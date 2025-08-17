@@ -31,10 +31,11 @@ router.post('/submit-form', async (req, res) => {
     const newUser = new User(
       { name, email, age, password: hashedPassword }
     );
-    await newUser.save();
+    const savedUser = await newUser.save();
+    if (savedUser) res.send(`congratulations ${savedUser.name}! your account is successfully created`)
 
      // Redirect to /users to see all users
-    res.redirect('/users'); // or wherever you want
+    //res.redirect('/users/sign-up'); // or wherever you want
   } catch (err) {
     console.error('Error saving user:', err);
     res.status(500).send('Error saving user: ' + err.message);
@@ -72,6 +73,7 @@ router.post('/login', async (req, res) => {
     req.session.userEmail = user.email;
     req.session.userAge = user.age;
 
+    // Redirect to dashboard after login
     res.redirect('/users/dashboard');
 
     //res.send(`Welcome, ${user.name}! You are now logged in.`);
@@ -105,7 +107,7 @@ router.post('/login', async (req, res) => {
 //dinamic html templates(ejs)
 router.get('/dashboard', (req, res) => {
   if (!req.session.userId) {
-    return res.redirect('/views/login'); // or wherever your login form is
+    return res.render('login'); // or wherever your login form is
   }
 
   // Prevent browser from caching this page

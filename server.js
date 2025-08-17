@@ -6,18 +6,13 @@ const app = express();
 require('dotenv').config();
 const mongoose = require('mongoose');
 
+// --- Database Connection ---
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ Connected to MongoDB');
-
-    // start the server only after connection
-    app.listen(3000, () => {
-      console.log('Server is running on http://localhost:3000');
-    });
-  })
+})
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-const usersRouter = require('./routes/users');
 
 // allow Express to read form data (from <form>)
 app.use(express.urlencoded({ extended: true }));
@@ -31,14 +26,9 @@ app.use(express.static('public'));
 // serve dinamic html templates in views
 app.set('view engine', 'ejs');
 
-// middleware to log every request
+// middleware to log every request and log the time of the request
 app.use((req, res, next) => {
   console.log(`${req.method} request to ${req.url}`);
-  next();
-});
-
-// middleware to log the time of the request
-app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
@@ -51,5 +41,14 @@ app.use(session({
   cookie: { maxAge: 1000 * 60 * 60 } // 1 hour
 }));
 
-// Use the users router for all routes starting with /users
+// --- Routes ---
+const usersRouter = require('./routes/users');
 app.use('/users', usersRouter);
+
+// Health check endpoint (optional, good for Render)
+app.get('/healthz', (req, res) => res.status(200).send('ok'));
+
+
+// Always start server, even if DB fails
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
