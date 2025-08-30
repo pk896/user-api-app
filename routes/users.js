@@ -1,12 +1,13 @@
+// routes/users.js
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
-const passport = require('passport'); // Add if using passport Google strategy
+const passport = require('passport');
+const User = require('../models/User');
 
 // -------------------------
-// Middleware for validation
+// Validation middleware
 // -------------------------
 const validateUser = [
   body('name').trim().notEmpty().withMessage('Name is required'),
@@ -16,87 +17,186 @@ const validateUser = [
 ];
 
 // -------------------------
-// Sign-up page
+// Signup page
 // -------------------------
 router.get('/render-sign-up', (req, res) => {
-  res.render('signup', { errors: [], oldInput: {} });
-});
+
+  const theme = req.session.theme || 'light'; // light or dark
+
+    res.render('signup', {
+      title: 'Sign Up',
+    active: 'signup',
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+  oldInput: {},                    // preserve empty old input
+    error: req.flash('error') || [], // ensure array even if no flash
+    success: req.flash('success') || []})
+  });
 
 // -------------------------
-//redirection to Login page
+// Login page
 // -------------------------
-router.get('/render-login', (req, res) => {
-  /*if (!req.session.userId) {
-    return res.redirect('/users/sign-up');
-  }*/
-  res.render('login', { errors: [], oldInput: {} });
+
+router.get('/render-log-in', (req, res) => {
+
+  const theme = req.session.theme || 'light'; // light or dark
+  
+  res.render('login', {
+    title: 'Log In',
+    active: 'login',
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+    oldInput: {},                    // preserve empty old input
+    error: req.flash('error') || [], // ensure array even if no flash
+    success: req.flash('success') || []
+  })
 });
 
+
 // -------------------------
-// Dashboard
+// Protected dashboard
 // -------------------------
 router.get('/dashboard', (req, res) => {
+
+   const theme = req.session.theme || 'light'; // light or dark
+
   if (!req.session.userId) {
-    return res.redirect('/users/sign-up');
+    req.flash('error', 'You must be logged in to access the dashboard');
+    return res.redirect('/users/render-login');
   }
+
+  const user = {
+      name: req.session.userName,
+      email: req.session.userEmail,
+      age: req.session.userAge
+    };
 
   const stats = {
     projects: 5,
     tasksCompleted: 12,
-    messages: 3
+    messages: 3,
+    notifications: 7,
+    followers: 23,
+    following: 18,
+    lastLogin: "2025-08-25",
+    reputation: 1200
   };
 
+  /*const stats = {
+    projects: 5,
+    tasksCompleted: 12,
+    messages: 3
+  };*/
+
   res.render('dashboard', {
-    user: {
+    title: 'Dashboard',
+    active: 'dashboard', user, stats,
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css'
+  });
+});
+
+// -------------------------
+// Home page
+// -------------------------
+router.get('/home', (req, res) => {
+
+const theme = req.session.theme || 'light'; // light or dark
+
+  res.render('home', { 
+    title: 'Home',
+    active: 'home',
+    user: req.session.userId ? {
+      name: req.session.userName,
+      email: req.session.userEmail,
+      age: req.session.userAge,
+    } : null,
+     themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+  });
+});
+
+// -------------------------
+// About page
+// -------------------------
+router.get('/about', (req, res) => {
+
+  const theme = req.session.theme || 'light'; // light or dark
+
+  res.render('about', { 
+    title: 'About',
+    active: 'about',
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+    user: req.session.userId ? {
       name: req.session.userName,
       email: req.session.userEmail,
       age: req.session.userAge
-    },
-    stats
+    } : null
   });
 });
 
 // -------------------------
-// Logout
+// Contact page
 // -------------------------
-router.get('/logout', (req, res) => {
-  req.session.destroy(err => {
+router.get('/contact', (req, res) => {
+
+  const theme = req.session.theme || 'light'; // light or dark
+
+  res.render('contact', { 
+    title: 'Contact',
+    active: 'contact',
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+    user: req.session.userId ? {
+      name: req.session.userName,
+      email: req.session.userEmail,
+      age: req.session.userAge
+    } : null
+  });
+});
+
+// -------------------------
+// Unified Logout
+// -------------------------
+router.get('/logout', (req, res, next) => {
+  console.log("------ LOGOUT START ------");
+  console.log("User before logout:", req.user);
+
+  // Passport logout (works for Google + local)
+  req.logout(err => {
     if (err) {
-      console.error('Error destroying session:', err);
-      return res.status(500).send('Error logging out');
+      console.error('Error during logout:', err);
+      return next(err);
     }
-    res.clearCookie('connect.sid');
-    res.render('signup', { errors: [], oldInput: {} });
+
+    // Destroy session for local users
+    req.session.destroy(err => {
+      if (err) {
+        console.error('Error destroying session:', err);
+        req.flash('error', 'Error logging out');
+        return res.redirect('/users/dashboard');
+      }
+
+      // Clear session cookie
+      const sessionName = req.session?.cookie?.name || 'connect.sid';
+      res.clearCookie(sessionName);
+
+      console.log("Logout complete: session destroyed, cookie cleared");
+      req.flash('success', 'You have been logged out successfully');
+
+      return res.redirect('/users/render-log-in');
+    });
   });
 });
 
 // -------------------------
-// Google OAuth
+// Signup form submission with automatic login
 // -------------------------
-router.get('/auth/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
-
-router.get('/auth/google/callback', 
-  passport.authenticate('google', { failureRedirect: '/users/sign-up?error=Google login failed' }),
-  (req, res) => {
-    // Successful login
-    req.session.userId = req.user._id;
-    req.session.userName = req.user.name;
-    req.session.userEmail = req.user.email;
-    req.session.userAge = req.user.age || null;
-    res.redirect('/users/dashboard');
-  }
-);
-
-// -------------------------
-// Sign-up form submission (EJS)
-// -------------------------
-router.post('/submit-form', validateUser, async (req, res) => {
+router.post('/submit-form', validateUser, async (req, res, next) => {
   const errors = validationResult(req);
-
+  const theme = req.session.theme || 'light'; // <-- you were missing this before
   if (!errors.isEmpty()) {
-    return res.status(400).render('signup', {
+    return res.status(400).render('signup', { 
+      title: 'Sign Up',
+      active: 'signup',
+      themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+      error: req.flash('error') || [], 
+      success: req.flash('success') || [],
       errors: errors.array(),
       oldInput: req.body
     });
@@ -106,47 +206,82 @@ router.post('/submit-form', validateUser, async (req, res) => {
     const { name, email, age, password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = new User({ name, email: email.toLowerCase(), age, password: hashedPassword });
+    const newUser = new User({ 
+      name, 
+      email: email.toLowerCase(), 
+      age, 
+      password: hashedPassword 
+    });
     const savedUser = await newUser.save();
 
-    req.session.userId = savedUser._id;
-    req.session.userName = savedUser.name;
-    req.session.userEmail = savedUser.email;
-    req.session.userAge = savedUser.age;
+    // Automatically log the user in
+    req.login(savedUser, err => {   // <-- Passport sets req.user
+      if (err) return next(err);
 
-    res.redirect('/users/dashboard');
+      // Set session vars for template rendering & dashboard
+      req.session.userId = savedUser._id;
+      req.session.userName = savedUser.name;
+      req.session.userEmail = savedUser.email;
+      req.session.userAge = savedUser.age;
+
+      req.flash('success', 'Account created successfully! Welcome!');
+
+      // Redirect to dashboard
+      return res.redirect('/users/dashboard');
+    });
+
   } catch (err) {
     console.error('Error saving user:', err);
-    res.status(500).render('signup', {
-      errors: [{ msg: 'Error creating account, please try again later.' }],
-      oldInput: req.body
+    res.status(500).render('signup', { 
+      errors: [{ msg: 'Error creating account, please try again later.' }], 
+      oldInput: req.body 
     });
   }
 });
 
 // -------------------------
-// Login route
+// Local login form submission (refactored with req.login)
 // -------------------------
-router.post('/login', async (req, res) => {
+router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).send('Email and password are required');
+    if (!email || !password) {
+      req.flash('error', 'Email and password are required');
+      return res.redirect('/users/render-log-in');
+    }
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) return res.status(400).send('Invalid email or password');
+    if (!user) {
+      req.flash('error', 'Invalid email or password');
+      return res.redirect('/users/render-log-in');
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).send('Invalid email or password.');
+    if (!isMatch) {
+      req.flash('error', 'Invalid email or password');
+      return res.redirect('/users/render-log-in');
+    }
 
-    req.session.userId = user._id;
-    req.session.userName = user.name;
-    req.session.userEmail = user.email;
-    req.session.userAge = user.age;
+    // Use Passport's req.login to set req.user
+    req.login(user, err => {
+      if (err) return next(err);
 
-    res.redirect('/users/dashboard');
+      // Also set session variables
+      req.session.userId = user._id;
+      req.session.userName = user.name;
+      req.session.userEmail = user.email;
+      req.session.userAge = user.age;
+
+      req.flash('success', `Welcome back, ${user.name}!`);
+
+      // Redirect to dashboard
+      return res.redirect('/users/dashboard');
+    });
+
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).send('Server error');
+    req.flash('error', 'Server error, please try again later');
+    return res.redirect('/users/render-log-in');
   }
 });
 
@@ -161,16 +296,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch users' });
   }
 });
-
-/*router.get('/:id', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select('-password');
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching user' });
-  }
-});*/
 
 router.put('/:id', async (req, res) => {
   try {
@@ -196,4 +321,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-

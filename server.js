@@ -1,9 +1,11 @@
 // server.js
 const express = require('express');
 const session = require('express-session');
+const flash = require('connect-flash'); // ✅ added
 const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const expressLayouts = require('express-ejs-layouts');
 const mongoose = require('mongoose');
 const compression = require('compression');
 const morgan = require('morgan');
@@ -44,21 +46,22 @@ connectWithRetry();
 // --------------------------
 // Middleware
 // --------------------------
-
-// Parse form data & JSON
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // EJS as view engine
 app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
 
-// Logging (production-friendly)
+// Layouts
+app.use(expressLayouts);
+app.set('layout', 'layout');
+
+// Logging
 app.use(morgan('combined'));
 
-// Secure headers (with CSP)
+// Security headers
 app.use(helmet());
 app.use(helmet.contentSecurityPolicy({
   directives: {
@@ -70,10 +73,10 @@ app.use(helmet.contentSecurityPolicy({
   }
 }));
 
-// Compression (gzip)
+// Compression
 app.use(compression());
 
-// Rate limiting (100 requests / 15 min per IP)
+// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -83,7 +86,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // --------------------------
-// Sessions (using MongoDB store)
+// Sessions (Mongo store)
 // --------------------------
 app.use(session({
   secret: process.env.SESSION_SECRET,
@@ -98,11 +101,64 @@ app.use(session({
 }));
 
 // --------------------------
+// Connect-flash (after session!)
+// --------------------------
+app.use(flash());
+
+// --------------------------
 // Passport (Google OAuth)
 // --------------------------
 const passport = require('./config/passport');
 app.use(passport.initialize());
 app.use(passport.session());
+
+// --------------------------
+// Make flash + user available in all views
+// --------------------------
+app.use((req, res, next) => {
+  res.locals.user = req.user || null; // passport user
+
+  // Flash messages
+  res.locals.success = req.flash('success') || [];
+  res.locals.error = req.flash('error') || [];
+  res.locals.info = req.flash('info') || [];
+  res.locals.warning = req.flash('warning') || [];
+  res.locals.errors = req.flash('errors') || [];
+  // Theme (default light, can override in routes)
+    res.locals.theme = req.session.theme || 'light';
+
+  next();
+});
+
+// --------------------------
+// google OAuth routes
+// --------------------------
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/users/render-log-in' }),
+  (req, res) => {
+    req.session.userId = req.user._id;
+    req.session.userName = req.user.name;
+    req.session.userEmail = req.user.email;
+    req.session.userAge = req.user.age || null;
+
+    req.flash('success', `Welcome back, ${req.user.name}!`);
+    res.redirect('/users/dashboard');
+  }
+);
+
+// --------------------------
+// Prevent cached pages after logout
+// --------------------------
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
 
 // --------------------------
 // Routes
@@ -114,36 +170,27 @@ const usersRouter = require('./routes/users');
 app.use('/users', usersRouter);
 
 // --------------------------
-// Google OAuth routes
+// Health check
 // --------------------------
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/users/login' }),
-  (req, res) => {
-    // Save Google user info to session (like normal login)
-    req.session.userId = req.user._id;
-    req.session.userName = req.user.name;
-    req.session.userEmail = req.user.email;
-    req.session.userAge = req.user.age || '';
-
-    res.redirect('/users/dashboard');
-  }
-);
-
-// --------------------------
-// Health check (for Render/Heroku/K8s)
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
 
-// 404 handler
+// 404 handler (after all routers)
 app.use((req, res) => {
-  res.status(404).render('404'); // create views/404.ejs
+  res.status(404).render('404', { 
+    layout: 'layout', 
+    title: 'Page Not Found',
+    active: ''
+  });
 });
 
-// Global error handler
+// 500 handler (after all routers)
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).render('500', { error: err }); // create views/500.ejs
+  res.status(500).render('500', { 
+    layout: 'layout', 
+    title: 'Server Error',
+    active: ''
+  });
 });
 
 // --------------------------
