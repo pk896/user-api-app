@@ -150,10 +150,48 @@ router.get('/contact', (req, res) => {
   });
 });
 
+// Unified Logout
+router.get('/logout', (req, res, next) => {
+  console.log("------ LOGOUT START ------");
+  console.log("User before logout:", req.user);
+
+  // Set flash BEFORE destroying session
+  if (req.session) {
+    req.flash('success', 'You have been logged out successfully');
+  }
+
+  // Passport logout (works for Google + local)
+  req.logout(err => {
+    if (err) {
+      console.error('Error during logout:', err);
+      return next(err);
+    }
+
+    // Destroy session for local users
+    if (req.session) {
+      req.session.destroy(err => {
+        if (err) {
+          console.error('Error destroying session:', err);
+          return res.redirect('/users/dashboard');
+        }
+
+        // Clear session cookie
+        res.clearCookie('connect.sid');
+
+        console.log("Logout complete: session destroyed, cookie cleared");
+        return res.redirect('/users/render-log-in');
+      });
+    } else {
+      // If no session, just redirect
+      return res.redirect('/users/render-log-in');
+    }
+  });
+});
+
 // -------------------------
 // Unified Logout
 // -------------------------
-router.get('/logout', (req, res, next) => {
+/*router.get('/logout', (req, res, next) => {
   console.log("------ LOGOUT START ------");
   console.log("User before logout:", req.user);
 
@@ -182,7 +220,7 @@ router.get('/logout', (req, res, next) => {
       return res.redirect('/users/render-log-in');
     });
   });
-});
+});*/
 
 // -------------------------
 // Signup form submission with automatic login
