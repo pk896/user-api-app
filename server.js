@@ -124,8 +124,13 @@ app.use((req, res, next) => {
   res.locals.info = req.flash('info') || [];
   res.locals.warning = req.flash('warning') || [];
   res.locals.errors = req.flash('errors') || [];
-  // Theme (default light, can override in routes)
-    res.locals.theme = req.session.theme || 'light';
+  
+    // Theme (light or dark)
+  res.locals.theme = req.session.theme || 'light';
+  res.locals.themeCss = res.locals.theme === 'dark' 
+    ? '/css/dark.css' 
+    : '/css/main.css';
+
 
   next();
 });
