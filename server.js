@@ -175,6 +175,22 @@ const usersRouter = require('./routes/users');
 app.use('/users', usersRouter);
 
 // --------------------------
+// Theme toggle route
+// --------------------------
+app.post('/theme-toggle', (req, res) => {
+  // Toggle session theme
+  req.session.theme = req.session.theme === 'dark' ? 'light' : 'dark';
+  res.json({ theme: req.session.theme });
+});
+
+// Redirect root to /users/home or render a homepage
+app.get('/', (req, res) => {
+  //res.redirect('/users/home');
+  // OR if you have a homepage view:
+   res.render('home', { layout: 'layout', title: 'Home', active: 'home' });
+});
+
+// --------------------------
 // Health check
 // --------------------------
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
