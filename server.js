@@ -191,6 +191,14 @@ app.get('/', (req, res) => {
 });
 
 // --------------------------
+// Debug route to check environment
+// --------------------------
+app.get('/env', (req, res) => {
+  res.send(`NODE_ENV = ${process.env.NODE_ENV}`);
+});
+
+
+// --------------------------
 // Health check
 // --------------------------
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
@@ -212,11 +220,6 @@ app.use((err, req, res, next) => {
     title: 'Server Error',
     active: ''
   });
-});
-
-// Debug route to check environment
-app.get('/env', (req, res) => {
-  res.send(`NODE_ENV = ${process.env.NODE_ENV}`);
 });
 
 // --------------------------
