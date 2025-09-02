@@ -214,6 +214,11 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Debug route to check environment
+app.get('/env', (req, res) => {
+  res.send(`NODE_ENV = ${process.env.NODE_ENV}`);
+});
+
 // --------------------------
 // Start Server
 // --------------------------
