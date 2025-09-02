@@ -17,6 +17,17 @@ const validateUser = [
 ];
 
 // -------------------------
+// Auth middleware
+// -------------------------
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  req.flash('error', 'You must be logged in to access the dashboard');
+  res.redirect('/users/render-log-in');
+}
+
+// -------------------------
 // Signup page
 // -------------------------
 router.get('/render-sign-up', (req, res) => {
@@ -79,12 +90,6 @@ router.get('/dashboard', (req, res) => {
     lastLogin: "2025-08-25",
     reputation: 1200
   };
-
-  /*const stats = {
-    projects: 5,
-    tasksCompleted: 12,
-    messages: 3
-  };*/
 
   res.render('dashboard', {
     title: 'Dashboard',
