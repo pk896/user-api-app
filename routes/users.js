@@ -60,7 +60,7 @@ router.get('/dashboard', (req, res) => {
 
   if (!req.session.userId) {
     req.flash('error', 'You must be logged in to access the dashboard');
-    return res.redirect('/users/render-login');
+    return res.redirect('/users/render-log-in');
   }
 
   const user = {
