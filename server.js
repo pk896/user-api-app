@@ -71,6 +71,8 @@ app.set('layout', 'layout');
 // Logging
 app.use(morgan('combined'));
 
+app.set('trust proxy', 1); // or 'trust proxy', true
+
 // Security headers
 app.use(helmet());
 app.use(helmet.contentSecurityPolicy({
@@ -88,11 +90,25 @@ app.use(compression());
 
 // Rate limiting
 const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`⚠️ Rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({
+      success: false,
+      message: "Too many requests. Please try again later.",
+    });
+  },
+});
+
+/*const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false
-});
+});*/
 app.use(limiter);
 
 // --------------------------
