@@ -43,6 +43,16 @@ const connectWithRetry = (retries = 5, delay = 5000) => {
 };
 connectWithRetry();
 
+//Http to https redirection in production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect('https://' + req.headers.host + req.url);
+    }
+    next();
+  });
+}
+
 // --------------------------
 // Middleware
 // --------------------------
@@ -96,6 +106,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax', // Required for OAuth
     maxAge: 1000 * 60 * 60 // 1 hour
   }
 }));
