@@ -81,29 +81,6 @@ app.use(cors({
   credentials: true // allow cookies/session
 }));
 
-
-
-// Detect frontend origin (declare once!)
-/*const frontendOrigin = process.env.NODE_ENV === 'production'
-  ? 'https://your-frontend-domain.com'  // ✅ replace with your deployed frontend domain
-  : 'http://localhost:5173';            // ✅ Vite dev server
-
-// --------------------------
-// CORS
-// --------------------------
-app.use(cors({
-  origin: frontendOrigin,
-  methods: ['GET', 'POST'],
-  credentials: true
-}));*/
-
-
-/*app.use(cors({
-  origin: 'http://localhost:5173', // frontend
-  methods: ['GET', 'POST'],
-  credentials: true
-}));*/
-
 // --------------------------
 // Middleware
 // --------------------------
@@ -122,8 +99,6 @@ app.set('layout', 'layout');
 
 // Logging
 app.use(morgan('combined'));
-
-app.set('trust proxy', 1); // or 'trust proxy', true
 
 // --------------------------
 // Security headers (Helmet + CSP)
@@ -170,13 +145,9 @@ const limiter = rateLimit({
   },
 });
 
-/*const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false
-});*/
 app.use(limiter);
+
+app.set('trust proxy', 1); // trust first proxy (Render)
 
 // --------------------------
 // Sessions (Mongo store)
