@@ -3,6 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash'); // ✅ added
 const path = require('path');
+const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const expressLayouts = require('express-ejs-layouts');
@@ -53,12 +54,63 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Detect frontend origin based on environment
+const frontendOrigin = process.env.NODE_ENV === 'production'
+  ? 'https://https://my-vite-app-ra7d.onrender.com'  // ✅ replace with your deployed frontend
+  : 'http://localhost:5174';             // ✅ Vite dev server
+
+// Define allowed origins
+const allowedOrigins = [
+  'http://localhost:3000',          // local dev
+  'https://my-vite-app-ra7d.onrender.com',
+  'http://localhost:5173', // production frontend URL
+  'http://localhost:5174'
+];
+
+// CORS middleware
+app.use(cors({
+  origin: function(origin, callback) {
+    // allow requests with no origin (like Postman, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `CORS error: ${origin} is not allowed.`;
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true // allow cookies/session
+}));
+
+
+
+// Detect frontend origin (declare once!)
+/*const frontendOrigin = process.env.NODE_ENV === 'production'
+  ? 'https://your-frontend-domain.com'  // ✅ replace with your deployed frontend domain
+  : 'http://localhost:5173';            // ✅ Vite dev server
+
+// --------------------------
+// CORS
+// --------------------------
+app.use(cors({
+  origin: frontendOrigin,
+  methods: ['GET', 'POST'],
+  credentials: true
+}));*/
+
+
+/*app.use(cors({
+  origin: 'http://localhost:5173', // frontend
+  methods: ['GET', 'POST'],
+  credentials: true
+}));*/
+
 // --------------------------
 // Middleware
 // --------------------------
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
 
 // EJS as view engine
 app.set('view engine', 'ejs');
@@ -73,8 +125,23 @@ app.use(morgan('combined'));
 
 app.set('trust proxy', 1); // or 'trust proxy', true
 
+// --------------------------
+// Security headers (Helmet + CSP)
+// --------------------------
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "https://apis.google.com", "https://www.paypal.com", "https://www.sandbox.paypal.com"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", "data:", "https:"],
+    connectSrc: ["'self'", frontendOrigin], // ✅ allow frontend
+    frameSrc: ["'self'", "https://www.paypal.com", "https://sandbox.paypal.com"], // ✅ needed for PayPal buttons
+  }
+}));
+
+
 // Security headers
-app.use(helmet());
+/*app.use(helmet());
 app.use(helmet.contentSecurityPolicy({
   directives: {
     defaultSrc: ["'self'"],
@@ -83,7 +150,7 @@ app.use(helmet.contentSecurityPolicy({
     imgSrc: ["'self'", "data:", "https:"],
     connectSrc: ["'self'"],
   }
-}));
+}));*/
 
 // Compression
 app.use(compression());
