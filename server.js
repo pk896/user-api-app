@@ -88,6 +88,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.set('trust proxy', 1); // trust first proxy (Render)
 
 // EJS as view engine
 app.set('view engine', 'ejs');
@@ -147,7 +148,25 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-app.set('trust proxy', 1); // trust first proxy (Render)
+// --------------------------
+// Sessions (Mongo store)
+// --------------------------
+
+/*app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI, // your MongoDB connection string
+    ttl: 14 * 24 * 60 * 60 // session lifetime in seconds (e.g., 14 days)
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  }
+}));*/
 
 // --------------------------
 // Sessions (Mongo store)
@@ -254,6 +273,12 @@ app.get('/', (req, res) => {
   // OR if you have a homepage view:
    res.render('home', { layout: 'layout', title: 'Home', active: 'home' });
 });
+
+app.get('/session-test', (req, res) => {
+  req.session.views = (req.session.views || 0) + 1;
+  res.send(`Session views: ${req.session.views}`);
+});
+
 
 // --------------------------
 // Debug route to check environment

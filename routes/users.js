@@ -321,6 +321,8 @@ router.post('/login', async (req, res, next) => {
       return res.redirect('/users/dashboard');
     });
 
+      console.log('Session after login:', req.session);
+
   } catch (err) {
     console.error('Login error:', err);
     req.flash('error', 'Server error, please try again later');

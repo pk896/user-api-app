@@ -1,5 +1,5 @@
 // Get the theme button
-const themeBtn = document.getElementById('theme-toggle-btn');
+/*const themeBtn = document.getElementById('theme-toggle-btn');
 
 themeBtn?.addEventListener('click', async () => {
   try {
@@ -19,7 +19,7 @@ themeBtn?.addEventListener('click', async () => {
   } catch (err) {
     console.error('Theme toggle error:', err);
   }
-});
+});*/
 
 
 
@@ -33,7 +33,7 @@ themeBtn?.addEventListener('click', async () => {
 
 
 
-/*document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
   const toggleBtn = document.getElementById('theme-toggle-btn');
   if (!toggleBtn) return;
 
@@ -74,4 +74,4 @@ document.addEventListener("DOMContentLoaded", () => {
         // Update button text
         themeBtn.textContent = isDark ? "Go to Light Theme Screen" : "Go to Dark Theme Screen";
     });
-});*/
+});
