@@ -1,3 +1,17 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // server.js
 const express = require('express');
 const session = require('express-session');
@@ -61,14 +75,28 @@ const frontendOrigin = process.env.NODE_ENV === 'production'
 
 // Define allowed origins
 const allowedOrigins = [
-  'http://localhost:3000',          // local dev
+
   'https://my-vite-app-ra7d.onrender.com',
+  'https://my-express-server-rq4a.onrender.com', // backend origin itself
+  'http://localhost:3000',  // local dev          
   'http://localhost:5173', // production frontend URL
-  'http://localhost:5174'
+  'http://localhost:5174'  // ✅ Vite dev server
+
 ];
 
-// CORS middleware
 app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS error: ${origin} is not allowed.`), false);
+  },
+  credentials: true
+}));
+
+// CORS middleware
+/*app.use(cors({
   origin: function(origin, callback) {
     // allow requests with no origin (like Postman, curl)
     if (!origin) return callback(null, true);
@@ -79,7 +107,7 @@ app.use(cors({
     return callback(null, true);
   },
   credentials: true // allow cookies/session
-}));
+}));*/
 
 // --------------------------
 // Middleware
@@ -115,19 +143,6 @@ app.use(helmet.contentSecurityPolicy({
   }
 }));
 
-
-// Security headers
-/*app.use(helmet());
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", "https://apis.google.com"],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    imgSrc: ["'self'", "data:", "https:"],
-    connectSrc: ["'self'"],
-  }
-}));*/
-
 // Compression
 app.use(compression());
 
@@ -151,27 +166,8 @@ app.use(limiter);
 // --------------------------
 // Sessions (Mongo store)
 // --------------------------
-
-/*app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI, // your MongoDB connection string
-    ttl: 14 * 24 * 60 * 60 // session lifetime in seconds (e.g., 14 days)
-  }),
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
-  }
-}));*/
-
-// --------------------------
-// Sessions (Mongo store)
-// --------------------------
 app.use(session({
+  name: 'sid',
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
