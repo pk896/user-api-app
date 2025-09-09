@@ -1,48 +1,44 @@
-/*routes/payment.js*/
-const express = require('express');
+// routes/payment.js
+const express = require("express");
 const router = express.Router();
-const paypal = require('@paypal/checkout-server-sdk');
+const paypal = require("@paypal/paypal-server-sdk");
 
-// PayPal environment (Sandbox for testing)
-const Environment = paypal.core.SandboxEnvironment;
-const paypalClient = new paypal.core.PayPalHttpClient(
-  new Environment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET)
-);
+// Create PayPal client
+const client = new paypal.Client({
+  clientId: process.env.PAYPAL_CLIENT_ID,
+  clientSecret: process.env.PAYPAL_CLIENT_SECRET,
+  environment: "sandbox", // or "live" for production
+});
 
-// Create an order
-router.post('/create-order', async (req, res) => {
-  const request = new paypal.orders.OrdersCreateRequest();
-  request.prefer("return=representation");
-  request.requestBody({
-    intent: "CAPTURE",
-    purchase_units: [
-      {
-        amount: {
-          currency_code: "USD", // or "ZAR"
-          value: "10.00" // Example: $10
-        }
-      }
-    ]
-  });
-
+// Create order
+router.post("/create-order", async (req, res) => {
   try {
-    const order = await paypalClient.execute(request);
-    res.json({ id: order.result.id });
+    const order = await client.orders.create({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          amount: {
+            currency_code: "USD",
+            value: "10.00",
+          },
+        },
+      ],
+    });
+    res.json(order);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Capture payment
-router.post('/capture-order/:orderID', async (req, res) => {
-  const orderID = req.params.orderID;
-  const request = new paypal.orders.OrdersCaptureRequest(orderID);
-  request.requestBody({});
-
+// Capture order
+router.post("/capture-order/:orderId", async (req, res) => {
+  const { orderId } = req.params;
   try {
-    const capture = await paypalClient.execute(request);
-    res.json(capture.result);
+    const capture = await client.orders.capture(orderId);
+    res.json(capture);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
