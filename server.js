@@ -245,6 +245,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// routes for product
+const productsRouter = require("./routes/products");
+app.use("/api/products", productsRouter);
+
 // --------------------------
 // Routes
 // --------------------------
