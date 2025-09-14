@@ -1,21 +1,8 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // server.js
 const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash'); // ✅ added
+const multer = require("multer");
 const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -245,9 +232,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// routes for product
-const productsRouter = require("./routes/products");
-app.use("/api/products", productsRouter);
+// routes for the delivery options
+const deliveryOptionRouter = require("./routes/deliveryOption");
+app.use("/api/deliveryOption", deliveryOptionRouter)
+
+// JSON API
+const productsApiRouter = require("./routes/products"); 
+app.use("/api/products", productsApiRouter);
+
+// EJS pages
+const productsPageRouter = require("./routes/add-product-routes");
+app.use("/products", productsPageRouter);
 
 // --------------------------
 // Routes

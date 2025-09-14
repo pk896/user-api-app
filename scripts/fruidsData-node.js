@@ -3,7 +3,7 @@ const fruidsData = [
   {
     id: '29374pd384-29456fh410-4544',
     name: 'Apple',
-    image: '/images/fruids-images/apples.jpeg',
+    image: '/images/products-images/apples.png',
     color: 'Red',
     size: 'Large',
     price: 2500,
@@ -18,7 +18,7 @@ const fruidsData = [
   {
     id: '52739er586-13456sj53-4933',
     name: 'Banana',
-    image: '/images/fruids-images/banana.png',
+    image: '/images/products-images/banana-extract.jpg',
     color: 'Yellow',
     size: 'Large',
     price: 5050,
@@ -33,7 +33,7 @@ const fruidsData = [
   {
     id: '15567kd765-89302ge421-3002',
     name: 'Orange',
-    image: '/images/fruids-images/oranges.jpeg',
+    image: '/images/products-images/oranges.jpg',
     color: 'Orange',
     size: 'Medium',
     price: 3000,
@@ -48,7 +48,7 @@ const fruidsData = [
   {
     id: '84426gsf28-384dgew3s8-5j39',
     name: 'Fig',
-    image: '/images/fruids-images/fig.png',
+    image: '/images/products-images/figs.jpg',
     color: 'Gray',
     size: 'Large',
     price: 6500,
@@ -61,9 +61,9 @@ const fruidsData = [
     description: 'Delicious fresh figs for healthy snacks.'
   },
   {
-    id: 'edf345-578dg-vdbjy86m-4f6j8m-00',
-    name: 'KD Shoes',
-    image: '/images/clothes-images/6afffa33-03aa-4d03-8906-3a565e7e200e.webp',
+    id: 'w21qdedf345-jg8578dg-vpmzdbjy86m-4f6kj50gfj8m-00',
+    name: 'seshoeshoe',
+    image: '/images/products-images/seshoeshoe.webp',
     color: 'White, Red, Pink, Black, Cream-White',
     size: '4,5,6,7,8,9',
     price: 250000,
@@ -73,12 +73,12 @@ const fruidsData = [
     made: 'SA',
     manufacturer: 'Pk CL',
     type: 'clothes',
-    description: 'High-quality KD shoes for everyday wear.'
+    description: 'High-quality KD Basotho women dressing style for everyday wear.'
   },
   {
-    id: 'eh45jd8-dfghe-fvbv26902fjf-3rsn',
+    id: 'za56eh45jd8-dfghe-fvbv2-r64ff6902fjf-3rozvsn',
     name: 'Lady Charm W1',
-    image: '/images/clothes-images/bc8ef94e-ba75-41ab-bc75-461817fb131b.webp',
+    image: '/images/products-images/dress3efc.webp',
     color: 'White, Purple, Black, Pink, Navy, Grey',
     size: '4,5,6,7,8,9',
     price: 404000,
@@ -88,84 +88,138 @@ const fruidsData = [
     made: 'USA',
     manufacturer: 'OFs',
     type: 'clothes',
-    description: 'Elegant Lady Charm shoes, perfect for parties.'
+    description: 'Elegant Lady Charm dress, perfect for parties.'
   },
+
+  {
+    id: '839wer43f45-sfgw5730fh-sfg-vdbjy86m-4f6j8m-00',
+    name: 'jagger-leather-modular',
+    image: '/images/products-images/jagger-leather-modular-grand-corner-couch-with-ottoman-desert-tan.jpg',
+    color: 'ppl, blue, brown, Black, Cream-White',
+    size: 'large',
+    price: 6550000,
+    stock: 20,
+    category: 'furniture',
+    quality: 'High',
+    made: 'SA',
+    manufacturer: 'Western cape D',
+    type: 'clothes',
+    description: ' jagger-leather-modular-grand-corner-couch-with-ottoman-desert-tan high-quality trusted by the globe.'
+  },
+
+  {
+    id: 'mmnajfw330133-sfgw5ssdkfff-zxg-jsfr-cgdwrvbvvf-434r8m-880',
+    name: 'jefferson-chesterfield',
+    image: '/images/products-images/jefferson-chesterfield-3-seater-leather-couch-brown.jpg',
+    color: 'light brown, navy blue, brown, Black',
+    size: '1',
+    price: 6550000,
+    stock: 20,
+    category: 'furniture',
+    quality: 'High',
+    made: 'SA',
+    manufacturer: 'Western cape D',
+    type: 'clothes',
+    description: 'jefferson-chesterfield-3-seater-leather-couch-brown high quality furniture for the sweet home.'
+  },
+
+  {
+    id: 'msstdfhffgd-ggsfgd-jkuillygjrffe-wsftqsgpdfgr3bv5f7gbv2690k752ffgjf-qd3rhefjkisn',
+    name: 'Iphone 13',
+    image: '/images/products-images/iPhone-13-resized_2-1000x1000.jpg',
+    color: 'White, Purple, Black, Pink, Navy, Grey',
+    size: '#',
+    price: 15644000,
+    stock: 15,
+    category: 'clothes',
+    quality: 'High',
+    made: 'USA',
+    manufacturer: 'Lodin eanch',
+    type: 'clothes',
+    description: 'smart life, future in now'
+  },
+
+  {
+    id: 'efgv548ffgd-sfhkhg6700fgd-jk36854jrffe-233fd7gpdfgr3bv5f7gbv2690k752ffgjf-qd3rhefjkisn',
+    name: 'Iphone 5',
+    image: '/images/products-images/iphone-5.jpg',
+    color: 'White, Purple, Black, Pink, Navy, Grey',
+    size: '#',
+    price: 5654000,
+    stock: 100,
+    category: 'clothes',
+    quality: 'High',
+    made: 'USA',
+    manufacturer: 'Lodin eanch',
+    type: 'clothes',
+    description: 'smart phone and life, perfect for tech alien.'
+  },
+
+  {
+    id: '01276hr468d-l01v-700fgd-j4ehklbbzjrffe-233f24dfgr3bv5f7gbv2690k752ffgjf-qd3rhefjkisn',
+    name: 'gold rw',
+    image: '/images/products-images/gold-rw.webp',
+    color: 'White, Purple, Black, Pink, Navy, Grey',
+    size: '#',
+    price: 3152000,
+    stock: 100,
+    category: 'clothes',
+    quality: 'High',
+    made: 'USA',
+    manufacturer: 'Lodin eanch',
+    type: 'clothes',
+    description: 'gold power, perfect excellency'
+  },
+
+  {
+    id: '6h-r468d-l01v-7gd-f7gbvqa-752ffgjf-23fjkisn',
+    name: 'diamond rw',
+    image: '/images/products-images/silve-diamond.webp',
+    color: 'silva',
+    size: '#',
+    price: 1524000,
+    stock: 500,
+    category: 'clothes',
+    quality: 'High',
+    made: 'USA',
+    manufacturer: 'Lodin eanch',
+    type: 'clothes',
+    description: 'diamond power, perfect excellency'
+  },
+
+  {
+    id: '6h-r468d-l01v-7gd-f7gbvqa-752ffgjf-23fjkisn',
+    name: 'samsang dl',
+    image: '/images/products-images/samsung-galaxy-phones-in-2023.avif',
+    color: 'silva',
+    size: '#',
+    price: 5654000,
+    stock: 300,
+    category: 'clothes',
+    quality: 'High',
+    made: 'USA',
+    manufacturer: 'Lodin eanch',
+    type: 'clothes',
+    description: 'tech power, perfect excellency'
+  },
+
+  {
+    id: '2e4th-75tj8d-07gf1v-hk97gd-zxbvqa-75gjf-2jkisn',
+    name: 'diamond rw',
+    image: '/images/products-images/silve-diamond.webp',
+    color: 'silva',
+    size: '#',
+    price: 75000,
+    stock: 500,
+    category: 'clothes',
+    quality: 'High',
+    made: 'USA',
+    manufacturer: 'Lodin eanch',
+    type: 'clothes',
+    description: 'jacket, perfect excellency'
+  }
   // Add more products here in the same format
 ];
 
 module.exports = { fruidsData };
 
-
-
-
-
-
-
-
-
-
-
-
-
-// scripts/fruidsData-node.js
-/*const fruidsData = [
-  {
-    id: '29374pd384-29456fh410-4544',
-    image: '/src/data/vite-images/apples.jpeg',
-    name: 'apple',
-    color: 'red',
-    size: 'large',
-    price: 2500
-  },
-  {
-    id: '52739er586-13456sj53-4933',
-    image: '/src/data/vite-images/banana.png',
-    name: 'banana',
-    color: 'yellow',
-    size: 'large',
-    price: 5050
-  },
-  {
-    id: '15567kd765-89302ge421-3002',
-    image: '/src/data/vite-images/oranges.jpeg',
-    name: 'orange',
-    color: 'orange',
-    size: 'medium',
-    price: 3000
-  },
-  {
-    id: '84426gsf28-384dgew3s8-5j39',
-    image: '/src/data/vite-images/fig.png',
-    name: 'fig',
-    color: 'gray',
-    size: 'large',
-    price: 6500
-  },
-  {
-    id: 'edf345-578dg-vdbjy86m-4f6j8m-00',
-    image: '/src/data/vite-clothes/6afffa33-03aa-4d03-8906-3a565e7e200e.webp',
-    name: 'kd shoes',
-    color: 'white, red, pink, black, cream-white',
-    size: '4, 5, 6, 7, 8, 9',
-    price: 250000,
-    quality: 'high',
-    made: 'SA',
-    manufacturer: 'Pk cl',
-    type: 'clothes'
-  },
-  {
-    id: 'eh45jd8-dfghe-fvbv26902fjf-3rsn',
-    image: '/src/data/vite-clothes/bc8ef94e-ba75-41ab-bc75-461817fb131b.webp',
-    name: 'lady charm w1',
-    color: 'white, purple, black, pink, navy, grey',
-    size: '4, 5, 6, 7, 8, 9',
-    price: 404000,
-    quality: 'high',
-    made: 'USA',
-    manufacturer: 'OFs',
-    type: 'clothes'
-  },
-  // ... add the remaining clothes in same format
-];
-
-module.exports = { fruidsData };*/

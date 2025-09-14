@@ -1,6 +1,71 @@
+/* scripts/seed-products.js */
+// Automatically fix the image paths to match your public folder structure (single products folder)
+require('dotenv').config();
+const mongoose = require('mongoose');
+const { fruidsData } = require('./fruidsData-node.js');
+const Product = require('../models/Product.js'); // adjust path if needed
+
+// Helper function to fix image paths
+function fixImagePath(product) {
+  // Keep all images in /images/products
+  const filename = product.image.split('/').pop(); // extract filename
+  product.image = `/images/products-images/${filename}`;
+  return product;
+}
+
+async function seedOrUpdateProducts() {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('✅ Connected to MongoDB');
+
+    for (let product of fruidsData) {
+      product = fixImagePath(product);
+
+      await Product.findOneAndUpdate(
+        { id: product.id },
+        { $set: product },
+        { upsert: true, new: true } // create if doesn't exist
+      );
+    }
+
+    console.log(`✅ Seeded or updated ${fruidsData.length} products with correct image paths`);
+    await mongoose.connection.close();
+    console.log('📦 MongoDB connection closed');
+  } catch (err) {
+    console.error('❌ Error seeding/updating products:', err);
+    await mongoose.connection.close();
+  }
+}
+
+seedOrUpdateProducts();*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /*scripts/seed-products.js*/
 //automatically fix the image paths so they match your public folder structure.
-require('dotenv').config();
+/*require('dotenv').config();
 const mongoose = require('mongoose');
 const { fruidsData } = require('./fruidsData-node.js');
 const Product = require('../models/Product.js'); // adjust path if needed
@@ -11,7 +76,7 @@ function fixImagePath(product) {
     product.image = `/images/clothes-images/${product.image.split('/').pop()}`;
   } else {
     // default to fruids folder
-    product.image = `/images/fruids-images/${product.image.split('/').pop()}`;
+    product.image = `/images/fruits-images/${product.image.split('/').pop()}`;
   }
   return product;
 }
@@ -41,7 +106,7 @@ async function seedOrUpdateProducts() {
 }
 
 seedOrUpdateProducts();
-
+*/
 
 
 
