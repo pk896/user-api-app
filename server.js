@@ -244,6 +244,13 @@ app.use("/api/products", productsApiRouter);
 const productsPageRouter = require("./routes/add-product-routes");
 app.use("/products", productsPageRouter);
 
+//---------------------------
+// cart routes
+//---------------------------
+const cartRoutes = require("./routes/cart");
+app.use("/api/cart", cartRoutes);
+
+
 // --------------------------
 // Routes
 // --------------------------
