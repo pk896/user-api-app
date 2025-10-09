@@ -1,0 +1,179 @@
+<h1 class="page-title">💼 Business Dashboard</h1>
+
+<!-- ✅ Flash Messages -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success"><%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error"><%= error %></div>
+<% } %>
+
+<div class="welcome-block">
+  <h2>Welcome, <%= business ? business.name : "Business User" %> 👋</h2>
+  <a href="/business/logout" class="btn small logout-btn">🚪 Logout</a>
+</div>
+
+<!-- 📊 Dashboard Stats -->
+<div class="stats-grid">
+  <div class="stat-card products">
+    <h3>🛍️ Total Products</h3>
+    <p><%= stats.totalProducts %></p>
+  </div>
+  <div class="stat-card sales">
+    <h3>💰 Total Sales</h3>
+    <p><%= stats.totalSales %></p>
+  </div>
+  <div class="stat-card messages">
+    <h3>💬 Messages</h3>
+    <p>
+      <%= stats.totalMessages %>
+      <% if (stats.unreadMessages > 0) { %>
+        <span id="unreadBadge" class="badge"><%= stats.unreadMessages %> New</span>
+      <% } %>
+    </p>
+  </div>
+</div>
+
+<!-- 🧾 Recent Messages -->
+<h2 class="section-title">📬 Recent Conversations</h2>
+
+<div class="recent-list">
+  <% if (recentMessages && recentMessages.length > 0) { %>
+    <% recentMessages.forEach(msg => { %>
+      <div class="message-row <%= msg.readByBusiness === false ? 'unread' : '' %>" data-id="<%= msg._id %>">
+        <div class="msg-info">
+          <strong>🧭 Admin</strong>
+          <p class="msg-body">
+            <% if (msg.thread && msg.thread.length > 0) { %>
+              <%= msg.thread[msg.thread.length - 1].message.slice(0, 100) %>...
+            <% } else { %>
+              (No conversation yet)
+            <% } %>
+          </p>
+        </div>
+        <div class="msg-meta">
+          <span class="msg-date"><%= new Date(msg.updatedAt).toLocaleString() %></span>
+          <button class="btn tiny view-btn" data-id="<%= msg._id %>">👁️ View</button>
+        </div>
+      </div>
+    <% }) %>
+  <% } else { %>
+    <p class="no-msg">No messages yet. Start a new one from the <a href="/contact">Contact Page</a>.</p>
+  <% } %>
+</div>
+
+<!-- 🪟 Modal -->
+<div id="messageModal" class="modal hidden">
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <h3>📨 Conversation with Admin</h3>
+
+    <div id="threadContainer" class="thread"></div>
+
+    <form id="replyForm" class="reply-form" method="POST">
+      <textarea name="reply" rows="2" placeholder="Type your reply..." required></textarea>
+      <button type="submit" class="btn reply-btn">📩 Send Reply</button>
+    </form>
+  </div>
+</div>
+
+<!-- 🎨 Styles -->
+<style>
+  .badge {
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    margin-left: 0.4rem;
+    font-weight: 600;
+  }
+
+  .page-title { text-align:center; margin:1rem 0; font-size:1.7rem; font-weight:700; }
+  .welcome-block { display:flex; justify-content:space-between; align-items:center; max-width:800px; margin:0 auto 1rem; }
+
+  .stats-grid {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:1rem; max-width:800px; margin:1rem auto;
+  }
+  .stat-card { border-radius:12px; padding:1rem; color:#fff; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.1); transition:transform 0.2s ease; }
+  .stat-card:hover { transform:translateY(-3px); }
+  .stat-card.products { background:#2563eb; }
+  .stat-card.sales { background:#16a34a; }
+  .stat-card.messages { background:#f59e0b; }
+
+  .section-title { text-align:center; margin:1.5rem 0 0.5rem; font-size:1.3rem; font-weight:600; }
+  .recent-list { max-width:800px; margin:0 auto 2rem; }
+
+  .message-row { display:flex; justify-content:space-between; background:#fff; border-radius:10px; padding:0.8rem 1rem; margin-bottom:0.6rem; box-shadow:0 1px 6px rgba(0,0,0,0.05); transition:background 0.2s ease; }
+  .message-row:hover { background:#f9fafb; }
+  .message-row.unread { border-left:4px solid #ef4444; }
+
+  .msg-info strong { display:block; font-size:1rem; }
+  .msg-body { font-size:0.9rem; color:#374151; }
+  .msg-meta { text-align:right; font-size:0.85rem; }
+
+  /* Modal */
+  .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; }
+  .modal.hidden { display:none; }
+  .modal-content {
+    background:#fff; border-radius:10px; padding:1.2rem; width:90%; max-width:600px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.2); position:relative;
+  }
+  .close-btn { position:absolute; top:10px; right:15px; font-size:1.5rem; cursor:pointer; }
+  .thread { margin:1rem 0; max-height:300px; overflow-y:auto; }
+  .bubble { max-width:80%; padding:0.6rem 0.9rem; border-radius:10px; margin-bottom:0.4rem; word-wrap:break-word; }
+  .bubble.business { background:#16a34a; color:#fff; align-self:flex-start; border-bottom-left-radius:0; }
+  .bubble.admin { background:#2563eb; color:#fff; align-self:flex-end; border-bottom-right-radius:0; }
+  .reply-form textarea { width:100%; padding:0.6rem; border-radius:6px; border:1px solid #ccc; }
+  .btn.reply-btn { background:#2563eb; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; margin-top:0.4rem; cursor:pointer; }
+  .btn.reply-btn:hover { background:#1d4ed8; }
+
+  .flash { max-width:800px; margin:0.5rem auto; padding:0.8rem 1rem; border-radius:6px; text-align:center; font-weight:500; }
+  .flash-success { background:#dcfce7; color:#166534; }
+  .flash-error { background:#fee2e2; color:#991b1b; }
+</style>
+
+<!-- ⚙️ Script -->
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  const modal = document.getElementById("messageModal");
+  const threadContainer = document.getElementById("threadContainer");
+  const replyForm = document.getElementById("replyForm");
+  const closeBtn = document.querySelector(".close-btn");
+
+  document.querySelectorAll(".view-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const msgId = btn.dataset.id;
+      modal.classList.remove("hidden");
+      threadContainer.innerHTML = "<p>Loading conversation...</p>";
+
+      try {
+        const res = await fetch(`/api/messages/${msgId}`);
+        const data = await res.json();
+
+        // Render thread bubbles
+        threadContainer.innerHTML = "";
+        data.thread.forEach(t => {
+          const div = document.createElement("div");
+          div.className = "bubble " + (t.sender === "admin" ? "admin" : "business");
+          div.innerHTML = `<p>${t.message}</p><small>${new Date(t.timestamp).toLocaleString()}</small>`;
+          threadContainer.appendChild(div);
+        });
+
+        replyForm.action = `/contact/business/reply/${msgId}`;
+
+        // Mark as read
+        await fetch(`/contact/mark-read/${msgId}`, { method: "PATCH" });
+
+      } catch (err) {
+        console.error("⚠️ Error loading thread:", err);
+        threadContainer.innerHTML = "<p>Could not load conversation.</p>";
+      }
+    });
+  });
+
+  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+  modal.addEventListener("click", e => { if (e.target === modal) modal.classList.add("hidden"); });
+});
+</script>

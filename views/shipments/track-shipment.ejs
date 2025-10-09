@@ -1,0 +1,237 @@
+<!-- views/shipments/track-shipment.ejs -->
+<section class="dashboard-home track-shipment">
+  <h1 class="page-title">📦 Track Your Shipment</h1>
+  <p class="subtitle">Enter your Order ID or Tracking Number to view shipment progress.</p>
+
+  <!-- 🔎 Search Form -->
+  <form action="/shipments/track" method="POST" class="track-form">
+    <input 
+      type="text" 
+      name="query" 
+      placeholder="Enter Order ID or Tracking Number" 
+      required 
+    />
+    <button type="submit" class="btn btn-primary">🔍 Track</button>
+  </form>
+
+  <!-- ✅ Flash Messages -->
+  <% if (error && error.length > 0) { %>
+    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
+  <% } %>
+  <% if (success && success.length > 0) { %>
+    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
+  <% } %>
+
+  <!-- 📦 Shipment Details -->
+  <% if (shipment) { %>
+    <div class="shipment-details">
+      <h2>Shipment Details</h2>
+
+      <div class="info-grid">
+        <p><strong>Order ID:</strong> <%= shipment.orderId %></p>
+        <p><strong>Product:</strong> <%= shipment.product ? shipment.product.name : 'N/A' %></p>
+        <p>
+          <strong>Status:</strong> 
+          <span class="badge <%= shipment.status.toLowerCase().replace(' ', '-') %>">
+            <%= shipment.status %>
+          </span>
+        </p>
+        <p><strong>Tracking #:</strong> <%= shipment.trackingNumber || '—' %></p>
+        <p><strong>Supplier:</strong> <%= shipment.business ? shipment.business.name : 'N/A' %></p>
+        <p><strong>Last Updated:</strong> <%= new Date(shipment.updatedAt).toLocaleString() %></p>
+      </div>
+
+      <% if (shipment.history && shipment.history.length > 0) { %>
+        <h3>Progress History</h3>
+        <ul class="history">
+          <% shipment.history.forEach(h => { %>
+            <li>
+              <span class="status <%= h.status.toLowerCase().replace(' ', '-') %>">
+                <%= h.status %>
+              </span>
+              <p class="note"><%= h.note %></p>
+              <small><%= new Date(h.timestamp).toLocaleString() %></small>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="no-progress">No tracking updates yet.</p>
+      <% } %>
+    </div>
+  <% } %>
+</section>
+
+<!-- 🌈 Scoped Styles -->
+<style>
+.dashboard-home {
+  padding: 1.5rem;
+}
+.page-title {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.subtitle {
+  text-align: center;
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+}
+
+/* 🔎 Form styling */
+.track-form {
+  display: flex;
+  gap: 0.6rem;
+  max-width: 600px;
+  margin: 0 auto 1.5rem;
+}
+.track-form input[name=query] {
+  flex: 1;
+  padding: 0.7rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+}
+.track-form .btn-primary {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 0.7rem 1.2rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.track-form .btn-primary:hover {
+  background: #1d4ed8;
+}
+
+/* 🪄 Flash Messages */
+.flash {
+  max-width: 600px;
+  margin: 0.5rem auto 1.5rem;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+  text-align: center;
+  animation: fadeIn 0.4s ease;
+}
+.flash-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.flash-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.flash.fade-out {
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.6s, transform 0.6s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 📦 Shipment Details */
+.shipment-details {
+  background: #f9fafb;
+  padding: 1.5rem;
+  border-radius: 12px;
+  max-width: 700px;
+  margin: 0 auto;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 1rem;
+  margin-bottom: 1rem;
+}
+.no-progress {
+  text-align: center;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* 🚦 Status badges */
+.badge {
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 600;
+  text-transform: capitalize;
+  font-size: 0.85rem;
+}
+.badge.pending { background: #fbbf24; }
+.badge.in-transit { background: #3b82f6; }
+.badge.delivered { background: #16a34a; }
+.badge.cancelled { background: #dc2626; }
+
+/* 🕒 Progress list */
+.history {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  border-left: 3px solid #2563eb;
+}
+.history li {
+  padding: 0.6rem 0.8rem;
+  margin-left: 0.8rem;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  margin-bottom: 0.6rem;
+  position: relative;
+}
+.history li::before {
+  content: "•";
+  position: absolute;
+  left: -1.2rem;
+  top: 0.7rem;
+  color: #2563eb;
+  font-size: 1.2rem;
+  line-height: 0;
+}
+.status {
+  display: inline-block;
+  font-weight: 600;
+  color: #2563eb;
+}
+.status.delivered { color: #16a34a; }
+.status.in-transit { color: #3b82f6; }
+.status.pending { color: #f59e0b; }
+.status.cancelled { color: #dc2626; }
+.note {
+  margin: 0.3rem 0;
+  color: #374151;
+}
+.dark-theme .shipment-details {
+  background: #1f2937;
+  color: #f3f4f6;
+}
+.dark-theme .history li {
+  background: #111827;
+  color: #e5e7eb;
+}
+
+/* 🌗 Dark mode flash */
+.dark-theme .flash-success { background: #064e3b; color: #d1fae5; }
+.dark-theme .flash-error { background: #7f1d1d; color: #fee2e2; }
+</style>
+
+<!-- ✅ CSP-Safe Inline Script -->
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  const flash = document.getElementById("flashMessage");
+  if (flash) {
+    setTimeout(() => {
+      flash.classList.add("fade-out");
+      setTimeout(() => flash.remove(), 600);
+    }, 5000);
+  }
+});
+</script>

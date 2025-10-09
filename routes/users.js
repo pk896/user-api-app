@@ -1,4 +1,3 @@
-// routes/users.js
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
@@ -20,65 +19,59 @@ const validateUser = [
 // Auth middleware
 // -------------------------
 function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
+  if (req.isAuthenticated()) return next();
   req.flash('error', 'You must be logged in to access the dashboard');
-  res.redirect('/users/render-log-in');
+  res.redirect('/users/login');
 }
+
+const requireUser = require("../middleware/requireUser");
 
 // -------------------------
 // Signup page
 // -------------------------
-router.get('/render-sign-up', (req, res) => {
-
-  const theme = req.session.theme || 'light'; // light or dark
-
-    res.render('signup', {
-      title: 'Sign Up',
-    active: 'signup',
+router.get('/signup', (req, res) => {
+  const theme = req.session.theme || 'light';
+  res.render('users-signup', {
+    title: 'Sign Up',
+    active: 'user-signup',
     themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
-  oldInput: {},                    // preserve empty old input
-    error: req.flash('error') || [], // ensure array even if no flash
-    success: req.flash('success') || []})
+    oldInput: {},
+    error: req.flash('error') || [],
+    success: req.flash('success') || []
   });
+});
 
 // -------------------------
 // Login page
 // -------------------------
-
-router.get('/render-log-in', (req, res) => {
-
-  const theme = req.session.theme || 'light'; // light or dark
-  
-  res.render('login', {
+router.get('/login', (req, res) => {
+  const theme = req.session.theme || 'light';
+  res.render('users-login', {
     title: 'Log In',
-    active: 'login',
+    active: 'user-login',
     themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
-    oldInput: {},                    // preserve empty old input
-    error: req.flash('error') || [], // ensure array even if no flash
+    oldInput: {},
+    error: req.flash('error') || [],
     success: req.flash('success') || []
-  })
+  });
 });
-
 
 // -------------------------
 // Protected dashboard
 // -------------------------
 router.get('/dashboard', (req, res) => {
-
-   const theme = req.session.theme || 'light'; // light or dark
+  const theme = req.session.theme || 'light';
 
   if (!req.session.userId) {
     req.flash('error', 'You must be logged in to access the dashboard');
-    return res.redirect('/users/render-log-in');
+    return res.redirect('/users/login');
   }
 
   const user = {
-      name: req.session.userName,
-      email: req.session.userEmail,
-      age: req.session.userAge
-    };
+    name: req.session.userName,
+    email: req.session.userEmail,
+    age: req.session.userAge
+  };
 
   const stats = {
     projects: 5,
@@ -91,39 +84,62 @@ router.get('/dashboard', (req, res) => {
     reputation: 1200
   };
 
-  res.render('dashboard', {
+  res.render('dashboards/users-dashboard', {
     title: 'Dashboard',
-    active: 'dashboard', user, stats,
+    active: 'user-dashboard',
+    user,
+    stats,
     themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css'
   });
 });
 
+/* ----------------------------------------------------------
+ * 🧭 GET: User Dashboard
+ * -------------------------------------------------------- */
+router.get("/dashboards/users-dashboard", requireUser, async (req, res) => {
+  try {
+    const user = req.user; // Passport sets this automatically
+    const stats = {
+      orders: 0,    // e.g., await Order.countDocuments({ user: user._id });
+      wishlist: 0,  // e.g., await Wishlist.countDocuments({ user: user._id });
+      payments: 0,  // e.g., await Payment.countDocuments({ user: user._id });
+    };
+
+    res.render("dashboards/users-dashboard", {
+      title: "User Dashboard",
+      user,
+      stats,
+      success: req.flash("success"),
+      error: req.flash("error"),
+      themeCss: res.locals.themeCss,
+    });
+  } catch (err) {
+    console.error("❌ User dashboard error:", err);
+    req.flash("error", "Failed to load user dashboard.");
+    res.redirect("/users/login");
+  }
+});
+
+
 // -------------------------
-// Home page
+// Home / About / Contact
 // -------------------------
 router.get('/home', (req, res) => {
-
-const theme = req.session.theme || 'light'; // light or dark
-
+  const theme = req.session.theme || 'light';
   res.render('home', { 
     title: 'Home',
     active: 'home',
     user: req.session.userId ? {
       name: req.session.userName,
       email: req.session.userEmail,
-      age: req.session.userAge,
+      age: req.session.userAge
     } : null,
-     themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css'
   });
 });
 
-// -------------------------
-// About page
-// -------------------------
 router.get('/about', (req, res) => {
-
-  const theme = req.session.theme || 'light'; // light or dark
-
+  const theme = req.session.theme || 'light';
   res.render('about', { 
     title: 'About',
     active: 'about',
@@ -136,13 +152,8 @@ router.get('/about', (req, res) => {
   });
 });
 
-// -------------------------
-// Contact page
-// -------------------------
 router.get('/contact', (req, res) => {
-
-  const theme = req.session.theme || 'light'; // light or dark
-
+  const theme = req.session.theme || 'light';
   res.render('contact', { 
     title: 'Contact',
     active: 'contact',
@@ -155,90 +166,152 @@ router.get('/contact', (req, res) => {
   });
 });
 
-// Unified Logout
-router.get('/logout', (req, res, next) => {
-  console.log("------ LOGOUT START ------");
-  console.log("User before logout:", req.user);
+// -------------------------
+// Profile pages
+// -------------------------
+router.get('/profile', (req, res) => {
+  const theme = req.session.theme || 'light';
 
-  // Set flash BEFORE destroying session
-  if (req.session) {
-    req.flash('success', 'You have been logged out successfully');
+  if (!req.session.userId) {
+    req.flash('error', 'You must be logged in to view your profile');
+    return res.redirect('/users/login');
   }
 
-  // Passport logout (works for Google + local)
-  req.logout(err => {
-    if (err) {
-      console.error('Error during logout:', err);
-      return next(err);
+  const user = {
+    name: req.session.userName,
+    email: req.session.userEmail,
+    age: req.session.userAge
+  };
+
+  res.render('profile', {
+    title: 'Profile',
+    active: 'profile',
+    user,
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+    success: req.flash('success'),
+    error: req.flash('error')
+  });
+});
+
+router.get('/profile/edit', (req, res) => {
+  const theme = req.session.theme || 'light';
+
+  if (!req.session.userId) {
+    req.flash('error', 'You must be logged in to edit your profile');
+    return res.redirect('/users/login');
+  }
+
+  const user = {
+    name: req.session.userName,
+    email: req.session.userEmail,
+    age: req.session.userAge
+  };
+
+  res.render('edit-profile', {
+    title: 'Edit Profile',
+    active: 'profile',
+    user,
+    themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
+    success: req.flash('success'),
+    error: req.flash('error')
+  });
+});
+
+router.post('/profile/edit', async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      req.flash('error', 'You must be logged in');
+      return res.redirect('/users/login');
     }
 
-    // Destroy session for local users
+    const { name, age, password } = req.body;
+    const user = await User.findById(req.session.userId);
+    if (!user) {
+      req.flash('error', 'User not found');
+      return res.redirect('/users/profile');
+    }
+
+    user.name = name || user.name;
+    user.age = age || user.age;
+
+    if (password && password.trim().length >= 6) {
+      user.password = await bcrypt.hash(password, 10);
+    }
+
+    await user.save();
+
+    req.session.userName = user.name;
+    req.session.userAge = user.age;
+
+    req.flash('success', '✅ Profile updated successfully');
+    return res.redirect('/users/profile');
+  } catch (err) {
+    console.error('Profile update error:', err);
+    req.flash('error', '❌ Failed to update profile');
+    return res.redirect('/users/profile/edit');
+  }
+});
+
+router.post('/profile/delete', async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      req.flash('error', 'You must be logged in');
+      return res.redirect('/users/login');
+    }
+
+    const user = await User.findByIdAndDelete(req.session.userId);
+    if (!user) {
+      req.flash('error', 'User not found');
+      return res.redirect('/users/profile');
+    }
+
+    req.session.destroy(err => {
+      if (err) {
+        console.error('Error destroying session:', err);
+        return res.redirect('/users/profile');
+      }
+      res.clearCookie('connect.sid');
+      req.flash('success', '✅ Your account has been permanently deleted.');
+      return res.redirect('/');
+    });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    req.flash('error', '❌ Failed to delete account');
+    return res.redirect('/users/profile');
+  }
+});
+
+// -------------------------
+// Logout
+// -------------------------
+router.get('/logout', (req, res, next) => {
+  if (req.session) req.flash('success', 'You have been logged out successfully');
+  req.logout(err => {
+    if (err) return next(err);
     if (req.session) {
       req.session.destroy(err => {
-        if (err) {
-          console.error('Error destroying session:', err);
-          return res.redirect('/users/dashboard');
-        }
-
-        // Clear session cookie
+        if (err) return res.redirect('/users/dashboard');
         res.clearCookie('connect.sid');
-
-        console.log("Logout complete: session destroyed, cookie cleared");
-        return res.redirect('/users/render-log-in');
+        return res.redirect('/users/login');
       });
     } else {
-      // If no session, just redirect
-      return res.redirect('/users/render-log-in');
+      return res.redirect('/users/login');
     }
   });
 });
 
 // -------------------------
-// Unified Logout
-// -------------------------
-/*router.get('/logout', (req, res, next) => {
-  console.log("------ LOGOUT START ------");
-  console.log("User before logout:", req.user);
-
-  // Passport logout (works for Google + local)
-  req.logout(err => {
-    if (err) {
-      console.error('Error during logout:', err);
-      return next(err);
-    }
-
-    // Destroy session for local users
-    req.session.destroy(err => {
-      if (err) {
-        console.error('Error destroying session:', err);
-        req.flash('error', 'Error logging out');
-        return res.redirect('/users/dashboard');
-      }
-
-      // Clear session cookie
-      const sessionName = req.session?.cookie?.name || 'connect.sid';
-      res.clearCookie(sessionName);
-
-      console.log("Logout complete: session destroyed, cookie cleared");
-      req.flash('success', 'You have been logged out successfully');
-
-      return res.redirect('/users/render-log-in');
-    });
-  });
-});*/
-
-// -------------------------
-// Signup form submission with automatic login
+// Signup submission
 // -------------------------
 router.post('/submit-form', validateUser, async (req, res, next) => {
   const errors = validationResult(req);
-  const theme = req.session.theme || 'light'; // <-- you were missing this before
+  const theme = req.session.theme || 'light';
   if (!errors.isEmpty()) {
-    return res.status(400).render('signup', { 
+    return res.status(400).render('users-signup', {
       title: 'Sign Up',
-      active: 'signup',
+      active: 'user-signup',
       themeCss: theme === 'dark' ? '/css/dark.css' : '/css/light.css',
-      error: req.flash('error') || [], 
+      error: req.flash('error') || [],
       success: req.flash('success') || [],
       errors: errors.array(),
       oldInput: req.body
@@ -248,121 +321,94 @@ router.post('/submit-form', validateUser, async (req, res, next) => {
   try {
     const { name, email, age, password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = new User({ 
-      name, 
-      email: email.toLowerCase(), 
-      age, 
-      password: hashedPassword 
-    });
+    const newUser = new User({ name, email: email.toLowerCase(), age, password: hashedPassword });
     const savedUser = await newUser.save();
 
-    // Automatically log the user in
-    req.login(savedUser, err => {   // <-- Passport sets req.user
+    req.login(savedUser, err => {
       if (err) return next(err);
-
-      // Set session vars for template rendering & dashboard
       req.session.userId = savedUser._id;
       req.session.userName = savedUser.name;
       req.session.userEmail = savedUser.email;
       req.session.userAge = savedUser.age;
-
       req.flash('success', 'Account created successfully! Welcome!');
-
-      // Redirect to dashboard
       return res.redirect('/users/dashboard');
     });
-
   } catch (err) {
     console.error('Error saving user:', err);
-    res.status(500).render('signup', { 
-      errors: [{ msg: 'Error creating account, please try again later.' }], 
-      oldInput: req.body 
+    res.status(500).render('users-signup', {
+      title: 'Sign Up',
+      active: 'user-signup',
+      errors: [{ msg: 'Error creating account, please try again later.' }],
+      oldInput: req.body
     });
   }
 });
 
 // -------------------------
-// Local login form submission (refactored with req.login)
+// Local login
 // -------------------------
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
       req.flash('error', 'Email and password are required');
-      return res.redirect('/users/render-log-in');
+      return res.redirect('/users/login');
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       req.flash('error', 'Invalid email or password');
-      return res.redirect('/users/render-log-in');
+      return res.redirect('/users/login');
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      req.flash('error', 'Invalid email or password');
-      return res.redirect('/users/render-log-in');
-    }
-
-    // Use Passport's req.login to set req.user
     req.login(user, err => {
       if (err) return next(err);
-
-      // Also set session variables
       req.session.userId = user._id;
       req.session.userName = user.name;
       req.session.userEmail = user.email;
       req.session.userAge = user.age;
-
       req.flash('success', `Welcome back, ${user.name}!`);
-
-      // Redirect to dashboard
       return res.redirect('/users/dashboard');
     });
-
-      console.log('Session after login:', req.session);
-
   } catch (err) {
     console.error('Login error:', err);
     req.flash('error', 'Server error, please try again later');
-    return res.redirect('/users/render-log-in');
+    return res.redirect('/users/login');
   }
 });
 
 // -------------------------
-// CRUD API endpoints
+// Basic CRUD API
 // -------------------------
 router.get('/', async (req, res) => {
   try {
     const users = await User.find().select('-password');
     res.json(users);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Failed to fetch users' });
   }
 });
 
 router.put('/:id', async (req, res) => {
   try {
-    if (req.body.password) {
-      req.body.password = await bcrypt.hash(req.body.password, 10);
-    }
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
-    if (!updatedUser) return res.status(404).json({ message: 'User not found' });
-    res.json(updatedUser);
-  } catch (err) {
+    if (req.body.password) req.body.password = await bcrypt.hash(req.body.password, 10);
+    const updated = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
+    if (!updated) return res.status(404).json({ message: 'User not found' });
+    res.json(updated);
+  } catch {
     res.status(400).json({ message: 'Error updating user' });
   }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
-    const deletedUser = await User.findByIdAndDelete(req.params.id);
-    if (!deletedUser) return res.status(404).json({ message: 'User not found' });
+    const deleted = await User.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'User not found' });
     res.json({ message: 'User deleted successfully' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Error deleting user' });
   }
 });
 
 module.exports = router;
+

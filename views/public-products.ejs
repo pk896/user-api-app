@@ -1,0 +1,134 @@
+<!-- views/public-products.ejs -->
+<h1>🛍️ Products Marketplace</h1>
+
+<!-- Flash messages -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
+<% } %>
+
+<div class="products-container <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <% if (!products || products.length === 0) { %>
+    <p>No products available at the moment. Please check back later.</p>
+  <% } else { %>
+    <% products.forEach(product => { %>
+      <!-- Public product card -->
+      <div class="product-card">
+        <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
+
+        <h2>
+          <a href="/products/view/<%= product.customId %>"><%= product.name %></a>
+        </h2>
+
+        <p class="price">💲 <%= Number(product.price).toFixed(2) %></p>
+
+        <% if (product.stock > 0) { %>
+          <p class="stock">✅ In stock: <%= product.stock %></p>
+        <% } else { %>
+          <p class="stock out">❌ Out of stock</p>
+        <% } %>
+
+        <% if (product.category) { %>
+          <p class="meta">📦 Category: <%= product.category %></p>
+        <% } %>
+
+        <% if (product.made) { %>
+          <p class="meta">🌍 Made in: <%= product.made %></p>
+        <% } %>
+
+        <!-- Manage buttons only for sellers/suppliers who own this product -->
+        <% if (
+          business &&
+          ["seller", "supplier"].includes(business.role) &&
+          product.businessId &&
+          product.businessId.toString() === business.id
+        ) { %>
+          <div class="manage-actions">
+            <form action="/products/<%= product.customId %>/delete" method="POST" class="inline-form">
+              <button type="submit" class="btn-delete">🗑 Delete</button>
+            </form>
+            <a href="/products/<%= product.customId %>/edit" class="btn-edit">✏️ Edit</a>
+          </div>
+        <% } %>
+      </div>
+    <% }) %>
+  <% } %>
+</div>
+
+<style>
+  .products-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  .product-card {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    text-align: center;
+  }
+  .dark-theme .product-card {
+    background: #222;
+    border: 1px solid #444;
+    color: #eee;
+  }
+  .product-image {
+    max-width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+  .price {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #28a745;
+  }
+  .stock {
+    margin: 0.3rem 0;
+    font-size: 0.95rem;
+  }
+  .stock.out {
+    color: #dc3545;
+    font-weight: bold;
+  }
+  .meta {
+    font-size: 0.9rem;
+    color: #555;
+  }
+  .dark-theme .meta {
+    color: #bbb;
+  }
+  .manage-actions {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.7rem;
+  }
+  .btn-delete, .btn-edit {
+    padding: 0.4rem 0.9rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    text-decoration: none;
+  }
+  .btn-delete {
+    background: #dc3545;
+    color: #fff;
+  }
+  .btn-delete:hover {
+    background: #b02a37;
+  }
+  .btn-edit {
+    background: #ffc107;
+    color: #000;
+  }
+  .btn-edit:hover {
+    background: #e0a800;
+  }
+</style>

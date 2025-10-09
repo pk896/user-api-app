@@ -1,0 +1,246 @@
+<!-- views/shipments/all-shipments.ejs -->
+<section class="dashboard-home">
+  <h1 class="page-title">🚚 Manage Shipments</h1>
+  <p class="subtitle">Track, update, and manage your shipment orders in one place.</p>
+
+  <div class="actions-bar">
+    <a href="/shipments/add" class="btn btn-primary">➕ Add Shipment</a>
+  </div>
+
+  <!-- ✅ Flash Messages -->
+  <% if (success && success.length > 0) { %>
+    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
+  <% } %>
+  <% if (error && error.length > 0) { %>
+    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
+  <% } %>
+
+  <!-- 📦 Shipment Table -->
+  <div class="table-container">
+    <table class="shipments-table">
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>Product</th>
+          <th>Status</th>
+          <th>Tracking #</th>
+          <th>Last Updated</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (shipments && shipments.length > 0) { %>
+          <% shipments.forEach(s => { %>
+            <tr>
+              <td><%= s.orderId %></td>
+              <td><%= s.product ? s.product.name : "—" %></td>
+              <td>
+                <span class="badge <%= s.status.toLowerCase().replace(' ', '-') %>">
+                  <%= s.status %>
+                </span>
+              </td>
+              <td><%= s.trackingNumber || "—" %></td>
+              <td><%= new Date(s.updatedAt).toLocaleString() %></td>
+              <td class="action-cells">
+                <!-- ✏️ Update Form -->
+                <form method="POST" action="/shipments/update/<%= s._id %>" class="inline-form">
+                  <select name="status" required>
+                    <option <%= s.status==='Pending'?'selected':'' %>>Pending</option>
+                    <option <%= s.status==='In Transit'?'selected':'' %>>In Transit</option>
+                    <option <%= s.status==='Delivered'?'selected':'' %>>Delivered</option>
+                    <option <%= s.status==='Cancelled'?'selected':'' %>>Cancelled</option>
+                  </select>
+                  <input 
+                    type="text" 
+                    name="trackingNumber" 
+                    placeholder="Tracking #" 
+                    value="<%= s.trackingNumber || '' %>" 
+                  />
+                  <input 
+                    type="text" 
+                    name="note" 
+                    placeholder="Add note (optional)" 
+                    class="note-input"
+                  />
+                  <button type="submit" class="btn small">💾</button>
+                </form>
+
+                <!-- 🗑️ Delete -->
+                <form method="POST" action="/shipments/delete/<%= s._id %>" class="inline-form">
+                  <button type="submit" class="btn small danger">🗑️</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr>
+            <td colspan="6" class="no-data">No shipments found.</td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ✅ Scoped Styles -->
+<style>
+.dashboard-home {
+  padding: 1.5rem;
+}
+.page-title {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.subtitle {
+  text-align: center;
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+}
+.actions-bar {
+  text-align: right;
+  margin-bottom: 1rem;
+}
+.table-container {
+  overflow-x: auto;
+}
+
+/* 📦 Table styling */
+.shipments-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--table-bg, #fff);
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+.shipments-table th,
+.shipments-table td {
+  padding: 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+.shipments-table th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+.dark-theme .shipments-table {
+  background: #1f2937;
+  color: #f3f4f6;
+}
+.dark-theme .shipments-table th {
+  background: #374151;
+}
+.no-data {
+  text-align: center;
+  padding: 1rem;
+  color: #9ca3af;
+}
+
+/* 🪄 Flash messages */
+.flash {
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+  animation: fadeIn 0.4s ease;
+}
+.flash-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.flash-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.flash.fade-out {
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.6s, transform 0.6s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 🧾 Buttons and forms */
+.inline-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.2rem 0;
+}
+.inline-form select,
+.inline-form input {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.note-input {
+  width: 130px;
+}
+.btn.small {
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+.btn.small:hover {
+  background: #1d4ed8;
+}
+.btn.small.danger {
+  background: #dc2626;
+}
+.btn.small.danger:hover {
+  background: #b91c1c;
+}
+.btn.btn-primary {
+  background: #2563eb;
+  color: #fff;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+/* 🚦 Status badges */
+.badge {
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.5rem;
+  color: #fff;
+  font-weight: 600;
+  text-transform: capitalize;
+  font-size: 0.85rem;
+}
+.badge.pending { background: #fbbf24; }
+.badge.in-transit { background: #3b82f6; }
+.badge.delivered { background: #16a34a; }
+.badge.cancelled { background: #dc2626; }
+
+/* 🌙 Dark mode adjustments */
+.dark-theme .flash-success { background: #064e3b; color: #d1fae5; }
+.dark-theme .flash-error { background: #7f1d1d; color: #fee2e2; }
+</style>
+
+<!-- ✅ Secure Inline Script -->
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  const flash = document.getElementById("flashMessage");
+  if (flash) {
+    setTimeout(() => {
+      flash.classList.add("fade-out");
+      setTimeout(() => flash.remove(), 600);
+    }, 5000);
+  }
+});
+</script>

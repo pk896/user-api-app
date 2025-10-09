@@ -1,66 +1,80 @@
 // models/Product.js
 const mongoose = require("mongoose");
 
-const productSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true }, // keep custom id
-  name: { type: String, required: true },
-  price: { type: Number, required: true },
-  description: String,
-  image: {
-    type: String,
-    required: true, // ensure every product has an image
-    validate: {
-      validator: function(v) {
-        // simple URL validation
-        return /^https?:\/\/|^\/\S+/.test(v);
+const productSchema = new mongoose.Schema(
+  {
+    // Custom readable product ID (not Mongo _id)
+    customId: {
+      type: String,
+      required: true,
+      unique: true, // ✅ ensures no duplicates
+      trim: true,
+    },
+
+    name: {
+      type: String,
+      required: [true, "Product name is required"],
+      trim: true,
+    },
+
+    price: {
+      type: Number,
+      required: [true, "Price is required"],
+      min: [0, "Price must be a positive number"],
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 2000, // prevent overly long descriptions
+    },
+
+    imageUrl: {
+      type: String,
+      required: [true, "Product image is required"],
+      validate: {
+        validator: (v) => /^https?:\/\/.+/.test(v),
+        message: (props) => `${props.value} is not a valid image URL!`,
       },
-      message: props => `${props.value} is not a valid image URL or path!`
-    }
+    },
+
+    stock: {
+      type: Number,
+      default: 0,
+      min: [0, "Stock cannot be negative"],
+    },
+
+    category: { type: String, trim: true },
+    color: { type: String, trim: true },
+    size: { type: String, trim: true },
+    quality: { type: String, trim: true },
+    made: { type: String, trim: true },
+    manufacturer: { type: String, trim: true },
+    type: { type: String, trim: true },
+
+    // 🔗 Reference to Business (owner)
+    business: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true, // ✅ keep indexed for fast queries
+    },
   },
-  stock: { type: Number, default: 0 },
-  category: String,
-  color: String,
-  size: String,
-  quality: String,
-  made: String,
-  manufacturer: String,
-  type: String,
-});
+  { timestamps: true }
+);
+
+// --------------------------
+// Indexes for performance
+// --------------------------
+productSchema.index({ category: 1 });
+
+// --------------------------
+// Safe JSON output (no internal Mongo fields)
+// --------------------------
+productSchema.methods.toSafeJSON = function () {
+  const obj = this.toObject();
+  delete obj.__v;
+  return obj;
+};
 
 module.exports = mongoose.model("Product", productSchema);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// models/Product.js
-/*const mongoose = require("mongoose");
-
-const productSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true }, // keep custom id
-  name: { type: String, required: true },
-  price: { type: Number, required: true },
-  description: String,
-  image: String,
-  stock: { type: Number, default: 0 },
-  category: String,
-  color: String,
-  size: String,
-  quality: String,
-  made: String,
-  manufacturer: String,
-  type: String,
-});
-
-module.exports = mongoose.model("Product", productSchema);
-*/

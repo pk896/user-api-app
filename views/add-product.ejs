@@ -1,73 +1,254 @@
-<!-- views/add-product.ejs -->
-<h1>Add New Product</h1>
+<h1 class="page-title">➕ Add New Product</h1>
 
-<form action="/products/add" method="POST" enctype="multipart/form-data">
-  <!-- Required Fields -->
-  <input type="text" name="id" placeholder="Product ID" required>
-  <input type="text" name="name" placeholder="Product Name" required>
-  <input type="number" name="price" placeholder="Price" step="0.01" required>
+<!-- Toast Container -->
+<div id="toast-container"></div>
 
-  <!-- Optional Fields -->
-  <textarea name="description" placeholder="Description"></textarea>
+<% if (!business) { %>
+  <div class="unauthorized">
+    <p>⚠️ You must be logged in with a business account to add products.</p>
+    <a href="/business/login" class="btn primary">Login</a>
+  </div>
+<% } else { %>
+  <form 
+    id="addProductForm"
+    action="/products/add" 
+    method="POST" 
+    enctype="multipart/form-data"
+    class="product-form <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>"
+  >
+    <div class="form-grid">
+      <div>
+        <label>Custom Product ID <span class="required">*</span></label>
+        <input type="text" name="customId" placeholder="e.g. ORG-001" required />
 
-  <!-- Image Upload (file will later be stored as URL/path in DB) -->
-  <input type="file" name="imageFile" accept="image/*" required class="file-input">
+        <label>Product Name <span class="required">*</span></label>
+        <input type="text" name="name" placeholder="e.g. Orange Juice" required />
 
-  <input type="number" name="stock" placeholder="Stock Quantity" value="0" min="0">
+        <label>Price <span class="required">*</span></label>
+        <input type="number" name="price" placeholder="e.g. 10.99" step="0.01" min="0" required />
 
-  <input type="text" name="category" placeholder="Category">
-  <input type="text" name="color" placeholder="Color">
-  <input type="text" name="size" placeholder="Size">
-  <input type="text" name="quality" placeholder="Quality">
-  <input type="text" name="made" placeholder="Made (e.g., Country)">
-  <input type="text" name="manufacturer" placeholder="Manufacturer">
-  <input type="text" name="type" placeholder="Type">
+        <label>Stock Quantity</label>
+        <input type="number" name="stock" placeholder="e.g. 100" min="0" />
 
-  <button type="submit">Add Product</button>
-</form>
+        <label>Category</label>
+        <input type="text" name="category" placeholder="e.g. Beverages" />
 
-<!-- Flash Messages -->
-<% if (success_msg && success_msg.length > 0) { %>
-  <p class="success"><%= success_msg %></p>
+        <label>Color</label>
+        <input type="text" name="color" placeholder="e.g. Orange" />
+
+        <label>Size</label>
+        <input type="text" name="size" placeholder="e.g. 1L Bottle" />
+      </div>
+
+      <div>
+        <label>Quality</label>
+        <input type="text" name="quality" placeholder="e.g. Premium" />
+
+        <label>Made in</label>
+        <input type="text" name="made" placeholder="e.g. South Africa" />
+
+        <label>Manufacturer</label>
+        <input type="text" name="manufacturer" placeholder="e.g. PK's Engineering" />
+
+        <label>Type</label>
+        <input type="text" name="type" placeholder="e.g. Organic Juice" />
+
+        <label>Description</label>
+        <textarea name="description" rows="2" placeholder="Short product description... (max 2000 chars)"></textarea>
+
+        <label>Product Image <span class="required">*</span></label>
+        <input id="imageFile" type="file" name="imageFile" accept="image/*" required />
+
+        <div id="previewWrapper" class="image-preview-block" style="display: none;">
+          <img id="imagePreview" class="image-preview" alt="Product image preview" />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn primary">💾 Save Product</button>
+      <a href="/products/all" class="btn secondary">⬅ Back</a>
+    </div>
+  </form>
 <% } %>
 
-<% if (error_msg && error_msg.length > 0) { %>
-  <p class="error"><%= error_msg %></p>
-<% } %>
+<style>
+  body {
+    margin: 0;
+    font-family: "Poppins", system-ui, sans-serif;
+    background: linear-gradient(145deg, #6366f1, #ec4899, #06b6d4);
+    background-size: 300% 300%;
+    animation: wave 10s infinite alternate ease-in-out;
+  }
 
+  @keyframes wave {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+  }
 
+  .page-title {
+    text-align: center;
+    margin: 1rem 0 0.8rem;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
 
+  .product-form {
+    max-width: 850px;
+    margin: 0.5rem auto 1.5rem;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  }
 
+  .dark-theme.product-form {
+    background: rgba(31, 41, 55, 0.9);
+    color: #f9fafb;
+  }
 
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.8rem 1rem;
+  }
 
+  label {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #111;
+  }
 
+  input, textarea {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
 
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 3px #2563eb;
+  }
 
+  .image-preview-block {
+    margin-top: 0.5rem;
+    text-align: center;
+  }
 
+  .image-preview {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+  }
 
+  .form-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
 
+  .btn {
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
 
+  .btn.primary {
+    background: #2563eb;
+    color: #fff;
+  }
+  .btn.primary:hover {
+    background: #1d4ed8;
+  }
 
-<!--views/add-product.ejs-->
-<!--<h1>Add New Product</h1>
+  .btn.secondary {
+    background: #f3f4f6;
+    color: #111;
+  }
+  .btn.secondary:hover {
+    background: #e5e7eb;
+  }
 
-<form action="/products/add" method="POST" enctype="multipart/form-data">
-  <input type="text" name="id" placeholder="ID" required>
-  <input type="text" name="name" placeholder="Name" required>
-  <input type="number" name="price" placeholder="Price" step="0.01" required>
-  <textarea name="description" placeholder="Description"></textarea>
-  <input type="file" name="imageFile" accept="image/*" required>
-  <input type="number" name="stock" placeholder="Stock" value="0">
-  <input type="text" name="category" placeholder="Category">
-  <input type="text" name="type" placeholder="Type">
-  <button type="submit">Add Product</button>
-</form>
+  #toast-container {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
 
-<% if (success_msg.length > 0) { %>
-  <p class="success"><%= success_msg %></p>
-<% } %>
+  .toast {
+    padding: 0.6rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: #fff;
+    background: rgba(34,197,94,0.9);
+    animation: fadeInUp 0.3s ease, fadeOutDown 0.3s ease 3.5s forwards;
+  }
+  .toast-error { background: rgba(239,68,68,0.9); }
 
-<% if (error_msg.length > 0) { %>
-  <p class="error"><%= error_msg %></p>
-<% } %>
--->
+  @keyframes fadeInUp { from {opacity: 0; transform: translateY(30px);} to {opacity:1; transform:translateY(0);} }
+  @keyframes fadeOutDown { to {opacity: 0; transform: translateY(30px);} }
+
+  @media (max-width: 600px) {
+    .page-title { font-size: 1.3rem; margin-top: 0.6rem; }
+    .product-form { padding: 0.8rem; margin: 0.5rem; }
+    label, input, textarea, .btn { font-size: 0.75rem; }
+    .form-grid { gap: 0.5rem; }
+    .image-preview { width: 100px; height: 100px; }
+  }
+</style>
+
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  const imageInput = document.getElementById("imageFile");
+  const previewWrapper = document.getElementById("previewWrapper");
+  const previewImg = document.getElementById("imagePreview");
+
+  if (imageInput) {
+    imageInput.addEventListener("change", () => {
+      const file = imageInput.files && imageInput.files[0];
+      if (!file) {
+        previewWrapper.style.display = "none";
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      previewImg.src = url;
+      previewWrapper.style.display = "block";
+    });
+  }
+
+  const showToast = (msg, type="success") => {
+    const container = document.getElementById("toast-container");
+    const toast = document.createElement("div");
+    toast.className = `toast ${type === "error" ? "toast-error" : ""}`;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+  };
+
+  const successMsg = "<%= success && success.length > 0 ? success : '' %>";
+  const errorMsg = "<%= error && error.length > 0 ? error : '' %>";
+  if (successMsg) showToast(successMsg);
+  if (errorMsg) showToast(errorMsg, "error");
+});
+</script>

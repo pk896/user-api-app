@@ -7,6 +7,7 @@ const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require("crypto");
 const expressLayouts = require('express-ejs-layouts');
 const mongoose = require('mongoose');
 const compression = require('compression');
@@ -15,6 +16,26 @@ const MongoStore = require('connect-mongo');
 require('dotenv').config();
 
 const app = express();
+
+// --------------------------
+// AWS S3 v3 Client Setup
+// --------------------------
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+const s3 = new S3Client({
+  region: process.env.AWS_REGION, // e.g., 'us-east-1'
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,   // from .env
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY // from .env
+  }
+});
+
+// Multer setup (memory storage for S3 upload)
+const upload = multer({ storage: multer.memoryStorage() });
+
+module.exports = { s3, upload }; // export to use in routes
+
 
 // --------------------------
 // Environment Validation
@@ -27,23 +48,15 @@ const app = express();
 });
 
 // --------------------------
-// Connect to MongoDB (with retry logic)
+// Global Error Handlers
 // --------------------------
-const connectWithRetry = (retries = 5, delay = 5000) => {
-  mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ Connected to MongoDB'))
-    .catch((err) => {
-      console.error('❌ MongoDB connection error:', err);
-      if (retries > 0) {
-        console.log(`🔄 Retrying in ${delay / 1000} seconds... (${retries} attempts left)`);
-        setTimeout(() => connectWithRetry(retries - 1, delay), delay);
-      } else {
-        console.error('❌ Could not connect to MongoDB after multiple attempts');
-        process.exit(1);
-      }
-    });
-};
-connectWithRetry();
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err);
+});
 
 //Http to https redirection in production
 if (process.env.NODE_ENV === 'production') {
@@ -57,10 +70,35 @@ if (process.env.NODE_ENV === 'production') {
 
 // Detect frontend origin based on environment
 const frontendOrigin = process.env.NODE_ENV === 'production'
-  ? 'https://https://my-vite-app-ra7d.onrender.com'  // ✅ replace with your deployed frontend
+  ? 'https://my-vite-app-ra7d.onrender.com'  // ✅ replace with your deployed frontend
   : 'http://localhost:5174';             // ✅ Vite dev server
 
-// Define allowed origins
+// ----------------------------
+// 🧩 CORS Configuration (fixed "null not allowed" issue)
+// ----------------------------
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "https://my-express-server-rq4a.onrender.com", // ✅ your deployed frontend domain
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // ✅ Allow same-origin requests or requests without Origin header (like EJS forms, Postman, curl)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.warn(`⚠️ CORS blocked for origin: ${origin}`);
+      return callback(null, false); // 👈 Don’t throw, just deny silently
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  })
+);
+
+/*// Define allowed origins
 const allowedOrigins = [
 
   'https://my-vite-app-ra7d.onrender.com',
@@ -80,20 +118,6 @@ app.use(cors({
     return callback(new Error(`CORS error: ${origin} is not allowed.`), false);
   },
   credentials: true
-}));
-
-// CORS middleware
-/*app.use(cors({
-  origin: function(origin, callback) {
-    // allow requests with no origin (like Postman, curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `CORS error: ${origin} is not allowed.`;
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true // allow cookies/session
 }));*/
 
 // --------------------------
@@ -116,7 +140,57 @@ app.set('layout', 'layout');
 // Logging
 app.use(morgan('combined'));
 
-// --------------------------
+// -------------------------------
+// 🧱 Security: Helmet with CSP Nonce (Final Secure Version)
+// -------------------------------
+
+// Generate a nonce for every response BEFORE Helmet
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
+// ✅ Configure Helmet with dynamic after setting nonce in CSP
+app.use((req, res, next) => {
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "https://apis.google.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          `'nonce-${res.locals.nonce}'`, // ✅ evaluated string, not a function
+        ],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.amazonaws.com",
+          "https://*.cloudinary.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+          "https://api.paypal.com",
+          "https://api.sandbox.paypal.com",
+        ],
+        frameSrc: [
+          "'self'",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+        ],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+  })(req, res, next); // ✅ run helmet as middleware inside the function
+});
+
+
+/*// --------------------------
 // Security headers (Helmet + CSP)
 // --------------------------
 app.use(helmet.contentSecurityPolicy({
@@ -128,12 +202,42 @@ app.use(helmet.contentSecurityPolicy({
     connectSrc: ["'self'", frontendOrigin], // ✅ allow frontend
     frameSrc: ["'self'", "https://www.paypal.com", "https://sandbox.paypal.com"], // ✅ needed for PayPal buttons
   }
-}));
+}));*/
 
 // Compression
 app.use(compression());
 
-// Rate limiting
+// ✅ Define a shared limiter (production vs dev)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === "production" ? 100 : 1000, // allow more in dev
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`⚠️ Rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({
+      success: false,
+      message: "Too many requests. Please try again later.",
+    });
+  },
+});
+
+// ✅ Apply limiter only to authentication & signup routes
+app.use("/business/login", limiter);
+app.use("/business/login", limiter);
+app.use("/business/signup", limiter);
+app.use("/business/signup", limiter);
+
+app.use("/users/login", limiter);
+app.use("/users/login", limiter);
+app.use("/users/signup", limiter);
+app.use("/users/rendersignup", limiter);
+
+// ❌ Do NOT apply globally anymore
+// app.use(limiter);
+
+
+/*// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -148,7 +252,7 @@ const limiter = rateLimit({
   },
 });
 
-app.use(limiter);
+app.use(limiter);*/
 
 // --------------------------
 // Sessions (Mongo store)
@@ -236,13 +340,19 @@ app.use((req, res, next) => {
 const deliveryOptionRouter = require("./routes/deliveryOption");
 app.use("/api/deliveryOption", deliveryOptionRouter)
 
-// JSON API
-const productsApiRouter = require("./routes/products"); 
-app.use("/api/products", productsApiRouter);
+//---------------------------
+// product routes
+//---------------------------
+const productsRouter = require("./routes/products");
+app.use("/products", productsRouter);
 
-// EJS pages
-const productsPageRouter = require("./routes/add-product-routes");
-app.use("/products", productsPageRouter);
+// 🌍 Contact Page Route
+const contactRoutes = require("./routes/contact");
+app.use("/contact", contactRoutes);
+
+// 🌐 Admin Routes
+const adminRoutes = require("./routes/admin");
+app.use("/admin", adminRoutes);
 
 //---------------------------
 // cart routes
@@ -250,15 +360,25 @@ app.use("/products", productsPageRouter);
 const cartRoutes = require("./routes/cart");
 app.use("/api/cart", cartRoutes);
 
-
 // --------------------------
 // Routes
 // --------------------------
 const paymentRoutes = require('./routes/payment');
 app.use('/payment', paymentRoutes);
 
+// User routes
 const usersRouter = require('./routes/users');
 app.use('/users', usersRouter);
+
+// Business auth routes
+const businessAuthRoutes = require("./routes/businessAuth");
+app.use("/business", businessAuthRoutes);
+
+// shipment routes
+const shipmentRoutes = require("./routes/shipments");
+app.use("/shipments", shipmentRoutes);
+
+app.use("/", require("./routes/staticPages"));
 
 // --------------------------
 // Theme toggle route
@@ -285,9 +405,9 @@ app.get('/session-test', (req, res) => {
 // --------------------------
 // Debug route to check environment
 // --------------------------
-app.get('/env', (req, res) => {
-  res.send(`NODE_ENV = ${process.env.NODE_ENV}`);
-});
+//app.get('/env', (req, res) => {
+  //res.send(`NODE_ENV = ${process.env.NODE_ENV}`);
+//});
 
 
 // --------------------------
@@ -304,7 +424,7 @@ app.use((req, res) => {
   });
 });
 
-// 500 handler (after all routers)
+/*// 500 handler (after all routers)
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).render('500', { 
@@ -312,13 +432,78 @@ app.use((err, req, res, next) => {
     title: 'Server Error',
     active: ''
   });
+});*/
+
+// 500 handler (after all routers) — DEBUG VERSION
+app.use((err, req, res, next) => {
+  console.error("❌ Template render error:", err);
+  res.status(500).send(`<pre>${err.stack}</pre>`);
 });
 
 // --------------------------
-// Start Server
+// Connect to MongoDB with retry
 // --------------------------
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+/*const connectWithRetry = (retries = 5, delay = 5000) => {
+  console.log(`🔗 Attempting to connect to MongoDB... (${retries} retries left)`);
+  mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+
+    // Start Express server AFTER DB connection
+    const PORT = process.env.PORT || 3000;
+  app.listen(PORT, '0.0.0.0', async() => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err);
+    if (retries > 0) {
+      console.log(`🔄 Retrying in ${delay / 1000} seconds...`);
+      setTimeout(() => connectWithRetry(retries - 1, delay), delay);
+    } else {
+      console.error("❌ Could not connect to MongoDB after multiple attempts. Exiting...");
+      process.exit(1);
+    }
+  });
+};
+
+connectWithRetry();*/
+
+const connectWithRetry = async (retries = 5) => {
+  try {
+    console.log(`🔗 Attempting to connect to MongoDB... (${retries} retries left)`);
+
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 20000, // wait up to 20s for server selection
+      socketTimeoutMS: 60000,          // keep socket alive 60s
+      connectTimeoutMS: 30000,         // wait up to 30s for initial connect
+      maxPoolSize: 20,                 // prevent overload of connections
+      minPoolSize: 2,                  // keep a small pool ready
+      family: 4,                       // force IPv4 (avoid DNS IPv6 bugs)
+    });
+
+    console.log("✅ Connected to MongoDB");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err.message);
+
+    if (retries > 0) {
+      console.log("🔄 Retrying in 5 seconds...");
+      setTimeout(() => connectWithRetry(retries - 1), 5000);
+    } else {
+      console.error("🚨 All MongoDB connection attempts failed. Exiting.");
+      process.exit(1);
+    }
+  }
+};
+
+// Call it once at startup
+connectWithRetry();
+
+// Start Express server AFTER DB connection
+    const PORT = process.env.PORT || 3000;
+  app.listen(PORT, '0.0.0.0', async() => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+
 

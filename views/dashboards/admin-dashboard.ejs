@@ -1,0 +1,264 @@
+<h1 class="page-title">🧭 Admin Dashboard</h1>
+
+<!-- ✅ Flash Messages -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success"><%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error"><%= error %></div>
+<% } %>
+
+<!-- 👋 Welcome Admin -->
+<div class="welcome-block">
+  <h2>Welcome, <%= admin ? admin.name : "Admin" %> 👋</h2>
+  <a href="/admin/logout" class="btn small logout-btn">🚪 Logout</a>
+</div>
+
+<!-- 📊 Stats Overview -->
+<div class="stats-grid">
+  <div class="stat-card total">
+    <h3>📨 Total Messages</h3>
+    <p><%= stats.total %></p>
+  </div>
+
+  <div class="stat-card pending">
+    <h3>🕓 Pending Replies</h3>
+    <p>
+      <%= stats.pending %>
+      <% const showBadge = stats.unreadForAdmin && stats.unreadForAdmin > 0; %>
+      <span id="unreadBadge" class="badge <%= showBadge ? '' : 'hidden' %>">
+        <%= showBadge ? stats.unreadForAdmin + ' New' : '' %>
+      </span>
+    </p>
+  </div>
+
+  <div class="stat-card replied">
+    <h3>💬 Replied</h3>
+    <p><%= stats.replied %></p>
+  </div>
+</div>
+
+<!-- 🔗 Quick Actions -->
+<div class="quick-links">
+  <a href="/contact/all" class="btn primary big">📬 View All Messages</a>
+</div>
+
+<!-- 🧾 Recent Messages -->
+<h2 class="section-title">📋 Recent Messages</h2>
+
+<div class="recent-list">
+  <% if (recentMessages && recentMessages.length > 0) { %>
+    <% recentMessages.forEach(msg => { %>
+      <div class="message-row">
+        <div class="msg-info">
+          <strong><%= msg.name %></strong>
+          <span class="msg-email"><%= msg.email %></span>
+          <p class="msg-snippet">
+            <%= msg.thread && msg.thread.length > 0
+              ? msg.thread[msg.thread.length - 1].message.slice(0, 80)
+              : "No message content" %>...
+          </p>
+        </div>
+        <div class="msg-meta">
+          <span class="msg-date"><%= new Date(msg.createdAt).toLocaleString() %></span>
+          <% if (msg.readByAdmin === false) { %>
+            <span class="status unread">🔴 New</span>
+          <% } else if (msg.thread && msg.thread.some(t => t.sender === 'admin')) { %>
+            <span class="status replied">💬 Replied</span>
+          <% } else { %>
+            <span class="status pending">🕓 Pending</span>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+  <% } else { %>
+    <p class="no-msg">No recent messages.</p>
+  <% } %>
+</div>
+
+<!-- 🔔 Notification Toast -->
+<div id="toast" class="toast hidden">
+  📩 New message received!
+</div>
+
+<!-- 🎨 Styles -->
+<style>
+  .page-title {
+    text-align: center;
+    margin: 1rem 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+
+  .welcome-block {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 800px;
+    margin: 0 auto 1rem;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+    max-width: 800px;
+    margin: 1rem auto;
+  }
+
+  .stat-card {
+    border-radius: 12px;
+    padding: 1rem;
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease;
+  }
+  .stat-card:hover { transform: translateY(-3px); }
+
+  .stat-card.total { background: #2563eb; }
+  .stat-card.pending { background: #f59e0b; position: relative; }
+  .stat-card.replied { background: #16a34a; }
+
+  .stat-card h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+  .stat-card p { font-size: 1.6rem; font-weight: 700; margin: 0; }
+
+  .badge {
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    margin-left: 0.4rem;
+    font-weight: 600;
+    animation: fadeIn 0.4s ease;
+  }
+
+  .hidden { display: none; }
+
+  .quick-links { text-align: center; margin: 1.5rem 0; }
+  .btn.primary.big {
+    padding: 0.7rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    background: #2563eb;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background 0.2s ease;
+  }
+  .btn.primary.big:hover { background: #1d4ed8; }
+
+  .section-title { text-align: center; margin: 1.5rem 0 0.5rem; font-size: 1.3rem; font-weight: 600; }
+
+  .recent-list { max-width: 800px; margin: 0 auto 2rem; }
+  .message-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    background: #fff; border-radius: 10px; padding: 0.8rem 1rem;
+    margin-bottom: 0.6rem; box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+    transition: background 0.2s ease;
+  }
+  .message-row:hover { background: #f9fafb; }
+  .dark-theme .message-row { background: #1f2937; color: #f9fafb; }
+
+  .msg-info strong { display: block; font-size: 1rem; }
+  .msg-email { font-size: 0.85rem; color: #6b7280; display: block; }
+  .msg-snippet { font-size: 0.9rem; margin-top: 0.3rem; color: #374151; }
+  .msg-meta { text-align: right; font-size: 0.85rem; }
+  .msg-date { color: #9ca3af; display: block; }
+
+  .status { font-weight: 600; }
+  .status.replied { color: #16a34a; }
+  .status.pending { color: #f59e0b; }
+  .status.unread { color: #ef4444; }
+
+  .btn.small { padding: 0.4rem 0.7rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; text-decoration: none; }
+  .logout-btn { background: #ef4444; color: #fff; }
+  .logout-btn:hover { background: #dc2626; }
+
+  .flash { max-width: 800px; margin: 0.5rem auto; padding: 0.8rem 1rem; border-radius: 6px; text-align: center; font-weight: 500; }
+  .flash-success { background: #dcfce7; color: #166534; }
+  .flash-error { background: #fee2e2; color: #991b1b; }
+
+  .dark-theme .flash-success { background: #064e3b; color: #bbf7d0; }
+  .dark-theme .flash-error { background: #7f1d1d; color: #fecaca; }
+
+  /* 🔔 Toast Notification */
+  .toast {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    background: #2563eb;
+    color: #fff;
+    padding: 0.9rem 1.4rem;
+    border-radius: 8px;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 999;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+
+<!-- ⚙️ Live Unread Badge & Notification -->
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("✅ Admin dashboard with live notifications active");
+
+  const badge = document.getElementById("unreadBadge");
+  const toast = document.getElementById("toast");
+  let lastCount = parseInt(badge?.textContent) || 0;
+
+  async function updateUnreadBadge() {
+    try {
+      const res = await fetch("/contact/unread-count", { cache: "no-store" });
+      const data = await res.json();
+      const count = data.unreadCount || 0;
+
+      if (count !== lastCount) {
+        lastCount = count;
+
+        if (count > 0) {
+          badge.textContent = `${count} New`;
+          badge.classList.remove("hidden");
+          badge.classList.add("pulse");
+
+          // 🔔 Show notification
+          showToast("📩 New message received!");
+
+          setTimeout(() => badge.classList.remove("pulse"), 600);
+        } else {
+          badge.classList.add("hidden");
+        }
+      }
+    } catch (err) {
+      console.warn("⚠️ Could not update unread count:", err);
+    }
+  }
+
+  // 🔔 Toast animation
+  function showToast(text) {
+    toast.textContent = text;
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 3500);
+  }
+
+  // Run now + repeat every 30s
+  updateUnreadBadge();
+  setInterval(updateUnreadBadge, 30000);
+});
+</script>
+
+<style>
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+  .pulse { animation: pulse 0.4s ease; }
+</style>

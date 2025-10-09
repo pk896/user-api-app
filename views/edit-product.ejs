@@ -1,0 +1,176 @@
+<!-- views/edit-product.ejs -->
+<h1 class="page-title">✏️ Edit Product</h1>
+
+<!-- Flash Messages -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
+<% } %>
+
+<div class="page-wrapper <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+
+  <% if (!business) { %>
+    <!-- No business session -->
+    <div class="card">
+      <p>You must be logged in with a business account to access this page.</p>
+      <a class="btn" href="/business/login">Log in</a>
+    </div>
+
+  <% } else if (["seller", "supplier"].includes(business.role)) { %>
+    <!-- SELLER / SUPPLIER: Full edit form -->
+    <form 
+      id="editProductForm"
+      action="/products/edit/<%= product.customId %>"
+      method="POST"
+      enctype="multipart/form-data"
+      class="product-form"
+      novalidate
+    >
+      <div class="grid">
+        <div class="col">
+          <label for="name">Product Name <span class="required">*</span></label>
+          <input id="name" type="text" name="name" value="<%= product.name %>" required />
+
+          <label for="price">Price <span class="required">*</span></label>
+          <input id="price" type="number" name="price" step="0.01" value="<%= product.price %>" required />
+
+          <label for="stock">Stock</label>
+          <input id="stock" type="number" name="stock" min="0" value="<%= product.stock %>" />
+
+          <label for="category">Category</label>
+          <input id="category" type="text" name="category" value="<%= product.category || '' %>" />
+
+          <label for="type">Type</label>
+          <input id="type" type="text" name="type" value="<%= product.type || '' %>" />
+
+          <label for="manufacturer">Manufacturer</label>
+          <input id="manufacturer" type="text" name="manufacturer" value="<%= product.manufacturer || '' %>" />
+
+          <label for="made">Made in</label>
+          <input id="made" type="text" name="made" value="<%= product.made || '' %>" />
+        </div>
+
+        <div class="col">
+          <label for="color">Color</label>
+          <input id="color" type="text" name="color" value="<%= product.color || '' %>" />
+
+          <label for="size">Size</label>
+          <input id="size" type="text" name="size" value="<%= product.size || '' %>" />
+
+          <label for="quality">Quality</label>
+          <input id="quality" type="text" name="quality" value="<%= product.quality || '' %>" />
+
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="5"><%= product.description || '' %></textarea>
+
+          <div class="image-block">
+            <label>Current Image</label>
+            <img 
+              src="<%= product.imageUrl %>" 
+              alt="Current image for <%= product.name %>" 
+              class="image-preview"
+            />
+          </div>
+
+          <label for="imageFile">Upload New Image (optional)</label>
+          <input id="imageFile" type="file" name="imageFile" accept="image/*" />
+          <div id="newImagePreviewWrapper" class="image-block" style="display:none;">
+            <label>New Image Preview</label>
+            <img id="newImagePreview" class="image-preview" alt="New image preview" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn primary">💾 Save Changes</button>
+        <a href="/products/all" class="btn">⬅ Back to All Products</a>
+        <a href="/products/<%= product.customId %>" class="btn subtle">🔎 View Details</a>
+      </div>
+    </form>
+
+  <% } else { %>
+    <!-- BUYER: Read-only view (no edit) -->
+    <div class="card">
+      <h2><%= product.name %></h2>
+      <div class="product-details">
+        <div class="media">
+          <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="image-preview" />
+        </div>
+        <div class="meta">
+          <p class="price">💲 <%= Number(product.price).toFixed(2) %></p>
+          <% if (product.stock > 0) { %>
+            <p class="stock in">✅ In stock: <%= product.stock %></p>
+          <% } else { %>
+            <p class="stock out">❌ Out of stock</p>
+          <% } %>
+          <p><strong>Category:</strong> <%= product.category || '—' %></p>
+          <p><strong>Type:</strong> <%= product.type || '—' %></p>
+          <p><strong>Color:</strong> <%= product.color || '—' %></p>
+          <p><strong>Size:</strong> <%= product.size || '—' %></p>
+          <p><strong>Quality:</strong> <%= product.quality || '—' %></p>
+          <p><strong>Made in:</strong> <%= product.made || '—' %></p>
+          <p><strong>Manufacturer:</strong> <%= product.manufacturer || '—' %></p>
+        </div>
+      </div>
+
+      <% if (product.description) { %>
+        <div class="description">
+          <h3>Description</h3>
+          <p><%= product.description %></p>
+        </div>
+      <% } %>
+
+      <div class="form-actions">
+        <a href="/products/all" class="btn">⬅ Back to All Products</a>
+        <a href="/api/cart/add?pid=<%= product.customId %>" class="btn primary">🛒 Add to Cart</a>
+      </div>
+    </div>
+  <% } %>
+</div>
+
+<!-- Minimal styles (optional; your main.css/dark.css will still apply) -->
+<style>
+  .page-title { margin-bottom: 1rem; }
+  .page-wrapper { display: block; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .col label { display:block; margin-top:.75rem; font-weight:600; }
+  .col input[type="text"], .col input[type="number"], .col textarea, .col input[type="file"] {
+    width:100%; padding:.6rem .7rem; border:1px solid var(--border, #ddd); border-radius:.5rem;
+  }
+  .required { color: #e11d48; }
+  .image-block { margin-top:.75rem; }
+  .image-preview { max-width: 100%; height: auto; border-radius:.6rem; border:1px solid var(--border, #ddd); }
+  .form-actions { display:flex; gap:.5rem; margin-top:1rem; flex-wrap:wrap; }
+  .btn { display:inline-block; padding:.6rem .9rem; border-radius:.6rem; text-decoration:none; border:1px solid #d1d5db; }
+  .btn.primary { background:#111827; color:#fff; border-color:#111827; }
+  .btn.subtle { background:#f3f4f6; }
+  .card { padding:1rem; border:1px solid #e5e7eb; border-radius:.75rem; background:#fff; }
+  .product-details { display:grid; grid-template-columns: 280px 1fr; gap:1rem; align-items:start; }
+  .price { font-size:1.25rem; font-weight:700; margin:.25rem 0; }
+  .stock.in { color:#065f46; }
+  .stock.out { color:#991b1b; }
+</style>
+
+<!-- 🧩 Secure Inline Script: Add Nonce -->
+<script nonce="<%= nonce %>">
+  (function () {
+    const input = document.getElementById('imageFile');
+    const wrapper = document.getElementById('newImagePreviewWrapper');
+    const img = document.getElementById('newImagePreview');
+    if (!input || !wrapper || !img) return;
+
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) {
+        wrapper.style.display = 'none';
+        img.src = '';
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      img.src = url;
+      wrapper.style.display = 'block';
+    });
+  })();
+</script>

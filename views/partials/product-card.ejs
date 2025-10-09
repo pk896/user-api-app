@@ -1,0 +1,95 @@
+<!-- views/partials/product-card.ejs -->
+<div class="product-card <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+
+  <!-- 🖼 Product image -->
+  <a href="/products/<%= product.customId %>" class="image-link">
+    <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
+  </a>
+
+  <!-- 🏷 Name & price -->
+  <h2 class="product-name">
+    <a href="/products/<%= product.customId %>"><%= product.name %></a>
+  </h2>
+  <p class="price">💲 <%= product.price.toFixed(2) %></p>
+
+  <!-- 📦 Stock -->
+  <% if (product.stock > 0) { %>
+    <p class="stock in">✅ In stock: <%= product.stock %></p>
+  <% } else { %>
+    <p class="stock out">❌ Out of stock</p>
+  <% } %>
+
+  <!-- ✏️ Short description -->
+  <% if (product.description) { %>
+    <p class="description">
+      <%= product.description.length > 100 
+            ? product.description.substring(0, 100) + "..." 
+            : product.description %>
+    </p>
+  <% } %>
+
+  <!-- ⚙️ Actions -->
+  <div class="product-actions">
+
+    <!-- 👁 Everyone can view -->
+    <a href="/products/<%= product.customId %>" class="btn btn-view">🔍 View Details</a>
+
+    <!-- 👨‍💼 Seller / Supplier can manage -->
+    <% if (business && ["seller","supplier"].includes(business.role)) { %>
+      <a href="/products/edit/<%= product.customId %>" class="btn btn-edit">✏️ Edit</a>
+
+      <a href="/products/delete/<%= product.customId %>"
+         onclick="return confirm('Are you sure you want to delete this product?');"
+         class="btn btn-delete">🗑 Delete</a>
+    <% } %>
+
+    <!-- 🛒 Buyer can add to cart -->
+    <% if (business && business.role === "buyer") { %>
+      <a href="/api/cart/add?pid=<%= product.customId %>" class="btn btn-cart">🛒 Add to Cart</a>
+    <% } %>
+  </div>
+</div>
+
+<!-- 💅 Styles -->
+<style>
+  .product-card {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: .75rem;
+    padding: 1rem;
+    background: var(--bg, #fff);
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .product-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 10px rgba(0,0,0,.1);
+  }
+  .product-image {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: .5rem;
+  }
+  .product-name { font-size: 1.1rem; margin: .5rem 0; }
+  .price { font-weight: bold; color: #111827; }
+  .stock.in { color: #047857; }
+  .stock.out { color: #b91c1c; }
+  .description { margin: .5rem 0; font-size: .95rem; color: #4b5563; }
+  .product-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+  .btn {
+    display: inline-block;
+    padding: .45rem .8rem;
+    border-radius: .5rem;
+    text-decoration: none;
+    font-size: .9rem;
+    border: 1px solid #d1d5db;
+    transition: background .2s ease, color .2s ease;
+  }
+  .btn-view { background: #f3f4f6; }
+  .btn-edit { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .btn-delete { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .btn-cart { background: #065f46; color: #fff; border-color: #065f46; }
+  .btn:hover { opacity: .85; }
+  .dark-theme .product-card { background: #1f2937; color: #f3f4f6; border-color: #374151; }
+  .dark-theme .btn-view { background: #374151; color: #e5e7eb; }
+</style>

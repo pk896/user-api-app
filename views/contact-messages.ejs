@@ -1,0 +1,237 @@
+<h1 class="page-title">
+  <%= isAdmin ? "📨 All Contact Messages" : "💬 Your Conversations" %>
+</h1>
+
+<!-- ✅ Flash Messages -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success"><%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error"><%= error %></div>
+<% } %>
+
+<!-- 🔘 Mark All as Read (only for admin) -->
+<% if (isAdmin) { %>
+  <div class="mark-all-container">
+    <button type="button" id="markAllBtn" class="btn mark-all-btn">✅ Mark All as Read</button>
+  </div>
+<% } %>
+
+<!-- 🔍 Search -->
+<div class="search-bar">
+  <form method="GET" action="/contact/all" class="search-form">
+    <input
+      type="text"
+      name="search"
+      value="<%= search || '' %>"
+      placeholder="Search by name or email..."
+      aria-label="Search messages"
+    />
+    <button type="submit" class="btn small">🔍 Search</button>
+  </form>
+</div>
+
+<!-- 💬 Message List -->
+<div class="message-list">
+  <% if (messages && messages.length > 0) { %>
+    <% messages.forEach(msg => { %>
+      <div class="message-item <%= msg.readByAdmin === false && isAdmin ? 'unread' : '' %>" data-id="<%= msg._id %>">
+
+        <!-- 🧾 Header -->
+        <div class="msg-header">
+          <strong>From:</strong>
+          <%= msg.business ? msg.business.name : msg.thread[0]?.sender === 'business' ? 'Business User' : 'Unknown' %>
+          <% if (msg.business && msg.business.email) { %>
+            | <small><%= msg.business.email %></small>
+          <% } %>
+          <span class="msg-date"><%= new Date(msg.createdAt).toLocaleString() %></span>
+        </div>
+
+        <!-- ✅ Mark as Read (only for admin) -->
+        <% if (isAdmin && msg.readByAdmin === false) { %>
+          <button type="button" class="btn mark-btn" data-id="<%= msg._id %>">✅ Mark as Read</button>
+        <% } %>
+
+        <!-- 🧵 Thread -->
+        <div class="thread-block">
+          <% if (msg.thread && msg.thread.length > 0) { %>
+            <% msg.thread.forEach(t => { %>
+              <div class="bubble <%= t.sender === 'admin' ? 'admin' : 'business' %>">
+                <p><%= t.message %></p>
+                <small><%= new Date(t.timestamp).toLocaleString() %></small>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <p class="no-thread">No conversation thread yet.</p>
+          <% } %>
+        </div>
+
+        <!-- 💬 Reply Form -->
+        <form action="/contact/reply/<%= msg._id %>" method="POST" class="reply-form">
+          <textarea
+            name="reply"
+            rows="2"
+            placeholder="<%= isAdmin ? 'Write a reply to the business...' : 'Write a reply to the admin...' %>"
+            required
+          ></textarea>
+          <button type="submit" class="btn reply-btn">
+            <%= isAdmin ? "📩 Send Reply" : "📨 Reply to Admin" %>
+          </button>
+        </form>
+
+        <!-- 🗑️ Delete -->
+        <form
+          action="/contact/delete/<%= msg._id %>"
+          method="POST"
+          class="delete-form"
+          onsubmit="return confirm('Are you sure you want to delete this message?');"
+        >
+          <button type="submit" class="btn danger-btn">🗑️ Delete</button>
+        </form>
+      </div>
+    <% }) %>
+  <% } else { %>
+    <p class="no-msg">No messages found.</p>
+  <% } %>
+</div>
+
+<!-- 📄 Pagination -->
+<% if (totalPages > 1) { %>
+  <div class="pagination">
+    <% for (let i = 1; i <= totalPages; i++) { %>
+      <a
+        href="/contact/all?page=<%= i %><%= search ? '&search=' + search : '' %>"
+        class="page-link <%= currentPage === i ? 'active' : '' %>"
+      ><%= i %></a>
+    <% } %>
+  </div>
+<% } %>
+
+<!-- 🔙 Back -->
+<div class="back-btn">
+  <a
+    href="<%= isAdmin ? '/admin/dashboard' : '/business/dashboard' %>"
+    class="btn secondary"
+  >
+    ⬅ Back to <%= isAdmin ? 'Admin Dashboard' : 'Business Dashboard' %>
+  </a>
+</div>
+
+<!-- 🎨 Styles -->
+<style>
+  .page-title { text-align:center; margin:1.2rem 0; font-size:1.8rem; font-weight:700; }
+  .flash { max-width:800px; margin:0.5rem auto; padding:0.8rem 1rem; border-radius:6px; text-align:center; font-weight:500; }
+  .flash-success { background:#dcfce7; color:#166534; }
+  .flash-error { background:#fee2e2; color:#991b1b; }
+
+  .mark-all-container { text-align:center; margin:1rem 0; }
+  .btn.mark-all-btn { background:#16a34a; color:#fff; padding:0.6rem 1.2rem; border:none; border-radius:8px; font-weight:600; cursor:pointer; }
+  .btn.mark-all-btn:hover { background:#15803d; }
+
+  .search-bar { text-align:center; margin:1rem 0; }
+  .search-form input { padding:0.5rem; border-radius:6px; border:1px solid #ccc; width:220px; }
+
+  .message-list { max-width:850px; margin:0 auto; }
+  .message-item { background:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; box-shadow:0 1px 8px rgba(0,0,0,0.08); transition:transform 0.2s ease; }
+  .message-item.unread { border-left:5px solid #ef4444; background:#fff5f5; }
+  .message-item:hover { transform:translateY(-2px); }
+  .dark-theme .message-item { background:#1f2937; color:#f9fafb; }
+
+  .msg-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; font-size:0.9rem; color:#555; }
+  .dark-theme .msg-header { color:#d1d5db; }
+
+  .thread-block { margin:0.5rem 0 1rem; display:flex; flex-direction:column; gap:0.4rem; }
+  .bubble { max-width:80%; padding:0.6rem 0.9rem; border-radius:10px; font-size:0.9rem; word-wrap:break-word; }
+  .bubble.admin { background:#2563eb; color:#fff; align-self:flex-end; border-bottom-right-radius:0; }
+  .bubble.business { background:#16a34a; color:#fff; align-self:flex-start; border-bottom-left-radius:0; }
+  .bubble small { display:block; font-size:0.7rem; opacity:0.8; margin-top:0.2rem; }
+
+  .reply-form, .delete-form { margin-top:0.8rem; display:flex; flex-direction:column; gap:0.4rem; }
+  .reply-form textarea { width:100%; padding:0.6rem; border-radius:6px; border:1px solid #ccc; }
+
+  .btn.reply-btn { background:#2563eb; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; font-weight:600; cursor:pointer; }
+  .btn.reply-btn:hover { background:#1d4ed8; }
+
+  .btn.danger-btn { background:#ef4444; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; font-weight:600; cursor:pointer; }
+  .btn.danger-btn:hover { background:#dc2626; }
+
+  .btn.mark-btn { background:#2563eb; color:#fff; border:none; padding:0.4rem 0.8rem; border-radius:6px; font-size:0.85rem; cursor:pointer; margin-top:0.4rem; }
+  .btn.mark-btn:hover { background:#1d4ed8; }
+
+  .pagination { text-align:center; margin:1rem 0; }
+  .page-link { display:inline-block; margin:0 0.3rem; padding:0.4rem 0.7rem; border-radius:6px; text-decoration:none; background:#e5e7eb; color:#111; }
+  .page-link.active { background:#2563eb; color:#fff; font-weight:600; }
+
+  .back-btn { text-align:center; margin:1.5rem 0; }
+  .btn.secondary { background:#9ca3af; color:#fff; padding:0.6rem 1.2rem; border-radius:8px; text-decoration:none; transition:background 0.2s ease; }
+  .btn.secondary:hover { background:#6b7280; }
+</style>
+
+<!-- ⚙️ Interactivity -->
+<div id="appData" data-is-admin="<%= isAdmin ? 'true' : 'false' %>"></div>
+
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("✅ Contact messages loaded — unified for admin and business");
+
+  // Read role from DOM safely
+  const appData = document.getElementById("appData");
+  const isAdmin = appData?.dataset.isAdmin === "true";
+
+  const markAllBtn = document.getElementById("markAllBtn");
+  const markButtons = document.querySelectorAll(".mark-btn");
+  const unreadItems = document.querySelectorAll(".message-item.unread");
+
+  // 🧠 Auto-mark unread messages (only if admin)
+  if (isAdmin) {
+    for (const item of unreadItems) {
+      const id = item.dataset.id;
+      if (!id) continue;
+      try {
+        const res = await fetch(`/contact/mark-read/${id}`, { method: "PATCH" });
+        if (res.ok) updateUI(item);
+      } catch (err) {
+        console.warn("⚠️ Auto mark failed:", err);
+      }
+    }
+  }
+
+  // ✅ Individual mark button
+  markButtons.forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      try {
+        const res = await fetch(`/contact/mark-read/${id}`, { method: "PATCH" });
+        if (res.ok) {
+          updateUI(btn.closest(".message-item"));
+          btn.remove();
+        }
+      } catch (err) {
+        console.error("❌ Failed to mark message:", err);
+      }
+    });
+  });
+
+  // ✅ Mark All (Admin only)
+  if (isAdmin && markAllBtn) {
+    markAllBtn.addEventListener("click", async () => {
+      if (!confirm("Mark all unread messages as read?")) return;
+      try {
+        const ids = [...document.querySelectorAll(".message-item[data-id]")].map(i => i.dataset.id);
+        for (const id of ids) await fetch(`/contact/mark-read/${id}`, { method: "PATCH" });
+        document.querySelectorAll(".message-item").forEach(updateUI);
+        document.querySelectorAll(".mark-btn").forEach(btn => btn.remove());
+        alert("✅ All messages marked as read.");
+      } catch (err) {
+        console.error("❌ Could not mark all:", err);
+        alert("⚠️ Try again later.");
+      }
+    });
+  }
+
+  function updateUI(item) {
+    if (!item) return;
+    item.classList.remove("unread");
+  }
+});
+</script>

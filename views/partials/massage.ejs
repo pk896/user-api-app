@@ -1,31 +1,86 @@
 <!-- views/partials/massage.ejs -->
-<% if (success && success.length) { %>
-  <% success.forEach(msg => { %>
-    <div class="alert alert-success"><%= msg %></div>
-  <% }) %>
-<% } %>
+<div id="flash-messages" class="flash-container">
+  <% if (success && success.length > 0) { %>
+    <% success.forEach(msg => { %>
+      <div class="flash flash-success">✅ <%= msg %></div>
+    <% }) %>
+  <% } %>
 
-<% if (error && error.length) { %>
-  <% error.forEach(msg => { %>
-    <div class="alert alert-error"><%= msg %></div>
-  <% }) %>
-<% } %>
+  <% if (error && error.length > 0) { %>
+    <% error.forEach(msg => { %>
+      <div class="flash flash-error">❌ <%= msg %></div>
+    <% }) %>
+  <% } %>
 
-<% if (info && info.length) { %>
-  <% info.forEach(msg => { %>
-    <div class="alert alert-info"><%= msg %></div>
-  <% }) %>
-<% } %>
+  <% if (info && info.length > 0) { %>
+    <% info.forEach(msg => { %>
+      <div class="flash flash-info">ℹ️ <%= msg %></div>
+    <% }) %>
+  <% } %>
 
-<% if (warning && warning.length) { %>
-  <% warning.forEach(msg => { %>
-    <div class="alert alert-warning"><%= msg %></div>
-  <% }) %>
-<% } %>
+  <% if (warning && warning.length > 0) { %>
+    <% warning.forEach(msg => { %>
+      <div class="flash flash-warning">⚠️ <%= msg %></div>
+    <% }) %>
+  <% } %>
 
-<% if (errors && errors.length) { %>
-  <% errors.forEach(err => { %>
-    <div class="alert alert-danger"><%= err.msg || err %></div>
-  <% }) %>
-<% } %>
- 
+  <% if (errors && errors.length > 0) { %>
+    <% errors.forEach(err => { %>
+      <div class="flash flash-error">❌ <%= err.msg || err %></div>
+    <% }) %>
+  <% } %>
+</div>
+
+<script nonce="<%= nonce %>">
+  // 🕒 Auto-hide flash messages smoothly
+  document.addEventListener("DOMContentLoaded", () => {
+    const flashes = document.querySelectorAll(".flash");
+    flashes.forEach(flash => {
+      setTimeout(() => {
+        flash.classList.add("fade-out");
+        setTimeout(() => flash.remove(), 500);
+      }, 4000); // 4 seconds visible
+    });
+  });
+</script>
+
+<style>
+  /* --- Flash message styling --- */
+  .flash-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 300px;
+    max-width: 90%;
+  }
+
+  .flash {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideIn 0.3s ease;
+  }
+
+  .flash-success { background-color: #16a34a; }   /* green */
+  .flash-error { background-color: #dc2626; }     /* red */
+  .flash-info { background-color: #2563eb; }      /* blue */
+  .flash-warning { background-color: #f59e0b; }   /* yellow/orange */
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(50px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .fade-out {
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+</style>
+
+

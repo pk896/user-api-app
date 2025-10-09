@@ -1,36 +1,263 @@
-<!-- views/partials/navbar.ejs -->
-<nav class="site-nav">
+<!-- ✅ views/partials/navbar.ejs -->
+<nav class="navbar <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
   <div class="nav-container">
-    <ul class="nav-list">
-      <li>
-        <a href="/users/home" class="<%= active === 'home' ? 'active-link' : '' %>">Home</a>
-      </li>
-      <li>
-        <a href="/users/about" class="<%= active === 'about' ? 'active-link' : '' %>">About</a>
-      </li>
-      <li>
-        <a href="/users/dashboard" class="<%= active === 'dashboard' ? 'active-link' : '' %>">Dashboard</a>
-      </li>
-      <li>
-        <a href="/users/contact" class="<%= active === 'contact' ? 'active-link' : '' %>">Contact</a>
-      </li>
+    <!-- 🌍 Brand -->
+    <div class="nav-left">
+      <a href="/home" class="brand">🌍 Phakisi Global</a>
+    </div>
 
-      <% if (user) { %>
-        <li class="right">
-          <span>Hi, <%= user.name || 'User' %></span>
-          <a href="/users/logout">Logout</a>
-        </li>
+    <!-- 🧭 Core quick links (always visible) -->
+    <div class="nav-core">
+      <a href="/" class="<%= active === 'home' ? 'active' : '' %>">Home</a>
+      <a href="/about" class="<%= active === 'about' ? 'active' : '' %>">About</a>
+    </div>
+
+    <!-- 🍔 Hamburger (mobile) -->
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+      <span class="bar"></span>
+      <span class="bar"></span>
+      <span class="bar"></span>
+    </button>
+
+    <!-- 📋 Expanded Links -->
+    <div class="nav-links" id="navLinks">
+      <a href="/contact" class="<%= active === 'contact' ? 'active' : '' %>">Contact</a>
+
+      <% if (business) { %>
+        <div class="nav-section-divider"></div>
+        <span class="welcome">Hi, <%= business.name %> 👋</span>
+
+        <a href="/business/dashboard" class="<%= active === 'business-dashboard' ? 'active' : '' %>">Dashboard</a>
+        <a href="/business/profile" class="<%= active === 'business-profile' ? 'active' : '' %>">Profile</a>
+        <a href="/products" class="<%= active === 'products' ? 'active' : '' %>">Products</a>
+        <a href="/products/add" class="<%= active === 'add-product' ? 'active' : '' %>">Add Product</a>
+        <a href="/shipments" class="<%= active === 'shipments' ? 'active' : '' %>">Shipments</a>
+        <a href="/admin/messages" class="<%= active === 'admin-messages' ? 'active' : '' %>">Messages</a>
+
+        <form action="/business/logout" method="POST" class="inline-form">
+          <button type="submit" class="btn-logout">Logout</button>
+        </form>
+
+      <% } else if (user) { %>
+        <div class="nav-section-divider"></div>
+        <span class="welcome">Hi, <%= user.name %> 👋</span>
+        <a href="/users/dashboard" class="<%= active === 'user-dashboard' ? 'active' : '' %>">Dashboard</a>
+        <a href="/users/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
+        <form action="/users/logout" method="GET" class="inline-form">
+          <button type="submit" class="btn-logout">Logout</button>
+        </form>
+
       <% } else { %>
-        <li class="right">
-          <a href="/users/render-log-in">Login</a>
-          <a href="/users/render-sign-up">Sign Up</a>
-        </li>
+        <div class="nav-section-divider"></div>
+        <span class="welcome">Guest 👤</span>
+        <a href="/users/login" class="<%= active === 'user-login' ? 'active' : '' %>">User Login</a>
+        <a href="/users/signup" class="<%= active === 'user-signup' ? 'active' : '' %>">User Sign Up</a>
+        <a href="/business/login" class="<%= active === 'business-login' ? 'active' : '' %>">Business Login</a>
+        <a href="/business/signup" class="<%= active === 'business-signup' ? 'active' : '' %>">Business Sign Up</a>
       <% } %>
-    </ul>  
+
+      <div class="nav-section-divider"></div>
+      <form id="themeToggleForm" method="POST" action="/theme-toggle">
+        <button type="submit" class="btn-theme">
+          <%= themeCss.includes('dark') ? '🌞 Light Mode' : '🌙 Dark Mode' %>
+        </button>
+      </form>
+    </div>
+  </div>
 </nav>
 
-<!-- Theme toggle button -->
-<button id="theme-toggle-btn" style="margin-left:auto; padding:0.25rem 0.5rem;">
-  Go to Dark Theme Screen
-</button>
+<!-- 💅 Styles -->
+<style>
+.navbar {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 1000;
+  background: var(--nav-bg, #ffffff);
+  color: var(--nav-text, #111827);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+.dark-theme.navbar {
+  --nav-bg: #111827;
+  --nav-text: #f9fafb;
+}
+.nav-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1.2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.brand {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--nav-text);
+  text-decoration: none;
+}
 
+/* 🌐 Core links (always visible) */
+.nav-core {
+  display: flex;
+  gap: 0.8rem;
+}
+.nav-core a {
+  color: var(--nav-text);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+.nav-core a:hover,
+.nav-core .active {
+  background: rgba(0,0,0,0.08);
+}
+.dark-theme .nav-core a:hover,
+.dark-theme .nav-core .active {
+  background: rgba(255,255,255,0.1);
+}
+
+/* 🍔 Hamburger */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 26px;
+  height: 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.nav-toggle .bar {
+  height: 3px;
+  width: 100%;
+  background: var(--nav-text);
+  border-radius: 3px;
+  transition: 0.3s ease;
+}
+
+/* 📋 Dropdown links */
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.nav-links a {
+  color: var(--nav-text);
+  text-decoration: none;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+.nav-links a:hover,
+.nav-links .active {
+  background: rgba(0,0,0,0.08);
+}
+.dark-theme .nav-links a:hover,
+.dark-theme .nav-links .active {
+  background: rgba(255,255,255,0.1);
+}
+
+.welcome {
+  font-weight: 500;
+  opacity: 0.9;
+}
+.btn-logout, .btn-theme {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #fff;
+  transition: background 0.2s;
+}
+.btn-logout {
+  background: #dc2626;
+}
+.btn-logout:hover {
+  background: #b91c1c;
+}
+.btn-theme {
+  background: #2563eb;
+  margin-left: 0.6rem;
+}
+.btn-theme:hover {
+  background: #1d4ed8;
+}
+.nav-section-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(0,0,0,0.1);
+  margin: 0 0.5rem;
+}
+.dark-theme .nav-section-divider {
+  background: rgba(255,255,255,0.2);
+}
+.inline-form {
+  display: inline;
+}
+
+/* 📱 Mobile View */
+@media (max-width: 768px) {
+  .nav-core a {
+    font-size: 0.95rem;
+  }
+  .nav-links {
+    position: absolute;
+    top: 58px;
+    right: 0;
+    width: 70%;
+    flex-direction: column;
+    background: var(--nav-bg);
+    padding: 1rem 0.8rem;
+    border-left: 1px solid rgba(0,0,0,0.05);
+    box-shadow: -3px 4px 10px rgba(0,0,0,0.1);
+    display: none;
+    animation: slideDown 0.3s ease forwards;
+  }
+  .nav-links.open {
+    display: flex;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .nav-toggle {
+    display: flex;
+  }
+  .nav-links a,
+  .btn-logout,
+  .btn-theme {
+    width: 100%;
+    text-align: left;
+  }
+  .nav-section-divider {
+    display: none;
+  }
+}
+</style>
+
+<!-- ⚙️ Hamburger Toggle Script -->
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  const toggle = document.getElementById("navToggle");
+  const links = document.getElementById("navLinks");
+
+  toggle.addEventListener("click", () => {
+    links.classList.toggle("open");
+    toggle.classList.toggle("active");
+  });
+
+  // animate bars when active
+  toggle.addEventListener("click", () => {
+    const bars = toggle.querySelectorAll(".bar");
+    bars.forEach((bar, i) => {
+      bar.style.transform = toggle.classList.contains("active")
+        ? i === 0 ? "rotate(45deg) translateY(8px)" : i === 2 ? "rotate(-45deg) translateY(-8px)" : "scale(0)"
+        : "none";
+    });
+  });
+});
+</script>

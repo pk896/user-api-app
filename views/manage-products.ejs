@@ -1,0 +1,132 @@
+<h1>📦 My Products</h1>
+
+<!-- Flash messages -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
+<% } %>
+
+<div class="products-container <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <% if (!products || products.length === 0) { %>
+    <p>You have not added any products yet.</p>
+  <% } else { %>
+    <% products.forEach(product => { %>
+      <div class="product-card">
+        <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-img" />
+        <div class="product-info">
+          <h2><%= product.name %></h2>
+          <p><strong>Price:</strong> $<%= product.price.toFixed(2) %></p>
+          <p><strong>Stock:</strong> <%= product.stock %></p>
+          <p><strong>Category:</strong> <%= product.category || 'N/A' %></p>
+          <p><strong>Added:</strong> <%= product.createdAt.toDateString() %></p>
+        </div>
+        <div class="product-actions">
+          <a href="/products/view/<%= product.customId %>" class="btn-view">🔍 View</a>
+          <form action="/products/<%= product.customId %>/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this product?');">
+            <button type="submit" class="btn-delete">🗑 Delete</button>
+          </form>
+        </div>
+      </div>
+    <% }) %>
+  <% } %>
+</div>
+
+<!-- Only sellers/suppliers can add -->
+<% if (business && ["seller", "supplier"].includes(business.role)) { %>
+  <a href="/products/add" class="btn-add">➕ Add New Product</a>
+<% } %>
+
+<style>
+  .products-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.2rem;
+    margin-top: 1rem;
+  }
+  .product-card {
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+  .dark-theme .product-card {
+    background: #222;
+    border: 1px solid #444;
+    color: #eee;
+  }
+  .product-img {
+    max-width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 0.8rem;
+  }
+  .product-info {
+    text-align: left;
+    width: 100%;
+  }
+  .product-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-top: 1rem;
+    width: 100%;
+  }
+  .btn-view, .btn-delete, .btn-add {
+    padding: 0.5rem 0.9rem;
+    border-radius: 6px;
+    text-decoration: none;
+    text-align: center;
+    cursor: pointer;
+    flex: 1;
+  }
+  .btn-view {
+    background: #0077cc;
+    color: #fff;
+  }
+  .btn-view:hover {
+    background: #005fa3;
+  }
+  .btn-delete {
+    background: #cc0000;
+    color: #fff;
+    border: none;
+  }
+  .btn-delete:hover {
+    background: #a30000;
+  }
+  .btn-add {
+    display: inline-block;
+    margin-top: 1.5rem;
+    background: #28a745;
+    color: #fff;
+    font-weight: bold;
+  }
+  .btn-add:hover {
+    background: #218838;
+  }
+  .flash {
+    margin: 0.75rem auto;
+    padding: 0.75rem;
+    border-radius: 8px;
+    font-weight: bold;
+    max-width: 600px;
+    text-align: center;
+  }
+  .flash-success {
+    background: #e0ffe5;
+    color: #228b22;
+    border: 1px solid #228b22;
+  }
+  .flash-error {
+    background: #ffe0e0;
+    color: #cc0000;
+    border: 1px solid #cc0000;
+  }
+</style>

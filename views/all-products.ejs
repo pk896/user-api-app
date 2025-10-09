@@ -1,0 +1,215 @@
+<!-- views/all-products.ejs -->
+<h1 class="page-title">📦 My Products</h1>
+
+<!-- ✅ Toast container -->
+<div id="toast-container"></div>
+
+<!-- ✅ Flash data -->
+<div
+  id="flash-data"
+  data-success="<%= success && success.length > 0 ? success : '' %>"
+  data-error="<%= error && error.length > 0 ? error : '' %>">
+</div>
+
+<!-- ✅ Delete Modal -->
+<div id="delete-modal" class="modal">
+  <div class="modal-content">
+    <h3>🗑️ Delete Product</h3>
+    <p>Are you sure you want to delete this product?</p>
+    <div class="modal-actions">
+      <button id="confirm-delete" class="btn danger big">Yes, Delete</button>
+      <button id="cancel-delete" class="btn subtle">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="products-container <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <% if (!business) { %>
+    <div class="unauthorized">
+      <p>⚠️ You must be logged in with a business account to view your products.</p>
+      <a href="/business/login" class="btn primary">Login</a>
+    </div>
+  <% } else if (!products || products.length === 0) { %>
+    <p class="no-products">No products found for <strong><%= business.name %></strong>.</p>
+  <% } else { %>
+    <div class="products-grid">
+      <% products.forEach(product => { %>
+        <div class="product-card" data-product-id="<%= product.customId %>">
+          <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-img" />
+
+          <div class="product-info">
+            <h2><%= product.name %></h2>
+            <p class="price">💲 <%= Number(product.price).toFixed(2) %></p>
+            <p class="stock <%= product.stock > 0 ? 'in' : 'out' %>">
+              <%= product.stock > 0 ? `✅ In stock: ${product.stock}` : '❌ Out of stock' %>
+            </p>
+            <p class="category">📂 <%= product.category || 'Uncategorized' %></p>
+          </div>
+
+          <!-- ✅ Seller/Supplier buttons -->
+          <% if (["seller", "supplier"].includes(business.role)) { %>
+            <div class="product-actions">
+              <a href="/products/<%= product.customId %>" class="btn small neutral">🔎 View</a>
+              <a href="/products/edit/<%= product.customId %>" class="btn small primary">✏️ Edit</a>
+              <button class="btn small danger big delete-btn" data-delete-url="/products/delete/<%= product.customId %>">
+                🗑️ Delete
+              </button>
+            </div>
+
+          <% } else if (business.role === "buyer") { %>
+            <div class="product-actions">
+              <a href="/products/<%= product.customId %>" class="btn small neutral">🔎 View</a>
+              <a href="/api/cart/add?pid=<%= product.customId %>" class="btn small primary">🛒 Add to Cart</a>
+            </div>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<!-- ✅ Floating Add Button -->
+<% if (business && ["seller", "supplier"].includes(business.role)) { %>
+  <div class="floating-btn-wrapper">
+    <a href="/products/add" class="btn-add" aria-label="Add Product">➕</a>
+    <span class="tooltip">Add Product</span>
+  </div>
+<% } %>
+
+<style>
+  :root {
+    --blue: #2563eb;
+    --blue-dark: #1d4ed8;
+    --danger: #dc2626;
+    --danger-dark: #b91c1c;
+    --success-bg: #d1fae5;
+    --success-color: #065f46;
+    --error-bg: #fee2e2;
+    --error-color: #991b1b;
+    --neutral-bg: #e5e7eb;
+    --neutral-dark: #d1d5db;
+  }
+
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+  .page-title { text-align: center; margin: 1rem 0; font-size: 1.8rem; font-weight: 700; }
+
+  .products-container { max-width: 1100px; margin: 0 auto; padding: 0.75rem; }
+  .products-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+
+  .product-card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .product-card:hover { transform: translateY(-3px); box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+  .dark-theme .product-card { background: #1f2937; color: #f9fafb; }
+
+  .product-img { width: 100%; height: 160px; object-fit: cover; }
+  .product-info { padding: 0.7rem 1rem; }
+  .product-info h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem; }
+  .price { color: var(--blue); font-weight: 700; }
+  .stock.in { color: var(--success-color); }
+  .stock.out { color: var(--error-color); }
+  .category { font-size: 0.9rem; color: #6b7280; }
+
+  /* ✅ Center-aligned equal buttons */
+  .product-actions {
+    display: flex;
+    justify-content: center;
+    padding: 0.8rem 1rem 1.2rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    text-decoration: none;
+    padding: 0.5rem 0.9rem;
+    border-radius: 6px;
+    font-weight: 600;
+    display: inline-block;
+    font-size: 0.85rem;
+    border: 1px solid transparent;
+    transition: background 0.2s ease, transform 0.1s ease;
+    cursor: pointer;
+    min-width: 100px; /* ✅ uniform button width */
+    text-align: center;
+  }
+
+  .btn.small { font-size: 0.8rem; }
+  .btn.big { padding: 0.55rem 1rem; min-width: 110px; font-size: 0.9rem; } /* ✅ Larger buttons for edit/delete */
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.primary:hover { background: var(--blue-dark); transform: scale(1.03); }
+  .btn.danger { background: var(--danger); color: #fff; }
+  .btn.danger:hover { background: var(--danger-dark); transform: scale(1.03); }
+  .btn.neutral { background: var(--neutral-bg); color: #111; }
+  .btn.neutral:hover { background: var(--neutral-dark); transform: scale(1.03); }
+
+  /* ✅ Floating Add Button */
+  .floating-btn-wrapper { position: fixed; bottom: 1.5rem; right: 1.5rem; display: flex; align-items: center; gap: 0.5rem; z-index: 1000; }
+  .btn-add { background: #111827; color: #fff; padding: 0.8rem 1rem; border-radius: 50%; font-size: 1.6rem; box-shadow: 0 4px 10px rgba(0,0,0,0.25); text-decoration: none; animation: pulse 3s ease-in-out infinite; }
+  .btn-add:hover { background: #1f2937; transform: scale(1.08); }
+  @keyframes pulse { 0%,100% {transform: scale(1);} 50% {transform: scale(1.05);} }
+  .tooltip { background: #111827; color: #fff; font-size: 0.8rem; padding: 0.4rem 0.7rem; border-radius: 6px; opacity: 0; transform: translateY(5px); transition: opacity 0.25s, transform 0.25s; white-space: nowrap; }
+  .floating-btn-wrapper:hover .tooltip { opacity: 1; transform: translateY(0); }
+
+  /* ✅ Modal */
+  .modal { position: fixed; inset: 0; display: none; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 2000; }
+  .modal.show { display: flex; animation: fadeIn 0.3s ease; }
+  .modal-content { background: #fff; padding: 1.2rem 1.5rem; border-radius: 8px; text-align: center; max-width: 320px; width: 90%; box-shadow: 0 3px 10px rgba(0,0,0,0.2); animation: slideUp 0.3s ease; }
+  .dark-theme .modal-content { background: #1f2937; color: #f9fafb; }
+  .modal-actions { margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; }
+
+  /* ✅ Toasts */
+  #toast-container { position: fixed; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast { min-width: 220px; padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.9rem; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.15); animation: slideIn 0.4s ease, fadeOut 0.4s ease 3.5s forwards; }
+  .toast-success { background: var(--success-bg); color: var(--success-color); }
+  .toast-error { background: var(--error-bg); color: var(--error-color); }
+
+  /* ✅ Mobile */
+  @media (max-width: 600px) {
+    .page-title { font-size: 1.3rem; }
+    .btn { min-width: unset; width: 100%; }
+    .product-actions { flex-direction: column; align-items: stretch; }
+  }
+</style>
+
+<script nonce="<%= nonce %>">
+  document.addEventListener("DOMContentLoaded", () => {
+    const toastContainer = document.getElementById("toast-container");
+    const flash = document.getElementById("flash-data");
+    const modal = document.getElementById("delete-modal");
+    const confirmBtn = document.getElementById("confirm-delete");
+    const cancelBtn = document.getElementById("cancel-delete");
+    let deleteUrl = null;
+
+    const showToast = (msg, type="success") => {
+      if (!msg) return;
+      const toast = document.createElement("div");
+      toast.className = `toast toast-${type}`;
+      toast.textContent = msg;
+      toastContainer.appendChild(toast);
+      if (navigator.vibrate) navigator.vibrate(40);
+      setTimeout(() => toast.remove(), 4000);
+    };
+
+    const s = flash?.dataset.success?.trim();
+    const e = flash?.dataset.error?.trim();
+    if (s) showToast(s,"success");
+    if (e) showToast(e,"error");
+
+    document.querySelectorAll(".delete-btn").forEach(btn => {
+      btn.addEventListener("click", e => {
+        e.preventDefault();
+        deleteUrl = btn.dataset.deleteUrl;
+        modal.classList.add("show");
+      });
+    });
+
+    cancelBtn.addEventListener("click", () => modal.classList.remove("show"));
+    confirmBtn.addEventListener("click", () => { if (deleteUrl) window.location.href = deleteUrl; });
+
+    console.log("✅ Edit and Delete buttons now perfectly same size and aligned!");
+  });
+</script>

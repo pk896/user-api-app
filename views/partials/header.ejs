@@ -1,17 +1,154 @@
-<!--header-->
-<header class="site-header" style="border-bottom:1px solid #eee; background:#fff;">
-  <div style="max-width:1100px; margin:0 auto; padding:0.75rem 1rem; display:flex; align-items:center; justify-content:space-between;">
-    <a href="/" style="text-decoration:none; color:#111; font-weight:700; font-size:1.25rem;">
-      MyApp
-    </a>
+<!-- views/partials/header.ejs -->
+<header class="site-header <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <div class="header-inner">
+    <!-- Brand / Home link -->
+    <a href="/" class="brand">MyApp</a>
 
-    <div style="display:flex; gap:0.75rem; align-items:center;">
+    <!-- Navigation links -->
+    <nav class="nav-links">
+      <a href="/about" class="<%= active === 'about' ? 'active' : '' %>">About</a>
+      <a href="/contact" class="<%= active === 'contact' ? 'active' : '' %>">Contact</a>
+
       <% if (user) { %>
-        <span style="font-size:0.95rem; color:#333;">Hi, <strong><%= user.name %></strong></span>
-        <a href="/users/logout" style="font-size:0.9rem;">Sign out</a>
-      <% } else { %>
-        <a href="/auth/login" style="font-size:0.9rem;">Sign in</a>
+        <a href="/users/dashboard" class="<%= active === 'user-dashboard' ? 'active' : '' %>">Dashboard</a>
+        <a href="/users/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
+      <% } else if (business) { %>
+        <a href="/business/dashboard" class="<%= active === 'business-dashboard' ? 'active' : '' %>">Dashboard</a>
+        <a href="/business/profile" class="<%= active === 'business-profile' ? 'active' : '' %>">Profile</a>
+        <% if (business.role === 'seller') { %>
+          <a href="/products/all" class="<%= active === 'products' ? 'active' : '' %>">Products</a>
+          <a href="/products/add" class="<%= active === 'add-product' ? 'active' : '' %>">Add Product</a>
+        <% } %>
       <% } %>
+    </nav>
+
+    <!-- Right side: user info + actions -->
+    <div class="header-actions">
+      <% if (user) { %>
+        <span class="welcome">👋 Hi, <strong><%= user.name %></strong></span>
+        <form action="/users/logout" method="GET" class="logout-form">
+          <button type="submit" class="btn-logout">Logout</button>
+        </form>
+      <% } else if (business) { %>
+        <span class="welcome">🏢 <%= business.role.toUpperCase() %>: <strong><%= business.name %></strong></span>
+        <form action="/business/logout" method="POST" class="logout-form">
+          <button type="submit" class="btn-logout">Logout</button>
+        </form>
+      <% } else { %>
+        <a href="/users/login" class="btn-login">User Login</a>
+        <a href="/business/login" class="btn-login">Business Login</a>
+      <% } %>
+
+      <!-- Theme toggle button -->
+      <button id="themeToggleBtn" class="theme-toggle" title="Toggle theme">🌓</button>
     </div>
   </div>
 </header>
+
+<!-- 🌈 Modern styles -->
+<style>
+  .site-header {
+    border-bottom: 1px solid #e5e7eb;
+    background: var(--header-bg, #fff);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .dark-theme .site-header {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: .75rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+  }
+  .brand {
+    text-decoration: none;
+    color: var(--brand-color, #111);
+    font-weight: 700;
+    font-size: 1.25rem;
+  }
+  .dark-theme .brand {
+    color: #f9fafb;
+  }
+  .nav-links a {
+    margin: 0 .5rem;
+    text-decoration: none;
+    color: #374151;
+    font-weight: 500;
+  }
+  .nav-links a.active {
+    color: #2563eb;
+    border-bottom: 2px solid #2563eb;
+  }
+  .dark-theme .nav-links a {
+    color: #d1d5db;
+  }
+  .dark-theme .nav-links a.active {
+    color: #60a5fa;
+    border-bottom: 2px solid #60a5fa;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+  }
+  .welcome {
+    font-size: .9rem;
+    color: #374151;
+  }
+  .dark-theme .welcome {
+    color: #f3f4f6;
+  }
+  .btn-login,
+  .btn-logout {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: .45rem .9rem;
+    border-radius: .4rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .2s ease;
+    text-decoration: none;
+  }
+  .btn-login:hover,
+  .btn-logout:hover {
+    background: #1d4ed8;
+  }
+  .theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: transform .2s ease;
+  }
+  .theme-toggle:hover { transform: scale(1.1); }
+</style>
+
+<!-- ✅ Secure script (CSP nonce) -->
+<script nonce="<%= nonce %>">
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("themeToggleBtn");
+    if (!btn) return;
+
+    btn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/theme-toggle", { method: "POST" });
+        const data = await res.json();
+        if (data.theme) {
+          document.body.classList.toggle("dark-theme", data.theme === "dark");
+          console.log(`🌗 Theme switched to ${data.theme}`);
+        }
+      } catch (err) {
+        console.error("Theme toggle failed:", err);
+      }
+    });
+  });
+</script>
