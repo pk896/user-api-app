@@ -77,6 +77,28 @@ router.get("/add", requireBusiness, (req, res) => {
   });
 });
 
+// GET: Public sales products page
+router.get("/sales", async (req, res) => {
+  try {
+    const products = await Product.find({ stock: { $gt: 0 } })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.render("sales-products", {
+      title: "Shop Products",
+      products,
+      themeCss: res.locals.themeCss,
+      success: req.flash("success"),
+      error: req.flash("error"),
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error("❌ Failed to load sales page:", err);
+    req.flash("error", "Could not load products.");
+    res.redirect("/");
+  }
+});
+
 
 /* ---------------------------------------------
  * ➕ POST /products/add — create product
@@ -360,12 +382,6 @@ router.use((err, req, res, _next) => {
   res.redirect("/products/add");
 });
 
-
-
-
-
-
-
 /* ---------------------------------------------
  * 📦 GET /products/all — list all products
  * ------------------------------------------- */
@@ -421,7 +437,6 @@ router.get("/:id", requireBusiness, async (req, res) => {
     res.redirect("/products/all");
   }
 });
-
 
  ---------------------------------------------
  * ✏️ GET /products/edit/:id — load edit form

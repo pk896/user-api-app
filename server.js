@@ -378,17 +378,53 @@ app.use("/business", businessAuthRoutes);
 const shipmentRoutes = require("./routes/shipments");
 app.use("/shipments", shipmentRoutes);
 
+// routes for terms and privacy
 app.use("/", require("./routes/staticPages"));
+
+// routes for sales-product page
+app.use("/sales", require("./routes/sales"));
+
+// 🛒 Get current cart item count
+app.get("/cart/count", (req, res) => {
+  try {
+    const count = req.session.cart && req.session.cart.items
+      ? req.session.cart.items.reduce((sum, i) => sum + i.quantity, 0)
+      : 0;
+    res.json({ count });
+  } catch (err) {
+    console.error("❌ Failed to fetch cart count:", err);
+    res.status(500).json({ count: 0 });
+  }
+});
+
+// ---------------------------
+// 🌗 Theme toggle route
+// ---------------------------
+app.post('/theme-toggle', (req, res) => {
+  // 🔄 Flip theme between dark and light
+  req.session.theme = req.session.theme === 'dark' ? 'light' : 'dark';
+
+  // ✅ Redirect back to where the user came from
+  const referer = req.get('Referer');
+  if (referer) {
+    return res.redirect(referer);
+  }
+
+  // fallback if no referer header
+  res.redirect('/');
+});
+
+
 
 // --------------------------
 // Theme toggle route
 // --------------------------
-app.post('/theme-toggle', (req, res) => {
+/*app.post('/theme-toggle', (req, res) => {
   // Toggle session theme
   req.session.theme = req.session.theme === 'dark' ? 'light' : 'dark';
   res.json({ theme: req.session.theme });
 });
-
+*/
 // Redirect root to /users/home or render a homepage
 app.get('/', (req, res) => {
   //res.redirect('/users/home');
