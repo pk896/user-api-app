@@ -192,6 +192,31 @@ router.post(
   }
 );
 
+// PUBLIC: view a product by customId (no auth)
+router.get("/view/:id", async (req, res) => {
+  try {
+    const product = await Product.findOne({ customId: req.params.id }).lean();
+    if (!product) {
+      req.flash("error", "❌ Product not found.");
+      return res.redirect("/products/sales"); // or wherever your shop is
+    }
+
+    res.render("product-details", {
+      title: product.name,
+      product,
+      business: req.session.business || null, // your EJS already checks this
+      success: req.flash("success"),
+      error: req.flash("error"),
+      themeCss: res.locals.themeCss,
+    });
+  } catch (err) {
+    console.error("❌ Public product details error:", err);
+    req.flash("error", "❌ Could not load product.");
+    res.redirect("/products/sales");
+  }
+});
+
+
 /* ===========================================================
  * 📦 GET: All Products (owned by this business)
  * =========================================================== */

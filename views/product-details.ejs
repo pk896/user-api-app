@@ -1,237 +1,48 @@
-<h1 class="page-title">📝 Product Details</h1>
+<!-- views/product-details.ejs -->
+<% const p = product; %>
 
-<!-- ✅ Toast Container -->
-<div id="toast-container"></div>
-
-<!-- ✅ Product Section -->
-<div class="product-details <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <div class="image-column">
-    <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
-  </div>
-
-  <div class="info-column">
-    <h2><%= product.name %></h2>
-    <p class="price">💲 <%= product.price.toFixed(2) %></p>
-
-    <% if (product.stock > 0) { %>
-      <p class="stock in">✅ In stock: <%= product.stock %></p>
-    <% } else { %>
-      <p class="stock out">❌ Out of stock</p>
-    <% } %>
-
-    <% if (product.description) { %>
-      <p class="description"><%= product.description %></p>
-    <% } %>
-
-    <ul class="meta">
-      <% if (product.category) { %><li>📂 Category: <%= product.category %></li><% } %>
-      <% if (product.color) { %><li>🎨 Color: <%= product.color %></li><% } %>
-      <% if (product.size) { %><li>📏 Size: <%= product.size %></li><% } %>
-      <% if (product.quality) { %><li>⭐ Quality: <%= product.quality %></li><% } %>
-      <% if (product.made) { %><li>🌍 Made in: <%= product.made %></li><% } %>
-      <% if (product.manufacturer) { %><li>🏭 Manufacturer: <%= product.manufacturer %></li><% } %>
-      <% if (product.type) { %><li>📦 Type: <%= product.type %></li><% } %>
-    </ul>
-
-    <!-- ✅ Role-based Actions -->
-    <div class="actions">
-      <% if (
-        business && ["seller", "supplier"].includes(business.role) &&
-        product.business && (
-          (product.business._id && product.business._id.toString() === business._id) ||
-          (typeof product.business === "string" && product.business === business._id)
-        )
-      ) { %>
-        <a href="/products/edit/<%= product.customId %>" class="btn primary">✏️ Edit</a>
-        <a href="/products/delete/<%= product.customId %>" class="btn danger"
-           onclick="return confirm('Are you sure you want to delete this product?');">🗑 Delete</a>
-      <% } else if (business && business.role === "buyer") { %>
-        <a href="/api/cart/add?pid=<%= product.customId %>" class="btn primary desktop-only">🛒 Add to Cart</a>
-      <% } %>
-
-      <a href="/products/all" class="btn secondary">⬅ Back to My Products</a>
-    </div>
-  </div>
-</div>
-
-<!-- ✅ Floating Add-to-Cart Button (Mobile Only) -->
-<% if (business && business.role === "buyer") { %>
-  <a href="/api/cart/add?pid=<%= product.customId %>" class="floating-cart-btn mobile-only">🛒 Add to Cart</a>
+<!-- Flash -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
 <% } %>
 
-<!-- ✅ Styles -->
-<style>
-  :root {
-    --blue-light: #2563eb;
-    --blue-dark: #3b82f6;
-    --danger: #dc2626;
-    --danger-dark: #b91c1c;
-    --gray: #6b7280;
-  }
+<main class="product-details <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <article class="pd-wrap">
+    <div class="pd-media">
+      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" />
+    </div>
 
-  .page-title {
-    text-align: center;
-    margin: 1.2rem 0;
-    font-size: 1.8rem;
-    font-weight: 700;
-  }
+    <div class="pd-info">
+      <h1><%= p.name %></h1>
+      <p class="pd-price">R <%= Number(p.price||0).toFixed(2) %></p>
+      <p class="pd-stock"><%= (p.stock||0) > 0 ? '✅ In stock' : '❌ Out of stock' %></p>
 
-  .product-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2rem;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 1rem;
-  }
+      <p class="pd-desc"><%= p.description || '' %></p>
 
-  .image-column { flex: 1; min-width: 300px; }
-  .info-column { flex: 1; min-width: 300px; }
+      <div class="pd-actions">
+        <a class="btn btn-primary"
+           href="/api/cart/add?pid=<%= p.customId %>"
+           <%= (p.stock||0) > 0 ? '' : 'aria-disabled="true" tabindex="-1"' %>>
+          ➕ Add to Cart
+        </a>
+        <a class="btn" href="/sales">← Back to Shop</a>
+      </div>
+    </div>
+  </article>
+</main>
 
-  .product-image {
-    width: 100%;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    border: 1px solid #e5e7eb;
-  }
-
-  .price { font-size: 1.4rem; font-weight: bold; color: var(--blue-light); margin: 0.5rem 0; }
-  .dark-theme .price { color: var(--blue-dark); }
-
-  .stock.in { color: #065f46; font-weight: 600; }
-  .stock.out { color: #991b1b; font-weight: 600; }
-
-  .meta { list-style: none; padding: 0; margin: 1rem 0; font-size: 0.95rem; }
-  .meta li { margin-bottom: 0.4rem; }
-
-  .description { margin: 0.5rem 0 1rem; line-height: 1.4; font-size: 0.95rem; }
-
-  .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
-
-  .btn {
-    display: inline-block;
-    text-decoration: none;
-    padding: 0.6rem 1.1rem;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 0.9rem;
-    transition: background 0.2s ease;
-    border: 1px solid transparent;
-  }
-  .btn.primary { background: var(--blue-light); color: #fff; }
-  .btn.primary:hover { background: var(--blue-dark); }
-  .btn.danger { background: var(--danger); color: #fff; }
-  .btn.danger:hover { background: var(--danger-dark); }
-  .btn.secondary { background: var(--gray); color: #fff; }
-  .btn.secondary:hover { background: #4b5563; }
-
-  /* ✅ Floating Add-to-Cart button */
-  .floating-cart-btn {
-    position: fixed;
-    bottom: 1.2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--blue-light);
-    color: #fff;
-    border-radius: 50px;
-    padding: 0.8rem 2rem;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-    z-index: 1000;
-    transition: background 0.2s ease, transform 0.2s ease;
-    animation: bounceIn 0.8s ease;
-  }
-
-  .dark-theme .floating-cart-btn {
-    background: var(--blue-dark);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-  }
-
-  @keyframes bounceIn {
-    0%   { transform: translateX(-50%) scale(0.8); opacity: 0; }
-    60%  { transform: translateX(-50%) scale(1.1); opacity: 1; }
-    100% { transform: translateX(-50%) scale(1); }
-  }
-
-  .floating-cart-btn:hover {
-    background: var(--blue-dark);
-    transform: translateX(-50%) scale(1.05);
-  }
-
-  .mobile-only { display: none; }
-  .desktop-only { display: inline-block; }
-
-  /* ✅ Mobile responsiveness */
-  @media (max-width: 600px) {
-    .page-title { font-size: 1.5rem; }
-    .product-details { flex-direction: column; gap: 1rem; }
-    .btn { width: 100%; text-align: center; }
-    .mobile-only { display: block; }
-    .desktop-only { display: none; }
-  }
-
-  /* ✅ Toast Notifications */
-  #toast-container {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  /* ✅ Move to bottom on mobile */
-  @media (max-width: 600px) {
-    #toast-container {
-      top: auto;
-      bottom: 1.2rem;
-      right: 50%;
-      transform: translateX(50%);
-      align-items: center;
-    }
-  }
-
-  .toast {
-    min-width: 220px;
-    padding: 0.7rem 1rem;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    animation: slideIn 0.4s ease, fadeOut 0.4s ease 3.5s forwards;
-  }
-
-  /* ✅ Light mode toast */
-  .light-theme .toast-success { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
-  .light-theme .toast-error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
-
-  /* ✅ Dark mode toast */
-  .dark-theme .toast-success { background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; }
-  .dark-theme .toast-error { background: #450a0a; color: #fecaca; border: 1px solid #ef4444; }
-
-  @keyframes slideIn { from { opacity: 0; transform: translateY(100%);} to { opacity: 1; transform: translateY(0);} }
-  @keyframes fadeOut { to { opacity: 0; transform: translateY(100%);} }
+<style nonce="<%= nonce %>">
+  .pd-wrap{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+  .pd-media img{width:100%;height:auto;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.1)}
+  .pd-info h1{margin:0 0 .25rem;font-size:clamp(1.25rem,2.4vw,1.8rem)}
+  .pd-price{font-weight:900;color:#2563eb;margin:.25rem 0}
+  .pd-stock{font-weight:700;margin:.25rem 0 1rem}
+  .pd-actions{display:flex;gap:.6rem}
+  .btn{display:inline-block;padding:.6rem 1rem;border-radius:10px;text-decoration:none;border:1px solid #d1d5db}
+  .btn-primary{background:#2563eb;color:#fff;border-color:#2563eb}
+  .btn[aria-disabled="true"]{background:#9ca3af;border-color:#9ca3af;pointer-events:none}
+  @media (max-width:820px){.pd-wrap{grid-template-columns:1fr}}
 </style>
-
-<!-- ✅ Secure Toast Script -->
-<script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    const showToast = (msg, type) => {
-      if (!msg) return;
-      const container = document.getElementById("toast-container");
-      if (!container) return;
-      const toast = document.createElement("div");
-      toast.className = `toast toast-${type}`;
-      toast.textContent = msg;
-      container.appendChild(toast);
-      setTimeout(() => toast.remove(), 4000);
-    };
-
-    const successMsg = "<%= success && success.length > 0 ? success : '' %>";
-    const errorMsg = "<%= error && error.length > 0 ? error : '' %>";
-    if (successMsg) showToast(successMsg, "success");
-    if (errorMsg) showToast(errorMsg, "error");
-  });
-</script>

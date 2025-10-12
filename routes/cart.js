@@ -1,165 +1,143 @@
 // routes/cart.js
 const express = require("express");
-const router = express.Router();
 const Product = require("../models/Product");
 
-/* ----------------------------------------------------------
- * 🧩 Middleware: Ensure session cart always exists
- * -------------------------------------------------------- */
-router.use((req, res, next) => {
-  if (!req.session.cart) {
-    req.session.cart = { items: [] }; // Structure: { items: [{ productId, quantity }] }
-  }
-  next();
-});
+const router = express.Router();
 
-/* ----------------------------------------------------------
- * 🔍 Helper: Find item index in the cart
- * -------------------------------------------------------- */
-function findItemIndex(cart, productId) {
-  return cart.items.findIndex((item) => item.productId.toString() === productId.toString());
+/* -----------------------------
+ * Helpers
+ * --------------------------- */
+function ensureCart(req) {
+  if (!req.session.cart) {
+    req.session.cart = { items: [] };
+  }
+  return req.session.cart;
 }
 
-/* ----------------------------------------------------------
- * 🛒 GET /api/cart
- * Fetch detailed cart with product info
- * -------------------------------------------------------- */
-router.get("/", async (req, res) => {
+async function findProductByPid(pid) {
+  if (!pid) return null;
+  // Try customId first (your shop pages use customId)
+  let p = await Product.findOne({ customId: pid }).lean();
+  if (p) return p;
+  // Fallback: treat as Mongo _id
   try {
-    const cart = req.session.cart;
-
-    // Populate each cart item with product details
-    const detailedItems = await Promise.all(
-      cart.items.map(async (item) => {
-        const product = await Product.findById(item.productId).lean();
-        if (!product) return null;
-        return {
-          productId: item.productId,
-          quantity: item.quantity,
-          name: product.name,
-          price: product.price,
-          imageUrl: product.imageUrl,
-        };
-      })
-    );
-
-    const items = detailedItems.filter(Boolean);
-    const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const totalCount = items.reduce((sum, i) => sum + i.quantity, 0);
-
-    res.json({ success: true, items, total, totalCount });
-  } catch (err) {
-    console.error("❌ Cart fetch error:", err);
-    res.status(500).json({ success: false, error: "Failed to fetch cart" });
+    p = await Product.findById(pid).lean();
+  } catch {
+    // ignore invalid ObjectId
   }
+  return p || null;
+}
+
+/* -----------------------------
+ * GET /api/cart
+ * -> { items: [ { productId, name, price, imageUrl, quantity } ] }
+ * --------------------------- */
+router.get("/", (req, res) => {
+  const cart = ensureCart(req);
+  return res.json({
+    items: cart.items || [],
+  });
 });
 
-/* ----------------------------------------------------------
- * ➕ POST /api/cart/add
- * Add item to cart or increase its quantity
- * -------------------------------------------------------- */
-router.post("/add", async (req, res) => {
+/* -----------------------------
+ * GET /api/cart/items
+ * -> [ { productId, name, price, imageUrl, quantity } ]
+ * --------------------------- */
+router.get("/items", (req, res) => {
+  const cart = ensureCart(req);
+  return res.json(cart.items || []);
+});
+
+/* -----------------------------
+ * GET /api/cart/count
+ * -> { count: number }
+ * --------------------------- */
+router.get("/count", (req, res) => {
+  const cart = ensureCart(req);
+  const count = (cart.items || []).reduce((n, it) => n + Number(it.quantity || 1), 0);
+  return res.json({ count });
+});
+
+/* -----------------------------
+ * GET /api/cart/add?pid=<customId or _id>&qty=1
+ * Adds one (or qty) to the cart
+ * --------------------------- */
+router.get("/add", async (req, res) => {
   try {
-    const { productId, quantity = 1 } = req.body;
-    if (!productId) return res.status(400).json({ success: false, error: "Missing productId" });
+    const pid = (req.query.pid || "").trim();
+    const qty = Math.max(1, Number(req.query.qty || 1));
 
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ success: false, error: "Product not found" });
+    const product = await findProductByPid(pid);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found." });
+    }
 
-    const cart = req.session.cart;
-    const index = findItemIndex(cart, productId);
+    // basic stock check (optional)
+    if (typeof product.stock === "number" && product.stock <= 0) {
+      return res.status(400).json({ success: false, message: "Out of stock." });
+    }
 
-    if (index >= 0) {
-      cart.items[index].quantity += Number(quantity);
+    const cart = ensureCart(req);
+    const id = String(product._id);
+
+    // If item exists, increase; else push new
+    const existing = cart.items.find((it) => String(it.productId) === id);
+    if (existing) {
+      existing.quantity = Number(existing.quantity || 1) + qty;
     } else {
-      cart.items.push({ productId, quantity: Number(quantity) });
+      cart.items.push({
+        productId: id,
+        customId: product.customId,
+        name: product.name,
+        price: Number(product.price || 0),
+        imageUrl: product.imageUrl,
+        quantity: qty,
+      });
     }
 
-    const totalCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
+    // Persist session
+    req.session.cart = cart;
 
-    res.json({ success: true, cart, totalCount });
+    return res.json({
+      success: true,
+      message: "Added to cart.",
+      cart: { items: cart.items },
+    });
   } catch (err) {
-    console.error("❌ Add to cart error:", err);
-    res.status(500).json({ success: false, error: "Failed to add item" });
+    console.error("❌ /api/cart/add error:", err);
+    return res.status(500).json({ success: false, message: "Failed to add to cart." });
   }
 });
 
-/* ----------------------------------------------------------
- * ⬆️ POST /api/cart/increase
- * Increase item quantity by 1
- * -------------------------------------------------------- */
-router.post("/increase", (req, res) => {
-  try {
-    const { productId } = req.body;
-    const cart = req.session.cart;
-    const index = findItemIndex(cart, productId);
-
-    if (index >= 0) cart.items[index].quantity += 1;
-
-    const totalCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
-    res.json({ success: true, cart, totalCount });
-  } catch (err) {
-    console.error("❌ Increase error:", err);
-    res.status(500).json({ success: false, error: "Failed to increase item" });
-  }
+/* -----------------------------
+ * (Optional) quantity updates
+ * --------------------------- */
+router.post("/increase", express.json(), (req, res) => {
+  const { productId } = req.body || {};
+  const cart = ensureCart(req);
+  const it = cart.items.find((i) => String(i.productId) === String(productId));
+  if (!it) return res.status(404).json({ success: false, message: "Item not found" });
+  it.quantity = Number(it.quantity || 1) + 1;
+  req.session.cart = cart;
+  res.json({ success: true, items: cart.items });
 });
 
-/* ----------------------------------------------------------
- * ⬇️ POST /api/cart/decrease
- * Decrease item quantity or remove if zero
- * -------------------------------------------------------- */
-router.post("/decrease", (req, res) => {
-  try {
-    const { productId } = req.body;
-    const cart = req.session.cart;
-    const index = findItemIndex(cart, productId);
-
-    if (index >= 0) {
-      cart.items[index].quantity -= 1;
-      if (cart.items[index].quantity <= 0) {
-        cart.items.splice(index, 1);
-      }
-    }
-
-    const totalCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
-    res.json({ success: true, cart, totalCount });
-  } catch (err) {
-    console.error("❌ Decrease error:", err);
-    res.status(500).json({ success: false, error: "Failed to decrease item" });
-  }
+router.post("/decrease", express.json(), (req, res) => {
+  const { productId } = req.body || {};
+  const cart = ensureCart(req);
+  const it = cart.items.find((i) => String(i.productId) === String(productId));
+  if (!it) return res.status(404).json({ success: false, message: "Item not found" });
+  it.quantity = Math.max(1, Number(it.quantity || 1) - 1);
+  req.session.cart = cart;
+  res.json({ success: true, items: cart.items });
 });
 
-/* ----------------------------------------------------------
- * ❌ POST /api/cart/remove
- * Remove product entirely from cart
- * -------------------------------------------------------- */
-router.post("/remove", (req, res) => {
-  try {
-    const { productId } = req.body;
-    const cart = req.session.cart;
-
-    cart.items = cart.items.filter((item) => item.productId.toString() !== productId.toString());
-
-    const totalCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
-    res.json({ success: true, cart, totalCount });
-  } catch (err) {
-    console.error("❌ Remove error:", err);
-    res.status(500).json({ success: false, error: "Failed to remove item" });
-  }
-});
-
-/* ----------------------------------------------------------
- * 🧹 POST /api/cart/clear
- * Empty entire cart
- * -------------------------------------------------------- */
-router.post("/clear", (req, res) => {
-  try {
-    req.session.cart = { items: [] };
-    res.json({ success: true, cart: req.session.cart, totalCount: 0 });
-  } catch (err) {
-    console.error("❌ Clear cart error:", err);
-    res.status(500).json({ success: false, error: "Failed to clear cart" });
-  }
+router.post("/remove", express.json(), (req, res) => {
+  const { productId } = req.body || {};
+  const cart = ensureCart(req);
+  cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(productId));
+  req.session.cart = cart;
+  res.json({ success: true, items: cart.items });
 });
 
 module.exports = router;
