@@ -128,7 +128,83 @@ app.use((req, res, next) => {
   next();
 });
 
+// existing Helmet wrapper
 app.use((req, res, next) => {
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'strict-dynamic'",
+          `'nonce-${res.locals.nonce}'`,
+          "https://apis.google.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
+        ],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.amazonaws.com",
+          "https://*.cloudinary.com",
+          "https://www.paypalobjects.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+          "https://api.paypal.com",
+          "https://api.sandbox.paypal.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
+        ],
+        frameSrc: [
+          "'self'",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+        ],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+  })(req, res, next);
+});
+
+// === Add this block to control the geolocation permission ===
+// Option A: Silence the console by allowing geolocation for PayPal iframes only.
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    'geolocation=(self "https://www.paypal.com" "https://www.sandbox.paypal.com")'
+  );
+  next();
+});
+
+/*
+ // Option B: Keep geolocation blocked everywhere (privacy-first).
+ // You’ll likely keep seeing the warning when the iframe probes it.
+ app.use((req, res, next) => {
+   res.setHeader("Permissions-Policy", "geolocation=()");
+   next();
+ });
+
+ // Option C: Remove the directive completely (no explicit policy).
+ // Then the warning disappears, but geolocation may be allowed by default
+ // (still gated by user permission).
+ app.use((req, res, next) => {
+   res.removeHeader("Permissions-Policy");
+   next();
+ });
+*/
+
+
+/*app.use((req, res, next) => {
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
@@ -184,7 +260,7 @@ app.use((req, res, next) => {
       },
     },
   })(req, res, next);
-});
+});*/
 
 // Compression
 app.use(compression());

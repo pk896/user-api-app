@@ -143,76 +143,50 @@
     tTotal.textContent = money(total);
 
     // 3) Load PayPal JS SDK using client-id from backend
-    const config = await getJSON('/payment/client-id'); // -> { clientId, intent?, currency? }
+    const config = await getJSON('/payment/client-id'); // -> { clientId, intent?, currency?, env? }
     if(!config || !config.clientId){
       payStatus.textContent = 'Could not load PayPal configuration.';
-      fallbackBox.hidden = false;
+      if (fallbackBox) fallbackBox.hidden = false;
       return;
     }
 
-
     try {
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-
-    // Choose host by environment (default to sandbox unless explicitly "live")
-    const host =
-      (config.env && String(config.env).toLowerCase() === 'live')
-        ? 'https://www.paypal.com'
-        : 'https://www.sandbox.paypal.com';
-
-    // Build query params (omit intent or force lowercase to avoid 400)
-    const paramsObj = {
-      'client-id': config.clientId,
-      'components': 'buttons',
-      // We let the server compute amounts; currency is optional but nice to include.
-      ...(config.currency ? { currency: config.currency } : {})
-    };
-    if (config.intent) paramsObj.intent = String(config.intent).toLowerCase();
-
-    const params = new URLSearchParams(paramsObj);
-    const sdkUrl = `${host}/sdk/js?${params.toString()}`;
-
-    // Debug: see exactly what we’re loading (copy into a new tab if needed)
-    console.log('[PayPal SDK URL]', sdkUrl);
-
-    s.src = sdkUrl;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-} catch (e) {
-  console.error('PayPal SDK load failed', e);
-  payStatus.textContent = 'PayPal failed to load.';
-  if (fallbackBox) fallbackBox.hidden = false;
-  return;
-}
-
-
-    /*try{
       await new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        const params = new URLSearchParams({
+
+        // Choose host by environment (default to sandbox unless explicitly "live")
+        const host =
+          (config.env && String(config.env).toLowerCase() === 'live')
+            ? 'https://www.paypal.com'
+            : 'https://www.sandbox.paypal.com';
+
+        const paramsObj = {
           'client-id': config.clientId,
           'components': 'buttons',
-          'intent': config.intent || 'CAPTURE',
-          // We let the server decide currency when creating the order.
-          ...(config.currency ? { currency: config.currency } : {}),
-        });
-        s.src = 'https://www.paypal.com/sdk/js?' + params.toString();
-        s.onload = resolve; s.onerror = reject;
+          ...(config.currency ? { currency: config.currency } : {})
+        };
+        if (config.intent) paramsObj.intent = String(config.intent).toLowerCase();
+
+        const params = new URLSearchParams(paramsObj);
+        const sdkUrl = `${host}/sdk/js?${params.toString()}`;
+
+        console.log('[PayPal SDK URL]', sdkUrl);
+
+        s.src = sdkUrl;
+        s.onload = resolve;
+        s.onerror = reject;
         document.head.appendChild(s);
       });
-    }catch(e){
+    } catch (e) {
       console.error('PayPal SDK load failed', e);
       payStatus.textContent = 'PayPal failed to load.';
-      fallbackBox.hidden = false;
+      if (fallbackBox) fallbackBox.hidden = false;
       return;
-    }*/
+    }
 
     if(!window.paypal){
       payStatus.textContent = 'PayPal SDK failed to initialize.';
-      fallbackBox.hidden = false;
+      if (fallbackBox) fallbackBox.hidden = false;
       return;
     }
 
@@ -224,10 +198,13 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({}) // no amounts from client; server trusts session
+          body: JSON.stringify({})
         });
-        const data = await r.json();
-        if(!r.ok || !data.id) throw new Error(data.message || 'Create order failed');
+        const data = await r.json().catch(()=> ({}));
+        if(!r.ok || !data.id) {
+          console.error('create_order_error', data);
+          throw new Error(data.message || 'Failed to create order.');
+        }
         return data.id;
       },
 
@@ -240,9 +217,9 @@
           credentials: 'same-origin',
           body: JSON.stringify({ orderID: data.orderID })
         });
-        const res = await r.json();
+        const res = await r.json().catch(()=> ({}));
         if(!r.ok || !res.success){
-          payStatus.textContent = res && res.message ? res.message : 'Payment capture failed.';
+          payStatus.textContent = (res && res.message) ? res.message : 'Payment capture failed.';
           return;
         }
         payStatus.textContent = '✅ Payment successful!';
