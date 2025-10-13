@@ -98,28 +98,6 @@ app.use(
   })
 );
 
-/*// Define allowed origins
-const allowedOrigins = [
-
-  'https://my-vite-app-ra7d.onrender.com',
-  'https://my-express-server-rq4a.onrender.com', // backend origin itself
-  'http://localhost:3000',  // local dev          
-  'http://localhost:5173', // production frontend URL
-  'http://localhost:5174'  // ✅ Vite dev server
-
-];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error(`CORS error: ${origin} is not allowed.`), false);
-  },
-  credentials: true
-}));*/
-
 // --------------------------
 // Middleware
 // --------------------------
@@ -150,59 +128,63 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Configure Helmet with dynamic after setting nonce in CSP
 app.use((req, res, next) => {
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
+
+        // 👇 Allow PayPal SDK's inline snippets + dynamic loads
         scriptSrc: [
           "'self'",
+          "'unsafe-inline'",                    // ← required for PayPal SDK inline
+          "'strict-dynamic'",                   // ← lets nonce’d scripts trust their children
+          `'nonce-${res.locals.nonce}'`,        // ← your page scripts still use a nonce
           "https://apis.google.com",
           "https://www.paypal.com",
           "https://www.sandbox.paypal.com",
-          `'nonce-${res.locals.nonce}'`, // ✅ evaluated string, not a function
+          "https://www.paypalobjects.com",
         ],
+
+        // If your Helmet version supports CSP3 splits, you can optionally do:
+        // scriptSrcElem: [ ...same as scriptSrc... ],
+        // scriptSrcAttr: ["'unsafe-inline'"],
+
         imgSrc: [
           "'self'",
           "data:",
           "blob:",
           "https://*.amazonaws.com",
           "https://*.cloudinary.com",
+          "https://www.paypalobjects.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
         ],
+
         styleSrc: ["'self'", "'unsafe-inline'"],
+
         connectSrc: [
           "'self'",
           "https://api.paypal.com",
           "https://api.sandbox.paypal.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
         ],
+
         frameSrc: [
           "'self'",
           "https://www.paypal.com",
           "https://www.sandbox.paypal.com",
         ],
+
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
       },
     },
-  })(req, res, next); // ✅ run helmet as middleware inside the function
+  })(req, res, next);
 });
-
-
-/*// --------------------------
-// Security headers (Helmet + CSP)
-// --------------------------
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", "https://apis.google.com", "https://www.paypal.com", "https://www.sandbox.paypal.com"],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    imgSrc: ["'self'", "data:", "https:"],
-    connectSrc: ["'self'", frontendOrigin], // ✅ allow frontend
-    frameSrc: ["'self'", "https://www.paypal.com", "https://sandbox.paypal.com"], // ✅ needed for PayPal buttons
-  }
-}));*/
 
 // Compression
 app.use(compression());
@@ -235,24 +217,6 @@ app.use("/users/rendersignup", limiter);
 
 // ❌ Do NOT apply globally anymore
 // app.use(limiter);
-
-
-/*// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    console.warn(`⚠️ Rate limit exceeded for IP: ${req.ip}`);
-    res.status(429).json({
-      success: false,
-      message: "Too many requests. Please try again later.",
-    });
-  },
-});
-
-app.use(limiter);*/
 
 // --------------------------
 // Sessions (Mongo store)
@@ -397,6 +361,54 @@ app.get("/cart/count", (req, res) => {
   }
 });
 
+// Checkout page
+app.get('/checkout', (req, res) => {
+  const cart = req.session.cart || { items: [] };
+
+  // (Optional) if you want to stop empty-checkout visits:
+  // if (!cart.items.length) {
+  //   req.flash('error', 'Your cart is empty.');
+  //   return res.redirect('/sales');
+  // }
+
+  res.render('checkout', {
+    title: 'Checkout',
+    vatRate: Number(process.env.VAT_RATE || 0.15),       // used by checkout.ejs JSON config
+    shippingFlat: Number(process.env.SHIPPING_FLAT || 0),// used by checkout.ejs JSON config
+    themeCss: res.locals.themeCss,
+    success: req.flash('success'),
+    error: req.flash('error'),
+    nonce: res.locals.nonce,
+  });
+});
+
+
+// ---------------------------
+// Additional EJS page routes
+// ---------------------------
+app.get('/thank-you', (req, res) => {
+  res.render('thank-you', {
+    title: 'Thank you',
+    orderID: req.query.orderID || '',
+    themeCss: res.locals.themeCss,
+    success: req.flash('success'),
+    error: req.flash('error'),
+    nonce: res.locals.nonce,
+  });
+});
+
+// Order list page
+app.get('/orders', (req, res) => {
+  res.render('order-list', {
+    title: 'My Orders',
+    themeCss: res.locals.themeCss,
+    success: req.flash('success'),
+    error: req.flash('error'),
+    nonce: res.locals.nonce,
+  });
+});
+
+
 // ---------------------------
 // 🌗 Theme toggle route
 // ---------------------------
@@ -414,17 +426,6 @@ app.post('/theme-toggle', (req, res) => {
   res.redirect('/');
 });
 
-
-
-// --------------------------
-// Theme toggle route
-// --------------------------
-/*app.post('/theme-toggle', (req, res) => {
-  // Toggle session theme
-  req.session.theme = req.session.theme === 'dark' ? 'light' : 'dark';
-  res.json({ theme: req.session.theme });
-});
-*/
 // Redirect root to /users/home or render a homepage
 app.get('/', (req, res) => {
   //res.redirect('/users/home');
@@ -460,51 +461,11 @@ app.use((req, res) => {
   });
 });
 
-/*// 500 handler (after all routers)
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).render('500', { 
-    layout: 'layout', 
-    title: 'Server Error',
-    active: ''
-  });
-});*/
-
 // 500 handler (after all routers) — DEBUG VERSION
 app.use((err, req, res, next) => {
   console.error("❌ Template render error:", err);
   res.status(500).send(`<pre>${err.stack}</pre>`);
 });
-
-// --------------------------
-// Connect to MongoDB with retry
-// --------------------------
-/*const connectWithRetry = (retries = 5, delay = 5000) => {
-  console.log(`🔗 Attempting to connect to MongoDB... (${retries} retries left)`);
-  mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("✅ Connected to MongoDB");
-
-    // Start Express server AFTER DB connection
-    const PORT = process.env.PORT || 3000;
-  app.listen(PORT, '0.0.0.0', async() => {
-    console.log(`🚀 Server running on port ${PORT}`);
-  });
-
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB connection error:", err);
-    if (retries > 0) {
-      console.log(`🔄 Retrying in ${delay / 1000} seconds...`);
-      setTimeout(() => connectWithRetry(retries - 1, delay), delay);
-    } else {
-      console.error("❌ Could not connect to MongoDB after multiple attempts. Exiting...");
-      process.exit(1);
-    }
-  });
-};
-
-connectWithRetry();*/
 
 const connectWithRetry = async (retries = 5) => {
   try {

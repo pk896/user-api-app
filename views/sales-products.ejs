@@ -126,6 +126,28 @@
 
   /* small helpers */
   .muted { color:#6b7280; }
+
+  /* ===== mini checkout bar ===== */
+.checkout-bar{
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: 84px; /* sits above the FAB */
+  display:flex; justify-content:space-between; align-items:center;
+  gap:.8rem; width: min(680px, 92vw);
+  background: var(--card-bg,#fff); color: inherit;
+  border:1px solid #e5e7eb; border-radius: 999px;
+  box-shadow: 0 12px 24px rgba(0,0,0,.12);
+  padding: .65rem .8rem; z-index: 65;
+  animation: fabIn .28s ease both;
+}
+.checkout-bar .co-left{ display:flex; align-items:center; gap:.4rem; padding-left:.4rem; }
+.checkout-bar .co-btn{
+  text-decoration:none; background:#16a34a; color:#fff; font-weight:900;
+  padding:.55rem .9rem; border-radius: 999px; display:inline-block;
+  box-shadow: 0 8px 18px rgba(22,163,74,.25);
+}
+.checkout-bar .co-btn:hover{ transform: translateY(-1px); }
+@media (max-width:560px){ .checkout-bar{ bottom: 78px; } }
+
 </style>
 
 <main class="shop-page">
@@ -134,7 +156,7 @@
       <h1 class="shop-title">Shop Products</h1>
       <p class="shop-sub">Browse and add to cart. Pay in Rands.</p>
     </div>
-    <a href="/cart" class="btn btn-secondary">Open full cart</a>
+    <a href="/checkout" class="btn btn-secondary">Go to Checkout</a>
   </header>
 
   <% if (products && products.length) { %>
@@ -175,6 +197,15 @@
       <p class="muted">Please check back later.</p>
     </div>
   <% } %>
+
+    <!-- Mini Checkout Bar (shown when cart has items) -->
+<div class="checkout-bar" id="miniCheckout" hidden>
+  <div class="co-left">
+    <strong id="miniSubtotal">R 0.00</strong>
+    <span class="muted"> · <span id="miniCount">0</span> item(s)</span>
+  </div>
+  <a href="/checkout" class="co-btn">Checkout</a>
+</div>
 </main>
 
 <!-- Sticky Cart FAB -->
@@ -204,16 +235,21 @@
 <!-- Page Script (CSP-safe) -->
 <script nonce="<%= nonce %>">
   document.addEventListener('DOMContentLoaded', () => {
-    const $ = (s,c=document)=>c.querySelector(s);
+    const $  = (s,c=document)=>c.querySelector(s);
     const $$ = (s,c=document)=>Array.from(c.querySelectorAll(s));
 
-    const cartFab = $('#cartFab');
-    const drawer  = $('#cartDrawer');
-    const overlay = $('#drawerOverlay');
-    const drawerClose = $('#drawerClose');
-    const cartList = $('#cartList');
-    const cartCount = $('#cartCount');
+    const cartFab      = $('#cartFab');
+    const drawer       = $('#cartDrawer');
+    const overlay      = $('#drawerOverlay');
+    const drawerClose  = $('#drawerClose');
+    const cartList     = $('#cartList');
+    const cartCount    = $('#cartCount');
     const cartSubtotal = $('#cartSubtotal');
+
+    /* ===== mini checkout bar elements ===== */
+    const miniBar        = document.getElementById('miniCheckout');
+    const miniSubtotalEl = document.getElementById('miniSubtotal');
+    const miniCountEl    = document.getElementById('miniCount');
 
     /* ========== Drawer toggling ========== */
     function openDrawer(){
@@ -249,19 +285,22 @@
       return data || { items: [] };
     }
 
+    /* ========== Render cart (drawer + mini bar) ========== */
     function renderCart(items){
       if (!items || !items.length){
         cartList.innerHTML = '<p class="muted">Your cart is empty.</p>';
         cartCount.textContent = '0';
         cartSubtotal.textContent = 'R 0.00';
+        if (miniBar) miniBar.hidden = true;     // hide mini bar when empty
         return;
       }
+
       let subtotal = 0;
       cartList.innerHTML = items.map(it => {
-        const qty = Number(it.quantity || it.qty || 1);
+        const qty   = Number(it.quantity || it.qty || 1);
         const price = Number(it.price || (it.product && it.product.price) || 0);
-        const name = it.name || (it.product && it.product.name) || 'Item';
-        const id = it.productId || (it.product && it.product._id) || it._id || '';
+        const name  = it.name || (it.product && it.product.name) || 'Item';
+        const id    = it.productId || (it.product && it.product._id) || it._id || '';
         const image = it.imageUrl || (it.product && it.product.imageUrl) || '';
         subtotal += (price * qty);
         return `
@@ -275,8 +314,17 @@
           </div>
         `;
       }).join('');
+
       cartSubtotal.textContent = 'R ' + subtotal.toFixed(2);
-      cartCount.textContent = String(items.reduce((n, it) => n + Number(it.quantity || it.qty || 1), 0));
+      const count = items.reduce((n, it) => n + Number(it.quantity || it.qty || 1), 0);
+      cartCount.textContent = String(count);
+
+      // Show/refresh mini bar
+      if (miniBar) {
+        miniSubtotalEl.textContent = 'R ' + subtotal.toFixed(2);
+        miniCountEl.textContent = String(count);
+        miniBar.hidden = false;
+      }
     }
 
     async function refreshCart(){
@@ -291,20 +339,17 @@
         btn.textContent = '⏳ Adding…';
         btn.setAttribute('aria-disabled', 'true');
 
-        // NOTE: add &json=1 so backend returns JSON (no redirect / no raw JSON page)
+        // ask backend for JSON (prevents raw JSON page/redirect)
         const r = await fetch(`/api/cart/add?pid=${encodeURIComponent(pid)}&json=1`, { credentials:'same-origin' });
         if (!r.ok) {
-          try {
-            const j = await r.json();
-            throw new Error(j && j.message ? j.message : 'Add failed');
-          } catch {
-            throw new Error('Add failed');
-          }
+          let message = 'Add failed';
+          try { const j = await r.json(); if (j && j.message) message = j.message; } catch {}
+          throw new Error(message);
         }
 
         btn.textContent = '✅ Added!';
         setTimeout(()=>{ btn.textContent = original; btn.removeAttribute('aria-disabled'); }, 900);
-        refreshCart();
+        refreshCart(); // updates drawer + mini bar
       }catch(e){
         console.error(e);
         btn.textContent = original;
@@ -327,6 +372,3 @@
     refreshCart();
   });
 </script>
-
-
-

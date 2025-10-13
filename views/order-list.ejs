@@ -1,0 +1,111 @@
+<!-- views/order-list.ejs -->
+
+<!-- Flash -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
+<% } %>
+
+<main class="orders-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <header class="orders-head">
+    <div>
+      <h1>My Orders</h1>
+      <p class="muted">View your recent orders and receipts.</p>
+    </div>
+    <a href="/sales" class="btn-back">← Continue shopping</a>
+  </header>
+
+  <section class="card">
+    <div id="ordersWrap">
+      <p class="muted">Loading orders…</p>
+    </div>
+  </section>
+</main>
+
+<style nonce="<%= nonce %>">
+  .orders-page{max-width:1000px;margin:0 auto;padding:1rem}
+  .orders-head{display:flex;justify-content:space-between;align-items:flex-start;margin:.25rem 0 1rem}
+  .btn-back{text-decoration:none;border:1px solid #d1d5db;padding:.45rem .8rem;border-radius:8px}
+  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
+  .muted{color:#6b7280}
+  .table{width:100%;border-collapse:collapse}
+  .table th,.table td{padding:.65rem;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:middle}
+  .table th{font-size:.92rem;color:#6b7280;font-weight:700}
+  .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;font-size:.78rem;font-weight:700}
+  .badge.ok{background:#16a34a;color:#fff}
+  .badge.pending{background:#eab308;color:#111}
+  .badge.fail{background:#ef4444;color:#fff}
+  .num{font-weight:800}
+  .actions a{ text-decoration:none; border:1px solid #d1d5db; padding:.35rem .6rem; border-radius:8px; }
+  @media (max-width:720px){
+    .table thead{display:none}
+    .table tr{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;padding:.6rem 0;border-bottom:1px solid #e5e7eb}
+    .table td{border:0;padding:.1rem 0}
+    .table td[data-label]:before{content:attr(data-label) ": ";font-weight:700;color:#6b7280}
+    .actions{grid-column:1/-1;margin-top:.2rem}
+  }
+</style>
+
+<script nonce="<%= nonce %>">
+  document.addEventListener('DOMContentLoaded', async () => {
+    const wrap = document.getElementById('ordersWrap');
+    const money = (n) => 'R ' + Number(n||0).toFixed(2);
+    const badge = (status) => {
+      const s = String(status || '').toUpperCase();
+      if (s === 'COMPLETED') return '<span class="badge ok">Completed</span>';
+      if (s === 'PENDING')   return '<span class="badge pending">Pending</span>';
+      return `<span class="badge ${s==='FAILED'?'fail':'pending'}">${status || '—'}</span>`;
+    };
+
+    try{
+      const r = await fetch('/payment/my-orders', { credentials:'same-origin' });
+      const data = await r.json();
+      if (!r.ok || !data.success) throw new Error(data.message || 'Failed to load orders');
+
+      const orders = Array.isArray(data.orders) ? data.orders : [];
+      if (!orders.length){
+        wrap.innerHTML = '<p class="muted">No orders yet.</p>';
+        return;
+      }
+
+      const rows = orders.map(o => {
+        const created = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
+        const itemCount = (o.items || []).reduce((n,it)=>n + Number(it.quantity||1), 0);
+        const link = `/thank-you?orderID=${encodeURIComponent(o.paypalOrderId)}`;
+        return `
+          <tr>
+            <td data-label="Date">${created}</td>
+            <td data-label="Order ID">${o.paypalOrderId || '—'}</td>
+            <td data-label="Items">${itemCount}</td>
+            <td data-label="Total" class="num">${money(o.total)}</td>
+            <td data-label="Status">${badge(o.status)}</td>
+            <td data-label="Receipt" class="actions"><a href="${link}">View receipt</a></td>
+          </tr>
+        `;
+      }).join('');
+
+      wrap.innerHTML = `
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Order ID</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Receipt</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }catch(e){
+      console.error(e);
+      wrap.innerHTML = '<p class="muted">Could not load your orders.</p>';
+    }
+  });
+</script>

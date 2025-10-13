@@ -1,0 +1,148 @@
+<!-- views/thank-you.ejs -->
+<!-- Flash -->
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
+<% } %>
+
+<main class="ty-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <header class="ty-head">
+    <div>
+      <h1>🎉 Thank you for your purchase!</h1>
+      <p class="muted">Your order has been received and is being processed.</p>
+    </div>
+    <a href="/sales" class="btn-back">← Continue shopping</a>
+  </header>
+
+  <section class="card">
+    <div id="orderMeta" class="order-meta">
+      <div><strong>Order ID:</strong> <span id="ordId">—</span></div>
+      <div><strong>Status:</strong> <span id="ordStatus">—</span></div>
+      <div><strong>Date:</strong> <span id="ordDate">—</span></div>
+    </div>
+
+    <div id="itemsList" class="items-list">
+      <p class="muted">Loading order…</p>
+    </div>
+
+    <div class="totals">
+      <div class="row"><span>Subtotal</span><span id="tSubtotal">R 0.00</span></div>
+      <div class="row"><span>VAT</span><span id="tVat">R 0.00</span></div>
+      <div class="row"><span>Shipping</span><span id="tShipping">R 0.00</span></div>
+      <div class="row total"><span>Total</span><span id="tTotal">R 0.00</span></div>
+    </div>
+
+    <div id="shipBox" class="ship card-ghost" hidden>
+      <h3>Shipping</h3>
+      <div><strong>Name:</strong> <span id="shipName">—</span></div>
+      <div id="shipAddr" class="muted"></div>
+    </div>
+
+    <p class="muted small">A receipt has been sent to your email if it was provided during checkout.</p>
+  </section>
+</main>
+
+<style nonce="<%= nonce %>">
+  .ty-page{max-width:900px;margin:0 auto;padding:1rem}
+  .ty-head{display:flex;justify-content:space-between;align-items:flex-start;margin:.25rem 0 1rem}
+  .btn-back{text-decoration:none;border:1px solid #d1d5db;padding:.45rem .8rem;border-radius:8px}
+  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
+  .card-ghost{margin-top:1rem}
+  .muted{color:#6b7280}
+  .small{font-size:.9rem}
+  .order-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:1rem}
+  .items-list{display:flex;flex-direction:column;gap:.6rem;margin:.5rem 0 1rem}
+  .item-row{display:grid;grid-template-columns:1fr auto auto;gap:.6rem;align-items:center}
+  .item-row .qty{min-width:64px;text-align:right}
+  .totals{display:grid;gap:.35rem;margin-top:.75rem}
+  .row{display:flex;justify-content:space-between}
+  .row.total{font-weight:900;font-size:1.05rem;border-top:1px solid #e5e7eb;padding-top:.5rem}
+  @media (max-width:760px){.order-meta{grid-template-columns:1fr}}
+</style>
+
+<!-- Pass the orderID to JS safely via JSON -->
+<script id="ty-config" type="application/json" nonce="<%= nonce %>">
+  <%- JSON.stringify({ orderID: orderID || '' }) %>
+</script>
+
+<script nonce="<%= nonce %>">
+  document.addEventListener('DOMContentLoaded', async () => {
+    const cfg = JSON.parse(document.getElementById('ty-config').textContent || '{}');
+    const orderID = cfg.orderID || '';
+
+    const $ = (s,c=document)=>c.querySelector(s);
+    const itemsList = $('#itemsList');
+    const ordId = $('#ordId');
+    const ordStatus = $('#ordStatus');
+    const ordDate = $('#ordDate');
+    const tSubtotal = $('#tSubtotal');
+    const tVat = $('#tVat');
+    const tShipping = $('#tShipping');
+    const tTotal = $('#tTotal');
+    const shipBox = $('#shipBox');
+    const shipName = $('#shipName');
+    const shipAddr = $('#shipAddr');
+
+    const money = (n) => 'R ' + Number(n||0).toFixed(2);
+
+    if (!orderID) {
+      itemsList.innerHTML = '<p class="muted">No order ID provided.</p>';
+      return;
+    }
+
+    try {
+      const r = await fetch(`/payment/order/${encodeURIComponent(orderID)}`, { credentials:'same-origin' });
+      const data = await r.json();
+      if (!r.ok || !data.success) throw new Error(data.message || 'Order fetch failed');
+
+      const o = data.order;
+      ordId.textContent = o.paypalOrderId;
+      ordStatus.textContent = o.status;
+      ordDate.textContent = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
+
+      // Render items
+      if (!o.items || !o.items.length) {
+        itemsList.innerHTML = '<p class="muted">No line items available.</p>';
+      } else {
+        itemsList.innerHTML = o.items.map(it => {
+          const line = (Number(it.price||0) * Number(it.quantity||1));
+          return `
+            <div class="item-row">
+              <div>${it.name}</div>
+              <div class="qty">× ${it.quantity}</div>
+              <div><strong>${money(line)}</strong></div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      tSubtotal.textContent = money(o.subtotal);
+      tShipping.textContent = money(o.shipping);
+      // Derive VAT if not stored separately: tax field already in order schema
+      tVat.textContent = money(o.tax);
+      tTotal.textContent = money(o.total);
+
+      // Shipping details (if present from PayPal)
+      if (o.shipToName || (o.shipToAddress && Object.keys(o.shipToAddress).length)) {
+        shipBox.hidden = false;
+        shipName.textContent = o.shipToName || '—';
+        const addr = o.shipToAddress || {};
+        // Assemble a readable address
+        const parts = [
+          addr.address_line_1,
+          addr.address_line_2,
+          addr.admin_area_2,   // city
+          addr.admin_area_1,   // state/province
+          addr.postal_code,
+          addr.country_code
+        ].filter(Boolean);
+        shipAddr.textContent = parts.join(', ');
+      }
+    } catch (e) {
+      console.error(e);
+      itemsList.innerHTML = '<p class="muted">Could not load your order details.</p>';
+    }
+  });
+</script>
