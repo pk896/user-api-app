@@ -494,6 +494,9 @@ app.use("/", require("./routes/staticPages"));
 // routes for sales-product page
 app.use("/sales", require("./routes/sales"));
 
+// URL control
+app.use("/links", require("./routes/someRoute"));
+
 // 🛒 Get current cart item count
 app.get("/cart/count", (req, res) => {
   try {
