@@ -1,8 +1,9 @@
 <!-- views/checkout.ejs -->
 <%
-  // You can override these from the server: res.render('checkout', { vatRate: 0.15, shippingFlat: 0, ... })
+  // You can override these via: res.render('checkout', { vatRate: 0.15, shippingFlat: 0 })
   const VAT_RATE = typeof vatRate !== 'undefined' ? vatRate : 0.15;  // SA VAT 15%
-  const SHIPPING_FLAT = typeof shippingFlat !== 'undefined' ? shippingFlat : 0; // R0 default
+  const SHIPPING_FLAT = typeof shippingFlat !== 'undefined' ? shippingFlat : 0; // default 0
+  const NONCE = (typeof nonce !== 'undefined' ? nonce : '');
 %>
 
 <!-- ✅ Flash -->
@@ -31,10 +32,10 @@
       </div>
 
       <div class="totals">
-        <div class="row"><span>Subtotal</span><span id="tSubtotal">R 0.00</span></div>
-        <div class="row"><span>VAT (15%)</span><span id="tVat">R 0.00</span></div>
-        <div class="row"><span>Shipping</span><span id="tShipping">R 0.00</span></div>
-        <div class="row total"><span>Total</span><span id="tTotal">R 0.00</span></div>
+        <div class="row"><span>Subtotal</span><span id="tSubtotal">—</span></div>
+        <div class="row"><span>VAT (15%)</span><span id="tVat">—</span></div>
+        <div class="row"><span>Shipping</span><span id="tShipping">—</span></div>
+        <div class="row total"><span>Total</span><span id="tTotal">—</span></div>
       </div>
     </div>
 
@@ -52,7 +53,7 @@
   </section>
 </main>
 
-<style nonce="<%= nonce %>">
+<style nonce="<%= NONCE %>">
   .checkout-page{max-width:1100px;margin:0 auto;padding:1rem}
   .co-head{display:flex;justify-content:space-between;align-items:flex-start;margin:.25rem 0 1rem}
   .link-back{text-decoration:none;border:1px solid #d1d5db;padding:.45rem .8rem;border-radius:8px}
@@ -69,12 +70,12 @@
   @media (max-width:920px){.co-grid{grid-template-columns:1fr}}
 </style>
 
-<!-- ✅ JSON config (no EJS in JS) -->
-<script id="checkout-config" type="application/json" nonce="<%= nonce %>">
+<!-- ✅ JSON config (server-provided values for VAT/Shipping only) -->
+<script id="checkout-config" type="application/json" nonce="<%= NONCE %>">
   <%- JSON.stringify({ VAT_RATE: VAT_RATE, SHIPPING_FLAT: SHIPPING_FLAT }) %>
 </script>
 
-<script nonce="<%= nonce %>">
+<script nonce="<%= NONCE %>">
   document.addEventListener('DOMContentLoaded', async () => {
     const $ = (s,c=document)=>c.querySelector(s);
 
@@ -86,11 +87,38 @@
     const payStatus = $('#payStatus');
     const fallbackBox = $('#fallbackBox');
 
-    // Read config safely from JSON blob
+    // Read VAT/shipping safely
     const cfgEl = document.getElementById('checkout-config');
     const { VAT_RATE = 0.15, SHIPPING_FLAT = 0 } = cfgEl ? JSON.parse(cfgEl.textContent || '{}') : {};
 
-    function money(n){ return 'R ' + Number(n||0).toFixed(2); }
+    // Load PayPal client-side config
+    const config = await (async ()=>{
+      try {
+        const r = await fetch('/payment/config', { credentials:'same-origin' });
+        if (!r.ok) return null;
+        const data = await r.json();
+        return data;
+      } catch { return null; }
+    })();
+
+    if(!config || !config.clientId){
+      payStatus.textContent = 'Could not load PayPal configuration.';
+      if (fallbackBox) fallbackBox.hidden = false;
+      return;
+    }
+
+    // Currency to use everywhere (SDK + create-order)
+    const currency = (config.baseCurrency || 'USD').toUpperCase();
+
+    // Simple symbol map for display
+    const CURRENCY_SYMBOL = {
+      USD: '$',
+      ZAR: 'R',
+      EUR: '€',
+      GBP: '£'
+    }[currency] || (currency + ' ');
+
+    const fmt = (n)=> (CURRENCY_SYMBOL + Number(n||0).toFixed(2));
 
     async function getJSON(url, opts){
       try{
@@ -106,7 +134,6 @@
     const cart = await getJSON('/api/cart');
     const items = (cart && cart.items) ? cart.items : [];
 
-    // Empty cart guard
     if(!items.length){
       summaryList.innerHTML = '<p class="muted">Your cart is empty. <a href="/sales">Go back to shop</a>.</p>';
       payStatus.textContent = 'Add items to proceed with payment.';
@@ -126,9 +153,9 @@
           <img src="${img}" alt="${name}" />
           <div>
             <div style="font-weight:700">${name}</div>
-            <div class="muted">R ${price.toFixed(2)} × ${qty}</div>
+            <div class="muted">${CURRENCY_SYMBOL} ${price.toFixed(2)} × ${qty}</div>
           </div>
-          <div style="font-weight:700">R ${(price*qty).toFixed(2)}</div>
+          <div style="font-weight:700">${CURRENCY_SYMBOL} ${(price*qty).toFixed(2)}</div>
         </div>
       `;
     }).join('');
@@ -137,39 +164,25 @@
     const shipping = SHIPPING_FLAT;
     const total = subtotal + vat + shipping;
 
-    tSubtotal.textContent = money(subtotal);
-    tVat.textContent = money(vat);
-    tShipping.textContent = money(shipping);
-    tTotal.textContent = money(total);
+    tSubtotal.textContent = fmt(subtotal);
+    tVat.textContent = fmt(vat);
+    tShipping.textContent = fmt(shipping);
+    tTotal.textContent = fmt(total);
 
-    // 3) Load PayPal JS SDK using client-id from backend
-    const config = await getJSON('/payment/client-id'); // -> { clientId, intent?, currency?, env? }
-    if(!config || !config.clientId){
-      payStatus.textContent = 'Could not load PayPal configuration.';
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
-
+    // 3) Load PayPal JS SDK with the SAME currency
     try {
       await new Promise((resolve, reject) => {
         const s = document.createElement('script');
+        const isLive = (config.mode && String(config.mode).toLowerCase() === 'live');
+        const host = isLive ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
 
-        // Choose host by environment (default to sandbox unless explicitly "live")
-        const host =
-          (config.env && String(config.env).toLowerCase() === 'live')
-            ? 'https://www.paypal.com'
-            : 'https://www.sandbox.paypal.com';
-
-        const paramsObj = {
+        const params = new URLSearchParams({
           'client-id': config.clientId,
           'components': 'buttons',
-          ...(config.currency ? { currency: config.currency } : {})
-        };
-        if (config.intent) paramsObj.intent = String(config.intent).toLowerCase();
-
-        const params = new URLSearchParams(paramsObj);
+          'currency': currency,
+          'intent': 'capture'
+        });
         const sdkUrl = `${host}/sdk/js?${params.toString()}`;
-
         console.log('[PayPal SDK URL]', sdkUrl);
 
         s.src = sdkUrl;
@@ -192,19 +205,26 @@
 
     // 4) Render PayPal Buttons
     paypal.Buttons({
-      // Create order by calling your server; the server reads the session cart and computes totals
+      // Create order by calling your server with the computed total
       createOrder: async () => {
+        payStatus.textContent = 'Creating order…';
         const r = await fetch('/payment/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({})
+          body: JSON.stringify({
+            total: total.toFixed(2),   // send a money string
+            currency,                  // MUST match SDK currency
+            referenceId: 'PK-CHECKOUT-' + Date.now()
+          })
         });
         const data = await r.json().catch(()=> ({}));
         if(!r.ok || !data.id) {
           console.error('create_order_error', data);
-          throw new Error(data.message || 'Failed to create order.');
+          payStatus.textContent = (data && data.message) ? data.message : 'Failed to create order.';
+          throw new Error(data.message || 'PayPal create order failed');
         }
+        payStatus.textContent = 'Order created. Awaiting approval…';
         return data.id;
       },
 
@@ -219,11 +239,11 @@
         });
         const res = await r.json().catch(()=> ({}));
         if(!r.ok || !res.success){
+          console.error('capture_error', res);
           payStatus.textContent = (res && res.message) ? res.message : 'Payment capture failed.';
           return;
         }
         payStatus.textContent = '✅ Payment successful!';
-        // Optional: redirect to Thank You / orders page
         // location.href = '/thank-you';
       },
 

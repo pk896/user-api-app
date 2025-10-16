@@ -1,0 +1,244 @@
+<!-- views/order-success.ejs -->
+<%
+  var pu   = (order && order.purchase_units && order.purchase_units[0]) || {};
+  var cap  = (pu.payments && pu.payments.captures && pu.payments.captures[0]) || {};
+  var br   = cap.seller_receivable_breakdown || {};
+  var ship = pu.shipping || {};
+  var addr = ship.address || {};
+  var items = pu.items || [];
+  var refunds = (pu.payments && pu.payments.refunds) || [];
+
+  var breakdown = (pu.amount && pu.amount.breakdown) || {};
+  var itemTotal = breakdown.item_total ? breakdown.item_total.value : undefined;
+  var shippingTotal = breakdown.shipping ? breakdown.shipping.value : undefined;
+  var taxTotal = breakdown.tax_total ? breakdown.tax_total.value : undefined;
+  var currency = (cap.amount && cap.amount.currency_code) || (pu.amount && pu.amount.currency_code) || "USD";
+  var grandTotal = (cap.amount && cap.amount.value) || (pu.amount && pu.amount.value) || "0.00";
+
+  function fmt(v) { var n = Number(v); return isNaN(n) ? (v || "0.00") : n.toFixed(2); }
+%>
+
+<style nonce="<%= nonce %>">
+  /* Root + dark theme tokens */
+  :root{
+    --card-bg:#fff;--card-border:#e5e7eb;--muted:#6b7280;--text:#111827;--surface:#f9fafb;
+    --shadow:0 6px 18px rgba(0,0,0,.06);--r:14px;--g:14px;--p:14px;
+    --fs:clamp(13px,3.5vw,16px);--fs-sm:clamp(12px,3.2vw,14px);--fs-lg:clamp(15px,4vw,18px);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  .dark-theme{
+    --card-bg:#0b1220;--card-border:rgba(255,255,255,0.1);--muted:#9ca3af;--text:#e5e7eb;--surface:#101826;
+    --shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+
+  /* Clamp page to viewport — no sideways scroll */
+  html,body,.page-content{max-width:100%; overflow-x:hidden;}
+  .wrap{display:grid;gap:var(--g);color:var(--text);}
+  .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--r);padding:var(--p);box-shadow:var(--shadow);}
+  .success-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#ecfdf5;color:#065f46;font-weight:700;font-size:var(--fs);}
+  .dark-theme .success-badge{background:#073b2c;color:#c0ffe6;}
+  .sub{color:var(--muted);margin:4px 0 10px;font-size:var(--fs);}
+  .btns{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{display:inline-flex;justify-content:center;align-items:center;gap:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--card-border);text-decoration:none;background:var(--card-bg);min-height:44px;min-width:44px;font-weight:600;font-size:var(--fs);}
+  .btn:hover{background:var(--surface)}
+  .grid-2{display:grid;grid-template-columns:1fr;gap:var(--g)}
+  @media(min-width:640px){.grid-2{grid-template-columns:1fr 1fr}}
+  .section-title{margin:0 0 8px;font-size:var(--fs-lg);font-weight:700}
+  .totals{display:grid;gap:8px;font-size:var(--fs)}
+  .totals .row{display:flex;justify-content:space-between;gap:10px}
+  .k{color:var(--muted)}
+  .v{font-weight:600}
+  .monospace{font-family:var(--mono);word-break:break-all;overflow-wrap:anywhere}
+
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;background:#f3f4f6;font-size:var(--fs-sm)}
+  .dark-theme .pill{background:#111827;color:#e5e7eb}
+
+  /* Tables: default responsive with soft scroll, but convert to stacked cards on ultra-small screens */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:transparent;border-radius:10px}
+  table.receipt{width:100%;border-collapse:collapse;font-size:var(--fs)}
+  table.receipt th,table.receipt td{border-bottom:1px solid var(--card-border);padding:10px;text-align:left;vertical-align:top}
+  table.receipt th{font-weight:600;color:#374151;background:var(--surface)}
+  .dark-theme table.receipt th{color:#d1d5db}
+  .tr-total td{border-bottom:none;font-weight:700}
+
+  /* Ultra-small screen layout (≤360px): stack table rows into cards to prevent sideways swipe */
+  @media(max-width:360px){
+    .btn{flex:1 1 100%; width:100%}
+    .card{padding:12px}
+    .section-title{font-size:15px}
+    table.receipt, thead.receipt, tbody.receipt, th.receipt, td.receipt, tr.receipt {display:block;}
+    table.receipt thead{display:none}
+    table.receipt tr{display:block;border:1px solid var(--card-border);border-radius:10px;margin:10px 0;overflow:hidden}
+    table.receipt td{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--card-border);padding:8px 10px}
+    table.receipt td:last-child{border-bottom:none}
+    table.receipt td::before{
+      content:attr(data-label);
+      font-weight:600;color:var(--muted);margin-right:12px;flex:0 0 44%;
+    }
+    .tr-total{border:none}
+    .tr-total td{display:flex;justify-content:space-between;border:0;padding:8px 0}
+  }
+
+  /* Debug JSON wraps; never overflow */
+  pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:var(--fs-sm);margin:0}
+</style>
+
+<div class="wrap">
+  <div class="card">
+    <div class="success-badge">✅ Payment Successful</div>
+    <p class="sub">Thank you — your order is confirmed.</p>
+    <div class="btns" style="margin-top:10px">
+      <a class="btn" href="/">← Back to shop</a>
+      <button class="btn" type="button" onclick="window.print()">🖨️ Print</button>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Order summary -->
+    <div class="card">
+      <div class="section-title">Order</div>
+      <div class="totals">
+        <div class="row"><span class="k">Order ID</span><span class="v monospace"><%= order.id %></span></div>
+        <div class="row">
+          <span class="k">Status</span>
+          <span class="v">
+            <%= order.status %>
+            <% if (cap.status && cap.status !== order.status) { %>
+              <span class="pill">Capture: <%= cap.status %></span>
+            <% } %>
+          </span>
+        </div>
+        <% if (cap.id) { %>
+          <div class="row"><span class="k">Capture ID</span><span class="v monospace"><%= cap.id %></span></div>
+        <% } %>
+        <div class="row"><span class="k">Reference</span><span class="v monospace"><%= pu.reference_id || "-" %></span></div>
+        <% if (cap.create_time) { %>
+          <div class="row"><span class="k">Captured at</span><span class="v"><%= cap.create_time %></span></div>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Amounts -->
+    <div class="card">
+      <div class="section-title">Amount</div>
+      <div class="totals">
+        <% if (typeof itemTotal !== "undefined") { %>
+          <div class="row"><span>Items</span><span><%= currency %> <%= fmt(itemTotal) %></span></div>
+        <% } %>
+        <% if (typeof shippingTotal !== "undefined") { %>
+          <div class="row"><span>Shipping</span><span><%= currency %> <%= fmt(shippingTotal) %></span></div>
+        <% } %>
+        <% if (typeof taxTotal !== "undefined") { %>
+          <div class="row"><span>Tax</span><span><%= currency %> <%= fmt(taxTotal) %></span></div>
+        <% } %>
+        <div class="row" style="margin-top:6px"><span><strong>Total</strong></span><span><strong><%= currency %> <%= fmt(grandTotal) %></strong></span></div>
+        <% if (br && br.paypal_fee && br.paypal_fee.value) { %>
+          <div class="row"><span>Fee</span><span><%= currency %> <%= fmt(br.paypal_fee.value) %></span></div>
+        <% } %>
+        <% if (br && br.net_amount && br.net_amount.value) { %>
+          <div class="row"><span>Net</span><span><%= currency %> <%= fmt(br.net_amount.value) %></span></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items -->
+  <% if (items && items.length) { %>
+    <div class="card">
+      <div class="section-title">Items</div>
+      <div class="table-wrap">
+        <table class="receipt">
+          <tbody>
+            <% for (var i = 0; i < items.length; i++) { 
+                 var it = items[i];
+                 var u  = it.unit_amount || {};
+                 var q  = Number(it.quantity || 1);
+                 var subtotal = (Number(u.value || 0) * q).toFixed(2);
+            %>
+              <tr class="receipt">
+                <td class="receipt" data-label="Item"><%= it.name %></td>
+                <td class="receipt" data-label="Unit"><%= u.currency_code || currency %> <%= fmt(u.value) %></td>
+                <td class="receipt" data-label="Qty"><%= q %></td>
+                <td class="receipt" data-label="Subtotal"><%= u.currency_code || currency %> <%= subtotal %></td>
+              </tr>
+            <% } %>
+            <tr class="tr-total receipt">
+              <td class="receipt" data-label=" " colspan="3" style="text-align:right"><strong>Total</strong></td>
+              <td class="receipt" data-label="Items Total">
+                <strong>
+                  <%= currency %> 
+                  <%= fmt(itemTotal || (function(){ 
+                        var s = 0; 
+                        for (var j=0;j<items.length;j++){ 
+                          var it2 = items[j]; 
+                          var u2 = it2.unit_amount || {}; 
+                          var q2 = Number(it2.quantity || 1); 
+                          s += Number(u2.value || 0) * q2; 
+                        } 
+                        return s; 
+                      })()) %>
+                </strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="grid-2">
+    <!-- Payer -->
+    <div class="card">
+      <div class="section-title">Payer</div>
+      <div class="totals">
+        <div class="row"><span class="k">Name</span><span class="v"><%= (order.payer && order.payer.name && order.payer.name.given_name) || "" %> <%= (order.payer && order.payer.name && order.payer.name.surname) || "" %></span></div>
+        <div class="row"><span class="k">Email</span><span class="v monospace"><%= (order.payer && order.payer.email_address) || "" %></span></div>
+        <div class="row"><span class="k">Country</span><span class="v"><%= (order.payer && order.payer.address && order.payer.address.country_code) || "" %></span></div>
+      </div>
+    </div>
+
+    <!-- Shipping -->
+    <div class="card">
+      <div class="section-title">Shipping</div>
+      <div class="totals">
+        <div class="row"><span class="k">Recipient</span><span class="v"><%= (ship.name && ship.name.full_name) || "-" %></span></div>
+        <div class="row">
+          <span class="k">Address</span>
+          <span class="v">
+            <span class="monospace"><%= addr.address_line_1 || "" %></span><br/>
+            <span class="monospace"><%= [addr.admin_area_2, addr.admin_area_1, addr.postal_code].filter(Boolean).join(", ") %></span><br/>
+            <span class="monospace"><%= addr.country_code || "" %></span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refunds -->
+  <% if (refunds && refunds.length) { %>
+    <div class="card">
+      <div class="section-title">Refunds</div>
+      <div class="table-wrap">
+        <table class="receipt">
+          <tbody>
+            <% for (var r = 0; r < refunds.length; r++) { var rf = refunds[r]; %>
+              <tr class="receipt">
+                <td class="receipt" data-label="Refund ID"><span class="monospace"><%= rf.id %></span></td>
+                <td class="receipt" data-label="Amount"><%= (rf.amount && rf.amount.currency_code) || currency %> <%= fmt(rf.amount && rf.amount.value) %></td>
+                <td class="receipt" data-label="Status"><%= rf.status %></td>
+                <td class="receipt" data-label="Created"><%= rf.create_time || "-" %></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+
+  <% if (typeof showDebug !== "undefined" && showDebug) { %>
+    <div class="card">
+      <div class="section-title">Raw response (debug)</div>
+      <pre><%= JSON.stringify(order, null, 2) %></pre>
+    </div>
+  <% } %>
+</div>

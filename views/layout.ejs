@@ -13,7 +13,7 @@
   <%- typeof styles !== 'undefined' ? styles : '' %>
 </head>
 
-<body class="<%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+<body class="<%= (themeCss && themeCss.includes('dark')) ? 'dark-theme' : 'light-theme' %>">
 
   <!-- ✅ Modern Responsive Navbar -->
   <%- include('partials/navbar', { 
@@ -24,13 +24,14 @@
     nonce: typeof nonce !== 'undefined' ? nonce : ''
   }) %>
 
-  <!-- ✅ Global Flash Messages -->
+  <!-- ✅ Global Flash Messages (now receives nonce) -->
   <%- include('partials/massage', { 
     success: success || [], 
     error: error || [], 
     info: info || [], 
     warning: warning || [], 
-    errors: errors || [] 
+    errors: errors || [],
+    nonce: typeof nonce !== 'undefined' ? nonce : ''
   }) %>
 
   <!-- ✅ Main Page Content -->
@@ -38,10 +39,12 @@
     <%- body %>
   </main>
 
-  <!-- ✅ Footer -->
-  <%- include('partials/footer') %>
+  <!-- ✅ Footer (now receives nonce) -->
+  <%- include('partials/footer', { 
+    nonce: typeof nonce !== 'undefined' ? nonce : ''
+  }) %>
 
-  <!-- 🧩 Page-specific scripts -->
+  <!-- 🧩 Page-specific scripts (ensure any added scripts use nonce in the route) -->
   <%- typeof scripts !== 'undefined' ? scripts : '' %>
 
   <!-- 🛡️ CSP-safe inline setup -->
@@ -51,8 +54,8 @@
     });
   </script>
 
-  <!-- 🎨 Layout Styles -->
-  <style>
+  <!-- 🎨 Layout Styles (now with nonce) -->
+  <style nonce="<%= nonce %>">
     body {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       margin: 0;

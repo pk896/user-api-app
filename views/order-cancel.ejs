@@ -1,0 +1,134 @@
+<!-- views/order-cancel.ejs -->
+<%
+  // Safe access for possibly-undefined locals from the route
+  var hasReason  = (typeof reason  !== 'undefined' && reason !== null && reason !== '');
+  var hasMessage = (typeof message !== 'undefined' && message !== null && message !== '');
+  var hasToken   = (typeof token   !== 'undefined' && token);
+  var hasPaypal  = (typeof paypal  !== 'undefined' && paypal);
+
+  var _reason  = hasReason  ? reason
+                : (hasPaypal && paypal.name) || "USER_CANCELLED";
+
+  var _message = hasMessage ? message
+                : (hasPaypal && (paypal.message || paypal.error_description))
+                || "Payment not completed.";
+
+  var _token   = hasToken ? token : null;
+
+  // Extract structured PayPal details if present
+  var _details = [];
+  try {
+    if (hasPaypal && paypal.details && Array.isArray(paypal.details)) {
+      _details = paypal.details.map(function (d) {
+        return {
+          issue: d.issue || "",
+          description: d.description || "",
+          field: d.field || ""
+        };
+      });
+    }
+  } catch (e) {}
+%>
+
+<style>
+  :root{
+    --card-bg:#fff;--card-border:#e5e7eb;--muted:#6b7280;--text:#111827;--surface:#f9fafb;
+    --shadow:0 6px 18px rgba(0,0,0,.06);--r:14px;--g:14px;--p:14px;
+    --fs:clamp(13px,3.5vw,16px);--fs-sm:clamp(12px,3.2vw,14px);--fs-lg:clamp(15px,4vw,18px);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --danger:#991b1b; --danger-bg:#fee2e2; --danger-pill:#fecaca;
+  }
+  .dark-theme{
+    --card-bg:#0b1220;--card-border:rgba(255,255,255,0.1);--muted:#9ca3af;--text:#e5e7eb;--surface:#101826;
+    --shadow:0 6px 18px rgba(0,0,0,.4);
+    --danger:#fecaca; --danger-bg:#3f1b1b; --danger-pill:#5a1c1c;
+  }
+
+  /* Prevent sideways scrolling even on tiny phones */
+  html,body,.page-content{max-width:100%; overflow-x:hidden;}
+
+  .wrap{display:grid;gap:var(--g);color:var(--text);}
+  .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--r);padding:var(--p);box-shadow:var(--shadow);}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;
+    background:var(--danger-bg);color:var(--danger);font-weight:700;font-size:var(--fs);
+  }
+  .sub{color:var(--muted);margin:4px 0 10px;font-size:var(--fs);}
+
+  .btns{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{
+    display:inline-flex;justify-content:center;align-items:center;gap:8px;
+    padding:12px 16px;border-radius:12px;border:1px solid var(--card-border);
+    text-decoration:none;background:var(--card-bg);min-height:44px;min-width:44px;
+    font-weight:600;font-size:var(--fs);
+  }
+  .btn:hover{background:var(--surface)}
+  .btn.primary{background:#111827;color:#fff;border-color:#111827}
+  .dark-theme .btn.primary{background:#e5e7eb;color:#111827;border-color:#e5e7eb}
+  @media(max-width:420px){ .btn{flex:1 1 100%; width:100%} }
+
+  .section-title{margin:0 0 8px;font-size:var(--fs-lg);font-weight:700}
+  .kv{display:grid;gap:8px}
+  .row{display:flex;justify-content:space-between;gap:10px}
+  .k{color:var(--muted)}
+  .v{font-weight:600}
+  .monospace{font-family:var(--mono);word-break:break-all;overflow-wrap:anywhere}
+
+  .issues{display:grid;gap:8px;margin-top:6px}
+  .issue{border:1px solid var(--card-border);border-radius:10px;padding:10px;background:var(--surface)}
+  .issue .head{font-weight:700;margin-bottom:4px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--danger-pill);font-size:var(--fs-sm);color:#111827}
+  .dark-theme .pill{color:#e5e7eb}
+
+  pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:var(--fs-sm);margin:0}
+</style>
+
+<div class="wrap">
+  <!-- Header -->
+  <div class="card" role="alert" aria-live="polite">
+    <div class="badge">✖ Payment not completed</div>
+    <p class="sub">Reason: <span class="v"><%= _reason %></span></p>
+
+    <div class="btns" style="margin-top:10px">
+      <a class="btn" href="/sales">← Back to shop</a>
+      <a class="btn primary" href="/payment/checkout">Try again</a>
+      <% if (_token) { %>
+        <a class="btn" href="/payment/debug/order/<%= encodeURIComponent(_token) %>" target="_blank" rel="noopener">View order (debug)</a>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="card">
+    <div class="section-title">Summary</div>
+    <div class="kv">
+      <div class="row"><span class="k">Message</span><span class="v"><%= _message %></span></div>
+      <div class="row"><span class="k">Token</span><span class="v monospace"><%= _token || "-" %></span></div>
+    </div>
+  </div>
+
+  <!-- Possible issues from PayPal -->
+  <% if (_details && _details.length) { %>
+    <div class="card">
+      <div class="section-title">Details</div>
+      <div class="issues">
+        <% for (var i=0;i<_details.length;i++){ var d=_details[i]; %>
+          <div class="issue">
+            <div class="head"><span class="pill"><%= d.issue || "ISSUE" %></span></div>
+            <% if (d.description) { %><div><%= d.description %></div><% } %>
+            <% if (d.field) { %><div class="monospace" style="margin-top:6px">Field: <%= d.field %></div><% } %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Optional raw debug -->
+  <% if (typeof showDebug !== "undefined" && showDebug && hasPaypal) { %>
+    <div class="card">
+      <div class="section-title">Raw (debug)</div>
+      <pre><%= JSON.stringify(paypal, null, 2) %></pre>
+    </div>
+  <% } %>
+</div>

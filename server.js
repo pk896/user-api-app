@@ -98,6 +98,76 @@ app.use(
   })
 );
 
+// Generate a nonce for every response BEFORE Helmet
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
+// existing Helmet wrapper
+app.use((req, res, next) => {
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'strict-dynamic'",
+          `'nonce-${res.locals.nonce}'`,
+          "https://apis.google.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
+        ],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.amazonaws.com",
+          "https://*.cloudinary.com",
+          "https://www.paypalobjects.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+
+            // ✅ Add these two:
+          "https://api-m.paypal.com",
+          "https://api-m.sandbox.paypal.com",
+
+
+          "https://api.paypal.com",
+          "https://api.sandbox.paypal.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
+        ],
+        frameSrc: [
+          "'self'",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+        ],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+  })(req, res, next);
+});
+
+/*// === Add this block to control the geolocation permission ===
+// Option A: Silence the console by allowing geolocation for PayPal iframes only.
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    'geolocation=(self "https://www.paypal.com" "https://www.sandbox.paypal.com")'
+  );
+  next();
+});*/
+
 // --------------------------
 // Middleware
 // --------------------------
@@ -122,7 +192,7 @@ app.use(morgan('combined'));
 // 🧱 Security: Helmet with CSP Nonce (Final Secure Version)
 // -------------------------------
 
-// Generate a nonce for every response BEFORE Helmet
+/*// Generate a nonce for every response BEFORE Helmet
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
@@ -184,7 +254,7 @@ app.use((req, res, next) => {
     'geolocation=(self "https://www.paypal.com" "https://www.sandbox.paypal.com")'
   );
   next();
-});
+});*/
 
 /*
  // Option B: Keep geolocation blocked everywhere (privacy-first).
@@ -438,7 +508,7 @@ app.get("/cart/count", (req, res) => {
 });
 
 // Checkout page
-app.get('/checkout', (req, res) => {
+app.get('/payment/checkout', (req, res) => {
   const cart = req.session.cart || { items: [] };
 
   // (Optional) if you want to stop empty-checkout visits:
@@ -536,6 +606,16 @@ app.use((req, res) => {
     active: ''
   });
 });
+
+// Silence devtools probe (optional)
+app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
+  // Option A: no content
+  // res.status(204).end();
+
+  // Option B: minimal stub
+  res.type('application/json').send('{}');
+});
+
 
 // 500 handler (after all routers) — DEBUG VERSION
 app.use((err, req, res, next) => {
