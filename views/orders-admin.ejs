@@ -1,0 +1,185 @@
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<main class="page">
+  <header class="head">
+    <h1>Orders (Admin)</h1>
+    <a href="/payment/checkout" class="back">← Checkout</a>
+  </header>
+
+  <section class="card">
+    <div class="bar">
+      <input id="q" class="input" placeholder="Filter by orderId, captureId, email…" />
+      <button id="reload" class="btn">Reload</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table" id="tbl">
+        <thead>
+          <tr>
+            <th>Created</th>
+            <th>Order ID</th>
+            <th>Status</th>
+            <th>Payer</th>
+            <th>Amount</th>
+            <th>Fee / Net</th>
+            <th>Capture</th>
+            <th>PayPal</th>
+            <th>Refund</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="9" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="flash" role="alert" aria-live="polite"></div>
+  </section>
+</main>
+
+<style nonce="<%= NONCE %>">
+  .page{max-width:1200px;margin:0 auto;padding:1rem}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.75rem}
+  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
+  .bar{display:flex;gap:.5rem;margin-bottom:.75rem}
+  .input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:.55rem .7rem}
+  .btn{border:1px solid #111827;border-radius:10px;padding:.5rem .8rem;background:#111827;color:#fff;cursor:pointer}
+  .table-wrap{overflow:auto}
+  .table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid #e5e7eb;padding:.5rem .6rem;text-align:left;vertical-align:top}
+  .muted{color:#6b7280}
+  .pill{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.78rem}
+  .pill-ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
+  .pill-pend{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+  .link{color:#2563eb;text-decoration:none}
+  .refund-wrap{display:flex;gap:.3rem;align-items:center}
+  .refund-amount{width:6.5ch;border:1px solid #d1d5db;border-radius:8px;padding:.25rem .35rem}
+  #flash .ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399;padding:.5rem;border-radius:10px;margin-top:.6rem}
+  #flash .err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;padding:.5rem;border-radius:10px;margin-top:.6rem}
+  .back{border:1px solid #d1d5db;border-radius:8px;padding:.4rem .6rem;text-decoration:none}
+</style>
+
+<script nonce="<%= NONCE %>">
+(() => {
+  const qs = (s,c=document)=>c.querySelector(s);
+  const rowsEl = qs('#rows');
+  const flash = qs('#flash');
+  const q = qs('#q');
+
+  const PP_ACTIVITY_BASE = "<%= ppActivityBase %>";
+
+  function fmtMoney(v, ccy){ return (ccy ? ccy + " " : "") + (Number(v||0).toFixed(2)); }
+  function pill(status){
+    const s = String(status||'').toUpperCase();
+    const ok = (s === 'COMPLETED' || s === 'APPROVED' || s === 'CAPTURED');
+    return `<span class="pill ${ok?'pill-ok':'pill-pend'}">${s||'—'}</span>`;
+  }
+  function setFlash(ok,msg){
+    flash.innerHTML = `<div class="${ok?'ok':'err'}">${msg}</div>`;
+  }
+
+  async function load(){
+    rowsEl.innerHTML = `<tr><td colspan="9" class="muted">Loading…</td></tr>`;
+    try{
+      const r = await fetch('/api/admin/orders?limit=100', { credentials:'same-origin' });
+      const data = await r.json();
+      if(!data?.ok) throw new Error(data?.message || 'Failed to load');
+      window.__ORDERS = data.orders || [];
+      render();
+    }catch(e){
+      rowsEl.innerHTML = `<tr><td colspan="9" class="muted">Failed to load.</td></tr>`;
+      setFlash(false, 'Could not load orders.');
+    }
+  }
+
+  function render(){
+    const needle = (q.value||'').toLowerCase().trim();
+    const list = (window.__ORDERS||[]).filter(o=>{
+      if(!needle) return true;
+      return [
+        o.orderId, o.captureId, o.payerEmail, o.payerName
+      ].filter(Boolean).some(v=> String(v).toLowerCase().includes(needle));
+    });
+
+    if(!list.length){
+      rowsEl.innerHTML = `<tr><td colspan="9" class="muted">No orders.</td></tr>`;
+      return;
+    }
+
+    rowsEl.innerHTML = list.map(o=>{
+      const payPalLink = o.captureId ? (PP_ACTIVITY_BASE + encodeURIComponent(o.captureId)) : '';
+      return `<tr data-order="${o.orderId}" data-capture="${o.captureId||''}">
+        <td><span class="muted">${new Date(o.createdAt).toLocaleString()}</span></td>
+        <td><code>${o.orderId}</code></td>
+        <td>${pill(o.status)}</td>
+        <td>
+          ${o.payerName ? o.payerName+'<br/>' : '' }
+          <span class="muted">${o.payerEmail||'—'}</span>
+        </td>
+        <td>${fmtMoney(o.amount, o.currency)}</td>
+        <td>
+          <div class="muted">fee: ${o.fee?fmtMoney(o.fee,o.currency):'—'}</div>
+          <div class="muted">net: ${o.net?fmtMoney(o.net,o.currency):'—'}</div>
+        </td>
+        <td>${o.captureId ? `<code>${o.captureId}</code>` : '—'}</td>
+        <td>${payPalLink ? `<a class="link" target="_blank" rel="noopener" href="${payPalLink}">Open</a>` : '<span class="muted">—</span>'}</td>
+        <td>
+          ${o.captureId ? `
+            <div class="refund-wrap">
+              <input class="refund-amount" type="number" step="0.01" min="0" placeholder="full" />
+              <button class="btn btn-refund">Refund</button>
+            </div>` : '<span class="muted">—</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // search & reload
+  qs('#reload').addEventListener('click', load);
+  q.addEventListener('input', render);
+
+  // refund handler (delegated)
+  rowsEl.addEventListener('click', async (ev)=>{
+    const btn = ev.target.closest('.btn-refund');
+    if(!btn) return;
+    const tr = ev.target.closest('tr');
+    const captureId = tr?.getAttribute('data-capture');
+    if(!captureId) { setFlash(false,'No capture id on this order.'); return; }
+
+    const amountEl = tr.querySelector('.refund-amount');
+    const val = amountEl?.value ? Number(amountEl.value) : null;
+    if (val !== null && (!Number.isFinite(val) || val <= 0)) {
+      setFlash(false, 'Enter a positive amount or leave blank for full refund.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Working…';
+    try{
+      const body = val ? { captureId, amount: val } : { captureId };
+      const r = await fetch('/payment/refund', {
+        method:'POST',
+        headers:{ 'Content-Type': 'application/json' },
+        credentials:'same-origin',
+        body: JSON.stringify(body)
+      });
+      const data = await r.json().catch(()=> ({}));
+      if(!r.ok || !data?.success){
+        throw new Error(data?.message || 'Refund failed');
+      }
+      setFlash(true, `Refund ${data.refund?.id || ''} submitted (${data.refund?.status || 'OK'}).`);
+      amountEl.value = '';
+      // reload list to reflect refundedTotal (if you show it later)
+      await load();
+    }catch(e){
+      console.error(e);
+      setFlash(false, e.message || 'Refund failed.');
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Refund';
+    }
+  });
+
+  // boot
+  load();
+})();
+</script>

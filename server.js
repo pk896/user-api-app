@@ -69,6 +69,36 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Detect frontend origin based on environment
+const frontendOrigin =
+  process.env.NODE_ENV === 'production'
+    ? 'https://my-vite-app-ra7d.onrender.com'   // deployed Vite app
+    : 'http://localhost:5174';                   // Vite dev server (match your actual port)
+
+// ----------------------------
+// 🧩 CORS Configuration
+// ----------------------------
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  frontendOrigin, // <- use the same value as above so it never drifts
+];
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow same-origin/no-origin (EJS forms, curl, Postman) and whitelisted frontends
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.warn(`⚠️ CORS blocked for origin: ${origin}`);
+      return callback(null, false); // deny silently
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], // include PATCH
+  })
+);
+
+/*// Detect frontend origin based on environment
 const frontendOrigin = process.env.NODE_ENV === 'production'
   ? 'https://my-vite-app-ra7d.onrender.com'  // ✅ replace with your deployed frontend
   : 'http://localhost:5174';             // ✅ Vite dev server
@@ -96,7 +126,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
   })
-);
+);*/
 
 // Generate a nonce for every response BEFORE Helmet
 app.use((req, res, next) => {
@@ -188,150 +218,6 @@ app.set('layout', 'layout');
 // Logging
 app.use(morgan('combined'));
 
-// -------------------------------
-// 🧱 Security: Helmet with CSP Nonce (Final Secure Version)
-// -------------------------------
-
-/*// Generate a nonce for every response BEFORE Helmet
-app.use((req, res, next) => {
-  res.locals.nonce = crypto.randomBytes(16).toString("base64");
-  next();
-});
-
-// existing Helmet wrapper
-app.use((req, res, next) => {
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          "'strict-dynamic'",
-          `'nonce-${res.locals.nonce}'`,
-          "https://apis.google.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-          "https://www.paypalobjects.com",
-        ],
-        imgSrc: [
-          "'self'",
-          "data:",
-          "blob:",
-          "https://*.amazonaws.com",
-          "https://*.cloudinary.com",
-          "https://www.paypalobjects.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-        ],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        connectSrc: [
-          "'self'",
-          "https://api.paypal.com",
-          "https://api.sandbox.paypal.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-          "https://www.paypalobjects.com",
-        ],
-        frameSrc: [
-          "'self'",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-        ],
-        objectSrc: ["'none'"],
-        upgradeInsecureRequests: [],
-      },
-    },
-  })(req, res, next);
-});
-
-// === Add this block to control the geolocation permission ===
-// Option A: Silence the console by allowing geolocation for PayPal iframes only.
-app.use((req, res, next) => {
-  res.setHeader(
-    "Permissions-Policy",
-    'geolocation=(self "https://www.paypal.com" "https://www.sandbox.paypal.com")'
-  );
-  next();
-});*/
-
-/*
- // Option B: Keep geolocation blocked everywhere (privacy-first).
- // You’ll likely keep seeing the warning when the iframe probes it.
- app.use((req, res, next) => {
-   res.setHeader("Permissions-Policy", "geolocation=()");
-   next();
- });
-
- // Option C: Remove the directive completely (no explicit policy).
- // Then the warning disappears, but geolocation may be allowed by default
- // (still gated by user permission).
- app.use((req, res, next) => {
-   res.removeHeader("Permissions-Policy");
-   next();
- });
-*/
-
-
-/*app.use((req, res, next) => {
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        defaultSrc: ["'self'"],
-
-        // 👇 Allow PayPal SDK's inline snippets + dynamic loads
-        scriptSrc: [
-          "'self'",
-          "'unsafe-inline'",                    // ← required for PayPal SDK inline
-          "'strict-dynamic'",                   // ← lets nonce’d scripts trust their children
-          `'nonce-${res.locals.nonce}'`,        // ← your page scripts still use a nonce
-          "https://apis.google.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-          "https://www.paypalobjects.com",
-        ],
-
-        // If your Helmet version supports CSP3 splits, you can optionally do:
-        // scriptSrcElem: [ ...same as scriptSrc... ],
-        // scriptSrcAttr: ["'unsafe-inline'"],
-
-        imgSrc: [
-          "'self'",
-          "data:",
-          "blob:",
-          "https://*.amazonaws.com",
-          "https://*.cloudinary.com",
-          "https://www.paypalobjects.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-        ],
-
-        styleSrc: ["'self'", "'unsafe-inline'"],
-
-        connectSrc: [
-          "'self'",
-          "https://api.paypal.com",
-          "https://api.sandbox.paypal.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-          "https://www.paypalobjects.com",
-        ],
-
-        frameSrc: [
-          "'self'",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-        ],
-
-        objectSrc: ["'none'"],
-        upgradeInsecureRequests: [],
-      },
-    },
-  })(req, res, next);
-});*/
-
 // Compression
 app.use(compression());
 
@@ -351,12 +237,12 @@ const limiter = rateLimit({
 });
 
 // ✅ Apply limiter only to authentication & signup routes
-app.use("/business/login", limiter);
+// app.use("/business/login", limiter);
 app.use("/business/login", limiter);
 app.use("/business/signup", limiter);
-app.use("/business/signup", limiter);
+// app.use("/business/signup", limiter);
 
-app.use("/users/login", limiter);
+// app.use("/users/login", limiter);
 app.use("/users/login", limiter);
 app.use("/users/signup", limiter);
 app.use("/users/rendersignup", limiter);
@@ -446,6 +332,14 @@ app.use((req, res, next) => {
   next();
 });
 
+// Allow PayPal popups/overlays on checkout/payment pages
+app.use((req, res, next) => {
+  if (req.path.startsWith('/checkout') || req.path.startsWith('/payment')) {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  }
+  next();
+});
+
 // routes for the delivery options
 const deliveryOptionRouter = require("./routes/deliveryOption");
 app.use("/api/deliveryOption", deliveryOptionRouter)
@@ -496,6 +390,9 @@ app.use("/sales", require("./routes/sales"));
 
 // URL control
 app.use("/links", require("./routes/someRoute"));
+
+// route for admin role on orders
+app.use(require("./routes/adminOrders"));
 
 // 🛒 Get current cart item count
 app.get("/cart/count", (req, res) => {
