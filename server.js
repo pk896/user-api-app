@@ -80,6 +80,7 @@ const frontendOrigin =
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'my-express-server-rq4a.onrender.com',
   frontendOrigin, // <- use the same value as above so it never drifts
 ];
 
