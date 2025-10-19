@@ -1,0 +1,110 @@
+<!-- views/orders.ejs -->
+<%
+  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
+%>
+
+<% if (success && success.length > 0) { %>
+  <div class="flash flash-success">✅ <%= success %></div>
+<% } %>
+<% if (error && error.length > 0) { %>
+  <div class="flash flash-error">❌ <%= error %></div>
+<% } %>
+
+<main class="orders-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <header class="head">
+    <h1>🧾 My Orders</h1>
+    <p class="muted">Tap an order to view a printable receipt.</p>
+    <nav class="btns">
+      <a href="/sales" class="btn btn-primary">← Continue shopping</a>
+    </nav>
+  </header>
+
+  <section class="card">
+    <div id="ordersList" class="orders-list">
+      <p class="muted">Loading your orders…</p>
+    </div>
+  </section>
+</main>
+
+<style nonce="<%= NONCE %>">
+  :root{
+    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
+    --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
+    --radius:12px; --pad:12px;
+  }
+  .dark-theme{
+    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
+    --brand:#f3f4f6; --brand-contrast:#111;
+  }
+  html,body{background:var(--bg); color:var(--text); margin:0}
+  .orders-page{max-width:680px; margin:0 auto; padding:12px}
+  .head h1{font-size:clamp(18px,5.5vw,28px); margin:0 0 4px}
+  .muted{color:var(--muted)}
+  .btns{display:flex; flex-wrap:wrap; gap:8px; margin:8px 0}
+  .btn{flex:1 1 100%; text-align:center; border:1px solid var(--brand); border-radius:10px; padding:10px 12px; text-decoration:none; cursor:pointer; font-size:clamp(14px,4.2vw,16px)}
+  .btn-primary{background:var(--brand); color:var(--brand-contrast)}
+
+  .card{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad)}
+  .orders-list{display:flex; flex-direction:column; gap:8px}
+
+  .order-row{
+    display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;
+    border:1px solid var(--border); border-radius:10px; padding:10px;
+  }
+  .order-main{display:flex; flex-direction:column; gap:4px}
+  .order-id{font-weight:700; font-size:clamp(14px,4.5vw,16px); word-break:break-all}
+  .order-sub{font-size:clamp(13px,4vw,15px); color:var(--muted)}
+  .order-amt{font-weight:800; font-size:clamp(14px,4.6vw,16px)}
+  .order-link{display:inline-block; text-decoration:none; border:1px solid var(--border); padding:8px 10px; border-radius:10px}
+  .flash{margin:.6rem 0; padding:.6rem .8rem; border-radius:10px; font-size:clamp(14px,4.2vw,16px)}
+  .flash-success{background:#ecfdf5; color:#065f46; border:1px solid #34d399}
+  .flash-error{background:#fef2f2; color:#991b1b; border:1px solid #fca5a5}
+  @media (min-width:420px){ .btn{flex:0 0 auto; min-width:180px} }
+</style>
+
+<script nonce="<%= NONCE %>">
+(function(){
+  function qs(s, c){ return (c||document).querySelector(s); }
+  function money(n, cur){
+    var C = (cur || 'USD').toUpperCase();
+    var sym = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[C] || (C + ' ');
+    return sym + Number(n||0).toFixed(2);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var list = qs('#ordersList');
+
+    fetch('/payment/my-orders', { credentials:'same-origin' })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        if (!res.ok || !res.j || !res.j.ok) throw new Error('Load failed');
+        var orders = res.j.orders || [];
+        if (!orders.length){
+          list.innerHTML = '<p class="muted">No recent orders found.</p>';
+          return;
+        }
+        var html = orders.map(function(o){
+          var dt = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
+          var amt = (o.amount && o.currency) ? money(o.amount, o.currency) : '';
+          var href = '/payment/receipt/' + encodeURIComponent(o.orderId);
+          return ''+
+          '<article class="order-row">'+
+            '<div class="order-main">'+
+              '<div class="order-id">'+(o.orderId || '')+'</div>'+
+              '<div class="order-sub">'+(o.status || '')+' • '+dt+'</div>'+
+            '</div>'+
+            '<div class="order-right">'+
+              (amt ? '<div class="order-amt">'+amt+'</div>' : '')+
+              '<a class="order-link" href="'+href+'">Open</a>'+
+            '</div>'+
+          '</article>';
+        }).join('');
+        list.innerHTML = html;
+      })
+      .catch(function(err){
+        console.error(err);
+        list.innerHTML = '<p class="muted">Could not load orders. Please try again later.</p>';
+      });
+  });
+})();
+</script>

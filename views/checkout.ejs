@@ -1,8 +1,8 @@
 <!-- views/checkout.ejs -->
 <%
-  const CO_VAT_RATE = typeof vatRate !== 'undefined' ? vatRate : 0.15;
-  const CO_SHIPPING_FLAT = typeof shippingFlat !== 'undefined' ? shippingFlat : 0;
-  const CO_NONCE = (typeof nonce !== 'undefined' ? nonce : '');
+  var CO_VAT_RATE = (typeof vatRate !== 'undefined') ? vatRate : 0.15;
+  var CO_SHIPPING_FLAT = (typeof shippingFlat !== 'undefined') ? shippingFlat : 0;
+  var CO_NONCE = (typeof nonce !== 'undefined') ? nonce : '';
 %>
 
 <% if (success && success.length > 0) { %>
@@ -14,19 +14,20 @@
 
 <main class="checkout-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
   <header class="co-head">
-    <div>
+    <div class="co-hgroup">
       <h1>Checkout</h1>
-      <p class="muted">Review your items, adjust quantities, and pay securely with PayPal.</p>
+      <p class="muted">Review items, adjust quantities, and pay securely with PayPal.</p>
     </div>
     <a href="/sales" class="link-back">← Continue shopping</a>
   </header>
 
-  <!-- ✅ Live flash moved OUTSIDE payment card (full-width under header) -->
+  <!-- Live flash: full-width, under header -->
   <div id="liveFlash" role="alert" aria-live="polite" tabindex="-1"></div>
 
   <section class="co-grid">
+    <!-- Order Summary -->
     <div class="co-summary card">
-      <h2>Order Summary</h2>
+      <h2 class="card-title">Order Summary</h2>
       <div id="summaryList" class="summary-list">
         <p class="muted">Loading items…</p>
       </div>
@@ -39,9 +40,10 @@
       </div>
     </div>
 
+    <!-- Payment -->
     <div class="co-payment card">
-      <h2>Payment</h2>
-      <div id="paypal-button-container"></div>
+      <h2 class="card-title">Payment</h2>
+      <div id="paypal-button-container" class="paypal-wrap"></div>
       <div id="payStatus" class="muted" style="margin-top:.6rem"></div>
 
       <div id="fallbackBox" class="fallback muted" hidden>
@@ -52,32 +54,92 @@
 </main>
 
 <style nonce="<%= CO_NONCE %>">
-  .checkout-page{max-width:1100px;margin:0 auto;padding:1rem}
-  .co-head{display:flex;justify-content:space-between;align-items:flex-start;margin:.25rem 0 1rem}
-  .link-back{text-decoration:none;border:1px solid #d1d5db;padding:.45rem .8rem;border-radius:8px}
-  .co-grid{display:grid;grid-template-columns:2fr 1.3fr;gap:1rem}
-  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
-  .summary-list{display:flex;flex-direction:column;gap:.6rem;margin:.5rem 0 1rem}
-  .summary-item{display:grid;grid-template-columns:64px 1fr auto;gap:.75rem;align-items:center}
-  .summary-item img{width:64px;height:64px;object-fit:cover;border-radius:.6rem}
-  .muted{color:#6b7280}
-  .totals{display:grid;gap:.35rem;margin-top:.75rem}
-  .row{display:flex;justify-content:space-between}
-  .row.total{font-weight:900;font-size:1.05rem;border-top:1px solid #e5e7eb;padding-top:.5rem}
-  .fallback{margin-top:.75rem;font-size:.92rem}
-  .qty-wrap{display:flex;align-items:center;gap:.35rem;margin-top:.35rem}
-  .qty-btn{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:.2rem .55rem;cursor:pointer}
-  .qty{min-width:2ch;text-align:center}
-  .remove-btn{border:none;background:none;color:#ef4444;cursor:pointer;font-size:.9rem;margin-left:.35rem}
-  .line-right{font-weight:700}
+  :root{
+    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
+    --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
+    --radius:12px; --pad:12px;
+    --tap:44px; /* min touch target height */
+  }
+  .dark-theme{
+    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
+    --brand:#f3f4f6; --brand-contrast:#111;
+  }
 
-  /* ✅ Live flash styles — full width, above grid */
-  #liveFlash .flash{padding:.7rem .9rem;border-radius:10px;margin:.6rem 0;font-weight:700}
-  #liveFlash .flash-success{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
-  #liveFlash .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
-  #liveFlash:focus{outline:2px solid #60a5fa; outline-offset:2px}
+  /* Mobile-first base (very small phones) */
+  html, body { background:var(--bg); color:var(--text); margin:0; }
+  .checkout-page { max-width:740px; margin:0 auto; padding:10px; }
+  .co-head {
+    display:flex; flex-direction:column; gap:8px; margin:4px 0 10px;
+  }
+  .co-hgroup h1 { font-size:clamp(18px,6vw,24px); line-height:1.15; margin:0 0 2px; }
+  .muted { color:var(--muted); }
+  .link-back {
+    align-self:flex-start; text-decoration:none; border:1px solid var(--border);
+    padding:8px 12px; border-radius:10px; font-size:clamp(13px,4.2vw,15px);
+  }
 
-  @media (max-width:920px){.co-grid{grid-template-columns:1fr}}
+  /* Cards & grid */
+  .co-grid { display:grid; grid-template-columns:1fr; gap:10px; }
+  .card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad); }
+  .card-title { font-size:clamp(16px,5vw,18px); margin:0 0 6px; }
+
+  /* Summary list items */
+  .summary-list { display:flex; flex-direction:column; gap:8px; margin:.5rem 0 1rem; }
+  .summary-item {
+    display:grid; grid-template-columns:56px 1fr auto; gap:10px; align-items:center;
+    padding:8px 0; border-bottom:1px dashed var(--border);
+  }
+  .summary-item:last-child { border-bottom:none; }
+  .summary-item img {
+    width:56px; height:56px; object-fit:cover; border-radius:10px; background:#f5f5f5;
+  }
+  .summary-item .name { font-weight:700; font-size:clamp(14px,4.8vw,16px); }
+  .summary-item .muted { font-size:clamp(12px,3.8vw,14px); }
+
+  /* Quantity controls (bigger tap targets) */
+  .qty-wrap { display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap; }
+  .qty-btn {
+    border:1px solid var(--border); background:#fff; border-radius:10px;
+    min-width:var(--tap); height:var(--tap); line-height:var(--tap);
+    font-size:18px; display:inline-flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .qty { min-width:28px; text-align:center; font-weight:600; }
+  .remove-btn {
+    border:none; background:none; color:#ef4444; cursor:pointer;
+    font-size:clamp(12px,3.8vw,14px); margin-left:4px; padding:8px 6px;
+  }
+  .line-right { font-weight:800; font-size:clamp(14px,4.8vw,16px); white-space:nowrap; }
+
+  /* Totals */
+  .totals { display:grid; gap:6px; margin-top:.5rem; }
+  .row { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .row span:first-child { max-width:70%; }
+  .row.total { font-weight:900; font-size:clamp(15px,5vw,18px); border-top:1px solid var(--border); padding-top:.5rem; }
+
+  /* PayPal container: full width, no overflow */
+  .paypal-wrap { width:100%; }
+  .paypal-buttons { width:100% !important; }
+  .paypal-buttons iframe { max-width:100% !important; }
+
+  .fallback { margin-top:.75rem; font-size:.92rem; }
+
+  /* Live flash */
+  #liveFlash .flash { padding:.7rem .9rem; border-radius:10px; margin:.6rem 0; font-weight:700; }
+  #liveFlash .flash-success { background:#ecfdf5; color:#065f46; border:1px solid #34d399; }
+  #liveFlash .flash-error { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+  #liveFlash:focus { outline:2px solid #60a5fa; outline-offset:2px; }
+
+  /* Medium screens: widen spacing a bit */
+  @media (min-width:480px){
+    .summary-item { grid-template-columns:64px 1fr auto; }
+    .summary-item img { width:64px; height:64px; }
+  }
+
+  /* Two-column only when there’s room */
+  @media (min-width:900px){
+    .co-grid { grid-template-columns:1.4fr 1fr; gap:14px; }
+  }
 </style>
 
 <script id="checkout-config" type="application/json" nonce="<%= CO_NONCE %>">
@@ -85,47 +147,54 @@
 </script>
 
 <script nonce="<%= CO_NONCE %>">
-  document.addEventListener('DOMContentLoaded', async () => {
-    const $ = (s,c=document)=>c.querySelector(s);
+  document.addEventListener('DOMContentLoaded', async function () {
+    var $ = function(sel, ctx){ return (ctx||document).querySelector(sel); };
 
-    const summaryList = $('#summaryList');
-    const tSubtotal = $('#tSubtotal');
-    const tVat = $('#tVat');
-    const tShipping = $('#tShipping');
-    const tTotal = $('#tTotal');
-    const payStatus = $('#payStatus');
-    const fallbackBox = $('#fallbackBox');
-    const liveFlash = document.getElementById('liveFlash');
+    var summaryList = $('#summaryList');
+    var tSubtotal = $('#tSubtotal');
+    var tVat = $('#tVat');
+    var tShipping = $('#tShipping');
+    var tTotal = $('#tTotal');
+    var payStatus = $('#payStatus');
+    var fallbackBox = $('#fallbackBox');
+    var liveFlash = document.getElementById('liveFlash');
 
-    const cfgEl = document.getElementById('checkout-config');
-    const { VAT_RATE = 0.15, SHIPPING_FLAT = 0 } = cfgEl ? JSON.parse(cfgEl.textContent || '{}') : {};
+    var cfgEl = document.getElementById('checkout-config');
+    var parsedCfg = {};
+    try { parsedCfg = JSON.parse(cfgEl ? cfgEl.textContent : '{}'); } catch(e){ parsedCfg = {}; }
+    var VAT_RATE = (typeof parsedCfg.VAT_RATE === 'number') ? parsedCfg.VAT_RATE : 0.15;
+    var SHIPPING_FLAT = (typeof parsedCfg.SHIPPING_FLAT === 'number') ? parsedCfg.SHIPPING_FLAT : 0;
 
-    // Live flash (success persists; errors auto-hide)
-    function showFlash(type, msg, opts={}){
+    function showFlash(type, msg, opts){
+      opts = opts || {};
       if(!liveFlash) return;
-      const cls = type === 'error' ? 'flash flash-error' : 'flash flash-success';
-      liveFlash.innerHTML = `<div class="${cls}">${msg}</div>`;
-      liveFlash.focus?.();
-      const autoHide = type === 'error' ? true : (opts.autoHide === true);
-      if (autoHide) setTimeout(()=> { liveFlash.innerHTML = ''; }, opts.timeout || 4500);
+      var cls = (type === 'error') ? 'flash flash-error' : 'flash flash-success';
+      liveFlash.innerHTML = '<div class="'+cls+'">'+msg+'</div>';
+      if (liveFlash.focus) liveFlash.focus();
+      var autoHide = (type === 'error') ? true : (opts.autoHide === true);
+      if (autoHide) setTimeout(function(){ liveFlash.innerHTML = ''; }, opts.timeout || 4500);
     }
 
     // Load PayPal config
-    const config = await (async ()=>{
-      try { const r = await fetch('/payment/config', { credentials:'same-origin' });
-            if(!r.ok) return null; return await r.json(); } catch { return null; }
+    var config = await (async function(){
+      try {
+        var r = await fetch('/payment/config', { credentials:'same-origin' });
+        if (!r.ok) return null;
+        return await r.json();
+      } catch(e){ return null; }
     })();
 
     if(!config || !config.clientId){
-      payStatus.textContent = 'Could not load PayPal configuration.';
-      showFlash('error', 'Could not load PayPal configuration.');
+      var msgCfg = 'Could not load PayPal configuration.';
+      payStatus.textContent = msgCfg;
+      showFlash('error', msgCfg);
       if (fallbackBox) fallbackBox.hidden = false;
       return;
     }
 
-    const currency = (config.baseCurrency || config.currency || 'USD').toUpperCase();
-    const CURRENCY_SYMBOL = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[currency] || (currency + ' ');
-    const fmt = (n)=> (CURRENCY_SYMBOL + Number(n||0).toFixed(2));
+    var currency = String((config.baseCurrency || config.currency || 'USD')).toUpperCase();
+    var SYMBOL = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[currency] || (currency + ' ');
+    var fmt = function(n){ return SYMBOL + Number(n||0).toFixed(2); };
 
     function pickId(it){
       return it.id || it._id || it.productId || it.sku || it.customId;
@@ -133,19 +202,19 @@
 
     async function getJSON(url, opts){
       try{
-        const r = await fetch(url, { credentials:'same-origin', ...(opts||{}) });
-        const ct = r.headers.get('content-type')||'';
-        const data = ct.includes('application/json') ? await r.json() : null;
-        return { ok: r.ok, status: r.status, data };
+        var r = await fetch(url, Object.assign({ credentials:'same-origin' }, (opts||{})));
+        var ct = r.headers.get('content-type') || '';
+        var data = ct.indexOf('application/json') !== -1 ? await r.json() : null;
+        return { ok: r.ok, status: r.status, data: data };
       }catch(e){ return { ok:false, status:0, data:null }; }
     }
 
     // --- CART STATE + RENDER ---
-    let items = [];
-    let subtotal = 0, vat = 0, shipping = 0, total = 0;
+    var items = [];
+    var subtotal = 0, vat = 0, shipping = 0, total = 0;
 
     function computeTotals(){
-      subtotal = items.reduce((s,it)=> s + Number(it.price||0)*Number(it.quantity||1), 0);
+      subtotal = items.reduce(function(s,it){ return s + Number(it.price||0)*Number(it.quantity||1); }, 0);
       vat = subtotal * Number(VAT_RATE || 0);
       shipping = Number(SHIPPING_FLAT || 0);
       total = subtotal + vat + shipping;
@@ -155,7 +224,6 @@
       tTotal.textContent = fmt(total);
     }
 
-    // ✅ accept a custom status so success doesn’t get overwritten
     function renderEmptyCart(statusMsg){
       summaryList.innerHTML = '<p class="muted">Your cart is empty. <a href="/sales">Go back to shop</a>.</p>';
       tSubtotal.textContent = fmt(0);
@@ -166,206 +234,215 @@
     }
 
     function render(){
-      if(!items.length){
-        renderEmptyCart();
-        return;
+      if(!items.length){ renderEmptyCart(); return; }
+      var html = '';
+      for (var i=0;i<items.length;i++){
+        var it = items[i] || {};
+        var id = pickId(it);
+        var qty = Number(it.quantity||1);
+        var price = Number(it.price||0);
+        var name = it.name || 'Item';
+        var img = it.imageUrl || it.image || '';
+        var line = price * qty;
+        html += ''
+          + '<div class="summary-item" data-id="'+String(id)+'">'
+          +   '<img src="'+(img||'')+'" alt="'+name+'" />'
+          +   '<div>'
+          +     '<div class="name">'+name+'</div>'
+          +     '<div class="muted">'+fmt(price)+' each</div>'
+          +     '<div class="qty-wrap">'
+          +       '<button class="qty-btn" data-act="dec" aria-label="Decrease quantity">−</button>'
+          +       '<span class="qty" aria-live="polite">'+qty+'</span>'
+          +       '<button class="qty-btn" data-act="inc" aria-label="Increase quantity">+</button>'
+          +       '<button class="remove-btn" data-act="remove" aria-label="Remove item">Remove</button>'
+          +     '</div>'
+          +   '</div>'
+          +   '<div class="line-right">'+fmt(line)+'</div>'
+          + '</div>';
       }
-      summaryList.innerHTML = items.map(it=>{
-        const id = pickId(it);
-        const qty = Number(it.quantity||1);
-        const price = Number(it.price||0);
-        const name = it.name || 'Item';
-        const img = it.imageUrl || it.image || '';
-        const line = price * qty;
-        return `
-          <div class="summary-item" data-id="${id}">
-            <img src="${img}" alt="${name}" />
-            <div>
-              <div style="font-weight:700">${name}</div>
-              <div class="muted">${fmt(price)} each</div>
-              <div class="qty-wrap">
-                <button class="qty-btn" data-act="dec" aria-label="Decrease quantity">−</button>
-                <span class="qty" aria-live="polite">${qty}</span>
-                <button class="qty-btn" data-act="inc" aria-label="Increase quantity">+</button>
-                <button class="remove-btn" data-act="remove" aria-label="Remove item">Remove</button>
-              </div>
-            </div>
-            <div class="line-right">${fmt(line)}</div>
-          </div>
-        `;
-      }).join('');
+      summaryList.innerHTML = html;
       computeTotals();
     }
 
     async function loadCart(){
-      const { ok, data } = await getJSON('/api/cart');
-      items = ok && data && Array.isArray(data.items) ? data.items : [];
+      var resp = await getJSON('/api/cart');
+      items = (resp.ok && resp.data && Array.isArray(resp.data.items)) ? resp.data.items : [];
       render();
     }
 
     async function clearCartServer(){
-      try { await fetch('/api/cart/clear', { method:'POST', credentials:'same-origin' }); } catch {}
+      try { await fetch('/api/cart/clear', { method:'POST', credentials:'same-origin' }); } catch(e){}
     }
 
     async function finalizePaymentSuccess(){
       await clearCartServer();
       items = [];
-      renderEmptyCart('✅ Payment successful!');   // <- keep the success status
-      const btnWrap = document.querySelector('#paypal-button-container');
+      renderEmptyCart('✅ Payment successful!');
+      var btnWrap = document.querySelector('#paypal-button-container');
       if (btnWrap) btnWrap.innerHTML = '';
     }
 
-    // initial load
     await loadCart();
     if(!items.length) return;
 
-    // --- QTY HANDLERS ---
-    summaryList.addEventListener('click', async (ev)=>{
-      const btn = ev.target.closest('button');
+    // Quantity handlers
+    summaryList.addEventListener('click', async function(ev){
+      var btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
       if(!btn) return;
-      const act = btn.dataset.act;
-      const row = ev.target.closest('.summary-item');
+      var act = btn.getAttribute('data-act');
+      var row = ev.target.closest('.summary-item');
       if(!row) return;
-      const id = row.getAttribute('data-id');
-      const idx = items.findIndex(i => String(pickId(i)) === String(id));
+      var id = row.getAttribute('data-id');
+      var idx = -1;
+      for (var i=0;i<items.length;i++){
+        if (String(pickId(items[i])) === String(id)) { idx = i; break; }
+      }
       if(idx < 0) return;
 
-      let qty = Number(items[idx].quantity || 1);
-      if(act === 'inc') qty += 1;
-      if(act === 'dec') qty = Math.max(1, qty - 1);
+      var qty = Number(items[idx].quantity || 1);
+      if (act === 'inc') qty += 1;
+      if (act === 'dec') qty = Math.max(1, qty - 1);
 
-      if(act === 'remove'){
-        const { ok, data } = await getJSON(`/api/cart/item/${encodeURIComponent(id)}`, { method:'DELETE' });
-        if(ok && data && data.items){
-          items = data.items;
+      if (act === 'remove'){
+        var delr = await getJSON('/api/cart/item/'+encodeURIComponent(id), { method:'DELETE' });
+        if(delr.ok && delr.data && delr.data.items){
+          items = delr.data.items;
           render();
-          showFlash('success', 'Item removed from cart.', { autoHide: true });
-        }else{
-          const msg = 'Could not remove item. Please try again.';
-          payStatus.textContent = msg;
-          showFlash('error', msg, { autoHide: true });
+          showFlash('success', 'Item removed from cart.', { autoHide:true });
+        } else {
+          var msgR = 'Could not remove item. Please try again.';
+          payStatus.textContent = msgR;
+          showFlash('error', msgR, { autoHide:true });
         }
         return;
       }
 
-      const { ok, data } = await getJSON(`/api/cart/item/${encodeURIComponent(id)}`, {
+      var upr = await getJSON('/api/cart/item/'+encodeURIComponent(id), {
         method:'PATCH',
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ quantity: qty })
       });
-      if(ok && data && data.items){
-        items = data.items;
+      if(upr.ok && upr.data && upr.data.items){
+        items = upr.data.items;
         render();
-        showFlash('success', 'Quantity updated.', { autoHide: true });
-      }else{
-        const msg = 'Could not update quantity. Please try again.';
-        payStatus.textContent = msg;
-        showFlash('error', msg, { autoHide: true });
+        showFlash('success', 'Quantity updated.', { autoHide:true });
+      } else {
+        var msgU = 'Could not update quantity. Please try again.';
+        payStatus.textContent = msgU;
+        showFlash('error', msgU, { autoHide:true });
       }
     });
 
-    // --- LOAD PAYPAL SDK (currency must match server) ---
+    // Load PayPal SDK
     try {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        const isLive = (config.mode && String(config.mode).toLowerCase() === 'live');
-        const host = isLive ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
-
-        const params = new URLSearchParams({
+      await new Promise(function(resolve, reject){
+        var s = document.createElement('script');
+        var isLive = (config.mode && String(config.mode).toLowerCase() === 'live');
+        var host = isLive ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
+        var params = new URLSearchParams({
           'client-id': config.clientId,
           'components': 'buttons',
           'currency': currency,
           'intent': 'capture'
         });
-        s.src = `${host}/sdk/js?${params.toString()}`;
+        s.src = host + '/sdk/js?' + params.toString();
         s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
       });
     } catch (e) {
-      const msg = 'PayPal failed to load.';
+      var msg = 'PayPal failed to load.';
       console.error(msg, e);
       payStatus.textContent = msg;
-      showFlash('error', msg, { autoHide: true });
+      showFlash('error', msg, { autoHide:true });
       if (fallbackBox) fallbackBox.hidden = false;
       return;
     }
 
-    if(!window.paypal){
-      const msg = 'PayPal SDK failed to initialize.';
-      payStatus.textContent = msg;
-      showFlash('error', msg, { autoHide: true });
+    if (!window.paypal) {
+      var msg2 = 'PayPal SDK failed to initialize.';
+      payStatus.textContent = msg2;
+      showFlash('error', msg2, { autoHide:true });
       if (fallbackBox) fallbackBox.hidden = false;
       return;
     }
 
-    // --- Buttons ---
-    paypal.Buttons({
-      createOrder: async () => {
+    // Render PayPal Buttons
+    window.paypal.Buttons({
+      style: {
+        layout: 'vertical',
+        color: 'gold',
+        shape: 'rect',
+        label: 'paypal',
+        height: 48,                 // taller for touch
+        tagline: false
+      },
+
+      createOrder: async function () {
         await loadCart();
         if(!items.length){
-          const msg = 'Your cart is empty.';
-          payStatus.textContent = msg;
-          showFlash('error', msg, { autoHide: true });
-          throw new Error('Empty cart');
+          var emsg = 'Your cart is empty.';
+          payStatus.textContent = emsg;
+          showFlash('error', emsg, { autoHide:true });
         }
         computeTotals();
         payStatus.textContent = 'Creating order…';
-        const r = await fetch('/payment/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
+
+        var r = await fetch('/payment/create-order', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          credentials:'same-origin',
           body: JSON.stringify({
             total: total.toFixed(2),
-            currency,
+            currency: currency,
             referenceId: 'PK-CHECKOUT-' + Date.now()
           })
         });
-        const data = await r.json().catch(()=> ({}));
-        if(!r.ok || !data.id) {
+        var data = {};
+        try { data = await r.json(); } catch(e){}
+        if(!r.ok || !data.id){
           console.error('create_order_error', data);
-          const msg = (data && data.message) ? data.message : 'Failed to create order.';
-          payStatus.textContent = msg;
-          showFlash('error', msg, { autoHide: true });
-          throw new Error(msg);
+          var m = (data && data.message) ? data.message : 'Failed to create order.';
+          payStatus.textContent = m;
+          showFlash('error', m, { autoHide:true });
         }
         payStatus.textContent = 'Order created. Awaiting approval…';
         return data.id;
       },
 
-      onApprove: async (data) => {
+      onApprove: async function (data) {
         payStatus.textContent = 'Finalizing payment…';
-        const r = await fetch('/payment/capture-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
+        var r = await fetch('/payment/capture-order', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          credentials:'same-origin',
           body: JSON.stringify({ orderID: data.orderID })
         });
-        const res = await r.json().catch(()=> ({}));
+        var res = {};
+        try { res = await r.json(); } catch(e){}
         if(!r.ok || !res.success){
           console.error('capture_error', res);
-          const msg = (res && res.message) ? res.message : 'Payment capture failed.';
-          payStatus.textContent = msg;
-          showFlash('error', msg, { autoHide: true });
+          var m = (res && res.message) ? res.message : 'Payment capture failed.';
+          payStatus.textContent = m;
+          showFlash('error', m, { autoHide:true });
           return;
         }
         payStatus.textContent = '✅ Payment successful!';
         showFlash('success', 'Payment successful!');
         await finalizePaymentSuccess();
-        // location.href = `/thank-you?orderID=${res.order?.id || ''}`;
 
-        // 🔁 Redirect to Thank You (pass the PayPal order id)
-  setTimeout(() => {
-    const oid = res.orderId || res.order?.id || '';
-    location.href = `/thank-you?orderID=${encodeURIComponent(oid)}`;
-  }, 1400);
+        // Redirect to Thank You with correct key (supports orderID, orderId, or embedded object)
+        setTimeout(function(){
+          var oid = res.orderID || res.orderId || (res.order && (res.order.id || res.orderID)) || '';
+          location.href = '/thank-you?orderID=' + encodeURIComponent(oid);
+        }, 1200);
       },
 
-      onError: (err) => {
+      onError: function (err) {
         console.error(err);
-        const msg = 'An error occurred during payment.';
+        var msg = 'An error occurred during payment.';
         payStatus.textContent = msg;
-        showFlash('error', msg, { autoHide: true });
+        showFlash('error', msg, { autoHide:true });
       }
 
     }).render('#paypal-button-container');
@@ -375,332 +452,3 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-<!-- views/checkout.ejs --
-<%
-  // Server-provided knobs (safe defaults)
-  const VAT_RATE = typeof vatRate !== 'undefined' ? vatRate : 0.15;  // SA VAT 15%
-  const SHIPPING_FLAT = typeof shippingFlat !== 'undefined' ? shippingFlat : 0; // default 0
-  const NONCE = (typeof nonce !== 'undefined' ? nonce : '');
-%>
-
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
-
-<main class="checkout-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <header class="co-head">
-    <div>
-      <h1>Checkout</h1>
-      <p class="muted">Review your items, adjust quantities, and pay securely with PayPal.</p>
-    </div>
-    <a href="/sales" class="link-back">← Continue shopping</a>
-  </header>
-
-  <section class="co-grid">
-    !-- 🧾 Order Summary --
-    <div class="co-summary card">
-      <h2>Order Summary</h2>
-      <div id="summaryList" class="summary-list">
-        <p class="muted">Loading items…</p>
-      </div>
-
-      <div class="totals">
-        <div class="row"><span>Subtotal</span><span id="tSubtotal">—</span></div>
-        <div class="row"><span>VAT (<span id="tVatRate"><%= (VAT_RATE * 100).toFixed(0) %>%</span>)</span><span id="tVat">—</span></div>
-        <div class="row"><span>Shipping</span><span id="tShipping">—</span></div>
-        <div class="row total"><span>Total</span><span id="tTotal">—</span></div>
-      </div>
-    </div>
-
-    !-- 💳 Payment --
-    <div class="co-payment card">
-      <h2>Payment</h2>
-      <div id="paypal-button-container"></div>
-      <div id="payStatus" class="muted" style="margin-top:.6rem"></div>
-
-      <div id="fallbackBox" class="fallback muted" hidden>
-        Having trouble with PayPal? Please try again in a moment.
-      </div>
-    </div>
-  </section>
-</main>
-
-<style nonce="<%= NONCE %>">
-  .checkout-page{max-width:1100px;margin:0 auto;padding:1rem}
-  .co-head{display:flex;justify-content:space-between;align-items:flex-start;margin:.25rem 0 1rem}
-  .link-back{text-decoration:none;border:1px solid #d1d5db;padding:.45rem .8rem;border-radius:8px}
-  .co-grid{display:grid;grid-template-columns:2fr 1.3fr;gap:1rem}
-  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
-  .summary-list{display:flex;flex-direction:column;gap:.6rem;margin:.5rem 0 1rem}
-  .summary-item{display:grid;grid-template-columns:64px 1fr auto;gap:.75rem;align-items:center}
-  .summary-item img{width:64px;height:64px;object-fit:cover;border-radius:.6rem}
-  .muted{color:#6b7280}
-  .totals{display:grid;gap:.35rem;margin-top:.75rem}
-  .row{display:flex;justify-content:space-between}
-  .row.total{font-weight:900;font-size:1.05rem;border-top:1px solid #e5e7eb;padding-top:.5rem}
-  .fallback{margin-top:.75rem;font-size:.92rem}
-  .qty-wrap{display:flex;align-items:center;gap:.35rem;margin-top:.35rem}
-  .qty-btn{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:.2rem .55rem;cursor:pointer}
-  .qty{min-width:2ch;text-align:center}
-  .remove-btn{border:none;background:none;color:#ef4444;cursor:pointer;font-size:.9rem;margin-left:.35rem}
-  .line-right{font-weight:700}
-  @media (max-width:920px){.co-grid{grid-template-columns:1fr}}
-</style>
-
-<script id="checkout-config" type="application/json" nonce="<%= NONCE %>">
-  <%- JSON.stringify({ VAT_RATE: VAT_RATE, SHIPPING_FLAT: SHIPPING_FLAT }) %>
-</script>
-
-<script nonce="<%= NONCE %>">
-  document.addEventListener('DOMContentLoaded', async () => {
-    const $ = (s,c=document)=>c.querySelector(s);
-
-    const summaryList = $('#summaryList');
-    const tSubtotal = $('#tSubtotal');
-    const tVat = $('#tVat');
-    const tShipping = $('#tShipping');
-    const tTotal = $('#tTotal');
-    const payStatus = $('#payStatus');
-    const fallbackBox = $('#fallbackBox');
-
-    const cfgEl = document.getElementById('checkout-config');
-    const { VAT_RATE = 0.15, SHIPPING_FLAT = 0 } = cfgEl ? JSON.parse(cfgEl.textContent || '{}') : {};
-
-    // Load PayPal config
-    const config = await (async ()=>{
-      try { const r = await fetch('/payment/config', { credentials:'same-origin' });
-            if(!r.ok) return null; return await r.json(); } catch { return null; }
-    })();
-
-    if(!config || !config.clientId){
-      payStatus.textContent = 'Could not load PayPal configuration.';
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
-
-    const currency = (config.baseCurrency || config.currency || 'USD').toUpperCase();
-    const CURRENCY_SYMBOL = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[currency] || (currency + ' ');
-    const fmt = (n)=> (CURRENCY_SYMBOL + Number(n||0).toFixed(2));
-
-    function pickId(it){
-      return it.id || it._id || it.productId || it.sku || it.customId;
-    }
-
-    async function getJSON(url, opts){
-      try{
-        const r = await fetch(url, { credentials:'same-origin', ...(opts||{}) });
-        const ct = r.headers.get('content-type')||'';
-        const data = ct.includes('application/json') ? await r.json() : null;
-        return { ok: r.ok, status: r.status, data };
-      }catch(e){ return { ok:false, status:0, data:null }; }
-    }
-
-    // --- CART STATE + RENDER ---
-    let items = [];
-    let subtotal = 0, vat = 0, shipping = 0, total = 0;
-
-    function computeTotals(){
-      subtotal = items.reduce((s,it)=> s + Number(it.price||0)*Number(it.quantity||1), 0);
-      vat = subtotal * Number(VAT_RATE || 0);
-      shipping = Number(SHIPPING_FLAT || 0);
-      total = subtotal + vat + shipping;
-      tSubtotal.textContent = fmt(subtotal);
-      tVat.textContent = fmt(vat);
-      tShipping.textContent = fmt(shipping);
-      tTotal.textContent = fmt(total);
-    }
-
-    function render(){
-      if(!items.length){
-        summaryList.innerHTML = '<p class="muted">Your cart is empty. <a href="/sales">Go back to shop</a>.</p>';
-        payStatus.textContent = 'Add items to proceed with payment.';
-        return;
-      }
-      summaryList.innerHTML = items.map(it=>{
-        const id = pickId(it);
-        const qty = Number(it.quantity||1);
-        const price = Number(it.price||0);
-        const name = it.name || 'Item';
-        const img = it.imageUrl || it.image || '';
-        const line = price * qty;
-        return `
-          <div class="summary-item" data-id="${id}">
-            <img src="${img}" alt="${name}" />
-            <div>
-              <div style="font-weight:700">${name}</div>
-              <div class="muted">${fmt(price)} each</div>
-              <div class="qty-wrap">
-                <button class="qty-btn" data-act="dec" aria-label="Decrease quantity">−</button>
-                <span class="qty" aria-live="polite">${qty}</span>
-                <button class="qty-btn" data-act="inc" aria-label="Increase quantity">+</button>
-                <button class="remove-btn" data-act="remove" aria-label="Remove item">Remove</button>
-              </div>
-            </div>
-            <div class="line-right">${fmt(line)}</div>
-          </div>
-        `;
-      }).join('');
-      computeTotals();
-    }
-
-    async function loadCart(){
-      const { ok, data } = await getJSON('/api/cart');
-      items = ok && data && Array.isArray(data.items) ? data.items : [];
-      render();
-    }
-
-    // initial load
-    await loadCart();
-    if(!items.length) return;
-
-    // --- QTY HANDLERS ---
-    summaryList.addEventListener('click', async (ev)=>{
-      const btn = ev.target.closest('button');
-      if(!btn) return;
-      const act = btn.dataset.act;
-      const row = ev.target.closest('.summary-item');
-      if(!row) return;
-      const id = row.getAttribute('data-id');
-      const idx = items.findIndex(i => String(pickId(i)) === String(id));
-      if(idx < 0) return;
-
-      let qty = Number(items[idx].quantity || 1);
-
-      if(act === 'inc') qty += 1;
-      if(act === 'dec') qty = Math.max(1, qty - 1);
-
-      if(act === 'remove'){
-        // DELETE item
-        const { ok, data } = await getJSON(`/api/cart/item/${encodeURIComponent(id)}`, { method:'DELETE' });
-        if(ok && data && data.items){
-          items = data.items;
-          render();
-        }else{
-          payStatus.textContent = 'Could not remove item. Please try again.';
-        }
-        return;
-      }
-
-      // PATCH new quantity
-      const { ok, data } = await getJSON(`/api/cart/item/${encodeURIComponent(id)}`, {
-        method:'PATCH',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ quantity: qty })
-      });
-      if(ok && data && data.items){
-        items = data.items;
-        render();
-      }else{
-        payStatus.textContent = 'Could not update quantity. Please try again.';
-      }
-    });
-
-    // --- LOAD PAYPAL SDK (currency must match server) ---
-    try {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        const isLive = (config.mode && String(config.mode).toLowerCase() === 'live');
-        const host = isLive ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
-
-        const params = new URLSearchParams({
-          'client-id': config.clientId,
-          'components': 'buttons',
-          'currency': currency,
-          'intent': 'capture'
-        });
-        s.src = `${host}/sdk/js?${params.toString()}`;
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    } catch (e) {
-      console.error('PayPal SDK load failed', e);
-      payStatus.textContent = 'PayPal failed to load.';
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
-
-    if(!window.paypal){
-      payStatus.textContent = 'PayPal SDK failed to initialize.';
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
-
-    // --- Buttons ---
-    paypal.Buttons({
-      createOrder: async () => {
-        // refresh cart before creating order (trust server in production)
-        await loadCart();
-        if(!items.length){
-          payStatus.textContent = 'Your cart is empty.';
-          throw new Error('Empty cart');
-        }
-        // recompute totals client-side (server should recompute as well)
-        computeTotals();
-        payStatus.textContent = 'Creating order…';
-        const r = await fetch('/payment/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            total: total.toFixed(2),   // send a money string
-            currency,                  // MUST match SDK currency
-            referenceId: 'PK-CHECKOUT-' + Date.now()
-          })
-        });
-        const data = await r.json().catch(()=> ({}));
-        if(!r.ok || !data.id) {
-          console.error('create_order_error', data);
-          payStatus.textContent = (data && data.message) ? data.message : 'Failed to create order.';
-          throw new Error(data.message || 'PayPal create order failed');
-        }
-        payStatus.textContent = 'Order created. Awaiting approval…';
-        return data.id;
-      },
-
-      onApprove: async (data) => {
-        payStatus.textContent = 'Finalizing payment…';
-        const r = await fetch('/payment/capture-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ orderID: data.orderID })
-        });
-        const res = await r.json().catch(()=> ({}));
-        if(!r.ok || !res.success){
-          console.error('capture_error', res);
-          payStatus.textContent = (res && res.message) ? res.message : 'Payment capture failed.';
-          return;
-        }
-        payStatus.textContent = '✅ Payment successful!';
-
-        // Optional: clear cart on success (if your API supports it)
-        try { await fetch('/api/cart/clear', { method:'POST', credentials:'same-origin' }); } catch {}
-
-        // Redirect to a thank-you page if you have one
-        // location.href = '/order-success';
-      },
-
-      onError: (err) => {
-        console.error(err);
-        payStatus.textContent = 'An error occurred during payment.';
-      }
-
-    }).render('#paypal-button-container');
-  });
-</script>
--->

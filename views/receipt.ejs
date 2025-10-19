@@ -1,0 +1,149 @@
+<!-- views/receipt.ejs -->
+<%
+  var NONCE = (typeof nonce !== 'undefined') ? nonce : '';
+  var o = order || {};
+  var items = Array.isArray(o.items) ? o.items : [];
+  function money(val, cur) {
+    var C = String(cur || 'USD').toUpperCase();
+    var map = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' };
+    var sym = map[C] || (C + ' ');
+    var n = Number(val || 0);
+    return sym + n.toFixed(2);
+  }
+  // defensively read totals without optional chaining
+  var totals = o.totals || {};
+  var t_sub = Number(totals.subtotal || 0);
+  var t_tax = Number(totals.tax || 0);
+  var t_ship = Number(totals.shipping || 0);
+  var t_tot = Number(totals.total || (t_sub + t_tax + t_ship));
+%>
+
+<main class="rcpt-page <%= (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme' %>">
+  <header class="rcpt-head">
+    <div class="rcpt-title">
+      <h1>🧾 Order Receipt</h1>
+      <p class="muted">Keep this page for your records.</p>
+    </div>
+    <nav class="btns">
+      <a class="btn btn-primary" href="/sales" rel="nofollow">← Continue shopping</a>
+      <button id="btnPrintReceipt" class="btn btn-ghost" type="button">🖨️ Print / Save PDF</button>
+    </nav>
+  </header>
+
+  <section class="card">
+    <div class="meta">
+      <div><strong>Order:</strong> <span class="wrap"><%= o.id %></span></div>
+      <div><strong>Status:</strong> <span><%= o.status %></span></div>
+      <div><strong>Date:</strong> <span><%= o.createdAt ? new Date(o.createdAt).toLocaleString() : '' %></span></div>
+    </div>
+
+    <div class="items">
+      <% if (!items.length) { %>
+        <p class="muted">No line items.</p>
+      <% } else { %>
+        <% items.forEach(function(it){ 
+             var unit = Number((it.price && it.price.value) ? it.price.value : (it.price || 0));
+             var qty = Number(it.quantity || 1);
+             var line = unit * qty;
+        %>
+          <article class="item">
+            <div class="name"><%= it.name || 'Item' %></div>
+            <div class="qty">× <%= qty %></div>
+            <div class="line"><strong><%= money(line, o.currency) %></strong></div>
+          </article>
+        <% }); %>
+      <% } %>
+    </div>
+
+    <div class="totals">
+      <div class="row"><span>Subtotal</span><span><%= money(t_sub, o.currency) %></span></div>
+      <div class="row"><span>VAT</span><span><%= money(t_tax, o.currency) %></span></div>
+      <div class="row"><span>Shipping</span><span><%= money(t_ship, o.currency) %></span></div>
+      <div class="row total"><span>Total</span><span><%= money(t_tot, o.currency) %></span></div>
+    </div>
+
+    <% if (o.shipping) { %>
+      <div class="ship">
+        <h3>Shipping</h3>
+        <div class="ship-name"><%= o.shipping.name || '' %></div>
+        <div class="ship-addr muted">
+          <%= [
+                o.shipping.address_line_1,
+                o.shipping.admin_area_2,
+                o.shipping.admin_area_1,
+                o.shipping.postal_code,
+                o.shipping.country_code
+              ].filter(function(p){ return !!p; }).join(', ')
+          %>
+        </div>
+      </div>
+    <% } %>
+  </section>
+</main>
+
+<style nonce="<%= NONCE %>">
+  :root{
+    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
+    --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
+    --radius:12px; --pad:12px;
+  }
+  .dark-theme{
+    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
+    --brand:#f3f4f6; --brand-contrast:#111;
+  }
+
+  /* Mobile-first for very small devices */
+  html,body{background:var(--bg); color:var(--text); margin:0}
+  .rcpt-page{max-width:680px; margin:0 auto; padding:12px}
+  .rcpt-head{display:flex; flex-direction:column; gap:10px; margin:4px 0 12px}
+  .rcpt-title h1{font-size:clamp(18px,5.5vw,28px); margin:0 0 2px; line-height:1.2}
+  .muted{color:var(--muted)}
+  .wrap{word-break:break-word}
+
+  .btns{display:flex; flex-wrap:wrap; gap:8px}
+  .btn{
+    flex:1 1 100%;
+    text-align:center; border:1px solid var(--brand); border-radius:10px;
+    padding:10px 12px; text-decoration:none; cursor:pointer;
+    font-size:clamp(14px,4.2vw,16px);
+  }
+  .btn-primary{background:var(--brand); color:var(--brand-contrast)}
+  .btn-ghost{border-color:var(--border); background:transparent; color:var(--text)}
+
+  .card{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad)}
+
+  .meta{display:grid; gap:6px; margin-bottom:10px}
+  .items{display:flex; flex-direction:column; gap:8px}
+  .item{
+    display:grid; grid-template-columns:1fr auto auto; gap:8px;
+    border-bottom:1px dashed var(--border); padding-bottom:6px
+  }
+  .qty{text-align:right; min-width:56px}
+
+  .totals{display:grid; gap:6px; margin-top:.75rem}
+  .row{display:flex; justify-content:space-between}
+  .row.total{font-weight:900; border-top:1px solid var(--border); padding-top:.5rem}
+
+  .ship{margin-top:12px}
+  .ship h3{margin:0 0 6px}
+
+  @media (min-width:420px){
+    .btn{flex:0 0 auto; min-width:180px}
+  }
+
+  @media print{
+    .btns{display:none !important}
+    .rcpt-page{max-width:100%; padding:0}
+    body{background:#fff}
+  }
+</style>
+
+<script nonce="<%= NONCE %>">
+  // CSP-safe: no inline handlers, no modern syntax
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.getElementById('btnPrintReceipt');
+    if (btn) {
+      btn.addEventListener('click', function(){ window.print(); });
+    }
+  });
+</script>
