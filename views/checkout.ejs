@@ -21,7 +21,7 @@
     <a href="/sales" class="link-back">← Continue shopping</a>
   </header>
 
-  <!-- Live flash: full-width, under header -->
+  <!-- Live flash -->
   <div id="liveFlash" role="alert" aria-live="polite" tabindex="-1"></div>
 
   <section class="co-grid">
@@ -34,7 +34,10 @@
 
       <div class="totals">
         <div class="row"><span>Subtotal</span><span id="tSubtotal">—</span></div>
-        <div class="row"><span>VAT (<span id="tVatRate"><%= (CO_VAT_RATE * 100).toFixed(0) %>%</span>)</span><span id="tVat">—</span></div>
+        <div class="row">
+          <span>VAT (<span id="tVatRate"><%= (CO_VAT_RATE * 100).toFixed(0) %>%</span>)</span>
+          <span id="tVat">—</span>
+        </div>
         <div class="row"><span>Shipping</span><span id="tShipping">—</span></div>
         <div class="row total"><span>Total</span><span id="tTotal">—</span></div>
       </div>
@@ -43,7 +46,19 @@
     <!-- Payment -->
     <div class="co-payment card">
       <h2 class="card-title">Payment</h2>
-      <div id="paypal-button-container" class="paypal-wrap"></div>
+
+      <!-- PayPal (gold) -->
+      <div class="btn-block">
+        <div class="btn-label">Pay with PayPal</div>
+        <div id="paypal-button-container" class="paypal-wrap"></div>
+      </div>
+
+      <!-- Card (black) -->
+      <div class="btn-block">
+        <div class="btn-label">Pay with Debit or Credit Card</div>
+        <div id="card-button-container" class="paypal-wrap"></div>
+      </div>
+
       <div id="payStatus" class="muted" style="margin-top:.6rem"></div>
 
       <div id="fallbackBox" class="fallback muted" hidden>
@@ -57,20 +72,16 @@
   :root{
     --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
     --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
-    --radius:12px; --pad:12px;
-    --tap:44px; /* min touch target height */
+    --radius:12px; --pad:12px; --tap:44px;
   }
   .dark-theme{
     --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
     --brand:#f3f4f6; --brand-contrast:#111;
   }
 
-  /* Mobile-first base (very small phones) */
   html, body { background:var(--bg); color:var(--text); margin:0; }
   .checkout-page { max-width:740px; margin:0 auto; padding:10px; }
-  .co-head {
-    display:flex; flex-direction:column; gap:8px; margin:4px 0 10px;
-  }
+  .co-head { display:flex; flex-direction:column; gap:8px; margin:4px 0 10px; }
   .co-hgroup h1 { font-size:clamp(18px,6vw,24px); line-height:1.15; margin:0 0 2px; }
   .muted { color:var(--muted); }
   .link-back {
@@ -78,65 +89,54 @@
     padding:8px 12px; border-radius:10px; font-size:clamp(13px,4.2vw,15px);
   }
 
-  /* Cards & grid */
   .co-grid { display:grid; grid-template-columns:1fr; gap:10px; }
   .card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad); }
   .card-title { font-size:clamp(16px,5vw,18px); margin:0 0 6px; }
 
-  /* Summary list items */
   .summary-list { display:flex; flex-direction:column; gap:8px; margin:.5rem 0 1rem; }
   .summary-item {
     display:grid; grid-template-columns:56px 1fr auto; gap:10px; align-items:center;
     padding:8px 0; border-bottom:1px dashed var(--border);
   }
   .summary-item:last-child { border-bottom:none; }
-  .summary-item img {
-    width:56px; height:56px; object-fit:cover; border-radius:10px; background:#f5f5f5;
-  }
+  .summary-item img { width:56px; height:56px; object-fit:cover; border-radius:10px; background:#f5f5f5; }
   .summary-item .name { font-weight:700; font-size:clamp(14px,4.8vw,16px); }
   .summary-item .muted { font-size:clamp(12px,3.8vw,14px); }
 
-  /* Quantity controls (bigger tap targets) */
   .qty-wrap { display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap; }
   .qty-btn {
     border:1px solid var(--border); background:#fff; border-radius:10px;
     min-width:var(--tap); height:var(--tap); line-height:var(--tap);
-    font-size:18px; display:inline-flex; align-items:center; justify-content:center;
-    cursor:pointer;
+    font-size:18px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .qty { min-width:28px; text-align:center; font-weight:600; }
-  .remove-btn {
-    border:none; background:none; color:#ef4444; cursor:pointer;
-    font-size:clamp(12px,3.8vw,14px); margin-left:4px; padding:8px 6px;
-  }
+  .remove-btn { border:none; background:none; color:#ef4444; cursor:pointer;
+    font-size:clamp(12px,3.8vw,14px); margin-left:4px; padding:8px 6px; }
   .line-right { font-weight:800; font-size:clamp(14px,4.8vw,16px); white-space:nowrap; }
 
-  /* Totals */
   .totals { display:grid; gap:6px; margin-top:.5rem; }
   .row { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
   .row span:first-child { max-width:70%; }
   .row.total { font-weight:900; font-size:clamp(15px,5vw,18px); border-top:1px solid var(--border); padding-top:.5rem; }
 
-  /* PayPal container: full width, no overflow */
   .paypal-wrap { width:100%; }
   .paypal-buttons { width:100% !important; }
   .paypal-buttons iframe { max-width:100% !important; }
 
+  .btn-block { margin-top:.6rem; }
+  .btn-label { font-size:.92rem; margin:0 0 .35rem; color:var(--muted); }
+
   .fallback { margin-top:.75rem; font-size:.92rem; }
 
-  /* Live flash */
   #liveFlash .flash { padding:.7rem .9rem; border-radius:10px; margin:.6rem 0; font-weight:700; }
   #liveFlash .flash-success { background:#ecfdf5; color:#065f46; border:1px solid #34d399; }
   #liveFlash .flash-error { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
   #liveFlash:focus { outline:2px solid #60a5fa; outline-offset:2px; }
 
-  /* Medium screens: widen spacing a bit */
   @media (min-width:480px){
     .summary-item { grid-template-columns:64px 1fr auto; }
     .summary-item img { width:64px; height:64px; }
   }
-
-  /* Two-column only when there’s room */
   @media (min-width:900px){
     .co-grid { grid-template-columns:1.4fr 1fr; gap:14px; }
   }
@@ -147,243 +147,257 @@
 </script>
 
 <script nonce="<%= CO_NONCE %>">
-  document.addEventListener('DOMContentLoaded', async function () {
-    var $ = function(sel, ctx){ return (ctx||document).querySelector(sel); };
+document.addEventListener('DOMContentLoaded', async function () {
+  var $ = function(sel, ctx){ return (ctx||document).querySelector(sel); };
 
-    var summaryList = $('#summaryList');
-    var tSubtotal = $('#tSubtotal');
-    var tVat = $('#tVat');
-    var tShipping = $('#tShipping');
-    var tTotal = $('#tTotal');
-    var payStatus = $('#payStatus');
-    var fallbackBox = $('#fallbackBox');
-    var liveFlash = document.getElementById('liveFlash');
+  /* ---------------- DOM + config ---------------- */
+  var summaryList = $('#summaryList');
+  var tSubtotal = $('#tSubtotal');
+  var tVat = $('#tVat');
+  var tShipping = $('#tShipping');
+  var tTotal = $('#tTotal');
+  var payStatus = $('#payStatus');
+  var fallbackBox = $('#fallbackBox');
+  var liveFlash = document.getElementById('liveFlash');
 
-    var cfgEl = document.getElementById('checkout-config');
-    var parsedCfg = {};
-    try { parsedCfg = JSON.parse(cfgEl ? cfgEl.textContent : '{}'); } catch(e){ parsedCfg = {}; }
-    var VAT_RATE = (typeof parsedCfg.VAT_RATE === 'number') ? parsedCfg.VAT_RATE : 0.15;
-    var SHIPPING_FLAT = (typeof parsedCfg.SHIPPING_FLAT === 'number') ? parsedCfg.SHIPPING_FLAT : 0;
+  var cfgEl = document.getElementById('checkout-config');
+  var parsedCfg = {};
+  try { parsedCfg = JSON.parse(cfgEl ? cfgEl.textContent : '{}'); } catch(e){ parsedCfg = {}; }
+  var VAT_RATE = (typeof parsedCfg.VAT_RATE === 'number') ? parsedCfg.VAT_RATE : 0.15;
+  var SHIPPING_FLAT = (typeof parsedCfg.SHIPPING_FLAT === 'number') ? parsedCfg.SHIPPING_FLAT : 0;
 
-    function showFlash(type, msg, opts){
-      opts = opts || {};
-      if(!liveFlash) return;
-      var cls = (type === 'error') ? 'flash flash-error' : 'flash flash-success';
-      liveFlash.innerHTML = '<div class="'+cls+'">'+msg+'</div>';
-      if (liveFlash.focus) liveFlash.focus();
-      var autoHide = (type === 'error') ? true : (opts.autoHide === true);
-      if (autoHide) setTimeout(function(){ liveFlash.innerHTML = ''; }, opts.timeout || 4500);
-    }
+  function showFlash(type, msg, opts){
+    opts = opts || {};
+    if(!liveFlash) return;
+    var cls = (type === 'error') ? 'flash flash-error' : 'flash flash-success';
+    liveFlash.innerHTML = '<div class="'+cls+'">'+msg+'</div>';
+    if (liveFlash.focus) liveFlash.focus();
+    var autoHide = (type === 'error') ? true : (opts.autoHide === true);
+    if (autoHide) setTimeout(function(){ liveFlash.innerHTML = ''; }, opts.timeout || 4500);
+  }
 
-    // Load PayPal config
-    var config = await (async function(){
-      try {
-        var r = await fetch('/payment/config', { credentials:'same-origin' });
-        if (!r.ok) return null;
-        return await r.json();
-      } catch(e){ return null; }
-    })();
-
-    if(!config || !config.clientId){
-      var msgCfg = 'Could not load PayPal configuration.';
-      payStatus.textContent = msgCfg;
-      showFlash('error', msgCfg);
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
-
-    var currency = String((config.baseCurrency || config.currency || 'USD')).toUpperCase();
+  function fmtCurrency(n, currency){
     var SYMBOL = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[currency] || (currency + ' ');
-    var fmt = function(n){ return SYMBOL + Number(n||0).toFixed(2); };
+    return SYMBOL + Number(n||0).toFixed(2);
+  }
 
-    function pickId(it){
-      return it.id || it._id || it.productId || it.sku || it.customId;
+  function pickId(it){ return it.id || it._id || it.productId || it.sku || it.customId; }
+
+  async function getJSON(url, opts){
+    try{
+      var r = await fetch(url, Object.assign({ credentials:'same-origin' }, (opts||{})));
+      var ct = r.headers.get('content-type') || '';
+      var data = ct.indexOf('application/json') !== -1 ? await r.json() : null;
+      return { ok: r.ok, status: r.status, data: data };
+    }catch(e){ return { ok:false, status:0, data:null }; }
+  }
+
+  /* ---------------- State: cart + totals ---------------- */
+  var items = [];
+  var subtotal = 0, vat = 0, shipping = 0, total = 0;
+  var currency = 'USD'; // will be updated after /payment/config
+
+  function computeTotals(){
+    subtotal = items.reduce(function(s,it){ return s + Number(it.price||0)*Number(it.quantity||1); }, 0);
+    vat = subtotal * Number(VAT_RATE || 0);
+    shipping = Number(SHIPPING_FLAT || 0);
+    total = subtotal + vat + shipping;
+    tSubtotal.textContent = fmtCurrency(subtotal, currency);
+    tVat.textContent = fmtCurrency(vat, currency);
+    tShipping.textContent = fmtCurrency(shipping, currency);
+    tTotal.textContent = fmtCurrency(total, currency);
+  }
+
+  function renderEmptyCart(statusMsg){
+    summaryList.innerHTML = '<p class="muted">Your cart is empty. <a href="/sales">Go back to shop</a>.</p>';
+    tSubtotal.textContent = fmtCurrency(0, currency);
+    tVat.textContent = fmtCurrency(0, currency);
+    tShipping.textContent = fmtCurrency(0, currency);
+    tTotal.textContent = fmtCurrency(0, currency);
+    payStatus.textContent = statusMsg || 'Add items to proceed with payment.';
+  }
+
+  function render(){
+    if(!items.length){ renderEmptyCart(); return; }
+    var html = '';
+    for (var i=0;i<items.length;i++){
+      var it = items[i] || {};
+      var id = pickId(it);
+      var qty = Number(it.quantity||1);
+      var price = Number(it.price||0);
+      var name = it.name || 'Item';
+      var img = it.imageUrl || it.image || '';
+      var line = price * qty;
+      html += ''
+        + '<div class="summary-item" data-id="'+String(id)+'">'
+        +   '<img src="'+(img||'')+'" alt="'+name+'" />'
+        +   '<div>'
+        +     '<div class="name">'+name+'</div>'
+        +     '<div class="muted">'+fmtCurrency(price, currency)+' each</div>'
+        +     '<div class="qty-wrap">'
+        +       '<button class="qty-btn" data-act="dec" aria-label="Decrease quantity">−</button>'
+        +       '<span class="qty" aria-live="polite">'+qty+'</span>'
+        +       '<button class="qty-btn" data-act="inc" aria-label="Increase quantity">+</button>'
+        +       '<button class="remove-btn" data-act="remove" aria-label="Remove item">Remove</button>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="line-right">'+fmtCurrency(line, currency)+'</div>'
+        + '</div>';
     }
+    summaryList.innerHTML = html;
+    computeTotals();
+  }
 
-    async function getJSON(url, opts){
-      try{
-        var r = await fetch(url, Object.assign({ credentials:'same-origin' }, (opts||{})));
-        var ct = r.headers.get('content-type') || '';
-        var data = ct.indexOf('application/json') !== -1 ? await r.json() : null;
-        return { ok: r.ok, status: r.status, data: data };
-      }catch(e){ return { ok:false, status:0, data:null }; }
-    }
+  async function loadCart(){
+    var resp = await getJSON('/api/cart');
+    items = (resp.ok && resp.data && Array.isArray(resp.data.items)) ? resp.data.items : [];
+    render();
+  }
 
-    // --- CART STATE + RENDER ---
-    var items = [];
-    var subtotal = 0, vat = 0, shipping = 0, total = 0;
+  async function clearCartServer(){
+    try { await fetch('/api/cart/clear', { method:'POST', credentials:'same-origin' }); } catch(e){}
+  }
 
-    function computeTotals(){
-      subtotal = items.reduce(function(s,it){ return s + Number(it.price||0)*Number(it.quantity||1); }, 0);
-      vat = subtotal * Number(VAT_RATE || 0);
-      shipping = Number(SHIPPING_FLAT || 0);
-      total = subtotal + vat + shipping;
-      tSubtotal.textContent = fmt(subtotal);
-      tVat.textContent = fmt(vat);
-      tShipping.textContent = fmt(shipping);
-      tTotal.textContent = fmt(total);
-    }
+  async function finalizePaymentSuccess(){
+    await clearCartServer();
+    items = [];
+    renderEmptyCart('✅ Payment successful!');
+    var btnWrap = document.querySelector('#paypal-button-container');
+    var cardWrap = document.querySelector('#card-button-container');
+    if (btnWrap) btnWrap.innerHTML = '';
+    if (cardWrap) cardWrap.innerHTML = '';
+  }
 
-    function renderEmptyCart(statusMsg){
-      summaryList.innerHTML = '<p class="muted">Your cart is empty. <a href="/sales">Go back to shop</a>.</p>';
-      tSubtotal.textContent = fmt(0);
-      tVat.textContent = fmt(0);
-      tShipping.textContent = fmt(0);
-      tTotal.textContent = fmt(0);
-      payStatus.textContent = statusMsg || 'Add items to proceed with payment.';
-    }
+  await loadCart();
 
-    function render(){
-      if(!items.length){ renderEmptyCart(); return; }
-      var html = '';
-      for (var i=0;i<items.length;i++){
-        var it = items[i] || {};
-        var id = pickId(it);
-        var qty = Number(it.quantity||1);
-        var price = Number(it.price||0);
-        var name = it.name || 'Item';
-        var img = it.imageUrl || it.image || '';
-        var line = price * qty;
-        html += ''
-          + '<div class="summary-item" data-id="'+String(id)+'">'
-          +   '<img src="'+(img||'')+'" alt="'+name+'" />'
-          +   '<div>'
-          +     '<div class="name">'+name+'</div>'
-          +     '<div class="muted">'+fmt(price)+' each</div>'
-          +     '<div class="qty-wrap">'
-          +       '<button class="qty-btn" data-act="dec" aria-label="Decrease quantity">−</button>'
-          +       '<span class="qty" aria-live="polite">'+qty+'</span>'
-          +       '<button class="qty-btn" data-act="inc" aria-label="Increase quantity">+</button>'
-          +       '<button class="remove-btn" data-act="remove" aria-label="Remove item">Remove</button>'
-          +     '</div>'
-          +   '</div>'
-          +   '<div class="line-right">'+fmt(line)+'</div>'
-          + '</div>';
-      }
-      summaryList.innerHTML = html;
-      computeTotals();
-    }
+  // Quantity handlers
+  summaryList.addEventListener('click', async function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if(!btn) return;
+    var act = btn.getAttribute('data-act');
+    var row = ev.target.closest('.summary-item');
+    if(!row) return;
+    var id = row.getAttribute('data-id');
+    var idx = items.findIndex(function(it){ return String(pickId(it)) === String(id); });
+    if(idx < 0) return;
 
-    async function loadCart(){
-      var resp = await getJSON('/api/cart');
-      items = (resp.ok && resp.data && Array.isArray(resp.data.items)) ? resp.data.items : [];
-      render();
-    }
+    var qty = Number(items[idx].quantity || 1);
+    if (act === 'inc') qty += 1;
+    if (act === 'dec') qty = Math.max(1, qty - 1);
 
-    async function clearCartServer(){
-      try { await fetch('/api/cart/clear', { method:'POST', credentials:'same-origin' }); } catch(e){}
-    }
-
-    async function finalizePaymentSuccess(){
-      await clearCartServer();
-      items = [];
-      renderEmptyCart('✅ Payment successful!');
-      var btnWrap = document.querySelector('#paypal-button-container');
-      if (btnWrap) btnWrap.innerHTML = '';
-    }
-
-    await loadCart();
-    if(!items.length) return;
-
-    // Quantity handlers
-    summaryList.addEventListener('click', async function(ev){
-      var btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
-      if(!btn) return;
-      var act = btn.getAttribute('data-act');
-      var row = ev.target.closest('.summary-item');
-      if(!row) return;
-      var id = row.getAttribute('data-id');
-      var idx = -1;
-      for (var i=0;i<items.length;i++){
-        if (String(pickId(items[i])) === String(id)) { idx = i; break; }
-      }
-      if(idx < 0) return;
-
-      var qty = Number(items[idx].quantity || 1);
-      if (act === 'inc') qty += 1;
-      if (act === 'dec') qty = Math.max(1, qty - 1);
-
-      if (act === 'remove'){
-        var delr = await getJSON('/api/cart/item/'+encodeURIComponent(id), { method:'DELETE' });
-        if(delr.ok && delr.data && delr.data.items){
-          items = delr.data.items;
-          render();
-          showFlash('success', 'Item removed from cart.', { autoHide:true });
-        } else {
-          var msgR = 'Could not remove item. Please try again.';
-          payStatus.textContent = msgR;
-          showFlash('error', msgR, { autoHide:true });
-        }
-        return;
-      }
-
-      var upr = await getJSON('/api/cart/item/'+encodeURIComponent(id), {
-        method:'PATCH',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ quantity: qty })
-      });
-      if(upr.ok && upr.data && upr.data.items){
-        items = upr.data.items;
+    if (act === 'remove'){
+      var delr = await getJSON('/api/cart/item/'+encodeURIComponent(id), { method:'DELETE' });
+      if(delr.ok && delr.data && delr.data.items){
+        items = delr.data.items;
         render();
-        showFlash('success', 'Quantity updated.', { autoHide:true });
+        showFlash('success', 'Item removed from cart.', { autoHide:true });
       } else {
-        var msgU = 'Could not update quantity. Please try again.';
-        payStatus.textContent = msgU;
-        showFlash('error', msgU, { autoHide:true });
+        var msgR = 'Could not remove item. Please try again.';
+        payStatus.textContent = msgR;
+        showFlash('error', msgR, { autoHide:true });
       }
+      return;
+    }
+
+    var upr = await getJSON('/api/cart/item/'+encodeURIComponent(id), {
+      method:'PATCH',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ quantity: qty })
     });
+    if(upr.ok && upr.data && upr.data.items){
+      items = upr.data.items;
+      render();
+      showFlash('success', 'Quantity updated.', { autoHide:true });
+    } else {
+      var msgU = 'Could not update quantity. Please try again.';
+      payStatus.textContent = msgU;
+      showFlash('error', msgU, { autoHide:true });
+    }
+  });
 
-    // Load PayPal SDK
-    try {
-      await new Promise(function(resolve, reject){
-        var s = document.createElement('script');
-        var isLive = (config.mode && String(config.mode).toLowerCase() === 'live');
-        var host = isLive ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
-        var params = new URLSearchParams({
-          'client-id': config.clientId,
-          'components': 'buttons',
-          'currency': currency,
-          'intent': 'capture'
-        });
-        s.src = host + '/sdk/js?' + params.toString();
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
+  /* ---------------- Server payment config ---------------- */
+  var config = null;
+  try {
+    var r = await fetch('/payment/config', { credentials:'same-origin' });
+    if (r.ok) config = await r.json();
+  } catch(e){}
+  if(!config || !config.clientId){
+    var msgCfg = 'Could not load PayPal configuration.';
+    payStatus.textContent = msgCfg;
+    showFlash('error', msgCfg);
+    if (fallbackBox) fallbackBox.hidden = false;
+    return;
+  }
+  currency = String((config.baseCurrency || config.currency || 'USD')).toUpperCase();
+  var env = (config.mode && String(config.mode).toLowerCase() === 'live') ? 'live' : 'sandbox';
+
+  /* ---------------- SDK load (once) ---------------- */
+  async function loadPayPalSdkOnce() {
+    if (window.paypal && typeof window.paypal.Buttons === 'function') return;
+
+    await new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      var host = env === 'live' ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
+      var params = new URLSearchParams({
+        'client-id': config.clientId,
+        'components': 'buttons',
+        'currency': currency,
+        'intent': 'capture'
       });
-    } catch (e) {
-      var msg = 'PayPal failed to load.';
-      console.error(msg, e);
-      payStatus.textContent = msg;
-      showFlash('error', msg, { autoHide:true });
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
+      s.src = host + '/sdk/js?' + params.toString();
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
 
-    if (!window.paypal) {
-      var msg2 = 'PayPal SDK failed to initialize.';
-      payStatus.textContent = msg2;
-      showFlash('error', msg2, { autoHide:true });
-      if (fallbackBox) fallbackBox.hidden = false;
-      return;
-    }
+  try {
+    await loadPayPalSdkOnce();
+  } catch (e) {
+    console.error('PayPal SDK failed to load', e);
+    payStatus.textContent = 'PayPal failed to load.';
+    if (fallbackBox) fallbackBox.hidden = false;
+    return;
+  }
+  if (!(window.paypal && typeof window.paypal.Buttons === 'function')) {
+    payStatus.textContent = 'PayPal SDK failed to initialize.';
+    if (fallbackBox) fallbackBox.hidden = false;
+    return;
+  }
 
-    // Render PayPal Buttons
-    window.paypal.Buttons({
-      style: {
-        layout: 'vertical',
-        color: 'gold',
-        shape: 'rect',
-        label: 'paypal',
-        height: 48,                 // taller for touch
-        tagline: false
-      },
+  /* ---------------- Safety: block generic, wrong-style renders ---------------- */
+  (function guardButtons(){
+    if (window.__PP_BUTTONS_GUARD__) return;
+    var orig = window.paypal.Buttons;
+    window.paypal.Buttons = function(opts){
+      // Require fundingSource so one call cannot style all funding sources at once
+      if (!opts || !opts.fundingSource) {
+        console.warn('[PP GUARD] Blocked Buttons() without fundingSource');
+        return { isEligible: function(){ return false; }, render: function(){ return Promise.resolve(); } };
+      }
+      try {
+        if (opts.fundingSource === window.paypal.FUNDING.CARD) {
+          // Enforce black/white for Card to avoid SDK "gold" error
+          var st = Object.assign({}, opts.style || {});
+          st.color = (st.color === 'white') ? 'white' : 'black';
+          opts.style = st;
+        }
+      } catch(e){}
+      return orig.call(this, opts);
+    };
+    window.__PP_BUTTONS_GUARD__ = true;
+  })();
 
-      createOrder: async function () {
+  /* ---------------- Shared button logic ---------------- */
+  function baseButtonConfig(){
+    return {
+      createOrder: async () => {
         await loadCart();
         if(!items.length){
           var emsg = 'Your cart is empty.';
           payStatus.textContent = emsg;
           showFlash('error', emsg, { autoHide:true });
+          throw new Error('empty_cart');
         }
         computeTotals();
         payStatus.textContent = 'Creating order…';
@@ -393,7 +407,7 @@
           headers:{ 'Content-Type':'application/json' },
           credentials:'same-origin',
           body: JSON.stringify({
-            total: total.toFixed(2),
+            total: Number(total || 0).toFixed(2),
             currency: currency,
             referenceId: 'PK-CHECKOUT-' + Date.now()
           })
@@ -401,16 +415,16 @@
         var data = {};
         try { data = await r.json(); } catch(e){}
         if(!r.ok || !data.id){
-          console.error('create_order_error', data);
           var m = (data && data.message) ? data.message : 'Failed to create order.';
           payStatus.textContent = m;
           showFlash('error', m, { autoHide:true });
+          throw new Error('create_order_failed');
         }
         payStatus.textContent = 'Order created. Awaiting approval…';
         return data.id;
       },
 
-      onApprove: async function (data) {
+      onApprove: async (data) => {
         payStatus.textContent = 'Finalizing payment…';
         var r = await fetch('/payment/capture-order', {
           method:'POST',
@@ -421,34 +435,58 @@
         var res = {};
         try { res = await r.json(); } catch(e){}
         if(!r.ok || !res.success){
-          console.error('capture_error', res);
           var m = (res && res.message) ? res.message : 'Payment capture failed.';
           payStatus.textContent = m;
           showFlash('error', m, { autoHide:true });
-          return;
+          throw new Error('capture_failed');
         }
         payStatus.textContent = '✅ Payment successful!';
         showFlash('success', 'Payment successful!');
         await finalizePaymentSuccess();
 
-        // Redirect to Thank You with correct key (supports orderID, orderId, or embedded object)
         setTimeout(function(){
           var oid = res.orderID || res.orderId || (res.order && (res.order.id || res.orderID)) || '';
           location.href = '/thank-you?orderID=' + encodeURIComponent(oid);
         }, 1200);
       },
 
-      onError: function (err) {
+      onError: (err) => {
         console.error(err);
         var msg = 'An error occurred during payment.';
         payStatus.textContent = msg;
         showFlash('error', msg, { autoHide:true });
       }
+    };
+  }
 
-    }).render('#paypal-button-container');
-  });
+  /* ---------------- Render the two buttons ---------------- */
+  try {
+    var paypalBtn = window.paypal.Buttons(Object.assign({}, baseButtonConfig(), {
+      fundingSource: window.paypal.FUNDING.PAYPAL,
+      style: { layout:'vertical', color:'gold', shape:'rect', label:'paypal', height:48, tagline:false }
+    }));
+    if (paypalBtn.isEligible()) {
+      paypalBtn.render('#paypal-button-container');
+    }
+  } catch (e) {
+    console.error('Render PayPal button failed', e);
+  }
+
+  try {
+    var cardBtn = window.paypal.Buttons(Object.assign({}, baseButtonConfig(), {
+      fundingSource: window.paypal.FUNDING.CARD,
+      style: { layout:'vertical', color:'black', shape:'rect', label:'pay', height:48, tagline:false } // black or white only
+    }));
+    if (cardBtn.isEligible()) {
+      cardBtn.render('#card-button-container');
+    } else {
+      var cardWrap = document.getElementById('card-button-container');
+      if (cardWrap) {
+        cardWrap.innerHTML = '<div class="muted" style="font-size:.9rem">Card payments are not available for this merchant.</div>';
+      }
+    }
+  } catch (e) {
+    console.error('Render Card button failed', e);
+  }
+});
 </script>
-
-
-
-
