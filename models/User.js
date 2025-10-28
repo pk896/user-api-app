@@ -1,5 +1,7 @@
 // model/User.js
-const mongoose = require('mongoose');
+//const mongoose = require('mongoose');
+const { mongoose } = require('../db'); // <-- use the shared instance
+
 const bcrypt = require('bcrypt');
 
 const userSchema = new mongoose.Schema({

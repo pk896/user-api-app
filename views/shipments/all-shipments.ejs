@@ -4,77 +4,137 @@
   <p class="subtitle">Track, update, and manage your shipment orders in one place.</p>
 
   <div class="actions-bar">
-    <a href="/shipments/add" class="btn btn-primary">➕ Add Shipment</a>
+    <a href="/shipments/add" class="btn btn-primary btn-block-sm">➕ Add Shipment</a>
   </div>
 
   <!-- ✅ Flash Messages -->
   <% if (success && success.length > 0) { %>
-    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
+    <div class="flash flash-success" id="flashMessage" role="status" aria-live="polite">✅ <%= success %></div>
   <% } %>
   <% if (error && error.length > 0) { %>
-    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
+    <div class="flash flash-error" id="flashMessage" role="alert" aria-live="assertive">❌ <%= error %></div>
   <% } %>
+
+  <!-- 🔎 Filter Bar (server + client) -->
+  <form class="filter-bar" id="filterBar" method="GET" action="/shipments">
+    <div class="fb-row">
+      <label class="sr-only" for="fb-q">Search</label>
+      <input
+        id="fb-q"
+        name="q"
+        class="fb-input"
+        type="search"
+        placeholder="Search order, product, carrier, tracking…"
+        inputmode="search"
+        value="<%= (initialFilters && initialFilters.q) ? initialFilters.q : '' %>"
+        aria-label="Search shipments"
+      />
+
+      <label class="sr-only" for="fb-status">Status</label>
+      <select id="fb-status" name="status" class="fb-select" aria-label="Filter by status">
+        <% const _status = (initialFilters && initialFilters.status) || ''; %>
+        <option value="" <%= _status===''?'selected':'' %>>All Statuses</option>
+        <option value="Processing" <%= _status==='Processing'?'selected':'' %>>Processing</option>
+        <option value="In Transit" <%= _status==='In Transit'?'selected':'' %>>In Transit</option>
+        <option value="Delivered"  <%= _status==='Delivered'?'selected':'' %>>Delivered</option>
+        <option value="Canceled"   <%= _status==='Canceled'?'selected':'' %>>Canceled</option>
+        <option value="Cancelled"  <%= _status==='Cancelled'?'selected':'' %>>Cancelled</option>
+      </select>
+    </div>
+
+    <div class="fb-actions-row">
+      <button class="btn fb-btn btn-block-sm" type="submit" title="Apply server filter">Apply</button>
+      <a class="btn fb-btn btn-block-sm" href="/shipments" title="Clear filters">Clear</a>
+      <button id="fb-reload" class="btn fb-btn btn-block-sm" type="button" title="Reload">Reload</button>
+    </div>
+
+    <div class="fb-meta" id="fb-meta">Showing <span id="fb-count">0</span> of <span id="fb-total">0</span></div>
+  </form>
 
   <!-- 📦 Shipment Table -->
   <div class="table-container">
-    <table class="shipments-table">
+    <table class="shipments-table" id="shipTable">
       <thead>
         <tr>
           <th>Order ID</th>
           <th>Product</th>
           <th>Status</th>
+          <th>Carrier</th>
           <th>Tracking #</th>
           <th>Last Updated</th>
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="shipRows">
         <% if (shipments && shipments.length > 0) { %>
-          <% shipments.forEach(s => { %>
-            <tr>
-              <td><%= s.orderId %></td>
-              <td><%= s.product ? s.product.name : "—" %></td>
-              <td>
-                <span class="badge <%= s.status.toLowerCase().replace(' ', '-') %>">
-                  <%= s.status %>
-                </span>
-              </td>
-              <td><%= s.trackingNumber || "—" %></td>
-              <td><%= new Date(s.updatedAt).toLocaleString() %></td>
-              <td class="action-cells">
-                <!-- ✏️ Update Form -->
+          <% shipments.forEach(s => {
+               const rowId = `row_${s._id}`;
+               const updatedStr = new Date(s.updatedAt).toLocaleString();
+               const statusKey = (s.status || '').toLowerCase().replace(' ', '-');
+               const carrier = s.carrier || '';
+               const tracking = s.trackingNumber || '';
+               const productName = s.product ? s.product.name : '';
+               const orderId = s.orderId || '';
+          %>
+            <tr id="<%= rowId %>"
+                data-id="<%= s._id %>"
+                data-status="<%= s.status || '' %>"
+                data-statuskey="<%= statusKey %>"
+                data-carrier="<%= carrier %>"
+                data-trk="<%= tracking %>"
+                data-order="<%= orderId %>"
+                data-product="<%= productName %>">
+
+              <td data-label="Order ID"><div class="cell"><%= orderId || '—' %></div></td>
+              <td data-label="Product"><div class="cell"><%= productName || "—" %></div></td>
+              <td data-label="Status"><span class="badge <%= statusKey %>"><%= s.status %></span></td>
+              <td data-label="Carrier"><div class="cell"><%= carrier || "—" %></div></td>
+              <td data-label="Tracking #"><span class="mono wrap"><%= tracking || "—" %></span></td>
+              <td data-label="Last Updated"><span class="muted"><%= updatedStr %></span></td>
+
+              <td class="action-cells" data-label="Actions">
+                <!-- ✏️ Update (manual) -->
                 <form method="POST" action="/shipments/update/<%= s._id %>" class="inline-form">
-                  <select name="status" required>
-                    <option <%= s.status==='Pending'?'selected':'' %>>Pending</option>
-                    <option <%= s.status==='In Transit'?'selected':'' %>>In Transit</option>
-                    <option <%= s.status==='Delivered'?'selected':'' %>>Delivered</option>
-                    <option <%= s.status==='Cancelled'?'selected':'' %>>Cancelled</option>
+                  <label class="sr-only" for="status-<%= s._id %>">Change status</label>
+                  <select id="status-<%= s._id %>" name="status" required aria-label="Change status">
+                    <option value="Processing" <%= s.status==='Processing'?'selected':'' %>>Processing</option>
+                    <option value="In Transit" <%= s.status==='In Transit'?'selected':'' %>>In Transit</option>
+                    <option value="Delivered"  <%= s.status==='Delivered'?'selected':'' %>>Delivered</option>
+                    <option value="Canceled"   <%= s.status==='Canceled'?'selected':'' %>>Canceled</option>
+                    <option value="Cancelled"  <%= s.status==='Cancelled'?'selected':'' %>>Cancelled</option>
                   </select>
-                  <input 
-                    type="text" 
-                    name="trackingNumber" 
-                    placeholder="Tracking #" 
-                    value="<%= s.trackingNumber || '' %>" 
-                  />
-                  <input 
-                    type="text" 
-                    name="note" 
-                    placeholder="Add note (optional)" 
-                    class="note-input"
-                  />
-                  <button type="submit" class="btn small">💾</button>
+                  <input type="text" name="carrier" placeholder="Carrier" value="<%= s.carrier || '' %>" inputmode="text" />
+                  <input type="text" name="trackingNumber" placeholder="Tracking #" value="<%= s.trackingNumber || '' %>" inputmode="text" />
+                  <input type="text" name="note" placeholder="Note (optional)" class="note-input" inputmode="text" />
+                  <button type="submit" class="btn small" title="Save">💾</button>
                 </form>
 
+                <!-- ⚡ Quick Actions -->
+                <div class="qa" role="group" aria-label="Quick status actions">
+                  <button class="btn qa-btn qa-proc" data-act="Processing" data-target="<%= rowId %>">Processing</button>
+                  <button class="btn qa-btn qa-transit" data-act="In Transit" data-target="<%= rowId %>">In Transit</button>
+                  <button class="btn qa-btn qa-deliv" data-act="Delivered" data-target="<%= rowId %>">Delivered</button>
+                  <button class="btn qa-btn qa-cancel" data-act="Canceled" data-target="<%= rowId %>">Canceled</button>
+                </div>
+
                 <!-- 🗑️ Delete -->
-                <form method="POST" action="/shipments/delete/<%= s._id %>" class="inline-form">
-                  <button type="submit" class="btn small danger">🗑️</button>
+                <form method="POST" action="/shipments/delete/<%= s._id %>" class="inline-form" onsubmit="return confirm('Delete this shipment?');">
+                  <button type="submit" class="btn small danger" title="Delete">🗑️</button>
+                </form>
+
+                <!-- hidden quick form -->
+                <form method="POST" action="/shipments/update/<%= s._id %>" class="hidden quick-form" aria-hidden="true">
+                  <input type="hidden" name="status" value="">
+                  <input type="hidden" name="carrier" value="">
+                  <input type="hidden" name="trackingNumber" value="">
+                  <input type="hidden" name="note" value="">
                 </form>
               </td>
             </tr>
           <% }) %>
         <% } else { %>
           <tr>
-            <td colspan="6" class="no-data">No shipments found.</td>
+            <td colspan="7" class="no-data">No shipments found.</td>
           </tr>
         <% } %>
       </tbody>
@@ -82,159 +142,140 @@
   </div>
 </section>
 
-<!-- ✅ Scoped Styles -->
-<style>
-.dashboard-home {
-  padding: 1.5rem;
-}
-.page-title {
-  text-align: center;
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-.subtitle {
-  text-align: center;
-  color: #6b7280;
-  margin-bottom: 1.5rem;
-}
-.actions-bar {
-  text-align: right;
-  margin-bottom: 1rem;
-}
-.table-container {
-  overflow-x: auto;
-}
+<style nonce="<%= nonce %>">
+  :root{
+    --radius:12px;
+    --gap:clamp(.5rem, 2.6vw, .75rem);
+    --muted:#6b7280;
+    --border:#e5e7eb;
+    --focus:#2563eb;
+  }
 
-/* 📦 Table styling */
-.shipments-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--table-bg, #fff);
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-}
-.shipments-table th,
-.shipments-table td {
-  padding: 0.8rem;
-  text-align: left;
-  border-bottom: 1px solid #e5e7eb;
-}
-.shipments-table th {
-  background: #f3f4f6;
-  font-weight: 600;
-}
-.dark-theme .shipments-table {
-  background: #1f2937;
-  color: #f3f4f6;
-}
-.dark-theme .shipments-table th {
-  background: #374151;
-}
-.no-data {
-  text-align: center;
-  padding: 1rem;
-  color: #9ca3af;
-}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
 
-/* 🪄 Flash messages */
-.flash {
-  margin: 1rem 0;
-  padding: 0.8rem 1rem;
-  border-radius: 8px;
-  font-weight: 500;
-  animation: fadeIn 0.4s ease;
-}
-.flash-success {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-.flash-error {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-}
-.flash.fade-out {
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: opacity 0.6s, transform 0.6s;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+  /* Container */
+  .dashboard-home{ padding:clamp(.75rem, 3vw, 1rem); margin:0 auto; width:min(100%, 1100px); }
+  .page-title{ text-align:center; font-size:clamp(1.1rem, 4.2vw, 1.5rem); font-weight:800; margin-bottom:.3rem; }
+  .subtitle{ text-align:center; color:var(--muted); margin-bottom:.8rem; font-size:clamp(.9rem, 3.4vw, .95rem); }
 
-/* 🧾 Buttons and forms */
-.inline-form {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin: 0.2rem 0;
-}
-.inline-form select,
-.inline-form input {
-  padding: 0.3rem 0.4rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-.note-input {
-  width: 130px;
-}
-.btn.small {
-  padding: 0.35rem 0.6rem;
-  border-radius: 5px;
-  border: none;
-  cursor: pointer;
-  background: #2563eb;
-  color: #fff;
-  font-weight: 600;
-  transition: background 0.2s ease;
-}
-.btn.small:hover {
-  background: #1d4ed8;
-}
-.btn.small.danger {
-  background: #dc2626;
-}
-.btn.small.danger:hover {
-  background: #b91c1c;
-}
-.btn.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  padding: 0.6rem 1rem;
-  border-radius: 6px;
-  font-weight: 600;
-  text-decoration: none;
-}
-.btn.btn-primary:hover {
-  background: #1d4ed8;
-}
+  .actions-bar{ display:flex; justify-content:flex-end; margin-bottom:.6rem; }
+  .btn-block-sm{ display:none; } /* becomes block on small screens */
 
-/* 🚦 Status badges */
-.badge {
-  padding: 0.3rem 0.6rem;
-  border-radius: 0.5rem;
-  color: #fff;
-  font-weight: 600;
-  text-transform: capitalize;
-  font-size: 0.85rem;
-}
-.badge.pending { background: #fbbf24; }
-.badge.in-transit { background: #3b82f6; }
-.badge.delivered { background: #16a34a; }
-.badge.cancelled { background: #dc2626; }
+  /* Flash */
+  .flash{ margin:.6rem 0; padding:.65rem .85rem; border-radius:10px; font-weight:600; font-size:.95rem; }
+  .flash-success{ background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .flash-error{ background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+  .flash.fade-out{ opacity:0; transform:translateY(-10px); transition:opacity .6s, transform .6s; }
 
-/* 🌙 Dark mode adjustments */
-.dark-theme .flash-success { background: #064e3b; color: #d1fae5; }
-.dark-theme .flash-error { background: #7f1d1d; color: #fee2e2; }
+  /* Buttons */
+  .btn{ display:inline-block; font-weight:700; text-decoration:none; border:1px solid #d1d5db; cursor:pointer; border-radius:10px;
+        padding:clamp(.5rem, 2.8vw, .65rem) clamp(.75rem, 3.6vw, .95rem); }
+  .btn.btn-primary{ background:#2563eb; border-color:#2563eb; color:#fff; }
+  .btn.small{ padding:.4rem .6rem; border:none; background:#2563eb; color:#fff; }
+  .btn.small.danger{ background:#dc2626; }
+  .btn:active{ transform:scale(.99); }
+
+  /* Filter bar */
+  .filter-bar{ position:sticky; top:0; z-index:3; background:var(--table-bg,#fff); border:1px solid var(--border);
+               border-radius:12px; padding:.6rem; margin-bottom:.6rem; box-shadow:0 2px 6px rgba(0,0,0,.04); }
+  .fb-row{ display:grid; gap:.45rem; grid-template-columns:minmax(0,1fr) minmax(0,240px); align-items:center; }
+  .fb-actions-row{ display:grid; gap:.4rem; grid-template-columns:repeat(3, minmax(0,1fr)); margin-top:.45rem; }
+  .fb-input, .fb-select{ padding:.55rem .65rem; border:1px solid #d1d5db; border-radius:10px; font-size:clamp(.95rem, 3.6vw, 1rem); min-width:0; }
+  .fb-btn{ padding:.55rem .65rem; text-align:center; }
+  .fb-meta{ margin-top:.35rem; font-size:.85rem; color:var(--muted); }
+
+  /* Table container */
+  .table-container{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+  /* Table */
+  .shipments-table{ width:100%; border-collapse:collapse; background:var(--table-bg,#fff); border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
+  .shipments-table th, .shipments-table td{ padding:.6rem .55rem; text-align:left; border-bottom:1px solid #e5e7eb; vertical-align:top; }
+  .shipments-table th{ background:#f3f4f6; font-weight:700; }
+  .no-data{ text-align:center; padding:1rem; color:#9ca3af; }
+
+  .cell{ overflow-wrap:anywhere; }
+  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  .wrap{ word-break:break-word; overflow-wrap:anywhere; }
+
+  /* Inputs in-row */
+  .inline-form{ display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; margin:.25rem 0; }
+  .inline-form select, .inline-form input{
+    padding:.45rem .5rem; border:1px solid #d1d5db; border-radius:8px; font-size:.92rem; min-width:0; flex:1 1 10ch;
+  }
+  .note-input{ flex:1 1 16ch; }
+
+  /* Quick actions */
+  .qa{ display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.25rem; }
+  .qa-btn{ padding:.35rem .55rem; border-radius:8px; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:.85rem; }
+  .qa-proc{ border-color:#a78bfa; }
+  .qa-transit{ border-color:#60a5fa; }
+  .qa-deliv{ border-color:#34d399; }
+  .qa-cancel{ border-color:#f87171; }
+
+  /* Badges */
+  .badge{ padding:.25rem .5rem; border-radius:.6rem; color:#fff; font-weight:700; text-transform:capitalize; font-size:.8rem; display:inline-block; }
+  .badge.processing{ background:#8b5cf6; }
+  .badge.pending{ background:#fbbf24; }
+  .badge.in-transit{ background:#3b82f6; }
+  .badge.delivered{ background:#16a34a; }
+  .badge.canceled, .badge.cancelled{ background:#dc2626; }
+
+  /* Dark mode tweaks */
+  .dark-theme .shipments-table{ background:#1f2937; color:#f3f4f6; }
+  .dark-theme .shipments-table th{ background:#374151; }
+  .dark-theme .qa-btn{ background:#111827; color:#e5e7eb; border-color:#374151; }
+  .dark-theme .flash-success{ background:#064e3b; color:#d1fae5; }
+  .dark-theme .flash-error{ background:#7f1d1d; color:#fee2e2; }
+  .dark-theme .filter-bar{ background:#1f2937; border-color:#374151; }
+
+  /* ======== MOBILE OPTIMIZATIONS (Hisense U50 Lite) ======== */
+  /* earlier collapse: 600px */
+  @media (max-width: 600px){
+    .dashboard-home{ padding:.75rem; width:100%; }
+    .actions-bar{ justify-content:center; }
+    .btn-block-sm{ display:block; width:100%; text-align:center; }
+
+    /* Filter: fully stacked, big taps */
+    .fb-row{ grid-template-columns:minmax(0,1fr); }
+    .fb-select{ width:100%; }
+    .fb-actions-row{ grid-template-columns:1fr; }
+    .fb-btn{ width:100%; }
+
+    /* Table becomes cards */
+    .shipments-table thead{ display:none; }
+    .shipments-table, .shipments-table tbody, .shipments-table tr, .shipments-table td{ display:block; width:100%; }
+    .shipments-table tr{
+      background:var(--table-bg,#fff); border:1px solid var(--border); border-radius:12px;
+      box-shadow:0 2px 6px rgba(0,0,0,.06); padding:.6rem .65rem; margin-bottom:.6rem;
+    }
+    .shipments-table td{ border:none; padding:.35rem 0; }
+    .shipments-table td[data-label]::before{
+      content:attr(data-label); display:block; font-size:.78rem; color:var(--muted); margin-bottom:.1rem;
+    }
+
+    .action-cells{ margin-top:.35rem; padding-top:.35rem; border-top:1px dashed var(--border); }
+    .inline-form{ gap:.35rem .4rem; }
+    .inline-form select, .inline-form input{ flex:1 1 100%; min-width:0; }
+    .inline-form .note-input{ width:100%; }
+    .btn.small{ width:100%; text-align:center; }
+
+    .qa{ gap:.4rem; }
+    .qa-btn{ flex:1 1 calc(50% - .2rem); text-align:center; }
+    /* Very narrow: 1 per row */
+  }
+
+  /* ~360px and below */
+  @media (max-width: 360px){
+    .page-title{ font-size:1.05rem; }
+    .btn, .qa-btn{ padding:.5rem .6rem; font-size:.9rem; }
+    .inline-form select, .inline-form input{ font-size:.9rem; padding:.45rem .5rem; }
+    .qa-btn{ flex:1 1 100%; }
+  }
 </style>
 
-<!-- ✅ Secure Inline Script -->
 <script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
+(function(){
+  // Flash fade
   const flash = document.getElementById("flashMessage");
   if (flash) {
     setTimeout(() => {
@@ -242,5 +283,95 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => flash.remove(), 600);
     }, 5000);
   }
-});
+
+  const rowsWrap = document.getElementById('shipRows');
+  const allRows = Array.from(rowsWrap?.querySelectorAll('tr') || []);
+  const countEl = document.getElementById('fb-count');
+  const totalEl = document.getElementById('fb-total');
+  const qEl = document.getElementById('fb-q');
+  const statusEl = document.getElementById('fb-status');
+  const reloadEl = document.getElementById('fb-reload');
+
+  function normalize(s){ return String(s||'').toLowerCase(); }
+
+  function applyFilter(){
+    const needle = normalize(qEl.value).trim();
+    const st = statusEl.value;
+    let shown = 0;
+
+    allRows.forEach(tr => {
+      const txt = [
+        tr.getAttribute('data-order'),
+        tr.getAttribute('data-product'),
+        tr.getAttribute('data-carrier'),
+        tr.getAttribute('data-trk')
+      ].map(normalize).join(' ');
+
+      const status = tr.getAttribute('data-status');
+      const statusMatch = !st || status === st;
+      const textMatch = !needle || txt.includes(needle);
+
+      const visible = statusMatch && textMatch;
+      tr.style.display = visible ? '' : 'none';
+      if (visible) shown++;
+    });
+
+    if (countEl) countEl.textContent = String(shown);
+    if (totalEl) totalEl.textContent = String(allRows.length);
+  }
+
+  // Initialize counts with server-filtered list
+  applyFilter();
+
+  // Debounced client refine
+  let timer;
+    function onType(){ 
+    clearTimeout(timer); 
+    timer = setTimeout(applyFilter, 120); 
+  }
+
+  qEl?.addEventListener('input', onType);
+  statusEl?.addEventListener('change', applyFilter);
+  reloadEl?.addEventListener('click', () => window.location.reload());
+
+  // Quick-actions submit (mobile/desktop)
+  document.body.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.qa-btn');
+    if (!btn) return;
+
+    const status = btn.getAttribute('data-act');
+    const rowId = btn.getAttribute('data-target');
+    const row = document.getElementById(rowId);
+    if (!row) return;
+
+    const quickForm = row.querySelector('form.quick-form');
+    const inStatus = quickForm.querySelector('input[name="status"]');
+    const inCarrier = quickForm.querySelector('input[name="carrier"]');
+    const inTrk = quickForm.querySelector('input[name="trackingNumber"]');
+    const inNote = quickForm.querySelector('input[name="note"]');
+
+    let carrier = row.getAttribute('data-carrier') || '';
+    let trk = row.getAttribute('data-trk') || '';
+
+    // If moving to In Transit and missing details, prompt inline
+    if (status === 'In Transit') {
+      if (!carrier) carrier = prompt('Enter carrier (e.g., DHL, FedEx, USPS):', carrier || '') || '';
+      if (!trk) trk = prompt('Enter tracking number:', trk || '') || '';
+    }
+
+    let note = '';
+    if (status === 'Processing') note = 'Marked Processing';
+    if (status === 'In Transit') note = 'Marked In Transit';
+    if (status === 'Delivered') note = 'Marked Delivered';
+    if (status === 'Canceled') note = 'Shipment canceled';
+
+    inStatus.value = status;
+    inCarrier.value = carrier;
+    inTrk.value = trk;
+    inNote.value = note;
+
+    quickForm.submit();
+  });
+})();
 </script>
+

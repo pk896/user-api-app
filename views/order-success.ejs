@@ -16,9 +16,12 @@
   var grandTotal = (cap.amount && cap.amount.value) || (pu.amount && pu.amount.value) || "0.00";
 
   function fmt(v) { var n = Number(v); return isNaN(n) ? (v || "0.00") : n.toFixed(2); }
+
+  var NONCE = (typeof nonce !== 'undefined') ? nonce : '';
+  var THEME_CLASS = (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme';
 %>
 
-<style nonce="<%= nonce %>">
+<style nonce="<%= NONCE %>">
   /* Root + dark theme tokens */
   :root{
     --card-bg:#fff;--card-border:#e5e7eb;--muted:#6b7280;--text:#111827;--surface:#f9fafb;
@@ -31,9 +34,12 @@
     --shadow:0 6px 18px rgba(0,0,0,.4);
   }
 
+  html,body{margin:0;background:var(--surface);color:var(--text)}
+  .page{max-width:900px;margin:0 auto;padding:12px}
+
   /* Clamp page to viewport — no sideways scroll */
-  html,body,.page-content{max-width:100%; overflow-x:hidden;}
-  .wrap{display:grid;gap:var(--g);color:var(--text);}
+  .page, .page *{max-width:100%}
+  .wrap{display:grid;gap:var(--g);}
   .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--r);padding:var(--p);box-shadow:var(--shadow);}
   .success-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#ecfdf5;color:#065f46;font-weight:700;font-size:var(--fs);}
   .dark-theme .success-badge{background:#073b2c;color:#c0ffe6;}
@@ -61,7 +67,7 @@
   .dark-theme table.receipt th{color:#d1d5db}
   .tr-total td{border-bottom:none;font-weight:700}
 
-  /* Ultra-small screen layout (≤360px): stack table rows into cards to prevent sideways swipe */
+  /* Ultra-small screen layout (≤360px): stack table rows into cards */
   @media(max-width:360px){
     .btn{flex:1 1 100%; width:100%}
     .card{padding:12px}
@@ -79,166 +85,182 @@
     .tr-total td{display:flex;justify-content:space-between;border:0;padding:8px 0}
   }
 
+  @media print{
+    .btns{display:none !important}
+    .page{max-width:100%;padding:0}
+    body{background:#fff}
+  }
+
   /* Debug JSON wraps; never overflow */
   pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:var(--fs-sm);margin:0}
 </style>
 
-<div class="wrap">
-  <div class="card">
-    <div class="success-badge">✅ Payment Successful</div>
-    <p class="sub">Thank you — your order is confirmed.</p>
-    <div class="btns" style="margin-top:10px">
-      <a class="btn" href="/">← Back to shop</a>
-      <button class="btn" type="button" onclick="window.print()">🖨️ Print</button>
-    </div>
-  </div>
-
-  <div class="grid-2">
-    <!-- Order summary -->
+<main class="page <%= THEME_CLASS %>">
+  <div class="wrap">
     <div class="card">
-      <div class="section-title">Order</div>
-      <div class="totals">
-        <div class="row"><span class="k">Order ID</span><span class="v monospace"><%= order.id %></span></div>
-        <div class="row">
-          <span class="k">Status</span>
-          <span class="v">
-            <%= order.status %>
-            <% if (cap.status && cap.status !== order.status) { %>
-              <span class="pill">Capture: <%= cap.status %></span>
-            <% } %>
-          </span>
+      <div class="success-badge">✅ Payment Successful</div>
+      <p class="sub">Thank you — your order is confirmed.</p>
+      <div class="btns" style="margin-top:10px">
+        <a class="btn" href="/sales">← Back to shop</a>
+        <button class="btn" id="btnPrint" type="button">🖨️ Print</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Order summary -->
+      <div class="card">
+        <div class="section-title">Order</div>
+        <div class="totals">
+          <div class="row"><span class="k">Order ID</span><span class="v monospace"><%= order.id %></span></div>
+          <div class="row">
+            <span class="k">Status</span>
+            <span class="v">
+              <%= order.status %>
+              <% if (cap.status && cap.status !== order.status) { %>
+                <span class="pill">Capture: <%= cap.status %></span>
+              <% } %>
+            </span>
+          </div>
+          <% if (cap.id) { %>
+            <div class="row"><span class="k">Capture ID</span><span class="v monospace"><%= cap.id %></span></div>
+          <% } %>
+          <div class="row"><span class="k">Reference</span><span class="v monospace"><%= pu.reference_id || "-" %></span></div>
+          <% if (cap.create_time) { %>
+            <div class="row"><span class="k">Captured at</span><span class="v"><%= cap.create_time %></span></div>
+          <% } %>
         </div>
-        <% if (cap.id) { %>
-          <div class="row"><span class="k">Capture ID</span><span class="v monospace"><%= cap.id %></span></div>
-        <% } %>
-        <div class="row"><span class="k">Reference</span><span class="v monospace"><%= pu.reference_id || "-" %></span></div>
-        <% if (cap.create_time) { %>
-          <div class="row"><span class="k">Captured at</span><span class="v"><%= cap.create_time %></span></div>
-        <% } %>
       </div>
-    </div>
 
-    <!-- Amounts -->
-    <div class="card">
-      <div class="section-title">Amount</div>
-      <div class="totals">
-        <% if (typeof itemTotal !== "undefined") { %>
-          <div class="row"><span>Items</span><span><%= currency %> <%= fmt(itemTotal) %></span></div>
-        <% } %>
-        <% if (typeof shippingTotal !== "undefined") { %>
-          <div class="row"><span>Shipping</span><span><%= currency %> <%= fmt(shippingTotal) %></span></div>
-        <% } %>
-        <% if (typeof taxTotal !== "undefined") { %>
-          <div class="row"><span>Tax</span><span><%= currency %> <%= fmt(taxTotal) %></span></div>
-        <% } %>
-        <div class="row" style="margin-top:6px"><span><strong>Total</strong></span><span><strong><%= currency %> <%= fmt(grandTotal) %></strong></span></div>
-        <% if (br && br.paypal_fee && br.paypal_fee.value) { %>
-          <div class="row"><span>Fee</span><span><%= currency %> <%= fmt(br.paypal_fee.value) %></span></div>
-        <% } %>
-        <% if (br && br.net_amount && br.net_amount.value) { %>
-          <div class="row"><span>Net</span><span><%= currency %> <%= fmt(br.net_amount.value) %></span></div>
-        <% } %>
-      </div>
-    </div>
-  </div>
-
-  <!-- Items -->
-  <% if (items && items.length) { %>
-    <div class="card">
-      <div class="section-title">Items</div>
-      <div class="table-wrap">
-        <table class="receipt">
-          <tbody>
-            <% for (var i = 0; i < items.length; i++) { 
-                 var it = items[i];
-                 var u  = it.unit_amount || {};
-                 var q  = Number(it.quantity || 1);
-                 var subtotal = (Number(u.value || 0) * q).toFixed(2);
-            %>
-              <tr class="receipt">
-                <td class="receipt" data-label="Item"><%= it.name %></td>
-                <td class="receipt" data-label="Unit"><%= u.currency_code || currency %> <%= fmt(u.value) %></td>
-                <td class="receipt" data-label="Qty"><%= q %></td>
-                <td class="receipt" data-label="Subtotal"><%= u.currency_code || currency %> <%= subtotal %></td>
-              </tr>
-            <% } %>
-            <tr class="tr-total receipt">
-              <td class="receipt" data-label=" " colspan="3" style="text-align:right"><strong>Total</strong></td>
-              <td class="receipt" data-label="Items Total">
-                <strong>
-                  <%= currency %> 
-                  <%= fmt(itemTotal || (function(){ 
-                        var s = 0; 
-                        for (var j=0;j<items.length;j++){ 
-                          var it2 = items[j]; 
-                          var u2 = it2.unit_amount || {}; 
-                          var q2 = Number(it2.quantity || 1); 
-                          s += Number(u2.value || 0) * q2; 
-                        } 
-                        return s; 
-                      })()) %>
-                </strong>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  <% } %>
-
-  <div class="grid-2">
-    <!-- Payer -->
-    <div class="card">
-      <div class="section-title">Payer</div>
-      <div class="totals">
-        <div class="row"><span class="k">Name</span><span class="v"><%= (order.payer && order.payer.name && order.payer.name.given_name) || "" %> <%= (order.payer && order.payer.name && order.payer.name.surname) || "" %></span></div>
-        <div class="row"><span class="k">Email</span><span class="v monospace"><%= (order.payer && order.payer.email_address) || "" %></span></div>
-        <div class="row"><span class="k">Country</span><span class="v"><%= (order.payer && order.payer.address && order.payer.address.country_code) || "" %></span></div>
-      </div>
-    </div>
-
-    <!-- Shipping -->
-    <div class="card">
-      <div class="section-title">Shipping</div>
-      <div class="totals">
-        <div class="row"><span class="k">Recipient</span><span class="v"><%= (ship.name && ship.name.full_name) || "-" %></span></div>
-        <div class="row">
-          <span class="k">Address</span>
-          <span class="v">
-            <span class="monospace"><%= addr.address_line_1 || "" %></span><br/>
-            <span class="monospace"><%= [addr.admin_area_2, addr.admin_area_1, addr.postal_code].filter(Boolean).join(", ") %></span><br/>
-            <span class="monospace"><%= addr.country_code || "" %></span>
-          </span>
+      <!-- Amounts -->
+      <div class="card">
+        <div class="section-title">Amount</div>
+        <div class="totals">
+          <% if (typeof itemTotal !== "undefined") { %>
+            <div class="row"><span>Items</span><span><%= currency %> <%= fmt(itemTotal) %></span></div>
+          <% } %>
+          <% if (typeof shippingTotal !== "undefined") { %>
+            <div class="row"><span>Shipping</span><span><%= currency %> <%= fmt(shippingTotal) %></span></div>
+          <% } %>
+          <% if (typeof taxTotal !== "undefined") { %>
+            <div class="row"><span>Tax</span><span><%= currency %> <%= fmt(taxTotal) %></span></div>
+          <% } %>
+          <div class="row" style="margin-top:6px"><span><strong>Total</strong></span><span><strong><%= currency %> <%= fmt(grandTotal) %></strong></span></div>
+          <% if (br && br.paypal_fee && br.paypal_fee.value) { %>
+            <div class="row"><span>Fee</span><span><%= currency %> <%= fmt(br.paypal_fee.value) %></span></div>
+          <% } %>
+          <% if (br && br.net_amount && br.net_amount.value) { %>
+            <div class="row"><span>Net</span><span><%= currency %> <%= fmt(br.net_amount.value) %></span></div>
+          <% } %>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Refunds -->
-  <% if (refunds && refunds.length) { %>
-    <div class="card">
-      <div class="section-title">Refunds</div>
-      <div class="table-wrap">
-        <table class="receipt">
-          <tbody>
-            <% for (var r = 0; r < refunds.length; r++) { var rf = refunds[r]; %>
-              <tr class="receipt">
-                <td class="receipt" data-label="Refund ID"><span class="monospace"><%= rf.id %></span></td>
-                <td class="receipt" data-label="Amount"><%= (rf.amount && rf.amount.currency_code) || currency %> <%= fmt(rf.amount && rf.amount.value) %></td>
-                <td class="receipt" data-label="Status"><%= rf.status %></td>
-                <td class="receipt" data-label="Created"><%= rf.create_time || "-" %></td>
+    <!-- Items -->
+    <% if (items && items.length) { %>
+      <div class="card">
+        <div class="section-title">Items</div>
+        <div class="table-wrap">
+          <table class="receipt">
+            <tbody>
+              <% for (var i = 0; i < items.length; i++) { 
+                   var it = items[i];
+                   var u  = it.unit_amount || {};
+                   var q  = Number(it.quantity || 1);
+                   var subtotal = (Number(u.value || 0) * q).toFixed(2);
+              %>
+                <tr class="receipt">
+                  <td class="receipt" data-label="Item"><%= it.name %></td>
+                  <td class="receipt" data-label="Unit"><%= u.currency_code || currency %> <%= fmt(u.value) %></td>
+                  <td class="receipt" data-label="Qty"><%= q %></td>
+                  <td class="receipt" data-label="Subtotal"><%= u.currency_code || currency %> <%= subtotal %></td>
+                </tr>
+              <% } %>
+              <tr class="tr-total receipt">
+                <td class="receipt" data-label=" " colspan="3" style="text-align:right"><strong>Total</strong></td>
+                <td class="receipt" data-label="Items Total">
+                  <strong>
+                    <%= currency %> 
+                    <%= fmt(itemTotal || (function(){ 
+                          var s = 0; 
+                          for (var j=0;j<items.length;j++){ 
+                            var it2 = items[j]; 
+                            var u2 = it2.unit_amount || {}; 
+                            var q2 = Number(it2.quantity || 1); 
+                            s += Number(u2.value || 0) * q2; 
+                          } 
+                          return s; 
+                        })()) %>
+                  </strong>
+                </td>
               </tr>
-            <% } %>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+
+    <div class="grid-2">
+      <!-- Payer -->
+      <div class="card">
+        <div class="section-title">Payer</div>
+        <div class="totals">
+          <div class="row"><span class="k">Name</span><span class="v"><%= (order.payer && order.payer.name && order.payer.name.given_name) || "" %> <%= (order.payer && order.payer.name && order.payer.name.surname) || "" %></span></div>
+          <div class="row"><span class="k">Email</span><span class="v monospace"><%= (order.payer && order.payer.email_address) || "" %></span></div>
+          <div class="row"><span class="k">Country</span><span class="v"><%= (order.payer && order.payer.address && order.payer.address.country_code) || "" %></span></div>
+        </div>
+      </div>
+
+      <!-- Shipping -->
+      <div class="card">
+        <div class="section-title">Shipping</div>
+        <div class="totals">
+          <div class="row"><span class="k">Recipient</span><span class="v"><%= (ship.name && ship.name.full_name) || "-" %></span></div>
+          <div class="row">
+            <span class="k">Address</span>
+            <span class="v">
+              <span class="monospace"><%= addr.address_line_1 || "" %></span><br/>
+              <span class="monospace"><%= [addr.admin_area_2, addr.admin_area_1, addr.postal_code].filter(Boolean).join(", ") %></span><br/>
+              <span class="monospace"><%= addr.country_code || "" %></span>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
-  <% } %>
 
-  <% if (typeof showDebug !== "undefined" && showDebug) { %>
-    <div class="card">
-      <div class="section-title">Raw response (debug)</div>
-      <pre><%= JSON.stringify(order, null, 2) %></pre>
-    </div>
-  <% } %>
-</div>
+    <!-- Refunds -->
+    <% if (refunds && refunds.length) { %>
+      <div class="card">
+        <div class="section-title">Refunds</div>
+        <div class="table-wrap">
+          <table class="receipt">
+            <tbody>
+              <% for (var r = 0; r < refunds.length; r++) { var rf = refunds[r]; %>
+                <tr class="receipt">
+                  <td class="receipt" data-label="Refund ID"><span class="monospace"><%= rf.id %></span></td>
+                  <td class="receipt" data-label="Amount"><%= (rf.amount && rf.amount.currency_code) || currency %> <%= fmt(rf.amount && rf.amount.value) %></td>
+                  <td class="receipt" data-label="Status"><%= rf.status %></td>
+                  <td class="receipt" data-label="Created"><%= rf.create_time || "-" %></td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+
+    <% if (typeof showDebug !== "undefined" && showDebug) { %>
+      <div class="card">
+        <div class="section-title">Raw response (debug)</div>
+        <pre><%= JSON.stringify(order, null, 2) %></pre>
+      </div>
+    <% } %>
+  </div>
+</main>
+
+<script nonce="<%= NONCE %>">
+  // CSP-safe: attach print handler via JS
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.getElementById('btnPrint');
+    if (btn) btn.addEventListener('click', function(){ window.print(); });
+  });
+</script>

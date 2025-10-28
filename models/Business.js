@@ -1,5 +1,6 @@
 // models/Business.js
-const mongoose = require("mongoose");
+//const mongoose = require("mongoose");
+const { mongoose } = require('../db'); // <-- use the shared instance
 
 const businessSchema = new mongoose.Schema(
   {

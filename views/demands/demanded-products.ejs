@@ -1,0 +1,612 @@
+<section class="dashboard-home">
+  <h1 class="page-title">📊 Demanded Products (Aggregated)</h1>
+
+  <% if (error && error.length) { %>
+    <div class="flash flash-error">❌ <%= error %></div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="flash flash-success">✅ <%= success %></div>
+  <% } %>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Requests</div>
+      <div class="kpi-value" id="kpiTotalRequests"><%= totals?.totalRequests || 0 %></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Unique Product Names</div>
+      <div class="kpi-value" id="kpiUniqueNames"><%= totals?.uniqueProductNames || 0 %></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Quantity Demanded</div>
+      <div class="kpi-value" id="kpiTotalQty"><%= totals?.totalQtyAll || 0 %></div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <input id="searchName" type="search" placeholder="🔎 Search by product name..." />
+    <select id="filterType">
+      <option value="">All Types</option>
+      <% (types || []).forEach(t => { %>
+        <option value="<%= t %>"><%= t %></option>
+      <% }) %>
+    </select>
+    <button id="clearFilters" class="btn btn-secondary">Clear</button>
+  </div>
+
+  <!-- All Demands (with requester info) -->
+  <h2 style="margin-top:1rem;">All Demands</h2>
+  <% if (demandsAll && demandsAll.length) { %>
+    <table class="nice-table" id="tableAllDemands">
+      <thead>
+        <tr>
+          <th>Requester</th>
+          <th>Type</th>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Location</th>
+          <th>Notes</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% demandsAll.forEach(d => { 
+             const nm = (d.productName || '').trim();
+             const typ = (d.type || '').trim();
+             const loc = [d.country, d.province, d.city, d.town].filter(Boolean).join(", ");
+        %>
+
+          <tr class="row-demand"
+              data-name="<%= nm.toLowerCase() %>"
+              data-type="<%= typ.toLowerCase() %>"
+              data-qty="<%= Number(d.quantity || 0) %>">
+
+            <!-- Requester -->
+            <td class="col-requester">
+              <div class="val-business-name"><%= d.requester?.businessName || '—' %></div>
+              <div>
+                <span class="val-contact-name"><%= d.requester?.contactName || '—' %></span>
+                <span class="sep">—</span>
+                <span class="val-position"><%= d.requester?.position || '—' %></span>
+              </div>
+            </td>
+
+            <!-- Type -->
+            <td class="col-type">
+              <span class="val-type"><%= typ || '—' %></span>
+            </td>
+
+            <!-- Product -->
+            <td class="col-product">
+              <span class="val-product-name"><%= nm || '—' %></span>
+            </td>
+
+            <!-- Quantity -->
+            <td class="col-qty">
+              <span class="val-quantity"><%= Number(d.quantity || 0) %></span>
+            </td>
+
+            <!-- Location -->
+            <td class="col-location">
+              <% const _country = (d.country || '').trim(); %>
+              <% const _province = (d.province || '').trim(); %>
+              <% const _city = (d.city || '').trim(); %>
+              <% const _town = (d.town || '').trim(); %>
+
+              <% if (_country) { %><span class="val-country"><%= _country %></span><% } %>
+              <% if (_province) { %><span class="sep">•</span><span class="val-province"><%= _province %></span><% } %>
+              <% if (_city) { %><span class="sep">•</span><span class="val-city"><%= _city %></span><% } %>
+              <% if (_town) { %><span class="sep">•</span><span class="val-town"><%= _town %></span><% } %>
+              <% if (!_country && !_province && !_city && !_town) { %>—<% } %>
+            </td>
+
+            <!-- Notes -->
+            <td class="col-notes">
+              <span class="val-notes"><%= (d.notes || '').slice(0,120) %><%= (d.notes && d.notes.length > 120) ? '…' : '' %></span>
+            </td>
+
+            <!-- Created -->
+            <td class="col-created">
+              <%= new Date(d.createdAt).toLocaleString() %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p>No demands found.</p>
+  <% } %>
+
+  <!-- Product Name Summary -->
+  <h2 style="margin-top:1.25rem;">Summary by Product Name</h2>
+  <% if (summaryByName && summaryByName.length) { %>
+    <table class="nice-table" id="tableSummaryByName">
+      <thead>
+        <tr>
+          <th>Product Name</th>
+          <th>Types (seen)</th>
+          <th>Requests</th>
+          <th>Total Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% summaryByName.forEach(s => { %>
+          <tr class="row-name"
+              data-name="<%= (s.name || '').toLowerCase() %>"
+              data-types="<%= (s.types || []).map(t => t.toLowerCase()).join('|') %>"
+              data-totalqty="<%= Number(s.totalQty || 0) %>">
+            <td><%= s.name || '—' %></td>
+            <td><%= (s.types || []).join(', ') || '—' %></td>
+            <td class="col-reqs"><%= Number(s.requests || 0) %></td>
+            <td class="col-totalqty"><%= Number(s.totalQty || 0) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p>No summary available.</p>
+  <% } %>
+
+  <!-- Existing Aggregations -->
+  <h2 style="margin-top:1.25rem;">By Type</h2>
+  <% if (byType && byType.length) { %>
+    <table class="nice-table">
+      <thead><tr><th>Type</th><th>Total Qty</th><th>Requests</th></tr></thead>
+      <tbody>
+        <% byType.forEach(r => { %>
+          <tr>
+            <td><%= r._id || '—' %></td>
+            <td><%= r.totalQty %></td>
+            <td><%= r.docs %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %><p>No data.</p><% } %>
+
+  <h2 style="margin-top:1rem;">By Type & Location</h2>
+  <% if (byTypeAndLocation && byTypeAndLocation.length) { %>
+    <table class="nice-table">
+      <thead><tr><th>Type</th><th>Country</th><th>Province</th><th>City</th><th>Town</th><th>Total Qty</th><th>Requests</th></tr></thead>
+      <tbody>
+        <% byTypeAndLocation.forEach(r => { %>
+          <tr>
+            <td><%= r._id.type || '—' %></td>
+            <td><%= r._id.country || '—' %></td>
+            <td><%= r._id.province || '—' %></td>
+            <td><%= r._id.city || '—' %></td>
+            <td><%= r._id.town || '—' %></td>
+            <td><%= r.totalQty %></td>
+            <td><%= r.docs %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %><p>No data.</p><% } %>
+</section>
+
+<script nonce="<%= nonce %>">
+(function(){
+  const $search = document.getElementById('searchName');
+  const $type   = document.getElementById('filterType');
+  const $clear  = document.getElementById('clearFilters');
+
+  const rowsAll   = Array.from(document.querySelectorAll('#tableAllDemands .row-demand'));
+  const rowsNames = Array.from(document.querySelectorAll('#tableSummaryByName .row-name'));
+
+  const kpiUnique = document.getElementById('kpiUniqueNames');
+  const kpiQty    = document.getElementById('kpiTotalQty');
+
+  function applyFilters(){
+    const q = ($search.value || '').trim().toLowerCase();
+    const t = ($type.value || '').trim().toLowerCase();
+
+    // Filter "All Demands"
+    let runningQty = 0;
+    rowsAll.forEach(tr => {
+      const name = tr.dataset.name || '';
+      const typ  = tr.dataset.type || '';
+      const matchName = !q || name.includes(q);
+      const matchType = !t || typ === t;
+
+      const show = matchName && matchType;
+      tr.style.display = show ? '' : 'none';
+      if (show) runningQty += Number(tr.dataset.qty || 0);
+    });
+
+    // Filter "Summary by Product Name"
+    let visibleNameCount = 0;
+    let visibleTotalQty  = 0;
+
+    rowsNames.forEach(tr => {
+      const name = tr.dataset.name || '';
+      const typesStr = tr.dataset.types || '';
+      const hasType = !t || typesStr.split('|').includes(t);
+
+      const matchName = !q || name.includes(q);
+      const matchType = hasType;
+
+      const show = matchName && matchType;
+      tr.style.display = show ? '' : 'none';
+
+      if (show) {
+        visibleNameCount += 1;
+        visibleTotalQty  += Number(tr.dataset.totalqty || 0);
+      }
+    });
+
+    // Update KPIs to reflect filtered view of summary
+    if (kpiUnique) kpiUnique.textContent = String(visibleNameCount);
+    if (kpiQty)    kpiQty.textContent    = String(visibleTotalQty);
+  }
+
+  $search && $search.addEventListener('input', applyFilters);
+  $type && $type.addEventListener('change', applyFilters);
+  $clear && $clear.addEventListener('click', function(){
+    if ($search) $search.value = '';
+    if ($type)   $type.value   = '';
+    applyFilters();
+  });
+
+  // initial pass
+  applyFilters();
+})();
+</script>
+
+<style>
+  .kpi-grid {
+    display:grid; gap:.8rem; grid-template-columns: repeat(3, minmax(0,1fr));
+    margin:.5rem 0 1rem;
+  }
+  .kpi-card { padding:1rem; border:1px solid #e5e7eb; border-radius:.6rem; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .kpi-label { font-size:.85rem; color:#6b7280; }
+  .kpi-value { font-size:1.4rem; font-weight:700; }
+
+  .filters { display:flex; gap:.6rem; align-items:center; margin:.4rem 0 1rem; }
+  .filters input[type="search"], .filters select {
+    padding:.55rem .65rem; border:1px solid #d1d5db; border-radius:.45rem;
+  }
+  .btn { padding:.5rem .8rem; border-radius:.45rem; border:0; cursor:pointer; }
+  .btn-secondary { background:#f3f4f6; }
+
+  .nice-table { width:100%; border-collapse: collapse; }
+  .nice-table th, .nice-table td { padding:.6rem .55rem; border-bottom:1px solid #e5e7eb; text-align:left; }
+  .nice-table thead th { background:#f9fafb; font-weight:600; }
+  .col-qty, .col-totalqty, .col-reqs { text-align:right; }
+
+  .flash { margin:.5rem 0; padding:.6rem .8rem; border-radius:.4rem; }
+  .flash-success { background:#ecfdf5; }
+  .flash-error { background:#fef2f2; }
+
+  body.dark-theme .kpi-card, body.dark-theme .filters select, body.dark-theme .filters input {
+    background:#111827; border-color:#374151; color:#eee;
+  }
+  body.dark-theme .nice-table thead th { background:#111827; }
+  body.dark-theme .nice-table td, body.dark-theme .nice-table th { border-color:#374151; }
+
+  /* ============================
+   🎨 Demand Color Legend
+   - Business Name: green
+   - Contact Name: blue
+   - Position: navy
+   - Product Name (All Demands): purple
+   - Product Name (Summary Table): golden
+   - Type: maroon
+   - Quantity: violet
+   - Country: teal
+   - Province: magenta
+   - City: orange
+   - Town: coral/rust
+   - Notes: navy blue
+   - KPI accents: subtle branded tones
+   ============================ */
+
+:root {
+  --col-green:        #16a34a;  /* business name */
+  --col-blue:         #2563eb;  /* contact name */
+  --col-navy:         #1f2937;  /* position / notes (navy-ish) */
+  --col-purple:       #7c3aed;  /* product name (table 1) */
+  --col-golden:       #b08900;  /* product name (summary table) */
+  --col-maroon:       #7a1f2b;  /* type */
+  --col-violet:       #6d28d9;  /* quantity */
+  --col-teal:         #0f766e;  /* country */
+  --col-magenta:      #be185d;  /* province */
+  --col-orange:       #ea580c;  /* city */
+  --col-coral:        #cc5533;  /* town (coral/rust) */
+  --col-navyblue:     #1e3a8a;  /* notes */
+  --col-muted:        #6b7280;
+
+  --kpi-bg-1: #f0fdf4; /* light green */
+  --kpi-bg-2: #fff7ed; /* light orange */
+  --kpi-bg-3: #eef2ff; /* light indigo */
+  --kpi-fg-1: #166534;
+  --kpi-fg-2: #9a3412;
+  --kpi-fg-3: #4338ca;
+}
+
+/* Dark theme tweaks (if you use body.dark-theme) */
+body.dark-theme {
+  --col-navy:     #cbd5e1;
+  --col-navyblue: #93c5fd;
+  --kpi-bg-1: #052e16;
+  --kpi-bg-2: #431407;
+  --kpi-bg-3: #111827;
+  --kpi-fg-1: #86efac;
+  --kpi-fg-2: #fdba74;
+  --kpi-fg-3: #a5b4fc;
+}
+
+/* === KPI color blocks === */
+.kpi-grid .kpi-card:nth-child(1) { background: var(--kpi-bg-1); color: var(--kpi-fg-1); }
+.kpi-grid .kpi-card:nth-child(2) { background: var(--kpi-bg-2); color: var(--kpi-fg-2); }
+.kpi-grid .kpi-card:nth-child(3) { background: var(--kpi-bg-3); color: var(--kpi-fg-3); }
+.kpi-grid .kpi-card { border: none; }
+.kpi-value { letter-spacing: 0.2px; }
+
+/* === All Demands table value colors === */
+.val-business-name { color: var(--col-green); font-weight: 700; }
+.val-contact-name  { color: var(--col-blue); font-weight: 600; }
+.val-position      { color: var(--col-navy); }
+.val-product-name  { color: var(--col-purple); font-weight: 600; }
+.val-type          { color: var(--col-maroon); font-weight: 600; }
+.val-quantity      { color: var(--col-violet); font-variant-numeric: tabular-nums; }
+
+.val-country  { color: var(--col-teal); font-weight: 600; }
+.val-province { color: var(--col-magenta); }
+.val-city     { color: var(--col-orange); }
+.val-town     { color: var(--col-coral); }
+.val-notes    { color: var(--col-navyblue); }
+
+/* tiny separator dot between location parts */
+.col-location .sep { margin: 0 .35rem; color: var(--col-muted); }
+
+/* === Summary table: make product names golden for contrast === */
+#tableSummaryByName tbody tr td:first-child { color: var(--col-golden); font-weight: 700; }
+
+/* Optional: make numeric columns slightly right-aligned and tabular for readability */
+.col-qty, .col-totalqty, .col-reqs { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Hover affordance to help scanning */
+.nice-table tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
+body.dark-theme .nice-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
+
+/* Inputs and select in filters—slight emphasis so they pop above colored values */
+.filters input[type="search"], .filters select {
+  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+}
+
+/* Make the requester cell breathe a bit */
+.col-requester .val-business-name { display:block; margin-bottom: 2px; }
+
+/* ============================
+   🎨 COLOR TOKENS (unchanged)
+   ============================ */
+:root {
+  --col-green:        #16a34a;  /* business name */
+  --col-blue:         #2563eb;  /* contact name */
+  --col-navy:         #1f2937;  /* position / notes (navy-ish) */
+  --col-purple:       #7c3aed;  /* product name (table 1) */
+  --col-golden:       #b08900;  /* product name (summary table) */
+  --col-maroon:       #7a1f2b;  /* type */
+  --col-violet:       #6d28d9;  /* quantity */
+  --col-teal:         #0f766e;  /* country */
+  --col-magenta:      #be185d;  /* province */
+  --col-orange:       #ea580c;  /* city */
+  --col-coral:        #cc5533;  /* town (coral/rust) */
+  --col-navyblue:     #1e3a8a;  /* notes */
+  --col-muted:        #6b7280;
+
+  --kpi-bg-1: #f0fdf4; /* light green */
+  --kpi-bg-2: #fff7ed; /* light orange */
+  --kpi-bg-3: #eef2ff; /* light indigo */
+  --kpi-fg-1: #166534;
+  --kpi-fg-2: #9a3412;
+  --kpi-fg-3: #4338ca;
+
+  --card-bg: #ffffff;
+  --border: #e5e7eb;
+}
+
+body.dark-theme {
+  --col-navy:     #cbd5e1;
+  --col-navyblue: #93c5fd;
+  --kpi-bg-1: #052e16;
+  --kpi-bg-2: #431407;
+  --kpi-bg-3: #111827;
+  --kpi-fg-1: #86efac;
+  --kpi-fg-2: #fdba74;
+  --kpi-fg-3: #a5b4fc;
+
+  --card-bg: #111827;
+  --border: #374151;
+}
+
+/* ============================
+   ⚙️ BASE / LAYOUT
+   ============================ */
+.kpi-grid {
+  display:grid;
+  gap:.8rem;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  margin:.5rem 0 1rem;
+}
+.kpi-card {
+  padding:1rem;
+  border:1px solid var(--border);
+  border-radius:.75rem;
+  background:var(--card-bg);
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
+}
+.kpi-grid .kpi-card:nth-child(1) { background: var(--kpi-bg-1); color: var(--kpi-fg-1); border:none; }
+.kpi-grid .kpi-card:nth-child(2) { background: var(--kpi-bg-2); color: var(--kpi-fg-2); border:none; }
+.kpi-grid .kpi-card:nth-child(3) { background: var(--kpi-bg-3); color: var(--kpi-fg-3); border:none; }
+.kpi-label { font-size:.85rem; color:#6b7280; }
+.kpi-value { font-size:1.35rem; font-weight:700; letter-spacing:.2px; }
+
+.filters {
+  display:flex; gap:.6rem; align-items:center; margin:.6rem 0 1rem; flex-wrap:wrap;
+}
+.filters input[type="search"], .filters select {
+  flex:1 1 220px;
+  min-width: 0;
+  padding:.6rem .7rem;
+  border:1px solid var(--border);
+  border-radius:.55rem;
+  box-shadow:0 1px 0 rgba(0,0,0,.04);
+  background:var(--card-bg);
+  color:inherit;
+}
+.btn { padding:.6rem .85rem; border-radius:.55rem; border:0; cursor:pointer; }
+.btn-secondary { background:#f3f4f6; color:#111; }
+
+/* For super small screens: make filters stack cleanly */
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .filters { flex-direction: column; align-items: stretch; gap:.5rem; }
+  .filters input[type="search"], .filters select, .filters .btn { width:100%; }
+}
+@media (max-width: 400px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================
+   📋 TABLES (desktop & fallback)
+   ============================ */
+.nice-table {
+  width:100%;
+  border-collapse: collapse;
+  background:var(--card-bg);
+  border-radius:.6rem;
+  overflow:hidden;
+  border:1px solid var(--border);
+}
+.nice-table th, .nice-table td {
+  padding:.65rem .6rem;
+  border-bottom:1px solid var(--border);
+  text-align:left;
+  vertical-align: top;
+  white-space:normal;
+}
+.nice-table thead th {
+  background:#f9fafb;
+  font-weight:600;
+}
+body.dark-theme .nice-table thead th { background:#0b1220; }
+.nice-table tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
+body.dark-theme .nice-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
+
+/* Numeric alignment */
+.col-qty, .col-totalqty, .col-reqs { text-align:right; font-variant-numeric: tabular-nums; }
+
+/* Colored value classes (unchanged) */
+.val-business-name { color: var(--col-green); font-weight: 700; }
+.val-contact-name  { color: var(--col-blue); font-weight: 600; }
+.val-position      { color: var(--col-navy); }
+.val-product-name  { color: var(--col-purple); font-weight: 600; }
+.val-type          { color: var(--col-maroon); font-weight: 600; }
+.val-quantity      { color: var(--col-violet); font-variant-numeric: tabular-nums; }
+.val-country  { color: var(--col-teal); font-weight: 600; }
+.val-province { color: var(--col-magenta); }
+.val-city     { color: var(--col-orange); }
+.val-town     { color: var(--col-coral); }
+.val-notes    { color: var(--col-navyblue); }
+.col-location .sep { margin: 0 .35rem; color: var(--col-muted); }
+
+/* Summary table: golden product names */
+#tableSummaryByName tbody tr td:first-child { color: var(--col-golden); font-weight: 700; }
+
+/* Horizontal scroll fallback if needed */
+.nice-table { overflow-x: auto; display: block; }
+
+/* ============================
+   📱 MOBILE CARD MODE (≤420px)
+   - Convert tables into stacked cards with CSS only
+   - We hide thead and add labels via ::before
+   - We also hide some less-critical columns to keep cards short
+   ============================ */
+@media (max-width: 420px) {
+  .nice-table { border-radius:.75rem; }
+
+  /* Hide headers in mobile card mode */
+  .nice-table thead { display:none; }
+
+  /* Each row becomes a card */
+  .nice-table tbody tr {
+    display:block;
+    padding:.7rem .7rem;
+    border-bottom:1px solid var(--border);
+  }
+  .nice-table tbody tr:last-child { border-bottom:none; }
+
+  /* Each cell becomes a labeled line */
+  .nice-table td {
+    display:flex;
+    justify-content: space-between;
+    align-items:flex-start;
+    gap:.75rem;
+    padding:.45rem 0;
+    border-bottom:none;
+    white-space:normal; /* allow wrapping */
+  }
+  .nice-table td::before {
+    content: attr(data-label);
+    flex:0 0 auto;
+    min-width: 7.5rem;
+    color: var(--col-muted);
+    font-size:.85rem;
+  }
+
+  /* ---------- All Demands table (id=tableAllDemands) ---------- */
+  #tableAllDemands tbody tr td:nth-child(1) { /* Requester */
+    flex-direction: column;
+  }
+  #tableAllDemands tbody tr td:nth-child(1)::before { content: "Requester"; }
+  #tableAllDemands tbody tr td:nth-child(2)::before { content: "Type"; }
+  #tableAllDemands tbody tr td:nth-child(3)::before { content: "Product"; }
+  #tableAllDemands tbody tr td:nth-child(4)::before { content: "Qty"; }
+  #tableAllDemands tbody tr td:nth-child(5)::before { content: "Location"; }
+  #tableAllDemands tbody tr td:nth-child(6)::before { content: "Notes"; }
+  #tableAllDemands tbody tr td:nth-child(7)::before { content: "Created"; }
+
+  /* Hide least-crucial columns on tiny screens (tweak if you prefer) */
+  #tableAllDemands tbody tr td:nth-child(7) { display:none; } /* hide Created */
+  /* You may also hide Notes by uncommenting: */
+  /* #tableAllDemands tbody tr td:nth-child(6) { display:none; } */
+
+  .col-requester .val-business-name { display:block; margin-bottom: 2px; }
+
+  /* ---------- Summary by Product Name (id=tableSummaryByName) ---------- */
+  #tableSummaryByName tbody tr { display:block; padding:.7rem .7rem; }
+  #tableSummaryByName tbody tr td { display:flex; gap:.75rem; padding:.45rem 0; }
+  #tableSummaryByName tbody tr td:nth-child(1)::before { content: "Product Name"; }
+  #tableSummaryByName tbody tr td:nth-child(2)::before { content: "Types"; }
+  #tableSummaryByName tbody tr td:nth-child(3)::before { content: "Requests"; }
+  #tableSummaryByName tbody tr td:nth-child(4)::before { content: "Total Qty"; }
+
+  /* Optional: hide "Types" to shorten cards */
+  /* #tableSummaryByName tbody tr td:nth-child(2) { display:none; } */
+
+  /* ---------- By Type table (no id, but structure is 3 cols) ---------- */
+  /* First "By Type" after the heading is the first .nice-table following that h2.
+     If you have multiple .nice-table, safer to scope by thead contents, but here we can keep general: */
+  .dashboard-home h2 + .nice-table tbody tr td:nth-child(1)::before { content: "Type"; }
+  .dashboard-home h2 + .nice-table tbody tr td:nth-child(2)::before { content: "Total Qty"; }
+  .dashboard-home h2 + .nice-table tbody tr td:nth-child(3)::before { content: "Requests"; }
+
+  /* ---------- By Type & Location table (7 cols) ---------- */
+  /* It's the next .nice-table after the second h2 */
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(1)::before { content: "Type"; }
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(2)::before { content: "Country"; }
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(3)::before { content: "Province"; }
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(4)::before { content: "City"; }
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(5)::before { content: "Town"; }
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(6)::before { content: "Total Qty"; }
+  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(7)::before { content: "Requests"; }
+
+  /* Optionally hide some location columns to shorten cards */
+  /* .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(3),
+     .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(5) { display:none; } */
+}
+</style>

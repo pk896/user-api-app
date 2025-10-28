@@ -1,0 +1,114 @@
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<main class="page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : '' %>">
+  <header class="head">
+    <h1>🚚 Delivery Options</h1>
+    <nav class="nav">
+      <a class="btn" href="/admin/orders">↩ Orders Admin</a>
+      <a class="btn btn-primary" href="/admin/delivery-options/new">➕ New Option</a>
+    </nav>
+  </header>
+
+  <!-- Flash -->
+  <% if (success && success.length) { %>
+    <div class="flash ok"><%= success %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="flash err"><%= error %></div>
+  <% } %>
+
+  <!-- Filter -->
+  <form class="filter" method="GET" action="/admin/delivery-options">
+    <input type="search" name="q" placeholder="Search by name…" value="<%= (initialFilters && initialFilters.q) || '' %>">
+    <select name="status" aria-label="Status">
+      <% const s = (initialFilters && initialFilters.status) || '' %>
+      <option value="" <%= s===''?'selected':'' %>>All</option>
+      <option value="active" <%= s==='active'?'selected':'' %>>Active</option>
+      <option value="inactive" <%= s==='inactive'?'selected':'' %>>Inactive</option>
+    </select>
+    <button class="btn" type="submit">Apply</button>
+    <a class="btn" href="/admin/delivery-options">Clear</a>
+  </form>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table class="table responsive" id="optTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Days</th>
+          <th>Price</th>
+          <th>Status</th>
+          <th style="min-width:220px">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (options && options.length) { %>
+          <% options.forEach(o => { %>
+            <tr>
+              <td data-label="Name"><strong><%= o.name %></strong></td>
+              <td data-label="Days"><%= o.deliveryDays %> day<%= o.deliveryDays===1?'':'s' %></td>
+              <td data-label="Price">
+                $<%= (o.priceCents / 100).toFixed(2) %>
+              </td>
+              <td data-label="Status">
+                <% if (o.active) { %>
+                  <span class="badge badge-on">Active</span>
+                <% } else { %>
+                  <span class="badge badge-off">Inactive</span>
+                <% } %>
+              </td>
+              <td data-label="Actions" class="acts">
+                <a class="btn" href="/admin/delivery-options/<%= o._id %>/edit">Edit</a>
+                <form action="/admin/delivery-options/<%= o._id %>/toggle" method="POST" class="inline">
+                  <button class="btn" type="submit"><%= o.active ? 'Deactivate' : 'Activate' %></button>
+                </form>
+                <form action="/admin/delivery-options/<%= o._id %>/delete" method="POST" class="inline"
+                      onsubmit="return confirm('Delete this option?');">
+                  <button class="btn danger" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr><td colspan="5" class="muted">No delivery options found.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<style nonce="<%= NONCE %>">
+  .page{max-width:1000px;margin:0 auto;padding:1rem}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.75rem}
+  .nav .btn{margin-left:.4rem}
+  .btn{border:1px solid #d1d5db;border-radius:10px;padding:.5rem .8rem;background:#fff;cursor:pointer;text-decoration:none;color:#111827}
+  .btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
+  .btn.danger{background:#dc2626;color:#fff;border-color:#dc2626}
+  .flash{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px}
+  .flash.ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
+  .flash.err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+  .filter{display:grid;grid-template-columns:1fr max-content max-content max-content;gap:.5rem;margin:.8rem 0}
+  .filter input,.filter select{padding:.5rem .6rem;border:1px solid #d1d5db;border-radius:10px}
+  .table-wrap{overflow:auto}
+  .table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid #e5e7eb;padding:.55rem .6rem;text-align:left;vertical-align:top}
+  .muted{color:#6b7280}
+  .badge{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.78rem;border:1px solid #d1d5db;background:#fff}
+  .badge-on{background:#ecfdf5;border-color:#34d399;color:#065f46}
+  .badge-off{background:#fee2e2;border-color:#fecaca;color:#991b1b}
+  .acts{display:flex;flex-wrap:wrap;gap:.35rem}
+  .inline{display:inline}
+  .dark-theme .btn{background:#111827;color:#e5e7eb;border-color:#374151}
+  .dark-theme .table th,.dark-theme .table td{border-color:#374151}
+
+  /* Mobile: card style */
+  @media (max-width:480px){
+    .filter{grid-template-columns:1fr 1fr;gap:.4rem}
+    .table thead{display:none}
+    .table,.table tbody,.table tr,.table td{display:block;width:100%}
+    .table tr{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,.06);padding:.6rem .65rem;margin-bottom:.6rem}
+    .table td{border:none;padding:.35rem 0}
+    .table td[data-label]::before{content:attr(data-label);display:block;font-size:.78rem;color:#6b7280;margin-bottom:.1rem}
+    .acts{border-top:1px dashed #e5e7eb;padding-top:.4rem}
+  }
+</style>

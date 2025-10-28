@@ -1,0 +1,130 @@
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<main class="page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : '' %>">
+  <header class="head">
+    <h1>📨 Thread: <%= (msg && msg.name) || 'Message' %></h1>
+    <nav class="nav">
+      <a class="btn" href="/contact/admin/all">↩ Back to all</a>
+    </nav>
+  </header>
+
+  <!-- Contact info -->
+  <div class="contact-infobox">
+    <div class="label">Email</div>
+    <div class="value"><%= (msg && msg.email) || '—' %></div>
+    <div class="label">Created</div>
+    <div class="value"><%= msg ? new Date(msg.createdAt).toLocaleString() : '' %></div>
+  </div>
+
+  <!-- Flash -->
+  <% if (success && success.length) { %>
+    <div class="flash ok" role="status" aria-live="polite"><%= success %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="flash err" role="alert" aria-live="assertive"><%= error %></div>
+  <% } %>
+
+  <!-- Thread -->
+  <section class="thread" id="thread">
+    <% (msg.thread || []).forEach(t => { 
+         const when = new Date(t.timestamp || t.at || t.createdAt).toLocaleString();
+         const isAdmin = t.sender === 'admin';
+    %>
+      <article class="bubble <%= isAdmin ? 'from-admin' : 'from-biz' %>">
+        <div class="meta">
+          <strong><%= isAdmin ? 'You' : (msg.name || 'Business') %></strong>
+          <span class="time"><%= when %></span>
+        </div>
+        <p class="text"><%= t.message %></p>
+      </article>
+    <% }) %>
+  </section>
+
+  <!-- Reply -->
+  <section class="reply">
+    <form class="reply-form" action="/contact/thread/<%= msg._id %>/reply" method="POST">
+      <label for="reply">Your reply</label>
+      <textarea id="reply" name="reply" rows="4" placeholder="Type your message…" required></textarea>
+
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% } %>
+
+      <div class="actions">
+        <a class="btn" href="/contact/admin/all">Cancel</a>
+        <button class="btn btn-primary" type="submit">Send reply</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<style nonce="<%= NONCE %>">
+  .page{max-width:900px;margin:0 auto;padding:1rem}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.5rem}
+  .btn{border:1px solid #d1d5db;border-radius:10px;padding:.45rem .8rem;background:#fff;cursor:pointer;text-decoration:none;color:#111827}
+  .btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
+  .flash{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px}
+  .flash.ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
+  .flash.err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+
+  .contact-infobox{display:grid;grid-template-columns:120px 1fr;gap:.35rem 1rem;border:1px solid #e5e7eb;border-radius:12px;padding:.8rem 1rem;margin:.5rem 0 1rem;background:#fff}
+  .contact-infobox .label{color:#6b7280}
+  .contact-infobox .value{font-weight:600}
+
+  .thread{display:flex;flex-direction:column;gap:.6rem;margin:1rem 0}
+  .bubble{padding:.7rem .9rem;border-radius:12px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .from-admin{border-left:4px solid #2563eb}
+  .from-biz{border-left:4px solid #059669}
+  .meta{font-size:.85rem;color:#6b7280;display:flex;gap:.5rem;align-items:baseline;margin-bottom:.35rem}
+  .text{margin:0;white-space:pre-wrap;word-break:break-word}
+
+  .reply-form{display:flex;flex-direction:column;gap:.5rem;border-top:1px solid #e5e7eb;padding-top:1rem}
+  .reply-form textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:.6rem .7rem;font:inherit}
+  .actions{display:flex;gap:.5rem;justify-content:flex-end}
+
+  .dark-theme .btn{background:#111827;color:#e5e7eb;border-color:#374151}
+  .dark-theme .contact-infobox{background:#1f2937;border-color:#374151}
+  .dark-theme .bubble{background:#1f2937;color:#e5e7eb}
+  .dark-theme .reply-form textarea{background:#111827;color:#e5e7eb;border-color:#374151}
+</style>
+
+<script nonce="<%= NONCE %>">
+document.addEventListener('DOMContentLoaded', () => {
+  // Auto-scroll to latest
+  const thread = document.getElementById('thread');
+  const autoscroll = () => { if (thread) thread.scrollTop = thread.scrollHeight; };
+  autoscroll();
+
+  // Live updates (SSE)
+  const threadId = "<%= msg && msg._id %>";
+  if (threadId) {
+    const es = new EventSource(`/contact/thread/${threadId}/stream`, { withCredentials: true });
+
+    es.addEventListener('newMessage', (ev) => {
+      try {
+        const data = JSON.parse(ev.data || "{}");
+        const isAdmin = data.sender === 'admin';
+        const when = new Date(data.timestamp || Date.now()).toLocaleString();
+
+        const article = document.createElement('article');
+        article.className = 'bubble ' + (isAdmin ? 'from-admin' : 'from-biz');
+        article.innerHTML = `
+          <div class="meta">
+            <strong>${isAdmin ? 'You' : '<%= (msg && (msg.name || "Business")) %>'}</strong>
+            <span class="time">${when}</span>
+          </div>
+          <p class="text"></p>
+        `;
+        article.querySelector('.text').textContent = data.message || '';
+        thread.appendChild(article);
+        autoscroll();
+      } catch (_) {}
+    });
+
+    // Optional: keepalive/hello handlers
+    es.addEventListener('hello', () => {});
+    es.addEventListener('keepalive', () => {});
+
+    window.addEventListener('beforeunload', () => es.close());
+  }
+});
+</script>

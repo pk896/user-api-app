@@ -1,9 +1,18 @@
-<!-- ✅ Supplier Dashboard -->
+<!-- views/dashboards/seller-dashboard.ejs -->
 <section class="dashboard-home">
-  <h1 class="page-title">🚚 Welcome, <%= business.name %>!</h1>
-  <p class="subtitle">Manage your product inventory, track stock, and communicate with admin.</p>
+  <h1 class="page-title">
+    👋 Welcome, <%= business.name %>! (seller D)
+    <span class="role-badge <%= business.role %>">
+      <%= (business.role || 'unknown').toUpperCase() %>
+    </span>
+  </h1>
+  <p class="subtitle">
+    Manage your inventory, orders, and shipping — all in one place.
+    <% if (business.role !== 'seller') { %>
+      <span class="warn">Note: your role is <strong><%= business.role %></strong>, not seller.</span>
+    <% } %>
+  </p>
 
-  <!-- ✅ Flash Messages -->
   <% if (success && success.length > 0) { %>
     <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
   <% } %>
@@ -11,218 +20,212 @@
     <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
   <% } %>
 
-  <!-- 📊 Supplier Stats -->
+  <!-- 📊 Top Stats -->
   <section class="stats-grid">
     <div class="stat-card">
       <h2>🛍️ Total Products</h2>
-      <p class="stat-number"><%= totalProducts || 0 %></p>
+      <p class="stat-number"><%= totals.totalProducts || 0 %></p>
     </div>
 
     <div class="stat-card">
-      <h2>📦 In Stock</h2>
-      <p class="stat-number"><%= inStock || 0 %></p>
+      <h2>📦 Total Stock</h2>
+      <p class="stat-number"><%= totals.totalStock || 0 %></p>
     </div>
 
     <div class="stat-card">
-      <h2>⚠️ Low Stock</h2>
-      <p class="stat-number"><%= lowStock || 0 %></p>
+      <h2>⚠️ Low Stock (≤5)</h2>
+      <p class="stat-number"><%= totals.lowStock || 0 %></p>
     </div>
 
     <div class="stat-card">
       <h2>❌ Out of Stock</h2>
-      <p class="stat-number"><%= outOfStock || 0 %></p>
+      <p class="stat-number"><%= totals.outOfStock || 0 %></p>
     </div>
 
-    <div class="stat-card messages">
-      <h2>💬 Messages</h2>
-      <p class="stat-number">
-        <%= stats.totalMessages || 0 %>
-        <% if (stats.unreadMessages > 0) { %>
-          <span id="unreadBadge" class="badge"><%= stats.unreadMessages %> New</span>
-        <% } %>
+    <div class="stat-card">
+      <h2>🧾 Orders</h2>
+      <p class="stat-number"><%= orders.total || 0 %></p>
+      <p class="muted">
+        <small>
+          <% Object.keys(orders.byStatus || {}).forEach(s => { %>
+            <span class="chip"><%= s %>: <%= orders.byStatus[s] %></span>
+          <% }) %>
+        </small>
       </p>
-      <button class="btn small open-msg-btn">📨 View Messages</button>
+    </div>
+
+    <div class="stat-card">
+      <h2>🚚 Shipments</h2>
+      <p class="stat-number"><%= shipments.total || 0 %></p>
+      <p class="muted">
+        <small>
+          <% ['Pending','Processing','In Transit','Delivered','Canceled','Cancelled'].forEach(s => { %>
+            <span class="chip"><%= s %>: <%= (shipments.byStatus && shipments.byStatus[s]) || 0 %></span>
+          <% }) %>
+        </small>
+      </p>
     </div>
   </section>
 
-  <!-- 🧾 Supplier’s Products -->
+  <!-- 🧾 Per-product stock (with totals) -->
   <section class="recent-section">
-    <h2>🧾 Your Recent Products</h2>
-    <% if (products && products.length > 0) { %>
-      <ul class="product-list">
-        <% products.forEach(p => { %>
+    <h2>🧾 Your Products & Stock</h2>
+    <% if (products && products.length) { %>
+      <div class="table-wrap">
+        <table class="nice-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Price</th>
+              <th>Stock</th>
+              <th>Sold (Units)</th>
+              <th>Orders</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          <% products.forEach(p => { %>
+            <tr>
+              <td class="pname">
+                <% if (p.imageUrl) { %><img class="thumb" src="<%= p.imageUrl %>" alt=""><% } %>
+                <div>
+                  <strong><%= p.name %></strong>
+                  <div class="muted">ID: <%= p.customId %></div>
+                  <% if (p.category) { %><div class="muted">Category: <%= p.category %></div><% } %>
+                </div>
+              </td>
+              <td>$<%= Number(p.price || 0).toFixed(2) %></td>
+              <td>
+                <% const s = Number(p.stock || 0); %>
+                <span class="stock-badge <%= s<=0 ? 'empty' : (s<=5 ? 'low' : 'ok') %>">
+                  <%= s %>
+                </span>
+              </td>
+              <td><%= Number(p.soldCount || 0) %></td>
+              <td><%= Number(p.soldOrders || 0) %></td>
+              <td class="row-actions">
+                <a class="btn small" href="/products/edit/<%= p.customId %>">✏️ Edit</a>
+                <a class="btn small" href="/shipments/by-product/<%= p._id %>">🚚 Shipments</a>
+                <a class="btn small" href="/products/delete/<%= p.customId %>" onclick="return confirm('Delete this product?')">🗑️ Delete</a>
+              </td>
+            </tr>
+          <% }) %>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="2" class="right">Totals:</th>
+              <th><%= totals.totalStock || 0 %></th>
+              <th><%= products.reduce((a,p)=>a+(Number(p.soldCount||0)),0) %></th>
+              <th><%= products.reduce((a,p)=>a+(Number(p.soldOrders||0)),0) %></th>
+              <th></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    <% } else { %>
+      <p>No products yet. Start by adding your first one.</p>
+    <% } %>
+  </section>
+
+  <!-- 🧾 Recent Orders (preview) -->
+  <section class="recent-section">
+    <h2>🧾 Recent Orders</h2>
+    <% if (orders.recent && orders.recent.length) { %>
+      <ul class="orders-list">
+        <% orders.recent.forEach(o => { %>
           <li>
-            <strong><%= p.name %></strong> — 💲<%= p.price.toFixed(2) %> |
-            Stock: <%= p.stock %> |
-            Category: <%= p.category || "Uncategorized" %>
-            <div class="actions-inline">
-              <a href="/products/edit/<%= p._id %>" class="btn small edit">✏️ Edit</a>
-              <a href="/products/delete/<%= p._id %>" class="btn small delete" onclick="return confirm('Are you sure?')">🗑️ Delete</a>
-            </div>
+            <strong>#<%= o.orderId || o._id %></strong>
+            — Status: <%= o.status || 'N/A' %>
+            — Amount: <%= o.amount && o.amount.value ? ('$' + o.amount.value) : '—' %>
+            <span class="muted"> <%= new Date(o.createdAt).toLocaleString() %></span>
           </li>
         <% }) %>
       </ul>
     <% } else { %>
-      <p>No products available yet. Start by adding a new one below.</p>
+      <p>No orders yet.</p>
     <% } %>
   </section>
 
-  <!-- ⚙️ Actions -->
+  <!-- ⚙️ Quick Actions -->
   <div class="actions">
     <a href="/products/add" class="btn btn-primary">➕ Add Product</a>
     <a href="/products/all" class="btn btn-secondary">📋 View All Products</a>
+    <a href="/shipments" class="btn btn-secondary">🚚 Manage Shipments</a>
   </div>
 </section>
 
-<!-- 🪟 Messages Modal -->
-<div id="messageModal" class="modal hidden">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <h3>📨 Your Conversations</h3>
-    <div id="threadContainer" class="thread"></div>
-    <form id="replyForm" class="reply-form" method="POST">
-      <textarea name="reply" rows="2" placeholder="Write your reply..." required></textarea>
-      <button type="submit" class="btn reply-btn">📩 Send Reply</button>
-    </form>
-  </div>
-</div>
-
-<!-- ✅ Styles -->
 <style>
   .dashboard-home { padding:1rem; }
   .page-title { margin-top:1rem; font-size:2rem; font-weight:700; text-align:center; }
-  .subtitle { color:#6b7280; margin-bottom:1.5rem; text-align:center; }
+  .subtitle { color:#6b7280; margin-bottom:1.3rem; text-align:center; }
+  .warn { color:#b45309; margin-left:.5rem; }
 
-  /* Flash */
-  .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500;
-           animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s,transform .6s; }
+  .role-badge { margin-left:.5rem; padding:.2rem .55rem; font-size:.75rem; border-radius:999px; font-weight:700; }
+  .role-badge.seller { background:#dbeafe; color:#1d4ed8; }
+  .role-badge.supplier { background:#dcfce7; color:#166534; }
+  .role-badge.buyer { background:#fde68a; color:#92400e; }
+
+  .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500; animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s,transform .6s; }
   .flash-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
   .flash-error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
   .flash.fade-out { opacity:0; transform:translateY(-10px); }
   @keyframes fadeIn { from{opacity:0; transform:translateY(-5px);} to{opacity:1; transform:translateY(0);} }
 
-  /* Stats */
-  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; margin-bottom:2rem; }
-  .stat-card { background:#f3f4f6; padding:1.2rem; border-radius:.75rem; box-shadow:0 2px 5px rgba(0,0,0,0.08);
-               text-align:center; transition:transform .2s,box-shadow .2s; }
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; margin-bottom:1.25rem; }
+  .stat-card { background:#f3f4f6; padding:1.1rem; border-radius:.75rem; box-shadow:0 2px 5px rgba(0,0,0,0.08); text-align:center; transition:transform .2s,box-shadow .2s; }
   .stat-card:hover { transform:translateY(-3px); box-shadow:0 4px 8px rgba(0,0,0,0.1); }
   .dark-theme .stat-card { background:#1f2937; color:#f9fafb; }
-  .stat-number { font-size:1.8rem; font-weight:bold; color:#2563eb; }
-  .badge { background:#f59e0b; color:#fff; font-size:.75rem; padding:.2rem .5rem; border-radius:999px; margin-left:.4rem; font-weight:600; }
+  .stat-number { font-size:1.7rem; font-weight:bold; color:#2563eb; }
+  .chip { display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px; padding:.05rem .5rem; margin:.05rem; }
 
-  /* Product list */
-  .product-list { list-style:none; padding:0; margin:0; }
-  .product-list li { padding:.6rem .8rem; margin-bottom:.5rem; border-radius:.5rem; background:#f9fafb;
-                     box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; justify-content:space-between;
-                     align-items:center; flex-wrap:wrap; gap:.6rem; }
-  .dark-theme .product-list li { background:#111827; color:#e5e7eb; }
+  .table-wrap { overflow-x:auto; }
+  .nice-table { width:100%; border-collapse:collapse; background:#fff; border-radius:.75rem; overflow:hidden; box-shadow:0 2px 5px rgba(0,0,0,0.06); }
+  .dark-theme .nice-table { background:#0b1220; color:#e5e7eb; }
+  .nice-table th, .nice-table td { padding:.75rem .7rem; border-bottom:1px solid #e5e7eb; vertical-align:middle; }
+  .nice-table thead th { background:#f8fafc; text-align:left; }
+  .dark-theme .nice-table thead th { background:#111827; }
+  .nice-table tfoot th { background:#f1f5f9; }
+  .dark-theme .nice-table tfoot th { background:#0f172a; }
+  .pname { display:flex; gap:.7rem; align-items:center; }
+  .thumb { width:40px; height:40px; object-fit:cover; border-radius:.4rem; }
+  .muted { color:#6b7280; font-size:.85rem; }
+  .stock-badge { font-weight:700; padding:.1rem .45rem; border-radius:.4rem; }
+  .stock-badge.ok { background:#dcfce7; color:#166534; }
+  .stock-badge.low { background:#fef9c3; color:#92400e; }
+  .stock-badge.empty { background:#fee2e2; color:#991b1b; }
+  .row-actions .btn.small { margin-right:.4rem; }
 
-  .actions-inline .btn.small { margin-left:.5rem; }
-  .btn.edit { background:#10b981; color:#fff; }
-  .btn.edit:hover { background:#059669; }
-  .btn.delete { background:#ef4444; color:#fff; }
-  .btn.delete:hover { background:#dc2626; }
+  .orders-list { list-style:none; padding:0; margin:0; }
+  .orders-list li { padding:.55rem .7rem; margin-bottom:.4rem; border-radius:.5rem; background:#f9fafb; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .dark-theme .orders-list li { background:#111827; color:#e5e7eb; }
 
-  /* Buttons */
-  .actions { display:flex; gap:1rem; margin-top:1.5rem; justify-content:center; }
-  .btn { display:inline-block; padding:.6rem 1rem; border-radius:.5rem; text-decoration:none; font-weight:600; transition:background .2s ease; }
-  .btn-primary { background:#2563eb; color:#fff; }
-  .btn-primary:hover { background:#1d4ed8; }
-  .btn-secondary { background:#f3f4f6; color:#111; }
-  .dark-theme .btn-secondary { background:#374151; color:#f9fafb; }
-  .btn-secondary:hover { background:#e5e7eb; }
-
-  /* Modal */
-  .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);
-           display:flex; align-items:center; justify-content:center; z-index:1000; }
-  .modal.hidden { display:none; }
-  .modal-content { background:#fff; border-radius:10px; padding:1.2rem; width:90%; max-width:600px; position:relative; }
-  .close-btn { position:absolute; top:10px; right:15px; font-size:1.5rem; cursor:pointer; }
-  .thread { margin:1rem 0; max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:0.4rem; }
-  .bubble { max-width:80%; padding:0.6rem 0.9rem; border-radius:10px; word-wrap:break-word; }
-  .bubble.business { background:#16a34a; color:#fff; align-self:flex-start; border-bottom-left-radius:0; }
-  .bubble.admin { background:#2563eb; color:#fff; align-self:flex-end; border-bottom-right-radius:0; }
-  .reply-form textarea { width:100%; padding:0.6rem; border-radius:6px; border:1px solid #ccc; }
-  .btn.reply-btn { background:#2563eb; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; margin-top:0.4rem; cursor:pointer; }
-  .btn.reply-btn:hover { background:#1d4ed8; }
+  .actions { display:flex; gap:.8rem; margin-top:1.1rem; justify-content:center; }
+  .btn { display:inline-block; padding:.55rem .95rem; border-radius:.55rem; text-decoration:none; font-weight:600; transition:background .2s ease; }
+  .btn.btn-primary { background:#2563eb; color:#fff; }
+  .btn.btn-primary:hover { background:#1d4ed8; }
+  .btn.btn-secondary { background:#f3f4f6; color:#111; }
+  .dark-theme .btn.btn-secondary { background:#374151; color:#f9fafb; }
+  .btn.small { font-size:.85rem; padding:.4rem .6rem; }
 </style>
 
-<!-- ✅ CSP-Safe Inline Script -->
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("🚚 Supplier dashboard loaded ✅");
-
-  // 🔢 Animate numbers
+  // Animate stat numbers
   document.querySelectorAll(".stat-number").forEach(n => {
     const target = +n.textContent || 0;
-    let count = 0, step = Math.ceil(target / 40);
-    const interval = setInterval(() => {
+    let count = 0, step = Math.ceil(Math.max(1, target / 40));
+    const id = setInterval(() => {
       count += step;
-      if (count >= target) { count = target; clearInterval(interval); }
+      if (count >= target) { count = target; clearInterval(id); }
       n.textContent = count;
     }, 25);
   });
 
-  // 💬 Flash auto-hide
+  // Auto-hide flash
   const flash = document.getElementById("flashMessage");
   if (flash) {
-    setTimeout(() => { flash.classList.add("fade-out"); setTimeout(() => flash.remove(), 600); }, 5000);
-    flash.addEventListener("click", () => { flash.classList.add("fade-out"); setTimeout(() => flash.remove(), 600); });
+    setTimeout(() => { flash.classList.add("fade-out"); setTimeout(()=>flash.remove(), 600); }, 5000);
+    flash.addEventListener("click", ()=>{ flash.classList.add("fade-out"); setTimeout(()=>flash.remove(), 600); });
   }
-
-  // 🪟 Modal handling
-  const modal = document.getElementById("messageModal");
-  const closeBtn = document.querySelector(".close-btn");
-  const threadContainer = document.getElementById("threadContainer");
-  const replyForm = document.getElementById("replyForm");
-  const openBtn = document.querySelector(".open-msg-btn");
-
-  openBtn.addEventListener("click", async () => {
-    modal.classList.remove("hidden");
-    threadContainer.innerHTML = "<p>Loading your messages...</p>";
-
-    try {
-      const res = await fetch("/contact/api/messages/mine");
-      const data = await res.json();
-      threadContainer.innerHTML = "";
-
-      if (data.thread && data.thread.length > 0) {
-        data.thread.forEach(t => {
-          const div = document.createElement("div");
-          div.className = "bubble " + (t.sender === "admin" ? "admin" : "business");
-          div.innerHTML = `<p>${t.message}</p><small>${new Date(t.timestamp).toLocaleString()}</small>`;
-          threadContainer.appendChild(div);
-        });
-        replyForm.action = "/contact/business/reply/" + data._id;
-        await fetch("/contact/mark-read/" + data._id, { method:"PATCH" });
-      } else {
-        threadContainer.innerHTML = "<p>No messages yet.</p>";
-      }
-    } catch (err) {
-      console.error("⚠️ Error fetching messages:", err);
-      threadContainer.innerHTML = "<p>Could not load conversation.</p>";
-    }
-  });
-
-  closeBtn.addEventListener("click",()=>modal.classList.add("hidden"));
-  modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.add("hidden");});
-
-  // 🔁 Auto-refresh unread badge
-  const unreadBadge=document.getElementById("unreadBadge");
-  async function refreshUnread(){
-    try{
-      const res=await fetch("/contact/unread-count");
-      if(!res.ok)return;
-      const data=await res.json();
-      if(data.success && data.unreadCount>0){
-        unreadBadge.textContent=`${data.unreadCount} New`;
-        unreadBadge.style.display="inline-block";
-      }else if(unreadBadge){
-        unreadBadge.style.display="none";
-      }
-    }catch(e){console.warn("⚠️ refresh fail:",e);}
-  }
-  refreshUnread();
-  setInterval(refreshUnread,30000);
 });
 </script>

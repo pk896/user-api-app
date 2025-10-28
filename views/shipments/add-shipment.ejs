@@ -1,215 +1,315 @@
 <!-- views/shipments/add-shipment.ejs -->
-<section class="dashboard-home add-shipment">
-  <h1 class="page-title">➕ Add New Shipment</h1>
-  <p class="subtitle">Create and dispatch a new shipment record linked to one of your products.</p>
+<section class="dashboard-home add-shipment" role="main">
+  <header class="page-header">
+    <h1 class="page-title">➕ Add New Shipment</h1>
+    <p class="subtitle">Create and dispatch a new shipment linked to one of your orders/products.</p>
+  </header>
 
   <!-- ✅ Flash Messages -->
   <% if (success && success.length > 0) { %>
-    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
+    <div class="flash flash-success" id="flashMessage" role="status" aria-live="polite">✅ <%= success %></div>
   <% } %>
   <% if (error && error.length > 0) { %>
-    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
+    <div class="flash flash-error" id="flashMessage" role="alert" aria-live="assertive">❌ <%= error %></div>
   <% } %>
 
   <!-- 🧾 Shipment Form -->
-  <form action="/shipments/add" method="POST" class="shipment-form">
-    <!-- Order ID -->
+  <form action="/shipments/add" method="POST" class="shipment-form" novalidate aria-describedby="formHelp">
+    <p id="formHelp" class="sr-only">Fields marked optional are not required. Inventory updates when status is set to Delivered.</p>
+
+    <!-- Order ID (optional) -->
     <div class="form-group">
-      <label for="orderId">Order ID <span class="required">*</span></label>
-      <input type="text" id="orderId" name="orderId" required placeholder="e.g. ORD-20251009-001" />
+      <label for="orderId">Order ID <small class="muted">(optional)</small></label>
+      <input
+        type="text"
+        id="orderId"
+        name="orderId"
+        placeholder="e.g. 6NC12345AB6789012"
+        inputmode="latin"
+        spellcheck="false"
+        autocapitalize="off"
+        autocomplete="off"
+        aria-describedby="orderTip"
+      />
+      <small id="orderTip" class="muted">Use the PayPal <strong>orderID</strong> or your internal order reference.</small>
     </div>
 
-    <!-- Product -->
+    <!-- Product (optional) -->
     <div class="form-group">
-      <label for="productId">Product <span class="required">*</span></label>
-      <select id="productId" name="productId" required>
-        <option value="">Select product</option>
-        <% products.forEach(p => { %>
-          <option value="<%= p._id %>"><%= p.name %></option>
-        <% }) %>
-      </select>
+      <label for="productId">Product <small class="muted">(optional)</small></label>
+      <div class="select-wrap">
+        <select id="productId" name="productId" aria-describedby="productTip">
+          <option value="">— No specific product —</option>
+          <% products.forEach(p => { %>
+            <option value="<%= p._id %>"><%= p.name %> (<%= p.customId || p._id %>)</option>
+          <% }) %>
+        </select>
+      </div>
+      <small id="productTip" class="muted">Select if this shipment fulfills a specific item (enables stock/sold tracking on delivery).</small>
+    </div>
+
+    <!-- Quantity -->
+    <div class="form-group">
+      <label for="quantity">Quantity <small class="muted">(defaults to 1)</small></label>
+      <input
+        type="number"
+        id="quantity"
+        name="quantity"
+        min="1"
+        step="1"
+        value="1"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        aria-describedby="qtyTip"
+      />
+      <small id="qtyTip" class="muted">Units of the selected product included in this shipment.</small>
     </div>
 
     <!-- Buyer Info -->
-    <div class="form-group-grid">
-      <div>
-        <label for="buyerName">Buyer Name</label>
-        <input type="text" id="buyerName" name="buyerName" placeholder="John Doe" />
+    <fieldset class="fieldset">
+      <legend>Buyer (optional)</legend>
+      <div class="form-group-grid">
+        <div class="form-group">
+          <label for="buyerName">Buyer Name</label>
+          <input
+            type="text"
+            id="buyerName"
+            name="buyerName"
+            placeholder="John Doe"
+            autocomplete="name"
+            inputmode="text"
+          />
+        </div>
+        <div class="form-group">
+          <label for="buyerEmail">Buyer Email</label>
+          <input
+            type="email"
+            id="buyerEmail"
+            name="buyerEmail"
+            placeholder="buyer@example.com"
+            autocomplete="email"
+            inputmode="email"
+          />
+        </div>
       </div>
-      <div>
-        <label for="buyerEmail">Buyer Email</label>
-        <input type="email" id="buyerEmail" name="buyerEmail" placeholder="buyer@example.com" />
-      </div>
-    </div>
+    </fieldset>
 
     <!-- Address -->
     <div class="form-group">
-      <label for="address">Shipping Address</label>
-      <textarea id="address" name="address" rows="3" placeholder="123 Main Street, City, Country"></textarea>
+      <label for="address">Shipping Address <small class="muted">(optional)</small></label>
+      <textarea
+        id="address"
+        name="address"
+        rows="3"
+        placeholder="123 Main Street, City, Country"
+        autocomplete="shipping street-address"
+      ></textarea>
     </div>
 
-    <!-- Tracking Number -->
-    <div class="form-group">
-      <label for="trackingNumber">Tracking Number (optional)</label>
-      <input type="text" id="trackingNumber" name="trackingNumber" placeholder="e.g. TRK-20251009-2341" />
-    </div>
+    <!-- Carrier + Tracking -->
+    <fieldset class="fieldset">
+      <legend>Carrier & Tracking (optional)</legend>
+      <div class="form-group-grid">
+        <div class="form-group">
+          <label for="carrier">Carrier</label>
+          <input
+            list="carrierList"
+            type="text"
+            id="carrier"
+            name="carrier"
+            placeholder="e.g. DHL, FedEx, UPS, USPS"
+            inputmode="text"
+            autocomplete="off"
+          />
+          <datalist id="carrierList">
+            <option value="DHL" />
+            <option value="FedEx" />
+            <option value="UPS" />
+            <option value="USPS" />
+            <option value="Royal Mail" />
+            <option value="Aramex" />
+            <option value="DPD" />
+            <option value="Hermes" />
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label for="trackingNumber">Tracking Number</label>
+          <input
+            type="text"
+            id="trackingNumber"
+            name="trackingNumber"
+            placeholder="e.g. 1Z999AA10123456784"
+            inputmode="latin"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+          />
+        </div>
+      </div>
+    </fieldset>
 
     <!-- Status -->
     <div class="form-group">
       <label for="status">Shipment Status</label>
-      <select id="status" name="status">
-        <option value="Pending" selected>Pending</option>
-        <option value="In Transit">In Transit</option>
-        <option value="Delivered">Delivered</option>
-        <option value="Cancelled">Cancelled</option>
-      </select>
+      <div class="select-wrap">
+        <select id="status" name="status" required aria-describedby="statusTip">
+          <option value="Processing" selected>Processing</option>
+          <option value="In Transit">In Transit</option>
+          <option value="Delivered">Delivered</option>
+          <option value="Canceled">Canceled</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      </div>
+      <small id="statusTip" class="muted">Inventory is adjusted once the shipment is marked <strong>Delivered</strong>.</small>
     </div>
+
+    <!-- (Optional) CSRF -->
+    <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <% } %>
 
     <!-- Submit -->
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">🚀 Create Shipment</button>
-      <a href="/shipments" class="btn btn-secondary">⬅ Back to Shipments</a>
+      <a href="/shipments" class="btn btn-secondary" role="button">⬅ Back to Shipments</a>
+    </div>
+
+    <!-- Sticky actions on tiny screens -->
+    <div class="sticky-actions" aria-hidden="true">
+      <button type="submit" class="btn btn-primary btn-block">🚀 Create Shipment</button>
+      <a href="/shipments" class="btn btn-secondary btn-block" role="button">⬅ Back</a>
     </div>
   </form>
 </section>
 
-<!-- 🌈 Scoped Styles -->
-<style>
-.dashboard-home {
-  padding: 1.5rem;
-  max-width: 700px;
-  margin: 0 auto;
-}
-.page-title {
-  text-align: center;
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 0.3rem;
-}
-.subtitle {
-  text-align: center;
-  color: #6b7280;
-  margin-bottom: 1.5rem;
-}
+<style nonce="<%= nonce %>">
+  :root{
+    --radius:12px;
+    --gap:clamp(.6rem, 2.5vw, .9rem);
+    --bg:#fff; --text:#111827; --muted:#6b7280; --border:#e5e7eb; --focus:#2563eb;
+  }
 
-/* ✨ Flash messages */
-.flash {
-  padding: 0.8rem 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  font-weight: 500;
-  text-align: center;
-  animation: fadeIn 0.4s ease;
-}
-.flash-success {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-.flash-error {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-}
-.flash.fade-out {
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: opacity 0.6s, transform 0.6s;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 
-/* 🧾 Form styling */
-.shipment-form {
-  background: var(--form-bg, #fff);
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  padding: 1.5rem;
-}
-.form-group {
-  margin-bottom: 1rem;
-}
-.form-group-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 0.3rem;
-}
-input, select, textarea {
-  width: 100%;
-  padding: 0.6rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 1rem;
-}
-textarea {
-  resize: vertical;
-}
-.required {
-  color: #dc2626;
-}
-.form-actions {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 1.5rem;
-}
+  /* Container — no fixed max-width on mobile, soft cap on larger screens */
+  .dashboard-home{
+    padding:clamp(.75rem, 2.5vw, 1rem);
+    margin:0 auto;
+    width:min(100%, 680px);
+  }
 
-/* 🎨 Buttons */
-.btn {
-  display: inline-block;
-  font-weight: 600;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 0.6rem 1.2rem;
-  transition: background 0.2s ease;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-}
-.btn-primary:hover {
-  background: #1d4ed8;
-}
-.btn-secondary {
-  background: #e5e7eb;
-  color: #111827;
-}
-.btn-secondary:hover {
-  background: #d1d5db;
-}
+  .page-title{ text-align:center; font-size:clamp(1.1rem, 4.2vw, 1.6rem); font-weight:800; margin-bottom:.25rem; color:var(--text); }
+  .subtitle{ text-align:center; color:var(--muted); margin-bottom:clamp(.6rem, 2.8vw, 1rem); font-size:clamp(.9rem, 3.4vw, .95rem); }
 
-/* 🌙 Dark mode adjustments */
-.dark-theme .shipment-form {
-  background: #1f2937;
-  color: #f3f4f6;
-}
-.dark-theme input, 
-.dark-theme select, 
-.dark-theme textarea {
-  background: #111827;
-  color: #f9fafb;
-  border-color: #374151;
-}
-.dark-theme .btn-secondary {
-  background: #374151;
-  color: #e5e7eb;
-}
-.dark-theme .flash-success { background: #064e3b; color: #d1fae5; }
-.dark-theme .flash-error { background: #7f1d1d; color: #fee2e2; }
+  /* Flash */
+  .flash{ padding:.75rem 1rem; border-radius:var(--radius); margin-bottom:.8rem; font-weight:600; text-align:center; }
+  .flash-success{ background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .flash-error{ background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+  .flash.fade-out{ opacity:0; transform:translateY(-8px); transition:opacity .6s, transform .6s; }
+
+  /* Card/Form */
+  .shipment-form{
+    background:var(--bg); border-radius:var(--radius);
+    box-shadow:0 2px 6px rgba(0,0,0,.06);
+    padding:clamp(.8rem, 3.2vw, 1rem);
+    overflow-wrap:anywhere; /* prevent overflow on long tokens */
+  }
+
+  .form-group{ margin-bottom:var(--gap); }
+  .form-group-grid{
+    display:grid; gap:clamp(.55rem, 2.5vw, .8rem);
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr); /* prevents overflow */
+  }
+
+  .fieldset{ border:1px solid var(--border); padding:clamp(.6rem, 2.6vw, .8rem); border-radius:var(--radius); margin-bottom:var(--gap); }
+  .fieldset>legend{ padding:0 .35rem; color:var(--muted); font-weight:700; font-size:clamp(.9rem, 3.5vw, .95rem); }
+
+  label{ display:block; font-weight:700; margin-bottom:.35rem; font-size:clamp(.92rem, 3.4vw, .98rem); color:var(--text); }
+  .muted{ color:var(--muted); font-weight:400; }
+
+  input, select, textarea{
+    width:100%; padding:clamp(.55rem, 2.8vw, .7rem) clamp(.6rem, 2.8vw, .75rem);
+    border:1px solid #d1d5db; border-radius:10px;
+    font-size:clamp(.95rem, 3.6vw, 1rem);
+    background:#fff; color:#111827; -webkit-tap-highlight-color:transparent;
+  }
+  textarea{ resize:vertical; min-height:84px; }
+
+  /* Custom select arrow (disabled on tiny screens to avoid overflow) */
+  .select-wrap{ position:relative; }
+  .select-wrap select{
+    appearance:none;
+    background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%), linear-gradient(135deg, #6b7280 50%, transparent 50%);
+    background-position: calc(100% - 16px) calc(1em + 2px), calc(100% - 11px) calc(1em + 2px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat:no-repeat;
+  }
+  @media (max-width:420px){
+    .select-wrap select{ background-image:none; } /* avoid pushing content */
+  }
+
+  input:focus, select:focus, textarea:focus{
+    outline:2px solid #2563eb22; border-color:var(--focus); box-shadow:0 0 0 3px #2563eb20;
+  }
+
+  .form-actions{
+    display:flex; gap:.6rem; justify-content:space-between; align-items:center; margin-top:1rem;
+  }
+
+  /* Buttons */
+  .btn{ display:inline-block; font-weight:800; text-decoration:none; border:none; cursor:pointer; border-radius:10px;
+        padding:clamp(.6rem, 2.8vw, .75rem) clamp(.9rem, 3.8vw, 1rem);
+        transition:transform .06s ease, background .2s ease; text-align:center; }
+  .btn:active{ transform:scale(.99); }
+  .btn-primary{ background:#2563eb; color:#fff; }
+  .btn-primary:hover{ background:#1d4ed8; }
+  .btn-secondary{ background:#e5e7eb; color:#111827; }
+  .btn-secondary:hover{ background:#d1d5db; }
+  .btn-block{ width:100%; }
+
+  /* Fixed sticky actions (always fits screen width) */
+  .sticky-actions{
+    position:fixed; left:0; right:0; bottom:0;
+    display:none; gap:.5rem;
+    background:color-mix(in srgb, #ffffff 85%, transparent);
+    backdrop-filter:saturate(140%) blur(8px);
+    padding:.6rem clamp(.6rem, 3vw, 1rem);
+    padding-bottom: calc(.6rem + env(safe-area-inset-bottom));
+    border-top:1px solid var(--border);
+    z-index:1000;
+  }
+
+  /* Dark mode */
+  .dark-theme .shipment-form{ background:#1f2937; color:#f3f4f6; }
+  .dark-theme input, .dark-theme select, .dark-theme textarea{ background:#111827; color:#f9fafb; border-color:#374151; }
+  .dark-theme .btn-secondary{ background:#374151; color:#e5e7eb; }
+  .dark-theme .flash-success{ background:#064e3b; color:#d1fae5; }
+  .dark-theme .flash-error{ background:#7f1d1d; color:#fee2e2; }
+  .dark-theme .sticky-actions{ background:color-mix(in srgb, #111827 85%, transparent); border-color:#374151; }
+
+  /* Small screens first */
+  @media (max-width: 720px){
+    .dashboard-home{ width:100%; } /* never exceed viewport */
+  }
+  @media (max-width: 640px){
+    .form-group-grid{ grid-template-columns: minmax(0,1fr); } /* stack earlier */
+    .form-actions{ display:none; }       /* hide regular actions */
+    .sticky-actions{ display:grid; grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 360px){
+    .sticky-actions{ grid-template-columns: 1fr; }
+  }
+
+  /* Modern mobile viewport units if supported */
+  @supports (width: 100dvw){
+    .sticky-actions{ left:0; right:0; width:100dvw; }
+    .dashboard-home{ width:min(100dvw, 680px); }
+  }
 </style>
 
-<!-- ✅ CSP-Safe Inline Script -->
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
+  // Auto-fade flash
   const flash = document.getElementById("flashMessage");
   if (flash) {
     setTimeout(() => {
@@ -217,5 +317,16 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => flash.remove(), 600);
     }, 5000);
   }
+
+  // Quantity guard when product selected
+  const product = document.getElementById('productId');
+  const qty = document.getElementById('quantity');
+  product?.addEventListener('change', () => {
+    const n = Number(qty.value);
+    if (!Number.isFinite(n) || n < 1) qty.value = '1';
+  });
+
+  // Prevent accidental wheel on number inputs (desktop)
+  qty?.addEventListener('wheel', (e) => { e.target.blur(); }, { passive: true });
 });
 </script>

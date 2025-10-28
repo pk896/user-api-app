@@ -1,5 +1,6 @@
 // models/Cart.js
 /*const mongoose = require("mongoose");
+const { mongoose } = require('../db'); // <-- use the shared instance
 
 const cartItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },

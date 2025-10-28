@@ -1,3 +1,4 @@
+<!-- views/orders-admin.ejs -->
 <% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
 <main class="page">
   <header class="head">
@@ -23,11 +24,12 @@
             <th>Fee / Net</th>
             <th>Capture</th>
             <th>PayPal</th>
+            <th>Shipment</th> <!-- NEW -->
             <th>Refund</th>
           </tr>
         </thead>
         <tbody id="rows">
-          <tr><td colspan="9" class="muted">Loading…</td></tr>
+          <tr><td colspan="10" class="muted">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -56,6 +58,14 @@
   #flash .ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399;padding:.5rem;border-radius:10px;margin-top:.6rem}
   #flash .err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;padding:.5rem;border-radius:10px;margin-top:.6rem}
   .back{border:1px solid #d1d5db;border-radius:8px;padding:.4rem .6rem;text-decoration:none}
+
+  /* shipment badge colors */
+  .ship-badge{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.78rem;border:1px solid #d1d5db;background:#fff;color:#111827}
+  .ship-processing{background:#ede9fe;border-color:#c4b5fd}
+  .ship-in-transit{background:#dbeafe;border-color:#93c5fd}
+  .ship-delivered{background:#ecfdf5;border-color:#34d399;color:#065f46}
+  .ship-canceled,.ship-cancelled{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+  .ship-muted{color:#6b7280}
 </style>
 
 <script nonce="<%= NONCE %>">
@@ -73,12 +83,23 @@
     const ok = (s === 'COMPLETED' || s === 'APPROVED' || s === 'CAPTURED');
     return `<span class="pill ${ok?'pill-ok':'pill-pend'}">${s||'—'}</span>`;
   }
+  function shipPill(s){
+    if(!s) return `<span class="ship-badge ship-muted">—</span>`;
+    const n = String(s||'').toLowerCase().replace(' ', '-');
+    const cls =
+      n === 'processing'   ? 'ship-processing' :
+      n === 'in-transit'   ? 'ship-in-transit' :
+      n === 'delivered'    ? 'ship-delivered' :
+      (n === 'canceled' || n === 'cancelled') ? 'ship-canceled' :
+      'ship-muted';
+    return `<span class="ship-badge ${cls}">${s}</span>`;
+  }
   function setFlash(ok,msg){
     flash.innerHTML = `<div class="${ok?'ok':'err'}">${msg}</div>`;
   }
 
   async function load(){
-    rowsEl.innerHTML = `<tr><td colspan="9" class="muted">Loading…</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="10" class="muted">Loading…</td></tr>`;
     try{
       const r = await fetch('/api/admin/orders?limit=100', { credentials:'same-origin' });
       const data = await r.json();
@@ -86,7 +107,7 @@
       window.__ORDERS = data.orders || [];
       render();
     }catch(e){
-      rowsEl.innerHTML = `<tr><td colspan="9" class="muted">Failed to load.</td></tr>`;
+      rowsEl.innerHTML = `<tr><td colspan="10" class="muted">Failed to load.</td></tr>`;
       setFlash(false, 'Could not load orders.');
     }
   }
@@ -101,15 +122,22 @@
     });
 
     if(!list.length){
-      rowsEl.innerHTML = `<tr><td colspan="9" class="muted">No orders.</td></tr>`;
+      rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No orders.</td></tr>`;
       return;
     }
 
     rowsEl.innerHTML = list.map(o=>{
       const payPalLink = o.captureId ? (PP_ACTIVITY_BASE + encodeURIComponent(o.captureId)) : '';
+      const trackHref  = o.orderId ? (`/shipments/track?prefill=${encodeURIComponent(o.orderId)}`) : '';
+      const ship       = o.shipment || null;
+      const shipStatus = ship?.status || null;
+      const shipTrk    = ship?.trackingNumber || null;
+
       return `<tr data-order="${o.orderId}" data-capture="${o.captureId||''}">
         <td><span class="muted">${new Date(o.createdAt).toLocaleString()}</span></td>
-        <td><code>${o.orderId}</code></td>
+        <td>
+          ${o.orderId ? `<a class="link" href="${trackHref}" title="Track shipment">${o.orderId}</a>` : `<code>${o.orderId||''}</code>`}
+        </td>
         <td>${pill(o.status)}</td>
         <td>
           ${o.payerName ? o.payerName+'<br/>' : '' }
@@ -122,6 +150,11 @@
         </td>
         <td>${o.captureId ? `<code>${o.captureId}</code>` : '—'}</td>
         <td>${payPalLink ? `<a class="link" target="_blank" rel="noopener" href="${payPalLink}">Open</a>` : '<span class="muted">—</span>'}</td>
+        <td>
+          ${shipStatus ? `${shipPill(shipStatus)}${shipTrk?`<div class="muted"># ${shipTrk}</div>`:''}
+          <div><a class="link" href="${trackHref}">Track</a></div>` :
+          `${o.orderId?`<a class="link" href="${trackHref}">Create / Track</a>`:'<span class="muted">—</span>'}`}
+        </td>
         <td>
           ${o.captureId ? `
             <div class="refund-wrap">
@@ -168,8 +201,7 @@
       }
       setFlash(true, `Refund ${data.refund?.id || ''} submitted (${data.refund?.status || 'OK'}).`);
       amountEl.value = '';
-      // reload list to reflect refundedTotal (if you show it later)
-      await load();
+      await load(); // refresh to reflect changes
     }catch(e){
       console.error(e);
       setFlash(false, e.message || 'Refund failed.');

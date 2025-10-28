@@ -1,5 +1,6 @@
 // models/ContactMessage.js
-const mongoose = require("mongoose");
+//const mongoose = require("mongoose");
+const { mongoose } = require('../db'); // <-- use the shared instance
 
 const contactMessageSchema = new mongoose.Schema({
   business: {

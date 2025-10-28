@@ -8,6 +8,7 @@ const {
   DeleteObjectCommand,
 } = require("@aws-sdk/client-s3");
 const Product = require("../models/Product");
+const Shipment = require("../models/Shipment");
 const requireBusiness = require("../middleware/requireBusiness");
 
 const router = express.Router();
@@ -192,29 +193,7 @@ router.post(
   }
 );
 
-// PUBLIC: view a product by customId (no auth)
-router.get("/view/:id", async (req, res) => {
-  try {
-    const product = await Product.findOne({ customId: req.params.id }).lean();
-    if (!product) {
-      req.flash("error", "❌ Product not found.");
-      return res.redirect("/products/sales"); // or wherever your shop is
-    }
 
-    res.render("product-details", {
-      title: product.name,
-      product,
-      business: req.session.business || null, // your EJS already checks this
-      success: req.flash("success"),
-      error: req.flash("error"),
-      themeCss: res.locals.themeCss,
-    });
-  } catch (err) {
-    console.error("❌ Public product details error:", err);
-    req.flash("error", "❌ Could not load product.");
-    res.redirect("/products/sales");
-  }
-});
 
 
 /* ===========================================================
@@ -242,9 +221,107 @@ router.get("/all", requireBusiness, async (req, res) => {
   }
 });
 
-/* ===========================================================
- * 🔍 GET: Product Details (only own)
- * =========================================================== */
+// Add near bottom of routes/products.js
+router.get("/stats/summary", requireBusiness, async (req, res) => {
+  try {
+    const bizId = req.session.business._id;
+    const prods = await Product.find({ business: bizId }).select("name stock soldCount soldOrders").lean();
+    res.json({ ok: true, products: prods });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, message: "Failed to load" });
+  }
+});
+
+// routes/products.js
+
+// --- PUBLIC: view a product by customId (no auth)
+// PLACE THIS ABOVE the business-only "/:id" route
+router.get("/view/:id", async (req, res) => {
+  try {
+    const customId = String(req.params.id || "").trim();
+    if (!customId) {
+      req.flash("error", "❌ Invalid product id.");
+      return res.redirect("/products/sales");
+    }
+
+    const product = await Product.findOne({ customId }).lean();
+    if (!product) {
+      req.flash("error", "❌ Product not found.");
+      return res.redirect("/products/sales");
+    }
+
+    // Shipment counters (defensive)
+    const [inTransitRes, deliveredRes] = await Promise.allSettled([
+      Shipment.countDocuments({ product: product._id, status: "In Transit" }),
+      Shipment.countDocuments({ product: product._id, status: "Delivered" }),
+    ]);
+
+    const shipmentStats = {
+      inTransit: inTransitRes.status === "fulfilled" ? Number(inTransitRes.value || 0) : 0,
+      delivered: deliveredRes.status === "fulfilled" ? Number(deliveredRes.value || 0) : 0,
+    };
+
+    // ✅ IMPORTANT: render without a leading slash
+    return res.render("product-details", {
+      title: product.name,
+      product,
+      shipmentStats,
+      business: req.session.business || null,
+      success: req.flash("success"),
+      error: req.flash("error"),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error("❌ Public product details error:", err);
+    req.flash("error", "❌ Could not load product.");
+    return res.redirect("/products/sales");
+  }
+});
+
+// BUSINESS-ONLY: view a product you own by customId
+router.get("/:id", requireBusiness, async (req, res) => {
+  try {
+    const customId = String(req.params.id || "").trim();
+    const business = req.session.business;
+
+    if (!business || !business._id) {
+      req.flash("error", "❌ Unauthorized. Please log in.");
+      return res.redirect("/business/login");
+    }
+
+    const product = await Product.findOne({
+      customId,
+      business: business._id,
+    }).lean();
+
+    if (!product) {
+      req.flash("error", "❌ Product not found or unauthorized.");
+      return res.redirect("/products/all");
+    }
+
+    // Provide defaults so the view never breaks
+    const shipmentStats = { inTransit: 0, delivered: 0 };
+
+    return res.render("product-details", {
+      title: product.name,
+      product,
+      shipmentStats,                        // ✅ consistent with public route
+      business,
+      success: req.flash("success"),
+      error: req.flash("error"),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error("❌ Error loading product details:", err);
+    req.flash("error", "❌ Could not load product details.");
+    return res.redirect("/products/all");
+  }
+});
+
+// routes/products.js  (business-only details)
 router.get("/:id", requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
@@ -258,13 +335,18 @@ router.get("/:id", requireBusiness, async (req, res) => {
       return res.redirect("/products/all");
     }
 
+    // provide defaults so the view never breaks
+    const shipmentStats = { inTransit: 0, delivered: 0 };
+
     res.render("product-details", {
       title: product.name,
       product,
+      shipmentStats,            // ✅ add this
       business,
       success: req.flash("success"),
       error: req.flash("error"),
       themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,  // (optional but consistent)
     });
   } catch (err) {
     console.error("❌ Error loading product details:", err);

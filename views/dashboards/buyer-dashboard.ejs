@@ -1,8 +1,14 @@
-<section class="dashboard-home">
-  <h1 class="page-title">🛒 Welcome, <%= business.name %>!</h1>
-  <p class="subtitle">Track your orders, connect with admin, and explore new products.</p>
+<div class="pill in-transit">
+  🚚 In transit: <strong><%= (shipStats && shipStats.inTransit) || 0 %></strong>
+</div>
+<div class="pill delivered">
+  ✅ Delivered: <strong><%= (shipStats && shipStats.delivered) || 0 %></strong>
+</div>
 
-  <!-- ✅ Flash Messages -->
+<section class="dashboard-home">
+  <h1 class="page-title">🛒 Welcome, <%= business.name %>! (buyer D)</h1>
+  <p class="subtitle">Track your orders and the products you purchased.</p>
+
   <% if (success && success.length > 0) { %>
     <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
   <% } %>
@@ -12,33 +18,43 @@
 
   <!-- 📊 Order Stats -->
   <section class="stats-grid">
-    <div class="stat-card"><h2>💼 Total Orders</h2><p class="stat-number"><%= totalOrders %></p></div>
-    <div class="stat-card"><h2>✅ Completed</h2><p class="stat-number"><%= completedOrders %></p></div>
-    <div class="stat-card"><h2>⏳ Pending</h2><p class="stat-number"><%= pendingOrders %></p></div>
+    <div class="stat-card"><h2>💼 Total Orders</h2><p class="stat-number"><%= totalOrders || 0 %></p></div>
+    <div class="stat-card"><h2>✅ Completed</h2><p class="stat-number"><%= completedOrders || 0 %></p></div>
+    <div class="stat-card"><h2>⏳ Pending</h2><p class="stat-number"><%= pendingOrders || 0 %></p></div>
     <a href="/shipments/track" class="btn btn-primary">🚚 Track Shipment</a>
+    <a href="/buyer/demands/add" class="btn btn-secondary">📝 Add Demand</a>
+    <a href="/buyer/demands" class="btn btn-secondary">📋 My Demands</a>
+  </section>
 
-    <div class="stat-card messages">
-      <h2>💬 Messages</h2>
-      <p class="stat-number">
-        <%= stats.totalMessages || 0 %>
-        <% if (stats.unreadMessages > 0) { %>
-          <span id="unreadBadge" class="badge"><%= stats.unreadMessages %> New</span>
-        <% } %>
-      </p>
-      <button class="btn small open-msg-btn">📨 View Messages</button>
-    </div>
+  <!-- 🧾 Products you ordered -->
+  <section class="recent-section">
+    <h2>🧾 Products You Purchased</h2>
+    <% if (orderedProducts && orderedProducts.length) { %>
+      <ul class="order-list">
+        <% orderedProducts.forEach(p => { %>
+          <li>
+            <% if (p.imageUrl) { %><img class="thumb" src="<%= p.imageUrl %>" alt=""><% } %>
+            <strong><a href="/products/view/<%= p.customId %>"><%= p.name %></a></strong>
+            — $<%= Number(p.price || 0).toFixed(2) %>
+            <% if (p.category) { %> | <span class="muted">Category: <%= p.category %></span> <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <p>No purchased products yet.</p>
+    <% } %>
   </section>
 
   <!-- 🧾 Recent Orders -->
   <section class="recent-section">
-    <h2>🧾 Recent Orders</h2>
+    <h2>🧾 Your Recent Orders</h2>
     <% if (orders && orders.length > 0) { %>
       <ul class="order-list">
         <% orders.forEach(o => { %>
           <li>
-            <strong>Order ID:</strong> <%= o._id %> |
-            <strong>Status:</strong> <%= o.status %> |
-            <strong>Total:</strong> $<%= o.total ? o.total.toFixed(2) : '0.00' %>
+            <strong>Order ID:</strong> <%= o.orderId || o._id %> |
+            <strong>Status:</strong> <%= o.status || 'N/A' %> |
+            <strong>Total:</strong> <%= o.amount && o.amount.value ? ('$' + o.amount.value) : '—' %>
           </li>
         <% }) %>
       </ul>
@@ -46,160 +62,29 @@
       <p>You haven’t placed any orders yet.</p>
     <% } %>
   </section>
-
-  <div class="actions">
-    <a href="/products/all" class="btn btn-primary">🛍️ Browse Products</a>
-  </div>
 </section>
 
-<!-- 🪟 Messages Modal -->
-<div id="messageModal" class="modal hidden">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <h3>📨 Your Conversation</h3>
-    <div id="threadContainer" class="thread"></div>
-    <form id="replyForm" class="reply-form" method="POST">
-      <textarea name="reply" rows="2" placeholder="Write your reply..." required></textarea>
-      <button type="submit" class="btn reply-btn">📩 Send Reply</button>
-    </form>
-  </div>
-</div>
-
-<!-- ✅ Scoped Styles -->
+<!-- styles (reuse your existing styles and add small bits) -->
 <style>
-  .dashboard-home { padding:1rem; }
-  .page-title { margin-top:1rem; font-size:2rem; font-weight:700; text-align:center; }
-  .subtitle { color:#6b7280; margin-bottom:1.5rem; text-align:center; }
-
-  /* Flash */
-  .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500;
-           animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s,transform .6s; }
-  .flash-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
-  .flash-error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
-  .flash.fade-out { opacity:0; transform:translateY(-10px); }
-  @keyframes fadeIn { from{opacity:0; transform:translateY(-5px);} to{opacity:1; transform:translateY(0);} }
-
-  /* Stats */
-  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; margin-bottom:2rem; }
-  .stat-card { background:#f3f4f6; padding:1.2rem; border-radius:.75rem;
-               box-shadow:0 2px 5px rgba(0,0,0,0.08); text-align:center; transition:transform .2s,box-shadow .2s; }
-  .stat-card:hover { transform:translateY(-3px); box-shadow:0 4px 8px rgba(0,0,0,0.1); }
-  .dark-theme .stat-card { background:#1f2937; color:#f9fafb; }
-  .stat-number { font-size:1.8rem; font-weight:bold; color:#2563eb; }
-  .badge { background:#ef4444; color:#fff; font-size:.75rem; padding:.2rem .5rem;
-           border-radius:999px; margin-left:.4rem; font-weight:600; }
-
-  /* Orders */
-  .order-list { list-style:none; padding:0; margin:0; }
-  .order-list li { padding:.6rem .8rem; margin-bottom:.5rem; border-radius:.5rem;
-                   background:#f9fafb; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
-  .dark-theme .order-list li { background:#111827; color:#e5e7eb; }
-
-  .actions { text-align:center; margin-top:1.5rem; }
-  .btn { display:inline-block; padding:.6rem 1rem; border-radius:.5rem;
-         text-decoration:none; font-weight:600; transition:background .2s ease; }
-  .btn-primary { background:#2563eb; color:#fff; }
-  .btn-primary:hover { background:#1d4ed8; }
-  .btn.small { padding:0.4rem 0.8rem; font-size:0.85rem; background:#10b981; color:#fff; }
-  .btn.small:hover { background:#059669; }
-
-  /* Modal */
-  .modal { position:fixed; top:0; left:0; width:100%; height:100%;
-           background:rgba(0,0,0,0.5); display:flex; align-items:center;
-           justify-content:center; z-index:1000; }
-  .modal.hidden { display:none; }
-  .modal-content { background:#fff; border-radius:10px; padding:1.2rem;
-                   width:90%; max-width:600px; position:relative; }
-  .close-btn { position:absolute; top:10px; right:15px; font-size:1.5rem; cursor:pointer; }
-  .thread { margin:1rem 0; max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:0.4rem; }
-  .bubble { max-width:80%; padding:0.6rem 0.9rem; border-radius:10px; word-wrap:break-word; }
-  .bubble.business { background:#16a34a; color:#fff; align-self:flex-start; border-bottom-left-radius:0; }
-  .bubble.admin { background:#2563eb; color:#fff; align-self:flex-end; border-bottom-right-radius:0; }
-  .reply-form textarea { width:100%; padding:0.6rem; border-radius:6px; border:1px solid #ccc; }
-  .btn.reply-btn { background:#2563eb; color:#fff; border:none;
-                   padding:0.6rem 1.2rem; border-radius:6px; margin-top:0.4rem; cursor:pointer; }
-  .btn.reply-btn:hover { background:#1d4ed8; }
+  .pill { display:inline-block; margin:.25rem .5rem; padding:.35rem .6rem; border-radius:999px; font-weight:700; }
+  .pill.in-transit { background:#eef2ff; color:#3730a3; }
+  .pill.delivered { background:#dcfce7; color:#166534; }
+  .thumb { width:40px; height:40px; object-fit:cover; border-radius:.4rem; margin-right:.35rem; vertical-align:middle; }
+  .btn.btn-secondary { background:#f3f4f6; color:#111; margin-left:.5rem; }
+  .btn.btn-secondary:hover { background:#e5e7eb; }
 </style>
 
-<!-- ✅ CSP-Safe Inline Script -->
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("🛒 Buyer dashboard loaded ✅");
-
-  // 🔢 Stat counter animation
   document.querySelectorAll(".stat-number").forEach(n => {
     const target = +n.textContent || 0;
-    let count = 0, step = Math.ceil(target / 40);
-    const interval = setInterval(() => {
-      count += step;
-      if (count >= target) { count = target; clearInterval(interval); }
-      n.textContent = count;
-    }, 25);
+    let c = 0, step = Math.ceil(Math.max(1, target/40));
+    const id = setInterval(()=>{ c+=step; if(c>=target){c=target; clearInterval(id);} n.textContent=c; }, 25);
   });
-
-  // 💬 Flash auto-hide
   const flash = document.getElementById("flashMessage");
   if (flash) {
-    setTimeout(() => { flash.classList.add("fade-out"); setTimeout(() => flash.remove(), 600); }, 5000);
-    flash.addEventListener("click", () => { flash.classList.add("fade-out"); setTimeout(() => flash.remove(), 600); });
+    setTimeout(()=>{ flash.classList.add("fade-out"); setTimeout(()=>flash.remove(),600); }, 5000);
+    flash.addEventListener("click", ()=>{ flash.classList.add("fade-out"); setTimeout(()=>flash.remove(),600); });
   }
-
-  // 🪟 Modal logic
-  const modal = document.getElementById("messageModal");
-  const closeBtn = document.querySelector(".close-btn");
-  const threadContainer = document.getElementById("threadContainer");
-  const replyForm = document.getElementById("replyForm");
-  const openMsgBtn = document.querySelector(".open-msg-btn");
-
-  openMsgBtn.addEventListener("click", async () => {
-    modal.classList.remove("hidden");
-    threadContainer.innerHTML = "<p>Loading your messages...</p>";
-
-    try {
-      const res = await fetch("/contact/api/messages/mine");
-      const data = await res.json();
-
-      threadContainer.innerHTML = "";
-      if (data.thread && data.thread.length > 0) {
-        data.thread.forEach(t => {
-          const div = document.createElement("div");
-          div.className = "bubble " + (t.sender === "admin" ? "admin" : "business");
-          div.innerHTML = `<p>${t.message}</p><small>${new Date(t.timestamp).toLocaleString()}</small>`;
-          threadContainer.appendChild(div);
-        });
-        replyForm.action = "/contact/business/reply/" + data._id;
-        await fetch("/contact/mark-read/" + data._id, { method:"PATCH" });
-      } else {
-        threadContainer.innerHTML = "<p>No messages yet.</p>";
-      }
-    } catch (err) {
-      console.error("⚠️ Error fetching messages:", err);
-      threadContainer.innerHTML = "<p>Could not load conversation.</p>";
-    }
-  });
-
-  closeBtn.addEventListener("click",()=>modal.classList.add("hidden"));
-  modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.add("hidden");});
-
-  // 🔁 Auto-refresh unread badge
-  const unreadBadge=document.getElementById("unreadBadge");
-  async function refreshUnread(){
-    try{
-      const res=await fetch("/contact/unread-count");
-      if(!res.ok)return;
-      const data=await res.json();
-      if(data.success && data.unreadCount>0){
-        unreadBadge.textContent=`${data.unreadCount} New`;
-        unreadBadge.style.display="inline-block";
-      }else if(unreadBadge){
-        unreadBadge.style.display="none";
-      }
-    }catch(e){
-      console.warn("⚠️ refresh fail:",e);
-    }
-  }
-  refreshUnread();
-  setInterval(refreshUnread,30000); // every 30s
 });
 </script>
-

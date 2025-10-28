@@ -1,5 +1,8 @@
 <section class="dashboard-home">
-  <h1 class="page-title">🚚 Welcome, <%= business.name %>!</h1>
+  <h1 class="page-title">
+    🚚 Welcome, <%= business.name %>!
+    <span class="role-badge <%= business.role %>"><%= (business.role || 'unknown').toUpperCase() %></span>
+  </h1>
   <p class="subtitle">Monitor shipments, manage inventory, and communicate with admin.</p>
 
   <!-- ✅ Flash Messages -->
@@ -12,15 +15,42 @@
 
   <!-- 📦 Stats Overview -->
   <section class="stats-grid">
-    <div class="stat-card"><h2>📦 Products</h2><p class="stat-number"><%= totalProducts %></p></div>
-    <div class="stat-card"><h2>🚛 Shipments</h2><p class="stat-number"><%= totalShipments %></p><a href="/shipments" class="btn btn-primary">Manage</a></div>
-    <div class="stat-card"><h2>🕒 Pending</h2><p class="stat-number"><%= pendingShipments %></p></div>
+    <div class="stat-card">
+      <h2>📦 Products</h2>
+      <p class="stat-number"><%= totalProducts || 0 %></p>
+    </div>
+
+    <div class="stat-card">
+      <h2>🚛 Shipments</h2>
+      <p class="stat-number"><%= totalShipments || 0 %></p>
+      <a href="/shipments" class="btn btn-primary">Manage</a>
+    </div>
+
+    <div class="stat-card">
+      <h2>🕒 Pending</h2>
+      <p class="stat-number"><%= pendingShipments || 0 %></p>
+    </div>
+
+    <div class="stat-card">
+      <h2>📦 In Stock</h2>
+      <p class="stat-number"><%= inStock || 0 %></p>
+    </div>
+
+    <div class="stat-card">
+      <h2>⚠️ Low Stock</h2>
+      <p class="stat-number"><%= lowStock || 0 %></p>
+    </div>
+
+    <div class="stat-card">
+      <h2>❌ Out of Stock</h2>
+      <p class="stat-number"><%= outOfStock || 0 %></p>
+    </div>
 
     <div class="stat-card messages">
       <h2>💬 Messages</h2>
       <p class="stat-number">
-        <%= stats.totalMessages || 0 %>
-        <% if (stats.unreadMessages > 0) { %>
+        <%= (stats && stats.totalMessages) || 0 %>
+        <% if (stats && stats.unreadMessages > 0) { %>
           <span id="unreadBadge" class="badge"><%= stats.unreadMessages %> New</span>
         <% } %>
       </p>
@@ -28,7 +58,7 @@
     </div>
   </section>
 
-  <!-- 🧾 Recent Shipments -->
+  <!-- 📋 Recent Shipments -->
   <section class="recent-section">
     <h2>📋 Recent Shipments</h2>
     <% if (shipments && shipments.length > 0) { %>
@@ -37,7 +67,8 @@
           <li>
             <strong>Order:</strong> <%= s.orderId ? s.orderId.toString() : 'N/A' %> |
             <strong>Status:</strong> <%= s.status %> |
-            <strong>Updated:</strong> <%= s.updatedAt ? s.updatedAt.toDateString() : '—' %>
+            <% if (s.product) { %><strong>Product:</strong> <%= s.product.name %> (ID: <%= s.product.customId %>) | <% } %>
+            <strong>Updated:</strong> <%= s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '—' %>
           </li>
         <% }) %>
       </ul>
@@ -65,6 +96,11 @@
   .dashboard-home { padding:1rem; }
   .page-title { margin-top:1rem; font-size:2rem; font-weight:700; text-align:center; }
   .subtitle { color:#6b7280; margin-bottom:1.5rem; text-align:center; }
+
+  .role-badge { margin-left:.5rem; padding:.2rem .55rem; font-size:.75rem; border-radius:999px; font-weight:700; }
+  .role-badge.seller { background:#dbeafe; color:#1d4ed8; }
+  .role-badge.supplier { background:#dcfce7; color:#166534; }
+  .role-badge.buyer { background:#fde68a; color:#92400e; }
 
   /* Flash messages */
   .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500; animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s,transform .6s; }
@@ -110,8 +146,6 @@
 <!-- ✅ CSP-Safe Inline Script -->
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("🚚 Supplier dashboard loaded ✅");
-
   // 🔢 Animate numbers
   document.querySelectorAll(".stat-number").forEach(n => {
     const target = +n.textContent || 0;
@@ -186,4 +220,3 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(refreshUnread,30000);
 });
 </script>
-

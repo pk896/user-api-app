@@ -1,0 +1,585 @@
+<section class="dashboard-home">
+  <h1 class="page-title">📋 My Demands</h1>
+
+  <% if (error && error.length) { %>
+    <div class="flash flash-error">❌ <%= error %></div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="flash flash-success">✅ <%= success %></div>
+  <% } %>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Requests</div>
+      <div class="kpi-value" id="kpiTotalRequests">0</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Unique Product Names</div>
+      <div class="kpi-value" id="kpiUniqueNames">0</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Quantity</div>
+      <div class="kpi-value" id="kpiTotalQty">0</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <input id="searchName" type="search" placeholder="🔎 Search by product name..." />
+    <select id="filterType">
+      <option value="">All Types</option>
+      <!-- options filled by script -->
+    </select>
+    <select id="filterStatus">
+      <option value="">All Statuses</option>
+      <!-- options filled by script -->
+    </select>
+    <button id="clearFilters" class="btn btn-secondary">Clear</button>
+    <a class="btn btn-primary" href="/demands/add" style="margin-left:auto;">➕ New Demand</a>
+  </div>
+
+  <% if (demands && demands.length) { %>
+    <table class="nice-table" id="tableMyDemands" style="margin-top:.6rem;">
+      <thead>
+        <tr>
+          <th>Requester</th>
+          <th>Type</th>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Location</th>
+          <th>Notes</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% demands.forEach(d => { 
+             const nm = (d.productName || '').trim();
+             const typ = (d.type || '').trim();
+             const loc = [d.country, d.province, d.city, d.town].filter(Boolean).join(", ");
+             const status = (d.status || '').trim();
+        %>
+          <tr class="row-demand"
+              data-name="<%= nm.toLowerCase() %>"
+              data-type="<%= typ.toLowerCase() %>"
+              data-status="<%= status.toLowerCase() %>"
+              data-qty="<%= Number(d.quantity || 0) %>">
+
+            <!-- Requester -->
+            <td class="col-requester">
+              <div class="val-business-name"><%= d.requester?.businessName || (business && business.name) || '—' %></div>
+              <div>
+                <span class="val-contact-name"><%= d.requester?.contactName || '—' %></span>
+                <span class="sep">—</span>
+                <span class="val-position"><%= d.requester?.position || '—' %></span>
+              </div>
+            </td>
+
+            <!-- Type -->
+            <td class="col-type">
+              <span class="val-type"><%= typ || '—' %></span>
+            </td>
+
+            <!-- Product -->
+            <td class="col-product">
+              <span class="val-product-name"><%= nm || '—' %></span>
+            </td>
+
+            <!-- Quantity -->
+            <td class="col-qty">
+              <span class="val-quantity"><%= Number(d.quantity || 0) %></span>
+            </td>
+
+            <!-- Location -->
+            <td class="col-location">
+              <% const _country = (d.country || '').trim(); %>
+              <% const _province = (d.province || '').trim(); %>
+              <% const _city = (d.city || '').trim(); %>
+              <% const _town = (d.town || '').trim(); %>
+
+              <% if (_country) { %><span class="val-country"><%= _country %></span><% } %>
+              <% if (_province) { %><span class="sep">•</span><span class="val-province"><%= _province %></span><% } %>
+              <% if (_city) { %><span class="sep">•</span><span class="val-city"><%= _city %></span><% } %>
+              <% if (_town) { %><span class="sep">•</span><span class="val-town"><%= _town %></span><% } %>
+              <% if (!_country && !_province && !_city && !_town) { %>—<% } %>
+            </td>
+
+            <!-- Notes -->
+            <td class="col-notes">
+              <span class="val-notes"><%= (d.notes || '').slice(0,120) %><%= (d.notes && d.notes.length > 120) ? '…' : '' %></span>
+            </td>
+
+            <!-- Status -->
+            <td class="col-status"><%= status || 'Open' %></td>
+
+            <!-- Created -->
+            <td class="col-created"><%= new Date(d.createdAt).toLocaleString() %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p>No demands yet.</p>
+  <% } %>
+</section>
+
+<script nonce="<%= nonce %>">
+(function(){
+  const $search = document.getElementById('searchName');
+  const $type   = document.getElementById('filterType');
+  const $status = document.getElementById('filterStatus');
+  const $clear  = document.getElementById('clearFilters');
+
+  const rows = Array.from(document.querySelectorAll('#tableMyDemands .row-demand'));
+
+  const kpiReq  = document.getElementById('kpiTotalRequests');
+  const kpiName = document.getElementById('kpiUniqueNames');
+  const kpiQty  = document.getElementById('kpiTotalQty');
+
+  // Build dropdown options from table data
+  const typeSet = new Set();
+  const statusSet = new Set();
+  rows.forEach(tr => {
+    const t = tr.dataset.type || '';
+    const s = tr.dataset.status || '';
+    if (t) typeSet.add(t);
+    if (s) statusSet.add(s);
+  });
+  Array.from(typeSet).sort().forEach(t => {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+    $type.appendChild(o);
+  });
+  Array.from(statusSet).sort().forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+    $status.appendChild(o);
+  });
+
+  function recomputeKPIs(visibleRows){
+    let totalReq = 0;
+    let totalQty = 0;
+    const names = new Set();
+
+    visibleRows.forEach(tr => {
+      totalReq += 1;
+      totalQty += Number(tr.dataset.qty || 0);
+      names.add((tr.dataset.name || '').trim());
+    });
+
+    if (kpiReq)  kpiReq.textContent  = String(totalReq);
+    if (kpiQty)  kpiQty.textContent  = String(totalQty);
+    if (kpiName) kpiName.textContent = String(names.size);
+  }
+
+  function applyFilters(){
+    const q = ($search.value || '').trim().toLowerCase();
+    const t = ($type.value   || '').trim().toLowerCase();
+    const s = ($status.value || '').trim().toLowerCase();
+
+    const visible = [];
+    rows.forEach(tr => {
+      const name = tr.dataset.name || '';
+      const typ  = tr.dataset.type || '';
+      const st   = tr.dataset.status || '';
+
+      const matchName   = !q || name.includes(q);
+      const matchType   = !t || typ === t;
+      const matchStatus = !s || st === s;
+
+      const show = matchName && matchType && matchStatus;
+      tr.style.display = show ? '' : 'none';
+      if (show) visible.push(tr);
+    });
+
+    recomputeKPIs(visible);
+  }
+
+  $search && $search.addEventListener('input', applyFilters);
+  $type && $type.addEventListener('change', applyFilters);
+  $status && $status.addEventListener('change', applyFilters);
+  $clear && $clear.addEventListener('click', function(){
+    if ($search) $search.value = '';
+    if ($type)   $type.value   = '';
+    if ($status) $status.value = '';
+    applyFilters();
+  });
+
+  // initial pass
+  applyFilters();
+})();
+</script>
+
+<style>
+  /* Reuse the same palette & components we used in demanded-products.ejs */
+  :root {
+    --col-green:        #16a34a;  /* business name */
+    --col-blue:         #2563eb;  /* contact name */
+    --col-navy:         #1f2937;  /* position / notes (navy-ish) */
+    --col-purple:       #7c3aed;  /* product name */
+    --col-maroon:       #7a1f2b;  /* type */
+    --col-violet:       #6d28d9;  /* quantity */
+    --col-teal:         #0f766e;  /* country */
+    --col-magenta:      #be185d;  /* province */
+    --col-orange:       #ea580c;  /* city */
+    --col-coral:        #cc5533;  /* town (coral/rust) */
+    --col-navyblue:     #1e3a8a;  /* notes */
+    --col-muted:        #6b7280;
+
+    --kpi-bg-1: #f0fdf4; /* light green */
+    --kpi-bg-2: #fff7ed; /* light orange */
+    --kpi-bg-3: #eef2ff; /* light indigo */
+    --kpi-fg-1: #166534;
+    --kpi-fg-2: #9a3412;
+    --kpi-fg-3: #4338ca;
+  }
+  body.dark-theme {
+    --col-navy:     #cbd5e1;
+    --col-navyblue: #93c5fd;
+    --kpi-bg-1: #052e16;
+    --kpi-bg-2: #431407;
+    --kpi-bg-3: #111827;
+    --kpi-fg-1: #86efac;
+    --kpi-fg-2: #fdba74;
+    --kpi-fg-3: #a5b4fc;
+  }
+
+  /* Cards & KPIs */
+  .kpi-grid {
+    display:grid; gap:.8rem; grid-template-columns: repeat(3, minmax(0,1fr));
+    margin:.5rem 0 1rem;
+  }
+  .kpi-card { padding:1rem; border:1px solid #e5e7eb; border-radius:.6rem; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .kpi-grid .kpi-card:nth-child(1) { background: var(--kpi-bg-1); color: var(--kpi-fg-1); border:none; }
+  .kpi-grid .kpi-card:nth-child(2) { background: var(--kpi-bg-2); color: var(--kpi-fg-2); border:none; }
+  .kpi-grid .kpi-card:nth-child(3) { background: var(--kpi-bg-3); color: var(--kpi-fg-3); border:none; }
+  .kpi-value { font-size:1.35rem; font-weight:700; letter-spacing: .2px; }
+
+  /* Filters */
+  .filters { display:flex; gap:.6rem; align-items:center; margin:.4rem 0 1rem; }
+  .filters input[type="search"], .filters select {
+    padding:.55rem .65rem; border:1px solid #d1d5db; border-radius:.45rem; box-shadow: 0 1px 0 rgba(0,0,0,.04);
+  }
+  .btn { padding:.5rem .8rem; border-radius:.45rem; border:0; cursor:pointer; }
+  .btn-primary { background:#2563eb; color:#fff; }
+  .btn-secondary { background:#f3f4f6; color:#111; }
+
+  /* Table */
+  .nice-table { width:100%; border-collapse: collapse; }
+  .nice-table th, .nice-table td { padding:.6rem .55rem; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align: top; }
+  .nice-table thead th { background:#f9fafb; font-weight:600; }
+  .nice-table tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
+  body.dark-theme .nice-table thead th { background:#111827; }
+  body.dark-theme .nice-table td, body.dark-theme .nice-table th { border-color:#374151; }
+  body.dark-theme .nice-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
+
+  /* Colored value classes */
+  .val-business-name { color: var(--col-green); font-weight: 700; }
+  .val-contact-name  { color: var(--col-blue); font-weight: 600; }
+  .val-position      { color: var(--col-navy); }
+  .val-product-name  { color: var(--col-purple); font-weight: 600; }
+  .val-type          { color: var(--col-maroon); font-weight: 600; }
+  .val-quantity      { color: var(--col-violet); font-variant-numeric: tabular-nums; }
+
+  .val-country  { color: var(--col-teal); font-weight: 600; }
+  .val-province { color: var(--col-magenta); }
+  .val-city     { color: var(--col-orange); }
+  .val-town     { color: var(--col-coral); }
+  .val-notes    { color: var(--col-navyblue); }
+
+  .col-location .sep { margin: 0 .35rem; color: var(--col-muted); }
+  .col-qty { text-align:right; }
+
+  /* ============================
+   🎨 COLOR TOKENS (consistent with aggregated page)
+   ============================ */
+:root {
+  --col-green:   #16a34a;  /* business name */
+  --col-blue:    #2563eb;  /* contact name */
+  --col-navy:    #1f2937;  /* position / notes (navy-ish) */
+  --col-purple:  #7c3aed;  /* product name */
+  --col-maroon:  #7a1f2b;  /* type */
+  --col-violet:  #6d28d9;  /* quantity */
+  --col-teal:    #0f766e;  /* country */
+  --col-magenta: #be185d;  /* province */
+  --col-orange:  #ea580c;  /* city */
+  --col-coral:   #cc5533;  /* town (coral/rust) */
+  --col-navyblue:#1e3a8a;  /* notes */
+  --col-muted:   #6b7280;
+
+  --kpi-bg-1: #f0fdf4; /* light green */
+  --kpi-bg-2: #fff7ed; /* light orange */
+  --kpi-bg-3: #eef2ff; /* light indigo */
+  --kpi-fg-1: #166534;
+  --kpi-fg-2: #9a3412;
+  --kpi-fg-3: #4338ca;
+
+  --card-bg: #ffffff;
+  --border:  #e5e7eb;
+}
+body.dark-theme {
+  --col-navy:     #cbd5e1;
+  --col-navyblue: #93c5fd;
+  --kpi-bg-1: #052e16;
+  --kpi-bg-2: #431407;
+  --kpi-bg-3: #111827;
+  --kpi-fg-1: #86efac;
+  --kpi-fg-2: #fdba74;
+  --kpi-fg-3: #a5b4fc;
+  --card-bg: #111827;
+  --border:  #374151;
+}
+
+/* ============================
+   📊 KPI CARDS
+   ============================ */
+.kpi-grid {
+  display:grid; gap:.8rem; grid-template-columns: repeat(3, minmax(0,1fr));
+  margin:.5rem 0 1rem;
+}
+.kpi-card {
+  padding:1rem; border:1px solid var(--border); border-radius:.75rem;
+  background:var(--card-bg); box-shadow:0 1px 2px rgba(0,0,0,.04);
+}
+.kpi-grid .kpi-card:nth-child(1) { background: var(--kpi-bg-1); color: var(--kpi-fg-1); border:none; }
+.kpi-grid .kpi-card:nth-child(2) { background: var(--kpi-bg-2); color: var(--kpi-fg-2); border:none; }
+.kpi-grid .kpi-card:nth-child(3) { background: var(--kpi-bg-3); color: var(--kpi-fg-3); border:none; }
+.kpi-label { font-size:.85rem; color:#6b7280; }
+.kpi-value { font-size:1.35rem; font-weight:700; letter-spacing:.2px; }
+
+@media (max-width: 768px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 400px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================
+   🔎 FILTERS
+   ============================ */
+.filters {
+  display:flex; gap:.6rem; align-items:center; margin:.6rem 0 1rem; flex-wrap:wrap;
+}
+.filters input[type="search"], .filters select {
+  flex:1 1 220px; min-width:0;
+  padding:.6rem .7rem; border:1px solid var(--border); border-radius:.55rem;
+  box-shadow:0 1px 0 rgba(0,0,0,.04); background:var(--card-bg); color:inherit;
+}
+.btn { padding:.6rem .85rem; border-radius:.55rem; border:0; cursor:pointer; }
+.btn-primary { background:#2563eb; color:#fff; }
+.btn-secondary { background:#f3f4f6; color:#111; }
+
+@media (max-width: 520px) {
+  .filters { flex-direction:column; align-items:stretch; gap:.5rem; }
+  .filters input[type="search"], .filters select, .filters .btn { width:100%; }
+  .filters .btn-primary { order: 4; } /* keep Add button at bottom on tiny screens */
+}
+
+/* ============================
+   📋 TABLE (desktop + fallback)
+   ============================ */
+.nice-table {
+  width:100%; border-collapse:collapse; background:var(--card-bg);
+  border-radius:.6rem; overflow:hidden; border:1px solid var(--border);
+}
+.nice-table th, .nice-table td {
+  padding:.65rem .6rem; border-bottom:1px solid var(--border);
+  text-align:left; vertical-align:top; white-space:normal;
+}
+.nice-table thead th { background:#f9fafb; font-weight:600; }
+body.dark-theme .nice-table thead th { background:#0b1220; }
+.nice-table tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
+body.dark-theme .nice-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
+
+.col-qty { text-align:right; font-variant-numeric: tabular-nums; }
+
+/* Colored value classes */
+.val-business-name { color: var(--col-green);   font-weight:700; }
+.val-contact-name  { color: var(--col-blue);    font-weight:600; }
+.val-position      { color: var(--col-navy); }
+.val-product-name  { color: var(--col-purple);  font-weight:600; }
+.val-type          { color: var(--col-maroon);  font-weight:600; }
+.val-quantity      { color: var(--col-violet);  font-variant-numeric: tabular-nums; }
+.val-country  { color: var(--col-teal);   font-weight:600; }
+.val-province { color: var(--col-magenta); }
+.val-city     { color: var(--col-orange); }
+.val-town     { color: var(--col-coral); }
+.val-notes    { color: var(--col-navyblue); }
+.col-location .sep { margin: 0 .35rem; color: var(--col-muted); }
+
+/* Horizontal scroll fallback */
+.nice-table { overflow-x:auto; display:block; }
+
+/* ============================
+   📱 MOBILE CARD MODE (≤420px)
+   Turn rows into cards with labels via ::before
+   Columns: Requester | Type | Product | Qty | Location | Notes | Status | Created
+   ============================ */
+@media (max-width: 420px) {
+
+  /* hide table head on phones */
+  .nice-table thead { display:none; }
+
+  /* each row becomes a card */
+  .nice-table tbody tr {
+    display:block; padding:.7rem .7rem; border-bottom:1px solid var(--border);
+  }
+  .nice-table tbody tr:last-child { border-bottom:none; }
+
+  /* each cell becomes labeled line with ::before */
+  .nice-table td {
+    display:flex; justify-content:space-between; align-items:flex-start;
+    gap:.75rem; padding:.45rem 0; border-bottom:none; white-space:normal;
+  }
+  .nice-table td::before {
+    content: attr(data-label);
+    flex:0 0 auto; min-width:7.5rem;
+    color: var(--col-muted); font-size:.85rem;
+  }
+
+  /* Provide labels for each column (index by visual order) */
+  #tableMyDemands tbody tr td:nth-child(1)::before { content: "Requester"; }
+  #tableMyDemands tbody tr td:nth-child(2)::before { content: "Type"; }
+  #tableMyDemands tbody tr td:nth-child(3)::before { content: "Product"; }
+  #tableMyDemands tbody tr td:nth-child(4)::before { content: "Qty"; }
+  #tableMyDemands tbody tr td:nth-child(5)::before { content: "Location"; }
+  #tableMyDemands tbody tr td:nth-child(6)::before { content: "Notes"; }
+  #tableMyDemands tbody tr td:nth-child(7)::before { content: "Status"; }
+  #tableMyDemands tbody tr td:nth-child(8)::before { content: "Created"; }
+
+  /* Requester cell stacks */
+  .col-requester { flex-direction:column; }
+  .col-requester .val-business-name { display:block; margin-bottom:2px; }
+
+  /* Optional: hide least critical columns to shorten cards */
+  /* #tableMyDemands tbody tr td:nth-child(8) { display:none; }  */ /* Hide Created */
+  /* #tableMyDemands tbody tr td:nth-child(6) { display:none; }  */ /* Hide Notes */
+}
+
+/* ===== Mobile input/selector sizing tweaks for very small screens ===== */
+@media (max-width: 420px) {
+  .filters { gap: .4rem; }
+
+  .filters input[type="search"],
+  .filters select,
+  .filters .btn {
+    font-size: .9rem;          /* smaller text */
+    padding: .45rem .55rem;    /* tighter padding */
+    line-height: 1.2;
+    min-height: 36px;          /* keep touchable but compact */
+    box-shadow: none;          /* flatter on small screens */
+  }
+
+  /* Make them truly full-width and consistent spacing when stacked */
+  .filters input[type="search"],
+  .filters select {
+    width: 100%;
+  }
+
+  /* Primary action button (➕ New Demand) fits the same rhythm */
+  .filters .btn-primary {
+    width: 100%;
+    font-weight: 600;
+  }
+
+  /* Trim placeholder size a touch for visual balance */
+  .filters input::placeholder {
+    font-size: .9rem;
+  }
+
+  /* Compact the select arrow so it doesn’t look oversized */
+  .filters select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 14px) calc(50% - 2px),
+      calc(100% - 8px) calc(50% - 2px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 28px; /* room for arrow */
+  }
+}
+
+/* Ultra-small devices: get even tighter */
+@media (max-width: 340px) {
+  .filters input[type="search"],
+  .filters select,
+  .filters .btn {
+    font-size: .85rem;
+    padding: .4rem .5rem;
+    min-height: 32px;
+  }
+}
+
+/* ===== FINAL, HIGH-SPECIFICITY MOBILE OVERRIDES (place last) ===== */
+@media (max-width: 480px) {
+  .dashboard-home .filters {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: .45rem !important;
+    align-items: stretch !important;
+  }
+
+  .dashboard-home .filters input[type="search"],
+  .dashboard-home .filters select,
+  .dashboard-home .filters .btn {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+
+    /* kill previous flex rule that makes them wide */
+    flex: 0 0 auto !important;
+
+    /* compact sizing */
+    font-size: .9rem !important;
+    padding: .44rem .56rem !important;
+    line-height: 1.2 !important;
+    min-height: 36px !important;
+
+    /* simpler visuals on tiny screens */
+    box-shadow: none !important;
+    border-radius: .5rem !important;
+  }
+
+  /* Make the primary button match input width */
+  .dashboard-home .filters .btn-primary {
+    font-weight: 600 !important;
+  }
+
+  /* Tighten placeholder */
+  .dashboard-home .filters input::placeholder {
+    font-size: .9rem !important;
+  }
+
+  /* Tame the native select arrow & padding */
+  .dashboard-home .filters select {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%) !important;
+    background-position:
+      calc(100% - 14px) calc(50% - 2px),
+      calc(100% - 8px)  calc(50% - 2px) !important;
+    background-size: 6px 6px, 6px 6px !important;
+    background-repeat: no-repeat !important;
+    padding-right: 28px !important; /* room for arrow */
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard-home .filters input[type="search"],
+  .dashboard-home .filters select,
+  .dashboard-home .filters .btn {
+    font-size: .85rem !important;
+    padding: .38rem .5rem !important;
+    min-height: 32px !important;
+  }
+}
+</style>

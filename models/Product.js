@@ -1,5 +1,6 @@
 // models/Product.js
-const mongoose = require("mongoose");
+//const mongoose = require("mongoose");
+const { mongoose } = require('../db'); // <-- use the shared instance
 
 const productSchema = new mongoose.Schema(
   {
@@ -51,6 +52,10 @@ const productSchema = new mongoose.Schema(
     made: { type: String, trim: true },
     manufacturer: { type: String, trim: true },
     type: { type: String, trim: true },
+    // Inside productSchema definition
+    soldCount: { type: Number, default: 0 },   // total units sold
+    soldOrders: { type: Number, default: 0 },  // number of orders that included this product
+
 
     // 🔗 Reference to Business (owner)
     business: {

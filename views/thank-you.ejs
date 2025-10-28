@@ -1,16 +1,16 @@
-<!-- views/thank-you.ejs -->
 <%
   const NONCE = typeof nonce !== 'undefined' ? nonce : '';
+  const THEME_CLASS = themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme';
 %>
 
 <% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
+  <div class="flash flash-success" role="status">✅ <%= success %></div>
 <% } %>
 <% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
+  <div class="flash flash-error" role="alert">❌ <%= error %></div>
 <% } %>
 
-<main class="ty-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+<main class="ty-page <%= THEME_CLASS %>">
   <header class="ty-head">
     <div class="ty-title">
       <h1>🎉 Thank you for your purchase!</h1>
@@ -18,258 +18,206 @@
         We’ve received your order
         <span id="tyOrderIdWrap" hidden>
           — <strong id="tyOrderId">—</strong>
-          <!-- Inline link to human-friendly receipt -->
           <a id="viewOrderLink" class="inline-link" href="#" target="_blank" rel="noopener" hidden>View this order</a>
         </span>
       </p>
     </div>
 
-    <nav class="btns">
-      <a href="/sales" class="btn btn-primary" id="btnShop">← Continue shopping</a>
-      <!-- Dedicated receipt button (shown after order loads) -->
-      <a id="btnReceipt" href="#" class="btn btn-light" hidden>View receipt</a>
-      <a href="/payment/orders" class="btn btn-light">View my orders</a>
-      <button id="btnPrint" class="btn btn-ghost" type="button">🖨️ Print receipt</button>
-    </nav>
+    <nav class="btns" aria-label="Post-purchase actions">
+  <a href="/sales" class="btn btn-primary" id="btnShop">← Continue shopping</a>
+  <a id="btnReceipt" href="#" class="btn btn-light" hidden>View receipt</a>
+  <a href="/payment/orders" class="btn btn-light">View my orders</a>
+  <button id="btnPrint" class="btn btn-ghost" type="button" aria-label="Print receipt">🖨️ Print</button>
+</nav>
   </header>
 
-  <section class="card">
-    <div id="orderMeta" class="order-meta">
-      <div class="meta-item"><span class="meta-label">Status</span><span id="ordStatus" class="meta-val">—</span></div>
-      <div class="meta-item"><span class="meta-label">Date</span><span id="ordDate" class="meta-val">—</span></div>
-      <div class="meta-item"><span class="meta-label">Paid</span><span id="ordPaid" class="meta-val">—</span></div>
-    </div>
-
-    <div id="itemsList" class="items-list">
-      <p class="muted">Loading order…</p>
-    </div>
-
-    <div class="totals">
+  <section class="card" aria-labelledby="totalsTitle">
+    <h2 id="totalsTitle" class="visually-hidden">Order totals</h2>
+    <div id="totalsBox" class="totals">
       <div class="row"><span>Subtotal</span><span id="tSubtotal">—</span></div>
       <div class="row"><span>VAT</span><span id="tVat">—</span></div>
-      <div class="row"><span>Shipping</span><span id="tShipping">—</span></div>
+      <div class="row"><span id="tShipLabel">Delivery</span><span id="tShipping">—</span></div>
       <div class="row total"><span>Total</span><span id="tTotal">—</span></div>
     </div>
 
-    <div id="shipBox" class="ship card-ghost" hidden>
-      <h3>Shipping</h3>
-      <div><strong>Name:</strong> <span id="shipName">—</span></div>
-      <div id="shipAddr" class="muted"></div>
+    <!-- Delivery snapshot -->
+    <div id="deliveryBox" class="card-ghost" hidden>
+      <h3>Delivery</h3>
+      <div><strong>Method:</strong> <span id="delName">—</span></div>
+      <div class="muted" id="delEta">—</div>
+    </div>
+
+    <!-- Meta snapshot -->
+    <div id="metaBox" class="meta card-ghost" hidden>
+      <h3>Order details</h3>
+      <div class="meta-grid">
+        <div><span class="label">Status</span><span id="ordStatus">—</span></div>
+        <div><span class="label">Date</span><span id="ordDate">—</span></div>
+        <div><span class="label">Paid</span><span id="ordPaid">—</span></div>
+      </div>
     </div>
   </section>
 </main>
 
 <style nonce="<%= NONCE %>">
-  :root {
+  :root{
     --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
     --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
-    --accent:#0f172a; --radius:12px; --pad:12px;
+    --radius:12px; --pad:12px; --tap:44px;
   }
-  .dark-theme {
+  .dark-theme{
     --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
-    --brand:#f3f4f6; --brand-contrast:#111; --accent:#e5e7eb;
+    --brand:#f3f4f6; --brand-contrast:#111;
   }
-  html, body { background:var(--bg); color:var(--text); margin:0; }
-  .ty-page { max-width:680px; margin:0 auto; padding:12px; }
-  .ty-head { display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
-  .ty-title h1 { font-size:clamp(18px,5.5vw,28px); line-height:1.2; margin:0 0 4px; }
-  .muted { color:var(--muted); }
-  .inline-link { margin-left:8px; font-size:.95em; text-decoration:underline; color:var(--accent); }
-
-  .btns { display:flex; flex-wrap:wrap; gap:8px; }
-  .btn {
-    flex:1 1 100%; display:inline-block; text-align:center;
-    border:1px solid var(--brand); border-radius:10px; padding:10px 12px;
-    cursor:pointer; text-decoration:none; font-size:clamp(14px,4.2vw,16px);
+  html,body{background:var(--bg);color:var(--text);margin:0}
+  .ty-page{max-width:680px;margin:0 auto;padding:12px}
+  .ty-head{display:flex;flex-direction:column;gap:10px;margin:4px 0 12px}
+  .ty-title h1{font-size:clamp(18px,6vw,28px);line-height:1.2;margin:0 0 4px}
+  .muted{color:var(--muted)}
+  .inline-link{margin-left:8px;font-size:.95em;text-decoration:underline}
+  .btns{display:flex;flex-wrap:wrap;gap:8px}
+  .btn{
+    flex:1 1 100%; text-align:center; border:1px solid var(--brand); border-radius:10px;
+    padding:10px 12px; min-height:var(--tap); line-height:1.1;
+    text-decoration:none; cursor:pointer; font-size:clamp(14px,4.5vw,16px);
   }
-  .btn-primary { background:var(--brand); color:var(--brand-contrast); }
-  .btn-light { border-color:var(--border); background:var(--card); color:var(--text); }
-  .btn-ghost { border-color:var(--border); background:transparent; color:var(--text); }
+  .btn-primary{background:var(--brand);color:var(--brand-contrast)}
+  .btn-light{border-color:var(--border);background:var(--card);color:var(--text)}
+  .btn-ghost{border-color:var(--border);background:transparent;color:var(--text)}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:var(--pad)}
+  .totals{display:grid;gap:6px;margin-top:.5rem}
+  .row{display:flex;justify-content:space-between;font-size:clamp(14px,5vw,16px)}
+  .row.total{font-weight:900;font-size:clamp(15px,5.4vw,18px);border-top:1px solid var(--border);padding-top:.5rem}
+  .card-ghost{margin-top:1rem}
+  .flash{margin:.6rem 0;padding:.6rem .8rem;border-radius:10px;font-size:clamp(14px,4.8vw,16px)}
+  .flash-success{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
+  .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+  .visually-hidden{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
 
-  .card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad); }
-
-  .order-meta { display:grid; gap:8px; margin-bottom:10px; grid-template-columns:1fr; }
-  .meta-item {
-    display:flex; justify-content:space-between; align-items:center;
-    border:1px solid var(--border); border-radius:10px; padding:10px;
-    font-size:clamp(14px,4.2vw,16px);
+  .meta .meta-grid{
+    display:grid;gap:8px;margin-top:6px;
+    grid-template-columns:1fr;
+    font-size:clamp(14px,4.8vw,16px);
   }
-  .meta-label { opacity:.8; }
+  .meta .label{opacity:.8;margin-right:8px;display:inline-block;min-width:64px}
 
-  .items-list { display:flex; flex-direction:column; gap:8px; margin:.5rem 0 1rem; }
-  .item-row {
-    display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center;
-    border-bottom:1px dashed var(--border); padding:6px 0;
-    font-size:clamp(14px,4.2vw,16px);
+  @media (min-width:420px){
+    .btn{flex:0 0 auto; min-width:180px}
+    .meta .meta-grid{grid-template-columns:repeat(3,1fr)}
   }
-  .item-row .qty { min-width:56px; text-align:right; }
 
-  .totals { display:grid; gap:6px; margin-top:.5rem; }
-  .row { display:flex; justify-content:space-between; font-size:clamp(14px,4.5vw,16px); }
-  .row.total { font-weight:900; font-size:clamp(15px,4.8vw,18px); border-top:1px solid var(--border); padding-top:.5rem; }
-
-  .card-ghost { margin-top:1rem; }
-
-  .flash { margin:.6rem 0; padding:.6rem .8rem; border-radius:10px; font-size:clamp(14px,4.2vw,16px); }
-  .flash-success { background:#ecfdf5; color:#065f46; border:1px solid #34d399; }
-  .flash-error { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
-
-  @media (min-width:420px) { .btn { flex:1 1 calc(50% - 8px); } }
-  @media (min-width:720px) {
-    .ty-head { flex-direction:row; align-items:flex-start; justify-content:space-between; }
-    .btn { flex:0 0 auto; min-width:180px; }
-    .order-meta { grid-template-columns:repeat(3,1fr); }
+  @media print{
+    .btns,.flash{display:none !important}
+    .ty-page{max-width:100%;padding:0}
+    body{background:#fff}
   }
 </style>
-
-<!-- Safer config embed -->
-<script id="ty-config" type="application/json" nonce="<%= NONCE %>"><%- JSON.stringify({ orderID: orderID || "" }) %></script>
 
 <script nonce="<%= NONCE %>">
 (function () {
   function qs(sel, ctx){ return (ctx||document).querySelector(sel); }
+  function qsp(name){ var m = location.search.match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : ''; }
+  function moneyFmt(currency){
+    var C=(currency||'USD').toUpperCase();
+    var sym={USD:'$',ZAR:'R',EUR:'€',GBP:'£'}[C]||(C+' ');
+    return function(n){ return sym + Number(n||0).toFixed(2); };
+  }
+  function fetchJsonSafe(url){
+    return fetch(url, { credentials:'same-origin' })
+      .then(function(r){
+        var ct = (r.headers.get('content-type') || '').toLowerCase();
+        if (!r.ok) return { ok:false, status:r.status, json:null };
+        if (!ct.includes('application/json')) return { ok:false, status:r.status, json:null };
+        return r.json().then(function(j){ return { ok:true, status:r.status, json:j }; });
+      })
+      .catch(function(){ return { ok:false, status:0, json:null }; });
+  }
+  function tryOrderEndpoints(orderId){
+    var path1 = '/payment/order/' + encodeURIComponent(orderId);
+    var path2 = '/order/' + encodeURIComponent(orderId); // fallback if router mounted differently
+    return fetchJsonSafe(path1).then(function(res1){
+      if (res1.ok && res1.json && res1.json.success) return res1.json;
+      return fetchJsonSafe(path2).then(function(res2){
+        if (res2.ok && res2.json && res2.json.success) return res2.json;
+        return null;
+      });
+    });
+  }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    var cfgEl = qs('#ty-config');
-    var parsed = {};
-    try { parsed = JSON.parse(cfgEl ? cfgEl.textContent : '{}'); } catch(e) { parsed = {}; }
-
-    var orderID = parsed && parsed.orderID ? String(parsed.orderID) : '';
-
-    var itemsList = qs('#itemsList');
-    var ordStatus = qs('#ordStatus');
-    var ordDate = qs('#ordDate');
-    var ordPaid = qs('#ordPaid');
-    var tSubtotal = qs('#tSubtotal');
-    var tVat = qs('#tVat');
-    var tShipping = qs('#tShipping');
-    var tTotal = qs('#tTotal');
-    var shipBox = qs('#shipBox');
-    var shipName = qs('#shipName');
-    var shipAddr = qs('#shipAddr');
-    var tyOrderIdWrap = qs('#tyOrderIdWrap');
-    var tyOrderId = qs('#tyOrderId');
-    var viewOrderLink = qs('#viewOrderLink');
-    var btnReceipt = qs('#btnReceipt');
+  document.addEventListener('DOMContentLoaded', function(){
     var btnPrint = qs('#btnPrint');
-
     if (btnPrint) btnPrint.addEventListener('click', function(){ window.print(); });
 
-    if (!orderID) {
-      if (itemsList) itemsList.innerHTML = '<p class="muted">No order ID provided. You can continue shopping.</p>';
-      return;
+    var orderId = qsp('id') || '';
+    var tyWrap = qs('#tyOrderIdWrap');
+    var tyId = qs('#tyOrderId');
+    var viewLink = qs('#viewOrderLink');
+    var btnReceipt = qs('#btnReceipt');
+
+    if (orderId && tyWrap && tyId) {
+      tyWrap.hidden = false;
+      tyId.textContent = orderId;
+      var recHref = '/payment/receipt/' + encodeURIComponent(orderId);
+      if (viewLink)  { viewLink.href = recHref; viewLink.hidden = false; }
+      if (btnReceipt){ btnReceipt.href = recHref; btnReceipt.hidden = false; }
     }
 
-    if (tyOrderIdWrap) tyOrderIdWrap.hidden = false;
-    if (tyOrderId) tyOrderId.textContent = orderID;
+    // Load currency (fallback to USD)
+    var currency = 'USD';
+    fetch('/payment/config', { credentials:'same-origin' })
+      .then(function(r){ return r.ok ? r.json() : {}; })
+      .then(function(cfg){ currency = String(cfg.baseCurrency || cfg.currency || 'USD').toUpperCase(); })
+      .catch(function(){});
 
-    // ✅ Point to human-friendly receipt page
-    var receiptHref = '/payment/receipt/' + encodeURIComponent(orderID);
-    if (viewOrderLink) { viewOrderLink.href = receiptHref; viewOrderLink.hidden = false; }
-    if (btnReceipt)    { btnReceipt.href = receiptHref;    btnReceipt.hidden = false; }
+    if (!orderId) return;
 
-    // Load currency for formatting
-    function getConfig() {
-      return fetch('/payment/config', { credentials: 'same-origin' })
-        .then(function(r){ return r.ok ? r.json() : null; })
-        .catch(function(){ return null; });
-    }
-    function moneyFmt(currency) {
-      var C = (currency || 'USD').toUpperCase();
-      var sym = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[C] || (C + ' ');
-      return function(n){ return sym + Number(n || 0).toFixed(2); };
-    }
+    // Hydrate: try /payment/order/:id then /order/:id
+    tryOrderEndpoints(orderId)
+      .then(function(payload){
+        if (!payload) return; // leave placeholders; user still has receipt link
+        var o = payload.order || {};
+        var C = (o.currency || currency || 'USD').toUpperCase();
+        var money = moneyFmt(C);
 
-    getConfig().then(function(conf){
-      var currency = (conf && (conf.baseCurrency || conf.currency)) ? String(conf.baseCurrency || conf.currency).toUpperCase() : 'USD';
-      var money = moneyFmt(currency);
-
-      // Fetch order (JSON) to populate the page (receipt link already set)
-      var url = '/payment/order/' + encodeURIComponent(orderID);
-      fetch(url, { credentials: 'same-origin' })
-        .then(function(r){
-          var ct = r.headers.get('content-type') || '';
-          if (!ct.includes('application/json')) {
-            return { ok:false, j:{ success:false, message:'Non-JSON response' } };
-          }
-          return r.json().then(function(j){ return { ok:r.ok, j:j }; });
-        })
-        .then(function(res){
-          if (!res.ok || !res.j || !res.j.success) { throw new Error((res.j && res.j.message) || 'Order fetch failed'); }
-          var o = res.j.order || {};
-
+        // Meta snapshot
+        var metaBox = qs('#metaBox');
+        if (metaBox) {
+          metaBox.hidden = false;
+          var ordStatus = qs('#ordStatus');
+          var ordDate   = qs('#ordDate');
+          var ordPaid   = qs('#ordPaid');
           if (ordStatus) ordStatus.textContent = o.status || '—';
           if (ordDate)   ordDate.textContent   = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
-          if (ordPaid)   ordPaid.textContent   = (o.amount && o.amount.value) ? money(o.amount.value) : '—';
+          if (ordPaid)   ordPaid.textContent   = (o.amount && o.amount.value != null) ? money(o.amount.value) : '—';
+        }
 
-          // Items
-          var itemsHtml = '';
-          if (o.items && o.items.length) {
-            for (var i=0; i<o.items.length; i++) {
-              var it = o.items[i] || {};
-              var unit = Number((it.price && it.price.value) ? it.price.value : it.price || 0);
-              var qty = Number(it.quantity || 1);
-              var line = unit * qty;
-              itemsHtml += '<div class="item-row">'
-                         +   '<div>' + (it.name || 'Item') + '</div>'
-                         +   '<div class="qty">× ' + qty + '</div>'
-                         +   '<div><strong>' + money(line) + '</strong></div>'
-                         + '</div>';
-            }
-          } else {
-            itemsHtml = '<p class="muted">No line items available.</p>';
-          }
-          if (itemsList) itemsList.innerHTML = itemsHtml;
+        // Totals
+        var tSub = qs('#tSubtotal');
+        var tVat = qs('#tVat');
+        var tShip= qs('#tShipping');
+        var tTot = qs('#tTotal');
+        if (tSub)  tSub.textContent  = (o.breakdown && o.breakdown.itemTotal) ? money(o.breakdown.itemTotal.value) : '—';
+        if (tVat)  tVat.textContent  = (o.breakdown && o.breakdown.taxTotal)  ? money(o.breakdown.taxTotal.value)  : '—';
+        if (tShip) tShip.textContent = (o.breakdown && o.breakdown.shipping)
+                                        ? money(o.breakdown.shipping.value)
+                                        : (o.delivery && o.delivery.amount != null ? money(o.delivery.amount) : '—');
+        if (tTot)  tTot.textContent  = (o.amount && o.amount.value != null)   ? money(o.amount.value)              : '—';
 
-          // Totals
-          var bd = o.breakdown || {};
-          var totalVal = Number((o.amount && o.amount.value) ? o.amount.value : o.total || 0);
-          var shippingVal = Number((bd.shipping && bd.shipping.value) ? bd.shipping.value : o.shipping || 0);
-
-          var derivedSubtotal = 0;
-          if ((!bd.itemTotal || !bd.itemTotal.value) && o.items && o.items.length) {
-            for (var k=0; k<o.items.length; k++) {
-              var ii = o.items[k] || {};
-              var u = Number((ii.price && ii.price.value) ? ii.price.value : ii.price || 0);
-              var q = Number(ii.quantity || 1);
-              derivedSubtotal += u * q;
-            }
-          }
-          var subtotalVal = Number(((bd.itemTotal && bd.itemTotal.value) ? bd.itemTotal.value : (o.subtotal || derivedSubtotal)));
-          var vatVal = Number(((bd.taxTotal && bd.taxTotal.value) ? bd.taxTotal.value : (o.tax || 0)));
-
-          if ((!bd.taxTotal || !bd.taxTotal.value) && !o.tax) {
-            var maybeVat = totalVal - (subtotalVal + shippingVal);
-            if (isFinite(maybeVat) && maybeVat > 0) vatVal = maybeVat;
-          }
-
-          if (tSubtotal) tSubtotal.textContent = money(subtotalVal);
-          if (tVat)      tVat.textContent      = money(vatVal);
-          if (tShipping) tShipping.textContent = money(shippingVal);
-          if (tTotal)    tTotal.textContent    = money(totalVal);
-
-          // Shipping
-          if (o.shipping && (o.shipping.name || o.shipping.address)) {
-            if (shipBox)  shipBox.hidden = false;
-            if (shipName) shipName.textContent = o.shipping.name || '—';
-            var addr = (o.shipping && o.shipping.address) ? o.shipping.address : {};
-            var parts = [];
-            if (addr.address_line_1) parts.push(addr.address_line_1);
-            if (addr.address_line_2) parts.push(addr.address_line_2);
-            if (addr.admin_area_2)   parts.push(addr.admin_area_2);
-            if (addr.admin_area_1)   parts.push(addr.admin_area_1);
-            if (addr.postal_code)    parts.push(addr.postal_code);
-            if (addr.country_code)   parts.push(addr.country_code);
-            if (shipAddr) shipAddr.textContent = parts.join(', ');
-          }
-        })
-        .catch(function(err){
-          console.error(err);
-          if (itemsList) itemsList.innerHTML =
-            '<p class="muted">Could not load your order details. You can still open a printable receipt:</p>' +
-            '<p><a class="inline-link" href="' + receiptHref + '" target="_blank" rel="noopener">Open receipt</a></p>';
-        });
-    });
+        // Delivery box
+        if (o.delivery && (o.delivery.name || (o.delivery.deliveryDays != null))) {
+          var dBox = qs('#deliveryBox');
+          var dName= qs('#delName');
+          var dEta = qs('#delEta');
+          if (dBox) dBox.hidden = false;
+          if (dName) dName.textContent = o.delivery.name || 'Selected method';
+          if (dEta)  dEta.textContent  = (o.delivery.deliveryDays != null)
+              ? ('Estimated delivery: ' + o.delivery.deliveryDays + ' day' + (o.delivery.deliveryDays === 1 ? '' : 's'))
+              : 'Estimated delivery: —';
+        }
+      })
+      .catch(function(e){
+        console.warn('thank-you hydrate failed', e);
+      });
   });
 })();
 </script>

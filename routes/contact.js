@@ -4,6 +4,30 @@ const router = express.Router();
 const ContactMessage = require("../models/ContactMessage");
 const requireBusiness = require("../middleware/requireBusiness");
 
+// --- SSE Broker (very small, per-thread) ---
+const sseClients = new Map(); // Map<threadId, Set<res>>
+
+function sseAddClient(threadId, res) {
+  if (!sseClients.has(threadId)) sseClients.set(threadId, new Set());
+  sseClients.get(threadId).add(res);
+}
+
+function sseRemoveClient(threadId, res) {
+  const set = sseClients.get(threadId);
+  if (!set) return;
+  set.delete(res);
+  if (set.size === 0) sseClients.delete(threadId);
+}
+
+function sseNotify(threadId, eventName, dataObj) {
+  const set = sseClients.get(String(threadId));
+  if (!set || !set.size) return;
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(dataObj)}\n\n`;
+  for (const res of set) {
+    try { res.write(payload); } catch (_) { /* ignore broken pipe */ }
+  }
+}
+
 /* ===========================================================
  * 📩 GET: Contact Page (for logged-in businesses)
  * =========================================================== */
@@ -18,6 +42,85 @@ router.get("/", requireBusiness, (req, res) => {
     business: req.session.business,
   });
 });
+
+// GET /contact/thread/:id/stream — live updates for a specific thread
+router.get("/thread/:id/stream", async (req, res) => {
+  // 🔒 Protect with requireAdmin (and/or requireBusiness) as needed:
+  // If you want both sides, you can allow either to pass:
+  // - For now, keep it simple: allow admin only. If you want both, add a small guard.
+  // (Example hybrid guard)
+  const isAdmin = !!req.session.admin;
+  const isBusiness = !!req.session.business;
+  if (!isAdmin && !isBusiness) {
+    return res.status(401).end();
+  }
+
+  // Optional: ensure viewer has access to this thread (e.g., business owns it, or admin)
+  if (isBusiness) {
+    const msg = await ContactMessage.findById(req.params.id).select("business").lean();
+    if (!msg || String(msg.business) !== String(req.session.business._id)) {
+      return res.status(403).end();
+    }
+  }
+
+  // SSE headers
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+  });
+  res.flushHeaders?.();
+
+  // Initial hello (optional)
+  res.write(`event: hello\ndata: ${JSON.stringify({ ok: true, ts: Date.now() })}\n\n`);
+
+  // Keepalive every 20s (some proxies close idle connections)
+  const keep = setInterval(() => {
+    try { res.write(`event: keepalive\ndata: ${Date.now()}\n\n`); } catch (e) {}
+  }, 20000);
+
+  const threadId = String(req.params.id);
+  sseAddClient(threadId, res);
+
+  req.on("close", () => {
+    clearInterval(keep);
+    sseRemoveClient(threadId, res);
+  });
+});
+
+// Admin global stream (receives every thread's newMessage)
+let adminClients = new Set();
+
+router.get("/admin/stream", (req, res) => {
+  if (!req.session.admin) return res.status(401).end();
+
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+  });
+  res.flushHeaders?.();
+  res.write(`event: hello\ndata: ${JSON.stringify({ ok: true, ts: Date.now() })}\n\n`);
+
+  const keep = setInterval(() => {
+    try { res.write(`event: keepalive\ndata: ${Date.now()}\n\n`); } catch (e) {}
+  }, 20000);
+
+  adminClients.add(res);
+  req.on("close", () => {
+    clearInterval(keep);
+    adminClients.delete(res);
+  });
+});
+
+// helper to notify all admins (list page)
+function sseNotifyAdmins(eventName, dataObj) {
+  if (!adminClients.size) return;
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(dataObj)}\n\n`;
+  for (const res of adminClients) {
+    try { res.write(payload); } catch (_) {}
+  }
+}
 
 /* ===========================================================
  * 📤 POST: Submit New Message (Business only)

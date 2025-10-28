@@ -7,6 +7,8 @@ const Product = require("../models/Product");
 const ContactMessage = require("../models/ContactMessage");
 const requireBusiness = require("../middleware/requireBusiness");
 const redirectIfLoggedIn = require("../middleware/redirectIfLoggedIn");
+const DeliveryOption = require("../models/DeliveryOption");
+
 
 
 const router = express.Router();
@@ -244,9 +246,6 @@ router.post(
   }
 );
 
-/* ----------------------------------------------------------
- * 🧭 GET: Seller Dashboard
- * -------------------------------------------------------- */
 router.get("/dashboards/seller-dashboard", requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
@@ -255,42 +254,105 @@ router.get("/dashboards/seller-dashboard", requireBusiness, async (req, res) => 
       return res.redirect("/business/login");
     }
 
-    // 🧮 Fetch product stats
-    const [totalProducts, inStock, lowStock, outOfStock] = await Promise.all([
-      Product.countDocuments({ business: business._id }),
-      Product.countDocuments({ business: business._id, stock: { $gt: 0 } }),
-      Product.countDocuments({ business: business._id, stock: { $lte: 5, $gt: 0 } }),
-      Product.countDocuments({ business: business._id, stock: 0 }),
-    ]);
+     // 🔒 Role gate: sellers only
+    if (business.role !== "seller") {
+      req.flash("error", "⛔ Access denied. Seller accounts only.");
+      return res.redirect("/business/dashboard");
+    }
 
-    // 🧾 Recent 5 products for seller
+    // Load models that are optional in your file header
+    const Order = require("../models/Order");
+    const Shipment = require("../models/Shipment");
+
+    // --- Load all products for this business
     const products = await Product.find({ business: business._id })
+      .select("customId name price stock category imageUrl createdAt soldCount soldOrders")
       .sort({ createdAt: -1 })
-      .limit(5)
       .lean();
 
-    // 💬 Placeholder message stats
-    const stats = {
-      totalMessages: 2,
-      unreadMessages: 1,
-    };
+    // --- Product totals
+    const totalProducts = products.length;
+    const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
+    const lowStock = products.filter(p => (Number(p.stock) || 0) > 0 && (Number(p.stock) || 0) <= 5).length;
+    const outOfStock = products.filter(p => (Number(p.stock) || 0) <= 0).length;
 
-    // 🧾 Placeholder order list
-    const orders = [
-      { _id: "ORD123", status: "Completed", total: 120.0 },
-      { _id: "ORD124", status: "Pending", total: 80.5 },
-    ];
+    // --- Shipment totals by status for this business
+    const shipmentsAgg = await Shipment.aggregate([
+      { $match: { business: business._id } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]);
+    const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
+      m[r._id] = Number(r.count || 0);
+      return m;
+    }, {});
+    const shipmentsTotal = Object.values(shipmentsByStatus).reduce((a, b) => a + b, 0);
 
-    res.render("dashboards/seller-dashboard", {
+    // --- Orders that include this seller’s products
+    // Match Order.items[].productId (string) with Product.customId you store
+    const sellerCustomIds = products.map(p => p.customId);
+    let ordersTotal = 0;
+    let ordersByStatus = {};
+    let recentOrders = [];
+
+    if (sellerCustomIds.length) {
+      const ordersAgg = await Order.aggregate([
+        { $match: { "items.productId": { $in: sellerCustomIds } } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]);
+      ordersByStatus = ordersAgg.reduce((m, r) => {
+        m[r._id || "Unknown"] = Number(r.count || 0);
+        return m;
+      }, {});
+      ordersTotal = await Order.countDocuments({ "items.productId": { $in: sellerCustomIds } });
+
+      recentOrders = await Order.find({ "items.productId": { $in: sellerCustomIds } })
+        .select("orderId status amount createdAt")
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+    }
+
+    // Delivery options (you were already sending these)
+    const deliveryOptions = await DeliveryOption.find({ active: true })
+      .sort({ deliveryDays: 1, priceCents: 1 })
+      .lean();
+
+    // Optional messages (keep your placeholder or wire to your ContactMessage)
+    let totalMessages = 0, unreadMessages = 0;
+    try {
+      totalMessages = await ContactMessage.countDocuments({ business: business._id });
+      unreadMessages = await ContactMessage.countDocuments({ business: business._id, readByBusiness: false });
+    } catch {
+      console.warn("💬 ContactMessage model not active, skipping message counts.");
+    }
+
+    return res.render("dashboards/seller-dashboard", {
       title: "Seller Dashboard",
-      business,
-      totalProducts,
-      inStock,
-      lowStock,
-      outOfStock,
-      products, // ✅ added back — required by EJS
-      orders,
-      stats,
+      business,                       // includes name + role (for the role badge)
+      // product totals
+      totals: {
+        totalProducts,
+        totalStock,
+        lowStock,
+        outOfStock,
+      },
+      products,                       // full list for per-product stock
+      // shipments
+      shipments: {
+        total: shipmentsTotal,
+        byStatus: shipmentsByStatus,
+      },
+      // orders
+      orders: {
+        total: ordersTotal,
+        byStatus: ordersByStatus,
+        recent: recentOrders,
+      },
+      // messages + delivery
+      stats: { totalMessages, unreadMessages },
+      deliveryOptions,
+      isOrdersAdmin: Boolean(req.session.ordersAdmin),
+
       success: req.flash("success"),
       error: req.flash("error"),
       themeCss: res.locals.themeCss,
@@ -303,71 +365,86 @@ router.get("/dashboards/seller-dashboard", requireBusiness, async (req, res) => 
   }
 });
 
-// ----------------------------------------------------------
-// 🧭 GET: Supplier Dashboard (Full Version)
-// --------------------------------------------------------
 router.get("/dashboards/supplier-dashboard", requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
-
-    // 🧱 Ensure valid session
     if (!business || !business._id) {
       req.flash("error", "Session expired. Please log in again.");
       return res.redirect("/business/login");
     }
-
-    // 🧱 Ensure correct role
+    // 🔒 Supplier-only
     if (business.role !== "supplier") {
       req.flash("error", "⛔ Access denied. Supplier accounts only.");
       return res.redirect("/business/dashboard");
     }
 
-    // 🎨 Theme setup
+    const LOW_STOCK_THRESHOLD = 10; // adjust if you prefer
+
     const theme = req.session.theme || "light";
     const themeCss = theme === "dark" ? "/css/dark.css" : "/css/light.css";
 
-    // 📦 Supplier products (latest 5)
-    const products = await Product.find({ business: business._id })
-      .sort({ createdAt: -1 })
-      .limit(5)
+    // --- Products (owned by this business)
+    const [totalProducts, inStock, lowStock, outOfStock, products] = await Promise.all([
+      Product.countDocuments({ business: business._id }),
+      Product.countDocuments({ business: business._id, stock: { $gt: 0 } }),
+      Product.countDocuments({ business: business._id, stock: { $gt: 0, $lte: LOW_STOCK_THRESHOLD } }),
+      Product.countDocuments({ business: business._id, stock: 0 }),
+      Product.find({ business: business._id })
+        .select("name customId stock price category imageUrl updatedAt")
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .lean(),
+    ]);
+
+    // --- Shipments (group + recent)
+    const Shipment = require("../models/Shipment");
+    const shipmentsAgg = await Shipment.aggregate([
+      { $match: { business: business._id } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]);
+    const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
+      m[r._id] = Number(r.count || 0);
+      return m;
+    }, {});
+    const totalShipments = Object.values(shipmentsByStatus).reduce((a, b) => a + b, 0);
+    const pendingShipments = (shipmentsByStatus["Pending"] || 0) + (shipmentsByStatus["Processing"] || 0);
+
+    const shipments = await Shipment.find({ business: business._id })
+      .populate("product", "name customId")
+      .select("orderId status updatedAt")
+      .sort({ updatedAt: -1 })
+      .limit(8)
       .lean();
 
-    // 📊 Product statistics
-    const totalProducts = await Product.countDocuments({ business: business._id });
-    const inStock = await Product.countDocuments({ business: business._id, stock: { $gt: 10 } });
-    const lowStock = await Product.countDocuments({ business: business._id, stock: { $gt: 0, $lte: 10 } });
-    const outOfStock = await Product.countDocuments({ business: business._id, stock: 0 });
+    // --- Messages + Delivery options
+    const [totalMessages, unreadMessages, deliveryOptions] = await Promise.all([
+      ContactMessage.countDocuments({ business: business._id }),
+      ContactMessage.countDocuments({ business: business._id, readByBusiness: false }),
+      DeliveryOption.find({ active: true }).sort({ deliveryDays: 1, priceCents: 1 }).lean(),
+    ]);
 
-    // 🚚 Shipment placeholders (will integrate real Shipment model later)
-    const totalShipments = 4;
-    const pendingShipments = 1;
-    const shipments = [
-      { orderId: "ORD5001", status: "Delivered", updatedAt: new Date("2025-10-01T14:00:00Z") },
-      { orderId: "ORD5002", status: "Pending", updatedAt: new Date("2025-10-04T10:30:00Z") },
-      { orderId: "ORD5003", status: "In Transit", updatedAt: new Date("2025-10-06T09:00:00Z") },
-      { orderId: "ORD5004", status: "Delivered", updatedAt: new Date("2025-10-07T11:15:00Z") },
-    ];
-
-    // 💬 Messages statistics
-    const totalMessages = await ContactMessage.countDocuments({ business: business._id });
-    const unreadMessages = await ContactMessage.countDocuments({
-      business: business._id,
-      readByBusiness: false,
-    });
-
-    // ✅ Render Supplier Dashboard
     res.render("dashboards/supplier-dashboard", {
       title: "Supplier Dashboard",
       business,
-      products,
+
+      // product stats
       totalProducts,
       inStock,
       lowStock,
       outOfStock,
+      products,
+
+      // shipments
       totalShipments,
       pendingShipments,
-      shipments, // ✅ Added this line
+      shipments,          // recent list
+      shipmentsByStatus,  // available if you want per-status chips in the view
+
+      // messages / delivery
       stats: { totalMessages, unreadMessages },
+      deliveryOptions,
+      isOrdersAdmin: Boolean(req.session.ordersAdmin),
+
       success: req.flash("success"),
       error: req.flash("error"),
       themeCss,
@@ -380,65 +457,81 @@ router.get("/dashboards/supplier-dashboard", requireBusiness, async (req, res) =
   }
 });
 
-/* ----------------------------------------------------------
- * 🧭 GET: Buyer Dashboard (Isolated by Buyer)
- * -------------------------------------------------------- */
 router.get("/dashboards/buyer-dashboard", requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
-
-    // ✅ Ensure buyer is logged in
     if (!business || !business._id) {
       req.flash("error", "Session expired. Please log in again.");
       return res.redirect("/business/login");
     }
-
     if (business.role !== "buyer") {
       req.flash("error", "⛔ Access denied. Buyer accounts only.");
       return res.redirect("/business/dashboard");
     }
 
     const Order = require("../models/Order");
+    const Shipment = require("../models/Shipment");
     const ContactMessage = require("../models/ContactMessage");
 
-    // 🧾 Fetch only orders belonging to this buyer
+    // Only this buyer’s orders
     const orders = await Order.find({ businessBuyer: business._id })
       .sort({ createdAt: -1 })
-      .limit(5)
+      .limit(20)
       .lean();
 
     const totalOrders = await Order.countDocuments({ businessBuyer: business._id });
-    const completedOrders = await Order.countDocuments({
-      businessBuyer: business._id,
-      status: "Completed",
-    });
-    const pendingOrders = await Order.countDocuments({
-      businessBuyer: business._id,
-      status: "Pending",
-    });
+    const completedOrders = await Order.countDocuments({ businessBuyer: business._id, status: "Completed" });
+    const pendingOrders = await Order.countDocuments({ businessBuyer: business._id, status: "Pending" });
 
-    // 💬 Fetch message stats for this buyer (if available)
-    let totalMessages = 0;
-    let unreadMessages = 0;
+    // Shipping stats for THIS buyer’s orders
+    const orderIds = orders.map(o => o.orderId).filter(Boolean);
+    let shipStats = { inTransit: 0, delivered: 0 };
+    if (orderIds.length) {
+      const byStatus = await Shipment.aggregate([
+        { $match: { orderId: { $in: orderIds } } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]);
+      for (const r of byStatus) {
+        if (r._id === "In Transit") shipStats.inTransit += r.count;
+        if (r._id === "Delivered") shipStats.delivered += r.count;
+      }
+    }
+
+    // Product details seen in their orders
+    const orderedCustomIds = new Set();
+    for (const o of orders) {
+      (o.items || []).forEach(it => {
+        if (it.productId) orderedCustomIds.add(String(it.productId));
+      });
+    }
+
+    let orderedProducts = [];
+    if (orderedCustomIds.size) {
+      orderedProducts = await Product.find({ customId: { $in: Array.from(orderedCustomIds) } })
+        .select("customId name price imageUrl category stock")
+        .lean();
+    }
+
+    let totalMessages = 0, unreadMessages = 0;
     try {
       totalMessages = await ContactMessage.countDocuments({ business: business._id });
-      unreadMessages = await ContactMessage.countDocuments({
-        business: business._id,
-        readByBusiness: false,
-      });
+      unreadMessages = await ContactMessage.countDocuments({ business: business._id, readByBusiness: false });
     } catch {
       console.warn("💬 ContactMessage model not active, skipping message counts.");
     }
 
-    // ✅ Render Buyer Dashboard
     res.render("dashboards/buyer-dashboard", {
       title: "Buyer Dashboard",
       business,
       totalOrders,
       completedOrders,
       pendingOrders,
-      orders,
+      orders,            // still listing recent orders below
+      shipStats,         // ✅ for your in-transit & delivered pills
+      orderedProducts,   // ✅ product details for what they actually bought
       stats: { totalMessages, unreadMessages },
+
+      // buttons/links can stay
       success: req.flash("success"),
       error: req.flash("error"),
       themeCss: res.locals.themeCss,
@@ -450,7 +543,6 @@ router.get("/dashboards/buyer-dashboard", requireBusiness, async (req, res) => {
     res.redirect("/business/login");
   }
 });
-
 
 /* ----------------------------------------------------------
  * 🧭 GET: Universal Dashboard Redirector

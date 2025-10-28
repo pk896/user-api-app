@@ -9,7 +9,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require("crypto");
 const expressLayouts = require('express-ejs-layouts');
-const mongoose = require('mongoose');
+//const mongoose = require('mongoose');
 const compression = require('compression');
 const morgan = require('morgan');
 const MongoStore = require('connect-mongo');
@@ -80,7 +80,7 @@ const frontendOrigin =
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  'my-express-server-rq4a.onrender.com',
+  'https://my-express-server-rq4a.onrender.com',
   frontendOrigin, // <- use the same value as above so it never drifts
 ];
 
@@ -341,59 +341,79 @@ app.use((req, res, next) => {
   next();
 });
 
-// routes for the delivery options
+// --------------------------
+// Require routers FIRST
+// --------------------------
 const deliveryOptionRouter = require("./routes/deliveryOption");
-app.use("/api/deliveryOption", deliveryOptionRouter)
-
-//---------------------------
-// product routes
-//---------------------------
-const productsRouter = require("./routes/products");
-app.use("/products", productsRouter);
-
-// 🌍 Contact Page Route
-const contactRoutes = require("./routes/contact");
-app.use("/contact", contactRoutes);
-
-// 🌐 Admin Routes
-const adminRoutes = require("./routes/admin");
-app.use("/admin", adminRoutes);
-
-//---------------------------
-// cart routes
-//---------------------------
-const cartRoutes = require("./routes/cart");
-app.use("/api/cart", cartRoutes);
+const productsRouter       = require("./routes/products");
+const contactRoutes        = require("./routes/contact");
+const adminRoutes          = require("./routes/admin");         // pages: /admin/*
+const adminOrdersRoutes    = require("./routes/ordersAdmin");   // pages: /admin/orders (see note below)
+const cartRoutes           = require("./routes/cart");
+const paymentRoutes        = require("./routes/payment");       // /payment/* and JSON feeds
+const usersRouter          = require("./routes/users");
+const businessAuthRoutes   = require("./routes/businessAuth");
+const shipmentRoutes       = require("./routes/shipments");
+const staticPagesRoutes    = require("./routes/staticPages");
+const salesRoutes          = require("./routes/sales");
+const someLinksRoutes      = require("./routes/someRoute");
+const requireOrdersAdmin   = require("./middleware/requireOrdersAdmin");
+const deliveryOptionsAdmin = require("./routes/deliveryOptionsAdmin");
+const requireAdmin         = require("./middleware/requireAdmin");
+const deliveryOptionsApi   = require('./routes/deliveryOptionsApi');
+const demandsRoutes        = require('./routes/demands');
 
 // --------------------------
-// Routes
+// Mount API-style routes first
 // --------------------------
-const paymentRoutes = require('./routes/payment');
-app.use('/payment', paymentRoutes);
+app.use("/api/deliveryOption", deliveryOptionRouter); // API
+app.use("/api/cart",          cartRoutes);            // API
 
-// User routes
-const usersRouter = require('./routes/users');
-app.use('/users', usersRouter);
+app.use('/api/admin', requireAdmin);
+app.use("/api/admin", paymentRoutes);
 
-// Business auth routes
-const businessAuthRoutes = require("./routes/businessAuth");
+// BEFORE mounting paymentRoutes under /api/admin:
+app.use('/api/admin', requireOrdersAdmin); // gate the API
+app.use(paymentRoutes); // mounts /payment/* endpoints defined inside
+
+// --------------------------
+// Auth & identity
+// --------------------------
+app.use("/users",   usersRouter);
 app.use("/business", businessAuthRoutes);
 
-// shipment routes
-const shipmentRoutes = require("./routes/shipments");
-app.use("/shipments", shipmentRoutes);
+// --------------------------
+// Business/admin pages
+// --------------------------
+// Mount ONE canonical /admin router first
+app.use("/admin", adminRoutes);
 
-// routes for terms and privacy
-app.use("/", require("./routes/staticPages"));
+// Mount admin orders UNDER /admin to avoid two top-level /admin routers fighting.
+// Ensure your ./routes/adminOrders.js uses paths like router.get('/orders', ...),
+/// router.get('/orders/...', ...) inside. If it currently defines '/', change to '/orders'.
+app.use("/admin", adminOrdersRoutes);
 
-// routes for sales-product page
-app.use("/sales", require("./routes/sales"));
+app.use(deliveryOptionsAdmin);
+app.use(deliveryOptionsApi);
 
-// URL control
-app.use("/links", require("./routes/someRoute"));
+// --------------------------
+// Commerce / catalog
+// --------------------------
+app.use("/products",  productsRouter);  // includes /products/add, /products/view/:id, etc.
+app.use("/shipments", shipmentRoutes);  // /shipments/* (manage + track)
+app.use("/payment",   paymentRoutes);   // /payment/* (checkout, capture, refunds, feeds)
 
-// route for admin role on orders
-app.use(require("./routes/adminOrders"));
+// --------------------------
+// Public pages
+// --------------------------
+app.use("/contact", contactRoutes);
+app.use("/sales",   salesRoutes);
+app.use("/links",   someLinksRoutes);
+
+// Static / legal etc. LAST so it doesn't shadow specific routes
+app.use("/", staticPagesRoutes);
+
+app.use('/demands', demandsRoutes); // ✅ all demand pages live under /demands/*
 
 // 🛒 Get current cart item count
 app.get("/cart/count", (req, res) => {
@@ -524,7 +544,7 @@ app.use((err, req, res, next) => {
   res.status(500).send(`<pre>${err.stack}</pre>`);
 });
 
-const connectWithRetry = async (retries = 5) => {
+/*const connectWithRetry = async (retries = 5) => {
   try {
     console.log(`🔗 Attempting to connect to MongoDB... (${retries} retries left)`);
 
@@ -552,12 +572,18 @@ const connectWithRetry = async (retries = 5) => {
 };
 
 // Call it once at startup
-connectWithRetry();
+connectWithRetry();*/
+
+/*await connect(); // before app.listen
 
 // Start Express server AFTER DB connection
     const PORT = process.env.PORT || 3000;
   app.listen(PORT, '0.0.0.0', async() => {
     console.log(`🚀 Server running on port ${PORT}`);
-  });
+  });*/
 
+const { connectWithRetry } = require('./utils/db');
+connectWithRetry();
 
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

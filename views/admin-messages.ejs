@@ -1,0 +1,317 @@
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<main class="page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : '' %>">
+  <header class="head">
+    <h1>📨 All Messages</h1>
+    <nav class="nav">
+      <a class="btn" href="/admin/dashboard">↩ Dashboard</a>
+    </nav>
+  </header>
+
+  <!-- Flash -->
+  <% if (success && success.length) { %>
+    <div class="flash ok" role="status" aria-live="polite"><%= success %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="flash err" role="alert" aria-live="assertive"><%= error %></div>
+  <% } %>
+
+  <!-- Search -->
+  <form class="bar" method="GET" action="/contact/admin/all">
+    <input
+      class="input"
+      type="search"
+      name="search"
+      value="<%= search || '' %>"
+      placeholder="Search by name, email, or message…"
+      aria-label="Search messages"
+    />
+    <button class="btn btn-primary" type="submit">Search</button>
+    <% if (search) { %>
+      <a class="btn" href="/contact/admin/all">Clear</a>
+    <% } %>
+  </form>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table class="table" id="msgTable">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Business / Contact</th>
+          <th>Snippet</th>
+          <th>Status</th>
+          <th style="min-width:210px">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (messages && messages.length) { %>
+          <% messages.forEach(m => { 
+               const last = (m.thread && m.thread.length) ? m.thread[m.thread.length-1] : null;
+               const snippet = last ? (last.message || '').slice(0, 90) : '—';
+               const when = new Date(m.createdAt).toLocaleString();
+               const statusKind = m.readByAdmin === false ? 'new' : (m.thread && m.thread.some(t => t.sender==='admin') ? 'replied' : 'pending');
+          %>
+            <!-- DATA ROW -->
+            <tr class="<%= m.readByAdmin === false ? 'row-unread' : '' %>" data-id="<%= m._id %>">
+              <td><span class="muted"><%= when %></span></td>
+              <td>
+                <div class="name"><%= m.name || '—' %></div>
+                <div class="muted"><%= m.email || '—' %></div>
+              </td>
+              <td class="cell-snippet"><%= snippet %><%= (last && last.message && last.message.length > 90) ? '…' : '' %></td>
+              <td class="cell-status">
+                <% if (statusKind === 'new') { %>
+                  <span class="badge badge-new">🔴 New</span>
+                <% } else if (statusKind === 'replied') { %>
+                  <span class="badge badge-replied">💬 Replied</span>
+                <% } else { %>
+                  <span class="badge badge-pending">🕓 Pending</span>
+                <% } %>
+              </td>
+              <td class="cell-actions">
+                <a class="link" href="/contact/thread/<%= m._id %>">Open thread →</a>
+                <button class="btn btn-ghost btn-quick" data-action="toggle" aria-expanded="false" aria-controls="qr-<%= m._id %>">Quick reply</button>
+              </td>
+            </tr>
+
+            <!-- QUICK REPLY ROW (collapsible) -->
+            <tr class="qr-row hidden" id="qr-<%= m._id %>">
+              <td colspan="5">
+                <form class="qr-form" data-id="<%= m._id %>" action="/contact/thread/<%= m._id %>/reply" method="POST">
+                  <label for="reply-<%= m._id %>" class="qr-label">Reply to <strong><%= m.name || 'Business' %></strong></label>
+                  <textarea class="qr-textarea" id="reply-<%= m._id %>" name="reply" rows="3" placeholder="Type your message…" required></textarea>
+
+                  <!-- CSRF: add your token here if enabled -->
+                  <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <% } %>
+
+                  <div class="qr-actions">
+                    <button class="btn" type="button" data-action="cancel">Cancel</button>
+                    <button class="btn btn-primary" type="submit" data-action="send">Send</button>
+                  </div>
+
+                  <div class="qr-flash" role="status" aria-live="polite"></div>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr><td colspan="5" class="muted">No messages found.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <% if (totalPages && totalPages > 1) { %>
+    <nav class="pager" aria-label="Pagination">
+      <% const q = search ? `&search=${encodeURIComponent(search)}` : '' ; %>
+      <a class="btn <%= currentPage<=1?'disabled':'' %>" href="/contact/admin/all?page=<%= Math.max(currentPage-1,1) %><%= q %>">← Prev</a>
+      <span class="muted">Page <%= currentPage %> of <%= totalPages %></span>
+      <a class="btn <%= currentPage>=totalPages?'disabled':'' %>" href="/contact/admin/all?page=<%= Math.min(currentPage+1,totalPages) %><%= q %>">Next →</a>
+    </nav>
+  <% } %>
+</main>
+
+<style nonce="<%= NONCE %>">
+  .page{max-width:1000px;margin:0 auto;padding:1rem}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.75rem}
+  .nav .btn{margin-left:.4rem}
+  .bar{display:flex;gap:.5rem;margin:.6rem 0 1rem}
+  .input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:.55rem .7rem}
+  .btn{border:1px solid #d1d5db;border-radius:10px;padding:.5rem .8rem;background:#fff;cursor:pointer;text-decoration:none;color:#111827}
+  .btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
+  .btn-ghost{background:transparent}
+  .btn.disabled{pointer-events:none;opacity:.55}
+  .table-wrap{overflow:auto}
+  .table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid #e5e7eb;padding:.55rem .6rem;text-align:left;vertical-align:top}
+  .muted{color:#6b7280}
+  .name{font-weight:600}
+  .link{color:#2563eb;text-decoration:none}
+  .flash{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px}
+  .flash.ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
+  .flash.err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+  .badge{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.78rem;border:1px solid #d1d5db;background:#fff}
+  .badge-new{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+  .badge-replied{background:#ecfdf5;border-color:#34d399;color:#065f46}
+  .badge-pending{background:#fef3c7;border-color:#fde68a;color:#92400e}
+  .row-unread td{background:rgba(254,226,226,.35)}
+  .dark-theme .btn{background:#111827;color:#e5e7eb;border-color:#374151}
+  .dark-theme .table th,.dark-theme .table td{border-color:#374151}
+  .dark-theme .row-unread td{background:rgba(71,85,105,.35)}
+
+  /* Quick reply */
+  .qr-row.hidden{display:none}
+  .qr-form{display:flex;flex-direction:column;gap:.5rem;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:.8rem}
+  .qr-label{font-weight:600}
+  .qr-textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:.6rem .7rem;font:inherit;resize:vertical}
+  .qr-actions{display:flex;gap:.5rem;justify-content:flex-end}
+  .qr-flash{font-size:.9rem;margin-top:.2rem}
+  .qr-flash.ok{color:#065f46}
+  .qr-flash.err{color:#991b1b}
+  .dark-theme .qr-form{background:#1f2937;border-color:#374151}
+  .dark-theme .qr-textarea{background:#111827;color:#e5e7eb;border-color:#374151}
+
+  /* Pulse animation for live updates */
+  @keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.02)} 100%{transform:scale(1)} }
+  .pulse { animation: pulse .25s ease; }
+</style>
+
+<script nonce="<%= NONCE %>">
+(() => {
+  const table = document.getElementById('msgTable');
+
+  function toggleRow(id, expand) {
+    const qr = document.getElementById('qr-' + id);
+    const btn = table.querySelector(`tr[data-id="${id}"] .btn-quick`);
+    if (!qr || !btn) return;
+
+    const willExpand = (typeof expand === 'boolean') ? expand : qr.classList.contains('hidden');
+    qr.classList.toggle('hidden', !willExpand);
+    btn.setAttribute('aria-expanded', String(willExpand));
+    if (willExpand) {
+      const ta = qr.querySelector('textarea');
+      if (ta) ta.focus();
+    }
+  }
+
+  function flashInline(el, ok, msg) {
+    if (!el) return;
+    el.classList.remove('ok','err');
+    el.classList.add(ok ? 'ok' : 'err');
+    el.textContent = msg || '';
+  }
+
+  async function sendQuickReply(form) {
+    const id = form.getAttribute('data-id');
+    const url = form.getAttribute('action');
+    const replyEl = form.querySelector('textarea[name="reply"]');
+    const flashEl = form.querySelector('.qr-flash');
+    const sendBtn = form.querySelector('[data-action="send"]');
+    const text = (replyEl?.value || '').trim();
+    if (!text) { flashInline(flashEl, false, 'Reply cannot be empty.'); return; }
+
+    try {
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending…';
+
+      const body = new URLSearchParams();
+      body.set('reply', text);
+      // CSRF support if your app injects it
+      const csrf = form.querySelector('input[name="_csrf"]')?.value;
+      if (csrf) body.set('_csrf', csrf);
+
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'same-origin',
+        body: body.toString()
+      });
+
+      if (!r.ok) throw new Error('Reply failed');
+
+      // UI updates (optimistic)
+      const row = table.querySelector(`tr[data-id="${id}"]`);
+      row?.classList.remove('row-unread');
+
+      // update status badge
+      const cellStatus = row?.querySelector('.cell-status');
+      if (cellStatus) cellStatus.innerHTML = '<span class="badge badge-replied">💬 Replied</span>';
+
+      // update snippet cell
+      const cellSnippet = row?.querySelector('.cell-snippet');
+      if (cellSnippet) {
+        const preview = text.length > 90 ? text.slice(0, 90) + '…' : text;
+        cellSnippet.textContent = preview;
+      }
+
+      // clear + show ok
+      replyEl.value = '';
+      flashInline(flashEl, true, 'Reply sent.');
+      setTimeout(() => toggleRow(id, false), 350);
+
+    } catch (e) {
+      flashInline(flashEl, false, e.message || 'Reply failed.');
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send';
+    }
+  }
+
+  table?.addEventListener('click', (ev) => {
+    const btnToggle = ev.target.closest('button[data-action="toggle"]');
+    const btnCancel = ev.target.closest('button[data-action="cancel"]');
+
+    if (btnToggle) {
+      const tr = btnToggle.closest('tr[data-id]');
+      if (!tr) return;
+      const id = tr.getAttribute('data-id');
+      toggleRow(id);
+      return;
+    }
+
+    if (btnCancel) {
+      const form = btnCancel.closest('.qr-form');
+      if (!form) return;
+      const id = form.getAttribute('data-id');
+      toggleRow(id, false);
+      return;
+    }
+  });
+
+  table?.addEventListener('submit', (ev) => {
+    const form = ev.target.closest('.qr-form');
+    if (!form) return;
+    ev.preventDefault();
+    sendQuickReply(form);
+  });
+})();
+</script>
+
+<!-- 🔴 Live updates via SSE -->
+<script nonce="<%= NONCE %>">
+(() => {
+  const table = document.getElementById('msgTable');
+  if (!table) return;
+
+  function pulse(el){ if(!el) return; el.classList.add('pulse'); setTimeout(()=>el.classList.remove('pulse'), 280); }
+
+  try {
+    const es = new EventSource('/contact/admin/stream', { withCredentials: true });
+
+    es.addEventListener('newMessage', (ev) => {
+      let data = {};
+      try { data = JSON.parse(ev.data || '{}'); } catch (_) {}
+      const id = data.threadId;
+      if (!id) return;
+      const row = table.querySelector(`tr[data-id="${id}"]`);
+      if (!row) return;
+
+      // Update snippet text
+      const cellSnippet = row.querySelector('.cell-snippet');
+      if (cellSnippet) {
+        const text = String(data.message || '');
+        cellSnippet.textContent = text.length > 90 ? (text.slice(0,90) + '…') : text;
+        pulse(cellSnippet);
+      }
+
+      // Update status based on sender
+      const cellStatus = row.querySelector('.cell-status');
+      if (cellStatus) {
+        if (data.sender === 'business') {
+          row.classList.add('row-unread');
+          cellStatus.innerHTML = '<span class="badge badge-new">🔴 New</span>';
+        } else {
+          row.classList.remove('row-unread');
+          cellStatus.innerHTML = '<span class="badge badge-replied">💬 Replied</span>';
+        }
+        pulse(cellStatus);
+      }
+    });
+
+    window.addEventListener('beforeunload', () => es.close());
+  } catch (_) { /* ignore */ }
+})();
+</script>

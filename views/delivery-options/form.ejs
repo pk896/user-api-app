@@ -1,0 +1,78 @@
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<main class="page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : '' %>">
+  <header class="head">
+    <h1><%= mode === 'edit' ? '✏️ Edit Delivery Option' : '➕ New Delivery Option' %></h1>
+    <nav class="nav">
+      <a class="btn" href="/admin/delivery-options">↩ Back</a>
+    </nav>
+  </header>
+
+  <% if (success && success.length) { %>
+    <div class="flash ok"><%= success %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="flash err"><%= error %></div>
+  <% } %>
+
+  <form class="form" method="POST" action="<%= mode==='edit' ? '/admin/delivery-options/'+doc._id : '/admin/delivery-options' %>" novalidate>
+    <div class="group">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" required placeholder="e.g. Standard, Express, Next-Day" value="<%= doc.name || '' %>">
+    </div>
+
+    <div class="grid">
+      <div class="group">
+        <label for="deliveryDays">Delivery Days</label>
+        <input id="deliveryDays" name="deliveryDays" type="number" min="0" inputmode="numeric" pattern="[0-9]*" value="<%= doc.deliveryDays || 0 %>">
+        <small class="muted">0 = same day, 1 = next day, etc.</small>
+      </div>
+
+      <div class="group">
+        <label for="price">Price</label>
+        <input id="price" name="price" type="text" inputmode="decimal" placeholder="e.g. 4.99" value="<%= (typeof doc.priceCents==='number') ? (doc.priceCents/100).toFixed(2) : '' %>">
+        <small class="muted">Currency in dollars (will be stored as cents).</small>
+      </div>
+    </div>
+
+    <div class="group check">
+      <input id="active" name="active" type="checkbox" <%= doc.active ? 'checked' : '' %>>
+      <label for="active">Active</label>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" type="submit"><%= mode==='edit' ? 'Save Changes' : 'Create Option' %></button>
+      <a class="btn" href="/admin/delivery-options">Cancel</a>
+    </div>
+  </form>
+</main>
+
+<style nonce="<%= NONCE %>">
+  .page{max-width:760px;margin:0 auto;padding:1rem}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.75rem}
+  .btn{border:1px solid #d1d5db;border-radius:10px;padding:.5rem .8rem;background:#fff;cursor:pointer;text-decoration:none;color:#111827}
+  .btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
+  .flash{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px}
+  .flash.ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
+  .flash.err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+  .form{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+  .group{margin-bottom:.8rem}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+  label{display:block;font-weight:700;margin-bottom:.25rem}
+  input[type="text"],input[type="number"]{width:100%;padding:.6rem .65rem;border:1px solid #d1d5db;border-radius:10px}
+  .muted{color:#6b7280}
+  .check{display:flex;align-items:center;gap:.45rem}
+  .actions{display:flex;gap:.5rem;margin-top:.6rem}
+
+  .dark-theme .form{background:#1f2937;border-color:#374151;color:#f3f4f6}
+  .dark-theme .btn{background:#111827;color:#e5e7eb;border-color:#374151}
+
+  @media (max-width:480px){
+    .grid{grid-template-columns:1fr}
+    .actions{flex-direction:column}
+    .btn{width:100%}
+  }
+</style>
+
+<script nonce="<%= NONCE %>">
+  // (Optional) light client validation or helpers could go here
+</script>

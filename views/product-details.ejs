@@ -1,7 +1,23 @@
 <!-- views/product-details.ejs -->
-<% const p = product; %>
+<%
+  // ---- locals / helpers (mobile-first) ----
+  const pd   = product || {};
+  const name = pd.name || 'Product';
+  const img  = pd.imageUrl || '/img/placeholder.png';
 
-<!-- Flash -->
+  const price        = Number(pd.price || 0);
+  const color        = pd.color || '';
+  const size         = pd.size || '';
+  const type         = pd.type || '';
+  const quality      = pd.quality || '';
+  const made         = pd.made || '';
+  const manufacturer = pd.manufacturer || '';
+  const desc         = pd.description || '';
+
+  const backToSales = '/products/sales';
+%>
+
+<!-- Flash (optional sitewide) -->
 <% if (success && success.length > 0) { %>
   <div class="flash flash-success">✅ <%= success %></div>
 <% } %>
@@ -9,40 +25,176 @@
   <div class="flash flash-error">❌ <%= error %></div>
 <% } %>
 
-<main class="product-details <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+<main class="pd-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+
+  <!-- Back / crumbs -->
+  <nav class="crumbs">
+    <a href="<%= backToSales %>" class="crumb-back" aria-label="Back to shop">← Back</a>
+    <span class="crumb-sep">/</span>
+    <span class="crumb-current"><%= name %></span>
+  </nav>
+
   <article class="pd-wrap">
+    <!-- Media -->
     <div class="pd-media">
-      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" />
+      <img class="pd-img" src="<%= img %>" alt="<%= name %>" loading="lazy" decoding="async" />
     </div>
 
+    <!-- Info -->
     <div class="pd-info">
-      <h1><%= p.name %></h1>
-      <p class="pd-price">R <%= Number(p.price||0).toFixed(2) %></p>
-      <p class="pd-stock"><%= (p.stock||0) > 0 ? '✅ In stock' : '❌ Out of stock' %></p>
+      <h1 class="pd-title"><%= name %></h1>
 
-      <p class="pd-desc"><%= p.description || '' %></p>
+      <!-- Price (always show) -->
+      <div class="pd-price-row">
+        <span class="pd-price">R <%= price.toFixed(2) %></span>
+      </div>
 
+      <!-- Attributes (only render rows that have values) -->
+      <dl class="pd-attrs">
+        <% if (color) { %>
+          <div class="row"><dt>Color</dt><dd><%= color %></dd></div>
+        <% } %>
+        <% if (size) { %>
+          <div class="row"><dt>Size</dt><dd><%= size %></dd></div>
+        <% } %>
+        <% if (type) { %>
+          <div class="row"><dt>Type</dt><dd><%= type %></dd></div>
+        <% } %>
+        <% if (quality) { %>
+          <div class="row"><dt>Quality</dt><dd><%= quality %></dd></div>
+        <% } %>
+        <% if (made) { %>
+          <div class="row"><dt>Made in</dt><dd><%= made %></dd></div>
+        <% } %>
+        <% if (manufacturer) { %>
+          <div class="row"><dt>Manufacturer</dt><dd><%= manufacturer %></dd></div>
+        <% } %>
+      </dl>
+
+      <% if (desc) { %>
+        <section class="pd-desc">
+          <h2>Description</h2>
+          <p><%= desc %></p>
+        </section>
+      <% } %>
+
+      <!-- Actions: Add to Cart + Back to Shop -->
       <div class="pd-actions">
-        <a class="btn btn-primary"
-           href="/api/cart/add?pid=<%= p.customId %>&back=/sales"
-           <%= (p.stock||0) > 0 ? '' : 'aria-disabled="true" tabindex="-1"' %>>
+        <a
+          class="btn btn-primary"
+          href="/api/cart/add?pid=<%= pd.customId %>&back=<%= backToSales %>">
           ➕ Add to Cart
         </a>
-        <a class="btn" href="/sales">← Back to Shop</a>
+        <a class="btn" href="<%= backToSales %>">← Back to Shop</a>
       </div>
     </div>
   </article>
 </main>
 
 <style nonce="<%= nonce %>">
-  .pd-wrap{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
-  .pd-media img{width:100%;height:auto;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.1)}
-  .pd-info h1{margin:0 0 .25rem;font-size:clamp(1.25rem,2.4vw,1.8rem)}
-  .pd-price{font-weight:900;color:#2563eb;margin:.25rem 0}
-  .pd-stock{font-weight:700;margin:.25rem 0 1rem}
-  .pd-actions{display:flex;gap:.6rem}
-  .btn{display:inline-block;padding:.6rem 1rem;border-radius:10px;text-decoration:none;border:1px solid #d1d5db}
-  .btn-primary{background:#2563eb;color:#fff;border-color:#2563eb}
-  .btn[aria-disabled="true"]{background:#9ca3af;border-color:#9ca3af;pointer-events:none}
-  @media (max-width:820px){.pd-wrap{grid-template-columns:1fr}}
+  /* ===== Page shell (mobile-first; Hisense U50 Lite friendly) ===== */
+  .pd-page{ padding:clamp(.6rem,3vw,1.25rem); }
+  .crumbs{
+    display:flex; align-items:center; gap:.4rem;
+    font-size:.9rem; margin:.2rem 0 .7rem;
+  }
+  .crumb-back{
+    text-decoration:none; padding:.28rem .55rem; border-radius:8px;
+    border:1px solid #e5e7eb; background:#fff; color:inherit;
+  }
+  .crumb-back:hover{ background:#f8fafc }
+  .crumb-sep{ color:#9ca3af }
+  .crumb-current{
+    color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:70vw;
+  }
+
+  /* ===== Layout: single column on phones, split on wider screens ===== */
+  .pd-wrap{
+    display:grid; gap:clamp(.9rem,2.6vw,1.4rem);
+    grid-template-columns: 1fr;            /* phones first */
+    max-width:1080px; margin:0 auto; align-items:start;
+  }
+  @media (min-width: 880px){
+    .pd-wrap{ grid-template-columns: 1.1fr 1fr; }
+  }
+
+  /* ===== Media ===== */
+  .pd-media{
+    background:#f3f4f6; border-radius:14px; overflow:hidden;
+    box-shadow:0 6px 18px rgba(0,0,0,.08);
+  }
+  .pd-img{
+    width:100%; height:auto; display:block;
+    max-height: 280px; object-fit: contain; /* keep full image visible on phones */
+  }
+  @media (min-width: 520px){ .pd-img{ max-height: 340px } }
+  @media (min-width: 880px){ .pd-img{ max-height: 420px } }
+
+  /* ===== Info ===== */
+  .pd-title{
+    margin:.1rem 0 .3rem; line-height:1.2;
+    font-size: clamp(1.1rem, 4.2vw, 1.9rem);
+  }
+  .pd-price-row{ margin:.1rem 0 .6rem; }
+  .pd-price{
+    font-weight:900; color:#2563eb; letter-spacing:.2px;
+    font-size: clamp(1.05rem, 3.8vw, 1.4rem);
+  }
+
+  /* Attributes list */
+  .pd-attrs{
+    display:grid; gap:.5rem; margin:.6rem 0 1rem;
+  }
+  .pd-attrs .row{
+    display:grid;
+    grid-template-columns: 120px 1fr;      /* label / value */
+    align-items:center;
+    gap:.6rem;
+    padding:.5rem .6rem;
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:10px;
+  }
+  .pd-attrs dt{
+    font-weight:700; color:#374151;
+    font-size:.92rem;
+  }
+  .pd-attrs dd{
+    margin:0; color:#111827; font-size:.95rem;
+    word-break: break-word;
+  }
+
+  /* Description */
+  .pd-desc{ margin:.75rem 0 1.2rem; }
+  .pd-desc h2{ margin:0 0 .4rem; font-size:1rem; }
+  .pd-desc p{ margin:0; line-height:1.55; color:#374151; }
+
+  /* Actions */
+  .pd-actions{
+    display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.6rem;
+  }
+  .btn{
+    display:inline-block; padding:.62rem 1rem; border-radius:10px;
+    text-decoration:none; border:1px solid #d1d5db;
+    font-weight:600;
+  }
+  .btn-primary{ background:#2563eb; color:#fff; border-color:#2563eb }
+  .btn-primary:hover{ filter:brightness(.98) }
+  .btn:hover{ background:#f9fafb }
+
+  /* Buttons: full width on very small screens for easy tapping */
+  @media (max-width: 520px){
+    .btn{ width:100%; text-align:center }
+  }
+
+  /* ===== Dark theme ===== */
+  .dark-theme .crumb-back{ background:#111827; border-color:#374151; color:#e5e7eb; }
+  .dark-theme .crumb-back:hover{ background:#0b1220; }
+  .dark-theme .pd-media{ background:#0f172a; }
+  .dark-theme .pd-attrs .row{
+    background:#111827; border-color:#374151;
+  }
+  .dark-theme .pd-attrs dt{ color:#e5e7eb; }
+  .dark-theme .pd-attrs dd{ color:#f9fafb; }
+  .dark-theme .pd-desc p{ color:#e5e7eb; }
 </style>
