@@ -2,20 +2,44 @@
 const express = require("express");
 const router = express.Router();
 
-const MatchedDemand = require("../models/MatchedDemand");
-const Demand = require("../models/Demand");
-const Product = require("../models/Product");
-const DemandedProduct = require("../models/DemandedProduct"); // ← add this
+const MatchedDemand     = require("../models/MatchedDemand");
+const Demand            = require("../models/Demand");
+const DemandedProduct   = require("../models/DemandedProduct"); // fallback model
+const Product           = require("../models/Product");
+const Notification      = require("../models/Notification");
+const nodemailer        = require("nodemailer");
 
+const requireBusiness   = require("../middleware/requireBusiness");
+const requireRole       = require("../middleware/requireRole");
 
+const { createNotification } = require("../utils/notify");
 
-// ✅ Import concrete middleware files (they must export function declarations)
-const requireBusiness = require("../middleware/requireBusiness");
-const requireRole = require("../middleware/requireRole");
+/* ---------------------------------------------
+ * Helpers
+ * ------------------------------------------- */
+function normStr(s) { return String(s || "").trim().toLowerCase(); }
+function safeNum(n, d = 0) { const x = Number(n); return Number.isFinite(x) ? x : d; }
 
-// -------------------------------------------------
-// Request logger
-// -------------------------------------------------
+// Email helper (no-op if SMTP not configured or recipient missing)
+async function sendBuyerEmail({ to, subject, text }) {
+  if (!process.env.SMTP_HOST || !to) return;
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: false, // STARTTLS on 587
+    auth: (process.env.SMTP_USER && process.env.SMTP_PASS)
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || "no-reply@phakisi.global",
+    to, subject, text,
+  });
+}
+
+/* ---------------------------------------------
+ * Middleware: request logger
+ * ------------------------------------------- */
 router.use((req, _res, next) => {
   console.log("[/matches]", req.method, req.originalUrl);
   next();
@@ -24,56 +48,9 @@ router.use((req, _res, next) => {
 // Simple health
 router.get("/_ping", (_req, res) => res.send("matches: ok"));
 
-// -------------------------------------------------
-// Utilities
-// -------------------------------------------------
-function normStr(s) { return String(s || "").trim().toLowerCase(); }
-function safeNum(n, d = 0) { const x = Number(n); return Number.isFinite(x) ? x : d; }
-
-/**
- * Optional: multi-signal scorer (not used in type-only run yet)
- */
-function computeMatchScore(demand, product) {
-  let score = 0;
-
-  // Type/category exact (case-insensitive)
-  if (normStr(demand.productType || demand.type) && normStr(product.type) &&
-      normStr(demand.productType || demand.type) === normStr(product.type)) score += 40;
-
-  // Quality
-  if (normStr(demand.quality) && normStr(product.quality) &&
-      normStr(demand.quality) === normStr(product.quality)) score += 15;
-
-  // Location (very rough)
-  const dLoc = normStr(demand.location || [demand.country, demand.province, demand.city, demand.town].filter(Boolean).join(", "));
-  const pLoc = normStr(product.location || [product.country, product.province, product.city, product.town].filter(Boolean).join(", "));
-  if (dLoc && pLoc) {
-    if (dLoc === pLoc) score += 20;
-    else if (pLoc.includes(dLoc)) score += 10;
-  }
-
-  // Quantity
-  const dq = safeNum(demand.quantity);
-  const pq = safeNum(product.stock || product.quantityAvailable || 0);
-  if (dq > 0 && pq > 0) {
-    if (pq >= dq) score += 15;
-    else if (pq >= Math.ceil(dq * 0.5)) score += 8;
-  }
-
-  // Price
-  const target = safeNum(demand.targetPrice, NaN);
-  const price = safeNum(product.price, NaN);
-  if (Number.isFinite(target) && Number.isFinite(price)) {
-    if (price <= target) score += 10;
-    else if (price <= target * 1.15) score += 5;
-  }
-
-  return Math.max(0, Math.min(100, score));
-}
-
-// -------------------------------------------------
-// Core: Type-only matching (single handler)
-// -------------------------------------------------
+/* ---------------------------------------------
+ * Core: TYPE-ONLY matching
+ * ------------------------------------------- */
 async function runMatchingTypeOnly(req, res) {
   try {
     const buyer = req.session.business;
@@ -88,18 +65,16 @@ async function runMatchingTypeOnly(req, res) {
       return res.redirect("/demands/my-demands");
     }
 
-    // --- Load demand from any of the models we’ve used historically
+    // Load demand from either model (historical support)
     let demand = await Demand.findById(demandId).lean();
-    if (!demand) {
-      demand = await DemandedProduct.findById(demandId).lean(); // fallback
-    }
+    if (!demand) demand = await DemandedProduct.findById(demandId).lean();
     if (!demand) {
       console.warn("[/matches/run] demand not found by id", demandId);
       req.flash("error", "Demand not found.");
       return res.redirect("/demands/my-demands");
     }
 
-    // --- Robust owner check (support historical fields)
+    // Robust owner check across historical fields
     const bizId = String(buyer._id);
     const candidateOwnerIds = [
       demand.buyerId,
@@ -108,19 +83,17 @@ async function runMatchingTypeOnly(req, res) {
       demand.owner,
       demand.requesterBusinessId,
       demand.requester && demand.requester.businessId,
-      demand.requester && demand.requester.business && demand.requester.business._id
+      demand.requester && demand.requester.business && demand.requester.business._id,
     ].filter(Boolean).map(String);
 
     const isOwner = candidateOwnerIds.some(id => id === bizId);
     if (!isOwner) {
-      console.warn("[/matches/run] owner check failed", {
-        demandId: String(demand._id), bizId, candidateOwnerIds
-      });
+      console.warn("[/matches/run] owner check failed", { demandId: String(demand._id), bizId, candidateOwnerIds });
       req.flash("error", "Demand not found (owner check failed).");
       return res.redirect("/demands/my-demands");
     }
 
-    // --- Type-only matching
+    // Type-only
     const dTypeRaw = String(demand.productType || demand.type || "").trim();
     if (!dTypeRaw) {
       req.flash("error", "This demand has no 'type'. Set a type first to find matches.");
@@ -136,7 +109,7 @@ async function runMatchingTypeOnly(req, res) {
     let created = 0, updated = 0;
 
     for (const p of products) {
-      const supplierId = p.business || p.businessId; // tolerate both
+      const supplierId = p.business || p.businessId; // tolerate both field names
       if (!supplierId) continue;
 
       const snapshot = {
@@ -168,6 +141,7 @@ async function runMatchingTypeOnly(req, res) {
         { upsert: true }
       );
 
+      // count inserts reliably across Mongoose versions
       if (resUpsert.upsertedId || resUpsert.upsertedCount > 0) created++;
       else updated++;
     }
@@ -181,6 +155,7 @@ async function runMatchingTypeOnly(req, res) {
   }
 }
 
+// Mount GET + POST (GET is handy for testing from a link)
 router.get("/run/:demandId",
   requireBusiness,
   requireRole("buyer"),
@@ -190,14 +165,11 @@ router.get("/run/:demandId",
     return runMatchingTypeOnly(req, res, next);
   }
 );
-
-// Mount GET+POST once (no duplicates)
-//router.get("/run/:demandId",  requireBusiness, requireRole("buyer"), runMatchingTypeOnly);
 router.post("/run/:demandId", requireBusiness, requireRole("buyer"), runMatchingTypeOnly);
 
-// -------------------------------------------------
-// Buyer view: see matched products
-// -------------------------------------------------
+/* ---------------------------------------------
+ * Buyer view: matched products (with optional demand filter)
+ * ------------------------------------------- */
 router.get("/buyer", requireBusiness, requireRole("buyer"), async (req, res) => {
   try {
     const theme = req.session.theme || "light";
@@ -205,9 +177,18 @@ router.get("/buyer", requireBusiness, requireRole("buyer"), async (req, res) => 
     const nonce = res.locals.nonce || "";
     const buyer = req.session.business;
 
+    // (Optional) pagination support
+    const page = Math.max(1, Number(req.query.page || 1));
+    const per  = Math.min(50, Math.max(5, Number(req.query.per || 20)));
+
     const demandFilter = req.query.demand ? { demandId: req.query.demand } : {};
-    const matches = await MatchedDemand.find({ buyerId: buyer._id, ...demandFilter })
+    const q = { buyerId: buyer._id, ...demandFilter };
+
+    const total = await MatchedDemand.countDocuments(q);
+    const matches = await MatchedDemand.find(q)
       .sort({ score: -1, createdAt: -1 })
+      .skip((page - 1) * per)
+      .limit(per)
       .populate("demandId")
       .populate("productId")
       .populate("supplierId")
@@ -222,6 +203,9 @@ router.get("/buyer", requireBusiness, requireRole("buyer"), async (req, res) => 
       success: req.flash("success"),
       error: req.flash("error"),
       business: buyer,
+      // pager state
+      page, per, total, pages: Math.ceil(total / per),
+      demand: req.query.demand || "",
     });
   } catch (err) {
     console.error("[matches.buyer]", err);
@@ -230,9 +214,9 @@ router.get("/buyer", requireBusiness, requireRole("buyer"), async (req, res) => 
   }
 });
 
-// -------------------------------------------------
-// Supplier view: see buyer demands that match your products
-// -------------------------------------------------
+/* ---------------------------------------------
+ * Supplier view: matched demands (Only Pending default + pagination)
+ * ------------------------------------------- */
 router.get("/supplier", requireBusiness, requireRole("supplier"), async (req, res) => {
   try {
     const theme = req.session.theme || "light";
@@ -240,8 +224,19 @@ router.get("/supplier", requireBusiness, requireRole("supplier"), async (req, re
     const nonce = res.locals.nonce || "";
     const supplier = req.session.business;
 
-    const matches = await MatchedDemand.find({ supplierId: supplier._id })
+    const page = Math.max(1, Number(req.query.page || 1));
+    const per  = Math.min(50, Math.max(5, Number(req.query.per || 20)));
+
+    // Default to onlyPending=1 unless explicitly set to 0
+    const onlyPending   = String(req.query.onlyPending ?? "1") !== "0";
+    const statusFilter  = onlyPending ? { status: "pending" } : {};
+    const q             = { supplierId: supplier._id, ...statusFilter };
+
+    const total = await MatchedDemand.countDocuments(q);
+    const matches = await MatchedDemand.find(q)
       .sort({ status: 1, score: -1, createdAt: -1 })
+      .skip((page - 1) * per)
+      .limit(per)
       .populate("demandId")
       .populate("productId")
       .populate("buyerId")
@@ -256,6 +251,9 @@ router.get("/supplier", requireBusiness, requireRole("supplier"), async (req, re
       success: req.flash("success"),
       error: req.flash("error"),
       business: supplier,
+      // pager + filter state
+      page, per, total, pages: Math.ceil(total / per),
+      onlyPending,
     });
   } catch (err) {
     console.error("[matches.supplier]", err);
@@ -264,15 +262,19 @@ router.get("/supplier", requireBusiness, requireRole("supplier"), async (req, re
   }
 });
 
-// -------------------------------------------------
-// Supplier respond (accept/reject + message)
-// -------------------------------------------------
 router.post("/:matchId/respond", requireBusiness, requireRole("supplier"), async (req, res) => {
   try {
     const supplier = req.session.business;
     const { action, message } = req.body;
 
-    const match = await MatchedDemand.findOne({ _id: req.params.matchId, supplierId: supplier._id });
+    const match = await MatchedDemand.findOne({
+      _id: req.params.matchId,
+      supplierId: supplier._id,
+    })
+      .populate("buyerId")
+      .populate("productId")
+      .populate("demandId");
+
     if (!match) {
       req.flash("error", "Match not found.");
       return res.redirect("/matches/supplier");
@@ -287,6 +289,52 @@ router.post("/:matchId/respond", requireBusiness, requireRole("supplier"), async
     match.supplierMessage = String(message || "").slice(0, 500);
     await match.save();
 
+    const demandTitle =
+      match.snapshot?.demandTitle ||
+      match.demandId?.title ||
+      match.demandId?.productName ||
+      match.demandId?.type ||
+      "Demand";
+
+    const productName = match.snapshot?.productName || match.productId?.name || "Product";
+
+    // ✅ use _id if populated, or the raw ObjectId if not
+    await Notification.create({
+      buyerId:   match.buyerId?._id || match.buyerId,
+      type:      `match.${action}`, // enum: match.accepted | match.rejected | match.pending
+      matchId:   match._id,
+      demandId:  match.demandId?._id || match.demandId,
+      productId: match.productId?._id || match.productId,
+      supplierId: supplier._id,
+      title:
+        action === "accepted"
+          ? `Supplier accepted your match: ${productName}`
+          : action === "rejected"
+          ? `Supplier rejected your match: ${productName}`
+          : `Match updated: ${productName}`,
+      message: message || `Demand: ${demandTitle}`,
+    });
+
+    const buyerEmail =
+      match.buyerId?.email || match.buyerId?.contactEmail || null;
+
+    if (action === "accepted" && buyerEmail) {
+      try {
+        await sendBuyerEmail({
+          to: buyerEmail,
+          subject: `[Phakisi] Supplier accepted your demand match`,
+          text: `${supplier.name || "Supplier"} accepted your match for ${
+            productName
+          }.\n\nDemand: ${demandTitle}\nMessage: ${
+            match.supplierMessage || "—"
+          }`,
+        });
+      } catch (e) {
+        // Don’t block the flow on email failure; notification already created
+        console.warn("[matches.respond] email send failed:", e.message);
+      }
+    }
+
     req.flash("success", `Response recorded: ${action.toUpperCase()}.`);
     return res.redirect("/matches/supplier");
   } catch (err) {
@@ -296,17 +344,86 @@ router.post("/:matchId/respond", requireBusiness, requireRole("supplier"), async
   }
 });
 
-// -------------------------------------------------
-// Buyer summary (JSON) — totals + per-demand
-// -------------------------------------------------
+/* ---------------------------------------------
+ * Supplier respond (accept / reject + optional message)
+ * - creates Notification for buyer
+ * - optionally emails buyer on "accepted"
+ * ------------------------------------------- */
+/*router.post("/:matchId/respond", requireBusiness, requireRole("supplier"), async (req, res) => {
+  try {
+    const supplier = req.session.business;
+    const { action, message } = req.body;
+
+    const match = await MatchedDemand.findOne({ _id: req.params.matchId, supplierId: supplier._id })
+      .populate("buyerId")
+      .populate("productId")
+      .populate("demandId");
+    if (!match) {
+      req.flash("error", "Match not found.");
+      return res.redirect("/matches/supplier");
+    }
+
+    if (!["accepted", "rejected", "pending"].includes(action)) {
+      req.flash("error", "Invalid action.");
+      return res.redirect("/matches/supplier");
+    }
+
+    match.status = action;
+    match.supplierMessage = String(message || "").slice(0, 500);
+    await match.save();
+
+    const demandTitle = match.snapshot?.demandTitle
+      || match.demandId?.title
+      || match.demandId?.productName
+      || match.demandId?.type
+      || "Demand";
+    const productName = match.snapshot?.productName || match.productId?.name || "Product";
+
+      await Notification.create({
+      buyerId: match.buyerId,
+      type: `match.${action}`,
+      matchId: match._id,
+      demandId: match.demandId?._id || match.demandId,
+      productId: match.productId?._id || match.productId,
+      supplierId: supplier._id,
+      title: action === "accepted"
+        ? `Supplier accepted your match: ${productName}`
+        : action === "rejected"
+        ? `Supplier rejected your match: ${productName}`
+        : `Match updated: ${productName}`,
+      message: message || `Demand: ${demandTitle}`,
+    });
+
+    const buyerEmail = match.buyerId?.email || match.buyerId?.contactEmail || null;
+    if (action === "accepted") {
+      await sendBuyerEmail({
+        to: buyerEmail,
+        subject: `[Phakisi] Supplier accepted your demand match`,
+        text: `${supplier.name || "Supplier"} accepted your match for ${productName}.\n\nDemand: ${demandTitle}\nMessage: ${match.supplierMessage || "—"}`,
+      });
+    }
+
+    req.flash("success", `Response recorded: ${action.toUpperCase()}.`);
+    return res.redirect("/matches/supplier");
+  } catch (err) {
+    console.error("[matches.respond]", err);
+    req.flash("error", "Failed to record response.");
+    return res.redirect("/matches/supplier");
+  }
+});*/
+
+/* ---------------------------------------------
+ * Buyer summary (JSON) — totals + per-demand
+ * ------------------------------------------- */
 router.get("/buyer/summary", requireBusiness, requireRole("buyer"), async (req, res) => {
   try {
     const buyer = req.session.business;
     const since = req.session.buyerMatchesLastSeenAt ? new Date(req.session.buyerMatchesLastSeenAt) : null;
 
+    // status counters
     const statusAgg = await MatchedDemand.aggregate([
       { $match: { buyerId: buyer._id } },
-      { $group: { _id: "$status", count: { $sum: 1 } } }
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
 
     const counters = { total: 0, pending: 0, accepted: 0, rejected: 0 };
@@ -315,17 +432,19 @@ router.get("/buyer/summary", requireBusiness, requireRole("buyer"), async (req, 
       counters.total += r.count;
     }
 
+    // new since last seen
     let newSince = 0;
     if (since) {
       newSince = await MatchedDemand.countDocuments({
         buyerId: buyer._id,
-        updatedAt: { $gt: since }
+        updatedAt: { $gt: since },
       });
     }
 
+    // per-demand aggregation
     const perDemandAgg = await MatchedDemand.aggregate([
       { $match: { buyerId: buyer._id } },
-      { $group: { _id: { demandId: "$demandId", status: "$status" }, count: { $sum: 1 } } }
+      { $group: { _id: { demandId: "$demandId", status: "$status" }, count: { $sum: 1 } } },
     ]);
 
     const perDemandMap = new Map();
@@ -342,10 +461,10 @@ router.get("/buyer/summary", requireBusiness, requireRole("buyer"), async (req, 
       ? await Demand.find({ _id: { $in: demandIds } }, { title: 1, productName: 1, type: 1 }).lean()
       : [];
     const titleById = new Map(demands.map(d => [String(d._id), (d.title || d.productName || d.type || "Demand")]));
-    const perDemand = Array.from(perDemandMap.values()).map(x => ({
-      ...x,
-      title: titleById.get(x.demandId) || "Demand"
-    })).sort((a,b) => b.total - a.total);
+
+    const perDemand = Array.from(perDemandMap.values())
+      .map(x => ({ ...x, title: titleById.get(x.demandId) || "Demand" }))
+      .sort((a, b) => b.total - a.total);
 
     res.json({ ok: true, counters: { ...counters, newSince }, perDemand });
   } catch (err) {
@@ -354,5 +473,4 @@ router.get("/buyer/summary", requireBusiness, requireRole("buyer"), async (req, 
   }
 });
 
-// -------------------------------------------------
 module.exports = router;

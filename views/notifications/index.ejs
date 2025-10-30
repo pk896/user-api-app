@@ -1,0 +1,121 @@
+<%
+  const CO_NONCE = (typeof nonce !== 'undefined' ? nonce : '');
+  const fmt = (d) => new Date(d).toLocaleString();
+%>
+
+<section class="notif-page">
+  <h1 class="page-title">🔔 Notifications</h1>
+
+  <% if (error && error.length) { %>
+    <div class="flash flash-error">❌ <%= error %></div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="flash flash-success">✅ <%= success %></div>
+  <% } %>
+
+  <div class="toolbar">
+    <form action="/notifications/mark-all-read" method="post">
+      <button class="btn btn-secondary" type="submit">Mark all as read</button>
+    </form>
+  </div>
+
+  <ul class="notif-list">
+    <% if (!notifications || !notifications.length) { %>
+      <li class="empty">No notifications yet.</li>
+    <% } else { %>
+      <% notifications.forEach(n => { %>
+        <li class="notif-item <%= n.readAt ? 'read' : 'unread' %>">
+          <div class="left">
+            <span class="badge <%= n.type.replace('.', '-') %>">
+              <% if (n.type === 'match.accepted') { %>✅<% } %>
+              <% if (n.type === 'match.rejected') { %>❌<% } %>
+              <% if (n.type === 'match.pending')  { %>⏳<% } %>
+            </span>
+          </div>
+
+          <div class="main">
+            <div class="title">
+              <%= n.title %>
+              <% if (!n.readAt) { %><span class="dot" title="Unread"></span><% } %>
+            </div>
+            <% if (n.message) { %>
+              <div class="msg"><%= n.message %></div>
+            <% } %>
+            <div class="meta">
+              <time datetime="<%= n.createdAt %>" class="rel"></time>
+              <span class="abs"> • <%= fmt(n.createdAt) %></span>
+            </div>
+          </div>
+
+          <div class="right">
+            <% if (!n.readAt) { %>
+              <form action="/notifications/<%= n._id %>/read" method="post">
+                <button class="btn btn-link" type="submit" title="Mark read">Mark read</button>
+              </form>
+            <% } %>
+          </div>
+        </li>
+      <% }) %>
+    <% } %>
+  </ul>
+
+  <% if (pages > 1) { %>
+    <nav class="pager">
+      <% const makeLink = (p) => `/notifications?page=${p}&per=${per}`; %>
+      <a class="btn <%= page<=1?'disabled':'' %>" href="<%= page<=1 ? '#' : makeLink(page-1) %>">Prev</a>
+      <span class="pg">Page <%= page %> of <%= pages %></span>
+      <a class="btn <%= page>=pages?'disabled':'' %>" href="<%= page>=pages ? '#' : makeLink(page+1) %>">Next</a>
+    </nav>
+  <% } %>
+</section>
+
+<style>
+  .notif-page { padding: 12px; }
+  .page-title { font-size: 1.25rem; margin: 6px 0 12px; }
+  .toolbar { display:flex; justify-content:flex-end; margin-bottom:10px; }
+  .notif-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px; }
+  .notif-item { display:flex; gap:10px; border:1px solid rgba(0,0,0,0.08); border-radius:12px; padding:10px; background:var(--card-bg, #fff); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .notif-item.unread { border-color: rgba(37,99,235,0.25); }
+  .left { display:flex; align-items:flex-start; }
+  .badge { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:999px; font-size:14px; background:#eef2ff; }
+  .badge.match-accepted { background:#dcfce7; }
+  .badge.match-rejected { background:#fee2e2; }
+  .badge.match-pending  { background:#fef9c3; }
+  .main { flex:1; min-width:0; }
+  .title { font-weight: 600; display:flex; align-items:center; gap:6px; }
+  .dot { width:8px; height:8px; border-radius:999px; background:#2563eb; display:inline-block; }
+  .msg { margin-top:4px; color:#444; font-size:0.95rem; }
+  .meta { margin-top:6px; font-size:0.8rem; color:#666; }
+  .right { display:flex; align-items:center; }
+  .btn { border:1px solid rgba(0,0,0,0.2); background:#fff; border-radius:8px; padding:6px 10px; text-decoration:none; font-size:0.9rem; }
+  .btn.disabled { opacity:0.5; pointer-events:none; }
+  .btn-link { border:none; background:transparent; color:#2563eb; padding:4px 6px; cursor:pointer; }
+  .flash { padding:8px 10px; border-radius:10px; margin-bottom:10px; }
+  .flash-success { background:#dcfce7; }
+  .flash-error { background:#fee2e2; }
+  .empty { padding:16px; text-align:center; color:#666; border:1px dashed rgba(0,0,0,0.2); border-radius:12px; }
+  @media (max-width: 380px) {
+    .notif-item { padding:8px; }
+    .title { font-size:0.98rem; }
+    .msg { font-size:0.9rem; }
+  }
+</style>
+
+<script nonce="<%= CO_NONCE %>">
+// Relative-time labels
+(function(){
+  const rels = document.querySelectorAll('time.rel');
+  const rel = (d) => {
+    const t = new Date(d).getTime();
+    const s = Math.floor((Date.now() - t)/1000);
+    if (s < 60) return s + "s ago";
+    const m = Math.floor(s/60); if (m < 60) return m + "m ago";
+    const h = Math.floor(m/60); if (h < 24) return h + "h ago";
+    const d2 = Math.floor(h/24); if (d2 < 7) return d2 + "d ago";
+    const w = Math.floor(d2/7); if (w < 5) return w + "w ago";
+    const mo = Math.floor(d2/30); if (mo < 12) return mo + "mo ago";
+    const y = Math.floor(d2/365); return y + "y ago";
+  };
+  rels.forEach(el => el.textContent = rel(el.getAttribute('datetime')));
+})();
+</script>

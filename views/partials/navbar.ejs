@@ -8,8 +8,16 @@
 
     <!-- 🧭 Core links (always visible, includes Shop) -->
     <div class="nav-core">
-      <a href="/" class="<%= active === 'home' ? 'active' : '' %>">Home</a>
       <a href="/users/about" class="<%= active === 'about' ? 'active' : '' %>">About</a>
+
+      <!-- 🔔 Notifications (added) -->
+      <a href="/notifications" class="nav-bell" title="Notifications">
+        🔔
+        <% if (typeof notificationsUnread !== 'undefined' && notificationsUnread > 0) { %>
+          <span class="bell-badge"><%= notificationsUnread %></span>
+        <% } %>
+      </a>
+
       <a href="/sales" class="<%= active === 'shop' ? 'active' : '' %> highlight-link">🛒 Shop</a>
       <!--<a href="/contact" class="<%= active === 'contact' ? 'active' : '' %> highlight-link">Contact</a>-->
     </div>
@@ -39,7 +47,8 @@
       <a href="/admin/messages">Messages</a>
       <a href="/demands/add">➕ Add Demand</a>                  <!-- ✅ -->
       <a href="/demands/aggregate">📊 Demanded Products</a>    <!-- ✅ -->
-      <a href="/demands/mine">📋 My Demands</a>                <!-- (optional quick link) -->
+      <a href="/demands/mine">📋 My Demands</a> 
+      <a href="/" class="<%= active === 'home' ? 'active' : '' %>">Home</a>               <!-- (optional quick link) -->
       <form action="/business/logout" method="POST" class="inline-form">
         <button type="submit" class="btn-logout">Logout</button>
       </form>
@@ -48,6 +57,7 @@
       <span class="welcome">Hi, <%= user.name %> 👋</span>
       <a href="/users/dashboard">Dashboard</a>
       <a href="/users/profile">Profile</a>
+      <a href="/" class="<%= active === 'home' ? 'active' : '' %>">Home</a>
       <form action="/users/logout" method="GET" class="inline-form">
         <button type="submit" class="btn-logout">Logout</button>
       </form>
@@ -58,6 +68,7 @@
       <a href="/users/signup" class="highlight-link">User Sign Up</a>
       <a href="/business/login" class="highlight-link">Business Login</a>
       <a href="/business/signup" class="highlight-link">Business Sign Up</a>
+       <a href="/" class="<%= active === 'home' ? 'active' : '' %>">Home</a>
     <% } %>
 
     <form id="themeToggleForm" method="POST" action="/theme-toggle">
@@ -213,6 +224,18 @@
 @media (max-width: 768px) {
   .nav-core { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 }
+
+/* 🔔 Notifications badge (non-intrusive) */
+.nav-core .nav-bell { position: relative; display:inline-flex; align-items:center; gap:6px; }
+.nav-core .nav-bell .bell-badge{
+  position:absolute; top:-6px; right:-8px;
+  min-width:18px; height:18px; padding:0 4px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#ef4444; color:#fff; border-radius:999px;
+  font-size:12px; font-weight:700; line-height:1;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+.dark-theme .nav-core .nav-bell .bell-badge{ box-shadow: 0 1px 2px rgba(255,255,255,0.1); }
 </style>
 
 <!-- ⚙️ Script -->
@@ -249,4 +272,30 @@ document.addEventListener("DOMContentLoaded", () => {
   overlay.addEventListener("click", closeMenu);
   drawerClose.addEventListener("click", closeMenu);
 });
+</script>
+
+<script nonce="<%= nonce %>">
+(function poll(){
+  fetch('/notifications/unread-count', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : { count: 0 })
+    .then(({ count }) => {
+      const anchor = document.querySelector('.nav-core .nav-bell');
+      if (!anchor) return;
+      let badge = anchor.querySelector('.bell-badge');
+      if (count > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'bell-badge';
+          badge.textContent = count;
+          anchor.appendChild(badge);
+        } else {
+          badge.textContent = count;
+        }
+      } else if (badge) {
+        badge.remove();
+      }
+    })
+    .catch(()=>{})
+    .finally(() => setTimeout(poll, 15000));
+})();
 </script>

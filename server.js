@@ -363,6 +363,8 @@ const requireAdmin         = require("./middleware/requireAdmin");
 const deliveryOptionsApi   = require('./routes/deliveryOptionsApi');
 const demandsRoutes        = require('./routes/demands');
 const matchesRoutes        = require("./routes/matches");
+const notificationsRoutes  = require("./routes/notifications");
+const notificationsUnread  = require("./middleware/notificationsUnread");
 
 // --------------------------
 // API-style routes first
@@ -413,6 +415,11 @@ app.use("/links",   someLinksRoutes);
 // --------------------------
 app.use("/demands",  demandsRoutes);
 app.use("/matches",  matchesRoutes);
+// --------------------------
+// Notifications routes
+// --------------------------
+app.use("/notifications", notificationsRoutes);
+app.use(notificationsUnread);
 
 // --------------------------
 // Static / legal etc. LAST so it doesn't shadow others ✅
