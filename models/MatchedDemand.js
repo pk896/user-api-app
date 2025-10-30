@@ -1,45 +1,38 @@
 // models/MatchedDemand.js
-const { mongoose } = require("../db");
+const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
-/**
- * A link between a Buyer's Demand and a Supplier's Product.
- */
-const matchedDemandSchema = new Schema(
+const MatchedDemandSchema = new Schema(
   {
-    demandId: { type: Schema.Types.ObjectId, ref: "Demand", required: true, index: true },
-    buyerId: { type: Schema.Types.ObjectId, ref: "Business", required: true, index: true },
-    supplierId: { type: Schema.Types.ObjectId, ref: "Business", required: true, index: true },
-    productId: { type: Schema.Types.ObjectId, ref: "Product", required: true, index: true },
+    demandId:   { type: Schema.Types.ObjectId, ref: "DemandedProduct", index: true }, // or "Demand"
+    buyerId:    { type: Schema.Types.ObjectId, ref: "Business", index: true },
+    supplierId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
+    productId:  { type: Schema.Types.ObjectId, ref: "Product", index: true },
 
-    // Matching score (0-100)
-    score: { type: Number, default: 0 },
+    // status the supplier sets: "pending" | "accepted" | "rejected"
+    status: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending", index: true },
 
-    // Supplier → action on this match
-    status: {
-      type: String,
-      enum: ["pending", "accepted", "rejected"],
-      default: "pending",
-      index: true,
-    },
+    // numeric score (100 for type-only now)
+    score:  { type: Number, default: 0, index: true },
 
-    // Optional light message/quote
-    supplierMessage: { type: String, default: "" },
-
-    // Simple denormalized fields to render faster in lists (optional)
+    // snapshot for resilience
     snapshot: {
-      demandTitle: String,
-      demandQuantity: Number,
-      demandLocation: String,
-      productName: String,
-      productType: String,
-      productPrice: Number,
+      demandTitle:     String,
+      demandQuantity:  Number,
+      demandLocation:  String,
+      productName:     String,
+      productType:     String,
+      productPrice:    Number,
       productLocation: String,
     },
+
+    // supplier response
+    supplierMessage: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
-matchedDemandSchema.index({ demandId: 1, productId: 1 }, { unique: true }); // prevent duplicates
+// unique-ish pair (same demand+product shouldn’t duplicate)
+MatchedDemandSchema.index({ demandId: 1, productId: 1 }, { unique: true });
 
-module.exports = mongoose.model("MatchedDemand", matchedDemandSchema);
+module.exports = mongoose.model("MatchedDemand", MatchedDemandSchema);

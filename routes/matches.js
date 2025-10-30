@@ -8,6 +8,7 @@ const Product = require("../models/Product");
 const DemandedProduct = require("../models/DemandedProduct"); // ← add this
 
 
+
 // ✅ Import concrete middleware files (they must export function declarations)
 const requireBusiness = require("../middleware/requireBusiness");
 const requireRole = require("../middleware/requireRole");
