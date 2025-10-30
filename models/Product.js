@@ -1,14 +1,14 @@
 // models/Product.js
-//const mongoose = require("mongoose");
-const { mongoose } = require('../db'); // <-- use the shared instance
+// Use the shared mongoose instance
+const { mongoose } = require("../db");
 
 const productSchema = new mongoose.Schema(
   {
-    // Custom readable product ID (not Mongo _id)
+    // Readable product ID (separate from Mongo _id)
     customId: {
       type: String,
       required: true,
-      unique: true, // ✅ ensures no duplicates
+      unique: true,
       trim: true,
     },
 
@@ -27,7 +27,7 @@ const productSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
-      maxlength: 2000, // prevent overly long descriptions
+      maxlength: 2000,
     },
 
     imageUrl: {
@@ -45,37 +45,44 @@ const productSchema = new mongoose.Schema(
       min: [0, "Stock cannot be negative"],
     },
 
+    // Classification / attributes
     category: { type: String, trim: true },
-    color: { type: String, trim: true },
-    size: { type: String, trim: true },
-    quality: { type: String, trim: true },
-    made: { type: String, trim: true },
+    color:    { type: String, trim: true },
+    size:     { type: String, trim: true },
+    quality:  { type: String, trim: true },
+    made:     { type: String, trim: true },
     manufacturer: { type: String, trim: true },
-    type: { type: String, trim: true },
-    // Inside productSchema definition
-    soldCount: { type: Number, default: 0 },   // total units sold
-    soldOrders: { type: Number, default: 0 },  // number of orders that included this product
 
+    // 🧭 Type is what we match on (type-only matching)
+    type: { type: String, trim: true, index: true }, // single index definition here
 
-    // 🔗 Reference to Business (owner)
+    // Sales counters
+    soldCount:  { type: Number, default: 0 },
+    soldOrders: { type: Number, default: 0 },
+
+    // 🔗 Owner (supplier) business
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Business",
       required: true,
-      index: true, // ✅ keep indexed for fast queries
+      index: true,
     },
   },
   { timestamps: true }
 );
 
-// --------------------------
-// Indexes for performance
-// --------------------------
+/* ---------------------------
+ * Indexes (no duplicates)
+ * ------------------------- */
+// Keep category indexed if you filter by it in lists
 productSchema.index({ category: 1 });
 
-// --------------------------
-// Safe JSON output (no internal Mongo fields)
-// --------------------------
+// Helpful compound for owner dashboards (optional)
+// productSchema.index({ business: 1, type: 1 });
+
+/* ---------------------------
+ * Safe JSON output
+ * ------------------------- */
 productSchema.methods.toSafeJSON = function () {
   const obj = this.toObject();
   delete obj.__v;

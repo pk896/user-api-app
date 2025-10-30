@@ -1,0 +1,71 @@
+<% /* views/matches/matched-products.ejs */ %>
+<% const _nonce = (typeof nonce !== 'undefined' ? nonce : ''); %>
+<link rel="stylesheet" href="<%= themeCss %>">
+<section class="page matches-buyer">
+  <h1 class="page-title">🔎 Matched Products</h1>
+
+  <% if (success && success.length) { %>
+    <div class="flash flash-success">✅ <%= success %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="flash flash-error">❌ <%= error %></div>
+  <% } %>
+
+  <div class="match-grid">
+    <% if (!matches || !matches.length) { %>
+      <p>No matches yet. Run matching from your Demands page.</p>
+    <% } else { %>
+      <% matches.forEach(m => { 
+        const p = m.productId || {};
+        const d = m.demandId || {};
+      %>
+        <article class="match-card">
+          <div class="match-head">
+            <span class="badge">Score: <%= m.score %></span>
+            <span class="status <%= m.status %>"><%= m.status %></span>
+          </div>
+
+          <h2 class="product-name"><%= p.name || m.snapshot?.productName || 'Product' %></h2>
+          <p class="meta">
+            <strong>Type:</strong> <%= p.type || m.snapshot?.productType || '-' %><br>
+            <strong>Price:</strong> <%= (p.price ?? m.snapshot?.productPrice) ?? '-' %><br>
+            <strong>Location:</strong> <%= p.location || m.snapshot?.productLocation || '-' %>
+          </p>
+
+          <div class="divider"></div>
+
+          <p class="demand">
+            <strong>Demand:</strong> <%= d.title || m.snapshot?.demandTitle || '-' %><br>
+            <strong>Quantity:</strong> <%= (d.quantity ?? m.snapshot?.demandQuantity) ?? '-' %><br>
+            <strong>Buyer location:</strong> <%= d.location || m.snapshot?.demandLocation || '-' %>
+          </p>
+
+          <div class="actions">
+            <a href="/products/<%= p._id %>" class="btn btn-primary">View Product</a>
+          </div>
+        </article>
+      <% }) %>
+    <% } %>
+  </div>
+</section>
+
+<style nonce="<%= _nonce %>">
+.matches-buyer .match-grid{
+  display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px
+}
+@media(min-width:520px){.matches-buyer .match-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:920px){.matches-buyer .match-grid{grid-template-columns:repeat(3,1fr)}}
+.match-card{background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:12px}
+.match-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.badge{font-size:.8rem;padding:2px 8px;border-radius:999px;background:#eef}
+.status{font-size:.8rem;text-transform:capitalize}
+.status.accepted{background:#e6ffed;padding:2px 8px;border-radius:999px}
+.status.rejected{background:#ffecec;padding:2px 8px;border-radius:999px}
+.product-name{font-size:1.05rem;margin:.25rem 0}
+.meta,.demand{font-size:.9rem;line-height:1.35}
+.divider{height:1px;background:rgba(0,0,0,.08);margin:8px 0}
+.actions{display:flex;gap:8px}
+.btn{display:inline-block;padding:8px 12px;border-radius:10px;text-decoration:none;border:1px solid rgba(0,0,0,.12)}
+.btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
+@media(max-width:360px){.btn{padding:7px 10px;font-size:.9rem}}
+</style>

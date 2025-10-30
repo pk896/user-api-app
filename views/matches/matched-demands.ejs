@@ -1,0 +1,211 @@
+<!-- views/matches/matched-products.ejs -->
+<link rel="stylesheet" href="<%= themeCss %>">
+
+<section class="dashboard-home">
+  <h1 class="page-title">🔎 Matched Products</h1>
+
+  <% if (error && error.length) { %>
+    <div class="flash flash-error">❌ <%= error %></div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="flash flash-success">✅ <%= success %></div>
+  <% } %>
+
+  <div class="toolbar">
+    <a class="btn btn-secondary" href="/demands/my-demands">← Back to My Demands</a>
+    <div class="spacer"></div>
+
+    <!-- Filters -->
+    <input id="q" class="input" type="search" placeholder="Search product name…" />
+    <select id="demandFilter" class="input">
+      <option value="">All Demands</option>
+      <% 
+        // Build a unique list of demands present in matches
+        const seen = new Set();
+        (matches || []).forEach(function(m){
+          const d = m.demandId || {};
+          const did = String(d._id || m.demandId);
+          if (did && !seen.has(did)) {
+            seen.add(did);
+            const dTitle = d.title || d.productName || d.type || (m.snapshot && (m.snapshot.demandTitle || m.snapshot.productType)) || "Demand";
+      %>
+        <option value="<%= did %>" <%= (String(did) === String((typeof demand !== 'undefined' ? demand : '') || (typeof query !== 'undefined' ? query.demand : '') || (typeof request !== 'undefined' ? request.query?.demand : '') || '') ? 'selected' : '' %>>
+          <%= dTitle %>
+        </option>
+      <% } }); %>
+    </select>
+    <select id="statusFilter" class="input">
+      <option value="">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="accepted">Accepted</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  </div>
+
+  <% if (matches && matches.length) { %>
+    <table class="nice-table" id="tblMatches" style="margin-top:.6rem;">
+      <thead>
+        <tr>
+          <th>Demand</th>
+          <th>Product (Type)</th>
+          <th>Supplier</th>
+          <th class="num">Price</th>
+          <th>Location</th>
+          <th class="num">Score</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% matches.forEach(function(m){ 
+             const d = m.demandId || {};
+             const p = m.productId || {};
+             const s = m.supplierId || {};
+             const snap = m.snapshot || {};
+
+             const demandTitle = d.title || d.productName || d.type || snap.demandTitle || "Demand";
+             const productName  = p.name || snap.productName || "—";
+             const productType  = p.type || snap.productType || (d.type || d.productType) || "—";
+             const supplierName = s.name || s.businessName || "—";
+             const price = (typeof p.price !== "undefined" ? p.price : snap.productPrice);
+             const location = p.location || snap.productLocation || d.location || snap.demandLocation || 
+                              [p.country,p.province,p.city,p.town].filter(Boolean).join(", ") || "—";
+             const status = (m.status || "pending").toLowerCase();
+             const demandId = String(d._id || m.demandId || "");
+             const searchable = [demandTitle, productName, productType, supplierName, location].join(" ").toLowerCase();
+        %>
+          <tr class="row-match"
+              data-search="<%= searchable %>"
+              data-demand="<%= demandId %>"
+              data-status="<%= status %>">
+            <td class="col-demand">
+              <div class="title"><%= demandTitle %></div>
+              <div class="sub">Type: <span class="tag"><%= productType %></span></div>
+            </td>
+            <td class="col-product">
+              <div class="title"><%= productName %></div>
+              <div class="muted">Type-only match</div>
+            </td>
+            <td class="col-supplier"><%= supplierName %></td>
+            <td class="col-price num"><%= (typeof price === "number") ? price.toFixed(2) : (price || "—") %></td>
+            <td class="col-loc"><%= location %></td>
+            <td class="col-score num"><%= Number(m.score || 0) %></td>
+            <td class="col-status">
+              <span class="badge <%= status %>"><%= status.charAt(0).toUpperCase() + status.slice(1) %></span>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <div class="empty">
+      <p>No matches yet. Run matching from your <a href="/demands/my-demands">Demands</a> page.</p>
+    </div>
+  <% } %>
+</section>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+(function(){
+  const $q = document.getElementById('q');
+  const $demand = document.getElementById('demandFilter');
+  const $status = document.getElementById('statusFilter');
+  const rows = Array.from(document.querySelectorAll('#tblMatches .row-match'));
+
+  function apply(){
+    const q = ($q?.value || '').trim().toLowerCase();
+    const did = ($demand?.value || '').trim();
+    const st = ($status?.value || '').trim().toLowerCase();
+
+    rows.forEach(tr => {
+      const search = tr.dataset.search || '';
+      const demand = tr.dataset.demand || '';
+      const status = (tr.dataset.status || '').toLowerCase();
+      const show = (!q || search.includes(q))
+                && (!did || demand === did)
+                && (!st || status === st);
+      tr.style.display = show ? '' : 'none';
+    });
+  }
+
+  if ($q) $q.addEventListener('input', apply);
+  if ($demand) $demand.addEventListener('change', apply);
+  if ($status) $status.addEventListener('change', apply);
+
+  // Auto-select dropdown if query param exists (?demand=...)
+  const params = new URLSearchParams(window.location.search);
+  const paramDemand = params.get('demand');
+  if (paramDemand && $demand) {
+    $demand.value = paramDemand;
+  }
+
+  apply();
+})();
+</script>
+
+<style>
+  :root {
+    --border:#e5e7eb; --card:#fff; --muted:#6b7280; --ink:#111827;
+    --primary:#2563eb; --success:#16a34a; --warn:#f59e0b; --danger:#ef4444;
+    --bg-dark:#111827; --muted-dark:#94a3b8; --row-hover: rgba(37,99,235,.06);
+  }
+  body.dark-theme {
+    --card:#111827; --border:#374151; --ink:#e5e7eb; --muted:#94a3b8; --row-hover: rgba(59,130,246,.08);
+  }
+
+  .toolbar{ display:flex; gap:.6rem; align-items:center; margin-bottom:.8rem; flex-wrap:wrap; }
+  .spacer{ flex:1 1 auto; }
+  .input{
+    padding:.6rem .7rem; border:1px solid var(--border); border-radius:.55rem; background:var(--card); color:inherit;
+    min-width:180px;
+  }
+  .btn{ padding:.6rem .85rem; border-radius:.55rem; border:0; cursor:pointer; display:inline-block; text-decoration:none; }
+  .btn-secondary{ background:#f3f4f6; color:#111; }
+  body.dark-theme .btn-secondary{ background:#1f2937; color:#e5e7eb; }
+
+  .nice-table{
+    width:100%; border-collapse:collapse; background:var(--card); color:inherit;
+    border:1px solid var(--border); border-radius:.6rem; overflow:hidden;
+  }
+  .nice-table th, .nice-table td{ padding:.65rem .6rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  .nice-table thead th{ background:#f9fafb; font-weight:600; }
+  body.dark-theme .nice-table thead th{ background:#0b1220; }
+  .nice-table tbody tr:hover{ background: var(--row-hover); }
+  .num{ text-align:right; font-variant-numeric: tabular-nums; }
+
+  .title{ font-weight:700; }
+  .sub{ font-size:.85rem; color:var(--muted); }
+  .muted{ color:var(--muted); }
+
+  .badge{ padding:.2rem .5rem; border-radius:.5rem; font-size:.8rem; font-weight:600; text-transform:capitalize; }
+  .badge.pending{ background:#fff7ed; color:#9a3412; }
+  .badge.accepted{ background:#ecfdf5; color:#065f46; }
+  .badge.rejected{ background:#fef2f2; color:#991b1b; }
+  body.dark-theme .badge.pending{ background:#431407; color:#fdba74; }
+  body.dark-theme .badge.accepted{ background:#052e16; color:#86efac; }
+  body.dark-theme .badge.rejected{ background:#3f1d1d; color:#fca5a5; }
+
+  .empty{
+    padding:1rem; border:1px dashed var(--border); border-radius:.6rem; color:var(--muted); background:var(--card);
+  }
+
+  /* Mobile card mode */
+  .nice-table{ display:block; overflow-x:auto; }
+  @media (max-width:420px){
+    .toolbar .input{ flex:1 1 100%; min-width:0; }
+    .nice-table thead{ display:none; }
+    .nice-table tbody tr{ display:block; padding:.7rem; border-bottom:1px solid var(--border); }
+    .nice-table tbody tr:last-child{ border-bottom:none; }
+    .nice-table td{
+      display:flex; justify-content:space-between; gap:.75rem; padding:.45rem 0; border-bottom:none;
+    }
+    .nice-table td::before{
+      content: attr(data-label); flex:0 0 auto; min-width:7.2rem; color:var(--muted); font-size:.85rem;
+    }
+    #tblMatches tbody tr td:nth-child(1)::before { content: "Demand"; }
+    #tblMatches tbody tr td:nth-child(2)::before { content: "Product (Type)"; }
+    #tblMatches tbody tr td:nth-child(3)::before { content: "Supplier"; }
+    #tblMatches tbody tr td:nth-child(4)::before { content: "Price"; }
+    #tblMatches tbody tr td:nth-child(5)::before { content: "Location"; }
+    #tblMatches tbody tr td:nth-child(6)::before { content: "Score"; }
+    #tblMatches tbody tr td:nth-child(7)::before { content: "Status"; }
+  }
+</style>

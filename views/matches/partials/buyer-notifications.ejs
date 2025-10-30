@@ -1,0 +1,34 @@
+<% const _nonce = (typeof nonce !== 'undefined' ? nonce : ''); %>
+<section class="buyer-notifs">
+  <div class="notif-head">
+    <h3>🔔 Matches</h3>
+    <span id="notifBadge" class="badge">0</span>
+  </div>
+  <div id="notifList" class="notif-list">Loading…</div>
+</section>
+
+<script nonce="<%= _nonce %>">
+(async function(){
+  function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text) e.textContent=text; return e; }
+  const r = await fetch('/matches/buyer/summary'); const j = await r.json();
+  if (!j.ok) return;
+  document.getElementById('notifBadge').textContent = j.counters?.newSince ?? 0;
+
+  const box = document.getElementById('notifList'); box.innerHTML='';
+  (j.perDemand||[]).slice(0,6).forEach(x=>{
+    const a = el('a','notif-item'); a.href='/matches/buyer?demand='+x.demandId;
+    a.append(el('span','title',x.title));
+    a.append(el('span','meta',`T:${x.total} • P:${x.pending||0} • A:${x.accepted||0}`));
+    box.append(a);
+  });
+})();
+</script>
+
+<style nonce="<%= _nonce %>">
+.buyer-notifs .notif-head{display:flex;align-items:center;gap:.5rem}
+.buyer-notifs .badge{background:#ef4444;color:#fff;border-radius:999px;padding:.1rem .5rem;font-weight:700}
+.buyer-notifs .notif-list{display:flex;flex-direction:column;margin-top:.5rem}
+.buyer-notifs .notif-item{display:flex;justify-content:space-between;gap:.5rem;padding:.45rem .6rem;border:1px solid var(--border,#e5e7eb);border-radius:.6rem;text-decoration:none;color:inherit;background:var(--card-bg,#fff);margin-bottom:.4rem}
+.buyer-notifs .notif-item .title{font-weight:600}
+.buyer-notifs .notif-item .meta{color:#6b7280}
+</style>

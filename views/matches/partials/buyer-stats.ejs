@@ -1,0 +1,82 @@
+<% const _nonce = (typeof nonce !== 'undefined' ? nonce : ''); %>
+<section class="buyer-stats">
+  <div class="stats-grid">
+    <div class="stat-card"><div class="label">Total matches</div><div id="stTotal" class="value">—</div></div>
+    <div class="stat-card"><div class="label">Pending</div><div id="stPending" class="value">—</div></div>
+    <div class="stat-card"><div class="label">Accepted</div><div id="stAccepted" class="value">—</div></div>
+    <div class="stat-card"><div class="label">Rejected</div><div id="stRejected" class="value">—</div></div>
+    <div class="stat-card new"><div class="label">New since last visit</div><div id="stNew" class="value">0</div></div>
+  </div>
+
+  <h3 class="subhead">By demand</h3>
+  <div id="perDemand" class="demand-list"></div>
+
+  <div class="actions">
+    <form id="markSeenForm" method="POST" action="/matches/buyer/mark-seen">
+      <button class="btn btn-secondary" type="submit">Mark as seen</button>
+    </form>
+    <a class="btn btn-primary" href="/matches/buyer">Open matched products</a>
+  </div>
+</section>
+
+<script nonce="<%= _nonce %>">
+(async function(){
+  async function fetchJSON(url, opts){ const r = await fetch(url, opts); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+
+  try {
+    const data = await fetchJSON('/matches/buyer/summary');
+    if (!data.ok) throw new Error('Failed');
+
+    const c = data.counters || {};
+    document.getElementById('stTotal').textContent    = c.total ?? 0;
+    document.getElementById('stPending').textContent  = c.pending ?? 0;
+    document.getElementById('stAccepted').textContent = c.accepted ?? 0;
+    document.getElementById('stRejected').textContent = c.rejected ?? 0;
+    document.getElementById('stNew').textContent      = c.newSince ?? 0;
+
+    const wrap = document.getElementById('perDemand');
+    wrap.innerHTML = '';
+    (data.perDemand || []).forEach(item => {
+      const el = document.createElement('a');
+      el.className = 'demand-pill';
+      el.href = '/matches/buyer?demand=' + item.demandId;
+      el.innerHTML = `
+        <span class="title">${item.title}</span>
+        <span class="counts">T:${item.total} • P:${item.pending || 0} • A:${item.accepted || 0} • R:${item.rejected || 0}</span>
+      `;
+      wrap.appendChild(el);
+    });
+
+    // mark-seen action via fetch to keep page static
+    const form = document.getElementById('markSeenForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON('/matches/buyer/mark-seen', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+        document.getElementById('stNew').textContent = '0';
+      } catch(_) {}
+    });
+  } catch (err) {
+    console.error('buyer-stats load failed', err);
+  }
+})();
+</script>
+
+<style nonce="<%= _nonce %>">
+.buyer-stats .stats-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.6rem;margin:.5rem 0 1rem}
+.buyer-stats .stat-card{background:var(--card-bg,#fff);border:1px solid var(--border,#e5e7eb);border-radius:.75rem;padding:.8rem}
+.buyer-stats .stat-card.new{border-style:dashed}
+.buyer-stats .label{font-size:.85rem;color:#6b7280}
+.buyer-stats .value{font-size:1.35rem;font-weight:700}
+@media(max-width:900px){.buyer-stats .stats-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:520px){.buyer-stats .stats-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:360px){.buyer-stats .stats-grid{grid-template-columns:1fr}}
+.buyer-stats .subhead{margin:.2rem 0 .4rem;font-size:1rem}
+.buyer-stats .demand-list{display:flex;flex-wrap:wrap;gap:.5rem}
+.buyer-stats .demand-pill{display:inline-flex;gap:.5rem;align-items:center;text-decoration:none;border:1px solid var(--border,#e5e7eb);border-radius:999px;padding:.35rem .6rem;background:var(--card-bg,#fff)}
+.buyer-stats .demand-pill .title{font-weight:600}
+.buyer-stats .actions{display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap}
+.buyer-stats .btn{padding:.55rem .8rem;border-radius:.55rem;border:0;cursor:pointer}
+.buyer-stats .btn-primary{background:#2563eb;color:#fff;text-decoration:none;display:inline-block}
+.buyer-stats .btn-secondary{background:#f3f4f6;color:#111}
+</style>

@@ -347,6 +347,84 @@ app.use((req, res, next) => {
 const deliveryOptionRouter = require("./routes/deliveryOption");
 const productsRouter       = require("./routes/products");
 const contactRoutes        = require("./routes/contact");
+const adminRoutes          = require("./routes/admin");         
+const adminOrdersRoutes    = require("./routes/ordersAdmin");   
+const cartRoutes           = require("./routes/cart");
+const paymentRoutes        = require("./routes/payment");       
+const usersRouter          = require("./routes/users");
+const businessAuthRoutes   = require("./routes/businessAuth");
+const shipmentRoutes       = require("./routes/shipments");
+const staticPagesRoutes    = require("./routes/staticPages");   // 👈 keep require same place
+const salesRoutes          = require("./routes/sales");
+const someLinksRoutes      = require("./routes/someRoute");
+const requireOrdersAdmin   = require("./middleware/requireOrdersAdmin");
+const deliveryOptionsAdmin = require("./routes/deliveryOptionsAdmin");
+const requireAdmin         = require("./middleware/requireAdmin");
+const deliveryOptionsApi   = require('./routes/deliveryOptionsApi');
+const demandsRoutes        = require('./routes/demands');
+const matchesRoutes        = require("./routes/matches");
+
+// --------------------------
+// API-style routes first
+// --------------------------
+app.use("/api/deliveryOption", deliveryOptionRouter);
+app.use("/api/cart",          cartRoutes);
+
+app.use('/api/admin', requireAdmin);
+app.use("/api/admin", paymentRoutes);   // if paymentRoutes exposes /refunds etc. under /api/admin
+
+// Gate the admin API before mounting unsecured things
+app.use('/api/admin', requireOrdersAdmin);
+
+// Avoid mounting paymentRoutes at root unless you truly need that
+// (If you keep this, it also exposes whatever /payment/* defines at root. Consider removing.)
+// app.use(paymentRoutes);
+
+// --------------------------
+// Auth & identity
+// --------------------------
+app.use("/users",    usersRouter);
+app.use("/business", businessAuthRoutes);
+
+// --------------------------
+// Business/admin pages
+// --------------------------
+app.use("/admin", adminRoutes);
+app.use("/admin", adminOrdersRoutes);
+app.use(deliveryOptionsAdmin);
+app.use(deliveryOptionsApi);
+
+// --------------------------
+// Commerce / catalog
+// --------------------------
+app.use("/products",  productsRouter);
+app.use("/shipments", shipmentRoutes);
+app.use("/payment",   paymentRoutes);
+
+// --------------------------
+// Public pages (scoped)
+// --------------------------
+app.use("/contact", contactRoutes);
+app.use("/sales",   salesRoutes);
+app.use("/links",   someLinksRoutes);
+
+// --------------------------
+// Demands & Matches  ✅ BEFORE static "/"
+// --------------------------
+app.use("/demands",  demandsRoutes);
+app.use("/matches",  matchesRoutes);
+
+// --------------------------
+// Static / legal etc. LAST so it doesn't shadow others ✅
+// --------------------------
+app.use("/", staticPagesRoutes);
+
+// --------------------------
+// Require routers FIRST
+/*// --------------------------
+const deliveryOptionRouter = require("./routes/deliveryOption");
+const productsRouter       = require("./routes/products");
+const contactRoutes        = require("./routes/contact");
 const adminRoutes          = require("./routes/admin");         // pages: /admin/*
 const adminOrdersRoutes    = require("./routes/ordersAdmin");   // pages: /admin/orders (see note below)
 const cartRoutes           = require("./routes/cart");
@@ -362,6 +440,7 @@ const deliveryOptionsAdmin = require("./routes/deliveryOptionsAdmin");
 const requireAdmin         = require("./middleware/requireAdmin");
 const deliveryOptionsApi   = require('./routes/deliveryOptionsApi');
 const demandsRoutes        = require('./routes/demands');
+const matchesRoutes        = require("./routes/matches");
 
 // --------------------------
 // Mount API-style routes first
@@ -410,11 +489,21 @@ app.use("/contact", contactRoutes);
 app.use("/sales",   salesRoutes);
 app.use("/links",   someLinksRoutes);
 
+// --------------------------
 // Static / legal etc. LAST so it doesn't shadow specific routes
+// --------------------------
 app.use("/", staticPagesRoutes);
 
+// --------------------------
+// Demands routes
+// --------------------------
 app.use('/demands', demandsRoutes); // ✅ all demand pages live under /demands/*
 
+// --------------------------
+// Matches of demands routes
+// --------------------------
+app.use("/matches", matchesRoutes);
+*/
 // 🛒 Get current cart item count
 app.get("/cart/count", (req, res) => {
   try {
