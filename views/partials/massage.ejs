@@ -32,20 +32,36 @@
 </div>
 
 <script nonce="<%= nonce %>">
-  // 🕒 Auto-hide flash messages smoothly
   document.addEventListener("DOMContentLoaded", () => {
     const flashes = document.querySelectorAll(".flash");
+
     flashes.forEach(flash => {
-      setTimeout(() => {
-        flash.classList.add("fade-out");
-        setTimeout(() => flash.remove(), 500);
-      }, 4000); // 4 seconds visible
+      // Add close button
+      const close = document.createElement("button");
+      close.setAttribute("type", "button");
+      close.className = "flash-close";
+      close.textContent = "×";
+      close.addEventListener("click", () => flash.remove());
+      flash.appendChild(close);
+
+      // Never auto-hide errors; others hide after 8s (pause on hover)
+      if (!flash.classList.contains("flash-error")) {
+        let hideTimer = setTimeout(() => fadeOutAndRemove(flash), 8000);
+        flash.addEventListener("mouseenter", () => clearTimeout(hideTimer));
+        flash.addEventListener("mouseleave", () => {
+          hideTimer = setTimeout(() => fadeOutAndRemove(flash), 3000);
+        });
+      }
     });
+
+    function fadeOutAndRemove(el) {
+      el.classList.add("fade-out");
+      setTimeout(() => el.remove(), 160);
+    }
   });
 </script>
 
-<style>
-  /* --- Flash message styling --- */
+<style nonce="<%= nonce %>">
   .flash-container {
     position: fixed;
     top: 1rem;
@@ -54,33 +70,48 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    width: 300px;
-    max-width: 90%;
+    width: 340px;
+    max-width: calc(100vw - 2rem);
   }
 
   .flash {
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    font-weight: 500;
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    animation: slideIn 0.3s ease;
+    position: relative;
+    padding: 0.9rem 1rem 0.9rem 0.9rem;
+    border-radius: 10px;
+    font-weight: 700;               /* strong text */
+    font-size: 0.95rem;             /* bigger text */
+    line-height: 1.25rem;
+    color: black;         /* force white text */
+    box-shadow: 0 6px 18px rgba(0,0,0,0.20);
+    filter: drop-shadow(0 0 1px rgba(0,0,0,0.25)); /* edge outline for readability */
+    animation: slideIn 0.2s ease;
   }
 
-  .flash-success { background-color: #16a34a; }   /* green */
-  .flash-error { background-color: #dc2626; }     /* red */
-  .flash-info { background-color: #2563eb; }      /* blue */
-  .flash-warning { background-color: #f59e0b; }   /* yellow/orange */
+  .flash-success { background-color: #16a34a; }  /* green */
+  .flash-error   { background-color: #b91c1c; }  /* deep red */
+  .flash-info    { background-color: #1e40af; }  /* deep blue */
+  .flash-warning { background-color: #b45309; }  /* deep amber */
+
+  /* If you ever switch to lighter backgrounds, set color to dark here:
+     .flash-light { background:#fef3c7; color:#111 !important; } */
+
+  .flash-close {
+    position: absolute;
+    top: 6px; right: 10px;
+    background: transparent;
+    border: 0;
+    color: rgba(255,255,255,0.95);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
 
   @keyframes slideIn {
-    from { opacity: 0; transform: translateX(50px); }
-    to { opacity: 1; transform: translateX(0); }
+    from { opacity: 0; transform: translateX(40px); }
+    to   { opacity: 1; transform: translateX(0); }
   }
+  .fade-out { opacity: 0; transition: opacity 0.16s ease; }
 
-  .fade-out {
-    opacity: 0;
-    transition: opacity 0.5s ease;
-  }
+  /* Respect your dark theme—no change needed since we force bg + white text */
+  .dark-theme .flash { box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
 </style>
-
-

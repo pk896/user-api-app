@@ -1,0 +1,86 @@
+<!-- views/users-wishlist.ejs -->
+<section class="wishlist-page">
+  <h1 class="page-title">❤️ My Wishlist</h1>
+
+  <% (success || []).forEach(msg => { %>
+  <div class="flash flash-success">✅ <%= msg %></div>
+<% }) %>
+
+<% (error || []).forEach(msg => { %>
+  <div class="flash flash-error">❌ <%= msg %></div>
+<% }) %>
+
+  <% if (!products || products.length === 0) { %>
+    <p class="empty-tip">Your wishlist is empty.</p>
+    <a href="/sales" class="btn">Browse Products</a>
+  <% } else { %>
+    <div class="grid">
+      <% products.forEach(p => { %>
+        <div class="card">
+          <div class="image-wrap">
+            <% if (p.images && p.images.length) { %>
+              <img src="<%= p.images[0] %>" alt="<%= p.name || 'Product' %>">
+            <% } else { %>
+              <div class="placeholder">No Image</div>
+            <% } %>
+          </div>
+          <div class="info">
+            <h3 class="name"><a href="/products/<%= p._id %>"><%= p.name || 'Product' %></a></h3>
+            <% if (typeof p.price !== 'undefined') { %>
+              <div class="price">ZAR <%= Number(p.price).toFixed(2) %></div>
+            <% } %>
+
+            <div class="actions">
+              <form action="/users/wishlist/<%= p._id %>/add-to-cart" method="POST" class="inline">
+                <input type="hidden" name="qty" value="1">
+                <button class="btn small">🛒 Add to Cart</button>
+              </form>
+
+              <form action="/users/wishlist/remove/<%= p._id %>" method="POST" class="inline">
+                <input type="hidden" name="redirect" value="/users/wishlist">
+                <button class="btn small danger">❌ Remove</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <div class="footer-actions">
+      <a href="/sales" class="btn">⬅ Back to Shop</a>
+    </div>
+  <% } %>
+</section>
+
+<style>
+.wishlist-page { padding: 1rem; }
+.page-title { font-size: 1.25rem; margin-bottom: .75rem; }
+.flash { margin:.5rem 0; padding:.6rem .8rem; border-radius:.5rem; }
+.flash-error { background:#ffe8e8; }
+.flash-success { background:#e9ffea; }
+.empty-tip { margin: .75rem 0 1rem; }
+
+.grid {
+  display:grid;
+  gap:.75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 768px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+.card {
+  border: 1px solid #eaeaea; border-radius: 12px; overflow: hidden; background: #fff;
+  display:flex; gap:.75rem; padding:.75rem;
+}
+.image-wrap { width: 120px; min-width:120px; height: 120px; border-radius: 8px; overflow: hidden; background:#f6f6f6; display:flex; align-items:center; justify-content:center; }
+.image-wrap img { width:100%; height:100%; object-fit:cover; }
+.placeholder { font-size:.85rem; color:#888; }
+.info { flex:1; display:flex; flex-direction:column; gap:.4rem; }
+.name { font-size:1rem; margin:0; }
+.price { font-weight:600; }
+.actions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:auto; }
+.btn { display:inline-block; padding:.5rem .8rem; border-radius:8px; text-decoration:none; background:#0f62fe; color:#fff; }
+.btn.small { padding:.4rem .65rem; font-size:.9rem; }
+.btn.danger { background:#d12b2b; }
+.inline { display:inline-block; }
+.footer-actions { margin-top: 1rem; }
+</style>

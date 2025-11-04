@@ -1,17 +1,55 @@
-<div class="pill in-transit">
-  🚚 In transit: <strong><%= shipStats.inTransit %></strong>
-</div>
-<div class="pill delivered">
-  ✅ Delivered: <strong><%= shipStats.delivered %></strong>
+<%
+  // Safe guards (do not invent data)
+  const u             = (user && typeof user === 'object') ? user : {};
+  const ordersArr     = Array.isArray(orders) ? orders : [];
+  const wishlistArr   = Array.isArray(wishlistItems) ? wishlistItems : [];
+  const paymentsArr   = Array.isArray(payments) ? payments : [];
+  const shipmentsArr  = Array.isArray(shipments) ? shipments : [];
+
+  // Shipments pills = real data
+  const fallbackInTransit = shipmentsArr.filter(s => (s?.status || '').toLowerCase().replace(/\s+/g,' ') === 'in transit').length;
+  const fallbackDelivered = shipmentsArr.filter(s => (s?.status || '').toLowerCase().replace(/\s+/g,' ') === 'delivered').length;
+  const ss = (shipStats && typeof shipStats === 'object')
+    ? { inTransit: Number(shipStats.inTransit || 0), delivered: Number(shipStats.delivered || 0) }
+    : { inTransit: fallbackInTransit, delivered: fallbackDelivered };
+
+  // Real counts from arrays (no fake numbers)
+  const counts = {
+    orders:   ordersArr.length,
+    wishlist: wishlistArr.length,
+    payments: paymentsArr.length,
+  };
+
+  // Small helpers for display
+  function money(am) {
+    if (!am) return '—';
+    const v = (typeof am.value === 'string' || typeof am.value === 'number') ? am.value : '';
+    const c = am.currency || 'USD';
+    return `${c} ${v}`;
+  }
+  function when(d) {
+    try { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleString(); }
+    catch { return '—'; }
+  }
+%>
+
+<!-- Top pills (real shipment counts) -->
+<div class="pills">
+  <div class="pill in-transit">
+    🚚 In transit: <strong><%= ss.inTransit %></strong>
+  </div>
+  <div class="pill delivered">
+    ✅ Delivered: <strong><%= ss.delivered %></strong>
+  </div>
 </div>
 
 <section class="dashboard-home">
   <header class="dashboard-header">
-    <h1>👋 Welcome, <%= user ? user.name : 'Guest' %>!</h1>
+    <h1>👋 Welcome, <%= u.name || 'User' %></h1>
     <p class="subtitle">Your personalized dashboard</p>
   </header>
 
-  <!-- ✅ Flash Messages -->
+  <!-- Flash Messages -->
   <% if (success && success.length > 0) { %>
     <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
   <% } %>
@@ -19,214 +57,253 @@
     <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
   <% } %>
 
-  <!-- 📊 Quick Stats -->
+  <!-- Quick Stats (purely from real collections) -->
   <div class="stats-grid">
     <div class="card">
       <h3>🛒 Orders</h3>
-      <p class="count"><%= stats && stats.orders ? stats.orders : 0 %></p>
+      <p class="count"><%= counts.orders %></p>
       <a href="/users/orders" class="btn small">View Orders</a>
     </div>
 
     <div class="card">
       <h3>❤️ Wishlist</h3>
-      <p class="count"><%= stats && stats.wishlist ? stats.wishlist : 0 %></p>
+      <p class="count"><%= counts.wishlist %></p>
       <a href="/users/wishlist" class="btn small">View Wishlist</a>
     </div>
 
     <div class="card">
       <h3>💳 Payments</h3>
-      <p class="count"><%= stats && stats.payments ? stats.payments : 0 %></p>
+      <p class="count"><%= counts.payments %></p>
       <a href="/users/payments" class="btn small">Manage Payments</a>
     </div>
   </div>
 
-  <!-- 👤 Account Info -->
+  <!-- Recent Orders -->
+  <div class="list-section">
+    <h2>🧾 Recent Orders</h2>
+    <% if (!ordersArr.length) { %>
+      <p class="empty">No orders yet.</p>
+    <% } else { %>
+      <ul class="list">
+        <% ordersArr.slice(0, 5).forEach(o => { %>
+          <li class="item">
+            <div class="row">
+              <div class="left">
+                <div class="title">#<%= o.orderId || o._id %></div>
+                <div class="meta">
+                  <span class="pill order"><%= o.status || '—' %></span>
+                  <span>Placed: <%= when(o.createdAt || o.created_at) %></span>
+                </div>
+              </div>
+              <div class="right">
+                <div class="amt"><%= money(o.amount) %></div>
+                <a class="btn tiny" href="/users/orders/<%= o._id %>">Details</a>
+              </div>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <!-- Your Shipments (only those linked to the user's orders/email) -->
+  <div class="list-section">
+    <h2>📦 Your Shipments</h2>
+    <% if (!shipmentsArr.length) { %>
+      <p class="empty">No shipments yet.</p>
+    <% } else { %>
+      <ul class="list">
+        <% shipmentsArr.slice(0, 5).forEach(s => { %>
+          <li class="item">
+            <div class="row">
+              <div class="left">
+                <div class="title">
+                  <%= s.carrier ? s.carrier + ' ' : '' %><%= s.trackingNumber || 'No tracking' %>
+                </div>
+                <div class="meta">
+                  <span class="pill ship <%= (s.status||'').toLowerCase().replace(/\s+/g,'-') %>"><%= s.status || '—' %></span>
+                  <% if (s.orderId) { %><span>Order: #<%= s.orderId %></span><% } %>
+                  <span>Updated: <%= when(s.updatedAt) %></span>
+                </div>
+              </div>
+              <div class="right">
+                <a class="btn tiny" href="/users/orders/by-order-id/<%= encodeURIComponent(s.orderId || '') %>">View Order</a>
+              </div>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <!-- Recent Payments (captures pulled from your orders) -->
+  <div class="list-section">
+    <h2>💳 Recent Payments</h2>
+    <% if (!paymentsArr.length) { %>
+      <p class="empty">No payments yet.</p>
+    <% } else { %>
+      <ul class="list">
+        <% paymentsArr.slice(0, 5).forEach(p => { %>
+          <li class="item">
+            <div class="row">
+              <div class="left">
+                <div class="title">Capture <%= p.captureId || p._id || '—' %></div>
+                <div class="meta">
+                  <span class="pill pay"><%= p.status || '—' %></span>
+                  <span><%= when(p.updateTime || p.createdAt) %></span>
+                </div>
+              </div>
+              <div class="right">
+                <div class="amt"><%= money(p.amount) %></div>
+              </div>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <!-- Account Info -->
   <div class="user-section">
     <h2>👤 Account Information</h2>
     <ul>
-      <li><strong>Name:</strong> <%= user ? user.name : '—' %></li>
-      <li><strong>Email:</strong> <%= user ? user.email : '—' %></li>
-      <% if (user && user.age) { %>
-        <li><strong>Age:</strong> <%= user.age %></li>
-      <% } %>
+      <li><strong>Name:</strong> <%= u.name || '—' %></li>
+      <li><strong>Email:</strong> <%= u.email || '—' %></li>
+      <% if (u.age) { %><li><strong>Age:</strong> <%= u.age %></li><% } %>
     </ul>
 
     <div class="account-actions">
-      <a href="/users/profile" class="btn subtle">Edit Profile</a>
+      <a href="/users/profile" class="btn subtle">✏️ Edit Profile</a>
+      <form action="/users/profile/delete" method="POST"
+            onsubmit="return confirm('⚠️ Permanently delete your account? This cannot be undone.');"
+            style="display:inline">
+        <button class="btn danger">🗑 Delete Account</button>
+      </form>
       <a href="/users/logout" class="btn danger">Logout</a>
     </div>
   </div>
 
-  <!-- ⚙️ Footer -->
+  <!-- Footer -->
   <footer class="dashboard-footer">
     <button id="themeToggle" class="btn secondary">🌓 Toggle Theme</button>
     <p>© <%= new Date().getFullYear() %> Phakisi Global E-commerce. All rights reserved.</p>
   </footer>
 </section>
 
-<!-- ✅ Scoped Styles -->
 <style>
+  /* Pills row */
+  .pills {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .6rem;
+    max-width: 900px;
+    margin: 1rem auto 0.5rem;
+    padding: 0 1rem;
+  }
+  .pill { background:#eef2ff; border:1px solid #c7d2fe; color:#1e3a8a; border-radius:999px; padding:.5rem .9rem; font-size:.95rem; text-align:center; white-space:nowrap; }
+  .pill.in-transit { background:#ecfeff; border-color:#a5f3fc; color:#155e75; }
+  .pill.delivered  { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
+  .pill.order { background:#f1f5f9; border-color:#e2e8f0; color:#334155; }
+  .pill.ship.processing { background:#fff7ed; border-color:#ffedd5; color:#9a3412; }
+  .pill.ship.in-transit { background:#ecfeff; border-color:#a5f3fc; color:#155e75; }
+  .pill.ship.delivered { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
+  .pill.pay { background:#e0e7ff; border-color:#c7d2fe; color:#3730a3; }
+
   .dashboard-home {
     max-width: 900px;
-    margin: 2rem auto;
-    padding: 2rem;
+    margin: 0.8rem auto 2rem;
+    padding: 1.25rem;
     border-radius: 12px;
     background: #f9fafb;
     box-shadow: 0 2px 10px rgba(0,0,0,0.05);
   }
-  .dark-theme .dashboard-home {
-    background: #111827;
-    color: #f3f4f6;
-  }
-  .dashboard-header {
-    text-align: center;
-    margin-bottom: 2rem;
-  }
-  .dashboard-header h1 {
-    margin: 0;
-    font-size: 1.8rem;
-  }
-  .dashboard-header .subtitle {
-    color: #6b7280;
-  }
-  .dark-theme .dashboard-header .subtitle {
-    color: #9ca3af;
-  }
+  .dark-theme .dashboard-home { background:#111827; color:#f3f4f6; }
+  .dashboard-header { text-align:center; margin-bottom:1.4rem; }
+  .dashboard-header h1 { margin:0; font-size:1.6rem; }
+  .dashboard-header .subtitle { color:#6b7280; }
+  .dark-theme .dashboard-header .subtitle { color:#9ca3af; }
 
-  /* ✅ Flash messages */
-  .flash {
-    margin-bottom: 1rem;
-    padding: .8rem 1rem;
-    border-radius: .5rem;
-    font-weight: 500;
-    animation: fadeIn 0.3s ease;
-    cursor: pointer;
-    transition: opacity 0.6s ease, transform 0.6s ease;
-  }
-  .flash-success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-  }
-  .flash-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-  }
-  .flash.fade-out {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+  .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500; animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s, transform .6s; }
+  .flash-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .flash-error   { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+  .flash.fade-out { opacity:0; transform:translateY(-10px); }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-5px);} to { opacity:1; transform:none;} }
 
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.25rem;
-    margin-bottom: 2rem;
+  .list-section { margin:1.2rem 0 1.8rem; }
+  .list-section h2 { margin-bottom:.6rem; }
+  .empty { opacity:.8; }
+  .list { list-style:none; margin:0; padding:0; display:grid; gap:.6rem; }
+  .item { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:.75rem .9rem; }
+  .dark-theme .item { background:#1f2937; border-color:#334155; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:.8rem; flex-wrap:wrap; }
+  .title { font-weight:600; }
+  .meta { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; opacity:.9; }
+  .amt { font-weight:700; }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.2rem; }
+  .card { background:#fff; border-radius:10px; padding:1rem; text-align:center; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
+  .dark-theme .card { background:#1f2937; box-shadow:0 2px 6px rgba(255,255,255,0.05); }
+  .card h3 { margin-bottom:.4rem; }
+  .count { font-size:1.7rem; font-weight:700; margin:.4rem 0 1rem; }
+
+  .user-section h2 { margin-bottom:.8rem; }
+  .user-section ul { list-style:none; padding:0; margin:0 0 1.2rem; }
+  .user-section li { margin:.35rem 0; }
+
+  .btn { display:inline-block; padding:.55rem .9rem; border-radius:6px; text-decoration:none; background:#111827; color:#fff; transition:background .2s ease; }
+  .btn:hover { background:#1f2937; }
+  .btn.small { font-size:.9rem; padding:.4rem .8rem; }
+  .btn.tiny { font-size:.85rem; padding:.35rem .6rem; }
+  .btn.subtle { background:#e5e7eb; color:#111827; }
+  .btn.subtle:hover { background:#d1d5db; }
+  .btn.secondary { background:#2563eb; }
+  .btn.secondary:hover { background:#1d4ed8; }
+  .btn.danger { background:#dc2626; }
+  .btn.danger:hover { background:#b91c1c; }
+
+  .dashboard-footer { text-align:center; margin-top:1.6rem; font-size:.9rem; color:#6b7280; }
+  .dark-theme .dashboard-footer { color:#9ca3af; }
+
+  /* Mobile (Hisense U50 Lite and smaller) */
+  @media (max-width: 380px) {
+    .dashboard-home { padding:.9rem; border-radius:10px; }
+    .dashboard-header h1 { font-size:1.35rem; }
+    .pill { font-size:.9rem; padding:.45rem .7rem; }
+    .stats-grid { gap:.75rem; }
+    .card { padding:.85rem; }
+    .count { font-size:1.5rem; }
+    .btn { padding:.5rem .8rem; }
   }
-  .card {
-    background: #fff;
-    border-radius: 10px;
-    padding: 1rem;
-    text-align: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  }
-  .dark-theme .card {
-    background: #1f2937;
-    box-shadow: 0 2px 6px rgba(255,255,255,0.05);
-  }
-  .card h3 {
-    margin-bottom: 0.5rem;
-  }
-  .count {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0.5rem 0 1rem;
-  }
-  .user-section h2 {
-    margin-bottom: 1rem;
-  }
-  .user-section ul {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.5rem;
-  }
-  .user-section li {
-    margin: 0.4rem 0;
-  }
-  .btn {
-    display: inline-block;
-    padding: 0.6rem 1rem;
-    border-radius: 6px;
-    text-decoration: none;
-    background: #111827;
-    color: #fff;
-    transition: background 0.2s ease;
-  }
-  .btn:hover { background: #1f2937; }
-  .btn.small { font-size: 0.9rem; padding: 0.4rem 0.8rem; }
-  .btn.subtle {
-    background: #e5e7eb;
-    color: #111827;
-  }
-  .btn.subtle:hover { background: #d1d5db; }
-  .btn.secondary { background: #2563eb; }
-  .btn.secondary:hover { background: #1d4ed8; }
-  .btn.danger { background: #dc2626; }
-  .btn.danger:hover { background: #b91c1c; }
-  .dashboard-footer {
-    text-align: center;
-    margin-top: 2rem;
-    font-size: 0.9rem;
-    color: #6b7280;
-  }
-  .dark-theme .dashboard-footer { color: #9ca3af; }
 </style>
 
-<!-- ✅ CSP-Safe Inline Script -->
 <script nonce="<%= nonce %>">
   document.addEventListener("DOMContentLoaded", () => {
-    console.log("👤 User dashboard loaded securely with CSP nonce ✅");
-
-    // 🌓 Theme toggle
+    // Theme toggle
     const toggleBtn = document.getElementById("themeToggle");
     if (toggleBtn) {
       toggleBtn.addEventListener("click", async () => {
         try {
           const res = await fetch("/theme-toggle", { method: "POST" });
           const data = await res.json();
-          if (data.theme === "dark") {
-            document.body.classList.add("dark-theme");
-          } else {
-            document.body.classList.remove("dark-theme");
-          }
-        } catch (err) {
-          console.error("Theme toggle failed:", err);
-        }
+          if (data.theme === "dark") document.body.classList.add("dark-theme");
+          else document.body.classList.remove("dark-theme");
+        } catch {}
       });
     }
 
-    // 🔢 Stat animation
-    const numbers = document.querySelectorAll(".count");
-    numbers.forEach(n => {
+    // Count animation (purely visual)
+    document.querySelectorAll(".count").forEach((n) => {
       const target = +n.textContent || 0;
       let count = 0;
-      const step = Math.ceil(target / 40);
-      const interval = setInterval(() => {
+      const step = Math.max(1, Math.ceil(target / 40));
+      const id = setInterval(() => {
         count += step;
-        if (count >= target) {
-          count = target;
-          clearInterval(interval);
-        }
+        if (count >= target) { count = target; clearInterval(id); }
         n.textContent = count;
       }, 25);
     });
 
-    // 💬 Auto-dismiss flash messages (after 5s or on click)
+    // Auto-dismiss flash
     const flash = document.getElementById("flashMessage");
     if (flash) {
       setTimeout(() => {

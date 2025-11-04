@@ -1,16 +1,21 @@
-// middleware/notificationsUnread.js
-const Notification = require("../models/Notification");
-
+// Attach unread count to res.locals for templates
 module.exports = async function notificationsUnread(req, res, next) {
   try {
-    if (req.session && req.session.business) {
-      const buyerId = req.session.business._id;
-      res.locals.notificationsUnread = await Notification.countDocuments({ buyerId, readAt: null });
-    } else {
-      res.locals.notificationsUnread = 0;
+    const filter = {};
+    if (req.session?.user?._id) filter.recipientUser = req.session.user._id;
+    if (req.session?.business?._id) filter.recipientBusiness = req.session.business._id;
+
+    if (!filter.recipientUser && !filter.recipientBusiness) {
+      res.locals.notificationsUnreadCount = 0;
+      return next();
     }
-  } catch (e) {
-    res.locals.notificationsUnread = 0;
+
+    const count = await Notification.countDocuments({ ...filter, isRead: false });
+    res.locals.notificationsUnreadCount = count;
+    next();
+  } catch (err) {
+    console.error("notificationsUnread error:", err);
+    res.locals.notificationsUnreadCount = 0;
+    next();
   }
-  next();
 };

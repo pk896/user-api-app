@@ -1,0 +1,39 @@
+<section>
+  <h1 class="page-title">🧾 Order #<%= order._id.toString().slice(-6) %></h1>
+
+  <div class="card">
+    <div><strong>Status:</strong> <span class="status <%= (order.status || 'pending').toLowerCase() %>"><%= order.status || 'pending' %></span></div>
+    <div><strong>Total:</strong> <%= (order.amount?.total || order.total || 0).toFixed(2) %> <%= order.currency || 'USD' %></div>
+    <div><strong>Placed:</strong> <%= new Date(order.createdAt).toLocaleString() %></div>
+    <% if (order.items && order.items.length) { %>
+      <div class="section-title" style="margin-top:.6rem;">Items</div>
+      <ul>
+      <% order.items.forEach(it => { %>
+        <li>
+          <%= it.name || it.productName || 'Item' %> — qty <%= it.quantity || 1 %> — <%= (it.price || it.unit_amount?.value || 0).toFixed?.(2) || it.price %>
+        </li>
+      <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <h2 class="section-title" style="margin-top:1rem;">Shipment</h2>
+  <% if (!shipment) { %>
+    <p class="muted">No shipment info yet.</p>
+  <% } else { %>
+    <div class="card">
+      <div><strong>Status:</strong> <%= shipment.status || 'in transit' %></div>
+      <% if (shipment.carrier) { %><div><strong>Carrier:</strong> <%= shipment.carrier %></div><% } %>
+      <% if (shipment.trackingNumber) { %><div><strong>Tracking:</strong> <%= shipment.trackingNumber %></div><% } %>
+      <% if (shipment.eta) { %><div><strong>ETA:</strong> <%= new Date(shipment.eta).toLocaleDateString() %></div><% } %>
+      <% if (shipment.events && shipment.events.length) { %>
+        <div class="section-title">Events</div>
+        <ul>
+          <% shipment.events.forEach(ev => { %>
+            <li><%= ev.status %> — <%= ev.location || '' %> — <%= new Date(ev.at).toLocaleString() %></li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </div>
+  <% } %>
+</section>

@@ -1,151 +1,197 @@
 <!-- views/users-login.ejs -->
-<section class="auth-form <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <h1>🔑 Log In</h1>
+<section class="auth-page mini">
+  <!-- stamp: users-login -->
+  <small class="stamp">view: users-login</small>
+  <h1 class="page-title">🔐 Log in</h1>
 
-  <!-- Flash messages -->
-  <%- include('partials/massage', { success, error, info, warning, errors }) %>
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
 
-  <form id="userLoginForm" action="/users/login" method="POST" class="form-fields" novalidate>
-    <!-- Email -->
-    <label for="email">Email <span class="required">*</span></label>
-    <input 
-      type="email" 
-      id="email" 
-      name="email" 
-      value="<%= oldInput && oldInput.email ? oldInput.email : '' %>" 
-      required 
-    />
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
 
-    <!-- Password -->
-    <label for="password">Password <span class="required">*</span></label>
-    <input 
-      type="password" 
-      id="password" 
-      name="password" 
-      required 
-    />
+  <form action="/users/login" method="post" class="auth-form card" autocomplete="on" novalidate>
+    <label>Email
+      <input id="login-email" type="email" name="email" required autocomplete="email" placeholder="you@example.com" inputmode="email" />
+    </label>
 
-    <!-- Submit -->
-    <button type="submit" class="btn-submit">🚀 Log In</button>
+    <label>Password
+      <div class="pw-wrap">
+        <input id="login-password" type="password" name="password" required minlength="6" placeholder="••••••••" autocomplete="current-password" />
+        <button type="button" class="pw-toggle" aria-label="Show password" title="Show/Hide">👁️</button>
+      </div>
+      <small id="caps-hint" class="muted caps-hint" hidden>Caps Lock is ON</small>
+    </label>
+
+    <div class="row between">
+      <label class="checkbox">
+        <input id="login-remember" type="checkbox" name="remember" value="1" />
+        <span>Remember me</span>
+      </label>
+      <!-- ✅ fixed path: password routes live under /users/password/* -->
+      <a class="muted tiny" href="/users/password/forgot" data-nav="true" rel="noopener">Forgot?</a>
+    </div>
+
+    <button id="login-submit" type="submit" class="btn xs primary wfull">Log in</button>
   </form>
 
-  <p class="extra-links">
-    Don’t have an account? 
-    <a href="/users/signup">Sign Up here</a>
-  </p>
+  <div class="divider">or</div>
 
-  <div class="oauth">
-    <p>Or log in with:</p>
-    <a href="/auth/google" class="btn-google">🔐 Google</a>
+  <div class="social">
+    <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">🔑 Continue with Google</a>
   </div>
+
+  <p class="auth-switch">
+    New here?
+    <a href="/users/signup" data-nav="true" rel="noopener">Create an account</a>
+  </p>
 </section>
 
-<!-- Styles -->
-<style>
-  .auth-form {
-    max-width: 450px;
-    margin: 2rem auto;
-    padding: 2rem;
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  /* Mobile-first compact (Hisense U50 Lite & smaller) */
+  .auth-page.mini { max-width: 400px; margin: .85rem auto 1.1rem; padding: 0 .56rem; }
+  .page-title { text-align: center; font-size: 1.04rem; font-weight: 800; margin: .18rem 0 .64rem; }
+
+  .card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-bd, #e5e7eb);
     border-radius: 10px;
-    background: #f9f9f9;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    padding: .66rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05);
   }
-  .dark-theme.auth-form {
-    background: #1e1e1e;
-    color: #f1f1f1;
+  .dark-theme .card { --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb; }
+
+  .auth-form { display: grid; gap: .64rem; }
+  label { display: grid; gap: .3rem; font-weight: 700; font-size: .84rem; }
+
+  input {
+    border: 1px solid #d1d5db; border-radius: 10px;
+    padding: .5rem .6rem; background: #fff; font-size: .9rem;
   }
-  .auth-form h1 {
-    text-align: center;
-    margin-bottom: 1.5rem;
+  .dark-theme input { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+
+  .pw-wrap { position: relative; display: grid; }
+  .pw-toggle {
+    position: absolute; right: .4rem; top: 50%; transform: translateY(-50%);
+    border: 0; background: transparent; cursor: pointer; font-size: .9rem; line-height: 1;
+    padding: .2rem .3rem; border-radius: .4rem;
   }
-  .form-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+  .pw-toggle:focus { outline: 2px solid #93c5fd; outline-offset: 2px; }
+
+  .row { display: flex; align-items: center; gap: .5rem; }
+  .between { justify-content: space-between; }
+  .checkbox { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; font-size: .82rem; }
+  .muted { color: #6b7280; } .tiny { font-size: .78rem; }
+  .dark-theme .muted { color: #9ca3af; }
+  .caps-hint { margin-top: .25rem; }
+
+  .btn {
+    display: inline-block; text-align: center; text-decoration: none;
+    border: 1px solid #d1d5db; background: #f3f4f6; color: #111827;
+    border-radius: 8px; padding: .4rem .56rem; font-size: .76rem; font-weight: 700;
   }
-  .form-fields label {
-    font-weight: bold;
-  }
-  .form-fields input {
-    padding: 0.6rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 1rem;
-  }
-  .dark-theme .form-fields input {
-    background: #333;
-    border: 1px solid #555;
-    color: #eee;
-  }
-  .required {
-    color: red;
-  }
-  .btn-submit {
-    margin-top: 1rem;
-    padding: 0.8rem;
-    background: #007bff;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.2s ease;
-  }
-  .btn-submit:hover {
-    background: #0056b3;
-  }
-  .extra-links {
-    margin-top: 1.2rem;
-    text-align: center;
-  }
-  .extra-links a {
-    color: #007bff;
-    text-decoration: none;
-  }
-  .extra-links a:hover {
-    text-decoration: underline;
-  }
-  .oauth {
-    margin-top: 1.5rem;
-    text-align: center;
-  }
-  .btn-google {
-    display: inline-block;
-    margin-top: 0.5rem;
-    padding: 0.6rem 1.2rem;
-    background: #db4437;
-    color: #fff;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 1rem;
-    transition: background 0.2s ease;
-  }
-  .btn-google:hover {
-    background: #b23121;
+  .btn.xs { padding: .34rem .48rem; font-size: .7rem; border-radius: 7px; }
+  .btn.wfull { width: 100%; }
+  .btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .btn.google { background: #fff; color: #111827; border-color: #d1d5db; }
+  .btn:hover { opacity: .96; }
+  .dark-theme .btn { background: #374151; border-color: #4b5563; color: #e5e7eb; }
+  .dark-theme .btn.primary { background: #1d4ed8; border-color: #1d4ed8; }
+  .dark-theme .btn.google { background: #111827; }
+
+  .divider { margin: .5rem auto; text-align: center; font-size: .84rem; color: #6b7280; }
+  .dark-theme .divider { color: #9ca3af; }
+
+  .social { display: grid; gap: .36rem; }
+  .auth-switch { margin-top: .64rem; text-align: center; font-size: .84rem; }
+
+  .flash { margin:.36rem 0; padding:.5rem .64rem; border-radius:.6rem; font-size:.84rem; }
+  .flash-success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+  .flash-error { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+
+  .stamp{display:block;margin:.2rem 0 .3rem;font-size:.72rem;opacity:.6}
+
+  @media (max-width: 360px) {
+    .auth-page.mini { padding: 0 .48rem; }
+    .page-title { font-size: .98rem; }
+    input { font-size: .84rem; padding: .48rem .56rem; }
+    .btn.xs { font-size: .68rem; padding: .3rem .44rem; }
   }
 </style>
 
-<!-- 🧩 Secure Inline Script with Nonce -->
-<script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("userLoginForm");
-    if (!form) return;
-
-    form.addEventListener("submit", (e) => {
-      const email = form.querySelector("#email").value.trim();
-      const password = form.querySelector("#password").value.trim();
-
-      if (!email || !password) {
-        e.preventDefault();
-        alert("⚠️ Please fill in both email and password before submitting.");
-        form.querySelectorAll("input[required]").forEach((input) => {
-          if (!input.value.trim()) {
-            input.style.borderColor = "#dc2626"; // red highlight
-          } else {
-            input.style.borderColor = "#ccc";
-          }
-        });
-      }
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  (function(){
+    // Hard navigation for data-nav links
+    document.querySelectorAll('a[data-nav]').forEach(a=>{
+      a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); location.assign(a.getAttribute('href')); });
+      a.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); location.assign(a.getAttribute('href')); }});
     });
-  });
+
+    const emailEl = document.getElementById('login-email');
+    const pwEl = document.getElementById('login-password');
+    const toggleEl = document.querySelector('.pw-toggle');
+    const submitEl = document.getElementById('login-submit');
+    const rememberEl = document.getElementById('login-remember');
+    const capsHint = document.getElementById('caps-hint');
+
+    // Prefill email from localStorage to reduce friction after redirects
+    try {
+      const stored = localStorage.getItem('login:email');
+      if (stored && emailEl && !emailEl.value) emailEl.value = stored;
+    } catch {}
+
+    if (emailEl) {
+      emailEl.addEventListener('input', () => {
+        try { localStorage.setItem('login:email', emailEl.value.trim()); } catch {}
+      });
+      // focus email if empty, else password
+      setTimeout(() => {
+        if (!emailEl.value) emailEl.focus();
+        else if (pwEl) pwEl.focus();
+      }, 0);
+    }
+
+    // Show/Hide password
+    if (toggleEl && pwEl) {
+      toggleEl.addEventListener('click', () => {
+        const showing = pwEl.type === 'text';
+        pwEl.type = showing ? 'password' : 'text';
+        toggleEl.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+      });
+    }
+
+    // Caps Lock detection
+    function handleCaps(e){
+      const on = e.getModifierState && e.getModifierState('CapsLock');
+      if (capsHint) capsHint.hidden = !on;
+    }
+    if (pwEl) {
+      pwEl.addEventListener('keydown', handleCaps);
+      pwEl.addEventListener('keyup', handleCaps);
+      pwEl.addEventListener('focus', handleCaps);
+      pwEl.addEventListener('blur', () => { if (capsHint) capsHint.hidden = true; });
+    }
+
+    // Double-submit guard
+    const form = document.querySelector('form.auth-form');
+    if (form && submitEl) {
+      form.addEventListener('submit', () => {
+        submitEl.disabled = true;
+        submitEl.textContent = 'Logging in...';
+      });
+    }
+
+    // If "Remember me" checked, stretch cookie lifespan server-side (handled by route).
+    // We persist email regardless, but you can gate it:
+    if (rememberEl && emailEl) {
+      rememberEl.addEventListener('change', () => {
+        try {
+          if (!rememberEl.checked) localStorage.removeItem('login:email');
+          else localStorage.setItem('login:email', emailEl.value.trim());
+        } catch {}
+      });
+    }
+  })();
 </script>

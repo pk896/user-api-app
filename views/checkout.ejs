@@ -1,1028 +1,402 @@
 <%
-  // Single source of truth for this view
-  const CHECKOUT_VAT_RATE = Number(typeof vatRate !== 'undefined' ? vatRate : 0.15);
-  const NONCE = (typeof nonce !== 'undefined' ? nonce : '');
+const CO_NONCE     = typeof NONCE !== 'undefined' ? NONCE : '';
+const CO_CLIENT_ID = typeof paypalClientId !== 'undefined' ? paypalClientId : '';
+const CO_CCY       = typeof currency !== 'undefined' ? currency : 'USD';
+const CO_BRAND     = typeof brandName !== 'undefined' ? brandName : 'Phakisi Global';
+const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
 %>
 
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
+<section class="checkout-page">
+  <h1 class="title">🧾 Checkout</h1>
 
-<section class="checkout container">
-  <h1 class="title">Checkout</h1>
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
 
-  <!-- Runtime flash (JS will fill this) -->
-  <div id="pay-flash" aria-live="polite" aria-atomic="true"></div>
+  <div class="co-grid">
+    <!-- LEFT -->
+    <div class="co-left card">
+      <h2 class="card-title">Your Cart</h2>
 
-  <div class="cards">
-    <!-- Cart -->
-    <div class="card">
-      <h2>Your Cart</h2>
-      <div id="cart-area">
-        <p class="muted">Loading cart…</p>
+      <!-- Simple state text (no spinner) -->
+      <div id="cart-state" class="state-msg">Loading your cart…</div>
+
+      <!-- Cart Items -->
+      <div id="cart-items" class="cart-list" hidden></div>
+
+      <!-- Delivery from DB -->
+      <div class="card-sub">
+        <label for="delivery-select" class="lbl">Delivery option</label>
+        <select id="delivery-select" class="select" disabled></select>
+        <div class="del-hint" id="delivery-hint"></div>
       </div>
     </div>
 
-    <!-- Delivery Options (collapsible) -->
-    <div class="card">
-      <h2>Delivery</h2>
-      <details id="del-accordion" class="accordion" open>
-        <summary class="accordion-summary">
-          <span id="del-picked-label" class="picked">Loading delivery options…</span>
-          <span class="chev" aria-hidden>▾</span>
-        </summary>
-        <div id="delivery-options" class="delivery-list">
-          <div class="muted">Loading…</div>
-        </div>
-      </details>
-    </div>
-
-    <!-- Order Summary -->
-    <div class="card">
-      <h2>Order Summary</h2>
-      <div id="order-summary">
-        <p class="muted">Calculating…</p>
-      </div>
-    </div>
-
-    <!-- Payment -->
-    <div class="card">
-      <h2>Pay with PayPal or Card</h2>
-
-      <div id="pay-guard" class="guard guard-warn" hidden>
-        <strong>Your cart is empty.</strong> Add items before paying.
+    <!-- RIGHT -->
+    <div class="co-right">
+      <div class="card">
+        <h2 class="card-title">Order Summary</h2>
+        <div class="summary-line"><span>Subtotal</span><span id="sum-subtotal">—</span></div>
+        <div class="summary-line"><span>VAT (<span id="sum-vat-rate"><%= (CO_VAT*100).toFixed(0) %></span>%)</span><span id="sum-vat">—</span></div>
+        <div class="summary-line"><span>Shipping</span><span id="sum-shipping">—</span></div>
+        <div class="summary-total"><span>Total</span><span id="sum-total">—</span></div>
       </div>
 
-      <div id="pay-wait" class="guard" hidden>
-        <span id="pay-wait-text">Preparing payment… Please wait.</span>
-        <button id="btn-retry-sdk" class="btn btn-light" type="button" hidden>Retry loading PayPal</button>
+      <div class="card pay-card">
+        <h3 class="card-title">Pay securely</h3>
+        <div id="pay-guard" class="pay-guard">Waiting for cart & delivery options…</div>
+        <div id="paypal-buttons"></div>
+        <small class="muted">Payments processed by PayPal. Merchant: <%= CO_BRAND %>.</small>
       </div>
-
-      <div id="paypal-buttons"></div>
-      <small class="muted">You’ll confirm payment after reviewing the totals above.</small>
     </div>
   </div>
 </section>
 
-<!-- Styles -->
-<style nonce="<%= NONCE %>">
-  :root{
-    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff;
-    --border:#e5e7eb; --radius:14px; --shadow:0 6px 18px rgba(0,0,0,.06);
-    --accent:#111827; --accent-weak:#334155; --brand:#2563eb; --danger:#dc2626;
-  }
-  html,body{background:var(--bg);color:var(--text);margin:0}
-  .container{max-width:980px;margin:0 auto;padding:12px}
-  .title{font-size:clamp(18px,5.5vw,28px);margin:.3rem 0 .8rem}
-  .cards{display:grid;gap:12px;grid-template-columns:1fr}
-  @media (min-width:900px){.cards{grid-template-columns:1fr 1fr}}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
-  h2{font-size:clamp(16px,4.8vw,20px);margin:.1rem 0 .6rem}
-  .muted{color:var(--muted)}
-
-  /* Runtime flash box */
-  #pay-flash{display:flex;flex-direction:column;gap:8px;margin:.5rem 0}
-  .flash{margin:.4rem 0;padding:.7rem .9rem;border-radius:10px;font-size:clamp(14px,4.5vw,16px)}
-  .flash-success{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
-  .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
-  .flash-info{background:#eff6ff;color:#1e3a8a;border:1px solid #93c5fd}
-
-  /* Cart table (mobile-first) */
-  .cart{display:flex;flex-direction:column;gap:10px}
-  .line{
-    display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;
-    border:1px solid var(--border);border-radius:12px;padding:8px;
-  }
-  .line-main{display:flex;flex-direction:column;gap:4px}
-  .line-name{font-weight:700}
-  .line-meta{font-size:.9rem;color:var(--muted)}
-  .line-qty{display:flex;align-items:center;gap:6px;justify-content:flex-end}
-  .qty-btn{
-    width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;
-    border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer
-  }
-  .qty-val{min-width:28px;text-align:center}
-  .price{font-weight:800}
-  .rm-btn{
-    border:1px solid var(--danger);color:#fff;background:var(--danger);
-    border-radius:8px;padding:6px 10px;cursor:pointer
-  }
-  @media (min-width:540px){
-    .line{grid-template-columns:1fr auto auto auto}
-    .line-qty{justify-content:center}
-  }
-
-  /* Delivery accordion */
-  .accordion{
-    border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#fff
-  }
-  .accordion-summary{
-    list-style:none;display:flex;align-items:center;justify-content:space-between;
-    gap:8px;padding:10px 12px;cursor:pointer;font-weight:700;
-    border-bottom:1px solid var(--border);
-  }
-  .accordion[open] .chev{transform:rotate(180deg)}
-  .chev{transition:transform .2s ease}
-  .picked{color:var(--accent)}
-  .delivery-list{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
-  .opt{display:flex;align-items:center;gap:.6rem;border:1px solid var(--border);border-radius:10px;padding:.6rem .7rem}
-  .opt label{display:flex;justify-content:space-between;align-items:center;width:100%;cursor:pointer}
-  .opt .meta{display:flex;gap:.6rem;align-items:center}
-  .opt .name{font-weight:600}
-  .opt .days{font-size:.9rem;color:var(--muted)}
-  .opt .price{font-weight:700}
-
-  /* Order summary rows */
-  .row{display:flex;justify-content:space-between;margin:.45rem 0}
-  .row strong{font-weight:800}
-
-  /* Pay guards */
-  .guard{border:1px dashed var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-  .guard-warn{background:#fff7ed;border-color:#fdba74}
-  .btn{border:1px solid var(--border);border-radius:10px;padding:.4rem .6rem;background:#fff;cursor:pointer}
-  .btn-light{background:#f3f4f6}
-</style>
-
-<!-- Static page config -->
-<script id="checkout-config" type="application/json" nonce="<%= NONCE %>">
-<%- JSON.stringify({ vatRate: CHECKOUT_VAT_RATE }) %>
-</script>
-
-<!-- Checkout Controller -->
-<script nonce="<%= NONCE %>">
-  (async function setupCheckout(){
-    const cfgEl = document.getElementById('checkout-config');
-    const cfg   = JSON.parse((cfgEl && cfgEl.textContent) || '{}');
-    const VAT_RATE = Number(cfg.vatRate || 0);
-
-    const els = {
-      cartArea: document.getElementById('cart-area'),
-      summary: document.getElementById('order-summary'),
-      deliveryHost: document.getElementById('delivery-options'),
-      delPicked: document.getElementById('del-picked-label'),
-      delAccordion: document.getElementById('del-accordion'),
-      payButtons: document.getElementById('paypal-buttons'),
-      payGuard: document.getElementById('pay-guard'),
-      payWait: document.getElementById('pay-wait'),
-      payWaitText: document.getElementById('pay-wait-text'),
-      btnRetrySdk: document.getElementById('btn-retry-sdk'),
-      flashHost: document.getElementById('pay-flash'),
-    };
-
-    const state = {
-      currencyCode: 'USD',
-      currencySymbol: '$',
-      cartItems: [],
-      delivery: null, // { id, name, priceCents, price, deliveryDays }
-      sdkLoaded: false,
-      sdkUrl: '',
-    };
-
-    /* ===== Utilities ===== */
-    const money = (n) => state.currencySymbol + Number(n || 0).toFixed(2);
-    function escapeHtml(s){
-      return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-    }
-    function fmtCurrencyFrom(code){
-      const C = (code || 'USD').toUpperCase();
-      const map = { USD: '$', ZAR: 'R', EUR: '€', GBP: '£' };
-      return { code: C, sym: map[C] || (C + ' ') };
-    }
-    function computeSubtotal(){
-      let sub = 0;
-      for (const i of state.cartItems) sub += Number(i.price || 0) * Number(i.quantity || 1);
-      return +sub.toFixed(2);
-    }
-    function setPayState({emptyCart=false, waiting=false, showButtons=false}){
-      els.payGuard.hidden = !emptyCart;
-      els.payWait.hidden  = !waiting;
-      els.payButtons.style.display = showButtons ? '' : 'none';
-    }
-    function flash(kind, msg, opts){
-      const el = document.createElement('div');
-      el.className = `flash flash-${kind||'info'}`;
-      el.textContent = String(msg || '');
-      els.flashHost.appendChild(el);
-      const ms = (opts && opts.durationMs) || 4000;
-      if (ms > 0) setTimeout(() => { el.remove(); }, ms);
-    }
-
-    /* ===== Cart rendering ===== */
-    function renderCart(){
-      if (!state.cartItems.length) {
-        els.cartArea.innerHTML = '<p class="muted">Your cart is empty.</p>';
-        return;
-      }
-      const html = [
-        '<div class="cart">',
-        ...state.cartItems.map(item => {
-          const price = Number(item.price || 0);
-          const qty = Number(item.quantity || 1);
-          const line = price * qty;
-          const pid = String(item.id || item.pid || item._id || item.productId || '');
-          return `
-            <article class="line" data-pid="${pid}">
-              <div class="line-main">
-                <div class="line-name">${escapeHtml(item.name || 'Item')}</div>
-                <div class="line-meta">${money(price)} each</div>
-              </div>
-              <div class="line-qty">
-                <button class="qty-btn btn-dec" type="button" aria-label="Decrease quantity">−</button>
-                <div class="qty-val">${qty}</div>
-                <button class="qty-btn btn-inc" type="button" aria-label="Increase quantity">+</button>
-              </div>
-              <div class="price">${money(line)}</div>
-              <button class="rm-btn btn-rm" type="button" aria-label="Remove">🗑️</button>
-            </article>
-          `;
-        }),
-        '</div>'
-      ].join('');
-      els.cartArea.innerHTML = html;
-
-      // wire buttons
-      els.cartArea.querySelectorAll('.btn-inc').forEach(btn => btn.addEventListener('click', onInc));
-      els.cartArea.querySelectorAll('.btn-dec').forEach(btn => btn.addEventListener('click', onDec));
-      els.cartArea.querySelectorAll('.btn-rm').forEach(btn => btn.addEventListener('click', onRemove));
-    }
-
-    /* ===== Totals ===== */
-    function renderTotals(){
-      const sub = computeSubtotal();
-      const vat = +(sub * VAT_RATE).toFixed(2);
-      const delivery = state.delivery ? Number(state.delivery.price || 0) : 0;
-      const total = +(sub + vat + delivery).toFixed(2);
-
-      els.summary.innerHTML = `
-        <div class="row"><span>Subtotal</span><strong>${money(sub)}</strong></div>
-        <div class="row"><span>VAT</span><strong>${money(vat)}</strong></div>
-        <div class="row"><span>Delivery</span><strong>${money(delivery)}</strong></div>
-        <hr/>
-        <div class="row"><span>Total</span><strong>${money(total)}</strong></div>
-      `;
-    }
-
-    /* ===== Delivery UI ===== */
-    function renderDeliveryOptions(options){
-      if (!options.length) {
-        els.deliveryHost.innerHTML = '<div class="muted">No delivery options available.</div>';
-        els.delPicked.textContent = 'No delivery option';
-        state.delivery = null;
-        return;
-      }
-      // keep current if still present; else choose cheapest
-      let chosen = options.find(o => state.delivery && o.id === state.delivery.id);
-      if (!chosen) {
-        chosen = [...options].sort((a,b)=> (a.priceCents||0)-(b.priceCents||0) || (a.deliveryDays||0)-(b.deliveryDays||0))[0];
-      }
-      state.delivery = {
-        id: chosen.id, name: chosen.name,
-        priceCents: chosen.priceCents, price: chosen.price,
-        deliveryDays: chosen.deliveryDays || 0
-      };
-      els.delPicked.textContent = `${chosen.name} • ${money(chosen.price)} • ${chosen.deliveryDays || 0} day${(chosen.deliveryDays||0)===1?'':'s'}`;
-
-      els.deliveryHost.innerHTML = options.map((o) => {
-        const id = `opt_${o.id}`;
-        const active = o.id === state.delivery.id;
-        return `
-          <div class="opt">
-            <input type="radio" name="deliveryOption" id="${id}" value="${o.id}" ${active ? 'checked' : ''} />
-            <label for="${id}">
-              <span class="meta">
-                <span class="name">${escapeHtml(o.name)}</span>
-                <span class="days">(${o.deliveryDays || 0} day${(o.deliveryDays||0)===1?'':'s'})</span>
-              </span>
-              <span class="price">${money(o.price)}</span>
-            </label>
-          </div>
-        `;
-      }).join('');
-
-      els.deliveryHost.querySelectorAll('input[name="deliveryOption"]').forEach((el) => {
-        el.addEventListener('change', () => {
-          const picked = options.find(op => op.id === el.value);
-          if (!picked) return;
-          state.delivery = {
-            id: picked.id, name: picked.name,
-            priceCents: picked.priceCents, price: picked.price,
-            deliveryDays: picked.deliveryDays || 0
-          };
-          els.delPicked.textContent = `${picked.name} • ${money(picked.price)} • ${picked.deliveryDays || 0} day${(picked.deliveryDays||0)===1?'':'s'}`;
-          renderTotals();
-        });
-      });
-    }
-
-    /* ===== Network helpers for cart mutations ===== */
-    async function postJson(url, body){
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(body||{})
-      });
-      return { ok:r.ok, data: await r.json().catch(()=>({})) };
-    }
-    async function getJson(url){
-      const r = await fetch(url, { credentials:'same-origin' });
-      return { ok:r.ok, data: await r.json().catch(()=>({})) };
-    }
-    async function mutateCart(kind, pid){
-      try {
-        let res;
-        if (kind === 'inc') {
-          res = await postJson('/api/cart/increase', { pid });
-          if (!res.ok) res = await getJson(`/api/cart/add?pid=${encodeURIComponent(pid)}&json=1`);
-        } else if (kind === 'dec') {
-          res = await postJson('/api/cart/decrease', { pid });
-          if (!res.ok) res = await getJson(`/api/cart/dec?pid=${encodeURIComponent(pid)}&json=1`);
-        } else if (kind === 'rm') {
-          res = await postJson('/api/cart/remove', { pid });
-          if (!res.ok) res = await getJson(`/api/cart/remove?pid=${encodeURIComponent(pid)}&json=1`);
-        }
-        await loadCart();
-        renderCart();
-        renderTotals();
-        updatePayVisibility();
-      } catch(e){
-        console.error('Cart mutation failed:', e);
-        flash('error', 'Could not update cart. Please try again.');
-      }
-    }
-    function onInc(e){ const pid = e.currentTarget.closest('.line')?.getAttribute('data-pid'); if (pid) mutateCart('inc', pid); }
-    function onDec(e){ const pid = e.currentTarget.closest('.line')?.getAttribute('data-pid'); if (pid) mutateCart('dec', pid); }
-    function onRemove(e){ const pid = e.currentTarget.closest('.line')?.getAttribute('data-pid'); if (pid) mutateCart('rm', pid); }
-
-    /* ===== Pay button gating ===== */
-    function updatePayVisibility(){
-      if (!state.cartItems.length) {
-        setPayState({ emptyCart: true,  waiting: false,        showButtons: false });
-      } else if (!state.sdkLoaded) {
-        setPayState({ emptyCart: false, waiting: true,         showButtons: false });
-      } else {
-        setPayState({ emptyCart: false, waiting: false,        showButtons: true  });
-      }
-    }
-
-    /* ===== Boot sequence ===== */
-    // 1) Config / currency
-    const payCfg = await fetch('/payment/config', { credentials:'same-origin' }).then(r => r.json());
-    const fc = fmtCurrencyFrom(payCfg.currency || payCfg.baseCurrency || 'USD');
-    state.currencyCode = fc.code;
-    state.currencySymbol = fc.sym;
-
-    // 2) Load cart
-    async function loadCart(){
-      const cartRes = await fetch('/api/cart', { credentials: 'same-origin' });
-      const cart = await cartRes.json().catch(() => ({ items: [] }));
-      state.cartItems = Array.isArray(cart.items) ? cart.items : [];
-    }
-    await loadCart();
-    renderCart();
-
-    // 3) Load delivery options
-    const delRes = await fetch('/api/delivery-options', { credentials: 'same-origin' });
-    const delData = await delRes.json().catch(() => ({ options: [] }));
-    const options = Array.isArray(delData.options) ? delData.options : [];
-    renderDeliveryOptions(options);
-
-    // 4) Totals
-    renderTotals();
-
-    // 5) Pay buttons visibility decision (before SDK)
-    updatePayVisibility();
-    if (!state.cartItems.length) return; // do not load SDK or show buttons
-
-    // 6) Load PayPal SDK with robust error handling + retry
-    async function loadPayPalSdkOnce(timeoutMs){
-      if (!payCfg.clientId) {
-        throw new Error('Missing PayPal clientId from /payment/config');
-      }
-      state.sdkUrl =
-        `https://www.paypal.com/sdk/js` +
-        `?client-id=${encodeURIComponent(payCfg.clientId)}` +
-        `&components=buttons` +
-        `&currency=${encodeURIComponent(state.currencyCode)}` +
-        `&intent=${encodeURIComponent((payCfg.intent || 'capture').toLowerCase())}` +
-        `&enable-funding=card`;
-
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        let settled = false;
-        const to = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            s.remove();
-            reject(new Error('PayPal SDK load timeout'));
-          }
-        }, Math.max(5000, Number(timeoutMs||10000)));
-
-        s.src = state.sdkUrl;
-        s.async = true;
-        s.onload = () => { if (!settled) { settled = true; clearTimeout(to); resolve(); } };
-        s.onerror = () => { if (!settled) { settled = true; clearTimeout(to); reject(new Error('Failed to load PayPal SDK')); } };
-        document.head.appendChild(s);
-      });
-    }
-
-    async function ensureSdkLoadedWithUI(){
-      try {
-        els.payWait.hidden = false;
-        els.btnRetrySdk.hidden = true;
-        els.payWaitText.textContent = 'Preparing payment… Please wait.';
-        await loadPayPalSdkOnce(12000);
-        state.sdkLoaded = true;
-        updatePayVisibility();
-        flash('success', 'Payment options ready.', { durationMs: 2500 });
-      } catch (e) {
-        console.error('SDK load error:', e);
-        state.sdkLoaded = false;
-        els.payWait.hidden = false;
-        els.payWaitText.textContent = 'Could not load PayPal. Check your connection or try again.';
-        els.btnRetrySdk.hidden = false;
-        updatePayVisibility(); // still shows waiting (guard), hides buttons
-        flash('error', 'PayPal failed to load. Tap “Retry loading PayPal”.', { durationMs: 6000 });
-      }
-    }
-
-    if (els.btnRetrySdk) {
-      els.btnRetrySdk.addEventListener('click', () => {
-        ensureSdkLoadedWithUI();
-      });
-    }
-
-    await ensureSdkLoadedWithUI();
-    if (!state.sdkLoaded) return; // stop here if still not loaded
-
-    function ensureDeliverySelected(){
-      if (!state.delivery || !state.delivery.id) {
-        flash('error', 'Please choose a delivery option before paying.');
-        throw new Error('No delivery option selected');
-      }
-      return state.delivery.id;
-    }
-
-    async function createOrder(){
-      const deliveryOptionId = ensureDeliverySelected();
-      flash('info', 'Creating order…');
-      try {
-        const r = await fetch('/payment/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ currency: state.currencyCode, deliveryOptionId })
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok || !data || (!data.id && !data.ok)) {
-          const msg = (data && (data.message || data.code)) || 'Failed to create order';
-          throw new Error(msg);
-        }
-        flash('success', 'Order created. Redirecting to PayPal…', { durationMs: 2000 });
-        return data.id || data.orderID || data.orderId;
-      } catch (err) {
-        console.error('create_order_error', err);
-        flash('error', 'Could not create order. Please try again.');
-        throw err;
-      }
-    }
-
-    async function onApprove(data){
-      flash('info', 'Capturing payment…');
-      try {
-        const r = await fetch('/payment/capture-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ orderID: data.orderID })
-        });
-        const res = await r.json();
-        if (!res || !res.ok) throw new Error('Capture failed');
-        flash('success', 'Payment captured. Finalizing…', { durationMs: 1500 });
-        window.location.href = '/thank-you?id=' + encodeURIComponent(data.orderID);
-      } catch (e) {
-        console.error('capture_error', e);
-        flash('error', 'Payment capture failed. Your card was not charged.');
-        window.location.href = '/payment/cancel';
-      }
-    }
-
-    // Render PayPal buttons (both PayPal and Card)
-    try {
-      // eslint-disable-next-line no-undef
-      paypal.Buttons({
-        style: { layout: 'vertical', shape: 'rect' },
-        fundingSource: paypal.FUNDING.PAYPAL,
-        createOrder,
-        onApprove
-      }).render('#paypal-buttons');
-
-      // eslint-disable-next-line no-undef
-      paypal.Buttons({
-        style: { layout: 'vertical', shape: 'rect' },
-        fundingSource: paypal.FUNDING.CARD,
-        createOrder,
-        onApprove
-      }).render('#paypal-buttons');
-    } catch (e) {
-      console.error('buttons_render_error', e);
-      flash('error', 'Could not render PayPal buttons. Please retry loading.');
-      els.btnRetrySdk.hidden = false;
-      setPayState({ emptyCart: false, waiting: true, showButtons: false });
-    }
-  })();
-</script>
-
-
-
-
-
-
-
-
-
-
-
-<!--<%
-  // Locals provided by your route
-  const CO_VAT_RATE = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
-  const CO_NONCE = (typeof nonce !== 'undefined' ? nonce : '');
-%>
-
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
-
-<section class="checkout container">
-  <h1 class="title">Checkout</h1>
-
-  <div class="cards">
-    !-- Cart --
-    <div class="card">
-      <h2>Your Cart</h2>
-      <div id="cart-area">
-        <p class="muted">Loading cart…</p>
-      </div>
-    </div>
-
-    !-- Delivery Options (collapsible) --
-    <div class="card">
-      <h2>Delivery</h2>
-      <details id="del-accordion" class="accordion" open>
-        <summary class="accordion-summary">
-          <span id="del-picked-label" class="picked">Loading delivery options…</span>
-          <span class="chev" aria-hidden>▾</span>
-        </summary>
-        <div id="delivery-options" class="delivery-list">
-          <div class="muted">Loading…</div>
-        </div>
-      </details>
-    </div>
-
-    !-- Order Summary --
-    <div class="card">
-      <h2>Order Summary</h2>
-      <div id="order-summary">
-        <p class="muted">Calculating…</p>
-      </div>
-    </div>
-
-    !-- Payment --
-    <div class="card">
-      <h2>Pay with PayPal or Card</h2>
-
-      <div id="pay-guard" class="guard guard-warn" hidden>
-        <strong>Your cart is empty.</strong> Add items before paying.
-      </div>
-      <div id="pay-wait" class="guard" hidden>
-        Preparing payment… Please wait.
-      </div>
-
-      <div id="paypal-buttons"></div>
-      <small class="muted">You’ll confirm payment after reviewing the totals above.</small>
-    </div>
-  </div>
-</section>
-
-!-- Styles --
 <style nonce="<%= CO_NONCE %>">
-  :root{
-    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff;
-    --border:#e5e7eb; --radius:14px; --shadow:0 6px 18px rgba(0,0,0,.06);
-    --accent:#111827; --accent-weak:#334155; --brand:#2563eb; --danger:#dc2626;
+  .checkout-page { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+  .title { font-size: 1.6rem; margin: 0 0 1rem 0; }
+  .co-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; }
+  .card { background: var(--card-bg,#fff); border: 1px solid #e5e7eb; border-radius: 14px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+  .card-title { margin: 0 0 .75rem 0; font-size: 1.1rem; }
+  .card-sub { margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #e5e7eb; }
+  .cart-list { display: grid; gap: .75rem; }
+  .cart-row { display: grid; grid-template-columns: 64px 1fr auto; gap: .75rem; align-items: center; }
+  .cart-img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid #eee; }
+  .cart-title { font-weight: 600; margin: 0 0 .25rem 0; }
+  .cart-meta { font-size: .85rem; color: #6b7280; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .qty { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #e5e7eb; border-radius: 10px; padding: .15rem .45rem; }
+  .qty button { border: 0; background: transparent; font-size: 1.1rem; line-height: 1; cursor: pointer; }
+  .cart-price { font-weight: 700; }
+  .lbl { display:block; font-weight:600; margin-bottom:.25rem; }
+  .select { width: 100%; padding:.55rem .6rem; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+  .del-hint { font-size:.85rem; color:#6b7280; margin-top:.35rem; min-height:1.2em; }
+  .summary-line { display:flex; justify-content:space-between; margin:.35rem 0; }
+  .summary-total { display:flex; justify-content:space-between; margin-top:.6rem; font-weight:800; font-size:1.1rem; }
+  .pay-card { position: relative; }
+  .pay-guard { position:absolute; inset:0; background:rgba(255,255,255,.75); display:grid; place-items:center; border-radius:14px; font-weight:600; text-align:center; padding:1rem; }
+  .flash { margin:.5rem 0; padding:.6rem .8rem; border-radius:10px; }
+  .flash-success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+  .flash-error { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+  .state-msg { font-size:.95rem; color:#6b7280; padding:.5rem 0; min-height:1.2em; }
+  .muted { color:#6b7280; font-size:.85rem; display:block; margin-top:.5rem; }
+  @media (max-width: 720px){
+    .co-grid { grid-template-columns: 1fr; }
+    .cart-row { grid-template-columns: 56px 1fr auto; }
   }
-  html,body{background:var(--bg);color:var(--text);margin:0}
-  .container{max-width:980px;margin:0 auto;padding:12px}
-  .title{font-size:clamp(18px,5.5vw,28px);margin:.3rem 0 .8rem}
-  .cards{display:grid;gap:12px;grid-template-columns:1fr}
-  @media (min-width:900px){.cards{grid-template-columns:1fr 1fr}}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
-  h2{font-size:clamp(16px,4.8vw,20px);margin:.1rem 0 .6rem}
-  .muted{color:var(--muted)}
-
-  /* Cart table (mobile-first) */
-  .cart{display:flex;flex-direction:column;gap:10px}
-  .line{
-    display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;
-    border:1px solid var(--border);border-radius:12px;padding:8px;
-  }
-  .line-main{display:flex;flex-direction:column;gap:4px}
-  .line-name{font-weight:700}
-  .line-meta{font-size:.9rem;color:var(--muted)}
-  .line-qty{display:flex;align-items:center;gap:6px;justify-content:flex-end}
-  .qty-btn{
-    width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;
-    border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer
-  }
-  .qty-val{min-width:28px;text-align:center}
-  .price{font-weight:800}
-  .rm-btn{
-    border:1px solid var(--danger);color:#fff;background:var(--danger);
-    border-radius:8px;padding:6px 10px;cursor:pointer
-  }
-  @media (min-width:540px){
-    .line{grid-template-columns:1fr auto auto auto}
-    .line-qty{justify-content:center}
-  }
-
-  /* Delivery accordion */
-  .accordion{
-    border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#fff
-  }
-  .accordion-summary{
-    list-style:none;display:flex;align-items:center;justify-content:space-between;
-    gap:8px;padding:10px 12px;cursor:pointer;font-weight:700;
-    border-bottom:1px solid var(--border);
-  }
-  .accordion[open] .chev{transform:rotate(180deg)}
-  .chev{transition:transform .2s ease}
-  .picked{color:var(--accent)}
-  .delivery-list{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
-  .opt{display:flex;align-items:center;gap:.6rem;border:1px solid var(--border);border-radius:10px;padding:.6rem .7rem}
-  .opt label{display:flex;justify-content:space-between;align-items:center;width:100%;cursor:pointer}
-  .opt .meta{display:flex;gap:.6rem;align-items:center}
-  .opt .name{font-weight:600}
-  .opt .days{font-size:.9rem;color:var(--muted)}
-  .opt .price{font-weight:700}
-
-  /* Order summary rows */
-  .row{display:flex;justify-content:space-between;margin:.45rem 0}
-  .row strong{font-weight:800}
-
-  /* Pay guards */
-  .guard{border:1px dashed var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem}
-  .guard-warn{background:#fff7ed;border-color:#fdba74}
-
-  /* Flash */
-  .flash{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px}
-  .flash-success{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
-  .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
 </style>
 
-!-- Static page config --
-<script id="checkout-config" type="application/json" nonce="<%= CO_NONCE %>">
-<%- JSON.stringify({ vatRate: Number(CO_VAT_RATE.toFixed(4)) }) %>
-</script>
+<template id="tpl-cart-row">
+  <div class="cart-row" data-id="">
+    <img class="cart-img" alt="" />
+    <div>
+      <div class="cart-title"></div>
+      <div class="cart-meta">
+        <span class="meta-opts"></span>
+        <span class="qty">
+          <button type="button" class="btn-dec" aria-label="Decrease">−</button>
+          <span class="qty-val">1</span>
+          <button type="button" class="btn-inc" aria-label="Increase">+</button>
+        </span>
+        <button type="button" class="btn-rem" style="margin-left:.4rem;color:#991b1b;background:transparent;border:0;cursor:pointer">Remove</button>
+      </div>
+    </div>
+    <div class="cart-price"></div>
+  </div>
+</template>
 
-!-- Checkout Controller --
+<div id="toast" hidden style="position:fixed;right:10px;bottom:10px;z-index:50;background:#111;color:#fff;padding:.6rem .8rem;border-radius:10px;"></div>
+
+<!-- PayPal SDK -->
+<script nonce="<%= CO_NONCE %>" src="https://www.paypal.com/sdk/js?client-id=<%= encodeURIComponent(CO_CLIENT_ID) %>&components=buttons&currency=<%= encodeURIComponent(CO_CCY) %>&intent=capture&enable-funding=card"></script>
+
 <script nonce="<%= CO_NONCE %>">
-  (async function setupCheckout(){
-    const cfg = JSON.parse(document.getElementById('checkout-config').textContent || '{}');
-    const VAT_RATE = Number(cfg.vatRate || 0);
+(function(){
+  const els = {
+    state:     document.getElementById('cart-state'),
+    items:     document.getElementById('cart-items'),
+    sumSub:    document.getElementById('sum-subtotal'),
+    sumVat:    document.getElementById('sum-vat'),
+    sumShip:   document.getElementById('sum-shipping'),
+    sumTotal:  document.getElementById('sum-total'),
+    payGuard:  document.getElementById('pay-guard'),
+    ppMount:   document.getElementById('paypal-buttons'),
+    toast:     document.getElementById('toast'),
+    delSelect: document.getElementById('delivery-select'),
+    delHint:   document.getElementById('delivery-hint'),
+  };
+  const TPL = document.getElementById('tpl-cart-row');
 
-    const els = {
-      cartArea: document.getElementById('cart-area'),
-      summary: document.getElementById('order-summary'),
-      deliveryHost: document.getElementById('delivery-options'),
-      delPicked: document.getElementById('del-picked-label'),
-      delAccordion: document.getElementById('del-accordion'),
-      payButtons: document.getElementById('paypal-buttons'),
-      payGuard: document.getElementById('pay-guard'),
-      payWait: document.getElementById('pay-wait'),
-    };
+  const VAT_RATE = <%- Number(CO_VAT) %>;
+  const CURRENCY = "<%- CO_CCY %>";
 
-    const state = {
-      currencyCode: 'USD',
-      currencySymbol: '$',
-      cartItems: [],
-      delivery: null, // { id, name, priceCents, price, deliveryDays }
-      sdkLoaded: false,
-    };
+  let state = {
+    items: [],
+    shipping: 0,
+    deliveryOptionId: null,
+    deliveryReady: false,
+    cartReady: false,
+    paypalMounted: false,
+  };
 
-    /* ===== Utilities ===== */
-    const money = (n) => state.currencySymbol + Number(n || 0).toFixed(2);
-    function escapeHtml(s){
-      return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const fmt = (n) => `${CURRENCY} ${Number(n||0).toFixed(2)}`;
+  function toast(msg, ms=2400){
+    els.toast.textContent = msg;
+    els.toast.hidden = false;
+    clearTimeout(els.toast._t);
+    els.toast._t = setTimeout(() => els.toast.hidden = true, ms);
+  }
+
+  /* -------------------- Delivery options (from your DB API) ------------------- */
+  async function loadDeliveryOptions(){
+    els.delSelect.disabled = true;
+    els.delSelect.innerHTML = "";
+    els.delHint.textContent = "Loading delivery options…";
+
+    const r = await fetch("/api/delivery-options?active=1&sort=price&order=asc", { headers:{ "Accept":"application/json" }});
+    if(!r.ok){
+      els.delHint.textContent = "Could not load delivery options.";
+      state.deliveryReady = false;
+      blockPay();
+      return;
     }
-    function fmtCurrencyFrom(code){
-      const C = (code || 'USD').toUpperCase();
-      const map = { USD: '$', ZAR: 'R', EUR: '€', GBP: '£' };
-      return { code: C, sym: map[C] || (C + ' ') };
-    }
-    function computeSubtotal(){
-      let sub = 0;
-      for (const i of state.cartItems) {
-        sub += Number(i.price || 0) * Number(i.quantity || 1);
-      }
-      return +sub.toFixed(2);
-    }
-    function setPayState({emptyCart=false, waiting=false, showButtons=false}){
-      els.payGuard.hidden = !emptyCart;
-      els.payWait.hidden = !waiting;
-      els.payButtons.style.display = showButtons ? '' : 'none';
+    const data = await r.json().catch(() => ({}));
+    const list = Array.isArray(data.options) ? data.options : [];
+
+    if(!list.length){
+      els.delHint.textContent = "No delivery options are enabled.";
+      state.deliveryReady = false;
+      blockPay();
+      return;
     }
 
-    /* ===== Cart rendering ===== */
-    function renderCart(){
-      if (!state.cartItems.length) {
-        els.cartArea.innerHTML = '<p class="muted">Your cart is empty.</p>';
+    // Fill dropdown with DB options
+    for (const o of list){
+      const opt = document.createElement("option");
+      opt.value = String(o.id);
+      opt.dataset.price = String((o.priceCents || 0) / 100);
+      opt.dataset.days  = String(o.deliveryDays || 0);
+      opt.textContent   = `${o.name} — ${fmt((o.priceCents||0)/100)}`;
+      els.delSelect.appendChild(opt);
+    }
+
+    els.delSelect.disabled = false;
+    els.delSelect.selectedIndex = 0;
+    applyDeliverySelection();
+    state.deliveryReady = true;
+    maybeEnablePay();
+  }
+
+  function applyDeliverySelection(){
+    const opt  = els.delSelect.options[els.delSelect.selectedIndex];
+    const id   = opt?.value || null;
+    const ship = Number(opt?.dataset?.price || 0);
+    const days = Number(opt?.dataset?.days || 0);
+    state.deliveryOptionId = id;
+    state.shipping = ship;
+    els.delHint.textContent = days ? `Estimated delivery: ~${days} day(s)` : "";
+    renderSummary();
+  }
+
+  /* ------------------------------ Cart logic ------------------------------ */
+  function totals(){
+    const subtotal = state.items.reduce((s,it) => s + (Number(it.price) * Number(it.quantity)), 0);
+    const vat = subtotal * VAT_RATE;
+    const total = subtotal + vat + state.shipping;
+    return { subtotal, vat, total };
+  }
+
+  function renderSummary(){
+    const t = totals();
+    els.sumSub.textContent = fmt(t.subtotal);
+    els.sumVat.textContent = fmt(t.vat);
+    els.sumShip.textContent = fmt(state.shipping);
+    els.sumTotal.textContent = fmt(t.total);
+  }
+
+  function rowDOM(item){
+    const node = TPL.content.firstElementChild.cloneNode(true);
+    const pid = String(item.productId || item.id || '');
+    node.dataset.id = pid;
+
+    node.querySelector('.cart-img').src = item.imageUrl || '/img/placeholder.png';
+    node.querySelector('.cart-img').alt = item.name || 'Product';
+    node.querySelector('.cart-title').textContent = item.name || 'Product';
+    node.querySelector('.meta-opts').textContent = [item.color, item.size, item.type].filter(Boolean).join(' • ');
+    node.querySelector('.qty-val').textContent = item.quantity;
+    node.querySelector('.cart-price').textContent = fmt(item.price * item.quantity);
+
+    const btnInc = node.querySelector('.btn-inc');
+    const btnDec = node.querySelector('.btn-dec');
+    const btnRem = node.querySelector('.btn-rem');
+
+    btnInc.addEventListener('click', async () => {
+      btnInc.disabled = btnDec.disabled = true;
+      try { await setQty(pid, item.quantity + 1); }
+      finally { btnInc.disabled = btnDec.disabled = false; }
+    });
+
+    btnDec.addEventListener('click', async () => {
+      btnInc.disabled = btnDec.disabled = true;
+      try { await setQty(pid, Math.max(1, item.quantity - 1)); }
+      finally { btnInc.disabled = btnDec.disabled = false; }
+    });
+
+    btnRem.addEventListener('click', async () => {
+      btnRem.disabled = true;
+      try { await removeItem(pid); }
+      finally { btnRem.disabled = false; }
+    });
+
+    return node;
+  }
+
+  async function loadCart(){
+    els.state.textContent = 'Loading your cart…';
+    els.items.hidden = true;
+
+    try{
+      const r = await fetch('/api/cart', { headers:{ 'Accept':'application/json' }});
+      const data = await r.json();
+      state.items = Array.isArray(data.items) ? data.items.map(it => ({
+        id: String(it.productId || it._id || it.id),
+        productId: String(it.productId || it._id || it.id),
+        name: it.name || it.title || 'Product',
+        price: Number(it.price || 0),
+        quantity: Number(it.quantity || it.qty || 1),
+        imageUrl: it.imageUrl || it.image || ''
+      })) : [];
+
+      if (!state.items.length){
+        els.state.innerHTML = 'Your cart is empty. <a href="/sales">Browse products</a>.';
+        blockPay();
+        renderSummary();
         return;
       }
-      const html = [
-        '<div class="cart">',
-        ...state.cartItems.map(item => {
-          const price = Number(item.price || 0);
-          const qty = Number(item.quantity || 1);
-          const line = price * qty;
-          const pid = String(item.id || item.pid || item._id || item.productId || '');
-          return `
-            <article class="line" data-pid="${pid}">
-              <div class="line-main">
-                <div class="line-name">${escapeHtml(item.name || 'Item')}</div>
-                <div class="line-meta">${money(price)} each</div>
-              </div>
-              <div class="line-qty">
-                <button class="qty-btn btn-dec" type="button" aria-label="Decrease quantity">−</button>
-                <div class="qty-val">${qty}</div>
-                <button class="qty-btn btn-inc" type="button" aria-label="Increase quantity">+</button>
-              </div>
-              <div class="price">${money(line)}</div>
-              <button class="rm-btn btn-rm" type="button" aria-label="Remove">🗑️</button>
-            </article>
-          `;
-        }),
-        '</div>'
-      ].join('');
-      els.cartArea.innerHTML = html;
 
-      // wire buttons
-      els.cartArea.querySelectorAll('.btn-inc').forEach(btn => {
-        btn.addEventListener('click', onInc);
-      });
-      els.cartArea.querySelectorAll('.btn-dec').forEach(btn => {
-        btn.addEventListener('click', onDec);
-      });
-      els.cartArea.querySelectorAll('.btn-rm').forEach(btn => {
-        btn.addEventListener('click', onRemove);
-      });
-    }
+      els.items.innerHTML = '';
+      state.items.forEach(it => els.items.appendChild(rowDOM(it)));
+      els.items.hidden = false;
+      els.state.textContent = '';
+      renderSummary();
 
-    /* ===== Totals ===== */
-    function renderTotals(){
-      const sub = computeSubtotal();
-      const vat = +(sub * VAT_RATE).toFixed(2);
-      const delivery = state.delivery ? Number(state.delivery.price || 0) : 0;
-      const total = +(sub + vat + delivery).toFixed(2);
+      state.cartReady = true;
+      maybeEnablePay();
+    }catch(e){
+      els.state.textContent = 'Could not load cart.';
+      blockPay('Unable to pay until cart loads');
+    }
+  }
 
-      els.summary.innerHTML = `
-        <div class="row"><span>Subtotal</span><strong>${money(sub)}</strong></div>
-        <div class="row"><span>VAT</span><strong>${money(vat)}</strong></div>
-        <div class="row"><span>Delivery</span><strong>${money(delivery)}</strong></div>
-        <hr/>
-        <div class="row"><span>Total</span><strong>${money(total)}</strong></div>
-      `;
-    }
+  /* ------------------------- Qty & Remove (server API) ------------------------ */
+  async function setQty(productId, quantity){
+    if(!productId) return toast('Missing product id');
 
-    /* ===== Delivery UI ===== */
-    function renderDeliveryOptions(options){
-      if (!options.length) {
-        els.deliveryHost.innerHTML = '<div class="muted">No delivery options available.</div>';
-        els.delPicked.textContent = 'No delivery option';
-        state.delivery = null;
-        return;
-      }
-      // keep current if still present; else choose cheapest
-      let chosen = options.find(o => state.delivery && o.id === state.delivery.id);
-      if (!chosen) {
-        chosen = [...options].sort((a,b)=> (a.priceCents||0)-(b.priceCents||0) || (a.deliveryDays||0)-(b.deliveryDays||0))[0];
-      }
-      state.delivery = {
-        id: chosen.id, name: chosen.name,
-        priceCents: chosen.priceCents, price: chosen.price,
-        deliveryDays: chosen.deliveryDays || 0
-      };
-      els.delPicked.textContent = `${chosen.name} • ${money(chosen.price)} • ${chosen.deliveryDays || 0} day${(chosen.deliveryDays||0)===1?'':'s'}`;
-
-      els.deliveryHost.innerHTML = options.map((o) => {
-        const id = `opt_${o.id}`;
-        const active = o.id === state.delivery.id;
-        return `
-          <div class="opt">
-            <input type="radio" name="deliveryOption" id="${id}" value="${o.id}" ${active ? 'checked' : ''} />
-            <label for="${id}">
-              <span class="meta">
-                <span class="name">${escapeHtml(o.name)}</span>
-                <span class="days">(${o.deliveryDays || 0} day${(o.deliveryDays||0)===1?'':'s'})</span>
-              </span>
-              <span class="price">${money(o.price)}</span>
-            </label>
-          </div>
-        `;
-      }).join('');
-
-      els.deliveryHost.querySelectorAll('input[name="deliveryOption"]').forEach((el) => {
-        el.addEventListener('change', () => {
-          const picked = options.find(op => op.id === el.value);
-          if (!picked) return;
-          state.delivery = {
-            id: picked.id, name: picked.name,
-            priceCents: picked.priceCents, price: picked.price,
-            deliveryDays: picked.deliveryDays || 0
-          };
-          els.delPicked.textContent = `${picked.name} • ${money(picked.price)} • ${picked.deliveryDays || 0} day${(picked.deliveryDays||0)===1?'':'s'}`;
-          renderTotals();
-        });
-      });
-    }
-
-    /* ===== Network helpers for cart mutations =====
-       Tries JSON POST endpoints first; if not present, falls back to legacy GETs.
-       - increase:  POST /api/cart/increase {pid}   -> fallback GET /api/cart/add?pid=...&json=1
-       - decrease:  POST /api/cart/decrease {pid}   -> fallback GET /api/cart/dec?pid=...&json=1
-       - remove:    POST /api/cart/remove   {pid}   -> fallback GET /api/cart/remove?pid=...&json=1
-    */
-    async function postJson(url, body){
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(body||{})
-      });
-      return { ok:r.ok, data: await r.json().catch(()=>({})) };
-    }
-    async function getJson(url){
-      const r = await fetch(url, { credentials:'same-origin' });
-      return { ok:r.ok, data: await r.json().catch(()=>({})) };
-    }
-    async function mutateCart(kind, pid){
-      try {
-        let res;
-        if (kind === 'inc') {
-          res = await postJson('/api/cart/increase', { pid });
-          if (!res.ok) res = await getJson(`/api/cart/add?pid=${encodeURIComponent(pid)}&json=1`);
-        } else if (kind === 'dec') {
-          res = await postJson('/api/cart/decrease', { pid });
-          if (!res.ok) res = await getJson(`/api/cart/dec?pid=${encodeURIComponent(pid)}&json=1`);
-        } else if (kind === 'rm') {
-          res = await postJson('/api/cart/remove', { pid });
-          if (!res.ok) res = await getJson(`/api/cart/remove?pid=${encodeURIComponent(pid)}&json=1`);
-        }
-        // Regardless, re-fetch canonical cart
-        await loadCart();
-        renderCart();
-        renderTotals();
-        updatePayVisibility();
-      } catch(e){
-        console.error('Cart mutation failed:', e);
-      }
-    }
-    function onInc(e){
-      const el = e.currentTarget;
-      const pid = el.closest('.line')?.getAttribute('data-pid');
-      if (pid) mutateCart('inc', pid);
-    }
-    function onDec(e){
-      const el = e.currentTarget;
-      const pid = el.closest('.line')?.getAttribute('data-pid');
-      if (pid) mutateCart('dec', pid);
-    }
-    function onRemove(e){
-      const el = e.currentTarget;
-      const pid = el.closest('.line')?.getAttribute('data-pid');
-      if (pid) mutateCart('rm', pid);
-    }
-
-    /* ===== Pay button gating ===== */
-    function updatePayVisibility(){
-      if (!state.cartItems.length) {
-        setPayState({ emptyCart: true, waiting: false, showButtons: false });
+    // Primary: PATCH /api/cart/item/:id  { quantity }
+    let r = await fetch(`/api/cart/item/${encodeURIComponent(productId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ quantity })
+    });
+    if(!r.ok){
+      // Fallbacks if something blocks PATCH
+      if(quantity <= 0){
+        r = await fetch(`/api/cart/item/${encodeURIComponent(productId)}`, { method:'DELETE' });
       } else {
-        setPayState({ emptyCart: false, waiting: !state.sdkLoaded, showButtons: state.sdkLoaded });
+        const current = state.items.find(i => String(i.productId) === String(productId));
+        const curQty = current ? Number(current.quantity || 1) : 0;
+        const delta = quantity - curQty;
+        if (delta > 0) {
+          r = await fetch('/api/cart/increase', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ pid: productId })
+          });
+        } else if (delta < 0) {
+          r = await fetch('/api/cart/decrease', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ pid: productId })
+          });
+        }
       }
-    }
-
-    /* ===== Boot sequence ===== */
-    // 1) Config / currency
-    const payCfg = await fetch('/payment/config', { credentials:'same-origin' }).then(r => r.json());
-    const fc = fmtCurrencyFrom(payCfg.currency || payCfg.baseCurrency || 'USD');
-    state.currencyCode = fc.code;
-    state.currencySymbol = fc.sym;
-
-    // 2) Load cart
-    async function loadCart(){
-      const cartRes = await fetch('/api/cart', { credentials: 'same-origin' });
-      const cart = await cartRes.json().catch(() => ({ items: [] }));
-      state.cartItems = Array.isArray(cart.items) ? cart.items : [];
     }
     await loadCart();
-    renderCart();
+  }
 
-    // 3) Load delivery options
-    const delRes = await fetch('/api/delivery-options', { credentials: 'same-origin' });
-    const delData = await delRes.json().catch(() => ({ options: [] }));
-    const options = Array.isArray(delData.options) ? delData.options : [];
-    renderDeliveryOptions(options);
-
-    // 4) Totals
-    renderTotals();
-
-    // 5) Pay buttons visibility decision (before SDK)
-    updatePayVisibility();
-    if (!state.cartItems.length) return; // do not load SDK or show buttons
-
-    // 6) Load PayPal SDK
-    const sdkUrl =
-      `https://www.paypal.com/sdk/js` +
-      `?client-id=${encodeURIComponent(payCfg.clientId)}` +
-      `&components=buttons` +
-      `&currency=${encodeURIComponent(state.currencyCode)}` +
-      `&intent=${encodeURIComponent((payCfg.intent || 'capture').toLowerCase())}` +
-      `&enable-funding=card`;
-
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = sdkUrl; s.async = true;
-      s.onload = resolve; s.onerror = () => reject(new Error('Failed to load PayPal SDK'));
-      document.head.appendChild(s);
-    });
-    state.sdkLoaded = true;
-    updatePayVisibility();
-
-    function ensureDeliverySelected(){
-      if (!state.delivery || !state.delivery.id) {
-        alert('Please choose a delivery option before paying.');
-        throw new Error('No delivery option selected');
-      }
-      return state.delivery.id;
-    }
-
-    function createOrder(){
-      const deliveryOptionId = ensureDeliverySelected();
-      return fetch('/payment/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ currency: state.currencyCode, deliveryOptionId })
-      })
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok || !data || (!data.id && !data.ok)) {
-          const msg = (data && (data.message || data.code)) || 'Failed to create order';
-          console.error('create_order_error', data || {});
-          throw new Error(msg);
-        }
-        return data.id || data.orderID || data.orderId;
+  async function removeItem(productId){
+    if(!productId) return toast('Missing product id');
+    let r = await fetch(`/api/cart/item/${encodeURIComponent(productId)}`, { method:'DELETE' });
+    if(!r.ok){
+      r = await fetch('/api/cart/remove', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ pid: productId })
       });
     }
+    await loadCart();
+  }
 
-    function onApprove(data){
-      return fetch('/payment/capture-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ orderID: data.orderID })
-      })
-      .then(r => r.json())
-      .then(res => {
-        if (!res.ok) throw new Error('Capture failed');
-        window.location.href = '/thank-you?id=' + encodeURIComponent(data.orderID);
-      })
-      .catch(() => {
-        window.location.href = '/payment/cancel';
-      });
+  /* --------------------------- Pay guard & PayPal ---------------------------- */
+  function blockPay(msg){
+    els.payGuard.textContent = msg || 'Waiting for cart & delivery options…';
+    els.payGuard.style.display = 'grid';
+  }
+  function allowPay(){
+    els.payGuard.style.display = 'none';
+  }
+  function maybeEnablePay(){
+    if(state.cartReady && state.deliveryReady){
+      allowPay();
+      maybeMountPaypal();
+    } else {
+      blockPay();
     }
+  }
 
-    // Render PayPal buttons
-    // eslint-disable-next-line no-undef
-    paypal.Buttons({
-      style: { layout: 'vertical', shape: 'rect' },
-      fundingSource: paypal.FUNDING.PAYPAL,
-      createOrder,
-      onApprove
-    }).render('#paypal-buttons');
+  function maybeMountPaypal(){
+    if(state.paypalMounted) return;
+    if(!window.paypal || !els.ppMount) return;
+    if(!state.items.length || !state.deliveryOptionId) return;
 
-    // eslint-disable-next-line no-undef
+    state.paypalMounted = true;
     paypal.Buttons({
-      style: { layout: 'vertical', shape: 'rect' },
-      fundingSource: paypal.FUNDING.CARD,
-      createOrder,
-      onApprove
+      style: { layout:'vertical', shape:'rect', label:'paypal' },
+
+      createOrder: async () => {
+        const body = { deliveryOptionId: state.deliveryOptionId };
+        const res = await fetch('/payment/create-order', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if(!res.ok || !data.id) throw new Error(data.message || 'Failed to create order');
+        return data.id;
+      },
+
+      onApprove: async (data) => {
+        const res = await fetch(`/payment/capture-order?orderId=${encodeURIComponent(data.orderID)}`, { method:'POST' });
+        const out = await res.json();
+        if(!res.ok) throw new Error(out.message || 'Failed to capture order');
+        const orderId = out.orderId || data.orderID;
+        window.location.href = `/payment/thank-you?orderId=${encodeURIComponent(orderId)}`;
+      },
+
+      onError: (err) => toast('Payment error: ' + (err?.message || err))
     }).render('#paypal-buttons');
+  }
+
+  /* -------------------------------- Events/init ------------------------------ */
+  document.getElementById('delivery-select').addEventListener('change', () => {
+    applyDeliverySelection();
+    // re-enable pay if both are ready
+    maybeEnablePay();
+  });
+
+  (async function init(){
+    await loadDeliveryOptions(); // DB only
+    await loadCart();            // session cart
   })();
-</script>-->
+
+})();
+</script>

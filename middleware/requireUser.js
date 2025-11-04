@@ -1,24 +1,16 @@
-// ===========================================
-// 🧭 middleware/requireUser.js
-// -------------------------------------------
-// Ensures only logged-in users (not businesses) 
-// can access user-specific pages like dashboard, 
-// orders, or wishlist.
-// ===========================================
+// middleware/requireUser.js
 module.exports = function requireUser(req, res, next) {
-  try {
-    // 🧩 Check if user session exists
-    if (!req.session.user && !req.user) {
-      req.flash("error", "❌ You must be logged in as a user to continue.");
-      return res.redirect("/users/login");
-    }
+  if (req.session && req.session.user) return next();
 
-    // ✅ Make user data easily accessible in views
-    res.locals.user = req.session.user || req.user;
-    next();
-  } catch (err) {
-    console.error("❌ requireUser middleware error:", err);
-    req.flash("error", "Unexpected error. Please log in again.");
-    return res.redirect("/users/login");
-  }
+  // helpful debug (remove later)
+  console.log("[requireUser] blocked:", {
+    hasUser: !!req.session?.user,
+    hasBusiness: !!req.session?.business,
+    url: req.originalUrl
+  });
+
+  req.flash("error", "Please log in with a user account.");
+  // optional 'next' param so we can send them back after login
+  const nextUrl = encodeURIComponent(req.originalUrl || "/users/dashboard");
+  return res.redirect(`/users/login?next=${nextUrl}`);
 };

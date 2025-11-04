@@ -1,0 +1,167 @@
+<!-- views/users-dashboard.ejs -->
+<section class="u-dashboard">
+  <h1 class="page-title">🏠 Dashboard</h1>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">Total Orders</div>
+      <div class="kpi-value"><%= kpis.totalOrders %></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Paid Orders</div>
+      <div class="kpi-value"><%= kpis.paidOrders %></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Spent</div>
+      <div class="kpi-value"><%= (kpis.totalSpent || 0).toFixed(2) %></div>
+    </div>
+  </div>
+
+  <!-- Recent Orders -->
+  <h2 class="section-title">Recent Orders</h2>
+  <% if (!orders || orders.length === 0) { %>
+    <p class="muted">No orders yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Order</th><th>Total</th><th>Status</th><th>Placed</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% orders.forEach(o => { %>
+            <tr>
+              <td data-label="Order">#<%= o._id.toString().slice(-6) %></td>
+              <td data-label="Total">
+                <%= (o.amount?.total || o.total || 0).toFixed(2) %> <%= o.currency || 'USD' %>
+              </td>
+              <td data-label="Status" class="status <%= (o.status || 'pending').toLowerCase() %>">
+                <%= o.status || 'pending' %>
+              </td>
+              <td data-label="Placed"><%= new Date(o.createdAt).toLocaleString() %></td>
+              <td data-label="">
+                <a class="btn xs" href="/users/orders/<%= o._id %>">View</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+
+  <!-- Recent Shipments -->
+  <h2 class="section-title">Recent Shipments</h2>
+  <% if (!shipments || shipments.length === 0) { %>
+    <p class="muted">No shipment updates.</p>
+  <% } else { %>
+    <div class="list">
+      <% shipments.forEach(s => { %>
+        <div class="card ship">
+          <div class="row"><span class="label">Order</span><span class="value">#<%= String(s.orderId).slice(-6) %></span></div>
+          <div class="row"><span class="label">Status</span><span class="value badge <%= (s.status || 'pending').toLowerCase() %>"><%= s.status || 'pending' %></span></div>
+          <% if (s.carrier) { %>
+            <div class="row"><span class="label">Carrier</span><span class="value"><%= s.carrier %></span></div>
+          <% } %>
+          <% if (s.trackingNumber) { %>
+            <div class="row"><span class="label">Tracking</span><span class="value"><%= s.trackingNumber %></span></div>
+          <% } %>
+          <% if (s.updatedAt) { %>
+            <div class="row"><span class="label">Updated</span><span class="value muted"><%= new Date(s.updatedAt).toLocaleString() %></span></div>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .u-dashboard{
+    max-width: 860px; margin:.6rem auto 1.2rem; padding:0 .6rem;
+  }
+  .page-title{ font-size:1.1rem; text-align:center; margin:.2rem 0 .6rem; font-weight:800; }
+
+  /* KPIs */
+  .kpis{ display:grid; grid-template-columns: repeat(3,1fr); gap:.5rem; }
+  .kpi{
+    background:var(--card-bg,#fff); border:1px solid var(--card-bd,#e5e7eb);
+    border-radius:10px; padding:.55rem .6rem; text-align:center;
+  }
+  .kpi-label{ font-size:.72rem; opacity:.8; margin-bottom:.2rem; }
+  .kpi-value{ font-size:1.05rem; font-weight:800; letter-spacing:.3px; }
+  .dark-theme .kpi{ --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb; }
+
+  .section-title{
+    font-size:.95rem; margin:.7rem 0 .35rem; font-weight:700;
+  }
+  .muted{ color:#6b7280; font-size:.85rem; }
+  .dark-theme .muted{ color:#9ca3af; }
+
+  /* Table (desktop) + Cards (mobile) */
+  .table-wrap{ width:100%; overflow-x:auto; }
+  .table{
+    width:100%; border-collapse:collapse; font-size:.86rem; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;
+  }
+  .table thead th{ text-align:left; background:#f9fafb; padding:.55rem .6rem; font-size:.78rem; }
+  .table tbody td{ padding:.5rem .6rem; border-top:1px solid #f1f5f9; vertical-align:middle; }
+  .status{ font-weight:700; text-transform:capitalize; }
+  .status.paid,.status.completed{ color:#065f46; }
+  .status.pending{ color:#92400e; }
+  .status.cancelled,.status.failed{ color:#991b1b; }
+
+  .btn{
+    display:inline-block; padding:.32rem .5rem; font-size:.72rem; border-radius:6px;
+    text-decoration:none; border:1px solid #d1d5db; background:#f3f4f6; color:#111827;
+  }
+  .btn.xs{ padding:.28rem .45rem; font-size:.7rem; }
+  .btn:hover{ opacity:.93; }
+  .dark-theme .btn{ background:#374151; border-color:#4b5563; color:#e5e7eb; }
+
+  /* Shipment cards */
+  .list{ display:grid; gap:.45rem; }
+  .card.ship{
+    background:var(--card-bg,#fff); border:1px solid var(--card-bd,#e5e7eb);
+    border-radius:10px; padding:.55rem .6rem;
+  }
+  .dark-theme .card.ship{ --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb; }
+  .card.ship .row{
+    display:grid; grid-template-columns:96px 1fr; gap:.35rem; padding:.22rem 0; border-bottom:1px dashed rgba(0,0,0,.06);
+  }
+  .card.ship .row:last-child{ border-bottom:0; }
+  .dark-theme .card.ship .row{ border-color:rgba(255,255,255,.08); }
+  .label{ font-size:.75rem; font-weight:700; opacity:.85; }
+  .value{ font-size:.83rem; }
+
+  .badge{ padding:.1rem .35rem; border-radius:999px; font-size:.7rem; font-weight:800; }
+  .badge.completed,.badge.delivered,.badge.paid{ background:#dcfce7; color:#166534; }
+  .badge.pending{ background:#fef3c7; color:#92400e; }
+  .badge.failed,.badge.cancelled{ background:#fee2e2; color:#991b1b; }
+
+  /* ✅ Mobile: stack table rows into cards */
+  @media (max-width: 640px){
+    .kpis{ grid-template-columns: 1fr 1fr; }
+    .kpi-value{ font-size:1rem; }
+    .table thead{ display:none; }
+    .table, .table tbody, .table tr, .table td{ display:block; width:100%; }
+    .table tr{
+      background:var(--card-bg,#fff); border:1px solid var(--card-bd,#e5e7eb);
+      border-radius:10px; margin-bottom:.5rem; padding:.35rem .5rem;
+    }
+    .dark-theme .table tr{ --card-bg:#111827; --card-bd:#374151; color:#e5e7eb; }
+    .table td{
+      border:none; padding:.28rem 0; display:flex; justify-content:space-between; gap:.6rem;
+    }
+    .table td::before{
+      content: attr(data-label);
+      flex:0 0 90px; font-weight:700; font-size:.75rem; opacity:.85;
+    }
+    .table td[data-label=""]::before{ content: ""; flex:0 0 auto; }
+  }
+
+  /* Ultra-small phones */
+  @media (max-width: 360px){
+    .u-dashboard{ padding:0 .45rem; }
+    .kpis{ grid-template-columns:1fr; }
+    .card.ship .row{ grid-template-columns:86px 1fr; }
+    .page-title{ font-size:1.02rem; }
+  }
+</style>

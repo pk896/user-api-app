@@ -1,0 +1,30 @@
+<section>
+  <h1 class="page-title">📦 My Orders</h1>
+
+  <% if (!orders || orders.length === 0) { %>
+    <p class="muted">You have no orders.</p>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr><th>Order</th><th>Total</th><th>Status</th><th>Shipment</th><th>Placed</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% orders.forEach(o => { %>
+          <tr>
+            <td data-label="Order">#<%= o._id.toString().slice(-6) %></td>
+            <td data-label="Total"><%= (o.amount?.total || o.total || 0).toFixed(2) %> <%= o.currency || 'USD' %></td>
+            <td data-label="Status" class="status <%= (o.status || 'pending').toLowerCase() %>"><%= o.status || 'pending' %></td>
+            <td data-label="Shipment">
+              <% if (o.shipment) { %>
+                <%= o.shipment.status || 'in transit' %>
+                <% if (o.shipment.trackingNumber) { %> — <small>#<%= o.shipment.trackingNumber %></small><% } %>
+              <% } else { %> — <% } %>
+            </td>
+            <td data-label="Placed"><%= new Date(o.createdAt).toLocaleString() %></td>
+            <td><a href="/users/orders/<%= o._id %>">View</a></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
