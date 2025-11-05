@@ -1,4 +1,7 @@
 // server.js
+const validateEnv = require("./config/validateEnv");
+validateEnv();
+
 const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash');
@@ -43,12 +46,12 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    Environment Validation
 --------------------------------------- */
-['MONGO_URI', 'SESSION_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].forEach(name => {
+/*['MONGO_URI', 'SESSION_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].forEach(name => {
   if (!process.env[name]) {
     console.error(`❌ Missing required env var: ${name}`);
     process.exit(1);
   }
-});
+});*/
 
 /* ---------------------------------------
    Global Error Handlers

@@ -75,12 +75,30 @@ function saveSession(req){
   });
 }
 
-// Normalize DB doc into client shape
+// Normalize DB doc into client shape (prefer persisted doc.items)
 function shapeOrderForClient(doc){
   const currency = doc.breakdown?.currency || upperCcy;
   const pu = (doc.purchase_units && doc.purchase_units[0]) || {};
   const capture = (pu.payments && pu.payments.captures && pu.payments.captures[0]) || {};
   const amountObj = capture.amount || { currency_code: currency, value: String(doc.breakdown?.grandTotal ?? 0) };
+
+  // Prefer items we persisted on capture
+  const items = Array.isArray(doc.items) && doc.items.length
+    ? doc.items.map(it => ({
+        name: it.name,
+        quantity: Number(it.quantity || 1),
+        price: { value: Number((it.price && it.price.value != null) ? it.price.value : it.price || 0) }
+      }))
+    : (Array.isArray(pu.items)
+        ? pu.items.map(it => ({
+            name: it.name,
+            quantity: Number(it.quantity || 1),
+            price: {
+              currency_code: (it.unit_amount && it.unit_amount.currency_code) || currency,
+              value: Number(it.unit_amount?.value || 0)
+            }
+          }))
+        : []);
 
   return {
     id: doc.paypalOrderId || String(doc._id),
@@ -88,14 +106,7 @@ function shapeOrderForClient(doc){
     createdAt: doc.createdAt || new Date(),
     currency: amountObj.currency_code || currency,
     amount: { value: Number(amountObj.value || doc.breakdown?.grandTotal || 0) },
-    items: Array.isArray(pu.items) ? pu.items.map(it => ({
-      name: it.name,
-      quantity: Number(it.quantity || 1),
-      price: {
-        currency_code: (it.unit_amount && it.unit_amount.currency_code) || currency,
-        value: Number(it.unit_amount?.value || 0)
-      }
-    })) : [],
+    items,
     breakdown: {
       itemTotal: doc.breakdown?.subTotal != null ? { value: Number(doc.breakdown.subTotal) } : null,
       taxTotal:  doc.breakdown?.vatTotal  != null ? { value: Number(doc.breakdown.vatTotal) }  : null,
@@ -103,22 +114,31 @@ function shapeOrderForClient(doc){
     },
     delivery: doc.delivery ? {
       name: doc.delivery.name || null,
-      deliveryDays: doc.delivery.days ?? null,
-      amount: (doc.delivery.price != null) ? Number(doc.delivery.price) : null
+      deliveryDays: (doc.delivery.days != null) ? doc.delivery.days : (doc.delivery.deliveryDays != null ? doc.delivery.deliveryDays : null),
+      amount: (doc.delivery.price != null) ? Number(doc.delivery.price) :
+              (doc.delivery.amount != null ? Number(doc.delivery.amount) : null)
     } : null,
     shipping: doc.shipping || null,
   };
 }
 
-// Build a session snapshot (used when DB isn’t available yet)
+// Build a session snapshot (used when DB isn’t available yet) — now includes items
 function buildSessionSnapshot(orderId, pending){
+  const items = Array.isArray(pending?.itemsBrief)
+    ? pending.itemsBrief.map(it => ({
+        name: it.name,
+        quantity: Number(it.quantity || 1),
+        price: { value: Number(it.unitPrice || 0) }
+      }))
+    : [];
+
   return {
     id: orderId,
     status: "COMPLETED",
     createdAt: new Date(),
     currency: pending?.currency || upperCcy,
     amount: { value: Number(pending?.grandTotal || 0) },
-    items: [],
+    items,
     breakdown: {
       itemTotal: pending?.subTotal != null ? { value: Number(pending.subTotal) } : null,
       taxTotal:  pending?.vatTotal  != null ? { value: Number(pending.vatTotal) }  : null,
@@ -133,7 +153,6 @@ function buildSessionSnapshot(orderId, pending){
 
 // ---------- views ----------
 router.get("/checkout", async (req, res) => {
-  // Provide a sensible initial shippingFlat for UI from the cheapest DeliveryOption
   let shippingFlat = 0;
   try {
     const { dollars } = await cheapestDelivery();
@@ -143,8 +162,8 @@ router.get("/checkout", async (req, res) => {
   return res.render("checkout", {
     title: "Checkout",
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),                 // matches the ejs variable the page expects
-    paypalClientId: PAYPAL_CLIENT_ID,     // used by the PayPal SDK include
+    NONCE: resNonce(req),
+    paypalClientId: PAYPAL_CLIENT_ID,
     currency: upperCcy,
     brandName: BRAND_NAME,
     vatRate,
@@ -154,7 +173,7 @@ router.get("/checkout", async (req, res) => {
   });
 });
 
-// ✅ Render simple "My Orders" page (optional view)
+// Optional orders list view
 router.get("/orders", (req, res) => {
   return res.render("orders", {
     title: "My Orders",
@@ -165,7 +184,7 @@ router.get("/orders", (req, res) => {
   });
 });
 
-// Printable receipt view
+// Printable receipt view (robust items + delivery snapshot)
 router.get("/receipt/:id", async (req, res) => {
   const id = String(req.params.id || "");
   let doc = null;
@@ -173,55 +192,119 @@ router.get("/receipt/:id", async (req, res) => {
   try {
     const OrderModel = require("../models/Order");
     doc = await OrderModel.findOne({ paypalOrderId: id }).lean();
-    if (!doc) {
-      try { doc = await OrderModel.findById(id).lean(); } catch { /* ignore invalid ObjectId */ }
+    if (!doc && /^[0-9a-fA-F]{24}$/.test(id)) {
+      doc = await OrderModel.findById(id).lean();
     }
-  } catch { /* Order model optional */ }
+  } catch { /* optional Order model */ }
 
+  const mapItems = (arr) => (Array.isArray(arr) ? arr.map(it => ({
+    name: it.name,
+    quantity: Number(it.quantity || 1),
+    price: { value: Number(
+      (it.price && it.price.value != null) ? it.price.value :
+      (it.unitPrice != null) ? it.unitPrice :
+      (it.unit_amount && it.unit_amount.value != null) ? it.unit_amount.value :
+      (it.price != null) ? it.price : 0
+    )},
+    imageUrl: it.imageUrl || ''
+  })) : []);
+
+  // If no DB doc, try session last snapshot
   if (!doc && req.session?.lastOrderSnapshot && String(req.session.lastOrderSnapshot.id) === id) {
     const s = req.session.lastOrderSnapshot;
-    doc = {
-      paypalOrderId: s.id,
-      status: s.status || "COMPLETED",
-      createdAt: s.createdAt || new Date(),
-      breakdown: {
-        currency: s.currency || upperCcy,
-        subTotal: (s.breakdown?.itemTotal?.value) || s.subTotal || 0,
-        vatTotal:  (s.breakdown?.taxTotal?.value)  || s.vatTotal  || 0,
-        delivery:  (s.breakdown?.shipping?.value)  || s.delivery  || s.deliveryPrice || 0,
-        grandTotal: s.amount?.value ?? s.grandTotal ?? 0,
-      },
-      delivery: s.delivery ? {
-        name: s.delivery.name || s.deliveryName || null,
-        days: s.delivery.deliveryDays || s.deliveryDays || null,
-        price: s.delivery.amount || s.deliveryPrice || null,
-      } : null,
-      purchase_units: [],
+    const currency = s.currency || upperCcy;
+    const itemsFromSnap = mapItems(s.items || s.itemsBrief);
+
+    const totals = {
+      subtotal: Number((s.breakdown && s.breakdown.itemTotal && s.breakdown.itemTotal.value) || s.subTotal || 0),
+      tax:      Number((s.breakdown && s.breakdown.taxTotal  && s.breakdown.taxTotal.value)  || s.vatTotal  || 0),
+      shipping: Number((s.breakdown && s.breakdown.shipping  && s.breakdown.shipping.value)  || s.delivery  || s.deliveryPrice || 0),
     };
+    totals.total = Number((s.amount && s.amount.value != null) ? s.amount.value : (totals.subtotal + totals.tax + totals.shipping));
+
+    return res.render("receipt", {
+      title: "Order Receipt",
+      themeCss: themeCssFrom(req),
+      nonce: resNonce(req),
+      order: {
+        id: s.id,
+        status: s.status || "COMPLETED",
+        createdAt: s.createdAt || new Date(),
+        currency,
+        items: itemsFromSnap,
+        totals,
+        delivery: s.delivery ? {
+          name: s.delivery.name || s.deliveryName || null,
+          deliveryDays: s.delivery.deliveryDays ?? s.deliveryDays ?? null,
+          amount: (s.delivery.amount != null) ? Number(s.delivery.amount) :
+                  (s.deliveryPrice != null ? Number(s.deliveryPrice) : null)
+        } : null,
+        shipping: s.shipping || null
+      },
+      success: [],
+      error: []
+    });
   }
 
   if (!doc) return res.status(404).send("Order not found");
 
+  // Build items with multiple fallbacks
+  let items = [];
+
+  // Prefer DB items (from capture save)
+  if (Array.isArray(doc.items) && doc.items.length) {
+    items = mapItems(doc.items);
+  }
+
+  // Then session last snapshot
+  if (!items.length && req.session?.lastOrderSnapshot && String(req.session.lastOrderSnapshot.id) === (doc.paypalOrderId || String(doc._id))) {
+    const s = req.session.lastOrderSnapshot;
+    items = mapItems(s.items || s.itemsBrief);
+  }
+
+  // Then PayPal GET /orders/:id
+  if (!items.length) {
+    try {
+      const token = await getAccessToken();
+      const r = await fetch(`${PP_API}/v2/checkout/orders/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) {
+        const orderJson = await r.json();
+        const pu = Array.isArray(orderJson.purchase_units) ? orderJson.purchase_units[0] : null;
+        if (pu && Array.isArray(pu.items) && pu.items.length) {
+          items = mapItems(pu.items);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Last resort: DB raw purchase_units[].items
+  if (!items.length && Array.isArray(doc.purchase_units?.[0]?.items)) {
+    items = mapItems(doc.purchase_units[0].items);
+  }
+
   const currency = doc.breakdown?.currency || upperCcy;
+
   const totals = {
     subtotal: Number(doc.breakdown?.subTotal || 0),
     tax:      Number(doc.breakdown?.vatTotal  || 0),
-    shipping: Number(doc.breakdown?.delivery  || 0),
+    shipping: Number(
+      (doc.breakdown && doc.breakdown.delivery != null ? doc.breakdown.delivery : 0) ?? 0
+    )
   };
   totals.total = Number(
-    doc.breakdown?.grandTotal ??
-    (totals.subtotal + totals.tax + totals.shipping)
+    (doc.breakdown && doc.breakdown.grandTotal != null)
+      ? doc.breakdown.grandTotal
+      : (totals.subtotal + totals.tax + totals.shipping)
   );
 
-  let items = [];
-  const pu = Array.isArray(doc.purchase_units) ? doc.purchase_units[0] : null;
-  if (pu && Array.isArray(pu.items)) {
-    items = pu.items.map(it => ({
-      name: it.name,
-      quantity: Number(it.quantity || 1),
-      price: { value: Number(it.unit_amount?.value || 0) }
-    }));
-  }
+  const deliveryForView = doc.delivery ? {
+    name: doc.delivery.name || null,
+    deliveryDays: (doc.delivery.days != null) ? doc.delivery.days : (doc.delivery.deliveryDays != null ? doc.delivery.deliveryDays : null),
+    amount: (doc.delivery.price != null) ? Number(doc.delivery.price) :
+            (doc.delivery.amount != null ? Number(doc.delivery.amount) : null)
+  } : null;
 
   const orderForView = {
     id: doc.paypalOrderId || String(doc._id),
@@ -230,13 +313,14 @@ router.get("/receipt/:id", async (req, res) => {
     currency,
     items,
     totals,
+    delivery: deliveryForView,
     shipping: doc.shipping || null
   };
 
   return res.render("receipt", {
     title: "Order Receipt",
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),
+    nonce: resNonce(req), // NOTE: lowercase 'nonce' to match your EJS
     order: orderForView,
     success: [],
     error: []
@@ -263,10 +347,15 @@ router.post("/create-order", express.json(), async (req, res) => {
       return res.status(422).json({ ok:false, code:"CART_EMPTY", message:"Cart is empty (server session)." });
     }
 
-    // Accept multiple ways of specifying delivery:
-    // - body.deliveryOptionId (preferred for DB options)
-    // - body.delivery === 'collect' (free)
-    // - fallback: cheapest active DeliveryOption
+    // Compact items list from the cart for later display/persist
+    const itemsBrief = (Array.isArray(cart.items) ? cart.items : []).map((it, i) => ({
+      name: (it.name || `Item ${i + 1}`).toString().slice(0, 127),
+      quantity: Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1)),
+      unitPrice: Number(it.price || 0),
+      imageUrl: it.imageUrl || it.image || ''
+    }));
+
+    // Delivery selection
     const providedId = String(req.body?.deliveryOptionId || "").trim();
     const simpleDelivery = String(req.body?.delivery || "").trim().toLowerCase();
 
@@ -335,9 +424,10 @@ router.post("/create-order", express.json(), async (req, res) => {
       });
     }
 
-    // snapshot for later (thank-you fallback)
+    // snapshot for later (thank-you/receipt fallback) — includes itemsBrief
     req.session.pendingOrder = {
       id: data.id,
+      itemsBrief,
       deliveryOptionId: opt._id ? String(opt._id) : null,
       deliveryName: opt.name,
       deliveryDays: opt.deliveryDays || 0,
@@ -361,7 +451,6 @@ router.post("/create-order", express.json(), async (req, res) => {
 // ---------- capture order ----------
 router.post("/capture-order", express.json(), async (req, res) => {
   try {
-    // accept body.orderID (PayPal style) OR query.orderId (our checkout.ejs)
     const orderID = String(req.body?.orderID || req.query?.orderId || "");
     if (!orderID) return res.status(400).json({ ok:false, code:"MISSING_ORDER_ID", message:"Missing orderId/orderID" });
 
@@ -378,6 +467,17 @@ router.post("/capture-order", express.json(), async (req, res) => {
     }
 
     const pending = req.session.pendingOrder || null;
+
+    // Build items from pending snapshot so DB always has line items
+    const itemsFromPending = Array.isArray(pending?.itemsBrief)
+      ? pending.itemsBrief.map(it => ({
+          name: it.name,
+          quantity: Number(it.quantity || 1),
+          // store in Money schema shape; value as String
+          price: { value: String(Number(it.unitPrice || 0).toFixed(2)) },
+          imageUrl: it.imageUrl || ""
+        }))
+      : [];
 
     // Optional: persist to DB
     try {
@@ -401,6 +501,8 @@ router.post("/capture-order", express.json(), async (req, res) => {
             delivery: pending.deliveryPrice != null ? Number(pending.deliveryPrice) : null,
             grandTotal: pending.grandTotal ?? null,
           } : null,
+          // ensure items are persisted for receipts
+          items: itemsFromPending,
           raw: capture,
           userId: req.session?.user?._id || null,
           createdAt: new Date(),
@@ -408,7 +510,7 @@ router.post("/capture-order", express.json(), async (req, res) => {
       }
     } catch (e) { console.warn("⚠️ Failed to persist Order:", e.message); }
 
-    // snapshot for thank-you fallback
+    // snapshot for thank-you/receipt fallback (now includes items)
     req.session.lastOrderSnapshot = buildSessionSnapshot(orderID, pending);
 
     // clear cart + pending
@@ -451,7 +553,6 @@ router.get("/order/:id", async (req, res) => {
 // Nice thank-you alias that matches the checkout redirect
 router.get("/thank-you", (req, res) => {
   const id = String(req.query.orderId || "");
-  // keep a friendly redirect to include id if missing but we have a snapshot
   const snapId = req.session?.lastOrderSnapshot?.id;
   if (!id && snapId) {
     return res.redirect(`/payment/thank-you?orderId=${encodeURIComponent(snapId)}`);
@@ -459,7 +560,7 @@ router.get("/thank-you", (req, res) => {
   return res.render("thank-you", {
     title: "Thank you",
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),
+    nonce: resNonce(req),
     success: ["Payment captured successfully."],
     error: []
   });
@@ -475,7 +576,7 @@ router.get("/success", (req, res) => {
   return res.render("thank-you", {
     title:"Thank you",
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),
+    nonce: resNonce(req),
     success:["Payment captured successfully."],
     error:[]
   });
@@ -485,7 +586,7 @@ router.get("/cancel", (req, res) => {
   return res.render("payment-cancel", {
     title: "Payment Cancelled",
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),
+    nonce: resNonce(req),
     success: [],
     error: ["Payment was cancelled or failed."],
   });

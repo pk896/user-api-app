@@ -57,6 +57,12 @@
       </div>
     </div>
   </section>
+
+  <!-- Items list -->
+<section id="itemsBox" class="card-ghost" hidden aria-labelledby="itemsTitle">
+  <h3 id="itemsTitle">Items</h3>
+  <div id="itemsList" class="items"></div>
+</section>
 </main>
 
 <style nonce="<%= NONCE %>">
@@ -111,12 +117,21 @@
     .ty-page{max-width:100%;padding:0}
     body{background:#fff}
   }
+
+  .items { display: grid; gap: 8px; margin-top: 6px; }
+.item-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
+.item-name { overflow-wrap: anywhere; }
+.item-qty { text-align: right; opacity: .8; }
+.item-line { text-align: right; font-weight: 700; }
 </style>
 
 <script nonce="<%= NONCE %>">
 (function () {
   function qs(sel, ctx){ return (ctx||document).querySelector(sel); }
-  function qsp(name){ var m = location.search.match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : ''; }
+  function qsp(name){
+    var m = location.search.match(new RegExp('[?&]'+name+'=([^&]+)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
   function moneyFmt(currency){
     var C=(currency||'USD').toUpperCase();
     var sym={USD:'$',ZAR:'R',EUR:'€',GBP:'£'}[C]||(C+' ');
@@ -125,30 +140,20 @@
   function fetchJsonSafe(url){
     return fetch(url, { credentials:'same-origin' })
       .then(function(r){
-        var ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!r.ok) return { ok:false, status:r.status, json:null };
-        if (!ct.includes('application/json')) return { ok:false, status:r.status, json:null };
-        return r.json().then(function(j){ return { ok:true, status:r.status, json:j }; });
+        var ct=(r.headers.get('content-type')||'').toLowerCase();
+        if(!r.ok) return {ok:false,status:r.status,json:null};
+        if(!ct.includes('application/json')) return {ok:false,status:r.status,json:null};
+        return r.json().then(function(j){return {ok:true,status:r.status,json:j};});
       })
-      .catch(function(){ return { ok:false, status:0, json:null }; });
-  }
-  function tryOrderEndpoints(orderId){
-    var path1 = '/payment/order/' + encodeURIComponent(orderId);
-    var path2 = '/order/' + encodeURIComponent(orderId); // fallback if router mounted differently
-    return fetchJsonSafe(path1).then(function(res1){
-      if (res1.ok && res1.json && res1.json.success) return res1.json;
-      return fetchJsonSafe(path2).then(function(res2){
-        if (res2.ok && res2.json && res2.json.success) return res2.json;
-        return null;
-      });
-    });
+      .catch(function(){return {ok:false,status:0,json:null};});
   }
 
   document.addEventListener('DOMContentLoaded', function(){
     var btnPrint = qs('#btnPrint');
     if (btnPrint) btnPrint.addEventListener('click', function(){ window.print(); });
 
-    var orderId = qsp('id') || '';
+    // ✅ accept both
+    var orderId = qsp('orderId') || qsp('id') || '';
     var tyWrap = qs('#tyOrderIdWrap');
     var tyId = qs('#tyOrderId');
     var viewLink = qs('#viewOrderLink');
@@ -161,63 +166,46 @@
       if (viewLink)  { viewLink.href = recHref; viewLink.hidden = false; }
       if (btnReceipt){ btnReceipt.href = recHref; btnReceipt.hidden = false; }
     }
-
-    // Load currency (fallback to USD)
-    var currency = 'USD';
-    fetch('/payment/config', { credentials:'same-origin' })
-      .then(function(r){ return r.ok ? r.json() : {}; })
-      .then(function(cfg){ currency = String(cfg.baseCurrency || cfg.currency || 'USD').toUpperCase(); })
-      .catch(function(){});
-
     if (!orderId) return;
 
-    // Hydrate: try /payment/order/:id then /order/:id
-    tryOrderEndpoints(orderId)
-      .then(function(payload){
-        if (!payload) return; // leave placeholders; user still has receipt link
-        var o = payload.order || {};
-        var C = (o.currency || currency || 'USD').toUpperCase();
+    // fetch JSON from your hydrator
+    fetchJsonSafe('/payment/order/' + encodeURIComponent(orderId))
+      .then(function(res){
+        if (!res.ok || !res.json || !res.json.success) return;
+        var o = res.json.order || {};
+        var C = (o.currency || 'USD').toUpperCase();
         var money = moneyFmt(C);
 
-        // Meta snapshot
-        var metaBox = qs('#metaBox');
-        if (metaBox) {
-          metaBox.hidden = false;
-          var ordStatus = qs('#ordStatus');
-          var ordDate   = qs('#ordDate');
-          var ordPaid   = qs('#ordPaid');
-          if (ordStatus) ordStatus.textContent = o.status || '—';
-          if (ordDate)   ordDate.textContent   = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
-          if (ordPaid)   ordPaid.textContent   = (o.amount && o.amount.value != null) ? money(o.amount.value) : '—';
-        }
+        // meta
+        var metaBox = qs('#metaBox'); if (metaBox) metaBox.hidden = false;
+        var ordStatus = qs('#ordStatus'); if (ordStatus) ordStatus.textContent = o.status || '—';
+        var ordDate   = qs('#ordDate');   if (ordDate)   ordDate.textContent   = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
+        var paidVal = (o.amount && o.amount.value!=null) ? o.amount.value : (o.totals ? o.totals.total : null);
+        var ordPaid  = qs('#ordPaid');    if (ordPaid)   ordPaid.textContent   = (paidVal!=null) ? money(paidVal) : '—';
 
-        // Totals
-        var tSub = qs('#tSubtotal');
-        var tVat = qs('#tVat');
-        var tShip= qs('#tShipping');
-        var tTot = qs('#tTotal');
-        if (tSub)  tSub.textContent  = (o.breakdown && o.breakdown.itemTotal) ? money(o.breakdown.itemTotal.value) : '—';
-        if (tVat)  tVat.textContent  = (o.breakdown && o.breakdown.taxTotal)  ? money(o.breakdown.taxTotal.value)  : '—';
-        if (tShip) tShip.textContent = (o.breakdown && o.breakdown.shipping)
-                                        ? money(o.breakdown.shipping.value)
-                                        : (o.delivery && o.delivery.amount != null ? money(o.delivery.amount) : '—');
-        if (tTot)  tTot.textContent  = (o.amount && o.amount.value != null)   ? money(o.amount.value)              : '—';
+        // totals
+        var itemTotal = o.breakdown && o.breakdown.itemTotal ? o.breakdown.itemTotal.value : (o.totals ? o.totals.subtotal : null);
+        var taxTotal  = o.breakdown && o.breakdown.taxTotal  ? o.breakdown.taxTotal.value  : (o.totals ? o.totals.tax : null);
+        var shipTotal = o.breakdown && o.breakdown.shipping  ? o.breakdown.shipping.value  : (o.delivery ? o.delivery.amount : null);
+        var grandTot  = (o.amount && (o.amount.value!=null)) ? o.amount.value : (o.totals ? o.totals.total : null);
 
-        // Delivery box
-        if (o.delivery && (o.delivery.name || (o.delivery.deliveryDays != null))) {
-          var dBox = qs('#deliveryBox');
-          var dName= qs('#delName');
-          var dEta = qs('#delEta');
-          if (dBox) dBox.hidden = false;
+        var tSub=qs('#tSubtotal'), tVat=qs('#tVat'), tShip=qs('#tShipping'), tTot=qs('#tTotal');
+        if (tSub)  tSub.textContent  = (itemTotal!=null) ? money(itemTotal) : '—';
+        if (tVat)  tVat.textContent  = (taxTotal!=null)  ? money(taxTotal)  : '—';
+        if (tShip) tShip.textContent = (shipTotal!=null) ? money(shipTotal) : '—';
+        if (tTot)  tTot.textContent  = (grandTot!=null)  ? money(grandTot)  : '—';
+
+        // delivery snapshot
+        if (o.delivery && (o.delivery.name || (o.delivery.deliveryDays!=null))) {
+          var dBox=qs('#deliveryBox'), dName=qs('#delName'), dEta=qs('#delEta');
+          if (dBox) dBox.hidden=false;
           if (dName) dName.textContent = o.delivery.name || 'Selected method';
-          if (dEta)  dEta.textContent  = (o.delivery.deliveryDays != null)
-              ? ('Estimated delivery: ' + o.delivery.deliveryDays + ' day' + (o.delivery.deliveryDays === 1 ? '' : 's'))
-              : 'Estimated delivery: —';
+          if (dEta)  dEta.textContent  = (o.delivery.deliveryDays!=null)
+            ? ('Estimated delivery: ' + o.delivery.deliveryDays + ' day' + (Number(o.delivery.deliveryDays)===1?'':'s'))
+            : 'Estimated delivery: —';
         }
       })
-      .catch(function(e){
-        console.warn('thank-you hydrate failed', e);
-      });
+      .catch(function(e){ console.warn('thank-you hydrate failed', e); });
   });
 })();
 </script>

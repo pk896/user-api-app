@@ -1,9 +1,9 @@
 <%
-const CO_NONCE     = typeof NONCE !== 'undefined' ? NONCE : '';
-const CO_CLIENT_ID = typeof paypalClientId !== 'undefined' ? paypalClientId : '';
-const CO_CCY       = typeof currency !== 'undefined' ? currency : 'USD';
-const CO_BRAND     = typeof brandName !== 'undefined' ? brandName : 'Phakisi Global';
-const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
+  const CO_NONCE     = typeof NONCE !== 'undefined' ? NONCE : '';
+  const CO_CLIENT_ID = typeof paypalClientId !== 'undefined' ? paypalClientId : '';
+  const CO_CCY       = typeof currency !== 'undefined' ? currency : 'USD';
+  const CO_BRAND     = typeof brandName !== 'undefined' ? brandName : 'Phakisi Global';
+  const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
 %>
 
 <section class="checkout-page">
@@ -40,7 +40,10 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
       <div class="card">
         <h2 class="card-title">Order Summary</h2>
         <div class="summary-line"><span>Subtotal</span><span id="sum-subtotal">—</span></div>
-        <div class="summary-line"><span>VAT (<span id="sum-vat-rate"><%= (CO_VAT*100).toFixed(0) %></span>%)</span><span id="sum-vat">—</span></div>
+        <div class="summary-line">
+          <span>VAT (<span id="sum-vat-rate"><%= (CO_VAT * 100).toFixed(0) %></span>%)</span>
+          <span id="sum-vat">—</span>
+        </div>
         <div class="summary-line"><span>Shipping</span><span id="sum-shipping">—</span></div>
         <div class="summary-total"><span>Total</span><span id="sum-total">—</span></div>
       </div>
@@ -109,12 +112,27 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
 
 <div id="toast" hidden style="position:fixed;right:10px;bottom:10px;z-index:50;background:#111;color:#fff;padding:.6rem .8rem;border-radius:10px;"></div>
 
-<!-- PayPal SDK -->
+<!-- ✅ JSON config (no EJS inside script logic) -->
+<script id="checkout-config" type="application/json" nonce="<%= CO_NONCE %>">
+  <%- JSON.stringify({
+    VAT_RATE: Number(CO_VAT),
+    CURRENCY: CO_CCY
+  }) %>
+</script>
+
+<!-- PayPal SDK (EJS in attribute is fine) -->
 <script nonce="<%= CO_NONCE %>" src="https://www.paypal.com/sdk/js?client-id=<%= encodeURIComponent(CO_CLIENT_ID) %>&components=buttons&currency=<%= encodeURIComponent(CO_CCY) %>&intent=capture&enable-funding=card"></script>
 
 <script nonce="<%= CO_NONCE %>">
 (function(){
-  const els = {
+  // Read config safely (avoids EJS inside JS expressions)
+  var _cfgEl = document.getElementById('checkout-config');
+  var _cfg = {};
+  try { _cfg = JSON.parse(_cfgEl ? _cfgEl.textContent : '{}'); } catch (_) { _cfg = {}; }
+  var VAT_RATE = Number(_cfg.VAT_RATE || 0);
+  var CURRENCY = String(_cfg.CURRENCY || 'USD');
+
+  var els = {
     state:     document.getElementById('cart-state'),
     items:     document.getElementById('cart-items'),
     sumSub:    document.getElementById('sum-subtotal'),
@@ -127,12 +145,9 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     delSelect: document.getElementById('delivery-select'),
     delHint:   document.getElementById('delivery-hint'),
   };
-  const TPL = document.getElementById('tpl-cart-row');
+  var TPL = document.getElementById('tpl-cart-row');
 
-  const VAT_RATE = <%- Number(CO_VAT) %>;
-  const CURRENCY = "<%- CO_CCY %>";
-
-  let state = {
+  var state = {
     items: [],
     shipping: 0,
     deliveryOptionId: null,
@@ -141,12 +156,13 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     paypalMounted: false,
   };
 
-  const fmt = (n) => `${CURRENCY} ${Number(n||0).toFixed(2)}`;
-  function toast(msg, ms=2400){
+  var fmt = function(n){ return CURRENCY + ' ' + Number(n || 0).toFixed(2); };
+  function toast(msg, ms){
+    if (ms == null) ms = 2400;
     els.toast.textContent = msg;
     els.toast.hidden = false;
     clearTimeout(els.toast._t);
-    els.toast._t = setTimeout(() => els.toast.hidden = true, ms);
+    els.toast._t = setTimeout(function(){ els.toast.hidden = true; }, ms);
   }
 
   /* -------------------- Delivery options (from your DB API) ------------------- */
@@ -155,15 +171,16 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     els.delSelect.innerHTML = "";
     els.delHint.textContent = "Loading delivery options…";
 
-    const r = await fetch("/api/delivery-options?active=1&sort=price&order=asc", { headers:{ "Accept":"application/json" }});
+    var r = await fetch("/api/delivery-options?active=1&sort=price&order=asc", { headers:{ "Accept":"application/json" }});
     if(!r.ok){
       els.delHint.textContent = "Could not load delivery options.";
       state.deliveryReady = false;
       blockPay();
       return;
     }
-    const data = await r.json().catch(() => ({}));
-    const list = Array.isArray(data.options) ? data.options : [];
+    var data = {};
+    try { data = await r.json(); } catch (_) { data = {}; }
+    var list = Array.isArray(data.options) ? data.options : [];
 
     if(!list.length){
       els.delHint.textContent = "No delivery options are enabled.";
@@ -173,12 +190,13 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     }
 
     // Fill dropdown with DB options
-    for (const o of list){
-      const opt = document.createElement("option");
+    for (var i=0;i<list.length;i++){
+      var o = list[i];
+      var opt = document.createElement("option");
       opt.value = String(o.id);
       opt.dataset.price = String((o.priceCents || 0) / 100);
       opt.dataset.days  = String(o.deliveryDays || 0);
-      opt.textContent   = `${o.name} — ${fmt((o.priceCents||0)/100)}`;
+      opt.textContent   = o.name + " — " + fmt((o.priceCents||0)/100);
       els.delSelect.appendChild(opt);
     }
 
@@ -190,26 +208,26 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
   }
 
   function applyDeliverySelection(){
-    const opt  = els.delSelect.options[els.delSelect.selectedIndex];
-    const id   = opt?.value || null;
-    const ship = Number(opt?.dataset?.price || 0);
-    const days = Number(opt?.dataset?.days || 0);
+    var opt  = els.delSelect.options[els.delSelect.selectedIndex];
+    var id   = opt ? opt.value : null;
+    var ship = Number(opt && opt.dataset ? opt.dataset.price : 0);
+    var days = Number(opt && opt.dataset ? opt.dataset.days  : 0);
     state.deliveryOptionId = id;
     state.shipping = ship;
-    els.delHint.textContent = days ? `Estimated delivery: ~${days} day(s)` : "";
+    els.delHint.textContent = days ? ("Estimated delivery: ~" + days + " day" + (Number(days)===1 ? "" : "s")) : "";
     renderSummary();
   }
 
   /* ------------------------------ Cart logic ------------------------------ */
   function totals(){
-    const subtotal = state.items.reduce((s,it) => s + (Number(it.price) * Number(it.quantity)), 0);
-    const vat = subtotal * VAT_RATE;
-    const total = subtotal + vat + state.shipping;
-    return { subtotal, vat, total };
+    var subtotal = state.items.reduce(function(s,it){ return s + (Number(it.price) * Number(it.quantity)); }, 0);
+    var vat = subtotal * VAT_RATE;
+    var total = subtotal + vat + state.shipping;
+    return { subtotal: subtotal, vat: vat, total: total };
   }
 
   function renderSummary(){
-    const t = totals();
+    var t = totals();
     els.sumSub.textContent = fmt(t.subtotal);
     els.sumVat.textContent = fmt(t.vat);
     els.sumShip.textContent = fmt(state.shipping);
@@ -217,8 +235,8 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
   }
 
   function rowDOM(item){
-    const node = TPL.content.firstElementChild.cloneNode(true);
-    const pid = String(item.productId || item.id || '');
+    var node = TPL.content.firstElementChild.cloneNode(true);
+    var pid = String(item.productId || item.id || '');
     node.dataset.id = pid;
 
     node.querySelector('.cart-img').src = item.imageUrl || '/img/placeholder.png';
@@ -228,23 +246,23 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     node.querySelector('.qty-val').textContent = item.quantity;
     node.querySelector('.cart-price').textContent = fmt(item.price * item.quantity);
 
-    const btnInc = node.querySelector('.btn-inc');
-    const btnDec = node.querySelector('.btn-dec');
-    const btnRem = node.querySelector('.btn-rem');
+    var btnInc = node.querySelector('.btn-inc');
+    var btnDec = node.querySelector('.btn-dec');
+    var btnRem = node.querySelector('.btn-rem');
 
-    btnInc.addEventListener('click', async () => {
-      btnInc.disabled = btnDec.disabled = true;
+    btnInc.addEventListener('click', async function(){
+      btnInc.disabled = true; btnDec.disabled = true;
       try { await setQty(pid, item.quantity + 1); }
-      finally { btnInc.disabled = btnDec.disabled = false; }
+      finally { btnInc.disabled = false; btnDec.disabled = false; }
     });
 
-    btnDec.addEventListener('click', async () => {
-      btnInc.disabled = btnDec.disabled = true;
+    btnDec.addEventListener('click', async function(){
+      btnInc.disabled = true; btnDec.disabled = true;
       try { await setQty(pid, Math.max(1, item.quantity - 1)); }
-      finally { btnInc.disabled = btnDec.disabled = false; }
+      finally { btnInc.disabled = false; btnDec.disabled = false; }
     });
 
-    btnRem.addEventListener('click', async () => {
+    btnRem.addEventListener('click', async function(){
       btnRem.disabled = true;
       try { await removeItem(pid); }
       finally { btnRem.disabled = false; }
@@ -258,16 +276,18 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     els.items.hidden = true;
 
     try{
-      const r = await fetch('/api/cart', { headers:{ 'Accept':'application/json' }});
-      const data = await r.json();
-      state.items = Array.isArray(data.items) ? data.items.map(it => ({
-        id: String(it.productId || it._id || it.id),
-        productId: String(it.productId || it._id || it.id),
-        name: it.name || it.title || 'Product',
-        price: Number(it.price || 0),
-        quantity: Number(it.quantity || it.qty || 1),
-        imageUrl: it.imageUrl || it.image || ''
-      })) : [];
+      var r = await fetch('/api/cart', { headers:{ 'Accept':'application/json' }});
+      var data = await r.json();
+      state.items = Array.isArray(data.items) ? data.items.map(function(it){
+        return {
+          id: String(it.productId || it._id || it.id),
+          productId: String(it.productId || it._id || it.id),
+          name: it.name || it.title || 'Product',
+          price: Number(it.price || 0),
+          quantity: Number(it.quantity || it.qty || 1),
+          imageUrl: it.imageUrl || it.image || ''
+        };
+      }) : [];
 
       if (!state.items.length){
         els.state.innerHTML = 'Your cart is empty. <a href="/sales">Browse products</a>.';
@@ -277,7 +297,7 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
       }
 
       els.items.innerHTML = '';
-      state.items.forEach(it => els.items.appendChild(rowDOM(it)));
+      state.items.forEach(function(it){ els.items.appendChild(rowDOM(it)); });
       els.items.hidden = false;
       els.state.textContent = '';
       renderSummary();
@@ -294,20 +314,18 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
   async function setQty(productId, quantity){
     if(!productId) return toast('Missing product id');
 
-    // Primary: PATCH /api/cart/item/:id  { quantity }
-    let r = await fetch(`/api/cart/item/${encodeURIComponent(productId)}`, {
+    var r = await fetch('/api/cart/item/' + encodeURIComponent(productId), {
       method: 'PATCH',
       headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ quantity })
+      body: JSON.stringify({ quantity: quantity })
     });
     if(!r.ok){
-      // Fallbacks if something blocks PATCH
       if(quantity <= 0){
-        r = await fetch(`/api/cart/item/${encodeURIComponent(productId)}`, { method:'DELETE' });
+        r = await fetch('/api/cart/item/' + encodeURIComponent(productId), { method:'DELETE' });
       } else {
-        const current = state.items.find(i => String(i.productId) === String(productId));
-        const curQty = current ? Number(current.quantity || 1) : 0;
-        const delta = quantity - curQty;
+        var current = state.items.find(function(i){ return String(i.productId) === String(productId); });
+        var curQty = current ? Number(current.quantity || 1) : 0;
+        var delta = quantity - curQty;
         if (delta > 0) {
           r = await fetch('/api/cart/increase', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -326,7 +344,7 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
 
   async function removeItem(productId){
     if(!productId) return toast('Missing product id');
-    let r = await fetch(`/api/cart/item/${encodeURIComponent(productId)}`, { method:'DELETE' });
+    var r = await fetch('/api/cart/item/' + encodeURIComponent(productId), { method:'DELETE' });
     if(!r.ok){
       r = await fetch('/api/cart/remove', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -362,34 +380,33 @@ const CO_VAT       = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
     paypal.Buttons({
       style: { layout:'vertical', shape:'rect', label:'paypal' },
 
-      createOrder: async () => {
-        const body = { deliveryOptionId: state.deliveryOptionId };
-        const res = await fetch('/payment/create-order', {
+      createOrder: async function(){
+        var body = { deliveryOptionId: state.deliveryOptionId };
+        var res = await fetch('/payment/create-order', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
           body: JSON.stringify(body)
         });
-        const data = await res.json();
+        var data = await res.json();
         if(!res.ok || !data.id) throw new Error(data.message || 'Failed to create order');
         return data.id;
       },
 
-      onApprove: async (data) => {
-        const res = await fetch(`/payment/capture-order?orderId=${encodeURIComponent(data.orderID)}`, { method:'POST' });
-        const out = await res.json();
+      onApprove: async function(data){
+        var res = await fetch('/payment/capture-order?orderId=' + encodeURIComponent(data.orderID), { method:'POST' });
+        var out = await res.json();
         if(!res.ok) throw new Error(out.message || 'Failed to capture order');
-        const orderId = out.orderId || data.orderID;
-        window.location.href = `/payment/thank-you?orderId=${encodeURIComponent(orderId)}`;
+        var orderId = out.orderId || data.orderID;
+        window.location.href = '/payment/thank-you?orderId=' + encodeURIComponent(orderId);
       },
 
-      onError: (err) => toast('Payment error: ' + (err?.message || err))
+      onError: function(err){ toast('Payment error: ' + (err && err.message ? err.message : err)); }
     }).render('#paypal-buttons');
   }
 
   /* -------------------------------- Events/init ------------------------------ */
-  document.getElementById('delivery-select').addEventListener('change', () => {
+  document.getElementById('delivery-select').addEventListener('change', function(){
     applyDeliverySelection();
-    // re-enable pay if both are ready
     maybeEnablePay();
   });
 

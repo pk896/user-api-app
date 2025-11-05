@@ -1,86 +1,99 @@
-<!-- views/users-wishlist.ejs -->
-<section class="wishlist-page">
-  <h1 class="page-title">❤️ My Wishlist</h1>
+<%
+  const NONCE = (typeof nonce !== 'undefined') ? nonce : '';
+  const THEME = (themeCss && themeCss.includes('dark')) ? 'dark-theme' : 'light-theme';
+  const list = Array.isArray(items) ? items : [];
+  function money(n, cur){
+    const C = (cur || 'USD').toUpperCase();
+    const sym = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[C] || (C + ' ');
+    return sym + Number(n || 0).toFixed(2);
+  }
+%>
 
-  <% (success || []).forEach(msg => { %>
+<% (success || []).forEach(msg => { %>
   <div class="flash flash-success">✅ <%= msg %></div>
 <% }) %>
-
 <% (error || []).forEach(msg => { %>
   <div class="flash flash-error">❌ <%= msg %></div>
 <% }) %>
 
-  <% if (!products || products.length === 0) { %>
-    <p class="empty-tip">Your wishlist is empty.</p>
-    <a href="/sales" class="btn">Browse Products</a>
+<main class="wl-page <%= THEME %>">
+  <header class="wl-head">
+    <h1>💖 My Wishlist</h1>
+    <p class="muted">Save products you love and add them to your cart later.</p>
+  </header>
+
+  <% if (!list.length) { %>
+    <div class="empty card">
+      <p>Your wishlist is empty.</p>
+      <a href="/sales" class="btn btn-primary">Browse products</a>
+    </div>
   <% } else { %>
-    <div class="grid">
-      <% products.forEach(p => { %>
-        <div class="card">
-          <div class="image-wrap">
-            <% if (p.images && p.images.length) { %>
-              <img src="<%= p.images[0] %>" alt="<%= p.name || 'Product' %>">
-            <% } else { %>
-              <div class="placeholder">No Image</div>
-            <% } %>
-          </div>
+    <section class="grid">
+      <% list.forEach(function(row){ 
+           const p = row.product || {};
+           const pid = p?._id;
+           const name = p?.name || p?.title || 'Product';
+           const price = Number(p?.price || 0);
+           const img = p?.imageUrl || p?.image || '/img/placeholder.png';
+      %>
+        <article class="card item">
+          <a href="/products/<%= pid %>" class="pic">
+            <img src="<%= img %>" alt="<%= name %>" />
+          </a>
           <div class="info">
-            <h3 class="name"><a href="/products/<%= p._id %>"><%= p.name || 'Product' %></a></h3>
-            <% if (typeof p.price !== 'undefined') { %>
-              <div class="price">ZAR <%= Number(p.price).toFixed(2) %></div>
-            <% } %>
-
+            <h3 class="name"><a href="/products/<%= pid %>"><%= name %></a></h3>
+            <div class="meta">
+              <span class="price"><%= money(price, 'USD') %></span>
+            </div>
             <div class="actions">
-              <form action="/users/wishlist/<%= p._id %>/add-to-cart" method="POST" class="inline">
-                <input type="hidden" name="qty" value="1">
-                <button class="btn small">🛒 Add to Cart</button>
+              <form action="/api/cart/add" method="post">
+                <input type="hidden" name="pid" value="<%= pid %>" />
+                <button class="btn btn-primary" type="submit">Add to cart</button>
               </form>
-
-              <form action="/users/wishlist/remove/<%= p._id %>" method="POST" class="inline">
-                <input type="hidden" name="redirect" value="/users/wishlist">
-                <button class="btn small danger">❌ Remove</button>
+              <form action="/users/wishlist/remove/<%= pid %>" method="post">
+                <button class="btn btn-ghost danger" type="submit" aria-label="Remove from wishlist">Remove</button>
               </form>
             </div>
           </div>
-        </div>
+        </article>
       <% }) %>
-    </div>
-    <div class="footer-actions">
-      <a href="/sales" class="btn">⬅ Back to Shop</a>
-    </div>
+    </section>
   <% } %>
-</section>
+</main>
 
-<style>
-.wishlist-page { padding: 1rem; }
-.page-title { font-size: 1.25rem; margin-bottom: .75rem; }
-.flash { margin:.5rem 0; padding:.6rem .8rem; border-radius:.5rem; }
-.flash-error { background:#ffe8e8; }
-.flash-success { background:#e9ffea; }
-.empty-tip { margin: .75rem 0 1rem; }
-
-.grid {
-  display:grid;
-  gap:.75rem;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 768px) { .grid { grid-template-columns: repeat(3, 1fr); } }
-
-.card {
-  border: 1px solid #eaeaea; border-radius: 12px; overflow: hidden; background: #fff;
-  display:flex; gap:.75rem; padding:.75rem;
-}
-.image-wrap { width: 120px; min-width:120px; height: 120px; border-radius: 8px; overflow: hidden; background:#f6f6f6; display:flex; align-items:center; justify-content:center; }
-.image-wrap img { width:100%; height:100%; object-fit:cover; }
-.placeholder { font-size:.85rem; color:#888; }
-.info { flex:1; display:flex; flex-direction:column; gap:.4rem; }
-.name { font-size:1rem; margin:0; }
-.price { font-weight:600; }
-.actions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:auto; }
-.btn { display:inline-block; padding:.5rem .8rem; border-radius:8px; text-decoration:none; background:#0f62fe; color:#fff; }
-.btn.small { padding:.4rem .65rem; font-size:.9rem; }
-.btn.danger { background:#d12b2b; }
-.inline { display:inline-block; }
-.footer-actions { margin-top: 1rem; }
+<style nonce="<%= NONCE %>">
+  :root{
+    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
+    --brand:#111827; --brand-contrast:#fff; --radius:14px; --shadow:0 6px 18px rgba(0,0,0,.06);
+  }
+  .dark-theme{
+    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
+    --brand:#f3f4f6; --brand-contrast:#111;
+  }
+  html,body{background:var(--bg);color:var(--text);margin:0}
+  .wl-page{max-width:1100px;margin:0 auto;padding:12px}
+  .wl-head h1{margin:0 0 4px;font-size:clamp(18px,6vw,28px)}
+  .muted{color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px}
+  .empty{text-align:center;padding:24px}
+  .btn{display:inline-block;border:1px solid var(--brand);border-radius:10px;padding:10px 12px;text-decoration:none;cursor:pointer}
+  .btn-primary{background:var(--brand);color:var(--brand-contrast)}
+  .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
+  .btn.danger{color:#b91c1c;border-color:#fecaca}
+  .grid{display:grid;gap:12px;grid-template-columns:1fr}
+  .item{display:grid;grid-template-columns:100px 1fr;gap:12px;align-items:center}
+  .pic img{width:100px;height:100px;object-fit:cover;border-radius:10px;border:1px solid var(--border)}
+  .name{margin:.2rem 0 .4rem;font-size:clamp(14px,4.5vw,18px)}
+  .meta{font-size:.95rem;color:var(--muted)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .flash{margin:.6rem 0;padding:.6rem .8rem;border-radius:10px}
+  .flash-success{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+  .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+  @media(min-width:560px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media(min-width:900px){ .grid{grid-template-columns:repeat(3,1fr)} }
 </style>
+
+<script nonce="<%= NONCE %>">
+// (Optional) progressive enhancement hooks could live here later.
+// Kept empty for CSP-safety and to avoid EJS inside JS issues.
+</script>
