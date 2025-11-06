@@ -1,0 +1,57 @@
+<%
+// expects: productId, myRating (optional {stars,title,body}), NONCE
+const existing = myRating || {};
+const stars = existing.stars || 0;
+%>
+<form class="rating-form card" action="/ratings/product/<%= productId %>" method="post" novalidate>
+  <h3 class="section-title">Rate this product</h3>
+
+  <fieldset class="stars" aria-label="Choose stars">
+    <% for (let i = 5; i >= 1; i--) { %>
+      <input type="radio" id="star-<%= i %>" name="stars" value="<%= i %>" <%= (i === stars) ? 'checked' : '' %> />
+      <label for="star-<%= i %>" title="<%= i %> star<%= i>1?'s':'' %>">★</label>
+    <% } %>
+  </fieldset>
+
+  <label>Title (optional)
+    <input type="text" name="title" maxlength="120" value="<%= existing.title || '' %>" />
+  </label>
+
+  <label>Review (optional)
+    <textarea name="body" rows="4" maxlength="2000"><%= existing.body || '' %></textarea>
+  </label>
+
+  <button type="submit" class="btn primary">Save rating</button>
+</form>
+
+<style>
+.rating-form.card { padding:1rem; border:1px solid var(--border,#ddd); border-radius:12px; }
+.rating-form .stars { display:flex; flex-direction:row-reverse; justify-content:flex-end; gap:.2rem; margin-bottom:.75rem; }
+.rating-form .stars input { display:none; }
+.rating-form .stars label { cursor:pointer; font-size:1.6rem; }
+.rating-form .stars input:checked ~ label,
+.rating-form .stars label:hover,
+.rating-form .stars label:hover ~ label { color:gold; }
+@media (max-width: 420px){
+  .rating-form.card{ padding:.75rem; }
+  .rating-form .stars label{ font-size:1.4rem; }
+}
+</style>
+
+<script nonce="<%= NONCE %>">
+  // Optional: click label should check radio on some browsers; most already do.
+  document.currentScript && (function(){
+    const form = document.currentScript.closest('form');
+    if (!form) return;
+    form.querySelectorAll('.stars label').forEach(lb=>{
+      lb.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const forId = lb.getAttribute('for');
+          const radio = document.getElementById(forId);
+          if (radio) { radio.checked = true; }
+        }
+      });
+    });
+  })();
+</script>

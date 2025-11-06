@@ -19,9 +19,11 @@
   // Wishlist helpers
   const productIdForWishlist = String(pd._id || pd.productId || pd.id || '');
   const inWish = (typeof wishset !== 'undefined') && wishset && wishset.has(productIdForWishlist);
+
+  // Ratings (client-driven)
+  const customId = pd.customId || '';
 %>
 
-<!-- Flash (optional sitewide) -->
 <% if (success && success.length > 0) { %>
   <div class="flash flash-success">✅ <%= success %></div>
 <% } %>
@@ -53,26 +55,25 @@
         <span class="pd-price">R <%= price.toFixed(2) %></span>
       </div>
 
+      <!-- ⭐ Rating summary (hidden until API fills) -->
+      <div id="pd-rating-summary" data-customid="<%= customId %>" hidden>
+        <div class="pd-rating-summary" aria-label="Average rating">
+          <div class="stars" aria-hidden="true"></div>
+          <div class="meta">
+            <strong class="avg">0.0</strong> / 5
+            <span class="count">(0 reviews)</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Attributes (only render rows that have values) -->
       <dl class="pd-attrs">
-        <% if (color) { %>
-          <div class="row"><dt>Color</dt><dd><%= color %></dd></div>
-        <% } %>
-        <% if (size) { %>
-          <div class="row"><dt>Size</dt><dd><%= size %></dd></div>
-        <% } %>
-        <% if (type) { %>
-          <div class="row"><dt>Type</dt><dd><%= type %></dd></div>
-        <% } %>
-        <% if (quality) { %>
-          <div class="row"><dt>Quality</dt><dd><%= quality %></dd></div>
-        <% } %>
-        <% if (made) { %>
-          <div class="row"><dt>Made in</dt><dd><%= made %></dd></div>
-        <% } %>
-        <% if (manufacturer) { %>
-          <div class="row"><dt>Manufacturer</dt><dd><%= manufacturer %></dd></div>
-        <% } %>
+        <% if (color) { %><div class="row"><dt>Color</dt><dd><%= color %></dd></div><% } %>
+        <% if (size) { %><div class="row"><dt>Size</dt><dd><%= size %></dd></div><% } %>
+        <% if (type) { %><div class="row"><dt>Type</dt><dd><%= type %></dd></div><% } %>
+        <% if (quality) { %><div class="row"><dt>Quality</dt><dd><%= quality %></dd></div><% } %>
+        <% if (made) { %><div class="row"><dt>Made in</dt><dd><%= made %></dd></div><% } %>
+        <% if (manufacturer) { %><div class="row"><dt>Manufacturer</dt><dd><%= manufacturer %></dd></div><% } %>
       </dl>
 
       <% if (desc) { %>
@@ -82,149 +83,243 @@
         </section>
       <% } %>
 
-      <!-- Actions: Add to Cart + Wishlist toggle + Back -->
+      <!-- ⭐ Ratings & reviews (compact) -->
+      <section class="pd-ratings">
+        <h2 class="section-title">Ratings &amp; Reviews</h2>
+
+        <!-- List (loaded from API) -->
+        <div id="ratings-list" data-customid="<%= customId %>">
+          <div class="ratings-empty state">Loading ratings…</div>
+        </div>
+
+        <!-- Rate this product (user or business) -->
+        <% if (customId) { %>
+        <form class="rating-form card compact" action="/products/view/<%= customId %>/ratings" method="post" novalidate>
+          <fieldset class="stars-input" aria-label="Choose stars">
+            <% for (let i = 5; i >= 1; i--) { %>
+              <input type="radio" id="rate-<%= i %>" name="stars" value="<%= i %>">
+              <label for="rate-<%= i %>" title="<%= i %> star<%= i>1?'s':'' %>">★</label>
+            <% } %>
+          </fieldset>
+
+          <div class="grid-2">
+            <label class="inp">
+              <input class="inp-sm" type="text" name="title" maxlength="120" placeholder="Title (optional)" />
+            </label>
+            <button type="submit" class="btn btn-primary xs">Save</button>
+          </div>
+
+          <label class="inp">
+            <textarea class="inp-sm" name="body" rows="2" maxlength="2000" placeholder="Short review (optional)"></textarea>
+          </label>
+        </form>
+        <% } %>
+      </section>
+
+      <!-- Actions -->
       <div class="pd-actions">
-        <!-- Add-to-Cart (kept) -->
         <a
-          class="btn btn-primary"
+          class="btn btn-primary xs"
           href="/api/cart/add?pid=<%= pd.customId %>&back=<%= backToSales %>">
           🛒 Add to Cart
         </a>
 
-        <!-- Wishlist toggle (universal: user OR business session) -->
         <% if (productIdForWishlist) { %>
           <% if (!inWish) { %>
-          <form action="/users/wishlist/add/<%= product._id || product.customId %>" method="POST">
-            <input type="hidden" name="redirect" value="/users/wishlist">
-            <button class="btn btn-success">💚 Add to Wishlist</button>
-          </form>
-
+            <form action="/users/wishlist/add/<%= product._id || product.customId %>" method="POST" class="inline">
+              <input type="hidden" name="redirect" value="/users/wishlist">
+              <button class="btn btn-success xs" type="submit">💚 Wishlist</button>
+            </form>
           <% } else { %>
             <form action="/users/wishlist/remove/<%= productIdForWishlist %>" method="POST" class="inline">
               <input type="hidden" name="redirect" value="/users/wishlist">
-              <button type="submit" class="btn btn-danger">❌ Remove</button>
+              <button type="submit" class="btn btn-danger xs">❌ Remove</button>
             </form>
           <% } %>
         <% } %>
 
-        <a class="btn" href="<%= backToSales %>">← Back to Shop</a>
+        <a class="btn xs" href="<%= backToSales %>">← Back</a>
       </div>
     </div>
   </article>
 </main>
 
 <style nonce="<%= nonce %>">
-  /* ===== Page shell (mobile-first; Hisense U50 Lite friendly) ===== */
-  .pd-page{ padding:clamp(.6rem,3vw,1.25rem); }
-  .crumbs{
-    display:flex; align-items:center; gap:.4rem;
-    font-size:.9rem; margin:.2rem 0 .7rem;
-  }
-  .crumb-back{
-    text-decoration:none; padding:.28rem .55rem; border-radius:8px;
-    border:1px solid #e5e7eb; background:#fff; color:inherit;
-  }
+  /* ===== Compact shell (Hisense U50 Lite friendly) ===== */
+  .pd-page{ padding:clamp(.45rem,3vw,.8rem); }
+  .crumbs{ display:flex; align-items:center; gap:.3rem; font-size:.82rem; margin:.05rem 0 .4rem; }
+  .crumb-back{ text-decoration:none; padding:.18rem .4rem; border-radius:8px; border:1px solid #e5e7eb; background:#fff; color:inherit; }
   .crumb-back:hover{ background:#f8fafc }
   .crumb-sep{ color:#9ca3af }
-  .crumb-current{
-    color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:70vw;
-  }
+  .crumb-current{ color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:72vw; }
 
-  /* ===== Layout: single column on phones, split on wider screens ===== */
-  .pd-wrap{
-    display:grid; gap:clamp(.9rem,2.6vw,1.4rem);
-    grid-template-columns: 1fr;            /* phones first */
-    max-width:1080px; margin:0 auto; align-items:start;
-  }
-  @media (min-width: 880px){
-    .pd-wrap{ grid-template-columns: 1.1fr 1fr; }
-  }
+  /* ===== Layout ===== */
+  .pd-wrap{ display:grid; gap:clamp(.5rem,2vw,.8rem); grid-template-columns: 1fr; max-width:960px; margin:0 auto; align-items:start; }
+  @media (min-width: 880px){ .pd-wrap{ grid-template-columns: 1.05fr 1fr; gap:.9rem; } }
 
   /* ===== Media ===== */
-  .pd-media{
-    background:#f3f4f6; border-radius:14px; overflow:hidden;
-    box-shadow:0 6px 18px rgba(0,0,0,.08);
-  }
-  .pd-img{
-    width:100%; height:auto; display:block;
-    max-height: 280px; object-fit: contain; /* keep full image visible on phones */
-  }
-  @media (min-width: 520px){ .pd-img{ max-height: 340px } }
-  @media (min-width: 880px){ .pd-img{ max-height: 420px } }
+  .pd-media{ background:#f3f4f6; border-radius:10px; overflow:hidden; box-shadow:0 3px 10px rgba(0,0,0,.05); }
+  .pd-img{ width:100%; height:auto; display:block; max-height: 220px; object-fit: contain; }
+  @media (min-width: 520px){ .pd-img{ max-height: 280px } }
+  @media (min-width: 880px){ .pd-img{ max-height: 360px } }
 
   /* ===== Info ===== */
-  .pd-title{
-    margin:.1rem 0 .3rem; line-height:1.2;
-    font-size: clamp(1.1rem, 4.2vw, 1.9rem);
-  }
-  .pd-price-row{ margin:.1rem 0 .6rem; }
-  .pd-price{
-    font-weight:900; color:#2563eb; letter-spacing:.2px;
-    font-size: clamp(1.05rem, 3.8vw, 1.4rem);
-  }
+  .pd-title{ margin:.02rem 0 .15rem; line-height:1.2; font-size: clamp(.95rem, 4vw, 1.35rem); }
+  .pd-price-row{ margin:.05rem 0 .25rem; }
+  .pd-price{ font-weight:800; color:#2563eb; letter-spacing:.1px; font-size: clamp(.95rem, 3.4vw, 1.15rem); }
 
-  /* Attributes list */
-  .pd-attrs{
-    display:grid; gap:.5rem; margin:.6rem 0 1rem;
-  }
+  /* ⭐ Rating summary (more compact) */
+  .pd-rating-summary{ display:flex; align-items:center; gap:.35rem; margin:.1rem 0 .5rem; }
+  .pd-rating-summary .stars{ font-size:.95rem; line-height:1; }
+  .pd-rating-summary .meta{ font-size:.82rem; color:#374151; }
+
+  /* Attributes list (denser) */
+  .pd-attrs{ display:grid; gap:.35rem; margin:.35rem 0 .7rem; }
   .pd-attrs .row{
-    display:grid;
-    grid-template-columns: 120px 1fr;      /* label / value */
-    align-items:center;
-    gap:.6rem;
-    padding:.5rem .6rem;
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:10px;
+    display:grid; grid-template-columns: 86px 1fr;
+    align-items:center; gap:.45rem; padding:.35rem .45rem;
+    background:#fff; border:1px solid #e5e7eb; border-radius:9px;
   }
-  .pd-attrs dt{
-    font-weight:700; color:#374151;
-    font-size:.92rem;
-  }
-  .pd-attrs dd{
-    margin:0; color:#111827; font-size:.95rem;
-    word-break: break-word;
-  }
+  .pd-attrs dt{ font-weight:700; color:#374151; font-size:.8rem; }
+  .pd-attrs dd{ margin:0; color:#111827; font-size:.86rem; word-break: break-word; }
 
-  /* Description */
-  .pd-desc{ margin:.75rem 0 1.2rem; }
-  .pd-desc h2{ margin:0 0 .4rem; font-size:1rem; }
-  .pd-desc p{ margin:0; line-height:1.55; color:#374151; }
+  /* Description (tight) */
+  .pd-desc{ margin:.5rem 0 .8rem; }
+  .pd-desc h2{ margin:0 0 .3rem; font-size:.9rem; }
+  .pd-desc p{ margin:0; line-height:1.45; color:#374151; font-size:.88rem; }
 
-  /* Actions (stack on phones, big tap targets) */
-  .pd-actions{
-    display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.6rem;
+  /* ⭐ Ratings (compact) */
+  .pd-ratings{ margin:.55rem 0 .8rem; }
+  .pd-ratings .section-title{ font-size:.9rem; margin:0 0 .35rem; }
+  #ratings-list .state{ font-size:.86rem; color:#6b7280; }
+  .rating-item{
+    border:1px solid #e5e7eb; border-radius:9px; padding:.45rem .5rem; margin:.35rem 0; background:#fff;
   }
-  .btn{
-    display:inline-block; padding:.68rem 1rem; border-radius:12px;
-    text-decoration:none; border:1px solid #d1d5db;
-    font-weight:700; font-size:1rem; line-height:1; /* bigger for thumb */
-  }
+  .rating-item .ri-head{ display:flex; align-items:center; gap:.45rem; justify-content:space-between; margin-bottom:.1rem; }
+  .rating-item .ri-stars{ font-size:.9rem; }
+  .rating-item .ri-title{ font-weight:700; font-size:.88rem; }
+  .rating-item .ri-body{ margin:.14rem 0 0; color:#374151; line-height:1.35; font-size:.86rem; }
+
+  /* Rate form (denser + smaller inputs) */
+  .rating-form.card { padding:.55rem; border:1px solid var(--border,#e5e7eb); border-radius:9px; }
+  .rating-form.compact .stars-input{ display:flex; flex-direction:row-reverse; gap:.18rem; margin-bottom:.35rem; }
+  .rating-form .stars-input input{ display:none; }
+  .rating-form .stars-input label{ cursor:pointer; font-size:1rem; line-height:1; }
+  .rating-form .stars-input input:checked ~ label,
+  .rating-form .stars-input label:hover,
+  .rating-form .stars-input label:hover ~ label { color:#f59e0b; }
+  .rating-form .inp{ display:block; margin:.28rem 0; }
+  .rating-form .inp-sm{ width:100%; border:1px solid #d1d5db; border-radius:7px; padding:.35rem .45rem; font-size:.86rem; }
+  .rating-form textarea.inp-sm{ min-height:2.2rem; }
+
+  .grid-2{ display:grid; grid-template-columns: 1fr auto; gap:.35rem; align-items:center; }
+
+  /* Actions (stack on phones, smaller buttons) */
+  .pd-actions{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.45rem; }
+  .btn{ display:inline-block; padding:.48rem .7rem; border-radius:9px; text-decoration:none; border:1px solid #d1d5db; font-weight:700; font-size:.9rem; line-height:1; }
+  .btn.sm{ padding:.4rem .6rem; font-size:.88rem; border-radius:8px; }
+  .btn.xs{ padding:.34rem .5rem; font-size:.82rem; border-radius:7px; }
   .btn-primary{ background:#2563eb; color:#fff; border-color:#2563eb }
   .btn-primary:hover{ filter:brightness(.98) }
   .btn:hover{ background:#f9fafb }
   .btn-danger{ background:#d12b2b; color:#fff; border-color:#d12b2b }
-
-  /* ✅ GREEN wishlist button */
   .btn-success{ background:#16a34a; color:#fff; border-color:#16a34a }
   .btn-success:hover{ filter:brightness(.98) }
-
   .inline{ display:inline-block; }
 
-  /* Buttons: full width on small screens for easy tapping */
+  /* Buttons full width on very small screens */
   @media (max-width: 520px){
-    .btn{ width:100%; text-align:center }
+    .btn { width:100%; text-align:center }
     .pd-actions{ flex-direction:column; }
+    .grid-2{ grid-template-columns: 1fr; }
   }
 
   /* ===== Dark theme ===== */
   .dark-theme .crumb-back{ background:#111827; border-color:#374151; color:#e5e7eb; }
   .dark-theme .crumb-back:hover{ background:#0b1220; }
   .dark-theme .pd-media{ background:#0f172a; }
-  .dark-theme .pd-attrs .row{
-    background:#111827; border-color:#374151;
-  }
+  .dark-theme .pd-attrs .row{ background:#111827; border-color:#374151; }
   .dark-theme .pd-attrs dt{ color:#e5e7eb; }
   .dark-theme .pd-attrs dd{ color:#f9fafb; }
   .dark-theme .pd-desc p{ color:#e5e7eb; }
+  .dark-theme .rating-item{ background:#0f172a; border-color:#374151; }
+  .dark-theme #ratings-list .state{ color:#9ca3af; }
 </style>
+
+<script nonce="<%= nonce %>">
+(function(){
+  const listEl = document.getElementById('ratings-list');
+  const sumEl  = document.getElementById('pd-rating-summary');
+
+  const customId =
+    (listEl && listEl.getAttribute('data-customid')) ||
+    (sumEl  && sumEl.getAttribute('data-customid'));
+
+  if (!customId) {
+    if (listEl) listEl.innerHTML = '<div class="ratings-empty state">Ratings unavailable.</div>';
+    if (sumEl)  sumEl.hidden = true;
+    return;
+  }
+
+  function renderStars(avg){
+    const full = Math.floor(avg);
+    const half = (avg - full) >= 0.5 ? 1 : 0;
+    const empty = 5 - full - half;
+    return '★'.repeat(full) + (half ? '☆' : '') + '✩'.repeat(empty);
+  }
+
+  fetch(`/api/products/${encodeURIComponent(customId)}/ratings?limit=5`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data || !data.ok) throw new Error('Bad response');
+
+      // ----- LIST -----
+      if (listEl) {
+        const items = data.items || [];
+        if (!items.length) {
+          listEl.innerHTML = '<div class="ratings-empty state">No ratings yet — be the first to review.</div>';
+        } else {
+          listEl.innerHTML = items.map(it => {
+            const stars = '★'.repeat(it.stars || 0) + '✩'.repeat(5 - (it.stars || 0));
+            const safeTitle = (it.title || '').toString().substring(0,120);
+            const safeBody  = (it.body  || '').toString().substring(0,2000);
+            const when = new Date(it.createdAt).toLocaleDateString();
+            return `
+              <div class="rating-item">
+                <div class="ri-head">
+                  <div class="ri-stars" aria-label="Rating ${it.stars}/5">${stars}</div>
+                  <div class="ri-when">${when}</div>
+                </div>
+                ${safeTitle ? `<div class="ri-title">${safeTitle}</div>` : ''}
+                ${safeBody  ? `<div class="ri-body">${safeBody}</div>` : ''}
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // ----- SUMMARY -----
+      if (sumEl) {
+        const avg  = Number(data.product?.avgRating || 0);
+        const cnt  = Number(data.product?.ratingsCount || 0);
+        if (cnt > 0) {
+          const starsHost = sumEl.querySelector('.stars');
+          const avgEl     = sumEl.querySelector('.avg');
+          const cntEl     = sumEl.querySelector('.count');
+
+          if (starsHost) starsHost.innerHTML = renderStars(avg);
+          if (avgEl)     avgEl.textContent   = avg.toFixed(1);
+          if (cntEl)     cntEl.textContent   = `(${cnt} review${cnt===1?'':'s'})`;
+
+          sumEl.hidden = false;
+        } else {
+          sumEl.hidden = true;
+        }
+      }
+    })
+    .catch(() => {
+      if (listEl) listEl.innerHTML = '<div class="ratings-empty state">Could not load ratings.</div>';
+      if (sumEl)  sumEl.hidden = true;
+    });
+})();
+</script>

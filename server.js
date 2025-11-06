@@ -307,6 +307,7 @@ const notificationsRoutes  = require("./routes/notifications");
 const notificationsUnread  = require("./middleware/notificationsUnread");
 const wishlistRoutes       = require("./routes/wishlist");
 const passwordResetRoutes  = require("./routes/passwordReset");
+const productRatingsRoutes = require("./routes/productRatings");
 
 // API first
 app.use("/api/deliveryOption", deliveryOptionRouter);
@@ -344,6 +345,9 @@ app.use("/matches",  matchesRoutes);
 // Notifications and unread counter
 app.use("/notifications", notificationsRoutes);
 app.use(notificationsUnread);
+
+// Ratings
+app.use(productRatingsRoutes);
 
 // Wishlist under /users
 app.use("/users", wishlistRoutes);

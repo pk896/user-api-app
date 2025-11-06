@@ -10,6 +10,7 @@ const {
 const Product = require("../models/Product");
 const Shipment = require("../models/Shipment");
 const requireBusiness = require("../middleware/requireBusiness");
+const Rating = require("../models/Rating");
 
 const router = express.Router();
 

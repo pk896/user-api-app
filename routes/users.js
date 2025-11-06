@@ -589,6 +589,19 @@ router.post("/profile/edit", ensureUser, async (req, res) => {
   }
 });
 
+// GET /users/about  (public)
+router.get("/about", (req, res) => {
+  const { nonce = "" } = res.locals;
+  res.render("about", {
+    title: "About Phakisi Global",
+    active: "about",
+    styles: pageStyles(nonce),
+    scripts: pageScripts(nonce),
+    user: req.session.user || null,
+    business: req.session.business || null,
+  });
+});
+
 /*// DEV-ONLY: view a user doc (masked) to verify fields
 router.get("/_dev/show", async (req, res) => {
   if (process.env.NODE_ENV === "production") return res.status(404).send("Not found");
