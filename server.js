@@ -355,6 +355,11 @@ app.use("/users", wishlistRoutes);
 // Password reset
 app.use("/users/password", passwordResetRoutes);
 
+// Land on the shopping page by default (put this BEFORE staticPagesRoutes)
+app.get("/", (req, res) => {
+  res.redirect(302, "/products/sales"); // use 301 in production if you want it permanent
+});
+
 // Static / legal LAST
 app.use("/", staticPagesRoutes);
 
