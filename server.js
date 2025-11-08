@@ -425,7 +425,7 @@ app.post('/theme-toggle', (req, res) => {
 /* ---------------------------------------
    Home + Debug + Health
 --------------------------------------- */
-app.get('/', (req, res) => {
+app.get('/home', (req, res) => {
   res.render('home', { layout: 'layout', title: 'Home', active: 'home' });
 });
 
