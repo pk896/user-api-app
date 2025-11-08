@@ -360,6 +360,9 @@ app.get("/", (req, res) => {
   res.redirect(302, "/products/sales"); // use 301 in production if you want it permanent
 });
 
+// Dev mail test route
+app.use(require('./routes/dev-mail'));
+
 // Static / legal LAST
 app.use("/", staticPagesRoutes);
 

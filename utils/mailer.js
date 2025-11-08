@@ -1,31 +1,29 @@
-const nodemailer = require("nodemailer");
+// utils/mailer.js
+const provider = (process.env.MAIL_PROVIDER || 'sendgrid').toLowerCase();
+const FROM = process.env.SMTP_FROM || `Phakisi Global <no-reply@example.com>`;
 
-const {
-  SMTP_HOST = "smtp.gmail.com",
-  SMTP_PORT = "587",
-  SMTP_USER,
-  SMTP_PASS,
-  SMTP_FROM = `Phakisi Global <${process.env.SMTP_USER || "no-reply@example.com"}>`
-} = process.env;
+// --- SendGrid (HTTP API) ---
+async function sendWithSendgrid({ to, subject, html, text }) {
+  const sg = require('@sendgrid/mail');
+  const key = process.env.SENDGRID_API_KEY;
+  if (!key) throw new Error('Missing SENDGRID_API_KEY');
+  sg.setApiKey(key);
+  const msg = { to, from: FROM, subject, text: text || '', html: html || '' };
+  const res = await sg.send(msg);
+  return res?.[0]?.statusCode || 202;
+}
 
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: Number(SMTP_PORT),
-  secure: false,
-  auth: { user: SMTP_USER, pass: SMTP_PASS }
-});
-
-// ✅ Log mail readiness once at startup
-transporter.verify((err, success) => {
-  if (err) {
-    console.error("[mailer] SMTP verify failed:", err.message || err);
-  } else {
-    console.log("[mailer] SMTP ready:", success);
-  }
-});
-
+// Unified facade used by the app
 async function sendMail({ to, subject, html, text }) {
-  return transporter.sendMail({ from: SMTP_FROM, to, subject, text: text || "", html: html || "" });
+  if (provider === 'sendgrid') return sendWithSendgrid({ to, subject, html, text });
+
+  // Fallback for dev if MAIL_PROVIDER not set
+  console.warn('[mailer] MAIL_PROVIDER not recognized, printing email to console.');
+  console.log({ to, subject, text, html });
+  return 200;
 }
 
 module.exports = { sendMail };
+
+
+
