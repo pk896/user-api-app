@@ -1,28 +1,32 @@
 // routes/users.js
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const bcrypt = require("bcrypt");
-const mongoose = require("mongoose");
+const bcrypt = require('bcrypt');
+const mongoose = require('mongoose');
 
-const User = require("../models/User");
-const Order = require("../models/Order");
-const Shipment = require("../models/Shipment");
+const User = require('../models/User');
+const Order = require('../models/Order');
+const Shipment = require('../models/Shipment');
 
 /* -----------------------------------------------------
    Small helpers so renders never crash even if your EJS
    doesn't reference these
 ----------------------------------------------------- */
-function pageStyles() { return ""; }
-function pageScripts() { return ""; }
+function pageStyles() {
+  return '';
+}
+function pageScripts() {
+  return '';
+}
 
 /* -----------------------------------------------------
    Gate: requires a logged-in user
 ----------------------------------------------------- */
 function ensureUser(req, res, next) {
-  if (req.session && req.session.user) return next();
-  if (req.session && !req.session.returnTo) req.session.returnTo = req.originalUrl;
-  req.flash("error", "Please log in.");
-  return res.redirect("/users/login");
+  if (req.session && req.session.user) {return next();}
+  if (req.session && !req.session.returnTo) {req.session.returnTo = req.originalUrl;}
+  req.flash('error', 'Please log in.');
+  return res.redirect('/users/login');
 }
 
 /* =======================================================
@@ -30,11 +34,11 @@ function ensureUser(req, res, next) {
 ======================================================= */
 
 // GET /users/signup
-router.get("/signup", (req, res) => {
-  const { nonce = "" } = res.locals;
-  res.render("users-signup", {
-    title: "User Sign Up",
-    active: "users",
+router.get('/signup', (req, res) => {
+  const { nonce = '' } = res.locals;
+  res.render('users-signup', {
+    title: 'User Sign Up',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user || null,
@@ -43,50 +47,50 @@ router.get("/signup", (req, res) => {
 });
 
 // POST /users/signup
-router.post("/signup", async (req, res) => {
+router.post('/signup', async (req, res) => {
   try {
     const { name, email, password, confirm, age, confirm16 } = req.body || {};
-    if (!name || !email || !password || !confirm || typeof age === "undefined") {
-      req.flash("error", "All fields are required.");
-      return res.redirect("/users/signup");
+    if (!name || !email || !password || !confirm || typeof age === 'undefined') {
+      req.flash('error', 'All fields are required.');
+      return res.redirect('/users/signup');
     }
 
-    const cleanName  = String(name).trim();
+    const cleanName = String(name).trim();
     const cleanEmail = String(email).toLowerCase().trim();
     const pass = String(password);
     const conf = String(confirm);
 
     if (cleanName.length < 2 || cleanName.length > 80) {
-      req.flash("error", "Please enter your full name (2–80 chars).");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Please enter your full name (2–80 chars).');
+      return res.redirect('/users/signup');
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      req.flash("error", "Please enter a valid email address.");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Please enter a valid email address.');
+      return res.redirect('/users/signup');
     }
     if (pass.length < 6) {
-      req.flash("error", "Password must be at least 6 characters.");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Password must be at least 6 characters.');
+      return res.redirect('/users/signup');
     }
     if (pass !== conf) {
-      req.flash("error", "Passwords do not match.");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Passwords do not match.');
+      return res.redirect('/users/signup');
     }
 
     const nAge = Number(age);
     if (!Number.isInteger(nAge) || nAge < 16 || nAge > 120) {
-      req.flash("error", "You must be at least 16 years old (valid whole number).");
-      return res.redirect("/users/signup");
+      req.flash('error', 'You must be at least 16 years old (valid whole number).');
+      return res.redirect('/users/signup');
     }
     if (!confirm16) {
-      req.flash("error", "Please confirm that you are at least 16 years old.");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Please confirm that you are at least 16 years old.');
+      return res.redirect('/users/signup');
     }
 
     const exists = await User.findOne({ email: cleanEmail }).lean();
     if (exists) {
-      req.flash("error", "Email already registered.");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Email already registered.');
+      return res.redirect('/users/signup');
     }
 
     const passwordHash = await bcrypt.hash(pass, 12);
@@ -98,11 +102,11 @@ router.post("/signup", async (req, res) => {
     });
 
     // Regenerate to prevent session fixation
-    req.session.regenerate(err => {
+    req.session.regenerate((err) => {
       if (err) {
-        console.error("[POST /users/signup] session regenerate failed:", err);
-        req.flash("error", "Registration succeeded, but session failed. Please log in.");
-        return res.redirect("/users/login");
+        console.error('[POST /users/signup] session regenerate failed:', err);
+        req.flash('error', 'Registration succeeded, but session failed. Please log in.');
+        return res.redirect('/users/login');
       }
       req.session.user = {
         _id: user._id.toString(),
@@ -110,26 +114,26 @@ router.post("/signup", async (req, res) => {
         email: user.email,
         createdAt: user.createdAt,
       };
-      req.flash("success", "Welcome! Your account is ready.");
-      return res.redirect("/users/dashboard");
+      req.flash('success', 'Welcome! Your account is ready.');
+      return res.redirect('/users/dashboard');
     });
   } catch (err) {
     if (err && err.code === 11000) {
-      req.flash("error", "Email already registered.");
-      return res.redirect("/users/signup");
+      req.flash('error', 'Email already registered.');
+      return res.redirect('/users/signup');
     }
-    console.error("Signup error:", err);
-    req.flash("error", "Registration failed.");
-    return res.redirect("/users/signup");
+    console.error('Signup error:', err);
+    req.flash('error', 'Registration failed.');
+    return res.redirect('/users/signup');
   }
 });
 
 // GET /users/login
-router.get("/login", (req, res) => {
-  const { nonce = "" } = res.locals;
-  res.render("users-login", {
-    title: "User Login",
-    active: "users",
+router.get('/login', (req, res) => {
+  const { nonce = '' } = res.locals;
+  res.render('users-login', {
+    title: 'User Login',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user || null,
@@ -138,54 +142,56 @@ router.get("/login", (req, res) => {
 });
 
 // POST /users/login
-router.post("/login", async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { email, password, remember } = req.body || {};
-    const cleanEmail = String(email || "").toLowerCase().trim();
-    const pass = String(password || "");
+    const cleanEmail = String(email || '')
+      .toLowerCase()
+      .trim();
+    const pass = String(password || '');
 
     if (!cleanEmail || !pass) {
-      console.warn("[LOGIN] missing creds", { cleanEmail, passLen: pass.length });
-      req.flash("error", "Email and password required.");
-      return res.redirect("/users/login");
+      console.warn('[LOGIN] missing creds', { cleanEmail, passLen: pass.length });
+      req.flash('error', 'Email and password required.');
+      return res.redirect('/users/login');
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      console.warn("[LOGIN] invalid email format:", cleanEmail);
-      req.flash("error", "Invalid credentials.");
-      return res.redirect("/users/login");
+      console.warn('[LOGIN] invalid email format:', cleanEmail);
+      req.flash('error', 'Invalid credentials.');
+      return res.redirect('/users/login');
     }
 
     const user = await User.findOne({ email: cleanEmail }).lean(false); // return doc, not lean object
     if (!user) {
-      console.warn("[LOGIN] user not found:", cleanEmail);
-      req.flash("error", "Invalid credentials.");
-      return res.redirect("/users/login");
+      console.warn('[LOGIN] user not found:', cleanEmail);
+      req.flash('error', 'Invalid credentials.');
+      return res.redirect('/users/login');
     }
 
-    if (!user.passwordHash || typeof user.passwordHash !== "string") {
-      console.warn("[LOGIN] missing passwordHash on user:", user._id.toString());
-      req.flash("error", "Invalid credentials.");
-      return res.redirect("/users/login");
+    if (!user.passwordHash || typeof user.passwordHash !== 'string') {
+      console.warn('[LOGIN] missing passwordHash on user:', user._id.toString());
+      req.flash('error', 'Invalid credentials.');
+      return res.redirect('/users/login');
     }
 
-    const ok = await require("bcrypt").compare(pass, user.passwordHash);
+    const ok = await require('bcrypt').compare(pass, user.passwordHash);
     if (!ok) {
-      console.warn("[LOGIN] bcrypt compare failed for:", user._id.toString());
-      req.flash("error", "Invalid credentials.");
-      return res.redirect("/users/login");
+      console.warn('[LOGIN] bcrypt compare failed for:', user._id.toString());
+      req.flash('error', 'Invalid credentials.');
+      return res.redirect('/users/login');
     }
 
     // preserve existing business session
     const keepBusiness = req.session.business || null;
 
-    req.session.regenerate(err => {
+    req.session.regenerate((err) => {
       if (err) {
-        console.error("[LOGIN] regenerate err", err);
-        req.flash("error", "Login failed.");
-        return res.redirect("/users/login");
+        console.error('[LOGIN] regenerate err', err);
+        req.flash('error', 'Login failed.');
+        return res.redirect('/users/login');
       }
 
-      if (keepBusiness) req.session.business = keepBusiness;
+      if (keepBusiness) {req.session.business = keepBusiness;}
 
       req.session.user = {
         _id: user._id.toString(),
@@ -200,17 +206,17 @@ router.post("/login", async (req, res) => {
         req.session.cookie.expires = false;
       }
 
-      const redirectTo = req.session.returnTo || "/users/dashboard";
+      const redirectTo = req.session.returnTo || '/users/dashboard';
       delete req.session.returnTo;
 
-      console.log("[LOGIN] OK ->", redirectTo);
-      req.flash("success", "Logged in successfully.");
+      console.log('[LOGIN] OK ->', redirectTo);
+      req.flash('success', 'Logged in successfully.');
       return res.redirect(redirectTo);
     });
   } catch (err) {
-    console.error("[LOGIN] error", err);
-    req.flash("error", "Login failed.");
-    return res.redirect("/users/login");
+    console.error('[LOGIN] error', err);
+    req.flash('error', 'Login failed.');
+    return res.redirect('/users/login');
   }
 });
 
@@ -284,32 +290,32 @@ router.post("/login", async (req, res) => {
 });*/
 
 // GET /users/logout
-router.get("/logout", (req, res) => {
+router.get('/logout', (req, res) => {
   const keepBusiness = req.session?.business || null;
-  req.session.regenerate(err => {
+  req.session.regenerate((err) => {
     if (err) {
-      console.error("[GET /users/logout] regenerate err", err);
-      if (req.session) req.session.user = null;
-      req.flash("success", "Logged out.");
-      return res.redirect("/users/login");
+      console.error('[GET /users/logout] regenerate err', err);
+      if (req.session) {req.session.user = null;}
+      req.flash('success', 'Logged out.');
+      return res.redirect('/users/login');
     }
-    if (keepBusiness) req.session.business = keepBusiness;
-    req.flash("success", "Logged out.");
-    res.redirect("/users/login");
+    if (keepBusiness) {req.session.business = keepBusiness;}
+    req.flash('success', 'Logged out.');
+    res.redirect('/users/login');
   });
 });
 
 /* =======================================================
    PROFILE
 ======================================================= */
-router.get("/profile", ensureUser, async (req, res) => {
-  const { nonce = "" } = res.locals;
+router.get('/profile', ensureUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
   const doc = await User.findById(req.session.user._id).lean();
   const user = doc ? { ...doc, _id: doc._id.toString() } : req.session.user;
 
-  res.render("users-profile", {
-    title: "My Profile",
-    active: "users",
+  res.render('users-profile', {
+    title: 'My Profile',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user,
@@ -320,8 +326,8 @@ router.get("/profile", ensureUser, async (req, res) => {
 /* =======================================================
    DASHBOARD
 ======================================================= */
-router.get("/dashboard", ensureUser, async (req, res) => {
-  const { nonce = "" } = res.locals;
+router.get('/dashboard', ensureUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
   const userObjectId = mongoose.Types.ObjectId.isValid(uid)
@@ -330,49 +336,55 @@ router.get("/dashboard", ensureUser, async (req, res) => {
 
   const [orders, shipments, totalOrders, paidOrders, spentAgg] = await Promise.all([
     Order.find({ userId: uid }).sort({ createdAt: -1 }).limit(10).lean(),
-    Shipment.find({ userId: uid }).sort({ createdAt: -1 }).limit(10).lean().catch(() => []),
+    Shipment.find({ userId: uid })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean()
+      .catch(() => []),
     Order.countDocuments({ userId: uid }),
-    Order.countDocuments({ userId: uid, status: "paid" }).catch(() => 0),
+    Order.countDocuments({ userId: uid, status: 'paid' }).catch(() => 0),
     userObjectId
       ? Order.aggregate([
           { $match: { userId: userObjectId } },
-          { $group: { _id: null, total: { $sum: { $ifNull: ["$amount.total", "$total"] } } } }
+          { $group: { _id: null, total: { $sum: { $ifNull: ['$amount.total', '$total'] } } } },
         ]).catch(() => [])
       : [],
   ]);
 
   const totalSpent = spentAgg?.[0]?.total || 0;
 
-  res.render("users-dashboard", {
-    title: "User Dashboard",
-    active: "users",
+  res.render('users-dashboard', {
+    title: 'User Dashboard',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user,
     business: req.session.business || null,
     orders,
     shipments,
-    kpis: { totalOrders, paidOrders, totalSpent }
+    kpis: { totalOrders, paidOrders, totalSpent },
   });
 });
 
 /* =======================================================
    ORDERS LIST + SHIPMENT SNAPSHOT
 ======================================================= */
-router.get("/orders", ensureUser, async (req, res) => {
-  const { nonce = "" } = res.locals;
+router.get('/orders', ensureUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
   const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).lean();
-  const orderIds = orders.map(o => o._id);
-  const shipments = await Shipment.find({ orderId: { $in: orderIds } }).lean().catch(() => []);
+  const orderIds = orders.map((o) => o._id);
+  const shipments = await Shipment.find({ orderId: { $in: orderIds } })
+    .lean()
+    .catch(() => []);
 
   const byOrder = shipments.reduce((acc, s) => ((acc[String(s.orderId)] = s), acc), {});
-  const withShip = orders.map(o => ({ ...o, shipment: byOrder[String(o._id)] || null }));
+  const withShip = orders.map((o) => ({ ...o, shipment: byOrder[String(o._id)] || null }));
 
-  res.render("users-orders", {
-    title: "My Orders",
-    active: "users",
+  res.render('users-orders', {
+    title: 'My Orders',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user,
@@ -384,21 +396,23 @@ router.get("/orders", ensureUser, async (req, res) => {
 /* =======================================================
    ORDER DETAIL + SHIPMENT DETAIL
 ======================================================= */
-router.get("/orders/:id", ensureUser, async (req, res) => {
-  const { nonce = "" } = res.locals;
+router.get('/orders/:id', ensureUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
   const order = await Order.findOne({ _id: req.params.id, userId: uid }).lean();
   if (!order) {
-    req.flash("error", "Order not found.");
-    return res.redirect("/users/orders");
+    req.flash('error', 'Order not found.');
+    return res.redirect('/users/orders');
   }
 
-  const shipment = await Shipment.findOne({ orderId: order._id }).lean().catch(() => null);
+  const shipment = await Shipment.findOne({ orderId: order._id })
+    .lean()
+    .catch(() => null);
 
-  res.render("users-order-detail", {
+  res.render('users-order-detail', {
     title: `Order #${order._id.toString().slice(-6)}`,
-    active: "users",
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user,
@@ -411,8 +425,8 @@ router.get("/orders/:id", ensureUser, async (req, res) => {
 /* =======================================================
    PAYMENTS (derived from Orders)
 ======================================================= */
-router.get("/payments", ensureUser, async (req, res) => {
-  const { nonce = "" } = res.locals;
+router.get('/payments', ensureUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
   const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).lean();
@@ -423,11 +437,11 @@ router.get("/payments", ensureUser, async (req, res) => {
       for (const c of o.captures) {
         payments.push({
           orderId: o._id,
-          provider: "PayPal",
+          provider: 'PayPal',
           id: c.id || c.capture_id,
           amount: Number(c.amount?.value || c.amount || o.total || 0),
-          currency: c.amount?.currency_code || o.currency || "USD",
-          status: c.status || o.status || "PAID",
+          currency: c.amount?.currency_code || o.currency || 'USD',
+          status: c.status || o.status || 'PAID',
           createdAt: c.create_time ? new Date(c.create_time) : o.createdAt,
         });
       }
@@ -435,30 +449,30 @@ router.get("/payments", ensureUser, async (req, res) => {
       for (const c of o.payment.captures) {
         payments.push({
           orderId: o._id,
-          provider: "PayPal",
+          provider: 'PayPal',
           id: c.id,
           amount: Number(c.amount?.value || 0),
-          currency: c.amount?.currency_code || "USD",
-          status: c.status || o.status || "PAID",
+          currency: c.amount?.currency_code || 'USD',
+          status: c.status || o.status || 'PAID',
           createdAt: c.create_time ? new Date(c.create_time) : o.createdAt,
         });
       }
     } else if (o?.paypalCaptureId) {
       payments.push({
         orderId: o._id,
-        provider: "PayPal",
+        provider: 'PayPal',
         id: o.paypalCaptureId,
         amount: Number(o.total || 0),
-        currency: o.currency || "USD",
-        status: o.status || "PAID",
+        currency: o.currency || 'USD',
+        status: o.status || 'PAID',
         createdAt: o.createdAt,
       });
     }
   }
 
-  res.render("users-payments", {
-    title: "My Payments",
-    active: "users",
+  res.render('users-payments', {
+    title: 'My Payments',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user,
@@ -470,11 +484,11 @@ router.get("/payments", ensureUser, async (req, res) => {
 /* =======================================================
    CHANGE PASSWORD (while logged in)
 ======================================================= */
-router.get("/change-password", ensureUser, (req, res) => {
-  const { nonce = "" } = res.locals;
-  res.render("users-change-password", {
-    title: "Change Password",
-    active: "users",
+router.get('/change-password', ensureUser, (req, res) => {
+  const { nonce = '' } = res.locals;
+  res.render('users-change-password', {
+    title: 'Change Password',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user,
@@ -482,39 +496,39 @@ router.get("/change-password", ensureUser, (req, res) => {
   });
 });
 
-router.post("/change-password", ensureUser, async (req, res) => {
+router.post('/change-password', ensureUser, async (req, res) => {
   try {
     const { current, next, confirm } = req.body || {};
     if (!current || !next || !confirm) {
-      req.flash("error", "All fields are required.");
-      return res.redirect("/users/change-password");
+      req.flash('error', 'All fields are required.');
+      return res.redirect('/users/change-password');
     }
     if (next !== confirm) {
-      req.flash("error", "New passwords do not match.");
-      return res.redirect("/users/change-password");
+      req.flash('error', 'New passwords do not match.');
+      return res.redirect('/users/change-password');
     }
 
     const user = await User.findById(req.session.user._id);
-    if (!user || typeof user.passwordHash !== "string") {
-      req.flash("error", "User not found.");
-      return res.redirect("/users/change-password");
+    if (!user || typeof user.passwordHash !== 'string') {
+      req.flash('error', 'User not found.');
+      return res.redirect('/users/change-password');
     }
 
     const ok = await bcrypt.compare(String(current), user.passwordHash);
     if (!ok) {
-      req.flash("error", "Current password is incorrect.");
-      return res.redirect("/users/change-password");
+      req.flash('error', 'Current password is incorrect.');
+      return res.redirect('/users/change-password');
     }
 
     user.passwordHash = await bcrypt.hash(String(next), 12);
     await user.save();
 
-    req.flash("success", "Password updated.");
-    res.redirect("/users/profile");
+    req.flash('success', 'Password updated.');
+    res.redirect('/users/profile');
   } catch (err) {
-    console.error("Change password error:", err);
-    req.flash("error", "Failed to change password.");
-    res.redirect("/users/change-password");
+    console.error('Change password error:', err);
+    req.flash('error', 'Failed to change password.');
+    res.redirect('/users/change-password');
   }
 });
 
@@ -523,14 +537,14 @@ router.post("/change-password", ensureUser, async (req, res) => {
 ======================================================= */
 
 // GET /users/profile/edit
-router.get("/profile/edit", ensureUser, async (req, res) => {
-  const { nonce = "" } = res.locals;
+router.get('/profile/edit', ensureUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
   const doc = await User.findById(req.session.user._id).lean();
   const user = doc ? { ...doc, _id: doc._id.toString() } : req.session.user;
 
-  return res.render("users-profile-edit", {
-    title: "Edit Profile",
-    active: "users",
+  return res.render('users-profile-edit', {
+    title: 'Edit Profile',
+    active: 'users',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user,
@@ -539,62 +553,61 @@ router.get("/profile/edit", ensureUser, async (req, res) => {
 });
 
 // POST /users/profile/edit
-router.post("/profile/edit", ensureUser, async (req, res) => {
+router.post('/profile/edit', ensureUser, async (req, res) => {
   try {
     const uid = req.session.user._id;
     const { name, age, password } = req.body || {};
-    const cleanName = String(name || "").trim();
+    const cleanName = String(name || '').trim();
 
     if (!cleanName || cleanName.length < 2) {
-      req.flash("error", "Please enter your full name (min 2 characters).");
-      return res.redirect("/users/profile/edit");
+      req.flash('error', 'Please enter your full name (min 2 characters).');
+      return res.redirect('/users/profile/edit');
     }
 
     const updates = { name: cleanName };
 
-    if (typeof age !== "undefined" && age !== null && String(age).trim() !== "") {
+    if (typeof age !== 'undefined' && age !== null && String(age).trim() !== '') {
       const nAge = Number(age);
       if (Number.isNaN(nAge) || nAge < 0 || nAge > 120) {
-        req.flash("error", "Please enter a valid age.");
-        return res.redirect("/users/profile/edit");
+        req.flash('error', 'Please enter a valid age.');
+        return res.redirect('/users/profile/edit');
       }
       updates.age = nAge;
     } else {
-      updates.$unset = { ...(updates.$unset || {}), age: "" };
+      updates.$unset = { ...(updates.$unset || {}), age: '' };
     }
 
     if (password && String(password).trim().length > 0) {
       const newHash = await bcrypt.hash(String(password).trim(), 12);
       updates.passwordHash = newHash;
-      updates.$unset = { ...(updates.$unset || {}), password: "" };
+      updates.$unset = { ...(updates.$unset || {}), password: '' };
     }
 
-    const updated = await User.findByIdAndUpdate(
-      uid,
-      updates,
-      { new: true, runValidators: true }
-    ).lean();
+    const updated = await User.findByIdAndUpdate(uid, updates, {
+      new: true,
+      runValidators: true,
+    }).lean();
 
     if (updated) {
       req.session.user.name = updated.name;
-      if (updated.email) req.session.user.email = updated.email;
+      if (updated.email) {req.session.user.email = updated.email;}
     }
 
-    req.flash("success", "Profile updated.");
-    return res.redirect("/users/profile");
+    req.flash('success', 'Profile updated.');
+    return res.redirect('/users/profile');
   } catch (err) {
-    console.error("Profile update error:", err);
-    req.flash("error", "Failed to update profile.");
-    return res.redirect("/users/profile/edit");
+    console.error('Profile update error:', err);
+    req.flash('error', 'Failed to update profile.');
+    return res.redirect('/users/profile/edit');
   }
 });
 
 // GET /users/about  (public)
-router.get("/about", (req, res) => {
-  const { nonce = "" } = res.locals;
-  res.render("about", {
-    title: "About Phakisi Global",
-    active: "about",
+router.get('/about', (req, res) => {
+  const { nonce = '' } = res.locals;
+  res.render('about', {
+    title: 'About Phakisi Global',
+    active: 'about',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
     user: req.session.user || null,

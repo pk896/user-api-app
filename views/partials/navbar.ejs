@@ -1,265 +1,625 @@
-<!-- ✅ Phakisi Global Navbar -->
-<nav class="navbar <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <div class="nav-container">
-    <!-- 🌍 Brand -->
-    <div class="nav-left">
-      <a href="/home" class="brand">🌍 Phakisi Global</a>
+<!-- views/partials/navbar.ejs -->
+<nav class="pg-navbar <%= themeCss && themeCss.includes('dark') ? 'theme-dark' : 'theme-light' %>">
+  <div class="pg-nav-inner">
+    <!-- Brand + context -->
+    <div class="pg-nav-left">
+      <a href="/home" class="pg-brand">
+        🌍 <span>Unicoporate.com</span>
+      </a>
     </div>
 
-    <!-- 🧭 Core links (always visible, includes Shop) -->
-    <div class="nav-core"> 
-      <a href="/sales" class="<%= active === 'shop' ? 'active' : '' %> highlight-link">🛒 Shop</a>
+    <!-- Center: Shop link (always visible) -->
+    <div class="pg-nav-center">
+      <a href="/sales" class="pg-chip pg-chip-shop <%= active === 'shop' ? 'pg-chip-active' : '' %>">
+        🛒 Shop
+      </a>
     </div>
 
-    <!-- 🍔 Hamburger (drawer trigger) -->
-    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">M
-      <span class="bar"></span>
-      <span class="bar"></span>
-      <span class="bar"></span>
-    </button>
-  </div>
+    <!-- Right: tiny actions + hamburger -->
+    <div class="pg-nav-right">
+      <% if (business) { %>
+        <span class="pg-pill">
+          <span class="pg-pill-label">
+            <%= business.role ? business.role.toUpperCase() : 'BUSINESS' %>
+          </span>
+        </span>
+      <% } else if (user) { %>
+        <span class="pg-pill">
+          <span class="pg-pill-label">USER</span>
+        </span>
+      <% } else { %>
+        <span class="pg-pill">
+          <span class="pg-pill-label">GUEST</span>
+        </span>
+      <% } %>
 
-  <!-- 🌫 Overlay background -->
-  <div class="nav-overlay" id="navOverlay"></div>
-
-  <!-- 📋 Drawer Menu -->
-  <div class="nav-links" id="navLinks">
-    <button class="drawer-close" id="drawerClose" aria-label="Close menu">✖</button>
-
-    <% if (business) { %>
-      <span class="welcome">Hi, <%= business.name %> 👋</span>
-      <a href="/business/dashboard">Dashboard</a>
-      <a href="/business/profile">Profile</a>
-      <a href="/products">Products</a>
-      <a href="/products/add">Add Product</a>
-      <a href="/shipments">Shipments</a>
-      <a href="/demands/add">➕ Add Demand</a>                  <!-- ✅ -->
-      <a href="/demands/aggregate">📊 Demanded Products</a>    <!-- ✅ -->
-      <a href="/demands/mine">📋 My Demands</a> 
-            <a href="/users/about" class="<%= active === 'about' ? 'active' : '' %>">About</a>
-      <a href="/home" class="<%= active === 'home' ? 'active' : '' %>">Home</a>               <!-- (optional quick link) -->
-      <form action="/business/logout" method="POST" class="inline-form">
-        <button type="submit" class="btn-logout">Logout</button>
+      <!-- Theme quick toggle (icon only) -->
+      <form method="POST" action="/theme-toggle" class="pg-theme-icon-form">
+        <button type="submit" class="pg-theme-icon-btn" aria-label="Toggle theme">
+          <span><%= themeCss && themeCss.includes('dark') ? '🌞' : '🌙' %></span>
+        </button>
       </form>
 
-    <% } else if (user) { %>
-      <span class="welcome">Hi, <%= user.name %> 👋</span>
-      <a href="/users/dashboard">Dashboard</a>
-      <a href="/users/profile">Profile</a>
-      <a href="/users/about" class="<%= active === 'about' ? 'active' : '' %>">About</a>
-      <a href="/home" class="<%= active === 'home' ? 'active' : '' %>">Home</a>
-      <form action="/users/logout" method="GET" class="inline-form">
-        <button type="submit" class="btn-logout">Logout</button>
-      </form>
-
-    <% } else { %>
-      <span class="welcome highlight-link">Guest 👤</span>
-      <a href="/users/login" class="highlight-link">User Login</a>
-      <a href="/users/signup" class="highlight-link">User Sign Up</a>
-      <a href="/business/login" class="highlight-link">Business Login</a>
-      <a href="/business/signup" class="highlight-link">Business Sign Up</a>
-       <a href="/home" class="<%= active === 'home' ? 'active' : '' %>">Home</a>
-    <% } %>
-
-    <form id="themeToggleForm" method="POST" action="/theme-toggle">
-      <button type="submit" class="btn-theme">
-        <%= themeCss.includes('dark') ? '🌞 Light Mode' : '🌙 Dark Mode' %>
+      <!-- 3-line menu button (all screen sizes) -->
+      <button class="pg-nav-toggle" id="pgNavToggle" aria-label="Toggle navigation">
+        <span class="pg-bar"></span>
+        <span class="pg-bar"></span>
+        <span class="pg-bar"></span>
       </button>
-    </form>
+    </div>
   </div>
+
+  <!-- Overlay -->
+  <div class="pg-nav-overlay" id="pgNavOverlay"></div>
+
+  <!-- Drawer -->
+  <aside class="pg-drawer" id="pgNavDrawer" aria-hidden="true">
+    <div class="pg-drawer-inner">
+      <!-- Top user summary -->
+      <div class="pg-drawer-header">
+        <% if (business) { %>
+          <div class="pg-user-title">Hi, <%= business.name || 'Business' %> 👋</div>
+          <div class="pg-user-sub">
+            Role: <span class="pg-role"><%= business.role || 'unknown' %></span>
+          </div>
+        <% } else if (user) { %>
+          <div class="pg-user-title">Hi, <%= user.name || 'User' %> 👋</div>
+          <div class="pg-user-sub">Signed in as user</div>
+        <% } else { %>
+          <div class="pg-user-title">Welcome 👋</div>
+          <div class="pg-user-sub">Browse or sign in below</div>
+        <% } %>
+      </div>
+
+      <nav class="pg-drawer-nav">
+        <% if (business) { %>
+          <!-- BUSINESS MENU -->
+          <div class="pg-section">
+            <div class="pg-section-title">Business</div>
+            <a href="/business/dashboard" class="pg-link">
+              <span class="pg-ico">📊</span><span>Dashboard</span>
+            </a>
+            <a href="/business/profile" class="pg-link">
+              <span class="pg-ico">👤</span><span>Profile</span>
+            </a>
+          </div>
+
+          <div class="pg-section">
+            <div class="pg-section-title">Products & Shipments</div>
+            <a href="/products" class="pg-link">
+              <span class="pg-ico">📦</span><span>Products</span>
+            </a>
+            <a href="/products/add" class="pg-link">
+              <span class="pg-ico">➕</span><span>Add Product</span>
+            </a>
+            <a href="/shipments" class="pg-link">
+              <span class="pg-ico">🚚</span><span>Shipments</span>
+            </a>
+          </div>
+
+          <div class="pg-section">
+            <div class="pg-section-title">Demands</div>
+            <a href="/demands/add" class="pg-link">
+              <span class="pg-ico">📝</span><span>Add Demand</span>
+            </a>
+            <a href="/demands/mine" class="pg-link">
+              <span class="pg-ico">📋</span><span>My Demands</span>
+            </a>
+            <a href="/demands/aggregate" class="pg-link">
+              <span class="pg-ico">📈</span><span>Demanded Products</span>
+            </a>
+          </div>
+
+          <div class="pg-section">
+            <div class="pg-section-title">More</div>
+            <a href="/users/about" class="pg-link <%= active === 'about' ? 'pg-link-active' : '' %>">
+              <span class="pg-ico">ℹ️</span><span>About</span>
+            </a>
+            <a href="/home" class="pg-link <%= active === 'home' ? 'pg-link-active' : '' %>">
+              <span class="pg-ico">🏠</span><span>Home</span>
+            </a>
+          </div>
+
+          <form action="/business/logout" method="POST" class="pg-footer-form">
+            <button type="submit" class="pg-btn-logout">
+              <span class="pg-ico">🚪</span><span>Logout</span>
+            </button>
+          </form>
+
+        <% } else if (user) { %>
+          <!-- USER MENU -->
+          <div class="pg-section">
+            <div class="pg-section-title">User</div>
+            <a href="/users/dashboard" class="pg-link">
+              <span class="pg-ico">📊</span><span>Dashboard</span>
+            </a>
+            <a href="/users/profile" class="pg-link">
+              <span class="pg-ico">👤</span><span>Profile</span>
+            </a>
+          </div>
+
+          <div class="pg-section">
+            <div class="pg-section-title">Info</div>
+            <a href="/users/about" class="pg-link <%= active === 'about' ? 'pg-link-active' : '' %>">
+              <span class="pg-ico">ℹ️</span><span>About</span>
+            </a>
+            <a href="/home" class="pg-link <%= active === 'home' ? 'pg-link-active' : '' %>">
+              <span class="pg-ico">🏠</span><span>Home</span>
+            </a>
+          </div>
+
+          <form action="/users/logout" method="GET" class="pg-footer-form">
+            <button type="submit" class="pg-btn-logout">
+              <span class="pg-ico">🚪</span><span>Logout</span>
+            </button>
+          </form>
+
+        <% } else { %>
+          <!-- GUEST MENU -->
+          <div class="pg-section">
+            <div class="pg-section-title">Sign In</div>
+            <a href="/users/login" class="pg-link">
+              <span class="pg-ico">🔑</span><span>User Login</span>
+            </a>
+            <a href="/users/signup" class="pg-link">
+              <span class="pg-ico">📝</span><span>User Sign Up</span>
+            </a>
+            <a href="/business/login" class="pg-link">
+              <span class="pg-ico">🏢</span><span>Business Login</span>
+            </a>
+            <a href="/business/signup" class="pg-link">
+              <span class="pg-ico">🏭</span><span>Business Sign Up</span>
+            </a>
+          </div>
+
+          <div class="pg-section">
+            <div class="pg-section-title">Browse</div>
+            <a href="/home" class="pg-link <%= active === 'home' ? 'pg-link-active' : '' %>">
+              <span class="pg-ico">🏠</span><span>Home</span>
+            </a>
+            <a href="/users/about" class="pg-link <%= active === 'about' ? 'pg-link-active' : '' %>">
+              <span class="pg-ico">ℹ️</span><span>About</span>
+            </a>
+          </div>
+        <% } %>
+      </nav>
+
+      <!-- Theme toggle (full label) -->
+      <form method="POST" action="/theme-toggle" class="pg-footer-form">
+        <button type="submit" class="pg-btn-theme">
+          <span class="pg-ico"><%= themeCss && themeCss.includes('dark') ? '🌞' : '🌙' %></span>
+          <span><%= themeCss && themeCss.includes('dark') ? 'Light mode' : 'Dark mode' %></span>
+        </button>
+      </form>
+    </div>
+  </aside>
 </nav>
 
-<!-- 💅 Styles -->
-<style>
-.navbar {
+<style nonce="<%= nonce %>">
+/* =============== ROOT TOKENS (compact & mobile-first) =============== */
+:root {
+  --pg-nav-height: 52px;
+  --pg-drawer-width: 270px;
+  --pg-radius: 999px;
+  --pg-radius-card: 12px;
+  --pg-primary: #2563eb;
+  --pg-primary-soft: rgba(37,99,235,.08);
+  --pg-danger: #dc2626;
+  --pg-bg: #ffffff;
+  --pg-bg-soft: #f9fafb;
+  --pg-text: #0f172a;
+  --pg-muted: #6b7280;
+  --pg-border: #e5e7eb;
+  --pg-shadow: 0 2px 8px rgba(15,23,42,.08);
+}
+
+.theme-dark {
+  --pg-bg: #020617;
+  --pg-bg-soft: #0b1120;
+  --pg-text: #e5e7eb;
+  --pg-muted: #9ca3af;
+  --pg-border: #334155;
+  --pg-shadow: 0 2px 12px rgba(15,23,42,.7);
+}
+
+/* =============== TOP NAVBAR =============== */
+.pg-navbar {
   position: sticky;
   top: 0;
-  width: 100%;
   z-index: 1000;
-  background: var(--nav-bg, #ffffff);
-  color: var(--nav-text, #111827);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  transition: background 0.3s, color 0.3s;
+  background: var(--pg-bg);
+  color: var(--pg-text);
+  box-shadow: var(--pg-shadow);
 }
-.dark-theme.navbar { --nav-bg: #111827; --nav-text: #f9fafb; }
 
-.nav-container {
+.pg-nav-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.6rem 1.2rem;
-  max-width: 1200px;
+  height: var(--pg-nav-height);
+  padding: 0 .6rem;
+  max-width: 1100px;
   margin: 0 auto;
 }
-.brand {
-  font-weight: 700;
-  font-size: 1.2rem;
-  color: var(--nav-text);
-  text-decoration: none;
-}
 
-/* 🌐 Core links */
-.nav-core {
-  display: flex;
-  gap: 0.8rem;
+/* Brand */
+.pg-brand {
+  display: inline-flex;
   align-items: center;
-}
-.nav-core a {
-  color: var(--nav-text);
+  gap: .25rem;
   text-decoration: none;
-  font-weight: 500;
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
-  transition: background 0.2s;
-}
-.nav-core a:hover,
-.nav-core .active {
-  background: rgba(0,0,0,0.08);
-}
-.dark-theme .nav-core a:hover,
-.dark-theme .nav-core .active {
-  background: rgba(255,255,255,0.1);
+  color: var(--pg-text);
+  font-weight: 700;
+  font-size: .95rem;
+  white-space: nowrap;
 }
 
-/* ✨ Highlighted links */
-.highlight-link {
+/* Center chip (Shop) */
+.pg-nav-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 0 .3rem;
+}
+
+.pg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .25rem .8rem;
+  border-radius: var(--pg-radius);
+  border: 1px solid transparent;
+  font-size: .85rem;
+  text-decoration: none;
+  color: var(--pg-primary);
+  background: var(--pg-primary-soft);
   font-weight: 600;
-  color: #2563eb;
 }
-.highlight-link:hover {
-  color: #1e40af;
-  background: rgba(37,99,235,0.1);
-}
-.dark-theme .highlight-link { color: #93c5fd; }
-.dark-theme .highlight-link:hover {
-  color: #60a5fa;
-  background: rgba(59,130,246,0.15);
+.pg-chip-active {
+  border-color: var(--pg-primary);
 }
 
-/* 🍔 Hamburger */
-.nav-toggle {
+/* ✨ Magic Shop chip */
+.pg-chip-shop {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--pg-radius);
+  padding: .28rem 1.2rem;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(15,23,42,0.08);
+  box-shadow: 0 2px 8px rgba(15,23,42,0.18);
+  font-weight: 700;
+  letter-spacing: .02em;
+  transform: translateY(0);
+  transition:
+    background .25s ease,
+    color .25s ease,
+    box-shadow .25s ease,
+    transform .18s ease;
+}
+
+/* Shiny streak that sweeps across on hover */
+.pg-chip-shop::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255,255,255,0.9) 25%,
+    transparent 50%
+  );
+  transform: translateX(-170%);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform .55s ease-out,
+    opacity .25s ease-out;
+}
+
+/* Hover / focus: warm gradient, glow, tiny lift */
+.pg-chip-shop:hover,
+.pg-chip-shop:focus-visible {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #111827;
+  transform: translateY(-1px) scale(1.03);
+  box-shadow:
+    0 0 0 1px rgba(251,191,36,0.65),
+    0 12px 26px rgba(15,23,42,0.45);
+}
+
+/* Trigger the shine sweep */
+.pg-chip-shop:hover::after,
+.pg-chip-shop:focus-visible::after {
+  transform: translateX(170%);
+  opacity: 1;
+}
+
+/* Keep a soft glow when Shop is the active page */
+.pg-chip-shop.pg-chip-active {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #111827;
+  box-shadow:
+    0 0 0 1px rgba(251,191,36,0.7),
+    0 10px 22px rgba(15,23,42,0.4);
+}
+
+/* Dark theme tweaks so it still pops */
+.theme-dark .pg-chip-shop {
+  background: #020617;
+  color: #e5e7eb;
+  border-color: rgba(148,163,184,0.4);
+  box-shadow: 0 2px 10px rgba(15,23,42,0.85);
+}
+
+.theme-dark .pg-chip-shop:hover,
+.theme-dark .pg-chip-shop:focus-visible,
+.theme-dark .pg-chip-shop.pg-chip-active {
+  color: #020617;
+}
+
+/* Right side */
+.pg-nav-right {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+}
+
+/* Tiny role pill */
+.pg-pill {
+  border-radius: var(--pg-radius);
+  border: 1px solid var(--pg-border);
+  padding: .15rem .4rem;
+  font-size: .7rem;
+  text-transform: uppercase;
+}
+.pg-pill-label { letter-spacing: .04em; }
+
+/* Theme icon button */
+.pg-theme-icon-form { margin: 0; }
+.pg-theme-icon-btn {
+  border: none;
+  background: transparent;
+  padding: .2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* Hamburger – visible on all sizes */
+.pg-nav-toggle {
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  width: 26px;
-  height: 20px;
-  background: #111827;
-  border: none;
   cursor: pointer;
-  padding: 0;
 }
-.nav-toggle .bar {
-  height: 3px;
+.pg-bar {
   width: 100%;
-  background: var(--nav-text);
-  border-radius: 3px;
-  transition: 0.3s ease;
+  height: 2px;
+  border-radius: 4px;
+  background: var(--pg-text);
 }
 
-/* 🌫 Overlay */
-.nav-overlay {
+/* =============== OVERLAY + DRAWER =============== */
+.pg-nav-overlay {
   position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: rgba(0,0,0,0.4);
-  opacity: 0; visibility: hidden;
-  transition: opacity 0.4s ease;
-  z-index: 900;
+  inset: 0;
+  background: rgba(15,23,42,.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .25s ease;
+  z-index: 998;
 }
-.nav-overlay.show { opacity: 1; visibility: visible; }
 
-/* 📋 Drawer */
-.nav-links {
+.pg-nav-overlay.pg-show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.pg-drawer {
   position: fixed;
-  top: 0; right: -80%;
-  width: 70%;
+  top: 0;
+  right: -100%;
+  width: var(--pg-drawer-width);
+  max-width: 100%;
   height: 100%;
-  background: #111827;
-  display: flex; flex-direction: column;
-  gap: 0.8rem;
-  padding: 4rem 1.5rem 2rem;
-  box-shadow: -4px 0 10px rgba(0,0,0,0.1);
-  transition: right 0.4s ease;
-  z-index: 1000;
+  background: var(--pg-bg);
+  box-shadow: -4px 0 12px rgba(15,23,42,.35);
+  transition: right .28s ease;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
 }
-.nav-links.open { right: 0; }
 
-.drawer-close {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: #ffffff;
-  cursor: pointer;
+.pg-drawer.pg-open {
+  right: 0;
 }
-.drawer-close:hover { color: #2563eb; transform: rotate(90deg); }
 
-.welcome { font-weight: 500; opacity: 0.9; }
+.pg-drawer-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: .9rem .9rem 1rem;
+  gap: 1rem;
+}
 
-.btn-logout, .btn-theme {
-  padding: 0.6rem 1rem;
-  border: none; border-radius: 6px;
-  cursor: pointer; color: #fff;
+/* Drawer header */
+.pg-drawer-header {
+  padding-bottom: .7rem;
+  border-bottom: 1px solid var(--pg-border);
+}
+.pg-user-title {
   font-weight: 600;
-  transition: background 0.3s;
+  font-size: .95rem;
 }
-.btn-logout { background: #dc2626; }
-.btn-logout:hover { background: #b91c1c; }
-.btn-theme { background: #2563eb; }
-.btn-theme:hover { background: #1d4ed8; }
+.pg-user-sub {
+  font-size: .8rem;
+  color: var(--pg-muted);
+  margin-top: .1rem;
+}
+.pg-role {
+  font-weight: 600;
+}
 
-/* ✅ Keep core visible on all screens */
-@media (max-width: 768px) {
-  .nav-core { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+/* Drawer nav sections */
+.pg-drawer-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: .2rem;
 }
 
-/* 🔔 Notifications badge (non-intrusive) */
-.nav-core .nav-bell { position: relative; display:inline-flex; align-items:center; gap:6px; }
-.nav-core .nav-bell .bell-badge{
-  position:absolute; top:-6px; right:-8px;
-  min-width:18px; height:18px; padding:0 4px;
-  display:inline-flex; align-items:center; justify-content:center;
-  background:#ef4444; color:#fff; border-radius:999px;
-  font-size:12px; font-weight:700; line-height:1;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+.pg-section {
+  margin-top: .5rem;
 }
-.dark-theme .nav-core .nav-bell .bell-badge{ box-shadow: 0 1px 2px rgba(255,255,255,0.1); }
+.pg-section:first-child { margin-top: 0; }
+
+.pg-section-title {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--pg-muted);
+  margin-bottom: .2rem;
+}
+
+/* Links */
+.pg-link {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .55rem .45rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--pg-text);
+  font-size: .87rem;
+}
+.pg-link:hover {
+  background: var(--pg-bg-soft);
+}
+.pg-link-active {
+  background: var(--pg-primary-soft);
+  color: var(--pg-primary);
+  font-weight: 600;
+}
+.pg-ico {
+  width: 22px;
+  text-align: center;
+}
+
+/* Footer buttons */
+.pg-footer-form {
+  margin-top: .2rem;
+}
+.pg-btn-logout,
+.pg-btn-theme {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  justify-content: center;
+  border-radius: 999px;
+  padding: .6rem .9rem;
+  border: none;
+  cursor: pointer;
+  font-size: .87rem;
+  font-weight: 600;
+}
+.pg-btn-logout {
+  background: var(--pg-danger);
+  color: #fff;
+}
+.pg-btn-theme {
+  margin-top: .4rem;
+  background: var(--pg-bg-soft);
+  color: var(--pg-text);
+}
+
+/* =============== RESPONSIVE TWEAKS =============== */
+
+/* Very small devices (Hisense U50 Lite range & below) */
+@media (max-width: 380px) {
+  .pg-nav-inner {
+    padding: 0 .4rem;
+  }
+  .pg-brand span {
+    display: none; /* keep just the globe "Phakisi" icon to save space */
+  }
+  .pg-chip {
+    padding-inline: .6rem;
+  }
+  .pg-drawer-inner {
+    padding-inline: .7rem;
+  }
+}
+
+/* Tablets and small laptops */
+@media (min-width: 768px) {
+  :root {
+    --pg-nav-height: 56px;
+    --pg-drawer-width: 290px;
+  }
+  .pg-nav-inner {
+    padding-inline: 1rem;
+  }
+}
+
+/* Wide desktops */
+@media (min-width: 1100px) {
+  .pg-nav-inner {
+    max-width: 1200px;
+  }
+}
 </style>
 
-<!-- ⚙️ Script -->
 <script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  const toggle = document.getElementById("navToggle");
-  const links = document.getElementById("navLinks");
-  const overlay = document.getElementById("navOverlay");
-  const bars = toggle.querySelectorAll(".bar");
-  const drawerClose = document.getElementById("drawerClose");
+document.addEventListener('DOMContentLoaded', function () {
+  const toggle  = document.getElementById('pgNavToggle');
+  const drawer  = document.getElementById('pgNavDrawer');
+  const overlay = document.getElementById('pgNavOverlay');
 
-  const openMenu = () => {
-    links.classList.add("open");
-    overlay.classList.add("show");
-    toggle.classList.add("active");
-    bars.forEach((bar, i) => {
-      if (i === 0) bar.style.transform = "rotate(45deg) translateY(8px)";
-      else if (i === 1) bar.style.transform = "scale(0)";
-      else if (i === 2) bar.style.transform = "rotate(-45deg) translateY(-8px)";
-    });
+  if (!toggle || !drawer || !overlay) return;
+
+  const openDrawer = () => {
+    drawer.classList.add('pg-open');
+    overlay.classList.add('pg-show');
+    document.body.style.overflow = 'hidden';
+    drawer.setAttribute('aria-hidden', 'false');
   };
 
-  const closeMenu = () => {
-    links.classList.remove("open");
-    overlay.classList.remove("show");
-    toggle.classList.remove("active");
-    bars.forEach(bar => (bar.style.transform = "none"));
+  const closeDrawer = () => {
+    drawer.classList.remove('pg-open');
+    overlay.classList.remove('pg-show');
+    document.body.style.overflow = '';
+    drawer.setAttribute('aria-hidden', 'true');
   };
 
-  toggle.addEventListener("click", () => {
-    if (links.classList.contains("open")) closeMenu();
-    else openMenu();
+  toggle.addEventListener('click', () => {
+    if (drawer.classList.contains('pg-open')) {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
   });
-  overlay.addEventListener("click", closeMenu);
-  drawerClose.addEventListener("click", closeMenu);
+
+  overlay.addEventListener('click', closeDrawer);
+
+  // Close when clicking any link inside drawer
+  drawer.addEventListener('click', (ev) => {
+    const target = ev.target.closest('a');
+    if (target) closeDrawer();
+  });
+
+  // If user grows window a lot while open, keep behaviour sane
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 1024 && drawer.classList.contains('pg-open')) {
+      closeDrawer();
+    }
+  });
 });
 </script>

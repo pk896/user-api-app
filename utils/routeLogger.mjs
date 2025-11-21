@@ -74,5 +74,3 @@ export function logRoutes(app, attempt = 1) {
 
   console.log(chalk.gray("────────────────────────────────────────────\n"));
 }*/
-
-

@@ -1,16 +1,19 @@
 <!-- views/contact.ejs -->
-<h1 class="page-title">📞 Contact Phakisi Global</h1>
+<h1 class="page-title">📞 Contact Unicoporate.com</h1>
 
 <!-- ✅ Flash Messages -->
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success visible">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error visible">❌ <%= error %></div>
-<% } %>
+<% (success || []).forEach(msg => { %>
+  <div class="flash flash-success visible">✅ <%= msg %></div>
+<% }) %>
+<% (error || []).forEach(msg => { %>
+  <div class="flash flash-error visible">❌ <%= msg %></div>
+<% }) %>
 
-<!-- 📨 Contact Form -->
-<form action="/contact" method="POST" class="contact-form">
+<!-- 📨 Contact Form (mailer-only) -->
+<form action="/contact" method="POST" class="contact-form" novalidate>
+  <!-- honeypot anti-spam -->
+  <input type="text" name="hp_field" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;" aria-hidden="true" />
+
   <label for="name">Your Name</label>
   <input type="text" id="name" name="name" placeholder="Enter your name" required />
 
@@ -22,7 +25,7 @@
 
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">📤 Send Message</button>
-    <a href="/contact/all" class="btn btn-secondary">🗂️ Manage Messages</a>
+    <a href="/sales" class="btn btn-secondary">🏬 Back to Shop</a>
   </div>
 </form>
 
@@ -30,7 +33,7 @@
 <section class="contact-info">
   <h2>🌍 Get in Touch with Us</h2>
   <p>
-    Phakisi Global is always open for collaboration, partnership, and innovation.
+    Unicoporate.com is always open for collaboration, partnership, and innovation.
     Whether you're a customer, an investor, or a future partner — we’d love to hear from you.
   </p>
 
@@ -38,7 +41,7 @@
     <div class="info-card">
       <h3>📍 Headquarters</h3>
       <p>
-        <strong>Phakisi Global E-commerce</strong><br />
+        <strong>Unicoporate.com</strong><br />
         Johannesburg, South Africa<br />
         Serving Africa and the world 🌍
       </p>
@@ -47,7 +50,7 @@
     <div class="info-card">
       <h3>✉️ Official Contact</h3>
       <p>
-        Email: <a href="mailto:info@phakisiglobal.com">info@phakisiglobal.com</a><br />
+        Email: <a href="mailto:info@phakisiglobal.com">info@unicoporate.com.com</a><br />
         General Inquiries: <a href="mailto:support@phakisiglobal.com">support@phakisiglobal.com</a>
       </p>
     </div>
@@ -87,10 +90,10 @@
 
 <!-- 🌟 Footer -->
 <footer class="contact-footer">
-  <p>© <%= new Date().getFullYear() %> Phakisi Global. Together we rise — for humanity, business, and a better world.</p>
+  <p>© <%= new Date().getFullYear() %> Unicoporate.com. Together we rise — for humanity, business, and a better world.</p>
 </footer>
 
-<style>
+<style nonce="<%= nonce %>">
 /* 🌈 Title */
 .page-title {
   text-align: center;
@@ -275,6 +278,8 @@ input:focus, textarea:focus {
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
   const flashes = document.querySelectorAll(".flash.visible");
+
+  // Auto-dismiss existing flashes (your existing behavior)
   if (flashes.length > 0) {
     setTimeout(() => {
       flashes.forEach(flash => {
@@ -282,6 +287,25 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => flash.remove(), 600);
       });
     }, 6000);
+  }
+
+  // After successful send, show flash, then redirect to dashboard if provided
+  const params = new URLSearchParams(window.location.search);
+  const sent   = params.get("sent") === "1";
+  const next   = params.get("next");
+
+  // Only redirect if we have both: a success flash on screen AND a next path
+  const hasSuccess = !!document.querySelector(".flash-success.visible");
+
+  if (sent && next && hasSuccess) {
+    // Optional: add a tiny helper text so users know what's happening
+    const note = document.createElement("div");
+    note.className = "flash flash-success visible";
+    note.textContent = "Redirecting you to your dashboard…";
+    document.body.insertBefore(note, document.body.firstChild);
+
+    // Wait ~2.5s so users can read the flash, then go
+    setTimeout(() => { window.location.assign(next); }, 2500);
   }
 });
 </script>

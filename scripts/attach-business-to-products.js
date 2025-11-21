@@ -1,73 +1,73 @@
-// scripts/attach-business-to-products.js
 require("dotenv").config();
 const mongoose = require("mongoose");
+const { runMain } = require("./_runner");
+
 const Business = require("../models/Business");
-const Product = require("../models/Product");
+const Product  = require("../models/Product");
 
 async function main() {
-  try {
-    console.log("🔗 Connecting to MongoDB...");
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ Connected to MongoDB");
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!uri) throw new Error("❌ Missing MONGO_URI (.env)");
 
-    // 1. Find the business (use first one if no email passed)
-    const email = process.argv[2]; // you can run: node scripts/attach-business-to-products.js email@example.com
+  console.log("🔗 Connecting to MongoDB...");
+  await mongoose.connect(uri);
+  console.log("✅ Connected to MongoDB");
+
+  try {
+    // 1) Pick the business to attach
+    const email = process.argv[2]; // usage: node scripts/attach-business-to-products.js email@example.com
     let business;
 
     if (email) {
       business = await Business.findOne({ email });
       if (!business) {
-        console.log(`❌ No business found with email: ${email}`);
-        process.exit(1);
+        throw new Error(`❌ No business found with email: ${email}`);
       }
     } else {
       business = await Business.findOne();
       if (!business) {
-        console.log("❌ No business found in the database.");
-        process.exit(1);
+        throw new Error("❌ No business found in the database.");
       }
       console.log(`⚠️ No email provided. Using first business: ${business.email}`);
     }
 
     console.log(`✅ Using business: ${business.name} (${business.email})`);
 
-    // 2. Find products without business
+    // 2) Find products without a business
     const productsWithoutBusiness = await Product.find({
-      $or: [{ business: null }, { business: { $exists: false } }]
-    });
+      $or: [{ business: null }, { business: { $exists: false } }],
+    }).select("_id name");
 
     if (productsWithoutBusiness.length === 0) {
       console.log("⚠️ No products without a business found.");
     } else {
       console.log(`📦 Found ${productsWithoutBusiness.length} products without business.`);
       console.log("➡️ Products that will be updated:");
-      productsWithoutBusiness.forEach(p => {
+      for (const p of productsWithoutBusiness) {
         console.log(`   - ${p._id} | ${p.name}`);
-      });
+      }
 
-      // 3. Update them
+      // 3) Attach them
+      const ids = productsWithoutBusiness.map((p) => p._id);
       const result = await Product.updateMany(
-        { _id: { $in: productsWithoutBusiness.map(p => p._id) } },
+        { _id: { $in: ids } },
         { $set: { business: business._id } }
       );
 
-      console.log(`🎉 Migration finished. Updated ${result.modifiedCount} products.`);
+      console.log(`🎉 Migration finished. Updated ${result.modifiedCount ?? 0} products.`);
     }
 
-    // 4. Show ALL products linked to this business
-    const linkedProducts = await Product.find({ business: business._id });
+    // 4) Show ALL products linked to this business
+    const linkedProducts = await Product.find({ business: business._id }).select("_id name");
     console.log(`\n✅ All products currently linked to ${business.name}:`);
-    linkedProducts.forEach(p => {
+    for (const p of linkedProducts) {
       console.log(`   - ${p._id} | ${p.name}`);
-    });
+    }
     console.log(`📦 Total linked: ${linkedProducts.length}`);
-
-    process.exit(0);
-
-  } catch (err) {
-    console.error("❌ Error during migration:", err);
-    process.exit(1);
+  } finally {
+    await mongoose.disconnect();
+    console.log("🔌 Disconnected");
   }
 }
 
-main();
+runMain(main);

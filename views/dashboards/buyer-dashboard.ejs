@@ -1,298 +1,594 @@
 <!-- views/dashboards/buyer-dashboard.ejs -->
-<div class="pill in-transit">
-  🚚 In transit: <strong><%= (shipStats && shipStats.inTransit) || 0 %></strong>
-</div>
-<div class="pill delivered">
-  ✅ Delivered: <strong><%= (shipStats && shipStats.delivered) || 0 %></strong>
-</div>
+<section class="dashboard buyer">
+  <h1 class="page-title">
+    👋 Welcome, <%= (business && business.name) || 'Buyer' %>!
+    <span class="role-badge buyer">BUYER</span>
+  </h1>
+  <p class="subtitle">
+    Track your orders, shipments, and product matches in one place.
+  </p>
 
-<section class="dashboard-home">
-  <h1 class="page-title">🛒 Welcome, <%= business.name %>! (buyer D)</h1>
-  <p class="subtitle">Track your orders, demands, and new supplier matches.</p>
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
 
-  <% if (success && success.length > 0) { %>
-    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
-  <% } %>
-  <% if (error && error.length > 0) { %>
-    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
-  <% } %>
-
-  <!-- ============================
-       🔔 Matches Overview (NEW)
-       ============================ -->
-  <section class="buyer-stats-wrap">
-    <h2 class="section-title">🔔 Matches Overview</h2>
-
-    <!-- Stats -->
-    <div class="buyer-stats-grid" id="buyerStatsGrid">
-      <div class="bstat-card">
-        <div class="bstat-label">Total matches</div>
-        <div class="bstat-value" id="stTotal">—</div>
-      </div>
-      <div class="bstat-card">
-        <div class="bstat-label">Pending</div>
-        <div class="bstat-value" id="stPending">—</div>
-      </div>
-      <div class="bstat-card">
-        <div class="bstat-label">Accepted</div>
-        <div class="bstat-value" id="stAccepted">—</div>
-      </div>
-      <div class="bstat-card">
-        <div class="bstat-label">Rejected</div>
-        <div class="bstat-value" id="stRejected">—</div>
-      </div>
-      <div class="bstat-card new">
-        <div class="bstat-label">New since last visit</div>
-        <div class="bstat-value" id="stNew">0</div>
-      </div>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <span class="pill pill-mail">
+        📧 Mail
+        <span class="status-dot <%= mailerOk ? 'ok' : 'down' %>"></span>
+        <span class="status-text"><%= mailerOk ? 'OK' : 'Down' %></span>
+      </span>
+      <span class="muted small hide-sm">
+        Logged in as <strong><%= (business && business.email) || '-' %></strong>
+      </span>
     </div>
-
-    <!-- Per-demand chips -->
-    <h3 class="subhead">By demand</h3>
-    <div id="perDemand" class="demand-chip-list"></div>
-
-    <!-- Actions -->
-    <div class="buyer-stats-actions">
-      <form id="markSeenForm" method="POST" action="/matches/buyer/mark-seen">
-        <button class="btn btn-secondary" type="submit">Mark as seen</button>
+    <div class="toolbar-right">
+      <a class="btn xs light" href="/contact">📨 Contact</a>
+      <a class="btn xs light" href="/demands/mine">📋 Demands</a>
+      <form action="/business/logout" method="post" class="logout-form">
+        <button type="submit" class="btn xs danger">🚪 Logout</button>
       </form>
-      <a class="btn btn-primary" href="/matches/buyer">Open matched products</a>
-      <a class="btn btn-light" href="/buyer/demands">📋 My Demands</a>
-      <a class="btn btn-light" href="/buyer/demands/add">📝 Add Demand</a>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <h2>📦 Total Orders</h2>
+      <p class="kpi-num"><%= totalOrders || 0 %></p>
     </div>
 
-    <!-- Compact notifications list -->
-    <div class="buyer-notifs">
-      <div class="notif-head">
-        <h3>Recent Matches</h3>
-        <span id="notifBadge" class="badge">0</span>
+    <div class="kpi-card">
+      <h2>✅ Completed</h2>
+      <p class="kpi-num"><%= completedOrders || 0 %></p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>⏳ Pending</h2>
+      <p class="kpi-num"><%= pendingOrders || 0 %></p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>🚚 In Transit</h2>
+      <p class="kpi-num"><%= (shipStats && shipStats.inTransit) || 0 %></p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>📬 Delivered</h2>
+      <p class="kpi-num"><%= (shipStats && shipStats.delivered) || 0 %></p>
+    </div>
+  </section>
+
+  <!-- Quick Actions -->
+  <div class="actions-row">
+    <a class="btn primary" href="/demands/add">📝 Add Demand</a>
+    <a class="btn light" href="/matches/buyer">🔔 View Matches</a>
+    <a class="btn light" href="/shipments/track">🚚 Track Shipment</a>
+  </div>
+
+  <!-- Two Column Layout -->
+  <section class="layout-grid">
+    <!-- Recent Orders -->
+    <div class="block">
+      <div class="block-head">
+        <h3>🧾 Recent Orders</h3>
+        <span class="chip chip-soft">latest 5</span>
       </div>
-      <div id="notifList" class="notif-list">Loading…</div>
+
+      <div class="table-wrap small">
+        <table class="nice-table compact">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Status</th>
+              <th class="right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (orders && orders.length) { %>
+              <% orders.forEach(o => { %>
+                <tr>
+                  <td class="truncate">
+                    <a href="/orders/<%= o.orderId || o._id %>" class="order-link">
+                      <%= (o.orderId || o._id).toString().substring(0, 12) %>...
+                    </a>
+                  </td>
+                  <td>
+                    <span class="status-pill status-<%= (o.status || 'Unknown').toLowerCase().replace(/\s+/g,'-') %>">
+                      <%= o.status || 'Unknown' %>
+                    </span>
+                  </td>
+                  <td class="right">
+                    R <%= Number(o.amount && o.amount.value || 0).toFixed(2) %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="3" class="muted center">
+                  No orders yet.
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Purchased Products -->
+    <div class="block">
+      <div class="block-head">
+        <h3>🛍️ Purchased Products</h3>
+        <span class="chip chip-soft orange">your items</span>
+      </div>
+
+      <div class="products-list">
+        <% if (orderedProducts && orderedProducts.length) { %>
+          <% orderedProducts.slice(0, 6).forEach(p => { %>
+            <div class="product-item">
+              <% if (p.imageUrl) { %>
+                <img src="<%= p.imageUrl %>" alt="" class="thumb">
+              <% } %>
+              <div class="product-info">
+                <div class="product-name"><%= p.name %></div>
+                <div class="product-meta">
+                  <span class="price">R <%= Number(p.price || 0).toFixed(2) %></span>
+                  <% if (p.category) { %>
+                    <span class="category"><%= p.category %></span>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        <% } else { %>
+          <p class="muted small center">
+            No purchased products yet.
+          </p>
+        <% } %>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Quick Stats -->
+      <div class="mini-kpis">
+        <div class="mini-card">
+          <div class="mini-title">Total Orders</div>
+          <div class="mini-num"><%= totalOrders || 0 %></div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-title">Completed</div>
+          <div class="mini-num"><%= completedOrders || 0 %></div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <!-- ============================
-       📊 Order Stats (existing)
-       ============================ -->
-  <section class="stats-grid">
-    <div class="stat-card"><h2>💼 Total Orders</h2><p class="stat-number"><%= totalOrders || 0 %></p></div>
-    <div class="stat-card"><h2>✅ Completed</h2><p class="stat-number"><%= completedOrders || 0 %></p></div>
-    <div class="stat-card"><h2>⏳ Pending</h2><p class="stat-number"><%= pendingOrders || 0 %></p></div>
-    <a href="/shipments/track" class="btn btn-primary">🚚 Track Shipment</a>
-    <a href="/buyer/demands/add" class="btn btn-secondary">📝 Add Demand</a>
-    <a href="/buyer/demands" class="btn btn-secondary">📋 My Demands</a>
-  </section>
+  <!-- Matches Overview -->
+  <section class="block">
+    <div class="block-head">
+      <h3>🔔 Matches Overview</h3>
+      <div class="block-actions">
+        <a href="/matches/buyer" class="btn xs primary">View All</a>
+        <a href="/demands/add" class="btn xs light">Add Demand</a>
+      </div>
+    </div>
 
-  <!-- ============================
-       🧾 Products you ordered
-       ============================ -->
-  <section class="recent-section">
-    <h2>🧾 Products You Purchased</h2>
-    <% if (orderedProducts && orderedProducts.length) { %>
-      <ul class="order-list">
-        <% orderedProducts.forEach(p => { %>
-          <li>
-            <% if (p.imageUrl) { %><img class="thumb" src="<%= p.imageUrl %>" alt=""><% } %>
-            <strong><a href="/products/view/<%= p.customId %>"><%= p.name %></a></strong>
-            — $<%= Number(p.price || 0).toFixed(2) %>
-            <% if (p.category) { %> | <span class="muted">Category: <%= p.category %></span> <% } %>
-          </li>
-        <% }) %>
-      </ul>
-    <% } else { %>
-      <p>No purchased products yet.</p>
-    <% } %>
-  </section>
-
-  <!-- ============================
-       🧾 Recent Orders
-       ============================ -->
-  <section class="recent-section">
-    <h2>🧾 Your Recent Orders</h2>
-    <% if (orders && orders.length > 0) { %>
-      <ul class="order-list">
-        <% orders.forEach(o => { %>
-          <li>
-            <strong>Order ID:</strong> <%= o.orderId || o._id %> |
-            <strong>Status:</strong> <%= o.status || 'N/A' %> |
-            <strong>Total:</strong> <%= o.amount && o.amount.value ? ('$' + o.amount.value) : '—' %>
-          </li>
-        <% }) %>
-      </ul>
-    <% } else { %>
-      <p>You haven’t placed any orders yet.</p>
-    <% } %>
+    <div class="matches-placeholder">
+      <p class="muted small">
+        Product matching features will appear here when you create demands.
+      </p>
+      <div class="actions-row">
+        <a class="btn light" href="/demands/add">📝 Create Your First Demand</a>
+      </div>
+    </div>
   </section>
 </section>
 
-<!-- ============================
-     Scripts
-     ============================ -->
-<script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  // Animate existing order stats
-  document.querySelectorAll(".stat-number").forEach(n => {
-    const target = +n.textContent || 0;
-    let c = 0, step = Math.ceil(Math.max(1, target/40));
-    const id = setInterval(()=>{ c+=step; if(c>=target){c=target; clearInterval(id);} n.textContent=c; }, 25);
-  });
-
-  // Flash close
-  const flash = document.getElementById("flashMessage");
-  if (flash) {
-    setTimeout(()=>{ flash.classList.add("fade-out"); setTimeout(()=>flash.remove(),600); }, 5000);
-    flash.addEventListener("click", ()=>{ flash.classList.add("fade-out"); setTimeout(()=>flash.remove(),600); });
+<style nonce="<%= nonce %>">
+  .dashboard.buyer {
+    padding: 1rem;
+    max-width: 1100px;
+    margin: 0 auto 2rem;
   }
-});
-
-// --- Matches widgets (fetch summary) ---
-(async function(){
-  async function fetchJSON(url, opts){ const r = await fetch(url, opts); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
-
-  try {
-    const data = await fetchJSON('/matches/buyer/summary');
-    if (!data.ok) throw new Error('Failed');
-
-    const c = data.counters || {};
-    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v ?? 0); };
-    setText('stTotal', c.total);
-    setText('stPending', c.pending);
-    setText('stAccepted', c.accepted);
-    setText('stRejected', c.rejected);
-    setText('stNew', c.newSince);
-
-    // Per-demand chips
-    const wrap = document.getElementById('perDemand');
-    if (wrap) {
-      wrap.innerHTML = '';
-      (data.perDemand || []).forEach(item => {
-        const a = document.createElement('a');
-        a.className = 'demand-chip';
-        a.href = '/matches/buyer?demand=' + item.demandId;
-        a.innerHTML = `
-          <span class="title">${item.title}</span>
-          <span class="counts">T:${item.total} • P:${item.pending || 0} • A:${item.accepted || 0} • R:${item.rejected || 0}</span>
-        `;
-        wrap.appendChild(a);
-      });
-    }
-
-    // Notifications list (top 6)
-    const badge = document.getElementById('notifBadge');
-    if (badge) badge.textContent = c.newSince ?? 0;
-
-    const box = document.getElementById('notifList');
-    if (box) {
-      box.innerHTML = '';
-      (data.perDemand || []).slice(0, 6).forEach(x => {
-        const item = document.createElement('a');
-        item.className = 'notif-item';
-        item.href = '/matches/buyer?demand=' + x.demandId;
-        item.innerHTML = `<span class="title">${x.title}</span><span class="meta">T:${x.total} • P:${x.pending||0} • A:${x.accepted||0}</span>`;
-        box.appendChild(item);
-      });
-      if (!box.children.length) box.textContent = 'No matches yet.';
-    }
-
-    // Mark as seen
-    const form = document.getElementById('markSeenForm');
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        try {
-          await fetchJSON('/matches/buyer/mark-seen', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
-          setText('stNew', 0);
-          const badge = document.getElementById('notifBadge'); if (badge) badge.textContent = '0';
-        } catch(_) {}
-      });
-    }
-  } catch (err) {
-    console.error('buyer-stats load failed', err);
+  .page-title {
+    margin-top: .4rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    justify-content: center;
   }
-})();
-</script>
-
-<!-- ============================
-     Styles (mobile-first; tuned for U50 Lite)
-     ============================ -->
-<style>
-  /* Pills */
-  .pill { display:inline-block; margin:.25rem .5rem; padding:.35rem .6rem; border-radius:999px; font-weight:700; }
-  .pill.in-transit { background:#eef2ff; color:#3730a3; }
-  .pill.delivered  { background:#dcfce7; color:#166534; }
-  .thumb { width:40px; height:40px; object-fit:cover; border-radius:.4rem; margin-right:.35rem; vertical-align:middle; }
-  .btn.btn-secondary { background:#f3f4f6; color:#111; margin-left:.5rem; }
-  .btn.btn-secondary:hover { background:#e5e7eb; }
-
-  /* Section titles */
-  .section-title { font-size:1.05rem; margin:.4rem 0 .3rem; }
-
-  /* ===== Matches Overview ===== */
-  .buyer-stats-wrap { margin:.6rem 0 1rem; padding:.6rem; border:1px solid var(--border, #e5e7eb); border-radius:.8rem; background:var(--card-bg, #fff); }
-  .buyer-stats-grid {
-    display:grid; gap:.5rem;
-    grid-template-columns: repeat(2, minmax(0,1fr)); /* phones first */
+  .subtitle {
+    text-align: center;
+    margin: .2rem 0 1rem;
+    color: #6b7280;
   }
-  .bstat-card { padding:.6rem; border:1px solid var(--border,#e5e7eb); border-radius:.6rem; background:var(--card-bg,#fff); }
-  .bstat-card.new { border-style:dashed; }
-  .bstat-label { font-size:.85rem; color:#6b7280; }
-  .bstat-value { font-size:1.25rem; font-weight:800; letter-spacing:.2px; }
+  .dark-theme .subtitle { color: #cbd5e1; }
 
-  /* Chips */
-  .demand-chip-list { display:flex; flex-wrap:wrap; gap:.4rem; margin:.5rem 0 .4rem; }
-  .demand-chip {
-    display:inline-flex; align-items:center; gap:.45rem;
-    padding:.35rem .55rem; border:1px solid var(--border,#e5e7eb);
-    border-radius:999px; text-decoration:none; background:var(--card-bg,#fff); color:inherit;
-  }
-  .demand-chip .title { font-weight:600; }
-  .demand-chip .counts { color:#6b7280; font-size:.85rem; }
-
-  /* Actions */
-  .buyer-stats-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.4rem; }
-  .btn { padding:.55rem .8rem; border-radius:.55rem; border:0; cursor:pointer; display:inline-block; text-decoration:none; }
-  .btn-primary { background:#2563eb; color:#fff; }
-  .btn-secondary { background:#f3f4f6; color:#111; }
-  .btn-light { background:#ffffff; color:#111; border:1px solid var(--border,#e5e7eb); }
-
-  /* Notifications */
-  .buyer-notifs { margin-top:.6rem; }
-  .buyer-notifs .notif-head { display:flex; align-items:center; gap:.5rem; }
-  .buyer-notifs .badge { background:#ef4444; color:#fff; border-radius:999px; padding:.1rem .5rem; font-weight:700; min-width:20px; text-align:center; }
-  .notif-list { display:flex; flex-direction:column; gap:.4rem; margin-top:.4rem; }
-  .notif-item {
-    display:flex; justify-content:space-between; gap:.6rem;
-    padding:.5rem .6rem; border:1px solid var(--border,#e5e7eb); border-radius:.6rem;
-    text-decoration:none; color:inherit; background:var(--card-bg,#fff);
-  }
-  .notif-item .title { font-weight:600; }
-  .notif-item .meta { color:#6b7280; font-size:.9rem; }
-
-  /* ===== Existing sections (minimal tweaks) ===== */
-  .stats-grid { display:grid; gap:.6rem; grid-template-columns:repeat(2, minmax(0,1fr)); margin-top:.6rem; align-items:start; }
-  .stats-grid .stat-card { padding:.7rem; border:1px solid var(--border,#e5e7eb); border-radius:.7rem; background:var(--card-bg,#fff); }
-  .stats-grid .btn { text-align:center; }
-
-  .recent-section { margin-top:1rem; }
-  .recent-section h2 { font-size:1.05rem; margin-bottom:.4rem; }
-  .order-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:.4rem; }
-  .order-list li { padding:.55rem .6rem; border:1px solid var(--border,#e5e7eb); border-radius:.6rem; background:var(--card-bg,#fff); }
-  .order-list .muted { color:#6b7280; }
-
-  /* ===== Responsive breakpoints (optimize for small phones like Hisense U50 Lite) ===== */
-  @media (min-width: 540px){
-    .buyer-stats-grid { grid-template-columns: repeat(3, 1fr); }
-    .stats-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
-  }
-  @media (min-width: 900px){
-    .buyer-stats-grid { grid-template-columns: repeat(5, 1fr); }
-    .stats-grid { grid-template-columns: repeat(6, minmax(0,1fr)); }
+  .role-badge.buyer {
+    padding: .2rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
   }
 
-  /* Ultra-small phones: compress paddings/fonts slightly */
-  @media (max-width: 360px){
-    .btn{ padding:.5rem .7rem; font-size:.95rem; }
-    .bstat-value{ font-size:1.15rem; }
-    .notif-item .meta{ font-size:.85rem; }
+  .flash {
+    padding: .6rem .9rem;
+    border-radius: .6rem;
+    margin: .4rem auto;
+    max-width: 700px;
+    font-weight: 600;
+  }
+  .flash-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+  }
+  .flash-error {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .7rem;
+    margin: .4rem 0 1rem;
+    flex-wrap: wrap;
+  }
+  .toolbar-left, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+  }
+  .status-dot {
+    width: .45rem;
+    height: .45rem;
+    border-radius: 999px;
+  }
+  .status-dot.ok { background: #22c55e; }
+  .status-dot.down { background: #ef4444; }
+  .status-text { font-weight: 700; font-size: .78rem; }
+  .muted { color: #6b7280; }
+  .muted.small { font-size: .82rem; }
+  .dark-theme .muted { color: #9ca3af; }
+
+  .logout-form { margin: 0; }
+
+  /* KPIs */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .8rem;
+    margin: .8rem 0 1rem;
+  }
+  .kpi-card {
+    background: #ffffff;
+    border-radius: .75rem;
+    padding: .8rem;
+    border: 1px solid rgba(148, 163, 184, .25);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    text-align: center;
+  }
+  .dark-theme .kpi-card {
+    background: #020617;
+    border-color: #1f2937;
+  }
+  .kpi-card h2 {
+    font-size: .9rem;
+    margin-bottom: .25rem;
+    color: #0f172a;
+  }
+  .dark-theme .kpi-card h2 { color: #e5e7eb; }
+  .kpi-num {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #2563eb;
+  }
+
+  .actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-bottom: 1rem;
+    justify-content: center;
+  }
+
+  /* Blocks & layout */
+  .layout-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+  @media (max-width: 800px) {
+    .layout-grid { grid-template-columns: minmax(0,1fr); }
+    .toolbar { flex-direction: column; align-items: flex-start; }
+    .hide-sm { display: none; }
+  }
+
+  .block {
+    background: #ffffff;
+    border-radius: .9rem;
+    padding: .9rem;
+    border: 1px solid rgba(148, 163, 184, .2);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    margin-bottom: 1rem;
+  }
+  .dark-theme .block {
+    background: #020617;
+    border-color: #1f2937;
+  }
+  .block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    margin-bottom: .5rem;
+  }
+  .block-head h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+  }
+  .block-actions {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+  }
+  .divider {
+    border: none;
+    border-top: 1px dashed rgba(148, 163, 184, .5);
+    margin: .7rem 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: .75rem;
+    border: 1px solid rgba(148, 163, 184, .3);
+    background: #ffffff;
+  }
+  .table-wrap.small { border-radius: .7rem; }
+  .dark-theme .table-wrap {
+    background: #020617;
+    border-color: #1f2937;
+  }
+
+  .nice-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .9rem;
+  }
+  .nice-table thead th {
+    padding: .55rem .6rem;
+    background: #f8fafc;
+    text-align: left;
+    border-bottom: 1px solid rgba(148, 163, 184, .3);
+    white-space: nowrap;
+  }
+  .dark-theme .nice-table thead th {
+    background: #020617;
+    border-bottom-color: #1f2937;
+  }
+  .nice-table td {
+    padding: .5rem .6rem;
+    border-bottom: 1px solid rgba(148, 163, 184, .2);
+  }
+  .nice-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .center { text-align: center; }
+  .right { text-align: right; }
+
+  .truncate {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .order-link {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .order-link:hover {
+    text-decoration: underline;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: .16rem .45rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 600;
+    background: #e5e7eb;
+    color: #111827;
+  }
+  .status-completed, 
+  .status-delivered { background: #dcfce7; color: #166534; }
+  .status-pending, 
+  .status-processing { background: #fef9c3; color: #92400e; }
+  .status-shipped,
+  .status-in-transit { background: #dbeafe; color: #1e40af; }
+  .status-cancelled,
+  .status-refunded { background: #fee2e2; color: #b91c1c; }
+
+  /* Products List */
+  .products-list {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+  }
+  .product-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem;
+    border-radius: .6rem;
+    background: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, .2);
+  }
+  .dark-theme .product-item {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  .thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: .4rem;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .product-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .product-name {
+    font-weight: 600;
+    font-size: .9rem;
+    margin-bottom: .1rem;
+  }
+  .product-meta {
+    display: flex;
+    gap: .6rem;
+    font-size: .8rem;
+  }
+  .price {
+    font-weight: 700;
+    color: #16a34a;
+  }
+  .category {
+    color: #6b7280;
+  }
+
+  .mini-kpis {
+    display: flex;
+    gap: .6rem;
+    flex-wrap: wrap;
+  }
+  .mini-card {
+    flex: 1;
+    min-width: 100px;
+    padding: .55rem .7rem;
+    border-radius: .7rem;
+    background: #f1f5f9;
+    border: 1px solid rgba(148, 163, 184, .4);
+    text-align: center;
+  }
+  .dark-theme .mini-card {
+    background: #020617;
+    border-color: #1f2937;
+  }
+  .mini-title {
+    font-size: .8rem;
+    color: #64748b;
+  }
+  .mini-num {
+    margin-top: .1rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .6rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    border: 1px solid rgba(148, 163, 184, .4);
+    background: #f9fafb;
+    color: #111827;
+  }
+  .chip-soft {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #bae6fd;
+  }
+  .chip-soft.orange {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fde68a;
+  }
+
+  .matches-placeholder {
+    text-align: center;
+    padding: 1rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    padding: .45rem .9rem;
+    border-radius: .7rem;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #111827;
+    font-weight: 700;
+    font-size: .86rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.primary {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #fff;
+  }
+  .btn.light {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+  }
+  .btn.danger {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #b91c1c;
+  }
+  .btn.xs {
+    padding: .34rem .6rem;
+    font-size: .8rem;
   }
 </style>
+
+<script nonce="<%= nonce %>">
+// Simple auto-refresh for orders count (optional)
+(async function setupBuyerAutoRefresh() {
+  async function refreshStats() {
+    try {
+      // You can add API endpoints later for live updates
+      console.log('🔄 Buyer stats refresh placeholder');
+    } catch (_) {
+      // Silent fail
+    }
+  }
+
+  // Refresh every 30 seconds
+  setInterval(refreshStats, 30000);
+})();
+</script>

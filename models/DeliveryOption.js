@@ -22,13 +22,13 @@ const deliveryOptionSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 2000,
-      default: "",
+      default: '',
     },
     region: {
       type: String,
       trim: true,
       maxlength: 120,
-      default: "",
+      default: '',
     },
 
     // e.g., 0 = same day, 1 = next day...
@@ -54,17 +54,15 @@ const deliveryOptionSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 /* -------- Virtuals (optional convenience) -------- */
 // price (float) <-> priceCents (int)
 deliveryOptionSchema
-  .virtual("price")
+  .virtual('price')
   .get(function () {
-    return typeof this.priceCents === "number"
-      ? Number((this.priceCents / 100).toFixed(2))
-      : 0;
+    return typeof this.priceCents === 'number' ? Number((this.priceCents / 100).toFixed(2)) : 0;
   })
   .set(function (val) {
     const n = Number(val);
@@ -75,22 +73,11 @@ deliveryOptionSchema
 deliveryOptionSchema.index({ active: 1, name: 1 });
 
 /* -------- Clean JSON/object output -------- */
-deliveryOptionSchema.set("toJSON", { virtuals: true });
-deliveryOptionSchema.set("toObject", { virtuals: true });
+deliveryOptionSchema.set('toJSON', { virtuals: true });
+deliveryOptionSchema.set('toObject', { virtuals: true });
 
 module.exports =
-  mongoose.models.DeliveryOption ||
-  mongoose.model("DeliveryOption", deliveryOptionSchema);
-
-
-
-
-
-
-
-
-
-
+  mongoose.models.DeliveryOption || mongoose.model('DeliveryOption', deliveryOptionSchema);
 
 /*const { mongoose } = require('../db');
 

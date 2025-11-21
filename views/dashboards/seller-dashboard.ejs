@@ -1,231 +1,745 @@
 <!-- views/dashboards/seller-dashboard.ejs -->
-<section class="dashboard-home">
+<section class="dashboard seller">
   <h1 class="page-title">
-    👋 Welcome, <%= business.name %>! (seller D)
-    <span class="role-badge <%= business.role %>">
-      <%= (business.role || 'unknown').toUpperCase() %>
-    </span>
+    👋 Welcome, <%= (business && business.name) || 'Seller' %>!
+    <span class="role-badge seller">SELLER</span>
   </h1>
   <p class="subtitle">
-    Manage your inventory, orders, and shipping — all in one place.
-    <% if (business.role !== 'seller') { %>
-      <span class="warn">Note: your role is <strong><%= business.role %></strong>, not seller.</span>
-    <% } %>
+    Track your products, sales and shipping performance — all in one compact view.
   </p>
 
-  <% if (success && success.length > 0) { %>
-    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
-  <% } %>
-  <% if (error && error.length > 0) { %>
-    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
-  <% } %>
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
 
-  <!-- 📊 Top Stats -->
-  <section class="stats-grid">
-    <div class="stat-card">
+  <%
+    // ---- Helpers & safe fallbacks ----
+    function fmtDate(d) {
+      try {
+        if (!d) return '';
+        const dd = (d instanceof Date) ? d : new Date(d);
+        return dd.toLocaleString('en-ZA', {
+          timeZone: 'Africa/Johannesburg',
+          dateStyle: 'medium',
+          timeStyle: 'short'
+        });
+      } catch { return String(d); }
+    }
+
+    const computedInStock =
+      Array.isArray(products)
+        ? products.filter(p => Number(p && p.stock || 0) > 0).length
+        : 0;
+
+    const sellerTotals = totals || {};
+    const sellerKpis = kpis || {};
+
+    const perProduct = (sellerKpis && Array.isArray(sellerKpis.perProduct))
+      ? sellerKpis.perProduct
+      : [];
+
+    // Best-selling categories from per-product stats
+    const categoryStats = {};
+    perProduct.forEach(p => {
+      const cat = p.category || 'Uncategorised';
+      if (!categoryStats[cat]) {
+        categoryStats[cat] = { qty: 0, revenue: 0 };
+      }
+      categoryStats[cat].qty += Number(p.qty || 0);
+      categoryStats[cat].revenue += Number(p.estRevenue || 0);
+    });
+    const categoryEntries = Object.entries(categoryStats)
+      .sort((a, b) => b[1].qty - a[1].qty);
+
+    const recentProducts = Array.isArray(products) ? products.slice(0, 5) : [];
+    const recentOrders = (orders && Array.isArray(orders.recent))
+      ? orders.recent
+      : [];
+  %>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <span class="pill pill-mail">
+        📧 Mail
+        <span class="status-dot ok"></span>
+        <span class="status-text">OK</span>
+      </span>
+      <span class="muted small hide-sm">
+        Logged in as <strong><%= (business && business.email) || '-' %></strong>
+      </span>
+    </div>
+    <div class="toolbar-right">
+      <a class="btn xs light" href="/contact">📨 Contact Support</a>
+      <a class="btn xs light" href="/products/all">📋 All Products</a>
+      <form action="/business/logout" method="post" class="logout-form">
+        <button type="submit" class="btn xs danger">🚪 Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <section class="kpi-grid">
+    <div class="kpi-card">
       <h2>🛍️ Total Products</h2>
-      <p class="stat-number"><%= totals.totalProducts || 0 %></p>
-    </div>
-
-    <div class="stat-card">
-      <h2>📦 Total Stock</h2>
-      <p class="stat-number"><%= totals.totalStock || 0 %></p>
-    </div>
-
-    <div class="stat-card">
-      <h2>⚠️ Low Stock (≤5)</h2>
-      <p class="stat-number"><%= totals.lowStock || 0 %></p>
-    </div>
-
-    <div class="stat-card">
-      <h2>❌ Out of Stock</h2>
-      <p class="stat-number"><%= totals.outOfStock || 0 %></p>
-    </div>
-
-    <div class="stat-card">
-      <h2>🧾 Orders</h2>
-      <p class="stat-number"><%= orders.total || 0 %></p>
-      <p class="muted">
-        <small>
-          <% Object.keys(orders.byStatus || {}).forEach(s => { %>
-            <span class="chip"><%= s %>: <%= orders.byStatus[s] %></span>
-          <% }) %>
-        </small>
+      <p class="kpi-num" data-kpi="totalProducts">
+        <%= sellerTotals.totalProducts || 0 %>
       </p>
     </div>
 
-    <div class="stat-card">
-      <h2>🚚 Shipments</h2>
-      <p class="stat-number"><%= shipments.total || 0 %></p>
-      <p class="muted">
-        <small>
-          <% ['Pending','Processing','In Transit','Delivered','Canceled','Cancelled'].forEach(s => { %>
-            <span class="chip"><%= s %>: <%= (shipments.byStatus && shipments.byStatus[s]) || 0 %></span>
-          <% }) %>
-        </small>
+    <div class="kpi-card">
+      <h2>📦 Total Stock</h2>
+      <p class="kpi-num" data-kpi="totalStock">
+        <%= sellerTotals.totalStock || 0 %>
+      </p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>✅ In Stock</h2>
+      <p class="kpi-num" data-kpi="inStock">
+        <%= (sellerTotals.inStock != null ? sellerTotals.inStock : computedInStock) %>
+      </p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>⚠️ Low Stock (≤10)</h2>
+      <p class="kpi-num warn" data-kpi="lowStock">
+        <%= sellerTotals.lowStock || 0 %>
+      </p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>❌ Out of Stock</h2>
+      <p class="kpi-num danger" data-kpi="outOfStock">
+        <%= sellerTotals.outOfStock || 0 %>
+      </p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>🧾 Sold (30d)</h2>
+      <p class="kpi-num" data-kpi="soldLast30">
+        <%= sellerKpis.soldLast30 || sellerKpis.last30Items || 0 %>
+      </p>
+    </div>
+
+    <div class="kpi-card">
+      <h2>💰 Revenue (30d)</h2>
+      <p class="kpi-num revenue" data-kpi="revenueLast30">
+        R <%= Number(sellerKpis.revenueLast30 || sellerKpis.last30Revenue || 0).toFixed(2) %>
       </p>
     </div>
   </section>
 
-  <!-- 🧾 Per-product stock (with totals) -->
-  <section class="recent-section">
-    <h2>🧾 Your Products & Stock</h2>
-    <% if (products && products.length) { %>
+  <!-- Quick actions -->
+  <div class="actions-row">
+    <a class="btn primary" href="/products/add">➕ Add Product</a>
+    <a class="btn light" href="/orders">📚 My Orders</a>
+    <a class="btn light" href="/shipments">🚚 Shipments</a>
+  </div>
+
+  <!-- Top products (30d) + best-selling categories -->
+  <section class="layout-grid">
+    <div class="block">
+      <div class="block-head">
+        <h3>📈 Top Products (30 days)</h3>
+        <span class="chip chip-soft">sales snapshot</span>
+      </div>
+
+      <div class="mini-kpis">
+        <div class="mini-card">
+          <div class="mini-title">🧮 Total Qty Sold</div>
+          <div class="mini-num" data-kpi="soldLast30">
+            <%= sellerKpis.soldLast30 || sellerKpis.last30Items || 0 %>
+          </div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-title">💸 Est. Revenue</div>
+          <div class="mini-num" data-kpi="revenueLast30">
+            R <%= Number(sellerKpis.revenueLast30 || sellerKpis.last30Revenue || 0).toFixed(2) %>
+          </div>
+        </div>
+      </div>
+
+
       <div class="table-wrap">
-        <table class="nice-table">
+        <table class="nice-table compact">
           <thead>
             <tr>
               <th>Product</th>
-              <th>Price</th>
-              <th>Stock</th>
-              <th>Sold (Units)</th>
-              <th>Orders</th>
-              <th>Actions</th>
+              <th class="right">Qty</th>
+              <th class="right">Est. Revenue (R)</th>
             </tr>
           </thead>
           <tbody>
-          <% products.forEach(p => { %>
-            <tr>
-              <td class="pname">
-                <% if (p.imageUrl) { %><img class="thumb" src="<%= p.imageUrl %>" alt=""><% } %>
-                <div>
-                  <strong><%= p.name %></strong>
-                  <div class="muted">ID: <%= p.customId %></div>
-                  <% if (p.category) { %><div class="muted">Category: <%= p.category %></div><% } %>
-                </div>
-              </td>
-              <td>$<%= Number(p.price || 0).toFixed(2) %></td>
-              <td>
-                <% const s = Number(p.stock || 0); %>
-                <span class="stock-badge <%= s<=0 ? 'empty' : (s<=5 ? 'low' : 'ok') %>">
-                  <%= s %>
-                </span>
-              </td>
-              <td><%= Number(p.soldCount || 0) %></td>
-              <td><%= Number(p.soldOrders || 0) %></td>
-              <td class="row-actions">
-                <a class="btn small" href="/products/edit/<%= p.customId %>">✏️ Edit</a>
-                <a class="btn small" href="/shipments/by-product/<%= p._id %>">🚚 Shipments</a>
-                <a class="btn small" href="/products/delete/<%= p.customId %>" onclick="return confirm('Delete this product?')">🗑️ Delete</a>
-              </td>
-            </tr>
-          <% }) %>
+            <% if (perProduct.length) { %>
+              <% perProduct.forEach(p => { %>
+                <tr>
+                  <td class="cell-product">
+                    <% if (p.imageUrl) { %>
+                      <img src="<%= p.imageUrl %>" alt="" class="thumb">
+                    <% } %>
+                    <div class="prod-meta">
+                      <div class="name"><%= p.name %></div>
+                      <% if (p.category) { %>
+                        <div class="cat"><%= p.category %></div>
+                      <% } %>
+                    </div>
+                  </td>
+                  <td class="right"><%= p.qty %></td>
+                  <td class="right"><%= Number(p.estRevenue || 0).toFixed(2) %></td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="3" class="muted center">
+                  No sales recorded in the last 30 days yet.
+                </td>
+              </tr>
+            <% } %>
           </tbody>
-          <tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <h3>🏷️ Best-selling Categories</h3>
+        <span class="chip chip-soft orange">last 30 days</span>
+      </div>
+
+      <div class="chips-list">
+        <% if (categoryEntries.length) { %>
+          <% categoryEntries.forEach(([cat, stats]) => { %>
+            <span class="chip pill-cat">
+              <strong><%= cat %></strong>
+              • <%= stats.qty %> sold
+              • R <%= Number(stats.revenue || 0).toFixed(2) %>
+            </span>
+          <% }) %>
+        <% } else { %>
+          <p class="muted small">
+            Once you start selling, your best categories will appear here.
+          </p>
+        <% } %>
+      </div>
+
+      <hr class="divider">
+
+      <div class="block-head small-head">
+        <h3>🧾 Recent Orders</h3>
+        <span class="tag">
+          Total: <strong><%= (orders && orders.total) || 0 %></strong>
+        </span>
+      </div>
+
+      <div class="table-wrap small">
+        <table class="nice-table compact">
+          <thead>
             <tr>
-              <th colspan="2" class="right">Totals:</th>
-              <th><%= totals.totalStock || 0 %></th>
-              <th><%= products.reduce((a,p)=>a+(Number(p.soldCount||0)),0) %></th>
-              <th><%= products.reduce((a,p)=>a+(Number(p.soldOrders||0)),0) %></th>
-              <th></th>
+              <th>Order ID</th>
+              <th class="right">Amount (R)</th>
+              <th>Status</th>
+              <th class="right">Created</th>
             </tr>
-          </tfoot>
+          </thead>
+          <tbody>
+            <% if (recentOrders.length) { %>
+              <% recentOrders.forEach(o => { %>
+                <tr>
+                  <td><%= o.orderId || o._id %></td>
+                  <td class="right">
+                    <%= Number(o.amount && o.amount.value || 0).toFixed(2) %>
+                  </td>
+                  <td>
+                    <span class="status-pill status-<%= (o.status || 'Unknown').toLowerCase().replace(/\s+/g,'-') %>">
+                      <%= o.status || 'Unknown' %>
+                    </span>
+                  </td>
+                  <td class="right"><%= fmtDate(o.createdAt) %></td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="4" class="muted center">
+                  No recent orders yet.
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent products list -->
+  <section class="block">
+    <div class="block-head">
+      <h3>🧾 Recent Products</h3>
+      <div class="block-actions">
+        <a href="/products/add" class="btn xs primary">➕ Add</a>
+        <a href="/products/all" class="btn xs light">📋 View All</a>
+      </div>
+    </div>
+
+    <% if (recentProducts.length) { %>
+      <div class="table-wrap small">
+        <table class="nice-table compact">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th class="right">Price (R)</th>
+              <th class="right">Stock</th>
+              <th>Category</th>
+              <th class="right">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% recentProducts.forEach(p => { const s = Number(p.stock || 0); %>
+              <tr>
+                <td class="cell-product">
+                  <% if (p.imageUrl) { %>
+                    <img src="<%= p.imageUrl %>" alt="" class="thumb">
+                  <% } %>
+                  <div class="prod-meta">
+                    <div class="name"><%= p.name %></div>
+                    <div class="cat small-muted">ID: <%= p.customId %></div>
+                  </div>
+                </td>
+                <td class="right">R <%= Number(p.price || 0).toFixed(2) %></td>
+                <td class="right">
+                  <span class="stock-badge <%= s<=0 ? 'empty' : (s<=10 ? 'low' : 'ok') %>">
+                    <%= s %>
+                  </span>
+                </td>
+                <td><%= p.category || '—' %></td>
+                <td class="right"><%= fmtDate(p.updatedAt || p.createdAt) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
         </table>
       </div>
     <% } else { %>
-      <p>No products yet. Start by adding your first one.</p>
+      <p class="muted small">
+        No products yet. Start by adding your first one.
+      </p>
     <% } %>
   </section>
-
-  <!-- 🧾 Recent Orders (preview) -->
-  <section class="recent-section">
-    <h2>🧾 Recent Orders</h2>
-    <% if (orders.recent && orders.recent.length) { %>
-      <ul class="orders-list">
-        <% orders.recent.forEach(o => { %>
-          <li>
-            <strong>#<%= o.orderId || o._id %></strong>
-            — Status: <%= o.status || 'N/A' %>
-            — Amount: <%= o.amount && o.amount.value ? ('$' + o.amount.value) : '—' %>
-            <span class="muted"> <%= new Date(o.createdAt).toLocaleString() %></span>
-          </li>
-        <% }) %>
-      </ul>
-    <% } else { %>
-      <p>No orders yet.</p>
-    <% } %>
-  </section>
-
-  <!-- ⚙️ Quick Actions -->
-  <div class="actions">
-    <a href="/products/add" class="btn btn-primary">➕ Add Product</a>
-    <a href="/products/all" class="btn btn-secondary">📋 View All Products</a>
-    <a href="/shipments" class="btn btn-secondary">🚚 Manage Shipments</a>
-  </div>
 </section>
 
-<style>
-  .dashboard-home { padding:1rem; }
-  .page-title { margin-top:1rem; font-size:2rem; font-weight:700; text-align:center; }
-  .subtitle { color:#6b7280; margin-bottom:1.3rem; text-align:center; }
-  .warn { color:#b45309; margin-left:.5rem; }
+<style nonce="<%= nonce %>">
+  .dashboard.seller {
+    padding: 1rem;
+    max-width: 1100px;
+    margin: 0 auto 2rem;
+  }
+  .page-title {
+    margin-top: .4rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    justify-content: center;
+  }
+  .subtitle {
+    text-align: center;
+    margin: .2rem 0 1rem;
+    color: #6b7280;
+  }
+  .dark-theme .subtitle { color: #cbd5e1; }
 
-  .role-badge { margin-left:.5rem; padding:.2rem .55rem; font-size:.75rem; border-radius:999px; font-weight:700; }
-  .role-badge.seller { background:#dbeafe; color:#1d4ed8; }
-  .role-badge.supplier { background:#dcfce7; color:#166534; }
-  .role-badge.buyer { background:#fde68a; color:#92400e; }
+  .role-badge.seller {
+    padding: .2rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+  }
 
-  .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500; animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s,transform .6s; }
-  .flash-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
-  .flash-error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
-  .flash.fade-out { opacity:0; transform:translateY(-10px); }
-  @keyframes fadeIn { from{opacity:0; transform:translateY(-5px);} to{opacity:1; transform:translateY(0);} }
+  .flash {
+    padding: .6rem .9rem;
+    border-radius: .6rem;
+    margin: .4rem auto;
+    max-width: 700px;
+    font-weight: 600;
+  }
+  .flash-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+  }
+  .flash-error {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
 
-  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; margin-bottom:1.25rem; }
-  .stat-card { background:#f3f4f6; padding:1.1rem; border-radius:.75rem; box-shadow:0 2px 5px rgba(0,0,0,0.08); text-align:center; transition:transform .2s,box-shadow .2s; }
-  .stat-card:hover { transform:translateY(-3px); box-shadow:0 4px 8px rgba(0,0,0,0.1); }
-  .dark-theme .stat-card { background:#1f2937; color:#f9fafb; }
-  .stat-number { font-size:1.7rem; font-weight:bold; color:#2563eb; }
-  .chip { display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px; padding:.05rem .5rem; margin:.05rem; }
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .7rem;
+    margin: .4rem 0 1rem;
+    flex-wrap: wrap;
+  }
+  .toolbar-left, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+  }
+  .status-dot {
+    width: .45rem;
+    height: .45rem;
+    border-radius: 999px;
+  }
+  .status-dot.ok { background: #22c55e; }
+  .status-text { font-weight: 700; font-size: .78rem; }
+  .muted { color: #6b7280; }
+  .muted.small { font-size: .82rem; }
+  .small-muted { font-size: .78rem; color: #94a3b8; }
+  .dark-theme .muted { color: #9ca3af; }
 
-  .table-wrap { overflow-x:auto; }
-  .nice-table { width:100%; border-collapse:collapse; background:#fff; border-radius:.75rem; overflow:hidden; box-shadow:0 2px 5px rgba(0,0,0,0.06); }
-  .dark-theme .nice-table { background:#0b1220; color:#e5e7eb; }
-  .nice-table th, .nice-table td { padding:.75rem .7rem; border-bottom:1px solid #e5e7eb; vertical-align:middle; }
-  .nice-table thead th { background:#f8fafc; text-align:left; }
-  .dark-theme .nice-table thead th { background:#111827; }
-  .nice-table tfoot th { background:#f1f5f9; }
-  .dark-theme .nice-table tfoot th { background:#0f172a; }
-  .pname { display:flex; gap:.7rem; align-items:center; }
-  .thumb { width:40px; height:40px; object-fit:cover; border-radius:.4rem; }
-  .muted { color:#6b7280; font-size:.85rem; }
-  .stock-badge { font-weight:700; padding:.1rem .45rem; border-radius:.4rem; }
-  .stock-badge.ok { background:#dcfce7; color:#166534; }
-  .stock-badge.low { background:#fef9c3; color:#92400e; }
-  .stock-badge.empty { background:#fee2e2; color:#991b1b; }
-  .row-actions .btn.small { margin-right:.4rem; }
+  .logout-form { margin: 0; }
 
-  .orders-list { list-style:none; padding:0; margin:0; }
-  .orders-list li { padding:.55rem .7rem; margin-bottom:.4rem; border-radius:.5rem; background:#f9fafb; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
-  .dark-theme .orders-list li { background:#111827; color:#e5e7eb; }
+  /* KPIs */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .8rem;
+    margin: .8rem 0 1rem;
+  }
+  .kpi-card {
+    background: #ffffff;
+    border-radius: .75rem;
+    padding: .8rem;
+    border: 1px solid rgba(148, 163, 184, .25);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    text-align: center;
+  }
+  .dark-theme .kpi-card {
+    background: #020617;
+    border-color: #1f2937;
+  }
+  .kpi-card h2 {
+    font-size: .9rem;
+    margin-bottom: .25rem;
+    color: #0f172a;
+  }
+  .dark-theme .kpi-card h2 { color: #e5e7eb; }
+  .kpi-num {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #2563eb;
+  }
+  .kpi-num.warn { color: #ea580c; }
+  .kpi-num.danger { color: #b91c1c; }
+  .kpi-num.revenue { color: #16a34a; }
 
-  .actions { display:flex; gap:.8rem; margin-top:1.1rem; justify-content:center; }
-  .btn { display:inline-block; padding:.55rem .95rem; border-radius:.55rem; text-decoration:none; font-weight:600; transition:background .2s ease; }
-  .btn.btn-primary { background:#2563eb; color:#fff; }
-  .btn.btn-primary:hover { background:#1d4ed8; }
-  .btn.btn-secondary { background:#f3f4f6; color:#111; }
-  .dark-theme .btn.btn-secondary { background:#374151; color:#f9fafb; }
-  .btn.small { font-size:.85rem; padding:.4rem .6rem; }
+  .actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-bottom: 1rem;
+    justify-content: center;
+  }
+
+  /* Blocks & layout */
+  .layout-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 2fr);
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+  @media (max-width: 800px) {
+    .layout-grid { grid-template-columns: minmax(0,1fr); }
+    .toolbar { flex-direction: column; align-items: flex-start; }
+    .hide-sm { display: none; }
+  }
+
+  .block {
+    background: #ffffff;
+    border-radius: .9rem;
+    padding: .9rem;
+    border: 1px solid rgba(148, 163, 184, .2);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    margin-bottom: 1rem;
+  }
+  .dark-theme .block {
+    background: #020617;
+    border-color: #1f2937;
+  }
+  .block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    margin-bottom: .5rem;
+  }
+  .block-head h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+  }
+  .block-actions {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+  }
+  .small-head h3 { font-size: .95rem; }
+  .divider {
+    border: none;
+    border-top: 1px dashed rgba(148, 163, 184, .5);
+    margin: .7rem 0;
+  }
+
+  .mini-kpis {
+    display: flex;
+    gap: .6rem;
+    flex-wrap: wrap;
+    margin-bottom: .6rem;
+  }
+  .mini-card {
+    flex: 0 0 auto;
+    min-width: 140px;
+    padding: .55rem .7rem;
+    border-radius: .7rem;
+    background: #f1f5f9;
+    border: 1px solid rgba(148, 163, 184, .4);
+  }
+  .dark-theme .mini-card {
+    background: #020617;
+    border-color: #1f2937;
+  }
+  .mini-title {
+    font-size: .8rem;
+    color: #64748b;
+  }
+  .mini-num {
+    margin-top: .1rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: .75rem;
+    border: 1px solid rgba(148, 163, 184, .3);
+    background: #ffffff;
+  }
+  .table-wrap.small { border-radius: .7rem; }
+  .dark-theme .table-wrap {
+    background: #020617;
+    border-color: #1f2937;
+  }
+
+  .nice-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .9rem;
+  }
+  .nice-table thead th {
+    padding: .55rem .6rem;
+    background: #f8fafc;
+    text-align: left;
+    border-bottom: 1px solid rgba(148, 163, 184, .3);
+    white-space: nowrap;
+  }
+  .dark-theme .nice-table thead th {
+    background: #020617;
+    border-bottom-color: #1f2937;
+  }
+  .nice-table td {
+    padding: .5rem .6rem;
+    border-bottom: 1px solid rgba(148, 163, 184, .2);
+  }
+  .nice-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .center { text-align: center; }
+  .right { text-align: right; }
+
+  .cell-product {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+  }
+  .thumb {
+    width: 36px;
+    height: 36px;
+    border-radius: .45rem;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid rgba(148, 163, 184, .4);
+  }
+  .prod-meta .name {
+    font-weight: 600;
+    font-size: .9rem;
+  }
+  .prod-meta .cat {
+    font-size: .8rem;
+    color: #6b7280;
+  }
+
+  .chips-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .6rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    border: 1px solid rgba(148, 163, 184, .4);
+    background: #f9fafb;
+    color: #111827;
+  }
+  .chip-soft {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #bae6fd;
+  }
+  .chip-soft.orange {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fde68a;
+  }
+  .pill-cat {
+    background: #eef2ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+  }
+
+  .tag {
+    font-size: .8rem;
+    padding: .15rem .45rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .stock-badge {
+    font-size: .8rem;
+    font-weight: 700;
+    padding: .18rem .5rem;
+    border-radius: .6rem;
+  }
+  .stock-badge.ok {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .stock-badge.low {
+    background: #fef9c3;
+    color: #92400e;
+  }
+  .stock-badge.empty {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: .16rem .45rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 600;
+    background: #e5e7eb;
+    color: #111827;
+  }
+  .status-completed { background: #dcfce7; color: #166534; }
+  .status-pending { background: #fef9c3; color: #92400e; }
+  .status-cancelled,
+  .status-refunded { background: #fee2e2; color: #b91c1c; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    padding: .45rem .9rem;
+    border-radius: .7rem;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #111827;
+    font-weight: 700;
+    font-size: .86rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.primary {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #fff;
+  }
+  .btn.light {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+  }
+  .btn.danger {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #b91c1c;
+  }
+  .btn.xs {
+    padding: .34rem .6rem;
+    font-size: .8rem;
+  }
 </style>
 
 <script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  // Animate stat numbers
-  document.querySelectorAll(".stat-number").forEach(n => {
-    const target = +n.textContent || 0;
-    let count = 0, step = Math.ceil(Math.max(1, target / 40));
-    const id = setInterval(() => {
-      count += step;
-      if (count >= target) { count = target; clearInterval(id); }
-      n.textContent = count;
-    }, 25);
-  });
+  (async function setupSellerKpiAutoRefresh() {
+    async function refreshKPIs() {
+      try {
+        const res = await fetch('/business/api/seller/kpis', {
+          credentials: 'same-origin'
+        });
+        if (!res.ok) return;
 
-  // Auto-hide flash
-  const flash = document.getElementById("flashMessage");
-  if (flash) {
-    setTimeout(() => { flash.classList.add("fade-out"); setTimeout(()=>flash.remove(), 600); }, 5000);
-    flash.addEventListener("click", ()=>{ flash.classList.add("fade-out"); setTimeout(()=>flash.remove(), 600); });
-  }
-});
+        const data = await res.json().catch(() => ({}));
+        if (!data || data.ok === false) return;
+
+        const set = (key, val, fmt) => {
+          const nodes = document.querySelectorAll('[data-kpi="' + key + '"]');
+          nodes.forEach((el) => {
+            el.textContent = fmt ? fmt(val) : (val ?? 0);
+          });
+        };
+
+        set('totalProducts',  data.totalProducts);
+        set('totalStock',     data.totalStock);
+        set('inStock',        data.inStock);
+        set('lowStock',       data.lowStock);
+        set('outOfStock',     data.outOfStock);
+        set('soldLast30',     data.soldLast30);
+        set('revenueLast30',  data.revenueLast30, (v) => 'R ' + Number(v || 0).toFixed(2));
+        // console.log('🔄 Seller KPIs refreshed', new Date().toLocaleTimeString());
+      } catch (_) {
+        // Silent fail – UI must never break because of KPI polling
+      }
+    }
+
+    await refreshKPIs();
+    setInterval(refreshKPIs, 30000);
+  })();
 </script>

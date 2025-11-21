@@ -1,4 +1,5 @@
 <!-- views/order-list.ejs -->
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : ''; %>
 
 <!-- Flash -->
 <% if (success && success.length > 0) { %>
@@ -11,101 +12,123 @@
 <main class="orders-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
   <header class="orders-head">
     <div>
-      <h1>My Orders</h1>
+      <h1>🧾 My Orders</h1>
       <p class="muted">View your recent orders and receipts.</p>
     </div>
-    <a href="/sales" class="btn-back">← Continue shopping</a>
+    <a href="/sales" class="btn-back" aria-label="Continue shopping">← Continue shopping</a>
   </header>
 
-  <section class="card">
+  <section class="card" aria-live="polite" aria-busy="true">
     <div id="ordersWrap">
       <p class="muted">Loading orders…</p>
     </div>
   </section>
 </main>
 
-<style nonce="<%= nonce %>">
-  .orders-page{max-width:1000px;margin:0 auto;padding:1rem}
-  .orders-head{display:flex;justify-content:space-between;align-items:flex-start;margin:.25rem 0 1rem}
-  .btn-back{text-decoration:none;border:1px solid #d1d5db;padding:.45rem .8rem;border-radius:8px}
-  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
-  .muted{color:#6b7280}
-  .table{width:100%;border-collapse:collapse}
-  .table th,.table td{padding:.65rem;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:middle}
-  .table th{font-size:.92rem;color:#6b7280;font-weight:700}
-  .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;font-size:.78rem;font-weight:700}
-  .badge.ok{background:#16a34a;color:#fff}
-  .badge.pending{background:#eab308;color:#111}
-  .badge.fail{background:#ef4444;color:#fff}
-  .num{font-weight:800}
-  .actions a{ text-decoration:none; border:1px solid #d1d5db; padding:.35rem .6rem; border-radius:8px; }
-  @media (max-width:720px){
-    .table thead{display:none}
-    .table tr{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;padding:.6rem 0;border-bottom:1px solid #e5e7eb}
-    .table td{border:0;padding:.1rem 0}
-    .table td[data-label]:before{content:attr(data-label) ": ";font-weight:700;color:#6b7280}
-    .actions{grid-column:1/-1;margin-top:.2rem}
+<style nonce="<%= NONCE %>">
+  :root{
+    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
+    --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
+    --radius:12px; --pad:12px; --chip:#f3f4f6;
   }
+  .dark-theme{
+    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
+    --brand:#f3f4f6; --brand-contrast:#111; --chip:#1f2937;
+  }
+
+  html,body{background:var(--bg); color:var(--text); margin:0}
+  .orders-page{max-width:680px; margin:0 auto; padding:12px}
+
+  .orders-head{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin:4px 0 12px;
+  }
+  .orders-head h1{font-size:clamp(18px,5.5vw,28px); margin:0 0 2px; line-height:1.2}
+  .muted{color:var(--muted)}
+  .btn-back{
+    display:inline-block; padding:10px 12px; border-radius:10px; text-decoration:none;
+    border:1px solid var(--brand); color:var(--brand); background:transparent;
+    font-size:clamp(14px,4.2vw,16px)
+  }
+
+  .card{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad)}
+  #ordersWrap{display:flex; flex-direction:column; gap:8px}
+
+  .row{
+    display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;
+    border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--chip);
+  }
+  .main{display:flex; flex-direction:column; gap:4px}
+  .oid{font-weight:700; font-size:clamp(14px,4.5vw,16px); word-break:break-all}
+  .sub{font-size:clamp(13px,4vw,15px); color:var(--muted)}
+  .right{display:flex; flex-direction:column; align-items:flex-end; gap:6px}
+  .amt{font-weight:800; font-size:clamp(14px,4.6vw,16px)}
+  .link{display:inline-block; text-decoration:none; border:1px solid var(--border); padding:8px 10px; border-radius:10px}
+
+  .flash{margin:.6rem 0; padding:.6rem .8rem; border-radius:10px; font-size:clamp(14px,4.2vw,16px)}
+  .flash-success{background:#ecfdf5; color:#065f46; border:1px solid #34d399}
+  .flash-error{background:#fef2f2; color:#991b1b; border:1px solid #fca5a5}
 </style>
 
-<script nonce="<%= nonce %>">
-  document.addEventListener('DOMContentLoaded', async () => {
-    const wrap = document.getElementById('ordersWrap');
-    const money = (n) => 'R ' + Number(n||0).toFixed(2);
-    const badge = (status) => {
-      const s = String(status || '').toUpperCase();
-      if (s === 'COMPLETED') return '<span class="badge ok">Completed</span>';
-      if (s === 'PENDING')   return '<span class="badge pending">Pending</span>';
-      return `<span class="badge ${s==='FAILED'?'fail':'pending'}">${status || '—'}</span>`;
-    };
-
+<script nonce="<%= NONCE %>">
+(function(){
+  function qs(s, c){ return (c||document).querySelector(s); }
+  function fmtZA(d){
     try{
-      const r = await fetch('/payment/my-orders', { credentials:'same-origin' });
-      const data = await r.json();
-      if (!r.ok || !data.success) throw new Error(data.message || 'Failed to load orders');
-
-      const orders = Array.isArray(data.orders) ? data.orders : [];
-      if (!orders.length){
-        wrap.innerHTML = '<p class="muted">No orders yet.</p>';
-        return;
+      if (!d) return '';
+      var dd = (d instanceof Date) ? d : new Date(d);
+      return dd.toLocaleString('en-ZA', { timeZone:'Africa/Johannesburg', dateStyle:'medium', timeStyle:'short' });
+    } catch(_) { return String(d || ''); }
+  }
+  function money(n, cur){
+    var C = (cur || 'USD').toUpperCase();
+    try{
+      if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+        return new Intl.NumberFormat('en-ZA', { style:'currency', currency:C, currencyDisplay:'symbol' }).format(Number(n||0));
       }
+    }catch(_){}
+    var sym = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[C] || (C + ' ');
+    return sym + Number(n||0).toFixed(2);
+  }
 
-      const rows = orders.map(o => {
-        const created = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
-        const itemCount = (o.items || []).reduce((n,it)=>n + Number(it.quantity||1), 0);
-        const link = `/thank-you?orderID=${encodeURIComponent(o.paypalOrderId)}`;
-        return `
-          <tr>
-            <td data-label="Date">${created}</td>
-            <td data-label="Order ID">${o.paypalOrderId || '—'}</td>
-            <td data-label="Items">${itemCount}</td>
-            <td data-label="Total" class="num">${money(o.total)}</td>
-            <td data-label="Status">${badge(o.status)}</td>
-            <td data-label="Receipt" class="actions"><a href="${link}">View receipt</a></td>
-          </tr>
-        `;
-      }).join('');
+  document.addEventListener('DOMContentLoaded', function(){
+    var wrap = qs('#ordersWrap');
+    var host = wrap && wrap.closest('.card');
+    if (host) host.setAttribute('aria-busy','true');
 
-      wrap.innerHTML = `
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Order ID</th>
-                <th>Items</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Receipt</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      `;
-    }catch(e){
-      console.error(e);
-      wrap.innerHTML = '<p class="muted">Could not load your orders.</p>';
-    }
+    fetch('/payment/my-orders', { credentials:'same-origin' })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        if (host) host.removeAttribute('aria-busy');
+        if (!res.ok || !res.j || !res.j.ok) throw new Error('Load failed');
+        var orders = res.j.orders || [];
+        if (!orders.length){
+          wrap.innerHTML = '<p class="muted">No recent orders found.</p>';
+          return;
+        }
+        var html = orders.map(function(o){
+          var id  = String(o.orderId || o.id || o.paypalOrderId || '').trim();
+          var dt  = o.createdAt ? fmtZA(o.createdAt) : '';
+          var amt = (o.amount != null && o.currency) ? money(o.amount, o.currency) : '';
+          var href = '/payment/receipt/' + encodeURIComponent(id);
+          return ''+
+            '<article class="row" role="article">'+
+              '<div class="main">'+
+                '<div class="oid">'+(id || '—')+'</div>'+
+                '<div class="sub">'+(o.status || '—')+(dt ? ' • '+dt : '')+'</div>'+
+              '</div>'+
+              '<div class="right">'+
+                (amt ? '<div class="amt">'+amt+'</div>' : '')+
+                '<a class="link" href="'+href+'" aria-label="Open receipt for order '+(id || '')+'">Open</a>'+
+              '</div>'+
+            '</article>';
+        }).join('');
+        wrap.innerHTML = html;
+      })
+      .catch(function(err){
+        if (host) host.removeAttribute('aria-busy');
+        console.error(err);
+        wrap.innerHTML = '<p class="muted">Could not load orders. Please try again later.</p>';
+      });
   });
+})();
 </script>

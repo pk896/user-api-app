@@ -1,7 +1,8 @@
-const express = require("express");
+// routes/demands.js
+const express = require('express');
 const router = express.Router();
-const requireBusiness = require("../middleware/requireBusiness");
-const DemandedProduct = require("../models/DemandedProduct");
+const requireBusiness = require('../middleware/requireBusiness');
+const DemandedProduct = require('../models/DemandedProduct');
 
 /**
  * Mounted at /demands:
@@ -12,88 +13,93 @@ const DemandedProduct = require("../models/DemandedProduct");
  *   GET  /demands/aggregate  -> aggregated view
  */
 
-router.get("/", requireBusiness, (_req, res) => res.redirect("/demands/mine"));
+router.get('/', requireBusiness, (_req, res) => res.redirect('/demands/mine'));
 
-router.get("/add", requireBusiness, (req, res) => {
+router.get('/add', requireBusiness, (req, res) => {
   const business = req.session.business;
-  res.render("demands/add-demand", {
-    title: "Add Demand",
+  res.render('demands/add-demand', {
+    title: 'Add Demand',
     business,
-    defaultBusinessName: business?.name || "",
-    success: req.flash("success"),
-    error: req.flash("error"),
+    defaultBusinessName: business?.name || '',
+    success: req.flash('success'),
+    error: req.flash('error'),
     themeCss: res.locals.themeCss,
     nonce: res.locals.nonce,
   });
 });
 
-router.post("/add", requireBusiness, async (req, res) => {
+router.post('/add', requireBusiness, async (req, res) => {
   try {
     const b = req.session.business;
     const {
       requesterBusinessName,
       requesterContactName,
       requesterPosition,
-      type, productName, quantity,
-      country, province, city, town,
+      type,
+      productName,
+      quantity,
+      country,
+      province,
+      city,
+      town,
       notes,
     } = req.body;
 
     if (!requesterBusinessName || !requesterContactName || !requesterPosition) {
-      req.flash("error", "Please enter your business name, your name, and your position.");
-      return res.redirect("/demands/add");
+      req.flash('error', 'Please enter your business name, your name, and your position.');
+      return res.redirect('/demands/add');
     }
 
     await DemandedProduct.create({
       business: b._id,
       requester: {
         businessName: String(requesterBusinessName).trim(),
-        contactName:  String(requesterContactName).trim(),
-        position:     String(requesterPosition).trim(),
+        contactName: String(requesterContactName).trim(),
+        position: String(requesterPosition).trim(),
       },
-      type:        String(type || "").trim(),
-      productName: String(productName || "").trim(),
-      quantity:    Math.max(1, Math.floor(Number(quantity) || 1)),
-      country:     String(country || "").trim(),
-      province:    String(province || "").trim(),
-      city:        String(city || "").trim(),
-      town:        String(town || "").trim(),
-      notes:       (notes || "").trim(),
+      type: String(type || '').trim(),
+      productName: String(productName || '').trim(),
+      quantity: Math.max(1, Math.floor(Number(quantity) || 1)),
+      country: String(country || '').trim(),
+      province: String(province || '').trim(),
+      city: String(city || '').trim(),
+      town: String(town || '').trim(),
+      notes: (notes || '').trim(),
     });
 
-    req.flash("success", "✅ Demand submitted.");
-    res.redirect("/demands/mine");
+    req.flash('success', '✅ Demand submitted.');
+    res.redirect('/demands/mine');
   } catch (err) {
-    console.error("❌ Add demand error:", err);
-    req.flash("error", "Failed to submit demand.");
-    res.redirect("/demands/add");
+    console.error('❌ Add demand error:', err);
+    req.flash('error', 'Failed to submit demand.');
+    res.redirect('/demands/add');
   }
 });
 
-router.get("/mine", requireBusiness, async (req, res) => {
+router.get('/mine', requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     const demands = await DemandedProduct.find({ business: business._id })
       .sort({ createdAt: -1 })
       .lean();
 
-    res.render("demands/my-demands", {
-      title: "My Demands",
+    res.render('demands/my-demands', {
+      title: 'My Demands',
       business,
       demands,
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
     });
   } catch (err) {
-    console.error("❌ List demands error:", err);
-    req.flash("error", "Failed to load demands.");
-    res.redirect("/business/dashboard");
+    console.error('❌ List demands error:', err);
+    req.flash('error', 'Failed to load demands.');
+    res.redirect('/business/dashboard');
   }
 });
 
-router.get("/aggregate", requireBusiness, async (req, res) => {
+router.get('/aggregate', requireBusiness, async (req, res) => {
   try {
     // ----- base data: all demands (lean for speed)
     const demandsAll = await DemandedProduct.find({})
@@ -106,7 +112,7 @@ router.get("/aggregate", requireBusiness, async (req, res) => {
         province: 1,
         city: 1,
         town: 1,
-        notes: 1, 
+        notes: 1,
         createdAt: 1,
       })
       .sort({ createdAt: -1 })
@@ -120,16 +126,18 @@ router.get("/aggregate", requireBusiness, async (req, res) => {
     // summary by productName (normalized)
     const nameSummaryMap = new Map();
     for (const d of demandsAll) {
-      const type = (d.type || "").trim();
-      if (type) typesSet.add(type);
+      const type = (d.type || '').trim();
+      if (type) {typesSet.add(type);}
 
       const qty = Number(d.quantity || 0);
       totalQtyAll += qty;
 
-      const key = String(d.productName || "").trim().toLowerCase();
+      const key = String(d.productName || '')
+        .trim()
+        .toLowerCase();
       if (!nameSummaryMap.has(key)) {
         nameSummaryMap.set(key, {
-          name: d.productName || "",
+          name: d.productName || '',
           requests: 0,
           totalQty: 0,
           types: new Set(),
@@ -138,22 +146,24 @@ router.get("/aggregate", requireBusiness, async (req, res) => {
       const entry = nameSummaryMap.get(key);
       entry.requests += 1;
       entry.totalQty += qty;
-      if (type) entry.types.add(type);
+      if (type) {entry.types.add(type);}
     }
 
-    const summaryByName = Array.from(nameSummaryMap.values()).map(e => ({
-      name: e.name,
-      requests: e.requests,
-      totalQty: e.totalQty,
-      types: Array.from(e.types).sort(),
-    })).sort((a, b) => b.totalQty - a.totalQty);
+    const summaryByName = Array.from(nameSummaryMap.values())
+      .map((e) => ({
+        name: e.name,
+        requests: e.requests,
+        totalQty: e.totalQty,
+        types: Array.from(e.types).sort(),
+      }))
+      .sort((a, b) => b.totalQty - a.totalQty);
 
     const uniqueProductNames = summaryByName.length;
     const types = Array.from(typesSet).sort();
 
     // ----- existing aggregations
     const byType = await DemandedProduct.aggregate([
-      { $group: { _id: "$type", totalQty: { $sum: "$quantity" }, docs: { $sum: 1 } } },
+      { $group: { _id: '$type', totalQty: { $sum: '$quantity' }, docs: { $sum: 1 } } },
       { $sort: { totalQty: -1 } },
     ]);
 
@@ -161,21 +171,21 @@ router.get("/aggregate", requireBusiness, async (req, res) => {
       {
         $group: {
           _id: {
-            type: "$type",
-            country: "$country",
-            province: "$province",
-            city: "$city",
-            town: "$town",
+            type: '$type',
+            country: '$country',
+            province: '$province',
+            city: '$city',
+            town: '$town',
           },
-          totalQty: { $sum: "$quantity" },
+          totalQty: { $sum: '$quantity' },
           docs: { $sum: 1 },
         },
       },
-      { $sort: { "_id.type": 1, totalQty: -1 } },
+      { $sort: { '_id.type': 1, totalQty: -1 } },
     ]);
 
-    res.render("demands/demanded-products", {
-      title: "Demanded Products (Aggregated)",
+    res.render('demands/demanded-products', {
+      title: 'Demanded Products (Aggregated)',
       business: req.session.business,
       // new data for the view
       demandsAll,
@@ -185,15 +195,15 @@ router.get("/aggregate", requireBusiness, async (req, res) => {
       // existing tables
       byType,
       byTypeAndLocation,
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
     });
   } catch (err) {
-    console.error("❌ Aggregation error:", err);
-    req.flash("error", "Failed to load demanded products.");
-    res.redirect("/business/dashboard");
+    console.error('❌ Aggregation error:', err);
+    req.flash('error', 'Failed to load demanded products.');
+    res.redirect('/business/dashboard');
   }
 });
 

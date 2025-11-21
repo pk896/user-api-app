@@ -9,4 +9,3 @@ const mongoose = require('mongoose');
 // - Direct:        const mongoose = require('../db')
 module.exports = mongoose;
 module.exports.mongoose = mongoose;
-

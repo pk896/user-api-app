@@ -3,10 +3,21 @@
   var NONCE = (typeof nonce !== 'undefined') ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '');
   var o = order || {};
 
-  // Currency + formatter
+  // Resolve id across shapes
+  var ORDER_ID = String(o.id || o.orderId || o.paypalOrderId || '').trim();
+
+  // Currency + formatter (prefer Intl, fallback to map)
   var C = String(o.currency || (o.amount && o.amount.currency_code) || 'USD').toUpperCase();
   var symMap = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' };
-  function money(n){ var v = Number(n || 0); return (symMap[C] || (C + ' ')) + v.toFixed(2); }
+  function money(n){
+    var v = Number(n || 0);
+    try {
+      if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+        return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: C, currencyDisplay: 'symbol' }).format(v);
+      }
+    } catch(_) {}
+    return (symMap[C] || (C + ' ')) + v.toFixed(2);
+  }
 
   // --- Normalize items from multiple possible sources ---
   var items = [];
@@ -23,24 +34,15 @@
     }
 
     var src = null;
-
-    // 1) DB-persisted items (from capture step)
     if (Array.isArray(o.items) && o.items.length) {
       src = o.items;
-    }
-    // 2) View provided raw purchase_units (some servers pass this through)
-    else if (o.purchase_units && Array.isArray(o.purchase_units) && o.purchase_units[0] && Array.isArray(o.purchase_units[0].items)) {
+    } else if (o.purchase_units && Array.isArray(o.purchase_units) && o.purchase_units[0] && Array.isArray(o.purchase_units[0].items)) {
       src = o.purchase_units[0].items;
-    }
-    // 3) Full PayPal response saved under 'raw'
-    else if (o.raw && o.raw.purchase_units && Array.isArray(o.raw.purchase_units) && o.raw.purchase_units[0] && Array.isArray(o.raw.purchase_units[0].items)) {
+    } else if (o.raw && o.raw.purchase_units && Array.isArray(o.raw.purchase_units) && o.raw.purchase_units[0] && Array.isArray(o.raw.purchase_units[0].items)) {
       src = o.raw.purchase_units[0].items;
-    }
-    // 4) Any other custom shape you might add in the future (o.pp.items)
-    else if (o.pp && Array.isArray(o.pp.items) && o.pp.items.length) {
+    } else if (o.pp && Array.isArray(o.pp.items) && o.pp.items.length) {
       src = o.pp.items;
     }
-
     if (src) items = src.map(norm).filter(function(x){ return x && x.name; });
   })();
 
@@ -59,6 +61,19 @@
   var t_tot = Number((totals.total != null) ? totals.total
                    : (o.amount && o.amount.value != null) ? o.amount.value
                    : (t_sub + t_tax + t_ship));
+
+  // --- Johannesburg time formatting ---
+  function fmtZA(d){
+    try{
+      if (!d) return '';
+      var dd = (d instanceof Date) ? d : new Date(d);
+      return dd.toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    } catch { return String(d || ''); }
+  }
 %>
 
 <main class="rcpt-page <%= (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme' %>">
@@ -75,9 +90,9 @@
 
   <section class="card">
     <div class="meta">
-      <div><strong>Order:</strong> <span class="wrap"><%= o.id %></span></div>
+      <div><strong>Order:</strong> <span class="wrap"><%= ORDER_ID || '—' %></span></div>
       <div><strong>Status:</strong> <span><%= o.status || '—' %></span></div>
-      <div><strong>Date:</strong> <span><%= o.createdAt ? new Date(o.createdAt).toLocaleString() : '' %></span></div>
+      <div><strong>Date:</strong> <span><%= fmtZA(o.createdAt) %></span></div>
     </div>
 
     <div class="items">

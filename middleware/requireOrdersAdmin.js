@@ -1,6 +1,6 @@
 // middleware/requireOrdersAdmin.js
 module.exports = function requireOrdersAdmin(req, res, next) {
-  if (req.session && req.session.ordersAdmin) return next();
+  if (req.session && req.session.ordersAdmin) {return next();}
 
   // If the client wants HTML, redirect to Orders Admin login
   if (req.accepts('html')) {

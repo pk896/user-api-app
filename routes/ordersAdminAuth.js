@@ -3,7 +3,9 @@ const express = require('express');
 const router = express.Router();
 
 // Prefer dedicated env vars for orders admin; fallback to general admin if not provided
-const USER = (process.env.ORDERS_ADMIN_USER || process.env.ADMIN_USER || 'Admin').trim().toLowerCase();
+const USER = (process.env.ORDERS_ADMIN_USER || process.env.ADMIN_USER || 'Admin')
+  .trim()
+  .toLowerCase();
 const PASS = (process.env.ORDERS_ADMIN_PASS || process.env.ADMIN_PASS || '1988').trim();
 
 router.get('/orders/login', (req, res) => {
@@ -12,12 +14,14 @@ router.get('/orders/login', (req, res) => {
   res.render('admin-login', {
     title: 'Orders Admin Login',
     nonce: res.locals.nonce,
-    themeCss
+    themeCss,
   });
 });
 
 router.post('/orders/login', (req, res) => {
-  const u = String(req.body.username || '').trim().toLowerCase();
+  const u = String(req.body.username || '')
+    .trim()
+    .toLowerCase();
   const p = String(req.body.password || '').trim();
 
   if (u === USER && p === PASS) {
@@ -31,7 +35,7 @@ router.post('/orders/login', (req, res) => {
 });
 
 router.get('/orders/logout', (req, res) => {
-  if (req.session) delete req.session.ordersAdmin;
+  if (req.session) {delete req.session.ordersAdmin;}
   req.flash('info', '👋 You have been logged out (Orders Admin).');
   res.redirect('/admin/orders/login');
 });

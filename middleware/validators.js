@@ -1,6 +1,6 @@
 // middleware/validators.js
-const { body } = require("express-validator");
-const { isSafeHttpUrl } = require("../utils/safeUrl");
+const { body } = require('express-validator');
+const { isSafeHttpUrl } = require('../utils/safeUrl');
 
 const urlField = (field, { restrictToHosts = null, requirePublicIP = false } = {}) =>
   body(field)
@@ -11,7 +11,7 @@ const urlField = (field, { restrictToHosts = null, requirePublicIP = false } = {
         allowedHosts: restrictToHosts ? new Set(restrictToHosts) : null,
         requirePublicIP,
       });
-      if (!ok) throw new Error(`Invalid or unsafe URL (${reason})`);
+      if (!ok) {throw new Error(`Invalid or unsafe URL (${reason})`);}
       return true;
     });
 

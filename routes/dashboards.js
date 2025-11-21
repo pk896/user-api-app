@@ -10,7 +10,7 @@ const Order = require('../models/Order');
 /** Helper to map array of {_id,count} into an object {key: count} */
 function aggToMap(rows) {
   const map = {};
-  for (const r of rows) map[r._id || 'Unknown'] = Number(r.count || 0);
+  for (const r of rows) {map[r._id || 'Unknown'] = Number(r.count || 0);}
   return map;
 }
 
@@ -36,8 +36,10 @@ router.get('/dashboards/seller', requireBusiness, async (req, res) => {
 
     const totalProducts = products.length;
     const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
-    const lowStock = products.filter(p => (Number(p.stock) || 0) > 0 && (Number(p.stock) || 0) <= LOW_STOCK_THRESHOLD).length;
-    const outOfStock = products.filter(p => (Number(p.stock) || 0) <= 0).length;
+    const lowStock = products.filter(
+      (p) => (Number(p.stock) || 0) > 0 && (Number(p.stock) || 0) <= LOW_STOCK_THRESHOLD,
+    ).length;
+    const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
 
     // 2) Shipments, grouped by status (for this business)
     const shipmentsAgg = await Shipment.aggregate([
@@ -48,7 +50,7 @@ router.get('/dashboards/seller', requireBusiness, async (req, res) => {
 
     // 3) Orders that include this seller's products
     //    Your Order.items[].productId is a String — we’ll match against Product.customId set.
-    const sellerCustomIds = products.map(p => p.customId);
+    const sellerCustomIds = products.map((p) => p.customId);
     let ordersCount = 0;
     let ordersByStatus = {};
     if (sellerCustomIds.length) {
@@ -82,7 +84,7 @@ router.get('/dashboards/seller', requireBusiness, async (req, res) => {
         lowStock,
         outOfStock,
       },
-      products,                // for per-product stock listing
+      products, // for per-product stock listing
       shipments: {
         byStatus: shipmentsByStatus,
         total: Object.values(shipmentsByStatus).reduce((a, b) => a + b, 0),
@@ -94,8 +96,8 @@ router.get('/dashboards/seller', requireBusiness, async (req, res) => {
       },
       success: req.flash('success'),
       error: req.flash('error'),
-      themeCss: res.locals.themeCss,   // keep your theming
-      nonce: res.locals.nonce,         // CSP nonce for inline script
+      themeCss: res.locals.themeCss, // keep your theming
+      nonce: res.locals.nonce, // CSP nonce for inline script
     });
   } catch (err) {
     console.error('❌ Seller dashboard error:', err);

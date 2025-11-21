@@ -9,12 +9,14 @@ router.get('/dev/test-mail', async (req, res) => {
       to,
       subject: '✅ Phakisi SendGrid test',
       text: 'Your SendGrid setup works!',
-      html: '<strong>Your SendGrid setup works!</strong>'
+      html: '<strong>Your SendGrid setup works!</strong>',
     });
     res.send('✅ Mail sent. Check your inbox/spam.');
   } catch (e) {
     console.error('[dev/test-mail] error:', e);
-    res.status(500).send('❌ Mail failed: ' + (e.response?.body?.errors?.[0]?.message || e.message || e));
+    res
+      .status(500)
+      .send('❌ Mail failed: ' + (e.response?.body?.errors?.[0]?.message || e.message || e));
   }
 });
 

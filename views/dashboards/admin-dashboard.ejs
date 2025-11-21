@@ -9,199 +9,164 @@
   <div class="flash flash-error" role="alert" aria-live="assertive"><%= error %></div>
 <% } %>
 
-<!-- 👋 Welcome Admin -->
-<div class="welcome-block">
-  <h2>Welcome, <%= admin ? admin.name : "Admin" %> 👋</h2>
-  <a href="/admin/logout" class="btn small logout-btn" aria-label="Log out of admin">🚪 Logout</a>
-</div>
+<!-- 👋 Welcome / top row -->
+<div class="top-row">
+  <div class="who">
+    <h2 class="hello">Hi, <%= (admin && admin.name) || "Admin" %> 👋</h2>
+    <div class="pills">
+      <!-- Mailer status pill (pass mailerOk from route) -->
+      <div class="status-pill <%= mailerOk ? 'ok' : 'bad' %>" title="<%= mailerOk ? 'Mailer configured' : 'Mailer not configured' %>">
+        <span class="dot"></span>
+        Mail: <strong><%= mailerOk ? 'OK' : 'OFF' %></strong>
+      </div>
 
-<!-- 📊 Stats Overview -->
-<div class="stats-grid" role="region" aria-label="Message statistics">
-  <div class="stat-card total">
-    <h3>📨 Total Messages</h3>
-    <p><%= stats.total %></p>
+      <!-- PayPal mode pill (computed in view from env via locals if you expose it, else just show Sandbox by default) -->
+      <div class="status-pill neutral" title="Current PayPal mode">
+        <span class="dot"></span>
+        PayPal: <strong><%= (process.env && (process.env.PAYPAL_MODE || 'sandbox')).toUpperCase() %></strong>
+      </div>
+
+      <!-- Theme hint (optional) -->
+      <div class="status-pill neutral" title="Active Theme">
+        <span class="dot"></span>
+        Theme: <strong><%= (themeCss && themeCss.includes('dark')) ? 'DARK' : 'LIGHT' %></strong>
+      </div>
+    </div>
   </div>
 
-  <div class="stat-card pending">
-    <h3>🕓 Pending Replies</h3>
-    <p>
-      <%= stats.pending %>
-      <% const showBadge = Number(stats.unreadForAdmin || 0) > 0; %>
-      <span id="unreadBadge" class="badge <%= showBadge ? '' : 'hidden' %>" aria-live="polite">
-        <%= showBadge ? (stats.unreadForAdmin + ' New') : '' %>
-      </span>
-    </p>
+  <form action="/admin/logout" method="get" class="logout-wrap">
+    <button type="submit" class="btn tiny danger" aria-label="Log out of admin">🚪 Logout</button>
+  </form>
+</div>
+
+<!-- 🧭 Quick Actions (cards compress on small phones) -->
+<nav class="quick-grid" aria-label="Admin quick actions">
+  <a class="qcard" href="/admin/orders">
+    <div class="qicon">🧾</div>
+    <div class="qtitle">Manage Orders</div>
+    <div class="qmeta">Review & reconcile</div>
+  </a>
+
+  <a class="qcard" href="/admin/delivery-options">
+    <div class="qicon">⚙️</div>
+    <div class="qtitle">Delivery Options</div>
+    <div class="qmeta">Edit active methods</div>
+  </a>
+
+  <a class="qcard" href="/products/all">
+    <div class="qicon">📦</div>
+    <div class="qtitle">All Products</div>
+    <div class="qmeta">Browse & audit</div>
+  </a>
+
+  <a class="qcard" href="/sales">
+    <div class="qicon">🛒</div>
+    <div class="qtitle">Shop Front</div>
+    <div class="qmeta">Public sales page</div>
+  </a>
+</nav>
+
+<!-- 🔧 Environment Snapshot (compact, no secrets) -->
+<section class="cards">
+  <div class="card">
+    <h3 class="card-title">🔧 Environment</h3>
+    <ul class="kv">
+      <li><span>App URL</span><strong><%= (appUrl || '') %></strong></li>
+      <li><span>Frontend</span><strong><%= (frontendUrl || '') %></strong></li>
+      <li><span>Node Env</span><strong><%= (process.env && (process.env.NODE_ENV || 'development')) %></strong></li>
+    </ul>
   </div>
 
-  <div class="stat-card replied">
-    <h3>💬 Replied</h3>
-    <p><%= stats.replied %></p>
+  <div class="card">
+    <h3 class="card-title">💳 Payments</h3>
+    <ul class="kv">
+      <li><span>Mode</span><strong><%= (process.env && (process.env.PAYPAL_MODE || 'sandbox')).toUpperCase() %></strong></li>
+      <li><span>Client ID</span><strong><%= (process.env && process.env.PAYPAL_CLIENT_ID) ? 'Set' : 'Missing' %></strong></li>
+    </ul>
   </div>
-</div>
 
-<!-- 🔗 Quick Actions -->
-<div class="quick-links" role="navigation" aria-label="Quick admin links">
-  <a href="/contact/all" class="btn primary big">📬 View All Messages</a>
-  <!-- Optional: show Orders link if you unified admin roles -->
-  <a href="/admin/orders" class="btn primary big" style="background:#111827;margin-left:.5rem">🧾 Manage Orders</a>
-  <!-- NEW: Delivery Options Management -->
-  <a href="/admin/delivery-options" class="btn primary big" style="background:#0ea5e9;margin-left:.5rem">⚙️ Delivery Options</a>
-</div>
+  <div class="card">
+    <h3 class="card-title">✉️ Mailer</h3>
+    <ul class="kv">
+      <li><span>From</span><strong><%= (process.env && (process.env.SMTP_FROM || '—')) %></strong></li>
+      <li><span>Status</span><strong><%= mailerOk ? 'Ready' : 'Not configured' %></strong></li>
+    </ul>
+  </div>
+</section>
 
-<!-- 🧾 Recent Messages -->
-<h2 class="section-title">📋 Recent Messages</h2>
-
-<div class="recent-list">
-  <% if (recentMessages && recentMessages.length > 0) { %>
-    <% recentMessages.forEach(msg => { %>
-      <a class="message-row anchor-card" href="/contact/thread/<%= msg._id %>" aria-label="Open thread from <%= msg.name %>">
-        <div class="msg-info">
-          <strong><%= msg.name %></strong>
-          <span class="msg-email"><%= msg.email %></span>
-          <p class="msg-snippet">
-            <%= msg.thread && msg.thread.length > 0
-              ? (msg.thread[msg.thread.length - 1].message || '').slice(0, 80)
-              : "No message content" %>...
-          </p>
-        </div>
-        <div class="msg-meta">
-          <span class="msg-date"><%= new Date(msg.createdAt).toLocaleString() %></span>
-          <% if (msg.readByAdmin === false) { %>
-            <span class="status unread">🔴 New</span>
-          <% } else if (msg.thread && msg.thread.some(t => t.sender === 'admin')) { %>
-            <span class="status replied">💬 Replied</span>
-          <% } else { %>
-            <span class="status pending">🕓 Pending</span>
-          <% } %>
-        </div>
-      </a>
-    <% }) %>
-  <% } else { %>
-    <p class="no-msg">No recent messages.</p>
-  <% } %>
-</div>
-
-<!-- 🔔 Notification Toast (ARIA live region) -->
-<div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true">
-  📩 New message received!
-</div>
-
-<!-- 🎨 Styles -->
 <style>
-  .anchor-card {
-    display:flex; justify-content:space-between; align-items:flex-start;
-    background:#fff; border-radius:10px; padding:.8rem 1rem; margin-bottom:.6rem;
-    box-shadow:0 1px 6px rgba(0,0,0,0.05); text-decoration:none; color:inherit;
-    transition: background .2s ease, box-shadow .2s ease, transform .06s ease;
+  /* Layout */
+  .page-title { text-align:center; margin: .8rem 0; font-size:1.6rem; font-weight:800; }
+  .top-row { display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.3rem .5rem; max-width:1000px; margin:0 auto .5rem; }
+  .hello { font-size:1.1rem; margin:.2rem 0 .35rem; }
+  .pills { display:flex; flex-wrap:wrap; gap:.4rem; }
+
+  /* Status pill (mail, mode, theme) */
+  .status-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .5rem; border-radius:999px; font-weight:700; font-size:.82rem; border:1px solid #e5e7eb; background:#fff; }
+  .status-pill .dot { width:.55rem; height:.55rem; border-radius:999px; background:#9ca3af; display:inline-block; }
+  .status-pill.ok { border-color:#bbf7d0; background:#ecfdf5; color:#065f46; }
+  .status-pill.ok .dot { background:#10b981; }
+  .status-pill.bad { border-color:#fecaca; background:#fef2f2; color:#991b1b; }
+  .status-pill.bad .dot { background:#ef4444; }
+  .status-pill.neutral { background:#f9fafb; color:#374151; }
+  .dark-theme .status-pill { border-color:#374151; background:#111827; color:#e5e7eb; }
+  .dark-theme .status-pill.ok { background:#052e2b; border-color:#14532d; color:#bbf7d0; }
+  .dark-theme .status-pill.bad { background:#3b0d0d; border-color:#7f1d1d; color:#fecaca; }
+
+  .logout-wrap { margin-left:auto; }
+  .btn.tiny { padding:.45rem .7rem; border-radius:.5rem; border:0; font-weight:700; cursor:pointer; }
+  .btn.tiny.danger { background:#ef4444; color:#fff; }
+  .btn.tiny.danger:hover { background:#dc2626; }
+
+  /* Quick grid */
+  .quick-grid {
+    display:grid; gap:.5rem; grid-template-columns:repeat(2, minmax(0,1fr));
+    max-width:1000px; margin:.5rem auto;
   }
-  .anchor-card:hover { background:#f9fafb; }
-  .anchor-card:focus { outline:2px solid #2563eb; outline-offset:2px; }
-  .anchor-card:active { transform:scale(.998); }
+  .qcard { display:block; text-decoration:none; padding:.75rem .8rem; border:1px solid #e5e7eb; border-radius:.7rem; background:#fff; transition:transform .06s, background .2s, box-shadow .2s; }
+  .qcard:hover { background:#f9fafb; transform:translateY(-1px); box-shadow:0 2px 8px rgba(0,0,0,.05); }
+  .qicon { font-size:1.35rem; }
+  .qtitle { font-weight:800; margin-top:.15rem; color:#111827; }
+  .qmeta { color:#6b7280; font-size:.9rem; }
+  .dark-theme .qcard { background:#0b1220; border-color:#374151; color:#e5e7eb; }
 
-  .dark-theme .anchor-card { background:#1f2937; color:#f9fafb; }
-  .dark-theme .anchor-card:hover { background:#111827; }
+  /* Cards row */
+  .cards {
+    display:grid; gap:.5rem; grid-template-columns:1fr; max-width:1000px; margin:.6rem auto 1rem;
+  }
+  @media (min-width: 640px){ .cards { grid-template-columns: repeat(3, 1fr); } }
 
-  .page-title { text-align: center; margin: 1rem 0; font-size: 1.8rem; font-weight: 700; }
-  .welcome-block { display:flex; justify-content:space-between; align-items:center; max-width:800px; margin:0 auto 1rem; }
+  .card { border:1px solid #e5e7eb; border-radius:.7rem; background:#fff; padding:.75rem .8rem; }
+  .dark-theme .card { background:#0b1220; border-color:#374151; color:#e5e7eb; }
+  .card-title { font-size:1rem; font-weight:800; margin:0 0 .4rem; }
+  .kv { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:.3rem; }
+  .kv li { display:flex; justify-content:space-between; gap:.75rem; }
+  .kv li span { color:#6b7280; }
+  .kv li strong { font-weight:800; }
 
-  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:1rem; max-width:800px; margin:1rem auto; }
-  .stat-card { border-radius:12px; padding:1rem; color:#fff; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.1); transition:transform .2s ease; }
-  .stat-card:hover { transform: translateY(-3px); }
-  .stat-card.total { background:#2563eb; }
-  .stat-card.pending { background:#f59e0b; position:relative; }
-  .stat-card.replied { background:#16a34a; }
-  .stat-card h3 { font-size:1rem; margin-bottom:.4rem; }
-  .stat-card p { font-size:1.6rem; font-weight:700; margin:0; }
+  /* Flashes */
+  .flash { max-width:1000px; margin:.5rem auto; padding:.7rem .9rem; border-radius:.6rem; text-align:center; font-weight:600; }
+  .flash-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .flash-error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+  .dark-theme .flash-success { background:#064e3b; color:#bbf7d0; border-color:#205b4d; }
+  .dark-theme .flash-error { background:#7f1d1d; color:#fecaca; border-color:#7f1d1d; }
 
-  .badge { background:#ef4444; color:#fff; font-size:.75rem; padding:.2rem .5rem; border-radius:999px; margin-left:.4rem; font-weight:600; animation: fadeIn .4s ease; }
-  .hidden { display:none; }
-
-  .quick-links { text-align:center; margin:1.5rem 0; display:flex; gap:.5rem; justify-content:center; flex-wrap:wrap; }
-  .btn.primary.big { padding:.7rem 1.5rem; font-size:1rem; font-weight:600; color:#fff; background:#2563eb; border-radius:8px; text-decoration:none; transition: background .2s ease; display:inline-block; }
-  .btn.primary.big:hover { background:#1d4ed8; }
-
-  .section-title { text-align:center; margin:1.5rem 0 .5rem; font-size:1.3rem; font-weight:600; }
-  .recent-list { max-width:800px; margin:0 auto 2rem; }
-  .message-row { display:flex; justify-content:space-between; align-items:flex-start; background:#fff; border-radius:10px; padding:.8rem 1rem; margin-bottom:.6rem; box-shadow:0 1px 6px rgba(0,0,0,0.05); transition: background .2s ease; }
-  .message-row:hover { background:#f9fafb; }
-  .dark-theme .message-row { background:#1f2937; color:#f9fafb; }
-  .msg-info strong { display:block; font-size:1rem; }
-  .msg-email { font-size:.85rem; color:#6b7280; display:block; }
-  .msg-snippet { font-size:.9rem; margin-top:.3rem; color:#374151; }
-  .msg-meta { text-align:right; font-size:.85rem; }
-  .msg-date { color:#9ca3af; display:block; }
-
-  .status { font-weight:600; }
-  .status.replied { color:#16a34a; }
-  .status.pending { color:#f59e0b; }
-  .status.unread { color:#ef4444; }
-
-  .btn.small { padding:.4rem .7rem; border:none; border-radius:6px; cursor:pointer; font-weight:600; text-decoration:none; }
-  .logout-btn { background:#ef4444; color:#fff; }
-  .logout-btn:hover { background:#dc2626; }
-
-  .flash { max-width:800px; margin:.5rem auto; padding:.8rem 1rem; border-radius:6px; text-align:center; font-weight:500; }
-  .flash-success { background:#dcfce7; color:#166534; }
-  .flash-error { background:#fee2e2; color:#991b1b; }
-  .dark-theme .flash-success { background:#064e3b; color:#bbf7d0; }
-  .dark-theme .flash-error { background:#7f1d1d; color:#fecaca; }
-
-  .toast { position:fixed; bottom:25px; right:25px; background:#2563eb; color:#fff; padding:.9rem 1.4rem; border-radius:8px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.15);
-           opacity:0; transform:translateY(20px); transition:opacity .3s ease, transform .3s ease; z-index:999; }
-  .toast.show { opacity:1; transform:translateY(0); }
-
-  @keyframes fadeIn { from{opacity:0; transform:translateY(-5px)} to{opacity:1; transform:translateY(0)} }
-  @keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.2)} 100%{transform:scale(1)} }
-  .pulse { animation: pulse .4s ease; }
-
-  /* Mobile tweaks for tiny screens */
-  @media (max-width: 480px) {
-    .page-title { font-size: 1.4rem; }
-    .quick-links { gap:.4rem; }
-    .btn.primary.big { width:100%; }
+  /* Ultra-small phones (U50 Lite & below) */
+  @media (max-width: 360px){
+    .hello{ font-size:1rem; }
+    .status-pill{ font-size:.78rem; padding:.22rem .45rem; }
+    .qtitle{ font-size:.95rem; }
+    .qmeta{ font-size:.85rem; }
   }
 </style>
 
-<!-- ⚙️ Live Unread Badge & Notification -->
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
-  const badge = document.getElementById("unreadBadge");
-  const toast = document.getElementById("toast");
-  let lastCount = badge ? parseInt((badge.textContent || "0"), 10) || 0 : 0;
-
-  async function updateUnreadBadge() {
-    try {
-      const res = await fetch("/contact/unread-count", { cache: "no-store", credentials: "same-origin" });
-      if (!res.ok) throw new Error("Bad response");
-      const data = await res.json();
-      const count = Number(data.unreadCount || 0);
-
-      if (!badge) return;
-
-      if (count !== lastCount) {
-        lastCount = count;
-        if (count > 0) {
-          badge.textContent = `${count} New`;
-          badge.classList.remove("hidden");
-          badge.classList.add("pulse");
-          showToast("📩 New message received!");
-          setTimeout(() => badge.classList.remove("pulse"), 600);
-        } else {
-          badge.classList.add("hidden");
-          badge.textContent = "";
-        }
-      }
-    } catch (err) {}
-  }
-
-  function showToast(text) {
-    if (!toast) return;
-    toast.textContent = text;
-    toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 3500);
-  }
-
-  updateUnreadBadge();
-  setInterval(updateUnreadBadge, 30000);
+  // Auto-dismiss flashes (tap to dismiss immediately)
+  document.querySelectorAll(".flash").forEach(el => {
+    const hide = () => { el.style.transition = "opacity .4s, transform .4s"; el.style.opacity = "0"; el.style.transform = "translateY(-6px)"; setTimeout(()=>el.remove(), 450); };
+    setTimeout(hide, 5000);
+    el.addEventListener("click", hide);
+  });
 });
 </script>

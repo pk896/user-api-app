@@ -1,40 +1,282 @@
 // routes/businessAuth.js
-const express = require("express");
-const bcrypt = require("bcrypt");
-const { body, validationResult } = require("express-validator");
-const Business = require("../models/Business");
-const Product = require("../models/Product");
-const ContactMessage = require("../models/ContactMessage");
-const requireBusiness = require("../middleware/requireBusiness");
-const redirectIfLoggedIn = require("../middleware/redirectIfLoggedIn");
-const DeliveryOption = require("../models/DeliveryOption");
+const express = require('express');
+const bcrypt = require('bcrypt');
+const { body, validationResult } = require('express-validator');
+const Business = require('../models/Business');
+const Product = require('../models/Product');
+const requireBusiness = require('../middleware/requireBusiness');
+const redirectIfLoggedIn = require('../middleware/redirectIfLoggedIn');
+const DeliveryOption = require('../models/DeliveryOption');
 
-
+let Order = null;
+try {
+  Order = require('../models/Order');
+} catch {
+  /* Order model optional */
+}
 
 const router = express.Router();
 
-// Optional models for extended dashboards
-let Order = null;
-let Shipment = null;
-try {
-  Order = require("../models/Order");
-  Shipment = require("../models/Shipment");
-} catch {
-  console.warn("⚠️ Order/Shipment models not found (optional).");
+// Normalize emails
+const normalizeEmail = (email) => (email || '').trim().toLowerCase();
+
+const LOW_STOCK_THRESHOLD = 10;
+
+async function computeSupplierKpis(businessId) {
+  // Load products for this supplier (we want customId, price, name, etc.)
+  const products = await Product.find({ business: businessId })
+    .select('stock customId price soldCount name category imageUrl')
+    .lean();
+
+  const totalProducts = products.length;
+  const totalStock = products.reduce(
+    (sum, p) => sum + (Number(p.stock) || 0),
+    0
+  );
+  const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+  const lowStock = products.filter((p) => {
+    const s = Number(p.stock) || 0;
+    return s > 0 && s <= LOW_STOCK_THRESHOLD;
+  }).length;
+  const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
+
+  let soldLast30 = 0;
+  let revenueLast30 = 0;
+
+  // Map for "Top Products (30 days)" section
+  const perProductMap = new Map();
+
+  const supplierCustomIds = products
+    .map((p) => (p.customId ? String(p.customId) : null))
+    .filter(Boolean);
+
+  // ---- Prefer using Order docs for last 30 days ----
+  if (Order && supplierCustomIds.length) {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const PAID_STATES = Array.isArray(Order.PAID_STATES)
+      ? Order.PAID_STATES
+      : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+    const idMatchOr = [
+      { 'items.productId': { $in: supplierCustomIds } },
+      { 'items.customId': { $in: supplierCustomIds } },
+      { 'items.pid': { $in: supplierCustomIds } },
+      { 'items.sku': { $in: supplierCustomIds } },
+    ];
+
+    const recentOrders = await Order.find({
+      createdAt: { $gte: since },
+      status: { $in: PAID_STATES },
+      $or: idMatchOr,
+    })
+      .select('items amount createdAt status')
+      .lean();
+
+    for (const o of recentOrders) {
+      // Full order revenue
+      const amt = Number(o?.amount?.value || 0);
+      if (!Number.isNaN(amt)) {
+        revenueLast30 += amt;
+      }
+
+      const items = Array.isArray(o.items) ? o.items : [];
+      for (const it of items) {
+        const pid = String(
+          it.productId ?? it.customId ?? it.pid ?? it.sku ?? ''
+        ).trim();
+        if (!pid) continue;
+        if (!supplierCustomIds.includes(pid)) continue;
+
+        const qty = Number(it.quantity || 1);
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+
+        soldLast30 += qty;
+
+        const prod =
+          products.find((p) => String(p.customId) === pid) || {};
+
+        const price = Number(prod.price || 0);
+        const estRevenue = price * qty;
+
+        const existing = perProductMap.get(pid) || {
+          productId: pid,
+          name: prod.name || it.name || '(unknown)',
+          imageUrl: prod.imageUrl || '',
+          category: prod.category || '',
+          price,
+          qty: 0,
+          estRevenue: 0,
+        };
+
+        existing.qty += qty;
+        existing.estRevenue += estRevenue;
+        perProductMap.set(pid, existing);
+      }
+    }
+  }
+
+  // ---- Fallback: lifetime counters on Product (soldCount) ----
+  if (soldLast30 === 0 && revenueLast30 === 0) {
+    for (const p of products) {
+      const qty = Number(p.soldCount || 0);
+      if (!qty) continue;
+      const price = Number(p.price || 0);
+
+      soldLast30 += qty;
+      revenueLast30 += qty * price;
+
+      const pid = p.customId ? String(p.customId) : null;
+      if (!pid) continue;
+
+      const existing = perProductMap.get(pid) || {
+        productId: pid,
+        name: p.name || '(unknown)',
+        imageUrl: p.imageUrl || '',
+        category: p.category || '',
+        price,
+        qty: 0,
+        estRevenue: 0,
+      };
+      existing.qty += qty;
+      existing.estRevenue += qty * price;
+      perProductMap.set(pid, existing);
+    }
+  }
+
+  const perProduct = Array.from(perProductMap.values()).sort(
+    (a, b) => b.qty - a.qty
+  );
+
+  const perProductTotalQty = perProduct.reduce(
+    (sum, p) => sum + (Number(p.qty) || 0),
+    0
+  );
+  const perProductEstRevenue = perProduct.reduce(
+    (sum, p) => sum + (Number(p.estRevenue) || 0),
+    0
+  );
+
+  return {
+    totalProducts,
+    totalStock,
+    inStock,
+    lowStock,
+    outOfStock,
+    soldLast30,
+    revenueLast30,
+    perProduct,
+    perProductTotalQty,
+    perProductEstRevenue: Number(perProductEstRevenue.toFixed(2)),
+  };
 }
 
-// Normalize emails
-const normalizeEmail = (email) => (email || "").trim().toLowerCase();
+
+/*async function computeSupplierKpis(businessId) {
+  // Load products for this supplier (include soldCount for fallback)
+  const products = await Product.find({ business: businessId })
+    .select('stock customId price soldCount')
+    .lean();
+
+  const totalProducts = products.length;
+  const totalStock = products.reduce(
+    (sum, p) => sum + (Number(p.stock) || 0),
+    0,
+  );
+  const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+  const lowStock = products.filter((p) => {
+    const s = Number(p.stock) || 0;
+    return s > 0 && s <= LOW_STOCK_THRESHOLD;
+  }).length;
+  const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
+
+  let soldLast30 = 0;
+  let revenueLast30 = 0;
+
+  const supplierCustomIds = products.map((p) => String(p.customId)).filter(Boolean);
+
+  // ---- Prefer using Order docs for last 30 days ----
+  if (Order && supplierCustomIds.length) {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const PAID_STATES = Array.isArray(Order.PAID_STATES)
+      ? Order.PAID_STATES
+      : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+    // Match any of the possible id fields inside items[]
+    const idMatchOr = [
+      { 'items.productId': { $in: supplierCustomIds } },
+      { 'items.customId': { $in: supplierCustomIds } },
+      { 'items.pid': { $in: supplierCustomIds } },
+      { 'items.sku': { $in: supplierCustomIds } },
+    ];
+
+    const recentOrders = await Order.find({
+      createdAt: { $gte: since },
+      status: { $in: PAID_STATES },
+      $or: idMatchOr,
+    })
+      .select('items amount createdAt status')
+      .lean();
+
+    for (const o of recentOrders) {
+      // Revenue: full order amount if it has at least one of this supplier's items
+      const amt = Number(o?.amount?.value || 0);
+      if (!Number.isNaN(amt)) {
+        revenueLast30 += amt;
+      }
+
+      const items = Array.isArray(o.items) ? o.items : [];
+      for (const it of items) {
+        const pid = String(
+          it.productId ??
+          it.customId ??
+          it.pid ??
+          it.sku ??
+          ''
+        ).trim();
+        if (!pid) continue;
+        if (!supplierCustomIds.includes(pid)) continue;
+
+        soldLast30 += Number(it.quantity || 1);
+      }
+    }
+  }
+
+  // ---- Fallback: use per-product counters (lifetime) ----
+  if (soldLast30 === 0 && revenueLast30 === 0) {
+    for (const p of products) {
+      const qty = Number(p.soldCount || 0);
+      if (!qty) continue;
+      const price = Number(p.price || 0);
+      soldLast30 += qty;
+      revenueLast30 += qty * price;
+    }
+  }
+
+  return {
+    totalProducts,
+    totalStock,
+    inStock,
+    lowStock,
+    outOfStock,
+    soldLast30,
+    revenueLast30,
+  };
+}
+*/
 
 /* ----------------------------------------------------------
  * 📝 GET: Business Signup
  * -------------------------------------------------------- */
-router.get("/signup", (req, res) => {
-  res.render("business-signup", {
-    title: "Business Sign Up",
-    active: "business-signup",
-    success: req.flash("success"),
-    error: req.flash("error"),
+router.get('/signup', (req, res) => {
+  res.render('business-signup', {
+    title: 'Business Sign Up',
+    active: 'business-signup',
+    success: req.flash('success'),
+    error: req.flash('error'),
     errors: [],
     themeCss: res.locals.themeCss,
   });
@@ -44,34 +286,32 @@ router.get("/signup", (req, res) => {
  * 📨 POST: Business Signup
  * -------------------------------------------------------- */
 router.post(
-  "/signup",
+  '/signup',
   redirectIfLoggedIn,
   [
-    body("name").notEmpty().withMessage("Business name is required"),
-    body("email").isEmail().withMessage("Valid email is required"),
-    body("password")
-      .isLength({ min: 6 })
-      .withMessage("Password must be at least 6 characters"),
-    body("role")
-      .isIn(["seller", "supplier", "buyer"])
-      .withMessage("Role must be seller, supplier, or buyer"),
-    body("businessNumber").notEmpty().withMessage("Business number is required"),
-    body("phone").notEmpty().withMessage("Phone number is required"),
-    body("country").notEmpty().withMessage("Country is required"),
-    body("city").notEmpty().withMessage("City is required"),
-    body("address").notEmpty().withMessage("Address is required"),
-    body("idOrPassport").notEmpty().withMessage("ID or Passport is required"),
+    body('name').notEmpty().withMessage('Business name is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('role')
+      .isIn(['seller', 'supplier', 'buyer'])
+      .withMessage('Role must be seller, supplier, or buyer'),
+    body('businessNumber').notEmpty().withMessage('Business number is required'),
+    body('phone').notEmpty().withMessage('Phone number is required'),
+    body('country').notEmpty().withMessage('Country is required'),
+    body('city').notEmpty().withMessage('City is required'),
+    body('address').notEmpty().withMessage('Address is required'),
+    body('idOrPassport').notEmpty().withMessage('ID or Passport is required'),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      req.flash("error", "Please fix the highlighted errors.");
-      return res.status(400).render("business-signup", {
-        title: "Business Sign Up",
-        active: "business-signup",
+      req.flash('error', 'Please fix the highlighted errors.');
+      return res.status(400).render('business-signup', {
+        title: 'Business Sign Up',
+        active: 'business-signup',
         errors: errors.array(),
-        success: req.flash("success"),
-        error: req.flash("error"),
+        success: req.flash('success'),
+        error: req.flash('error'),
         themeCss: res.locals.themeCss,
       });
     }
@@ -93,13 +333,13 @@ router.post(
       const emailNorm = normalizeEmail(email);
       const existing = await Business.findOne({ email: emailNorm });
       if (existing) {
-        req.flash("error", "An account with that email already exists.");
-        return res.status(409).render("business-signup", {
-          title: "Business Sign Up",
-          active: "business-signup",
-          errors: [{ msg: "Email already in use", param: "email" }],
-          success: req.flash("success"),
-          error: req.flash("error"),
+        req.flash('error', 'An account with that email already exists.');
+        return res.status(409).render('business-signup', {
+          title: 'Business Sign Up',
+          active: 'business-signup',
+          errors: [{ msg: 'Email already in use', param: 'email' }],
+          success: req.flash('success'),
+          error: req.flash('error'),
           themeCss: res.locals.themeCss,
         });
       }
@@ -126,43 +366,43 @@ router.post(
         role: business.role,
       };
 
-      req.flash("success", `🎉 Welcome ${business.name}! Your account was created successfully.`);
+      req.flash('success', `🎉 Welcome ${business.name}! Your account was created successfully.`);
 
       // ✅ Role-based redirect after signup
       switch (business.role) {
-        case "seller":
-          return res.redirect("/business/dashboards/seller-dashboard");
-        case "supplier":
-          return res.redirect("/business/dashboards/supplier-dashboard");
-        case "buyer":
-          return res.redirect("/business/dashboards/buyer-dashboard");
+        case 'seller':
+          return res.redirect('/business/dashboards/seller-dashboard');
+        case 'supplier':
+          return res.redirect('/business/dashboards/supplier-dashboard');
+        case 'buyer':
+          return res.redirect('/business/dashboards/buyer-dashboard');
         default:
-          req.flash("error", "Invalid business role.");
-          return res.redirect("/business/login");
+          req.flash('error', 'Invalid business role.');
+          return res.redirect('/business/login');
       }
     } catch (err) {
-      console.error("❌ Signup error:", err);
-      req.flash("error", "Server error during signup. Please try again.");
-      return res.status(500).render("business-signup", {
-        title: "Business Sign Up",
-        errors: [{ msg: "Server error" }],
-        success: req.flash("success"),
-        error: req.flash("error"),
+      console.error('❌ Signup error:', err);
+      req.flash('error', 'Server error during signup. Please try again.');
+      return res.status(500).render('business-signup', {
+        title: 'Business Sign Up',
+        errors: [{ msg: 'Server error' }],
+        success: req.flash('success'),
+        error: req.flash('error'),
         themeCss: res.locals.themeCss,
       });
     }
-  }
+  },
 );
 
 /* ----------------------------------------------------------
  * 🔐 GET: Business Login
  * -------------------------------------------------------- */
-router.get("/login", redirectIfLoggedIn, (req, res) => {
-  res.render("business-login", {
-    title: "Business Login",
-    active: "business-login",
-    success: req.flash("success"),
-    error: req.flash("error"),
+router.get('/login', redirectIfLoggedIn, (req, res) => {
+  res.render('business-login', {
+    title: 'Business Login',
+    active: 'business-login',
+    success: req.flash('success'),
+    error: req.flash('error'),
     errors: [],
     themeCss: res.locals.themeCss,
   });
@@ -172,23 +412,23 @@ router.get("/login", redirectIfLoggedIn, (req, res) => {
  * 🔑 POST: Business Login
  * -------------------------------------------------------- */
 router.post(
-  "/login",
+  '/login',
   [
-    body("email").isEmail().withMessage("Valid email is required"),
-    body("password").notEmpty().withMessage("Password is required"),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required'),
   ],
   async (req, res) => {
-    console.log("✅ Session created:", req.session);
+    console.log('✅ Session created:', req.session);
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      req.flash("error", "Please fix the errors and try again.");
-      return res.status(400).render("business-login", {
-        title: "Business Login",
-        active: "business-login",
+      req.flash('error', 'Please fix the errors and try again.');
+      return res.status(400).render('business-login', {
+        title: 'Business Login',
+        active: 'business-login',
         errors: errors.array(),
-        success: req.flash("success"),
-        error: req.flash("error"),
+        success: req.flash('success'),
+        error: req.flash('error'),
         themeCss: res.locals.themeCss,
       });
     }
@@ -199,13 +439,13 @@ router.post(
       const business = await Business.findOne({ email: emailNorm });
 
       if (!business || !(await bcrypt.compare(password, business.password))) {
-        req.flash("error", "❌ Invalid email or password.");
-        return res.status(401).render("business-login", {
-          title: "Business Login",
-          active: "business-login",
-          errors: [{ msg: "Invalid credentials" }],
-          success: req.flash("success"),
-          error: req.flash("error"),
+        req.flash('error', '❌ Invalid email or password.');
+        return res.status(401).render('business-login', {
+          title: 'Business Login',
+          active: 'business-login',
+          errors: [{ msg: 'Invalid credentials' }],
+          success: req.flash('success'),
+          error: req.flash('error'),
           themeCss: res.locals.themeCss,
         });
       }
@@ -218,260 +458,1707 @@ router.post(
         role: business.role,
       };
 
-      req.flash("success", `✅ Welcome back, ${business.name}!`);
+      req.flash('success', `✅ Welcome back, ${business.name}!`);
 
       // ✅ Role-based redirect after login
       switch (business.role) {
-        case "seller":
-          return res.redirect("/business/dashboards/seller-dashboard");
-        case "supplier":
-          return res.redirect("/business/dashboards/supplier-dashboard");
-        case "buyer":
-          return res.redirect("/business/dashboards/buyer-dashboard");
+        case 'seller':
+          return res.redirect('/business/dashboards/seller-dashboard');
+        case 'supplier':
+          return res.redirect('/business/dashboards/supplier-dashboard');
+        case 'buyer':
+          return res.redirect('/business/dashboards/buyer-dashboard');
         default:
-          req.flash("error", "Invalid business role.");
-          return res.redirect("/business/login");
+          req.flash('error', 'Invalid business role.');
+          return res.redirect('/business/login');
       }
     } catch (err) {
-      console.error("❌ Login error:", err);
-      req.flash("error", "❌ Login failed. Please try again later.");
-      return res.status(500).render("business-login", {
-        title: "Business Login",
-        errors: [{ msg: "Server error" }],
-        success: req.flash("success"),
-        error: req.flash("error"),
+      console.error('❌ Login error:', err);
+      req.flash('error', '❌ Login failed. Please try again later.');
+      return res.status(500).render('business-login', {
+        title: 'Business Login',
+        errors: [{ msg: 'Server error' }],
+        success: req.flash('success'),
+        error: req.flash('error'),
         themeCss: res.locals.themeCss,
       });
     }
-  }
+  },
 );
 
-router.get("/dashboards/seller-dashboard", requireBusiness, async (req, res) => {
+// SELLER DASHBOARD - FIXED VERSION
+router.get('/dashboards/seller-dashboard', requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     if (!business || !business._id) {
-      req.flash("error", "Session expired. Please log in again.");
-      return res.redirect("/business/login");
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
     }
 
-     // 🔒 Role gate: sellers only
-    if (business.role !== "seller") {
-      req.flash("error", "⛔ Access denied. Seller accounts only.");
-      return res.redirect("/business/dashboard");
+    // sellers only
+    if (business.role !== 'seller') {
+      req.flash('error', '⛔ Access denied. Seller accounts only.');
+      return res.redirect('/business/dashboard');
     }
 
-    // Load models that are optional in your file header
-    const Order = require("../models/Order");
-    const Shipment = require("../models/Shipment");
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
 
-    // --- Load all products for this business
+    // ------------------------------------------------------------
+    // 1) All products for this seller (include customId for matching)
+    // ------------------------------------------------------------
     const products = await Product.find({ business: business._id })
-      .select("customId name price stock category imageUrl createdAt soldCount soldOrders")
-      .sort({ createdAt: -1 })
+      .select('customId name price stock category imageUrl createdAt updatedAt')
+      .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
 
-    // --- Product totals
     const totalProducts = products.length;
-    const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
-    const lowStock = products.filter(p => (Number(p.stock) || 0) > 0 && (Number(p.stock) || 0) <= 5).length;
-    const outOfStock = products.filter(p => (Number(p.stock) || 0) <= 0).length;
+    const totalStock = products.reduce(
+      (sum, p) => sum + (Number(p.stock) || 0),
+      0
+    );
+    const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+    const lowStock = products.filter((p) => {
+      const s = Number(p.stock) || 0;
+      return s > 0 && s <= 5;
+    }).length;
+    const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0)
+      .length;
 
-    // --- Shipment totals by status for this business
+    // Map by customId (this is what Order.items.productId stores)
+    const productsByKey = new Map();
+    const supplierCustomIds = [];
+    for (const p of products) {
+      if (p.customId) {
+        const key = String(p.customId);
+        supplierCustomIds.push(key);
+        productsByKey.set(key, p);
+      }
+      // Also map by _id for backward compatibility
+      productsByKey.set(String(p._id), p);
+    }
+
+    // ------------------------------------------------------------
+    // 2) Shipments for this seller
+    // ------------------------------------------------------------
     const shipmentsAgg = await Shipment.aggregate([
       { $match: { business: business._id } },
-      { $group: { _id: "$status", count: { $sum: 1 } } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
+
     const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
       m[r._id] = Number(r.count || 0);
       return m;
     }, {});
-    const shipmentsTotal = Object.values(shipmentsByStatus).reduce((a, b) => a + b, 0);
 
-    // --- Orders that include this seller’s products
-    // Match Order.items[].productId (string) with Product.customId you store
-    const sellerCustomIds = products.map(p => p.customId);
+    const shipmentsTotal = Object.values(shipmentsByStatus).reduce(
+      (a, b) => a + b,
+      0
+    );
+
+    // ------------------------------------------------------------
+    // 3) Orders for this seller (Recent Orders)
+    // ------------------------------------------------------------
     let ordersTotal = 0;
     let ordersByStatus = {};
     let recentOrders = [];
 
-    if (sellerCustomIds.length) {
+    if (Order && supplierCustomIds.length) {
+      const idMatchOr = [
+        { 'items.productId': { $in: supplierCustomIds } },
+        { 'items.customId': { $in: supplierCustomIds } },
+        { 'items.pid': { $in: supplierCustomIds } },
+        { 'items.sku': { $in: supplierCustomIds } },
+      ];
+
+      const baseOrderMatch = { $or: idMatchOr };
+
       const ordersAgg = await Order.aggregate([
-        { $match: { "items.productId": { $in: sellerCustomIds } } },
-        { $group: { _id: "$status", count: { $sum: 1 } } },
+        { $match: baseOrderMatch },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
       ]);
+
       ordersByStatus = ordersAgg.reduce((m, r) => {
-        m[r._id || "Unknown"] = Number(r.count || 0);
+        m[r._id || 'Unknown'] = Number(r.count || 0);
         return m;
       }, {});
-      ordersTotal = await Order.countDocuments({ "items.productId": { $in: sellerCustomIds } });
+      ordersTotal = await Order.countDocuments(baseOrderMatch);
 
-      recentOrders = await Order.find({ "items.productId": { $in: sellerCustomIds } })
-        .select("orderId status amount createdAt")
+      recentOrders = await Order.find(baseOrderMatch)
+        .select('orderId status amount createdAt')
         .sort({ createdAt: -1 })
         .limit(5)
         .lean();
     }
 
-    // Delivery options (you were already sending these)
+    // ------------------------------------------------------------
+    // 4) 30-day KPIs with PROPER per-product data
+    // ------------------------------------------------------------
+    const SINCE_DAYS = 30;
+    const since = new Date();
+    since.setDate(since.getDate() - SINCE_DAYS);
+
+    let soldPerProduct = [];
+    let soldTotalQty = 0;
+    let soldEstRevenue = 0;
+    let last30Revenue = 0;
+    let last30Items = 0;
+
+    if (Order && supplierCustomIds.length) {
+      const PAID_STATES = Array.isArray(Order.PAID_STATES)
+        ? Order.PAID_STATES
+        : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+      const idMatchOr = [
+        { 'items.productId': { $in: supplierCustomIds } },
+        { 'items.customId': { $in: supplierCustomIds } },
+        { 'items.pid': { $in: supplierCustomIds } },
+        { 'items.sku': { $in: supplierCustomIds } },
+      ];
+
+      const baseMatch = {
+        createdAt: { $gte: since },
+        status: { $in: PAID_STATES },
+        $or: idMatchOr,
+      };
+
+      // Get ALL orders in last 30 days for this seller
+      const recentOrders30 = await Order.find(baseMatch)
+        .select('items amount createdAt status')
+        .lean();
+
+      // Process each order to build per-product stats
+      const productSalesMap = new Map();
+
+      for (const order of recentOrders30) {
+        const items = Array.isArray(order.items) ? order.items : [];
+        
+        for (const item of items) {
+          // Try all possible product ID fields
+          const productId = String(
+            item.productId || item.customId || item.pid || item.sku || ''
+          ).trim();
+          
+          if (!productId || !supplierCustomIds.includes(productId)) continue;
+
+          const quantity = Number(item.quantity || 1);
+          if (quantity <= 0) continue;
+
+          // Find the product details
+          const product = productsByKey.get(productId);
+          if (!product) continue;
+
+          const price = Number(product.price || 0);
+          const revenue = quantity * price;
+
+          // Update totals
+          last30Items += quantity;
+          last30Revenue += revenue;
+
+          // Update per-product stats
+          if (!productSalesMap.has(productId)) {
+            productSalesMap.set(productId, {
+              productId: productId,
+              name: product.name || '(unknown)',
+              imageUrl: product.imageUrl || '',
+              category: product.category || '',
+              price: price,
+              qty: 0,
+              estRevenue: 0
+            });
+          }
+
+          const existing = productSalesMap.get(productId);
+          existing.qty += quantity;
+          existing.estRevenue += revenue;
+        }
+      }
+
+      // Convert map to array and sort by quantity sold
+      soldPerProduct = Array.from(productSalesMap.values())
+        .sort((a, b) => b.qty - a.qty);
+
+      soldTotalQty = last30Items;
+      soldEstRevenue = last30Revenue;
+    }
+
+    // If no recent orders, try using computeSupplierKpis as fallback
+    if (soldPerProduct.length === 0) {
+      try {
+        const kpisRaw = await computeSupplierKpis(business._id);
+        if (kpisRaw && Array.isArray(kpisRaw.perProduct) && kpisRaw.perProduct.length > 0) {
+          soldPerProduct = kpisRaw.perProduct;
+          soldTotalQty = kpisRaw.perProductTotalQty || 0;
+          soldEstRevenue = kpisRaw.perProductEstRevenue || 0;
+          last30Items = kpisRaw.soldLast30 || 0;
+          last30Revenue = kpisRaw.revenueLast30 || 0;
+        }
+      } catch (e) {
+        console.error('Fallback computeSupplierKpis failed:', e);
+      }
+    }
+
+    const kpis = {
+      totalProducts,
+      totalStock,
+      inStock,
+      lowStock,
+      outOfStock,
+      soldLast30: last30Items,
+      revenueLast30: Number(last30Revenue.toFixed(2)),
+      last30Items,
+      last30Revenue: Number(last30Revenue.toFixed(2)),
+      perProduct: soldPerProduct, // THIS IS CRITICAL - must be populated
+      perProductTotalQty: soldTotalQty,
+      perProductEstRevenue: Number(soldEstRevenue.toFixed(2)),
+    };
+
+    console.log('📊 Seller KPIs Debug:', {
+      perProductCount: kpis.perProduct.length,
+      soldLast30: kpis.soldLast30,
+      revenueLast30: kpis.revenueLast30,
+      sampleProducts: kpis.perProduct.slice(0, 3).map(p => ({
+        name: p.name,
+        qty: p.qty,
+        revenue: p.estRevenue
+      }))
+    });
+
+    // ------------------------------------------------------------
+    // 5) Delivery options + render
+    // ------------------------------------------------------------
     const deliveryOptions = await DeliveryOption.find({ active: true })
       .sort({ deliveryDays: 1, priceCents: 1 })
       .lean();
 
-    // Optional messages (keep your placeholder or wire to your ContactMessage)
-    let totalMessages = 0, unreadMessages = 0;
-    try {
-      totalMessages = await ContactMessage.countDocuments({ business: business._id });
-      unreadMessages = await ContactMessage.countDocuments({ business: business._id, readByBusiness: false });
-    } catch {
-      console.warn("💬 ContactMessage model not active, skipping message counts.");
-    }
-
-    return res.render("dashboards/seller-dashboard", {
-      title: "Seller Dashboard",
-      business,                       // includes name + role (for the role badge)
-      // product totals
+    return res.render('dashboards/seller-dashboard', {
+      title: 'Seller Dashboard',
+      business,
       totals: {
         totalProducts,
         totalStock,
+        inStock,
         lowStock,
         outOfStock,
       },
-      products,                       // full list for per-product stock
-      // shipments
+      products, // used by recentProducts in your EJS
+
       shipments: {
         total: shipmentsTotal,
         byStatus: shipmentsByStatus,
       },
-      // orders
       orders: {
         total: ordersTotal,
         byStatus: ordersByStatus,
         recent: recentOrders,
       },
-      // messages + delivery
-      stats: { totalMessages, unreadMessages },
+      kpis, // This now includes properly populated perProduct array
       deliveryOptions,
       isOrdersAdmin: Boolean(req.session.ordersAdmin),
 
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
     });
   } catch (err) {
-    console.error("❌ Seller dashboard error:", err);
-    req.flash("error", "Failed to load seller dashboard.");
-    res.redirect("/business/login");
+    console.error('❌ Seller dashboard error:', err);
+    req.flash('error', 'Failed to load seller dashboard.');
+    res.redirect('/business/login');
   }
 });
 
-router.get("/dashboards/supplier-dashboard", requireBusiness, async (req, res) => {
+/*// SELLER DASHBOARD
+router.get('/dashboards/seller-dashboard', requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     if (!business || !business._id) {
-      req.flash("error", "Session expired. Please log in again.");
-      return res.redirect("/business/login");
-    }
-    // 🔒 Supplier-only
-    if (business.role !== "supplier") {
-      req.flash("error", "⛔ Access denied. Supplier accounts only.");
-      return res.redirect("/business/dashboard");
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
     }
 
-    const LOW_STOCK_THRESHOLD = 10; // adjust if you prefer
+    // sellers only
+    if (business.role !== 'seller') {
+      req.flash('error', '⛔ Access denied. Seller accounts only.');
+      return res.redirect('/business/dashboard');
+    }
 
-    const theme = req.session.theme || "light";
-    const themeCss = theme === "dark" ? "/css/dark.css" : "/css/light.css";
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
 
-    // --- Products (owned by this business)
-    const [totalProducts, inStock, lowStock, outOfStock, products] = await Promise.all([
-      Product.countDocuments({ business: business._id }),
-      Product.countDocuments({ business: business._id, stock: { $gt: 0 } }),
-      Product.countDocuments({ business: business._id, stock: { $gt: 0, $lte: LOW_STOCK_THRESHOLD } }),
-      Product.countDocuments({ business: business._id, stock: 0 }),
-      Product.find({ business: business._id })
-        .select("name customId stock price category imageUrl updatedAt")
-        .sort({ updatedAt: -1 })
-        .limit(5)
-        .lean(),
-    ]);
+    // ------------------------------------------------------------
+    // 1) All products for this seller (include customId for matching)
+    // ------------------------------------------------------------
+    const products = await Product.find({ business: business._id })
+      .select('customId name price stock category imageUrl createdAt updatedAt')
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
 
-    // --- Shipments (group + recent)
-    const Shipment = require("../models/Shipment");
+    const totalProducts = products.length;
+    const totalStock = products.reduce(
+      (sum, p) => sum + (Number(p.stock) || 0),
+      0
+    );
+    const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+    const lowStock = products.filter((p) => {
+      const s = Number(p.stock) || 0;
+      return s > 0 && s <= 5;
+    }).length;
+    const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0)
+      .length;
+
+    // Map by customId (this is what Order.items.productId stores)
+    const productsByKey = new Map();
+    const supplierCustomIds = [];
+    for (const p of products) {
+      if (p.customId) {
+        const key = String(p.customId);
+        supplierCustomIds.push(key);
+        productsByKey.set(key, p);
+      }
+    }
+
+    // ------------------------------------------------------------
+    // 2) Shipments for this seller
+    // ------------------------------------------------------------
     const shipmentsAgg = await Shipment.aggregate([
       { $match: { business: business._id } },
-      { $group: { _id: "$status", count: { $sum: 1 } } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
+
     const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
       m[r._id] = Number(r.count || 0);
       return m;
     }, {});
-    const totalShipments = Object.values(shipmentsByStatus).reduce((a, b) => a + b, 0);
-    const pendingShipments = (shipmentsByStatus["Pending"] || 0) + (shipmentsByStatus["Processing"] || 0);
 
-    const shipments = await Shipment.find({ business: business._id })
-      .populate("product", "name customId")
-      .select("orderId status updatedAt")
+    const shipmentsTotal = Object.values(shipmentsByStatus).reduce(
+      (a, b) => a + b,
+      0
+    );
+
+    // ------------------------------------------------------------
+    // 3) Orders for this seller (Recent Orders)
+    //    Match on the SAME keys as computeSupplierKpis
+    // ------------------------------------------------------------
+    let ordersTotal = 0;
+    let ordersByStatus = {};
+    let recentOrders = [];
+
+    if (Order && supplierCustomIds.length) {
+      const idMatchOr = [
+        { 'items.productId': { $in: supplierCustomIds } },
+        { 'items.customId': { $in: supplierCustomIds } },
+        { 'items.pid': { $in: supplierCustomIds } },
+        { 'items.sku': { $in: supplierCustomIds } },
+      ];
+
+      const baseOrderMatch = { $or: idMatchOr };
+
+      const ordersAgg = await Order.aggregate([
+        { $match: baseOrderMatch },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]);
+
+      ordersByStatus = ordersAgg.reduce((m, r) => {
+        m[r._id || 'Unknown'] = Number(r.count || 0);
+        return m;
+      }, {});
+      ordersTotal = await Order.countDocuments(baseOrderMatch);
+
+      recentOrders = await Order.find(baseOrderMatch)
+        .select('orderId status amount createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+    }
+
+    // ------------------------------------------------------------
+    // 4) 30-day KPIs (sold + revenue) from the SAME helper as supplier
+    // ------------------------------------------------------------
+    const kpiCore = await computeSupplierKpis(business._id);
+    // kpiCore: { totalProducts, totalStock, inStock, lowStock, outOfStock, soldLast30, revenueLast30 }
+
+    // ------------------------------------------------------------
+    // 5) Per-product breakdown for "Top Products (30 days)"
+    //    Use customId-based keys so it lines up with Payment/Order code
+    // ------------------------------------------------------------
+    const SINCE_DAYS = 30;
+    const since = new Date();
+    since.setDate(since.getDate() - SINCE_DAYS);
+
+    let soldPerProduct = [];
+    let soldTotalQty = 0;
+    let soldEstRevenue = 0;
+
+    if (Order && supplierCustomIds.length) {
+      const PAID_STATES = Array.isArray(Order.PAID_STATES)
+        ? Order.PAID_STATES
+        : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+      const idMatchOr = [
+        { 'items.productId': { $in: supplierCustomIds } },
+        { 'items.customId': { $in: supplierCustomIds } },
+        { 'items.pid': { $in: supplierCustomIds } },
+        { 'items.sku': { $in: supplierCustomIds } },
+      ];
+
+      const baseMatch = {
+        createdAt: { $gte: since },
+        status: { $in: PAID_STATES },
+        $or: idMatchOr,
+      };
+
+      const perProductAgg = await Order.aggregate([
+        { $match: baseMatch },
+        { $unwind: '$items' },
+        {
+          $project: {
+            key: {
+              $ifNull: [
+                '$items.productId',
+                {
+                  $ifNull: [
+                    '$items.customId',
+                    { $ifNull: ['$items.pid', '$items.sku'] },
+                  ],
+                },
+              ],
+            },
+            quantity: { $ifNull: ['$items.quantity', 1] },
+          },
+        },
+        { $match: { key: { $in: supplierCustomIds } } },
+        {
+          $group: {
+            _id: '$key',
+            qty: { $sum: '$quantity' },
+          },
+        },
+      ]);
+
+      soldPerProduct = perProductAgg.map((row) => {
+        const key = String(row._id);
+        const prod = productsByKey.get(key) || {};
+        const qty = Number(row.qty || 0);
+        const price = Number(prod.price || 0);
+        const estRevenue = qty * price;
+
+        soldTotalQty += qty;
+        soldEstRevenue += estRevenue;
+
+        return {
+          productId: key,
+          name: prod.name || '(unknown)',
+          imageUrl: prod.imageUrl || '',
+          category: prod.category || '',
+          price,
+          qty,
+          estRevenue,
+        };
+      });
+
+      soldPerProduct.sort((a, b) => b.qty - a.qty);
+    }
+
+    const kpis = {
+      ...kpiCore,
+      // EJS expects these aliases:
+      last30Items:
+        kpiCore.soldLast30 ?? kpiCore.last30Items ?? soldTotalQty,
+      last30Revenue:
+        kpiCore.revenueLast30 ?? kpiCore.last30Revenue ?? soldEstRevenue,
+
+      perProduct: soldPerProduct,
+      perProductTotalQty: soldTotalQty,
+      perProductEstRevenue: Number(soldEstRevenue.toFixed(2)),
+    };
+
+    console.log('📊 Seller render KPIs (customId-based)', {
+      seller: String(business._id),
+      soldLast30: kpis.soldLast30,
+      revenueLast30: kpis.revenueLast30,
+      perProductCount: kpis.perProduct.length,
+      exampleKeys: kpis.perProduct.slice(0, 5).map((p) => p.productId),
+    });
+
+    // ------------------------------------------------------------
+    // 6) Delivery options + render
+    // ------------------------------------------------------------
+    const deliveryOptions = await DeliveryOption.find({ active: true })
+      .sort({ deliveryDays: 1, priceCents: 1 })
+      .lean();
+
+    return res.render('dashboards/seller-dashboard', {
+      title: 'Seller Dashboard',
+      business,
+      totals: {
+        totalProducts,
+        totalStock,
+        inStock,
+        lowStock,
+        outOfStock,
+      },
+      products, // used by recentProducts in your EJS
+
+      shipments: {
+        total: shipmentsTotal,
+        byStatus: shipmentsByStatus,
+      },
+      orders: {
+        total: ordersTotal,
+        byStatus: ordersByStatus,
+        recent: recentOrders,
+      },
+      kpis,
+      deliveryOptions,
+      isOrdersAdmin: Boolean(req.session.ordersAdmin),
+
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Seller dashboard error:', err);
+    req.flash('error', 'Failed to load seller dashboard.');
+    res.redirect('/business/login');
+  }
+});*/
+
+/*// SELLER DASHBOARD
+router.get('/dashboards/seller-dashboard', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    // 🔒 Role gate: sellers only
+    if (business.role !== 'seller') {
+      req.flash('error', '⛔ Access denied. Seller accounts only.');
+      return res.redirect('/business/dashboard');
+    }
+
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
+
+    // ------------------------------------------------------------
+    // 1) Load all products for this seller
+    // ------------------------------------------------------------
+    const products = await Product.find({ business: business._id })
+      .select('name price stock category imageUrl createdAt updatedAt')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totalProducts = products.length;
+    const totalStock = products.reduce(
+      (sum, p) => sum + (Number(p.stock) || 0),
+      0,
+    );
+    const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+    const lowStock = products.filter((p) => {
+      const s = Number(p.stock) || 0;
+      return s > 0 && s <= 5;
+    }).length;
+    const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0)
+      .length;
+
+    // Map productId (string) -> product
+    const productIdStrings = products.map((p) => String(p._id));
+    const productsById = new Map();
+    for (const p of products) {
+      productsById.set(String(p._id), p);
+    }
+
+    // ------------------------------------------------------------
+    // 2) Shipment totals by status (for this business)
+    // ------------------------------------------------------------
+    const shipmentsAgg = await Shipment.aggregate([
+      { $match: { business: business._id } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+
+    const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
+      m[r._id] = Number(r.count || 0);
+      return m;
+    }, {});
+
+    const shipmentsTotal = Object.values(shipmentsByStatus).reduce(
+      (a, b) => a + b,
+      0,
+    );
+
+    // ------------------------------------------------------------
+    // 3) Orders for this seller (any time) for "Recent Orders"
+    //    We say an order belongs to this seller if ANY item.productId
+    //    is one of this seller's product IDs.
+    // ------------------------------------------------------------
+    let ordersTotal = 0;
+    let ordersByStatus = {};
+    let recentOrders = [];
+
+    if (Order && productIdStrings.length) {
+      const baseOrderMatch = {
+        'items.productId': { $in: productIdStrings },
+      };
+
+      const ordersAgg = await Order.aggregate([
+        { $match: baseOrderMatch },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]);
+
+      ordersByStatus = ordersAgg.reduce((m, r) => {
+        m[r._id || 'Unknown'] = Number(r.count || 0);
+        return m;
+      }, {});
+      ordersTotal = await Order.countDocuments(baseOrderMatch);
+
+      recentOrders = await Order.find(baseOrderMatch)
+        .select('orderId status amount createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+    }
+
+    // ------------------------------------------------------------
+    // 4) Last 30 days KPIs + per-product breakdown
+    //    We treat revenue as product.price * quantity (store currency).
+    // ------------------------------------------------------------
+    const SINCE_DAYS = 30;
+    const since = new Date();
+    since.setDate(since.getDate() - SINCE_DAYS);
+
+    let last30Revenue = 0;
+    let last30Items = 0;
+    const perProductMap = new Map(); // key = productId (string)
+
+    if (Order && productIdStrings.length) {
+      const PAID_STATES = Array.isArray(Order.PAID_STATES)
+        ? Order.PAID_STATES
+        : [
+            'Completed',
+            'Paid',
+            'Shipped',
+            'Delivered',
+            'COMPLETED',
+            'completed',
+            'APPROVED',
+          ];
+
+      const kpiMatch = {
+        createdAt: { $gte: since },
+        status: { $in: PAID_STATES },
+        'items.productId': { $in: productIdStrings },
+      };
+
+      const recent30 = await Order.find(kpiMatch)
+        .select('items createdAt status')
+        .lean();
+
+      for (const o of recent30) {
+        const items = Array.isArray(o.items) ? o.items : [];
+        for (const it of items) {
+          const pid = String(it.productId || '').trim();
+          if (!pid) continue;
+          if (!productsById.has(pid)) continue; // not this seller's product
+
+          const qty = Number(it.quantity || 1);
+          last30Items += qty;
+
+          const prod = productsById.get(pid);
+          const price =
+            Number(prod.price || (it.price && it.price.value) || 0);
+          const estRevenue = qty * price;
+
+          let existing = perProductMap.get(pid);
+          if (!existing) {
+            existing = {
+              productId: pid,
+              name: prod.name || it.name || '(unknown)',
+              imageUrl: prod.imageUrl || '',
+              category: prod.category || '',
+              price,
+              qty: 0,
+              estRevenue: 0,
+            };
+          }
+
+          existing.qty += qty;
+          existing.estRevenue += estRevenue;
+
+          perProductMap.set(pid, existing);
+          last30Revenue += estRevenue;
+        }
+      }
+    }
+
+    const soldPerProduct = Array.from(perProductMap.values()).sort(
+      (a, b) => b.qty - a.qty,
+    );
+
+    const soldTotalQty = soldPerProduct.reduce(
+      (sum, p) => sum + (Number(p.qty) || 0),
+      0,
+    );
+    const soldEstRevenue = soldPerProduct.reduce(
+      (sum, p) => sum + (Number(p.estRevenue) || 0),
+      0,
+    );
+
+    const kpis = {
+      soldLast30: last30Items,
+      revenueLast30: Number(last30Revenue.toFixed(2)),
+      last30Revenue,
+      last30Items,
+      perProduct: soldPerProduct,
+      perProductTotalQty: soldTotalQty,
+      perProductEstRevenue: Number(soldEstRevenue.toFixed(2)),
+    };
+
+    console.log('📊 Seller render KPIs (productId-based)', {
+      seller: String(business._id),
+      last30Items: kpis.last30Items,
+      last30Revenue: kpis.last30Revenue,
+      perProductCount: kpis.perProduct.length,
+      perProductKeys: kpis.perProduct.map((p) => p.productId),
+    });
+
+    // ------------------------------------------------------------
+    // 5) Delivery options + render
+    // ------------------------------------------------------------
+    const deliveryOptions = await DeliveryOption.find({ active: true })
+      .sort({ deliveryDays: 1, priceCents: 1 })
+      .lean();
+
+    return res.render('dashboards/seller-dashboard', {
+      title: 'Seller Dashboard',
+      business,
+      totals: {
+        totalProducts,
+        totalStock,
+        inStock,
+        lowStock,
+        outOfStock,
+      },
+      products,
+      shipments: {
+        total: shipmentsTotal,
+        byStatus: shipmentsByStatus,
+      },
+      orders: {
+        total: ordersTotal,
+        byStatus: ordersByStatus,
+        recent: recentOrders,
+      },
+      kpis,
+      deliveryOptions,
+      isOrdersAdmin: Boolean(req.session.ordersAdmin),
+
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Seller dashboard error:', err);
+    req.flash('error', 'Failed to load seller dashboard.');
+    res.redirect('/business/login');
+  }
+});
+*/
+
+/*// SELLER DASHBOARD
+router.get('/dashboards/seller-dashboard', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    // 🔒 Role gate: sellers only
+    if (business.role !== 'seller') {
+      req.flash('error', '⛔ Access denied. Seller accounts only.');
+      return res.redirect('/business/dashboard');
+    }
+
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
+
+    // --- Load all products for this seller
+    const products = await Product.find({ business: business._id })
+      .select(
+        'customId name price stock category imageUrl createdAt updatedAt soldCount soldOrders'
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // --- Product totals
+    const totalProducts = products.length;
+    const totalStock = products.reduce(
+      (sum, p) => sum + (Number(p.stock) || 0),
+      0
+    );
+    const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+    const lowStock = products.filter((p) => {
+      const s = Number(p.stock) || 0;
+      return s > 0 && s <= 5;
+    }).length;
+    const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0)
+      .length;
+
+    // --- Build IDs in BOTH ObjectId + string forms (for matching)
+    const productObjectIds = products
+      .map((p) => p._id)
+      .filter(Boolean);
+
+    const productIdStrings = productObjectIds.map((id) => String(id));
+
+    const customIdStrings = products
+      .map((p) => (p.customId ? String(p.customId) : null))
+      .filter(Boolean);
+
+    const allItemKeys = Array.from(
+      new Set([...productIdStrings, ...customIdStrings])
+    );
+
+    // --- Shipment totals by status for this business
+    const shipmentsAgg = await Shipment.aggregate([
+      { $match: { business: business._id } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+
+    const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
+      m[r._id] = Number(r.count || 0);
+      return m;
+    }, {});
+    const shipmentsTotal = Object.values(shipmentsByStatus).reduce(
+      (a, b) => a + b,
+      0
+    );
+
+    // --- Orders that belong to this seller (for “Recent Orders” block)
+    let ordersTotal = 0;
+    let ordersByStatus = {};
+    let recentOrders = [];
+
+    if (allItemKeys.length && Order) {
+      const baseOrderMatch = {
+        $or: [
+          { sellerId: business._id },
+          { businessSeller: business._id },
+          { 'items.sellerId': business._id },
+
+          // productId as ObjectId or as string
+          { 'items.productId': { $in: productObjectIds } },
+          { 'items.productId': { $in: productIdStrings } },
+
+          // custom IDs (strings)
+          { 'items.customId': { $in: customIdStrings } },
+          { 'items.pid': { $in: customIdStrings } },
+          { 'items.sku': { $in: customIdStrings } },
+        ],
+      };
+
+      const ordersAgg = await Order.aggregate([
+        { $match: baseOrderMatch },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]);
+
+      ordersByStatus = ordersAgg.reduce((m, r) => {
+        m[r._id || 'Unknown'] = Number(r.count || 0);
+        return m;
+      }, {});
+      ordersTotal = await Order.countDocuments(baseOrderMatch);
+
+      recentOrders = await Order.find(baseOrderMatch)
+        .select('orderId status amount createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+    }
+
+    // --- KPIs for last 30 days (revenue & items) + per-product breakdown
+    const SINCE_DAYS = 30;
+    const since = new Date();
+    since.setDate(since.getDate() - SINCE_DAYS);
+
+    let last30Revenue = 0;
+    let last30Items = 0;
+
+    let soldPerProduct = [];
+    let soldTotalQty = 0;
+    let soldEstRevenue = 0;
+
+    // 1) First, try to reuse computeSupplierKpis (same helper as supplier + API)
+    let kpisRaw = null;
+    try {
+      if (Order) {
+        kpisRaw = await computeSupplierKpis(business._id);
+      }
+    } catch (e) {
+      console.error('computeSupplierKpis failed for seller:', e);
+    }
+
+    if (kpisRaw) {
+      last30Items =
+        kpisRaw.soldLast30 ?? kpisRaw.last30Items ?? last30Items ?? 0;
+      const revRaw =
+        kpisRaw.revenueLast30 ?? kpisRaw.last30Revenue ?? last30Revenue ?? 0;
+      last30Revenue = Number(revRaw) || 0;
+
+      if (Array.isArray(kpisRaw.perProduct) && kpisRaw.perProduct.length > 0) {
+        soldPerProduct = kpisRaw.perProduct;
+        soldTotalQty = kpisRaw.perProductTotalQty ?? 0;
+        soldEstRevenue = kpisRaw.perProductEstRevenue ?? 0;
+      }
+    }
+
+    // 2) If per-product is STILL empty but we know there are items, do our own aggregation
+    if (!soldPerProduct.length && allItemKeys.length && Order) {
+      const PAID_STATES = Array.isArray(Order.PAID_STATES)
+        ? Order.PAID_STATES
+        : [
+            'Completed',
+            'Paid',
+            'Shipped',
+            'Delivered',
+            'COMPLETED',
+            'completed',
+            'APPROVED',
+          ];
+
+      const baseMatch = {
+        createdAt: { $gte: since },
+        status: { $in: PAID_STATES },
+        $or: [
+          { sellerId: business._id },
+          { businessSeller: business._id },
+          { 'items.sellerId': business._id },
+
+          { 'items.productId': { $in: productObjectIds } },
+          { 'items.productId': { $in: productIdStrings } },
+
+          { 'items.customId': { $in: customIdStrings } },
+          { 'items.pid': { $in: customIdStrings } },
+          { 'items.sku': { $in: customIdStrings } },
+        ],
+      };
+
+      // 2a) Totals from orders (if helper didn’t already fill them)
+      const recent30 = await Order.find(baseMatch)
+        .select('items amount createdAt status')
+        .lean();
+
+      if (!kpisRaw) {
+        for (const o of recent30) {
+          const v = Number(o?.amount?.value || 0);
+          if (!Number.isNaN(v)) last30Revenue += v;
+
+          const items = Array.isArray(o.items) ? o.items : [];
+          for (const it of items) {
+            const pid = String(
+              it.productId ?? it.customId ?? it.pid ?? it.sku ?? ''
+            ).trim();
+            if (!pid) continue;
+            if (!allItemKeys.includes(pid)) continue;
+
+            last30Items += Number(it.quantity || 1);
+          }
+        }
+      }
+
+      // 2b) Per-product qty (last 30d) for this seller
+      const perProductAgg = await Order.aggregate([
+        { $match: baseMatch },
+        { $unwind: '$items' },
+        {
+          $match: {
+            $or: [
+              { 'items.productId': { $in: productObjectIds } },
+              { 'items.productId': { $in: productIdStrings } },
+              { 'items.customId': { $in: customIdStrings } },
+              { 'items.pid': { $in: customIdStrings } },
+              { 'items.sku': { $in: customIdStrings } },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $ifNull: [
+                '$items.productId',
+                {
+                  $ifNull: [
+                    '$items.customId',
+                    { $ifNull: ['$items.pid', '$items.sku'] },
+                  ],
+                },
+              ],
+            },
+            qty: { $sum: { $ifNull: ['$items.quantity', 1] } },
+          },
+        },
+      ]);
+
+      const productsByKey = new Map();
+      for (const p of products) {
+        if (p._id) productsByKey.set(String(p._id), p);
+        if (p.customId) productsByKey.set(String(p.customId), p);
+      }
+
+      soldPerProduct = perProductAgg.map((row) => {
+        const key = String(row._id);
+        const prod = productsByKey.get(key) || {};
+        const qty = Number(row.qty || 0);
+        const price = Number(prod.price || 0);
+        const estRevenue = qty * price;
+
+        soldTotalQty += qty;
+        soldEstRevenue += estRevenue;
+
+        return {
+          productId: key,
+          name: prod.name || '(unknown)',
+          imageUrl: prod.imageUrl || '',
+          category: prod.category || '',
+          price,
+          qty,
+          estRevenue,
+        };
+      });
+
+      soldPerProduct.sort((a, b) => b.qty - a.qty);
+    }
+
+    const kpis = {
+      soldLast30: last30Items,
+      revenueLast30: Number(last30Revenue.toFixed(2)),
+
+      last30Revenue,
+      last30Items,
+
+      perProduct: soldPerProduct,
+      perProductTotalQty: soldTotalQty,
+      perProductEstRevenue: Number(soldEstRevenue.toFixed(2)),
+    };
+
+    console.log('📊 Seller render KPIs', {
+      seller: String(business._id),
+      last30Items: kpis.last30Items,
+      last30Revenue: kpis.last30Revenue,
+      perProductCount: kpis.perProduct.length,
+    });
+
+    // Delivery options
+    const deliveryOptions = await DeliveryOption.find({ active: true })
+      .sort({ deliveryDays: 1, priceCents: 1 })
+      .lean();
+
+    return res.render('dashboards/seller-dashboard', {
+      title: 'Seller Dashboard',
+      business,
+      totals: {
+        totalProducts,
+        totalStock,
+        inStock,
+        lowStock,
+        outOfStock,
+      },
+      products,
+      shipments: {
+        total: shipmentsTotal,
+        byStatus: shipmentsByStatus,
+      },
+      orders: {
+        total: ordersTotal,
+        byStatus: ordersByStatus,
+        recent: recentOrders,
+      },
+      kpis,
+      deliveryOptions,
+      isOrdersAdmin: Boolean(req.session.ordersAdmin),
+
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Seller dashboard error:', err);
+    req.flash('error', 'Failed to load seller dashboard.');
+    res.redirect('/business/login');
+  }
+});*/
+
+// SUPPLIER DASHBOARD - UPDATED TO MATCH SELLER DASHBOARD
+router.get('/dashboards/supplier-dashboard', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+    
+    // 🔒 Supplier-only
+    if (business.role !== 'supplier') {
+      req.flash('error', '⛔ Access denied. Supplier accounts only.');
+      return res.redirect('/business/dashboard');
+    }
+
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
+
+    // ------------------------------------------------------------
+    // 1) All products for this supplier
+    // ------------------------------------------------------------
+    const products = await Product.find({ business: business._id })
+      .select('customId name price stock category imageUrl createdAt updatedAt')
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+
+    const totalProducts = products.length;
+    const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
+    const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+    const lowStock = products.filter((p) => {
+      const s = Number(p.stock) || 0;
+      return s > 0 && s <= 10; // Using 10 as threshold like seller dashboard
+    }).length;
+    const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
+
+    // Build product lookup maps
+    const productsByKey = new Map();
+    const allProductIdentifiers = [];
+    
+    for (const p of products) {
+      // Map by customId
+      if (p.customId) {
+        const customId = String(p.customId);
+        productsByKey.set(customId, p);
+        allProductIdentifiers.push(customId);
+      }
+      // Map by _id
+      const objectId = String(p._id);
+      productsByKey.set(objectId, p);
+      allProductIdentifiers.push(objectId);
+    }
+
+    // ------------------------------------------------------------
+    // 2) Shipments for this supplier
+    // ------------------------------------------------------------
+    const shipmentsAgg = await Shipment.aggregate([
+      { $match: { business: business._id } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+
+    const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
+      m[r._id] = Number(r.count || 0);
+      return m;
+    }, {});
+
+    const shipmentsTotal = Object.values(shipmentsByStatus).reduce((a, b) => a + b, 0);
+
+    // ------------------------------------------------------------
+    // 3) Recent Orders for this supplier
+    // ------------------------------------------------------------
+    let ordersTotal = 0;
+    let ordersByStatus = {};
+    let recentOrders = [];
+
+    if (Order && allProductIdentifiers.length) {
+      const idMatchOr = [
+        { 'items.productId': { $in: allProductIdentifiers } },
+        { 'items.customId': { $in: allProductIdentifiers } },
+        { 'items.pid': { $in: allProductIdentifiers } },
+        { 'items.sku': { $in: allProductIdentifiers } },
+      ];
+
+      const baseOrderMatch = { $or: idMatchOr };
+
+      const ordersAgg = await Order.aggregate([
+        { $match: baseOrderMatch },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]);
+
+      ordersByStatus = ordersAgg.reduce((m, r) => {
+        m[r._id || 'Unknown'] = Number(r.count || 0);
+        return m;
+      }, {});
+      ordersTotal = await Order.countDocuments(baseOrderMatch);
+
+      recentOrders = await Order.find(baseOrderMatch)
+        .select('orderId status amount createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+    }
+
+    // ------------------------------------------------------------
+    // 4) 30-DAY SALES DATA - SAME LOGIC AS SELLER DASHBOARD
+    // ------------------------------------------------------------
+    const SINCE_DAYS = 30;
+    const since = new Date();
+    since.setDate(since.getDate() - SINCE_DAYS);
+
+    let soldPerProduct = [];
+    let last30Revenue = 0;
+    let last30Items = 0;
+
+    if (Order && allProductIdentifiers.length) {
+      const PAID_STATES = Array.isArray(Order.PAID_STATES)
+        ? Order.PAID_STATES
+        : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+      const idMatchOr = [
+        { 'items.productId': { $in: allProductIdentifiers } },
+        { 'items.customId': { $in: allProductIdentifiers } },
+        { 'items.pid': { $in: allProductIdentifiers } },
+        { 'items.sku': { $in: allProductIdentifiers } },
+      ];
+
+      const baseMatch = {
+        createdAt: { $gte: since },
+        status: { $in: PAID_STATES },
+        $or: idMatchOr,
+      };
+
+      // Get recent paid orders
+      const recentPaidOrders = await Order.find(baseMatch)
+        .select('items amount createdAt status')
+        .lean();
+
+      // Track sales per product
+      const productSales = new Map();
+
+      for (const order of recentPaidOrders) {
+        const items = Array.isArray(order.items) ? order.items : [];
+        
+        for (const item of items) {
+          // Try all possible product ID fields
+          let productId = null;
+          const possibleIds = [
+            item.productId,
+            item.customId, 
+            item.pid,
+            item.sku
+          ];
+          
+          for (const id of possibleIds) {
+            if (id && allProductIdentifiers.includes(String(id))) {
+              productId = String(id);
+              break;
+            }
+          }
+
+          if (!productId) continue;
+
+          const product = productsByKey.get(productId);
+          if (!product) continue;
+
+          const quantity = Number(item.quantity || 1);
+          const price = Number(product.price || item.price || 0);
+          const revenue = quantity * price;
+
+          // Update totals
+          last30Items += quantity;
+          last30Revenue += revenue;
+
+          // Update per-product stats
+          if (!productSales.has(productId)) {
+            productSales.set(productId, {
+              productId: productId,
+              name: product.name || item.name || '(unknown)',
+              imageUrl: product.imageUrl || '',
+              category: product.category || '',
+              price: price,
+              qty: 0,
+              estRevenue: 0
+            });
+          }
+
+          const productStat = productSales.get(productId);
+          productStat.qty += quantity;
+          productStat.estRevenue += revenue;
+        }
+      }
+
+      // Convert to array and sort by quantity sold
+      soldPerProduct = Array.from(productSales.values())
+        .sort((a, b) => b.qty - a.qty);
+
+      console.log('🔄 Supplier 30-day sales data:', {
+        ordersProcessed: recentPaidOrders.length,
+        productsWithSales: soldPerProduct.length,
+        totalItemsSold: last30Items,
+        totalRevenue: last30Revenue,
+        topProducts: soldPerProduct.slice(0, 3).map(p => ({
+          name: p.name,
+          qty: p.qty,
+          revenue: p.estRevenue
+        }))
+      });
+    }
+
+    // If no data found, use computeSupplierKpis as fallback
+    if (soldPerProduct.length === 0 && last30Items === 0) {
+      try {
+        console.log('🔄 Trying computeSupplierKpis fallback for supplier...');
+        const kpisRaw = await computeSupplierKpis(business._id);
+        
+        if (kpisRaw) {
+          last30Items = kpisRaw.soldLast30 || 0;
+          last30Revenue = kpisRaw.revenueLast30 || 0;
+          
+          if (Array.isArray(kpisRaw.perProduct) && kpisRaw.perProduct.length > 0) {
+            soldPerProduct = kpisRaw.perProduct;
+            console.log('🔄 Fallback provided', soldPerProduct.length, 'products for supplier');
+          }
+        }
+      } catch (fallbackError) {
+        console.error('❌ Supplier fallback also failed:', fallbackError);
+      }
+    }
+
+    // Final KPIs object - SAME STRUCTURE AS SELLER DASHBOARD
+    const kpis = {
+      totalProducts,
+      totalStock,
+      inStock,
+      lowStock,
+      outOfStock,
+      soldLast30: last30Items,
+      revenueLast30: Number(last30Revenue.toFixed(2)),
+      last30Items,
+      last30Revenue: Number(last30Revenue.toFixed(2)),
+      perProduct: soldPerProduct, // This is what the EJS checks
+      perProductTotalQty: last30Items,
+      perProductEstRevenue: Number(last30Revenue.toFixed(2)),
+    };
+
+    // ------------------------------------------------------------
+    // 5) Delivery options
+    // ------------------------------------------------------------
+    const deliveryOptions = await DeliveryOption.find({ active: true })
+      .sort({ deliveryDays: 1, priceCents: 1 })
+      .lean();
+
+    // Mailer status + inbox shown in toolbar
+    const supportInbox = process.env.SUPPORT_INBOX || 'support@phakisi-global.test';
+    const mailerOk = !!(
+      process.env.SENDGRID_API_KEY ||
+      process.env.SMTP_HOST ||
+      process.env.SMTP_URL
+    );
+
+    return res.render('dashboards/supplier-dashboard', {
+      title: 'Supplier Dashboard',
+      business,
+      totals: {
+        totalProducts,
+        totalStock,
+        inStock,
+        lowStock,
+        outOfStock,
+      },
+      products,
+      shipments: {
+        total: shipmentsTotal,
+        byStatus: shipmentsByStatus,
+      },
+      orders: {
+        total: ordersTotal,
+        byStatus: ordersByStatus,
+        recent: recentOrders,
+      },
+      kpis, // Same structure as seller dashboard
+      deliveryOptions,
+      isOrdersAdmin: Boolean(req.session.ordersAdmin),
+      mailerOk,
+      supportInbox,
+
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Supplier dashboard error:', err);
+    req.flash('error', '❌ Failed to load supplier dashboard.');
+    res.redirect('/business/login');
+  }
+});
+
+/* ----------------------------------------------------------
+ * SUPPLIER DASHBOARD (uses computeSupplierKpis)
+ * -------------------------------------------------------- */
+/*router.get('/dashboards/supplier-dashboard', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+    // 🔒 Supplier-only
+    if (business.role !== 'supplier') {
+      req.flash('error', '⛔ Access denied. Supplier accounts only.');
+      return res.redirect('/business/dashboard');
+    }
+
+    const theme = req.session.theme || 'light';
+    const themeCss = theme === 'dark' ? '/css/dark.css' : '/css/light.css';
+
+    // KPIs for the cards at top (from helper)
+    const kpis = await computeSupplierKpis(business._id);
+
+    // Recent products list (separate query so we can select more fields)
+    const products = await Product.find({ business: business._id })
+      .select('name customId stock price category imageUrl updatedAt createdAt')
       .sort({ updatedAt: -1 })
       .limit(8)
       .lean();
 
-    // --- Messages + Delivery options
-    const [totalMessages, unreadMessages, deliveryOptions] = await Promise.all([
-      ContactMessage.countDocuments({ business: business._id }),
-      ContactMessage.countDocuments({ business: business._id, readByBusiness: false }),
-      DeliveryOption.find({ active: true }).sort({ deliveryDays: 1, priceCents: 1 }).lean(),
+    // ---- (Optional) Shipments info – not used by the new EJS, but kept for future
+    const Shipment = require('../models/Shipment');
+    const shipmentsAgg = await Shipment.aggregate([
+      { $match: { business: business._id } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
 
-    res.render("dashboards/supplier-dashboard", {
-      title: "Supplier Dashboard",
+    const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
+      m[r._id] = Number(r.count || 0);
+      return m;
+    }, {});
+    const totalShipments = Object.values(shipmentsByStatus).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    const pendingShipments =
+      (shipmentsByStatus.Pending || 0) +
+      (shipmentsByStatus.Processing || 0);
+
+    const shipments = await Shipment.find({ business: business._id })
+      .populate('product', 'name customId')
+      .select('orderId status updatedAt')
+      .sort({ updatedAt: -1 })
+      .limit(8)
+      .lean();
+
+    // Delivery options for bottom section
+    const deliveryOptions = await DeliveryOption.find({ active: true })
+      .sort({ deliveryDays: 1, priceCents: 1 })
+      .lean();
+
+    // Mailer status + inbox shown in toolbar
+    const supportInbox = process.env.SUPPORT_INBOX || 'support@phakisi-global.test';
+    const mailerOk = !!(
+      process.env.SENDGRID_API_KEY ||
+      process.env.SMTP_HOST ||
+      process.env.SMTP_URL
+    );
+
+    res.render('dashboards/supplier-dashboard', {
+      title: 'Supplier Dashboard',
       business,
-
-      // product stats
-      totalProducts,
-      inStock,
-      lowStock,
-      outOfStock,
+      kpis,
       products,
-
-      // shipments
       totalShipments,
       pendingShipments,
-      shipments,          // recent list
-      shipmentsByStatus,  // available if you want per-status chips in the view
-
-      // messages / delivery
-      stats: { totalMessages, unreadMessages },
+      shipments,
+      shipmentsByStatus,
       deliveryOptions,
       isOrdersAdmin: Boolean(req.session.ordersAdmin),
+      mailerOk,
+      supportInbox,
 
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss,
       nonce: res.locals.nonce,
     });
   } catch (err) {
-    console.error("❌ Supplier dashboard error:", err);
-    req.flash("error", "❌ Failed to load supplier dashboard.");
-    res.redirect("/business/login");
+    console.error('❌ Supplier dashboard error:', err);
+    req.flash('error', '❌ Failed to load supplier dashboard.');
+    res.redirect('/business/login');
+  }
+});*/
+
+/* ----------------------------------------------------------
+ * Supplier KPIs JSON for auto-refresh (/business/api/supplier/kpis)
+ * -------------------------------------------------------- */
+router.get('/api/supplier/kpis', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id || business.role !== 'supplier') {
+      return res.status(403).json({ ok: false, message: 'Suppliers only' });
+    }
+
+    const kpis = await computeSupplierKpis(business._id);
+    return res.json({ ok: true, ...kpis });
+  } catch (err) {
+    console.error('supplier KPI API error:', err);
+    return res.status(500).json({ ok: false, message: 'Failed to load KPIs' });
   }
 });
 
-router.get("/dashboards/buyer-dashboard", requireBusiness, async (req, res) => {
+/* ----------------------------------------------------------
+ * Seller KPIs JSON for auto-refresh (/business/api/seller/kpis)
+ * (re-use the same helper as supplier so logic is identical)
+ * -------------------------------------------------------- */
+router.get('/api/seller/kpis', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id || business.role !== 'seller') {
+      return res.status(403).json({ ok: false, message: 'Sellers only' });
+    }
+
+    // 🔁 Re-use the same KPI computation as supplier
+    const kpis = await computeSupplierKpis(business._id);
+
+    return res.json({ ok: true, ...kpis });
+  } catch (err) {
+    console.error('seller KPI API error:', err);
+    return res.status(500).json({ ok: false, message: 'Failed to load KPIs' });
+  }
+});
+
+/* ----------------------------------------------------------
+ * BUYER DASHBOARD - UPDATED
+ * -------------------------------------------------------- */
+router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     if (!business || !business._id) {
-      req.flash("error", "Session expired. Please log in again.");
-      return res.redirect("/business/login");
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
     }
-    if (business.role !== "buyer") {
-      req.flash("error", "⛔ Access denied. Buyer accounts only.");
-      return res.redirect("/business/dashboard");
+    if (business.role !== 'buyer') {
+      req.flash('error', '⛔ Access denied. Buyer accounts only.');
+      return res.redirect('/business/dashboard');
     }
 
-    const Order = require("../models/Order");
-    const Shipment = require("../models/Shipment");
-    const ContactMessage = require("../models/ContactMessage");
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
+
+    // ------------------------------------------------------------
+    // 1) Buyer's orders
+    // ------------------------------------------------------------
+    const orders = await Order.find({ businessBuyer: business._id })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const totalOrders = await Order.countDocuments({ businessBuyer: business._id });
+    const completedOrders = await Order.countDocuments({
+      businessBuyer: business._id,
+      status: { $in: ['Completed', 'COMPLETED', 'Delivered'] }
+    });
+    const pendingOrders = await Order.countDocuments({
+      businessBuyer: business._id,
+      status: { $in: ['Pending', 'Processing', 'PAID', 'Shipped'] }
+    });
+
+    // ------------------------------------------------------------
+    // 2) Shipping stats
+    // ------------------------------------------------------------
+    let shipStats = { inTransit: 0, delivered: 0 };
+    
+    if (orders.length > 0) {
+      const orderIds = orders.map(o => o.orderId).filter(Boolean);
+      if (orderIds.length > 0) {
+        const byStatus = await Shipment.aggregate([
+          { $match: { orderId: { $in: orderIds } } },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]);
+        
+        for (const r of byStatus) {
+          if (r._id === 'In Transit' || r._id === 'Shipped') {
+            shipStats.inTransit += r.count;
+          }
+          if (r._id === 'Delivered') {
+            shipStats.delivered += r.count;
+          }
+        }
+      }
+    }
+
+    // ------------------------------------------------------------
+    // 3) Products from orders
+    // ------------------------------------------------------------
+    const orderedCustomIds = new Set();
+    for (const o of orders) {
+      (o.items || []).forEach((it) => {
+        if (it.productId) orderedCustomIds.add(String(it.productId));
+        if (it.customId) orderedCustomIds.add(String(it.customId));
+      });
+    }
+
+    let orderedProducts = [];
+    if (orderedCustomIds.size > 0) {
+      orderedProducts = await Product.find({ 
+        $or: [
+          { customId: { $in: Array.from(orderedCustomIds) } },
+          { _id: { $in: Array.from(orderedCustomIds) } }
+        ]
+      })
+      .select('customId name price imageUrl category stock')
+      .limit(8)
+      .lean();
+    }
+
+    // ------------------------------------------------------------
+    // 4) Mailer status
+    // ------------------------------------------------------------
+    const mailerOk = !!(
+      process.env.SENDGRID_API_KEY ||
+      process.env.SMTP_HOST ||
+      process.env.SMTP_URL
+    );
+
+    // ------------------------------------------------------------
+    // 5) Recent orders for display
+    // ------------------------------------------------------------
+    const recentOrders = orders.slice(0, 5);
+
+    res.render('dashboards/buyer-dashboard', {
+      title: 'Buyer Dashboard',
+      business,
+      totalOrders,
+      completedOrders,
+      pendingOrders,
+      orders: recentOrders,
+      shipStats,
+      orderedProducts,
+      mailerOk, // This was missing - causing the error
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Buyer dashboard error:', err);
+    req.flash('error', 'Failed to load buyer dashboard.');
+    res.redirect('/business/login');
+  }
+});
+
+/* ----------------------------------------------------------
+ * BUYER DASHBOARD (unchanged)
+ * -------------------------------------------------------- */
+/*router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+    if (business.role !== 'buyer') {
+      req.flash('error', '⛔ Access denied. Buyer accounts only.');
+      return res.redirect('/business/dashboard');
+    }
+
+    const Order = require('../models/Order');
+    const Shipment = require('../models/Shipment');
 
     // Only this buyer’s orders
     const orders = await Order.find({ businessBuyer: business._id })
@@ -480,166 +2167,159 @@ router.get("/dashboards/buyer-dashboard", requireBusiness, async (req, res) => {
       .lean();
 
     const totalOrders = await Order.countDocuments({ businessBuyer: business._id });
-    const completedOrders = await Order.countDocuments({ businessBuyer: business._id, status: "Completed" });
-    const pendingOrders = await Order.countDocuments({ businessBuyer: business._id, status: "Pending" });
+    const completedOrders = await Order.countDocuments({
+      businessBuyer: business._id,
+      status: 'Completed',
+    });
+    const pendingOrders = await Order.countDocuments({
+      businessBuyer: business._id,
+      status: 'Pending',
+    });
 
     // Shipping stats for THIS buyer’s orders
-    const orderIds = orders.map(o => o.orderId).filter(Boolean);
+    const orderIds = orders.map((o) => o.orderId).filter(Boolean);
     let shipStats = { inTransit: 0, delivered: 0 };
     if (orderIds.length) {
       const byStatus = await Shipment.aggregate([
         { $match: { orderId: { $in: orderIds } } },
-        { $group: { _id: "$status", count: { $sum: 1 } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
       ]);
       for (const r of byStatus) {
-        if (r._id === "In Transit") shipStats.inTransit += r.count;
-        if (r._id === "Delivered") shipStats.delivered += r.count;
+        if (r._id === 'In Transit') {shipStats.inTransit += r.count;}
+        if (r._id === 'Delivered') {shipStats.delivered += r.count;}
       }
     }
 
     // Product details seen in their orders
     const orderedCustomIds = new Set();
     for (const o of orders) {
-      (o.items || []).forEach(it => {
-        if (it.productId) orderedCustomIds.add(String(it.productId));
+      (o.items || []).forEach((it) => {
+        if (it.productId) {orderedCustomIds.add(String(it.productId));}
       });
     }
 
     let orderedProducts = [];
     if (orderedCustomIds.size) {
       orderedProducts = await Product.find({ customId: { $in: Array.from(orderedCustomIds) } })
-        .select("customId name price imageUrl category stock")
+        .select('customId name price imageUrl category stock')
         .lean();
     }
 
-    let totalMessages = 0, unreadMessages = 0;
-    try {
-      totalMessages = await ContactMessage.countDocuments({ business: business._id });
-      unreadMessages = await ContactMessage.countDocuments({ business: business._id, readByBusiness: false });
-    } catch {
-      console.warn("💬 ContactMessage model not active, skipping message counts.");
-    }
-
-    res.render("dashboards/buyer-dashboard", {
-      title: "Buyer Dashboard",
+    res.render('dashboards/buyer-dashboard', {
+      title: 'Buyer Dashboard',
       business,
       totalOrders,
       completedOrders,
       pendingOrders,
-      orders,            // still listing recent orders below
-      shipStats,         // ✅ for your in-transit & delivered pills
-      orderedProducts,   // ✅ product details for what they actually bought
-      stats: { totalMessages, unreadMessages },
+      orders,
+      shipStats,
+      orderedProducts,
 
-      // buttons/links can stay
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
     });
   } catch (err) {
-    console.error("❌ Buyer dashboard error:", err);
-    req.flash("error", "Failed to load buyer dashboard.");
-    res.redirect("/business/login");
+    console.error('❌ Buyer dashboard error:', err);
+    req.flash('error', 'Failed to load buyer dashboard.');
+    res.redirect('/business/login');
   }
-});
+});*/
 
 /* ----------------------------------------------------------
  * 🧭 GET: Universal Dashboard Redirector
  * -------------------------------------------------------- */
-router.get("/dashboard", requireBusiness, (req, res) => {
+router.get('/dashboard', requireBusiness, (req, res) => {
   const { role } = req.session.business;
 
   switch (role) {
-    case "seller":
-      return res.redirect("/business/dashboards/seller-dashboard");
-    case "supplier":
-      return res.redirect("/business/dashboards/supplier-dashboard");
-    case "buyer":
-      return res.redirect("/business/dashboards/buyer-dashboard");
+    case 'seller':
+      return res.redirect('/business/dashboards/seller-dashboard');
+    case 'supplier':
+      return res.redirect('/business/dashboards/supplier-dashboard');
+    case 'buyer':
+      return res.redirect('/business/dashboards/buyer-dashboard');
     default:
-      req.flash("error", "Invalid business role.");
-      return res.redirect("/business/login");
+      req.flash('error', 'Invalid business role.');
+      return res.redirect('/business/login');
   }
 });
 
-router.post("/logout", (req, res) => {
-  if (!req.session) return res.redirect("/business/login");
+router.post('/logout', (req, res) => {
+  if (!req.session) {return res.redirect('/business/login');}
 
   // ✅ store flash message first
-  req.flash("success", "You’ve been logged out successfully.");
+  req.flash('success', 'You’ve been logged out successfully.');
 
   // ✅ now destroy session
-  req.session.destroy(err => {
+  req.session.destroy((err) => {
     if (err) {
-      console.error("❌ Logout error:", err);
-      return res.redirect("/business/dashboard");
+      console.error('❌ Logout error:', err);
+      return res.redirect('/business/dashboard');
     }
 
-    res.clearCookie("connect.sid");
-    res.redirect("/business/login");
+    res.clearCookie('connect.sid');
+    res.redirect('/business/login');
   });
 });
-
-
-
 
 /* ----------------------------------------------------------
  * 👤 Profile Management
  * -------------------------------------------------------- */
-router.get("/profile", requireBusiness, async (req, res) => {
+router.get('/profile', requireBusiness, async (req, res) => {
   try {
     const business = await Business.findById(req.session.business._id).lean();
     if (!business) {
-      req.flash("error", "Business not found.");
-      return res.redirect("/business/renderlog-in");
+      req.flash('error', 'Business not found.');
+      return res.redirect('/business/login');
     }
 
-    res.render("business-profile", {
-      title: "Business Profile",
+    res.render('business-profile', {
+      title: 'Business Profile',
       business,
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
     });
   } catch (err) {
-    console.error("❌ Business profile error:", err);
-    req.flash("error", "Failed to load profile.");
-    res.redirect("/business/dashboard");
+    console.error('❌ Business profile error:', err);
+    req.flash('error', 'Failed to load profile.');
+    res.redirect('/business/dashboard');
   }
 });
 
 /* ----------------------------------------------------------
  * ✏️ Edit Profile
  * -------------------------------------------------------- */
-router.get("/profile/edit", requireBusiness, async (req, res) => {
+router.get('/profile/edit', requireBusiness, async (req, res) => {
   try {
     const business = await Business.findById(req.session.business._id).lean();
     if (!business) {
-      req.flash("error", "Business not found.");
-      return res.redirect("/business/login");
+      req.flash('error', 'Business not found.');
+      return res.redirect('/business/login');
     }
 
-    res.render("edit-profile", {
-      title: "Edit Profile",
+    res.render('edit-profile', {
+      title: 'Edit Profile',
       business,
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
     });
   } catch (err) {
-    console.error("❌ Edit profile page error:", err);
-    req.flash("error", "Failed to load edit profile page.");
-    res.redirect("/business/profile");
+    console.error('❌ Edit profile page error:', err);
+    req.flash('error', 'Failed to load edit profile page.');
+    res.redirect('/business/profile');
   }
 });
 
-router.post("/profile/edit", requireBusiness, async (req, res) => {
+router.post('/profile/edit', requireBusiness, async (req, res) => {
   try {
     const business = await Business.findById(req.session.business._id);
     if (!business) {
-      req.flash("error", "Business not found.");
-      return res.redirect("/business/renderlog-in");
+      req.flash('error', 'Business not found.');
+      return res.redirect('/business/renderlog-in');
     }
 
     const { name, phone, country, city, address, password } = req.body;
@@ -649,58 +2329,59 @@ router.post("/profile/edit", requireBusiness, async (req, res) => {
     business.city = city || business.city;
     business.address = address || business.address;
 
-    if (password && password.trim().length >= 6)
+    if (password && password.trim().length >= 6) {
       business.password = await bcrypt.hash(password, 12);
+    }
 
     await business.save();
     req.session.business.name = business.name;
 
-    req.flash("success", "✅ Profile updated successfully.");
-    res.redirect("/business/profile");
+    req.flash('success', '✅ Profile updated successfully.');
+    res.redirect('/business/profile');
   } catch (err) {
-    console.error("❌ Profile update error:", err);
-    req.flash("error", "❌ Failed to update profile.");
-    res.redirect("/business/profile");
+    console.error('❌ Profile update error:', err);
+    req.flash('error', '❌ Failed to update profile.');
+    res.redirect('/business/profile');
   }
 });
 
 /* ----------------------------------------------------------
  * 🗑️ Delete Profile
  * -------------------------------------------------------- */
-router.get("/profile/delete", requireBusiness, async (req, res) => {
+router.get('/profile/delete', requireBusiness, async (req, res) => {
   try {
     const business = await Business.findById(req.session.business._id).lean();
     if (!business) {
-      req.flash("error", "Business not found.");
-      return res.redirect("/business/login");
+      req.flash('error', 'Business not found.');
+      return res.redirect('/business/login');
     }
 
-    res.render("delete-profile", {
-      title: "Delete Profile",
+    res.render('delete-profile', {
+      title: 'Delete Profile',
       business,
-      success: req.flash("success"),
-      error: req.flash("error"),
+      success: req.flash('success'),
+      error: req.flash('error'),
       themeCss: res.locals.themeCss,
     });
   } catch (err) {
-    console.error("❌ Delete profile render error:", err);
-    req.flash("error", "Failed to load delete confirmation page.");
-    res.redirect("/business/profile");
+    console.error('❌ Delete profile render error:', err);
+    req.flash('error', 'Failed to load delete confirmation page.');
+    res.redirect('/business/profile');
   }
 });
 
-router.post("/profile/delete", requireBusiness, async (req, res) => {
+router.post('/profile/delete', requireBusiness, async (req, res) => {
   try {
     await Business.findByIdAndDelete(req.session.business._id);
     req.session.destroy(() => {
-      res.clearCookie("connect.sid");
-      req.flash("success", "✅ Business account deleted.");
-      res.redirect("/");
+      res.clearCookie('connect.sid');
+      req.flash('success', '✅ Business account deleted.');
+      res.redirect('/');
     });
   } catch (err) {
-    console.error("❌ Delete business error:", err);
-    req.flash("error", "Failed to delete account.");
-    res.redirect("/business/profile");
+    console.error('❌ Delete business error:', err);
+    req.flash('error', 'Failed to delete account.');
+    res.redirect('/business/profile');
   }
 });
 

@@ -18,31 +18,28 @@ const REQUIRED_VARS = [
   "ORDERS_ADMIN_PASS",
   "MAIL_PROVIDER",
   "SENDGRID_API_KEY",
-  "SMTP_FROM"
+  "SMTP_FROM",
 ];
 
 function validateEnv() {
   const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    console.error("❌ Missing environment variables:");
-    missing.forEach((v) => console.error(" -", v));
-    process.exit(1);
+    const list = missing.map((v) => ` - ${v}`).join("\n");
+    throw new Error(`Missing environment variables:\n${list}`);
   }
 
-  // 🔒 Basic validation
   const port = Number(process.env.PORT);
-  if (isNaN(port) || port <= 0) {
-    console.error("❌ Invalid PORT value:", process.env.PORT);
-    process.exit(1);
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error(`Invalid PORT value: ${process.env.PORT}`);
   }
 
   const env = process.env.NODE_ENV;
   if (!["production", "development", "test"].includes(env)) {
-    console.error("❌ NODE_ENV must be one of: production, development, test");
-    process.exit(1);
+    throw new Error("NODE_ENV must be one of: production, development, test");
   }
 
   console.log(`✅ Environment validated for ${env.toUpperCase()} mode.`);
+  return true;
 }
 
 module.exports = validateEnv;

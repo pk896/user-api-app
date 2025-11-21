@@ -1,80 +1,62 @@
-// fix-product-image-urls.js
-require('dotenv').config();
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
 const mongoose = require("mongoose");
-const fetch = require("node-fetch"); // npm install node-fetch@2
-const { S3Client, ListObjectsV2Command } = require("@aws-sdk/client-s3");
-const Product = require("./models/Product"); // adjust path if needed
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { runMain } = require("./scripts/_runner"); // adjust if this file is in project root
+const Product = require("./models/Product");      // adjust if your path differs
 
-// S3 client
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
-});
+function detectContentType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  return "application/octet-stream";
+}
 
-async function fixProductImages() {
+async function main() {
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!uri) throw new Error("❌ Missing MONGO_URI (.env)");
+  const bucket = process.env.AWS_BUCKET_NAME;
+  const region = process.env.AWS_REGION || "us-east-1";
+  if (!bucket) throw new Error("❌ Missing AWS_BUCKET_NAME (.env)");
+
+  const s3 = new S3Client({
+    region,
+    credentials: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
+      ? { accessKeyId: process.env.AWS_ACCESS_KEY_ID, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY }
+      : undefined,
+  });
+
+  await mongoose.connect(uri);
   try {
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ Connected to MongoDB");
+    const products = await Product.find({ imageUrl: { $regex: "^images/" } });
+    for (const product of products) {
+      const rel = product.imageUrl.replace(/^[/\\]+/, "");
+      const localPath = path.join(__dirname, rel);
+      if (!fs.existsSync(localPath)) continue;
 
-    const bucketName = process.env.AWS_BUCKET_NAME;
+      const contentType = detectContentType(localPath);
+      const ext = path.extname(localPath).toLowerCase() || ".jpg";
+      const key = `products/${Date.now()}-${Math.floor(Math.random() * 1e6)}${ext}`;
+      const Body = fs.createReadStream(localPath);
 
-    // List objects in products-images folder
-    const command = new ListObjectsV2Command({
-      Bucket: bucketName,
-      Prefix: "products-images/",
-    });
-    const response = await s3.send(command);
+      await s3.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body,
+        ContentType: contentType,
+      }));
 
-    if (!response.Contents || response.Contents.length === 0) {
-      console.log("No images found in products-images folder.");
-      return;
-    }
-
-    console.log(`Found ${response.Contents.length} images in S3`);
-
-    // Iterate through each image in S3
-    for (const obj of response.Contents) {
-      const objectUrl = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${obj.Key}`;
-
-      // Check if URL is accessible
-      try {
-        const res = await fetch(objectUrl, { method: "HEAD" });
-        if (!res.ok) {
-          console.warn(`❌ Not accessible: ${objectUrl} (status ${res.status})`);
-          continue;
-        }
-      } catch (err) {
-        console.warn(`❌ Error fetching ${objectUrl}: ${err.message}`);
-        continue;
-      }
-
-      // Extract filename from S3 key
-      const filename = obj.Key.split("/").pop();
-
-      // Find the product in MongoDB with this filename in the old image path
-      const product = await Product.findOne({ image: { $regex: filename } });
-      if (!product) {
-        console.log(`⚠️ No product found matching image ${filename}`);
-        continue;
-      }
-
-      // Update product's image URL
-      product.image = objectUrl;
+      product.imageUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
       await product.save();
-      console.log(`✅ Updated product ${product.name} image URL`);
+      console.log(`✅ Migrated: ${product.name}`);
     }
-
-    console.log("🎉 Done updating product images");
-    process.exit(0);
-
-  } catch (err) {
-    console.error("❌ Error:", err);
-    process.exit(1);
+    console.log("🎉 Migration finished");
+  } finally {
+    await mongoose.disconnect();
   }
 }
 
-fixProductImages();
+runMain(main);

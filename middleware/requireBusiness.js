@@ -1,16 +1,16 @@
 // middleware/requireBusiness.js
-const chalk = require("chalk");
+const chalk = require('chalk');
 
 module.exports = function requireBusiness(req, res, next) {
   try {
     if (!req.session || !req.session.business) {
       if (chalk?.yellow) {
-        console.log(chalk.yellow("🚫 No active business session"));
+        console.log(chalk.yellow('🚫 No active business session'));
       } else {
-        console.log("🚫 No active business session");
+        console.log('🚫 No active business session');
       }
-      req.flash("error", "Please log in to continue.");
-      return res.redirect("/business/login");
+      req.flash('error', 'Please log in to continue.');
+      return res.redirect('/business/login');
     }
 
     if (chalk?.cyan) {
@@ -21,8 +21,8 @@ module.exports = function requireBusiness(req, res, next) {
 
     next();
   } catch (err) {
-    console.error("❌ requireBusiness middleware error:", err);
-    req.flash("error", "Authentication check failed.");
-    return res.redirect("/business/login");
+    console.error('❌ requireBusiness middleware error:', err);
+    req.flash('error', 'Authentication check failed.');
+    return res.redirect('/business/login');
   }
 };
