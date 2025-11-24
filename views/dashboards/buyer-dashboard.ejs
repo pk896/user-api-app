@@ -81,7 +81,7 @@
       </div>
 
       <div class="table-wrap small">
-        <table class="nice-table compact">
+        <table class="nice-table compact responsive">
           <thead>
             <tr>
               <th>Order ID</th>
@@ -93,17 +93,19 @@
             <% if (orders && orders.length) { %>
               <% orders.forEach(o => { %>
                 <tr>
-                  <td class="truncate">
+                  <td class="truncate" data-label="Order ID">
                     <a href="/orders/<%= o.orderId || o._id %>" class="order-link">
                       <%= (o.orderId || o._id).toString().substring(0, 12) %>...
                     </a>
                   </td>
-                  <td>
+
+                  <td data-label="Status">
                     <span class="status-pill status-<%= (o.status || 'Unknown').toLowerCase().replace(/\s+/g,'-') %>">
                       <%= o.status || 'Unknown' %>
                     </span>
                   </td>
-                  <td class="right">
+
+                  <td class="right" data-label="Amount">
                     R <%= Number(o.amount && o.amount.value || 0).toFixed(2) %>
                   </td>
                 </tr>
@@ -117,7 +119,7 @@
             <% } %>
           </tbody>
         </table>
-      </div>
+      </div> 
     </div>
 
     <!-- Purchased Products -->
@@ -574,6 +576,89 @@
     padding: .34rem .6rem;
     font-size: .8rem;
   }
+
+  /* Responsive cards for buyer Recent Orders on small screens */
+@media (max-width: 640px) {
+  .table-wrap {
+    border-radius: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .table-wrap.small {
+    padding: 0;
+  }
+
+  .nice-table.responsive {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .nice-table.responsive thead {
+    display: none; /* hide header on mobile */
+  }
+
+  .nice-table.responsive tbody tr {
+    display: block;
+    background: #ffffff;
+    border-radius: .9rem;
+    margin-bottom: .8rem;
+    padding: .45rem .65rem;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+    border: 1px solid rgba(148, 163, 184, .25);
+  }
+
+  .dark-theme .nice-table.responsive tbody tr {
+    background: #020617;
+    border-color: #1f2937;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.7);
+  }
+
+  .nice-table.responsive td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: .25rem 0;
+    border-bottom: none;
+    text-align: left;
+    font-size: .85rem;
+  }
+
+  .nice-table.responsive td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: .8rem;
+    margin-right: .75rem;
+    flex: 0 0 auto;
+    max-width: 45%;
+    white-space: nowrap;
+  }
+
+  .nice-table.responsive td.right {
+    text-align: right;
+    justify-content: space-between;
+  }
+
+  /* Per-property colours: label + value same colour, all different */
+  /* 1) Order ID */
+  .nice-table.responsive tbody tr td:nth-of-type(1),
+  .nice-table.responsive tbody tr td:nth-of-type(1)::before {
+    color: #2563eb; /* blue */
+  }
+
+  /* 2) Status */
+  .nice-table.responsive tbody tr td:nth-of-type(2),
+  .nice-table.responsive tbody tr td:nth-of-type(2)::before {
+    color: #ea580c; /* orange */
+  }
+
+  /* 3) Amount */
+  .nice-table.responsive tbody tr td:nth-of-type(3),
+  .nice-table.responsive tbody tr td:nth-of-type(3)::before {
+    color: #16a34a; /* green */
+  }
+}
 </style>
 
 <script nonce="<%= nonce %>">

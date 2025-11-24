@@ -31,232 +31,607 @@
   <div class="flash flash-error">❌ <%= error %></div>
 <% } %>
 
-<main class="pd-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-
-  <!-- Back / crumbs -->
-  <nav class="crumbs">
-    <a href="<%= backToSales %>" class="crumb-back" aria-label="Back to shop">← Back</a>
-    <span class="crumb-sep">/</span>
-    <span class="crumb-current"><%= name %></span>
+<main class="product-details <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <!-- Back navigation -->
+  <nav class="breadcrumbs">
+    <a href="<%= backToSales %>" class="breadcrumb-back" aria-label="Back to shop">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Back to Shop
+    </a>
   </nav>
 
-  <article class="pd-wrap">
-    <!-- Media -->
-    <div class="pd-media">
-      <img class="pd-img" src="<%= img %>" alt="<%= name %>" loading="lazy" decoding="async" />
+  <div class="product-container">
+    <!-- Product Media -->
+    <div class="product-media">
+      <div class="product-image-container">
+        <img class="product-image" src="<%= img %>" alt="<%= name %>" loading="lazy" decoding="async" />
+      </div>
     </div>
 
-    <!-- Info -->
-    <div class="pd-info">
-      <h1 class="pd-title"><%= name %></h1>
-
-      <!-- Price (always show) -->
-      <div class="pd-price-row">
-        <span class="pd-price">R <%= price.toFixed(2) %></span>
-      </div>
-
-      <!-- ⭐ Rating summary (hidden until API fills) -->
-      <div id="pd-rating-summary" data-customid="<%= customId %>" hidden>
-        <div class="pd-rating-summary" aria-label="Average rating">
-          <div class="stars" aria-hidden="true"></div>
-          <div class="meta">
-            <strong class="avg">0.0</strong> / 5
-            <span class="count">(0 reviews)</span>
+    <!-- Product Info -->
+    <div class="product-info">
+      <div class="product-header">
+        <h1 class="product-title"><%= name %></h1>
+        
+        <!-- Price -->
+        <div class="product-price">
+          R <%= price.toFixed(2) %>
+        </div>
+        
+        <!-- Rating summary -->
+        <div id="product-rating-summary" data-customid="<%= customId %>" hidden>
+          <div class="rating-summary" aria-label="Average rating">
+            <div class="rating-stars" aria-hidden="true"></div>
+            <div class="rating-meta">
+              <strong class="rating-avg">0.0</strong> / 5
+              <span class="rating-count">(0 reviews)</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Attributes (only render rows that have values) -->
-      <dl class="pd-attrs">
-        <% if (color) { %><div class="row"><dt>Color</dt><dd><%= color %></dd></div><% } %>
-        <% if (size) { %><div class="row"><dt>Size</dt><dd><%= size %></dd></div><% } %>
-        <% if (type) { %><div class="row"><dt>Type</dt><dd><%= type %></dd></div><% } %>
-        <% if (quality) { %><div class="row"><dt>Quality</dt><dd><%= quality %></dd></div><% } %>
-        <% if (made) { %><div class="row"><dt>Made in</dt><dd><%= made %></dd></div><% } %>
-        <% if (manufacturer) { %><div class="row"><dt>Manufacturer</dt><dd><%= manufacturer %></dd></div><% } %>
-      </dl>
-
-      <% if (desc) { %>
-        <section class="pd-desc">
-          <h2>Description</h2>
-          <p><%= desc %></p>
-        </section>
-      <% } %>
-
-      <!-- ⭐ Ratings & reviews (compact) -->
-      <section class="pd-ratings">
-        <h2 class="section-title">Ratings &amp; Reviews</h2>
-
-        <!-- List (loaded from API) -->
-        <div id="ratings-list" data-customid="<%= customId %>">
-          <div class="ratings-empty state">Loading ratings…</div>
-        </div>
-
-        <!-- Rate this product (user or business) -->
-        <% if (customId) { %>
-        <form class="rating-form card compact" action="/products/view/<%= customId %>/ratings" method="post" novalidate>
-          <fieldset class="stars-input" aria-label="Choose stars">
-            <% for (let i = 5; i >= 1; i--) { %>
-              <input type="radio" id="rate-<%= i %>" name="stars" value="<%= i %>">
-              <label for="rate-<%= i %>" title="<%= i %> star<%= i>1?'s':'' %>">★</label>
-            <% } %>
-          </fieldset>
-
-          <div class="grid-2">
-            <label class="inp">
-              <input class="inp-sm" type="text" name="title" maxlength="120" placeholder="Title (optional)" />
-            </label>
-            <button type="submit" class="btn btn-primary xs">Save</button>
-          </div>
-
-          <label class="inp">
-            <textarea class="inp-sm" name="body" rows="2" maxlength="2000" placeholder="Short review (optional)"></textarea>
-          </label>
-        </form>
-        <% } %>
-      </section>
-
-      <!-- Actions -->
-      <div class="pd-actions">
+      <!-- Product Actions -->
+      <div class="product-actions">
         <a
-          class="btn btn-primary xs"
+          class="btn btn-primary btn-cart"
           href="/api/cart/add?pid=<%= pd.customId %>&back=<%= backToSales %>">
-          🛒 Add to Cart
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 3H5L5.4 5M7 13H17L21 5H5.4M7 13L5.4 5M7 13L4.7 15.3C4.3 15.7 4.6 16.4 5.2 16.4H17M17 16C16.4 16 16 16.4 16 17C16 17.6 16.4 18 17 18C17.6 18 18 17.6 18 17C18 16.4 17.6 16 17 16ZM9 17C9 17.6 8.6 18 8 18C7.4 18 7 17.6 7 17C7 16.4 7.4 16 8 16C8.6 16 9 16.4 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Add to Cart
         </a>
 
         <% if (productIdForWishlist) { %>
           <% if (!inWish) { %>
-            <form action="/users/wishlist/add/<%= product._id || product.customId %>" method="POST" class="inline">
+            <form action="/users/wishlist/add/<%= product._id || product.customId %>" method="POST" class="wishlist-form">
               <input type="hidden" name="redirect" value="/users/wishlist">
-              <button class="btn btn-success xs" type="submit">💚 Wishlist</button>
+              <button class="btn btn-secondary btn-wishlist" type="submit">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 21.35L10.55 20.03C5.4 15.36 2 12.28 2 8.5C2 5.42 4.42 3 7.5 3C9.24 3 10.91 3.81 12 5.09C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.42 22 8.5C22 12.28 18.6 15.36 13.45 20.04L12 21.35Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Add to Wishlist
+              </button>
             </form>
           <% } else { %>
-            <form action="/users/wishlist/remove/<%= productIdForWishlist %>" method="POST" class="inline">
+            <form action="/users/wishlist/remove/<%= productIdForWishlist %>" method="POST" class="wishlist-form">
               <input type="hidden" name="redirect" value="/users/wishlist">
-              <button type="submit" class="btn btn-danger xs">❌ Remove</button>
+              <button type="submit" class="btn btn-secondary btn-wishlist active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 21.35L10.55 20.03C5.4 15.36 2 12.28 2 8.5C2 5.42 4.42 3 7.5 3C9.24 3 10.91 3.81 12 5.09C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.42 22 8.5C22 12.28 18.6 15.36 13.45 20.04L12 21.35Z"/>
+                </svg>
+                Remove from Wishlist
+              </button>
             </form>
           <% } %>
         <% } %>
-
-        <a class="btn xs" href="<%= backToSales %>">← Back</a>
       </div>
+
+      <!-- Product Attributes -->
+      <div class="product-attributes">
+        <% if (color || size || type || quality || made || manufacturer) { %>
+          <h3 class="section-title">Product Details</h3>
+          <div class="attributes-grid">
+            <% if (color) { %><div class="attribute"><span class="attribute-label">Color</span><span class="attribute-value"><%= color %></span></div><% } %>
+            <% if (size) { %><div class="attribute"><span class="attribute-label">Size</span><span class="attribute-value"><%= size %></span></div><% } %>
+            <% if (type) { %><div class="attribute"><span class="attribute-label">Type</span><span class="attribute-value"><%= type %></span></div><% } %>
+            <% if (quality) { %><div class="attribute"><span class="attribute-label">Quality</span><span class="attribute-value"><%= quality %></span></div><% } %>
+            <% if (made) { %><div class="attribute"><span class="attribute-label">Made in</span><span class="attribute-value"><%= made %></span></div><% } %>
+            <% if (manufacturer) { %><div class="attribute"><span class="attribute-label">Manufacturer</span><span class="attribute-value"><%= manufacturer %></span></div><% } %>
+          </div>
+        <% } %>
+      </div>
+
+      <!-- Product Description -->
+      <% if (desc) { %>
+        <section class="product-description">
+          <h3 class="section-title">Description</h3>
+          <p><%= desc %></p>
+        </section>
+      <% } %>
+
+      <!-- Ratings & Reviews -->
+      <section class="product-reviews">
+        <h3 class="section-title">Ratings & Reviews</h3>
+
+        <!-- Reviews List -->
+        <div id="reviews-list" data-customid="<%= customId %>">
+          <div class="reviews-empty">Loading reviews…</div>
+        </div>
+
+        <!-- Review Form -->
+        <% if (customId) { %>
+        <div class="review-form-container">
+          <h4>Add Your Review</h4>
+          <form class="review-form" action="/products/view/<%= customId %>/ratings" method="post" novalidate>
+            <div class="rating-input">
+              <span class="rating-label">Your Rating:</span>
+              <div class="stars-input" aria-label="Choose stars">
+                <% for (let i = 5; i >= 1; i--) { %>
+                  <input type="radio" id="rate-<%= i %>" name="stars" value="<%= i %>">
+                  <label for="rate-<%= i %>" title="<%= i %> star<%= i>1?'s':'' %>">★</label>
+                <% } %>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <input type="text" name="title" maxlength="120" placeholder="Review title (optional)" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <textarea name="body" rows="3" maxlength="2000" placeholder="Share your experience with this product (optional)"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Submit Review</button>
+          </form>
+        </div>
+        <% } %>
+      </section>
     </div>
-  </article>
+  </div>
 </main>
 
 <style nonce="<%= nonce %>">
-  /* ===== Compact shell (Hisense U50 Lite friendly) ===== */
-  .pd-page{ padding:clamp(.45rem,3vw,.8rem); }
-  .crumbs{ display:flex; align-items:center; gap:.3rem; font-size:.82rem; margin:.05rem 0 .4rem; }
-  .crumb-back{ text-decoration:none; padding:.18rem .4rem; border-radius:8px; border:1px solid #e5e7eb; background:#fff; color:inherit; }
-  .crumb-back:hover{ background:#f8fafc }
-  .crumb-sep{ color:#9ca3af }
-  .crumb-current{ color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:72vw; }
-
-  /* ===== Layout ===== */
-  .pd-wrap{ display:grid; gap:clamp(.5rem,2vw,.8rem); grid-template-columns: 1fr; max-width:960px; margin:0 auto; align-items:start; }
-  @media (min-width: 880px){ .pd-wrap{ grid-template-columns: 1.05fr 1fr; gap:.9rem; } }
-
-  /* ===== Media ===== */
-  .pd-media{ background:#f3f4f6; border-radius:10px; overflow:hidden; box-shadow:0 3px 10px rgba(0,0,0,.05); }
-  .pd-img{ width:100%; height:auto; display:block; max-height: 220px; object-fit: contain; }
-  @media (min-width: 520px){ .pd-img{ max-height: 280px } }
-  @media (min-width: 880px){ .pd-img{ max-height: 360px } }
-
-  /* ===== Info ===== */
-  .pd-title{ margin:.02rem 0 .15rem; line-height:1.2; font-size: clamp(.95rem, 4vw, 1.35rem); }
-  .pd-price-row{ margin:.05rem 0 .25rem; }
-  .pd-price{ font-weight:800; color:#2563eb; letter-spacing:.1px; font-size: clamp(.95rem, 3.4vw, 1.15rem); }
-
-  /* ⭐ Rating summary (more compact) */
-  .pd-rating-summary{ display:flex; align-items:center; gap:.35rem; margin:.1rem 0 .5rem; }
-  .pd-rating-summary .stars{ font-size:.95rem; line-height:1; }
-  .pd-rating-summary .meta{ font-size:.82rem; color:#374151; }
-
-  /* Attributes list (denser) */
-  .pd-attrs{ display:grid; gap:.35rem; margin:.35rem 0 .7rem; }
-  .pd-attrs .row{
-    display:grid; grid-template-columns: 86px 1fr;
-    align-items:center; gap:.45rem; padding:.35rem .45rem;
-    background:#fff; border:1px solid #e5e7eb; border-radius:9px;
-  }
-  .pd-attrs dt{ font-weight:700; color:#374151; font-size:.8rem; }
-  .pd-attrs dd{ margin:0; color:#111827; font-size:.86rem; word-break: break-word; }
-
-  /* Description (tight) */
-  .pd-desc{ margin:.5rem 0 .8rem; }
-  .pd-desc h2{ margin:0 0 .3rem; font-size:.9rem; }
-  .pd-desc p{ margin:0; line-height:1.45; color:#374151; font-size:.88rem; }
-
-  /* ⭐ Ratings (compact) */
-  .pd-ratings{ margin:.55rem 0 .8rem; }
-  .pd-ratings .section-title{ font-size:.9rem; margin:0 0 .35rem; }
-  #ratings-list .state{ font-size:.86rem; color:#6b7280; }
-  .rating-item{
-    border:1px solid #e5e7eb; border-radius:9px; padding:.45rem .5rem; margin:.35rem 0; background:#fff;
-  }
-  .rating-item .ri-head{ display:flex; align-items:center; gap:.45rem; justify-content:space-between; margin-bottom:.1rem; }
-  .rating-item .ri-stars{ font-size:.9rem; }
-  .rating-item .ri-title{ font-weight:700; font-size:.88rem; }
-  .rating-item .ri-body{ margin:.14rem 0 0; color:#374151; line-height:1.35; font-size:.86rem; }
-
-  /* Rate form (denser + smaller inputs) */
-  .rating-form.card { padding:.55rem; border:1px solid var(--border,#e5e7eb); border-radius:9px; }
-  .rating-form.compact .stars-input{ display:flex; flex-direction:row-reverse; gap:.18rem; margin-bottom:.35rem; }
-  .rating-form .stars-input input{ display:none; }
-  .rating-form .stars-input label{ cursor:pointer; font-size:1rem; line-height:1; }
-  .rating-form .stars-input input:checked ~ label,
-  .rating-form .stars-input label:hover,
-  .rating-form .stars-input label:hover ~ label { color:#f59e0b; }
-  .rating-form .inp{ display:block; margin:.28rem 0; }
-  .rating-form .inp-sm{ width:100%; border:1px solid #d1d5db; border-radius:7px; padding:.35rem .45rem; font-size:.86rem; }
-  .rating-form textarea.inp-sm{ min-height:2.2rem; }
-
-  .grid-2{ display:grid; grid-template-columns: 1fr auto; gap:.35rem; align-items:center; }
-
-  /* Actions (stack on phones, smaller buttons) */
-  .pd-actions{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.45rem; }
-  .btn{ display:inline-block; padding:.48rem .7rem; border-radius:9px; text-decoration:none; border:1px solid #d1d5db; font-weight:700; font-size:.9rem; line-height:1; }
-  .btn.sm{ padding:.4rem .6rem; font-size:.88rem; border-radius:8px; }
-  .btn.xs{ padding:.34rem .5rem; font-size:.82rem; border-radius:7px; }
-  .btn-primary{ background:#2563eb; color:#fff; border-color:#2563eb }
-  .btn-primary:hover{ filter:brightness(.98) }
-  .btn:hover{ background:#f9fafb }
-  .btn-danger{ background:#d12b2b; color:#fff; border-color:#d12b2b }
-  .btn-success{ background:#16a34a; color:#fff; border-color:#16a34a }
-  .btn-success:hover{ filter:brightness(.98) }
-  .inline{ display:inline-block; }
-
-  /* Buttons full width on very small screens */
-  @media (max-width: 520px){
-    .btn { width:100%; text-align:center }
-    .pd-actions{ flex-direction:column; }
-    .grid-2{ grid-template-columns: 1fr; }
+  /* ===== BASE STYLES ===== */
+  .product-details {
+    padding: 0.75rem;
+    max-width: 1200px;
+    margin: 0 auto;
   }
 
-  /* ===== Dark theme ===== */
-  .dark-theme .crumb-back{ background:#111827; border-color:#374151; color:#e5e7eb; }
-  .dark-theme .crumb-back:hover{ background:#0b1220; }
-  .dark-theme .pd-media{ background:#0f172a; }
-  .dark-theme .pd-attrs .row{ background:#111827; border-color:#374151; }
-  .dark-theme .pd-attrs dt{ color:#e5e7eb; }
-  .dark-theme .pd-attrs dd{ color:#f9fafb; }
-  .dark-theme .pd-desc p{ color:#e5e7eb; }
-  .dark-theme .rating-item{ background:#0f172a; border-color:#374151; }
-  .dark-theme #ratings-list .state{ color:#9ca3af; }
+  /* ===== BREADCRUMBS ===== */
+  .breadcrumbs {
+    margin-bottom: 1.25rem;
+  }
+
+  .breadcrumb-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    border: 1px solid #e5e7eb;
+  }
+
+  .breadcrumb-back:hover {
+    background-color: #f9fafb;
+    color: #374151;
+  }
+
+  /* ===== PRODUCT LAYOUT ===== */
+  .product-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (min-width: 768px) {
+    .product-container {
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+    }
+  }
+
+  /* ===== PRODUCT MEDIA ===== */
+  .product-media {
+    position: relative;
+  }
+
+  .product-image-container {
+    background: #f8fafc;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .product-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+  }
+
+  /* ===== PRODUCT INFO ===== */
+  .product-header {
+    margin-bottom: 1.5rem;
+  }
+
+  .product-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0 0 0.75rem 0;
+    color: #111827;
+  }
+
+  .product-price {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #2563eb;
+    margin-bottom: 1rem;
+  }
+
+  /* ===== RATING SUMMARY ===== */
+  .rating-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .rating-stars {
+    font-size: 1.125rem;
+    color: #f59e0b;
+    line-height: 1;
+  }
+
+  .rating-meta {
+    font-size: 0.875rem;
+    color: #6b7280;
+  }
+
+  .rating-avg {
+    color: #111827;
+  }
+
+  /* ===== PRODUCT ACTIONS ===== */
+  .product-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (min-width: 480px) {
+    .product-actions {
+      flex-direction: row;
+    }
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    line-height: 1;
+  }
+
+  .btn-primary {
+    background-color: #2563eb;
+    color: white;
+    flex: 1;
+  }
+
+  .btn-primary:hover {
+    background-color: #1d4ed8;
+  }
+
+  .btn-secondary {
+    background-color: white;
+    color: #374151;
+    border-color: #d1d5db;
+    flex: 1;
+  }
+
+  .btn-secondary:hover {
+    background-color: #f9fafb;
+    border-color: #9ca3af;
+  }
+
+  .btn-wishlist.active {
+    background-color: #fef2f2;
+    color: #dc2626;
+    border-color: #fecaca;
+  }
+
+  /* ===== PRODUCT ATTRIBUTES ===== */
+  .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+    color: #111827;
+  }
+
+  .product-attributes {
+    margin-bottom: 2rem;
+  }
+
+  .attributes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .attribute {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+    background-color: #f9fafb;
+    border-radius: 8px;
+  }
+
+  .attribute-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    margin-bottom: 0.25rem;
+  }
+
+  .attribute-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #111827;
+  }
+
+  /* ===== PRODUCT DESCRIPTION ===== */
+  .product-description {
+    margin-bottom: 2rem;
+  }
+
+  .product-description p {
+    line-height: 1.6;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  /* ===== REVIEWS ===== */
+  .product-reviews {
+    margin-top: 2rem;
+  }
+
+  .reviews-empty {
+    text-align: center;
+    padding: 2rem;
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  .review-item {
+    padding: 1.25rem 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .review-item:last-child {
+    border-bottom: none;
+  }
+
+  .review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+  }
+
+  .review-stars {
+    color: #f59e0b;
+    font-size: 0.875rem;
+  }
+
+  .review-title {
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+    color: #111827;
+  }
+
+  .review-body {
+    color: #4b5563;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .review-date {
+    font-size: 0.75rem;
+    color: #9ca3af;
+  }
+
+  /* ===== REVIEW FORM ===== */
+  .review-form-container {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: #f9fafb;
+    border-radius: 12px;
+  }
+
+  .review-form-container h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .rating-input {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .rating-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+  }
+
+  .stars-input {
+    display: flex;
+    flex-direction: row-reverse;
+    gap: 0.25rem;
+  }
+
+  .stars-input input {
+    display: none;
+  }
+
+  .stars-input label {
+    cursor: pointer;
+    font-size: 1.25rem;
+    color: #d1d5db;
+    transition: color 0.2s ease;
+  }
+
+  .stars-input input:checked ~ label,
+  .stars-input label:hover,
+  .stars-input label:hover ~ label {
+    color: #f59e0b;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (min-width: 480px) {
+    .form-row {
+      grid-template-columns: 1fr auto;
+    }
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-group input,
+  .form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  /* ===== FLASH MESSAGES ===== */
+  .flash {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .flash-success {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .flash-error {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  /* ===== DARK THEME ===== */
+  .dark-theme {
+    background-color: #111827;
+    color: #f9fafb;
+  }
+
+  .dark-theme .breadcrumb-back {
+    background-color: #1f2937;
+    border-color: #374151;
+    color: #d1d5db;
+  }
+
+  .dark-theme .breadcrumb-back:hover {
+    background-color: #374151;
+  }
+
+  .dark-theme .product-image-container {
+    background: #1f2937;
+  }
+
+  .dark-theme .product-title,
+  .dark-theme .section-title {
+    color: #f9fafb;
+  }
+
+  .dark-theme .attribute {
+    background-color: #1f2937;
+  }
+
+  .dark-theme .attribute-value {
+    color: #e5e7eb;
+  }
+
+  .dark-theme .product-description p {
+    color: #d1d5db;
+  }
+
+  .dark-theme .btn-secondary {
+    background-color: #1f2937;
+    color: #e5e7eb;
+    border-color: #374151;
+  }
+
+  .dark-theme .btn-secondary:hover {
+    background-color: #374151;
+  }
+
+  .dark-theme .review-form-container {
+    background-color: #1f2937;
+  }
+
+  .dark-theme .form-group input,
+  .dark-theme .form-group textarea {
+    background-color: #111827;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+
+  .dark-theme .review-item {
+    border-bottom-color: #374151;
+  }
+
+  .dark-theme .review-title {
+    color: #f9fafb;
+  }
+
+  .dark-theme .review-body {
+    color: #d1d5db;
+  }
 </style>
 
 <script nonce="<%= nonce %>">
 (function(){
-  const listEl = document.getElementById('ratings-list');
-  const sumEl  = document.getElementById('pd-rating-summary');
+  const listEl = document.getElementById('reviews-list');
+  const sumEl  = document.getElementById('product-rating-summary');
 
   const customId =
     (listEl && listEl.getAttribute('data-customid')) ||
     (sumEl  && sumEl.getAttribute('data-customid'));
 
   if (!customId) {
-    if (listEl) listEl.innerHTML = '<div class="ratings-empty state">Ratings unavailable.</div>';
+    if (listEl) listEl.innerHTML = '<div class="reviews-empty">Reviews unavailable.</div>';
     if (sumEl)  sumEl.hidden = true;
     return;
   }
@@ -273,11 +648,11 @@
     .then(data => {
       if (!data || !data.ok) throw new Error('Bad response');
 
-      // ----- LIST -----
+      // ----- REVIEWS LIST -----
       if (listEl) {
         const items = data.items || [];
         if (!items.length) {
-          listEl.innerHTML = '<div class="ratings-empty state">No ratings yet — be the first to review.</div>';
+          listEl.innerHTML = '<div class="reviews-empty">No reviews yet — be the first to review this product.</div>';
         } else {
           listEl.innerHTML = items.map(it => {
             const stars = '★'.repeat(it.stars || 0) + '✩'.repeat(5 - (it.stars || 0));
@@ -285,27 +660,27 @@
             const safeBody  = (it.body  || '').toString().substring(0,2000);
             const when = new Date(it.createdAt).toLocaleDateString();
             return `
-              <div class="rating-item">
-                <div class="ri-head">
-                  <div class="ri-stars" aria-label="Rating ${it.stars}/5">${stars}</div>
-                  <div class="ri-when">${when}</div>
+              <div class="review-item">
+                <div class="review-header">
+                  <div class="review-stars" aria-label="Rating ${it.stars}/5">${stars}</div>
+                  <div class="review-date">${when}</div>
                 </div>
-                ${safeTitle ? `<div class="ri-title">${safeTitle}</div>` : ''}
-                ${safeBody  ? `<div class="ri-body">${safeBody}</div>` : ''}
+                ${safeTitle ? `<h4 class="review-title">${safeTitle}</h4>` : ''}
+                ${safeBody  ? `<p class="review-body">${safeBody}</p>` : ''}
               </div>
             `;
           }).join('');
         }
       }
 
-      // ----- SUMMARY -----
+      // ----- RATING SUMMARY -----
       if (sumEl) {
         const avg  = Number(data.product?.avgRating || 0);
         const cnt  = Number(data.product?.ratingsCount || 0);
         if (cnt > 0) {
-          const starsHost = sumEl.querySelector('.stars');
-          const avgEl     = sumEl.querySelector('.avg');
-          const cntEl     = sumEl.querySelector('.count');
+          const starsHost = sumEl.querySelector('.rating-stars');
+          const avgEl     = sumEl.querySelector('.rating-avg');
+          const cntEl     = sumEl.querySelector('.rating-count');
 
           if (starsHost) starsHost.innerHTML = renderStars(avg);
           if (avgEl)     avgEl.textContent   = avg.toFixed(1);
@@ -318,7 +693,7 @@
       }
     })
     .catch(() => {
-      if (listEl) listEl.innerHTML = '<div class="ratings-empty state">Could not load ratings.</div>';
+      if (listEl) listEl.innerHTML = '<div class="reviews-empty">Could not load reviews.</div>';
       if (sumEl)  sumEl.hidden = true;
     });
 })();
