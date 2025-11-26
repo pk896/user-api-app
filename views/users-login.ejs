@@ -13,14 +13,29 @@
   <% }) %>
 
   <form action="/users/login" method="post" class="auth-form card" autocomplete="on" novalidate>
-    <label>Email
-      <input id="login-email" type="email" name="email" required autocomplete="email" placeholder="you@example.com" inputmode="email" />
+    <label>Username
+      <input
+        id="login-username"
+        type="text"
+        name="loginId"
+        required
+        autocomplete="username"
+        placeholder="your username" />
     </label>
 
     <label>Password
       <div class="pw-wrap">
-        <input id="login-password" type="password" name="password" required minlength="6" placeholder="••••••••" autocomplete="current-password" />
-        <button type="button" class="pw-toggle" aria-label="Show password" title="Show/Hide">👁️</button>
+        <input
+          id="login-password"
+          type="password"
+          name="password"
+          required
+          minlength="6"
+          placeholder="••••••••"
+          autocomplete="current-password" />
+        <button type="button" class="pw-toggle" aria-label="Show password" title="Show/Hide">
+          👁️
+        </button>
       </div>
       <small id="caps-hint" class="muted caps-hint" hidden>Caps Lock is ON</small>
     </label>
@@ -30,7 +45,6 @@
         <input id="login-remember" type="checkbox" name="remember" value="1" />
         <span>Remember me</span>
       </label>
-      <!-- ✅ fixed path: password routes live under /users/password/* -->
       <a class="muted tiny" href="/users/password/forgot" data-nav="true" rel="noopener">Forgot?</a>
     </div>
 
@@ -40,7 +54,12 @@
   <div class="divider">or</div>
 
   <div class="social">
-    <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">🔑 Continue with Google</a>
+    <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">
+      🔑 Continue with Google
+    </a>
+    <p class="muted tiny" style="text-align:center;margin-top:.25rem;">
+      If you signed up with Google, use this button to log in.
+    </p>
   </div>
 
   <p class="auth-switch">
@@ -97,9 +116,9 @@
   .btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
   .btn.google { background: #fff; color: #111827; border-color: #d1d5db; }
   .btn:hover { opacity: .96; }
-  .dark-theme .btn { background: #374151; border-color: #4b5563; color: #e5e7eb; }
-  .dark-theme .btn.primary { background: #1d4ed8; border-color: #1d4ed8; }
-  .dark-theme .btn.google { background: #111827; }
+  .dark-theme .btn { background: #374151; border-color: #4b5563; color:#e5e7eb; }
+  .dark-theme .btn.primary { background:#1d4ed8; border-color:#1d4ed8; }
+  .dark-theme .btn.google { background:#111827; }
 
   .divider { margin: .5rem auto; text-align: center; font-size: .84rem; color: #6b7280; }
   .dark-theme .divider { color: #9ca3af; }
@@ -124,31 +143,40 @@
 <script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   (function(){
     // Hard navigation for data-nav links
-    document.querySelectorAll('a[data-nav]').forEach(a=>{
-      a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); location.assign(a.getAttribute('href')); });
-      a.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); location.assign(a.getAttribute('href')); }});
+    document.querySelectorAll('a[data-nav]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        location.assign(a.getAttribute('href'));
+      });
+      a.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          location.assign(a.getAttribute('href'));
+        }
+      });
     });
 
-    const emailEl = document.getElementById('login-email');
+    const usernameEl = document.getElementById('login-username');
     const pwEl = document.getElementById('login-password');
     const toggleEl = document.querySelector('.pw-toggle');
     const submitEl = document.getElementById('login-submit');
     const rememberEl = document.getElementById('login-remember');
     const capsHint = document.getElementById('caps-hint');
 
-    // Prefill email from localStorage to reduce friction after redirects
+    // Prefill username from localStorage to reduce friction after redirects
     try {
-      const stored = localStorage.getItem('login:email');
-      if (stored && emailEl && !emailEl.value) emailEl.value = stored;
+      const stored = localStorage.getItem('login:username');
+      if (stored && usernameEl && !usernameEl.value) usernameEl.value = stored;
     } catch {}
 
-    if (emailEl) {
-      emailEl.addEventListener('input', () => {
-        try { localStorage.setItem('login:email', emailEl.value.trim()); } catch {}
+    if (usernameEl) {
+      usernameEl.addEventListener('input', () => {
+        try { localStorage.setItem('login:username', usernameEl.value.trim()); } catch {}
       });
-      // focus email if empty, else password
       setTimeout(() => {
-        if (!emailEl.value) emailEl.focus();
+        if (!usernameEl.value) usernameEl.focus();
         else if (pwEl) pwEl.focus();
       }, 0);
     }
@@ -183,13 +211,11 @@
       });
     }
 
-    // If "Remember me" checked, stretch cookie lifespan server-side (handled by route).
-    // We persist email regardless, but you can gate it:
-    if (rememberEl && emailEl) {
+    if (rememberEl && usernameEl) {
       rememberEl.addEventListener('change', () => {
         try {
-          if (!rememberEl.checked) localStorage.removeItem('login:email');
-          else localStorage.setItem('login:email', emailEl.value.trim());
+          if (!rememberEl.checked) localStorage.removeItem('login:username');
+          else localStorage.setItem('login:username', usernameEl.value.trim());
         } catch {}
       });
     }

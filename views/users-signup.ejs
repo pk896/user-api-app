@@ -3,34 +3,87 @@
   <!-- stamp: users-signup -->
   <small class="stamp">view: users-signup</small>
   <h1 class="page-title">🧑‍💻 Create an account</h1>
+  <p class="page-subtitle">
+    Use your real email (Gmail/Outlook) so we can verify your account and send important updates.
+  </p>
 
   <% (success || []).forEach(msg => { %>
-  <div class="flash flash-success">✅ <%= msg %></div>
-<% }) %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
 
-<% (error || []).forEach(msg => { %>
-  <div class="flash flash-error">❌ <%= msg %></div>
-<% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
 
   <form action="/users/signup" method="post" class="auth-form card" autocomplete="off" novalidate>
-    <label>Full name
-      <input type="text" name="name" minlength="2" maxlength="80" required placeholder="e.g. Jane Doe" />
+    <label>Contact email (Gmail / Outlook)
+      <input
+        type="email"
+        name="email"
+        required
+        autocomplete="email"
+        placeholder="you@gmail.com"
+        inputmode="email" />
+      <small class="muted tiny">
+        We’ll send a verification link to this address.
+      </small>
     </label>
 
-    <label>Email
-      <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" />
+    <label>Username
+      <input
+        type="text"
+        name="username"
+        minlength="3"
+        maxlength="30"
+        required
+        placeholder="e.g. phakisi_01" />
+      <small class="muted tiny">
+        This is your login name. Do not use your email password here.
+      </small>
+    </label>
+
+    <label>Full name
+      <input
+        type="text"
+        name="name"
+        minlength="2"
+        maxlength="80"
+        required
+        placeholder="e.g. Jane Doe" />
     </label>
 
     <label>Age <span class="muted">(must be 16+)</span>
-      <input type="number" name="age" min="16" max="120" step="1" required placeholder="16" />
+      <input
+        type="number"
+        name="age"
+        min="16"
+        max="120"
+        step="1"
+        required
+        placeholder="16" />
     </label>
 
     <label>Password
-      <input type="password" name="password" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+      <input
+        type="password"
+        name="password"
+        required
+        minlength="6"
+        placeholder="••••••••"
+        autocomplete="new-password" />
+      <small class="muted tiny">
+        This is your <strong>user password</strong>, not your Gmail password.
+      </small>
     </label>
 
     <label>Confirm password
-      <input type="password" name="confirm" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+      <input
+        type="password"
+        name="confirm"
+        required
+        minlength="6"
+        placeholder="••••••••"
+        autocomplete="new-password" />
     </label>
 
     <label class="checkbox">
@@ -44,7 +97,12 @@
   <div class="divider">or</div>
 
   <div class="social">
-    <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">🔑 Continue with Google</a>
+    <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">
+      🔑 Continue with Google
+    </a>
+    <p class="muted tiny" style="text-align:center;margin-top:.25rem;">
+      If you sign up with Google, we’ll use your Google email.
+    </p>
   </div>
 
   <p class="auth-switch">
@@ -63,8 +121,16 @@
     text-align: center;
     font-size: 1.05rem;
     font-weight: 800;
-    margin: .2rem 0 .7rem;
+    margin: .2rem 0 .25rem;
   }
+  .page-subtitle {
+    text-align: center;
+    font-size: .78rem;
+    color: #6b7280;
+    margin: 0 0 .7rem;
+  }
+  .dark-theme .page-subtitle { color: #9ca3af; }
+
   .card {
     background: var(--card-bg, #fff);
     border: 1px solid var(--card-bd, #e5e7eb);
@@ -78,6 +144,7 @@
   label { display: grid; gap: .35rem; font-weight: 700; font-size: .85rem; }
   .checkbox { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; font-size: .82rem; }
   .muted { color: #6b7280; }
+  .tiny { font-size: .78rem; }
   .dark-theme .muted { color: #9ca3af; }
 
   input {
@@ -115,15 +182,16 @@
   @media (max-width: 360px) {
     .auth-page.mini { padding: 0 .5rem; }
     .page-title { font-size: 1rem; }
+    .page-subtitle { font-size: .75rem; }
     input { font-size: .85rem; padding: .5rem .6rem; }
     .btn.xs { font-size: .68rem; padding: .32rem .45rem; }
   }
 </style>
 
 <script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-  // Force clean navigation for links marked data-nav (prevents any form interception)
   (function () {
-    document.querySelectorAll('a[data-nav]').forEach(a => {
+    const links = document.querySelectorAll('a[data-nav]');
+    links.forEach(a => {
       a.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();

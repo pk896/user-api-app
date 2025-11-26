@@ -1,43 +1,118 @@
 <!-- views/users-profile.ejs -->
 <section class="profile-page mini">
+  <% const profileUser = user || locals.user || {}; %>
+
   <h1 class="page-title">🙍 My Profile</h1>
+
+  <% if (!profileUser.isEmailVerified && profileUser.email) { %>
+    <div class="card verify-card">
+      <p class="verify-title">⚠ Email not verified</p>
+      <p class="verify-text">
+        We’ve sent a verification email to
+        <strong><%= profileUser.email %></strong>.
+      </p>
+      <p class="verify-text small">
+        Please verify your email to unlock your dashboard, orders and other features.
+        You can resend the verification email from the next page.
+      </p>
+      <a href="/users/verify-pending" class="btn xs warn wfull">
+        📧 Verify / resend email
+      </a>
+    </div>
+  <% } %>
 
   <div class="card info">
     <div class="row">
       <span class="label">Name</span>
       <span class="value">
-        <%= (user && user.name) || (locals.user && locals.user.name) %>
+        <%= profileUser.name || '' %>
+      </span>
+    </div>
+
+    <div class="row">
+      <span class="label">Username</span>
+      <span class="value">
+        <%= profileUser.username || '—' %>
       </span>
     </div>
 
     <div class="row">
       <span class="label">Email</span>
-      <span class="value ellipsis" title="<%= (user && user.email) || (locals.user && locals.user.email) %>">
-        <%= (user && user.email) || (locals.user && locals.user.email) %>
+      <span
+        class="value ellipsis"
+        title="<%= profileUser.email || '' %>">
+        <%= profileUser.email || '—' %>
       </span>
     </div>
 
-    <% if (user && typeof user.age !== 'undefined' && user.age !== null) { %>
+    <div class="row">
+      <span class="label">Email status</span>
+      <span class="value">
+        <% if (profileUser.isEmailVerified) { %>
+          ✅ Verified
+        <% } else { %>
+          ⚠️ Not verified
+        <% } %>
+      </span>
+    </div>
+
+    <div class="row">
+      <span class="label">Sign-in</span>
+      <span class="value">
+        <% if (profileUser.provider === 'google') { %>
+          Google
+        <% } else if (profileUser.provider === 'both') { %>
+          Email &amp; Google
+        <% } else { %>
+          Email / Username
+        <% } %>
+      </span>
+    </div>
+
+    <% if (typeof profileUser.age !== 'undefined' && profileUser.age !== null) { %>
       <div class="row">
         <span class="label">Age</span>
-        <span class="value"><%= user.age %></span>
+        <span class="value"><%= profileUser.age %></span>
       </div>
     <% } %>
 
     <div class="row">
       <span class="label">Joined</span>
       <span class="value">
-        <%= (user && user.createdAt) ? new Date(user.createdAt).toLocaleString() : '' %>
+        <%= profileUser.createdAt ? new Date(profileUser.createdAt).toLocaleString() : '' %>
       </span>
     </div>
+
+    <% if (profileUser.lastLogin) { %>
+      <div class="row">
+        <span class="label">Last login</span>
+        <span class="value">
+          <%= new Date(profileUser.lastLogin).toLocaleString() %>
+        </span>
+      </div>
+    <% } %>
   </div>
 
   <div class="card actions">
     <a href="/users/profile/edit" class="btn xs wfull">✏️ Edit</a>
     <a href="/users/change-password" class="btn xs wfull">🔑 Password</a>
+
     <form action="/users/logout" method="get" class="stack">
-      <button type="submit" class="btn xs danger wfull">🚪 Log out</button>
+      <button type="submit" class="btn xs subtle wfull">🚪 Log out</button>
     </form>
+
+    <form
+      action="/users/profile/delete"
+      method="post"
+      class="stack"
+      onsubmit="return confirm('Are you sure? This will permanently delete your account and cannot be undone.');"
+    >
+      <button type="submit" class="btn xs danger wfull">🗑️ Delete account</button>
+    </form>
+
+    <p class="danger-note">
+      Deleting your account will permanently remove your profile and access.
+    </p>
   </div>
 </section>
 
@@ -82,10 +157,37 @@
     color: #e5e7eb;
   }
 
+  /* Verify banner card */
+  .verify-card {
+    border-color:#fcd34d;
+    background:#fffbeb;
+  }
+  .dark-theme .verify-card {
+    border-color:#facc15;
+    background:#451a03;
+  }
+  .verify-title {
+    font-weight:800;
+    margin-bottom:.2rem;
+    font-size:.86rem;
+  }
+  .verify-text {
+    margin:.08rem 0;
+    color:#4b5563;
+  }
+  .verify-text.small {
+    font-size:.78rem;
+    color:#6b7280;
+  }
+  .dark-theme .verify-text,
+  .dark-theme .verify-text.small {
+    color:#e5e7eb;
+  }
+
   /* Info rows: very tight and readable on tiny screens */
   .info .row {
     display: grid;
-    grid-template-columns: 64px 1fr;   /* narrower label column */
+    grid-template-columns: 80px 1fr;   /* a bit wider for new labels */
     gap: .28rem;
     align-items: center;
     padding: .22rem 0;
@@ -149,6 +251,28 @@
     color: #fff;
   }
 
+  .btn.subtle {
+    background:#e5e7eb;
+    border-color:#d1d5db;
+    color:#111827;
+  }
+  .dark-theme .btn.subtle {
+    background:#111827;
+    border-color:#4b5563;
+    color:#e5e7eb;
+  }
+
+  .btn.warn {
+    background:#f97316;
+    border-color:#ea580c;
+    color:#fff;
+  }
+  .dark-theme .btn.warn {
+    background:#c2410c;
+    border-color:#ea580c;
+    color:#fff;
+  }
+
   .btn.xs {
     font-size: var(--pg-fs-small);
     padding: .32rem .44rem;
@@ -156,6 +280,14 @@
   }
 
   .wfull { width: 100%; }
+
+  .danger-note {
+    margin-top: .1rem;
+    font-size: .7rem;
+    color: #991b1b;
+    text-align: center;
+  }
+  .dark-theme .danger-note { color: #fecaca; }
 
   /* ===== Extra-tight layout for ultra-small screens (~320px) ===== */
   @media (max-width: 360px) {
@@ -168,13 +300,13 @@
       --pg-fs-title: .98rem;
     }
     .profile-page.mini { padding: 0 .38rem; }
-    .info .row { grid-template-columns: 58px 1fr; }
+    .info .row { grid-template-columns: 76px 1fr; }
   }
 
   /* Slightly scale up for mid phones while staying compact */
   @media (min-width: 420px) {
     .profile-page.mini { max-width: 420px; }
-    .info .row { grid-template-columns: 72px 1fr; }
+    .info .row { grid-template-columns: 90px 1fr; }
   }
 
   /* Motion safety */
@@ -182,3 +314,4 @@
     * { transition: none !important; animation: none !important; }
   }
 </style>
+

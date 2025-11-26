@@ -1,4 +1,5 @@
 // server.js
+require('dotenv').config();
 const validateEnv = require("./config/validateEnv");
 try {
   validateEnv();
@@ -21,7 +22,6 @@ const expressLayouts = require('express-ejs-layouts');
 const compression = require('compression');
 const morgan = require('morgan');
 const MongoStore = require('connect-mongo');
-require('dotenv').config();
 
 const app = express();
 
@@ -275,26 +275,61 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    Google OAuth
 --------------------------------------- */
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get(
+  '/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] }),
+);
 
 app.get(
   '/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/users/login', failureFlash: true }),
-  (req, res) => {
-    if (!req.user) {return res.redirect('/users/login');}
+  passport.authenticate('google', {
+    failureRedirect: '/users/login',
+    failureFlash: true,
+  }),
+  async (req, res) => {   // 👈 make this async
+    // At this point, Passport has attached the full User doc to req.user
+    if (!req.user) {
+      req.flash('error', 'Google login failed. Please try again.');
+      return res.redirect('/users/login');
+    }
 
-    // Regenerate + save ensures cookie write before redirect
-    req.session.regenerate((err) => {
-      if (err) {return res.redirect('/users/login');}
+    const keepBusiness = req.session?.business || null;
+
+    // Regenerate session to avoid fixation
+    req.session.regenerate(async (err) => {
+      if (err) {
+        console.error('[Google callback] session regenerate error:', err);
+        req.flash('error', 'Login failed. Please try again.');
+        return res.redirect('/users/login');
+      }
+
+      if (keepBusiness) {
+        req.session.business = keepBusiness;
+      }
+
+      // Mirror the same structure you use for local login
       req.session.user = {
         _id: req.user._id.toString(),
         name: req.user.name,
         email: req.user.email,
         createdAt: req.user.createdAt,
+        provider: req.user.provider || 'google',
+        isEmailVerified: !!req.user.isEmailVerified,
       };
+
+      // Track lastLogin for professionalism
+      try {
+        req.user.lastLogin = new Date();
+        await req.user.save();   // 👈 no .catch, we handle errors here
+      } catch (e) {
+        console.warn('[Google callback] lastLogin error:', e?.message);
+      }
+
       req.session.save(() => {
         req.flash('success', 'Logged in with Google.');
-        res.redirect('/users/dashboard');
+        const redirectTo = req.session.returnTo || '/users/dashboard';
+        delete req.session.returnTo;
+        res.redirect(redirectTo);
       });
     });
   },

@@ -1,21 +1,79 @@
 <!-- views/users-profile-edit.ejs -->
 <section class="profile-edit-page mini">
+  <% const profileUser = user || locals.user || {}; %>
+
   <h1 class="page-title">👤 Edit Your Profile</h1>
 
-  <form action="/users/profile/edit" method="POST" class="card form">
+  <form action="/users/profile/edit" method="POST" class="card form" novalidate>
+    <div class="field">
+      <label for="email">Email <span class="muted">(read-only)</span></label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        value="<%= profileUser.email || '' %>"
+        readonly
+        disabled
+      >
+      <small class="muted tiny">
+        This is your contact email (Gmail / Outlook). Changing it will be handled via email verification in future.
+      </small>
+    </div>
+
+    <div class="field">
+      <label for="username">Username</label>
+      <input
+        id="username"
+        name="username"
+        type="text"
+        minlength="3"
+        maxlength="30"
+        value="<%= profileUser.username || '' %>"
+        required
+      >
+      <small class="muted tiny">
+        Used for login with password. Do not use your email password here.
+      </small>
+    </div>
+
     <div class="field">
       <label for="name">Full name</label>
-      <input id="name" name="name" type="text" value="<%= (user && user.name) || '' %>" required>
+      <input
+        id="name"
+        name="name"
+        type="text"
+        minlength="2"
+        maxlength="120"
+        value="<%= profileUser.name || '' %>"
+        required
+      >
     </div>
 
     <div class="field">
       <label for="age">Age <span class="muted">(optional)</span></label>
-      <input id="age" name="age" type="number" min="0" value="<%= (user && user.age) || '' %>">
+      <input
+        id="age"
+        name="age"
+        type="number"
+        min="0"
+        max="120"
+        value="<%= (typeof profileUser.age !== 'undefined' && profileUser.age !== null) ? profileUser.age : '' %>"
+      >
     </div>
 
     <div class="field">
-      <label for="password">New password <span class="muted">(min 6; leave blank to keep current)</span></label>
-      <input id="password" name="password" type="password" minlength="6" placeholder="••••••••">
+      <label for="password">
+        New password
+        <span class="muted">(min 6; leave blank to keep current)</span>
+      </label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        minlength="6"
+        placeholder="••••••••"
+        autocomplete="new-password"
+      >
     </div>
 
     <div class="actions">
@@ -26,35 +84,74 @@
 </section>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-  .profile-edit-page.mini{ max-width:420px; margin:.8rem auto 1.2rem; padding:0 .6rem; }
-  .page-title{ text-align:center; font-size:1.05rem; font-weight:800; margin:.2rem 0 .7rem; }
+  .profile-edit-page.mini{
+    max-width:420px; margin:.8rem auto 1.2rem; padding:0 .6rem;
+  }
+  .page-title{
+    text-align:center; font-size:1.05rem; font-weight:800; margin:.2rem 0 .7rem;
+  }
 
   .card.form{
     background:var(--card-bg,#fff); border:1px solid var(--card-bd,#e5e7eb);
     border-radius:12px; padding:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.06);
   }
-  .dark-theme .card.form{ --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb; }
+  .dark-theme .card.form{
+    --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb;
+  }
 
-  .field{ display:grid; gap:.35rem; margin-bottom:.8rem; }
-  label{ font-weight:700; font-size:.85rem; }
-  .muted{ font-weight:500; color:#6b7280; }
-  .dark-theme .muted{ color:#9ca3af; }
+  .field{
+    display:grid; gap:.35rem; margin-bottom:.8rem;
+  }
+  label{
+    font-weight:700; font-size:.85rem;
+  }
+  .muted{
+    font-weight:500; color:#6b7280;
+  }
+  .tiny{
+    font-size:.75rem;
+  }
+  .dark-theme .muted{
+    color:#9ca3af;
+  }
   input{
     border:1px solid #d1d5db; border-radius:10px; padding:.55rem .65rem; background:#fff; font-size:.9rem;
   }
-  .dark-theme input{ background:#0b1220; border-color:#334155; color:#e5e7eb; }
+  input[readonly], input[disabled]{
+    background:#f9fafb; color:#6b7280;
+  }
+  .dark-theme input{
+    background:#0b1220; border-color:#334155; color:#e5e7eb;
+  }
+  .dark-theme input[readonly], .dark-theme input[disabled]{
+    background:#020617; color:#9ca3af;
+  }
 
-  .actions{ display:flex; gap:.4rem; justify-content:flex-end; flex-wrap:wrap; margin-top:.2rem; }
+  .actions{
+    display:flex; gap:.4rem; justify-content:flex-end; flex-wrap:wrap; margin-top:.2rem;
+  }
   .btn{
     display:inline-block; padding:.35rem .55rem; border-radius:8px; text-decoration:none;
     border:1px solid #d1d5db; background:#f3f4f6; color:#111827; font-size:.78rem;
   }
-  .btn.xs{ padding:.3rem .5rem; font-size:.72rem; border-radius:7px; }
-  .btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
-  .btn.primary:hover{ opacity:.95; }
-  .btn.subtle{ background:#e5e7eb; color:#111827; }
-  .dark-theme .btn{ background:#374151; border-color:#4b5563; color:#e5e7eb; }
-  .dark-theme .btn.primary{ background:#1d4ed8; border-color:#1d4ed8; }
+  .btn.xs{
+    padding:.3rem .5rem; font-size:.72rem; border-radius:7px;
+  }
+  .btn.primary{
+    background:#2563eb; color:#fff; border-color:#2563eb;
+  }
+  .btn.primary:hover{
+    opacity:.95;
+  }
+  .btn.subtle{
+    background:#e5e7eb; color:#111827;
+  }
+  .dark-theme .btn{
+    background:#374151; border-color:#4b5563; color:#e5e7eb;
+  }
+  .dark-theme .btn.primary{
+    background:#1d4ed8; border-color:#1d4ed8;
+  }
 
   @media (max-width:360px){
     .profile-edit-page.mini{ padding:0 .5rem; }
