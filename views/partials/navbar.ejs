@@ -73,6 +73,7 @@
 
       <nav class="pg-drawer-nav">
         <% if (business) { %>
+          <% const isVerified = business && business.isVerified; %>
           <!-- BUSINESS MENU -->
           <div class="pg-section">
             <div class="pg-section-title">Business</div>
@@ -86,28 +87,42 @@
 
           <div class="pg-section">
             <div class="pg-section-title">Products & Shipments</div>
-            <a href="/products" class="pg-link">
-              <span class="pg-ico">📦</span><span>Products</span>
-            </a>
-            <a href="/products/add" class="pg-link">
-              <span class="pg-ico">➕</span><span>Add Product</span>
-            </a>
-            <a href="/shipments" class="pg-link">
-              <span class="pg-ico">🚚</span><span>Shipments</span>
-            </a>
+
+            <% if (isVerified) { %>
+              <a href="/products" class="pg-link">
+                <span class="pg-ico">📦</span><span>Products</span>
+              </a>
+              <a href="/products/add" class="pg-link">
+                <span class="pg-ico">➕</span><span>Add Product</span>
+              </a>
+              <a href="/shipments" class="pg-link">
+                <span class="pg-ico">🚚</span><span>Shipments</span>
+              </a>
+            <% } else { %>
+              <div class="pg-note-verify">
+                Verify your email to manage products & shipments.
+              </div>
+            <% } %>
           </div>
 
           <div class="pg-section">
             <div class="pg-section-title">Demands</div>
-            <a href="/demands/add" class="pg-link">
-              <span class="pg-ico">📝</span><span>Add Demand</span>
-            </a>
-            <a href="/demands/mine" class="pg-link">
-              <span class="pg-ico">📋</span><span>My Demands</span>
-            </a>
-            <a href="/demands/aggregate" class="pg-link">
-              <span class="pg-ico">📈</span><span>Demanded Products</span>
-            </a>
+
+            <% if (isVerified) { %>
+              <a href="/demands/add" class="pg-link">
+                <span class="pg-ico">📝</span><span>Add Demand</span>
+              </a>
+              <a href="/demands/mine" class="pg-link">
+                <span class="pg-ico">📋</span><span>My Demands</span>
+              </a>
+              <a href="/demands/aggregate" class="pg-link">
+                <span class="pg-ico">📈</span><span>Demanded Products</span>
+              </a>
+            <% } else { %>
+              <div class="pg-note-verify">
+                Verify your email to use Demands.
+              </div>
+            <% } %>
           </div>
 
           <div class="pg-section">
@@ -360,6 +375,37 @@
   color: #020617;
 }
 
+/* --- Auto pulse version of the Shop chip --- */
+.pg-chip-shop.pg-chip-pulse {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #111827;
+  transform: translateY(-1px) scale(1.03);
+  box-shadow:
+    0 0 0 1px rgba(251,191,36,0.65),
+    0 12px 26px rgba(15,23,42,0.45);
+}
+
+/* make the shine streak run when pulsing */
+.pg-chip-shop.pg-chip-pulse::after {
+  opacity: 1;
+  animation: pg-chip-shine 0.8s ease-out;
+}
+
+/* dark theme text color when pulsing */
+.theme-dark .pg-chip-shop.pg-chip-pulse {
+  color: #020617;
+}
+
+/* keyframes for the shine sweep */
+@keyframes pg-chip-shine {
+  from {
+    transform: translateX(-170%);
+  }
+  to {
+    transform: translateX(170%);
+  }
+}
+
 /* Right side */
 .pg-nav-right {
   display: flex;
@@ -575,51 +621,73 @@
     max-width: 1200px;
   }
 }
+
+.pg-note-verify {
+  margin: .2rem .6rem .4rem;
+  font-size: .78rem;
+  color: var(--pg-muted);
+}
 </style>
 
 <script nonce="<%= nonce %>">
-document.addEventListener('DOMContentLoaded', function () {
-  const toggle  = document.getElementById('pgNavToggle');
-  const drawer  = document.getElementById('pgNavDrawer');
-  const overlay = document.getElementById('pgNavOverlay');
+  document.addEventListener('DOMContentLoaded', function () {
+    const toggle  = document.getElementById('pgNavToggle');
+    const drawer  = document.getElementById('pgNavDrawer');
+    const overlay = document.getElementById('pgNavOverlay');
 
-  if (!toggle || !drawer || !overlay) return;
+    if (!toggle || !drawer || !overlay) return;
 
-  const openDrawer = () => {
-    drawer.classList.add('pg-open');
-    overlay.classList.add('pg-show');
-    document.body.style.overflow = 'hidden';
-    drawer.setAttribute('aria-hidden', 'false');
-  };
+    const openDrawer = () => {
+      drawer.classList.add('pg-open');
+      overlay.classList.add('pg-show');
+      document.body.style.overflow = 'hidden';
+      drawer.setAttribute('aria-hidden', 'false');
+    };
 
-  const closeDrawer = () => {
-    drawer.classList.remove('pg-open');
-    overlay.classList.remove('pg-show');
-    document.body.style.overflow = '';
-    drawer.setAttribute('aria-hidden', 'true');
-  };
+    const closeDrawer = () => {
+      drawer.classList.remove('pg-open');
+      overlay.classList.remove('pg-show');
+      document.body.style.overflow = '';
+      drawer.setAttribute('aria-hidden', 'true');
+    };
 
-  toggle.addEventListener('click', () => {
-    if (drawer.classList.contains('pg-open')) {
-      closeDrawer();
-    } else {
-      openDrawer();
+    toggle.addEventListener('click', () => {
+      if (drawer.classList.contains('pg-open')) {
+        closeDrawer();
+      } else {
+        openDrawer();
+      }
+    });
+
+    overlay.addEventListener('click', closeDrawer);
+
+    drawer.addEventListener('click', (ev) => {
+      const target = ev.target.closest('a');
+      if (target) closeDrawer();
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 1024 && drawer.classList.contains('pg-open')) {
+        closeDrawer();
+      }
+    });
+
+    /* 🔥 Auto-pulse the Shop chip every 5 seconds */
+    const shopChip = document.querySelector('.pg-chip-shop');
+    if (shopChip) {
+      const runPulse = () => {
+        if (shopChip.classList.contains('pg-chip-pulse')) return;
+        shopChip.classList.add('pg-chip-pulse');
+        // remove after animation ends
+        setTimeout(() => {
+          shopChip.classList.remove('pg-chip-pulse');
+        }, 900);
+      };
+
+      // first pulse shortly after load
+      setTimeout(runPulse, 1500);
+      // then every 5 seconds
+      setInterval(runPulse, 5000);
     }
   });
-
-  overlay.addEventListener('click', closeDrawer);
-
-  // Close when clicking any link inside drawer
-  drawer.addEventListener('click', (ev) => {
-    const target = ev.target.closest('a');
-    if (target) closeDrawer();
-  });
-
-  // If user grows window a lot while open, keep behaviour sane
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > 1024 && drawer.classList.contains('pg-open')) {
-      closeDrawer();
-    }
-  });
-});
 </script>

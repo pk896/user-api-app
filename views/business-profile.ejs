@@ -1,85 +1,359 @@
 <!-- views/business-profile.ejs -->
-<h1>🏢 My Business Profile</h1>
+<section class="business-profile-page">
+  <h1 class="page-title">🏢 My Business Profile</h1>
+  <p class="subtitle">
+    Manage your business details and email verification status.
+  </p>
 
-<!-- Flash messages -->
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success"><%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error"><%= error %></div>
-<% } %>
+  <!-- Flash messages -->
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
 
-<div class="business-profile <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <div class="profile-info">
-    <p><strong>Business Name:</strong> <%= business.name %></p>
-    <p><strong>Email:</strong> <%= business.email %></p>
-    <p><strong>Role:</strong> <%= business.role %></p>
-    <p><strong>Business Number:</strong> <%= business.businessNumber %></p>
-    <p><strong>Phone:</strong> <%= business.phone %></p>
-    <p><strong>Country:</strong> <%= business.country %></p>
-    <p><strong>City:</strong> <%= business.city %></p>
-    <p><strong>Address:</strong> <%= business.address %></p>
-    <p><strong>ID / Passport:</strong> <%= business.idOrPassport %></p>
+  <% const isVerified = business && business.isVerified; %>
+
+  <div class="profile-layout">
+    <!-- Left: Business details -->
+    <section class="block profile-card">
+      <div class="block-head">
+        <h2>Business Details</h2>
+        <span class="role-pill role-<%= business.role %>">
+          <%= business.role && business.role.toUpperCase() %>
+        </span>
+      </div>
+
+      <dl class="details-list">
+        <div class="detail-row">
+          <dt>Business Name</dt>
+          <dd><%= business.name %></dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>Email</dt>
+          <dd class="email-row">
+            <span><%= business.email %></span>
+            <% if (isVerified) { %>
+              <span class="badge badge-verified">✅ Verified</span>
+            <% } else { %>
+              <span class="badge badge-unverified">⚠️ Not verified</span>
+            <% } %>
+          </dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>Business Number</dt>
+          <dd><%= business.businessNumber %></dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>Phone</dt>
+          <dd><%= business.phone %></dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>Country</dt>
+          <dd><%= business.country %></dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>City</dt>
+          <dd><%= business.city %></dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>Address</dt>
+          <dd><%= business.address %></dd>
+        </div>
+
+        <div class="detail-row">
+          <dt>ID / Passport</dt>
+          <dd><%= business.idOrPassport %></dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- Right: Email verification & actions -->
+    <section class="block verify-card">
+      <div class="block-head">
+        <h2>Email Verification</h2>
+      </div>
+
+      <% if (isVerified) { %>
+        <p class="muted">
+          ✅ Your business email is verified.  
+          All dashboards (Seller / Supplier / Buyer) are fully available.
+        </p>
+      <% } else { %>
+        <p class="muted">
+          ⚠️ Your business email is <strong>not verified</strong> yet.
+          For security reasons, full access to business dashboards is only
+          available after you verify your email address.
+        </p>
+
+        <div class="actions-column">
+          <!-- Start / resend verification flow -->
+          <a href="/business/verify/start" class="btn primary">
+            📧 Send verification email
+          </a>
+
+          <!-- Easy way to get back to the verify-pending screen -->
+          <a href="/business/verify/pending" class="btn light">
+            ⏳ View verification status / resend
+          </a>
+        </div>
+
+        <p class="hint">
+          Didn’t get the email? Check your spam/junk folder or use
+          “View verification status / resend” to request a new link.
+        </p>
+      <% } %>
+
+      <hr class="divider">
+
+      <div class="profile-actions">
+        <!-- Edit profile -->
+        <a href="/business/profile/edit" class="btn light">
+          ✏️ Edit profile
+        </a>
+
+        <!-- Change password (new) -->
+        <a href="/business/change-password" class="btn light">
+          🔑 Password
+        </a>
+
+        <!-- Delete business account -->
+        <form
+          id="delete-business-form"
+          action="/business/profile/delete"
+          method="POST"
+        >
+          <button type="submit" class="btn danger">
+            🗑 Delete business account
+          </button>
+        </form>
+      </div> 
+    </section>
   </div>
+</section>
 
-  <div class="profile-actions">
-    <!-- Edit profile -->
-    <a href="/business/profile/edit" class="btn-edit">✏️ Edit Profile</a>
+<style nonce="<%= nonce %>">
+  .business-profile-page {
+    max-width: 1100px;
+    margin: 0 auto 2rem;
+    padding: 1rem;
+  }
 
-    <!-- Delete account -->
-    <form 
-      action="/business/profile/delete" 
-      method="POST" 
-      onsubmit="return confirm('⚠️ Are you sure you want to delete your business account? This cannot be undone.');"
-      style="display:inline;"
-    >
-      <button type="submit" class="btn-delete">🗑 Delete Business</button>
-    </form>
-  </div>
-</div>
+  .page-title {
+    margin-top: .4rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    text-align: center;
+  }
 
-<style>
-  .business-profile {
-    margin-top: 1.5rem;
-    padding: 1.5rem;
-    border-radius: 10px;
-    background: #f9f9f9;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  .subtitle {
+    text-align: center;
+    margin: .2rem 0 1rem;
+    color: #6b7280;
   }
-  .dark-theme .business-profile {
-    background: #222;
-    color: #eee;
+  .dark-theme .subtitle { color: #cbd5e1; }
+
+  .flash {
+    padding: .6rem .9rem;
+    border-radius: .6rem;
+    margin: .4rem auto;
+    max-width: 700px;
+    font-weight: 600;
   }
-  .profile-info p {
-    margin: 0.6rem 0;
-    font-size: 1.05rem;
-    line-height: 1.4;
+  .flash-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
   }
-  .profile-actions {
-    margin-top: 2rem;
-    display: flex;
+  .flash-error {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .profile-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
     gap: 1rem;
+    margin-top: 1rem;
   }
-  .btn-edit, .btn-delete {
-    padding: 0.7rem 1.4rem;
+  @media (max-width: 800px) {
+    .profile-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .block {
+    background: #ffffff;
+    border-radius: .9rem;
+    padding: 1rem;
+    border: 1px solid rgba(148, 163, 184, .2);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  }
+  .dark-theme .block {
+    background: #020617;
+    border-color: #1f2937;
+  }
+
+  .block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    margin-bottom: .7rem;
+  }
+  .block-head h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .role-pill {
+    padding: .15rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+    background: #e5e7eb;
+    color: #111827;
+  }
+  .role-seller {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+  .role-supplier {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .role-buyer {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .details-list {
+    margin: 0;
+    padding: 0;
+  }
+  .detail-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: .55rem;
+  }
+  .detail-row dt {
+    font-size: .82rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7280;
+    margin-bottom: .15rem;
+  }
+  .dark-theme .detail-row dt { color: #9ca3af; }
+  .detail-row dd {
+    margin: 0;
+    font-weight: 600;
+    font-size: .95rem;
+  }
+
+  .email-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .6rem;
+    align-items: center;
+  }
+
+  .badge {
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+  }
+  .badge-verified {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+  }
+  .badge-unverified {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+  }
+
+  .verify-card .muted {
+    color: #6b7280;
+    font-size: .9rem;
+  }
+  .dark-theme .verify-card .muted { color: #9ca3af; }
+
+  .actions-column {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin: .8rem 0;
+  }
+
+  .hint {
+    font-size: .8rem;
+    color: #6b7280;
+    margin-top: .2rem;
+  }
+  .dark-theme .hint { color: #9ca3af; }
+
+  .divider {
     border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1rem;
+    border-top: 1px dashed rgba(148, 163, 184, .5);
+    margin: .9rem 0 .7rem;
+  }
+
+  .profile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    padding: .45rem .9rem;
+    border-radius: .7rem;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #111827;
+    font-weight: 700;
+    font-size: .86rem;
     text-decoration: none;
+    cursor: pointer;
   }
-  .btn-edit {
-    background: #ffc107;
-    color: #000;
-  }
-  .btn-edit:hover {
-    background: #e0a800;
-  }
-  .btn-delete {
-    background: #dc3545;
+  .btn.primary {
+    background: #2563eb;
+    border-color: #1d4ed8;
     color: #fff;
   }
-  .btn-delete:hover {
-    background: #b02a37;
+  .btn.light {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+  }
+  .btn.danger {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #b91c1c;
   }
 </style>
+
+<script nonce="<%= nonce %>">
+  (function () {
+    const form = document.getElementById('delete-business-form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+      const ok = window.confirm(
+        '⚠️ Are you sure you want to delete your business account? This cannot be undone.'
+      );
+      if (!ok) e.preventDefault();
+    });
+  })();
+</script>

@@ -15,15 +15,23 @@
     <div class="flash flash-error">❌ <%= msg %></div>
   <% }) %>
 
-  <form action="/users/signup" method="post" class="auth-form card" autocomplete="off" novalidate>
+  <form
+    action="/users/signup"
+    method="post"
+    class="auth-form card"
+    autocomplete="off"
+    novalidate
+  >
     <label>Contact email (Gmail / Outlook)
       <input
         type="email"
         name="email"
+        id="email"
         required
         autocomplete="email"
         placeholder="you@gmail.com"
-        inputmode="email" />
+        inputmode="email"
+      />
       <small class="muted tiny">
         We’ll send a verification link to this address.
       </small>
@@ -33,10 +41,13 @@
       <input
         type="text"
         name="username"
+        id="username"
         minlength="3"
         maxlength="30"
         required
-        placeholder="e.g. phakisi_01" />
+        autocomplete="username"
+        placeholder="e.g. phakisi_01"
+      />
       <small class="muted tiny">
         This is your login name. Do not use your email password here.
       </small>
@@ -46,64 +57,91 @@
       <input
         type="text"
         name="name"
+        id="name"
         minlength="2"
         maxlength="80"
         required
-        placeholder="e.g. Jane Doe" />
+        autocomplete="name"
+        placeholder="e.g. Jane Doe"
+      />
     </label>
 
     <label>Age <span class="muted">(must be 16+)</span>
       <input
         type="number"
         name="age"
+        id="age"
         min="16"
         max="120"
         step="1"
         required
-        placeholder="16" />
+        autocomplete="off"
+        placeholder="16"
+      />
     </label>
 
     <label>Password
-      <input
-        type="password"
-        name="password"
-        required
-        minlength="6"
-        placeholder="••••••••"
-        autocomplete="new-password" />
+      <div class="password-row">
+        <input
+          type="password"
+          name="password"
+          id="password"
+          required
+          minlength="6"
+          placeholder="••••••••"
+          autocomplete="new-password"
+        />
+        <button
+          type="button"
+          class="toggle-password"
+          data-target="password"
+          aria-label="Show password"
+        >👁</button>
+      </div>
       <small class="muted tiny">
         This is your <strong>user password</strong>, not your Gmail password.
       </small>
     </label>
 
     <label>Confirm password
-      <input
-        type="password"
-        name="confirm"
-        required
-        minlength="6"
-        placeholder="••••••••"
-        autocomplete="new-password" />
+      <div class="password-row">
+        <input
+          type="password"
+          name="confirm"
+          id="confirm"
+          required
+          minlength="6"
+          placeholder="••••••••"
+          autocomplete="new-password"
+        />
+        <button
+          type="button"
+          class="toggle-password"
+          data-target="confirm"
+          aria-label="Show confirm password"
+        >👁</button>
+      </div>
     </label>
 
     <label class="checkbox">
       <input type="checkbox" name="confirm16" value="1" required />
-      <span>I confirm I am at least 16 years old.</span>
+      <span>I confirm age</span>
     </label>
 
     <button type="submit" class="btn xs primary wfull">Create account</button>
+
+    <!-- moved INSIDE the card so it lines up nicely -->
+    <div class="divider">or</div>
+
+    <div class="social">
+      <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">
+        🔑 Continue with Google
+      </a>
+      <p class="muted tiny" style="text-align:center;margin-top:.25rem;">
+        If you sign up with Google, we’ll use your Google email.
+      </p>
+    </div>
   </form>
-
-  <div class="divider">or</div>
-
-  <div class="social">
-    <a href="/auth/google" class="btn xs wfull google" data-nav="true" rel="noopener">
-      🔑 Continue with Google
-    </a>
-    <p class="muted tiny" style="text-align:center;margin-top:.25rem;">
-      If you sign up with Google, we’ll use your Google email.
-    </p>
-  </div>
 
   <p class="auth-switch">
     Already have an account?
@@ -113,83 +151,215 @@
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   .auth-page.mini {
-    max-width: 400px;
-    margin: .9rem auto 1.2rem;
-    padding: 0 .6rem;
+    max-width: 340px;                /* slightly narrower */
+    margin: .8rem auto 1.1rem;
+    padding: .7rem .55rem 1rem;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #e0f2ff, #eff6ff);
   }
+  .dark-theme .auth-page.mini {
+    background: radial-gradient(circle at top, #0f172a, #020617);
+  }
+
   .page-title {
     text-align: center;
-    font-size: 1.05rem;
+    font-size: 1.02rem;
     font-weight: 800;
-    margin: .2rem 0 .25rem;
+    margin: .1rem 0 .25rem;
   }
   .page-subtitle {
     text-align: center;
-    font-size: .78rem;
-    color: #6b7280;
-    margin: 0 0 .7rem;
+    font-size: .76rem;
+    color: #4b5563;
+    margin: 0 0 .6rem;
   }
   .dark-theme .page-subtitle { color: #9ca3af; }
 
   .card {
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--card-bd, #e5e7eb);
+    background: var(--card-bg, #ffffff);
+    border: 1px solid var(--card-bd, #dbeafe);
     border-radius: 10px;
-    padding: .7rem .7rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    padding: .6rem .6rem .65rem;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, .12);
+    box-sizing: border-box;
   }
-  .dark-theme .card { --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb; }
+  .dark-theme .card {
+    --card-bg:#020617;
+    --card-bd:#1e293b;
+    color:#e5e7eb;
+  }
 
-  .auth-form { display: grid; gap: .7rem; }
-  label { display: grid; gap: .35rem; font-weight: 700; font-size: .85rem; }
-  .checkbox { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; font-size: .82rem; }
+  .auth-form { display: grid; gap: .55rem; }
+  label { display: grid; gap: .3rem; font-weight: 700; font-size: .83rem; }
+
+  .password-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-weight: 600;
+    font-size: .8rem;
+  }
+
   .muted { color: #6b7280; }
-  .tiny { font-size: .78rem; }
+  .tiny { font-size: .75rem; }
   .dark-theme .muted { color: #9ca3af; }
 
   input {
-    border: 1px solid #d1d5db; border-radius: 10px;
-    padding: .55rem .65rem; background: #fff; font-size: .9rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: .48rem .5rem;
+    background: #eff6ff;
+    font-size: .85rem;
+    width: 100%;
+    box-sizing: border-box;
   }
-  .dark-theme input { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+  input:focus {
+    outline: 0;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, .4);
+  }
+  .dark-theme input {
+    background: #020617;
+    border-color: #334155;
+    color: #e5e7eb;
+  }
+
+  .toggle-password {
+    position: absolute;
+    right: .35rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: .86rem;
+    padding: 0;
+    line-height: 1;
+  }
+  .dark-theme .toggle-password { color: #e5e7eb; }
 
   .btn {
-    display: inline-block; text-align: center; text-decoration: none;
-    border: 1px solid #d1d5db; background: #f3f4f6; color: #111827;
-    border-radius: 8px; padding: .42rem .6rem; font-size: .78rem; font-weight: 700;
+    display: inline-block;
+    text-align: center;
+    text-decoration: none;
+    border: 1px solid #bfdbfe;
+    background: #dbeafe;
+    color: #0f172a;
+    border-radius: 8px;
+    padding: .36rem .5rem;
+    font-size: .72rem;
+    font-weight: 700;
+    box-sizing: border-box;
   }
-  .btn.xs { padding: .36rem .5rem; font-size: .72rem; border-radius: 7px; }
+  .btn.xs {
+    padding: .32rem .46rem;
+    font-size: .7rem;
+    border-radius: 7px;
+  }
   .btn.wfull { width: 100%; }
-  .btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
-  .btn.google { background: #fff; color: #111827; border-color: #d1d5db; }
-  .btn:hover { opacity: .95; }
-  .dark-theme .btn { background: #374151; border-color: #4b5563; color: #e5e7eb; }
-  .dark-theme .btn.primary { background: #1d4ed8; border-color: #1d4ed8; }
-  .dark-theme .btn.google { background: #111827; }
+  .btn.primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
+  .btn.google {
+    background: #ffffff;
+    color: #111827;
+    border-color: #d1d5db;
+    font-size: .7rem;          /* smaller text */
+    padding: .3rem .45rem;     /* slimmer */
+    white-space: nowrap;       /* stay on one line */
+  }
+  .btn:hover { opacity: .97; }
+  .dark-theme .btn {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e5e7eb;
+  }
+  .dark-theme .btn.primary {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+  }
+  .dark-theme .btn.google {
+    background: #020617;
+  }
 
-  .divider { margin: .55rem auto; text-align: center; font-size: .85rem; color: #6b7280; }
+  .divider {
+    margin: .4rem auto .3rem;
+    text-align: center;
+    font-size: .78rem;
+    color: #6b7280;
+  }
   .dark-theme .divider { color: #9ca3af; }
 
-  .social { display: grid; gap: .4rem; }
-  .auth-switch { margin-top: .7rem; text-align: center; font-size: .85rem; }
+  .social {
+    display: grid;
+    gap: .25rem;
+  }
 
-  .flash { margin:.4rem 0; padding:.55rem .7rem; border-radius:.6rem; font-size:.85rem; }
-  .flash-success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
-  .flash-error { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+  .auth-switch {
+    margin-top: .6rem;
+    text-align: center;
+    font-size: .8rem;
+  }
 
-  .stamp{display:block;margin:.2rem 0 .3rem;font-size:.72rem;opacity:.6}
+  .flash {
+    margin:.35rem 0;
+    padding:.5rem .6rem;
+    border-radius:.6rem;
+    font-size:.8rem;
+  }
+  .flash-success {
+    background:#ecfdf5;
+    color:#065f46;
+    border:1px solid #a7f3d0;
+  }
+  .flash-error {
+    background:#fef2f2;
+    color:#991b1b;
+    border:1px solid #fecaca;
+  }
+
+  .stamp {
+    display:block;
+    margin:.15rem 0 .25rem;
+    font-size:.7rem;
+    opacity:.6;
+    text-align:center;
+  }
 
   @media (max-width: 360px) {
-    .auth-page.mini { padding: 0 .5rem; }
-    .page-title { font-size: 1rem; }
-    .page-subtitle { font-size: .75rem; }
-    input { font-size: .85rem; padding: .5rem .6rem; }
-    .btn.xs { font-size: .68rem; padding: .32rem .45rem; }
+    .auth-page.mini {
+      max-width: 100%;
+      margin: .5rem .25rem .9rem;
+      padding: .55rem .4rem .85rem;
+    }
+    .page-title { font-size: .96rem; }
+    .page-subtitle { font-size: .73rem; }
+    input {
+      font-size: .8rem;
+      padding: .44rem .46rem;
+    }
+    .btn.xs {
+      font-size: .66rem;
+      padding: .3rem .4rem;
+    }
+    .btn.google {
+      font-size: .66rem;
+      padding: .28rem .4rem;
+    }
   }
 </style>
 
 <script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   (function () {
+    // normal nav helper
     const links = document.querySelectorAll('a[data-nav]');
     links.forEach(a => {
       a.addEventListener('click', function (e) {
@@ -204,6 +374,19 @@
           window.location.assign(a.getAttribute('href'));
         }
       }, false);
+    });
+
+    // 👁 show/hide password + confirm
+    document.querySelectorAll('.toggle-password').forEach(btn => {
+      const targetId = btn.getAttribute('data-target');
+      const input = document.getElementById(targetId);
+      if (!input) return;
+
+      btn.addEventListener('click', () => {
+        const isPwd = input.type === 'password';
+        input.type = isPwd ? 'text' : 'password';
+        btn.textContent = isPwd ? '🙈' : '👁';
+      });
     });
   })();
 </script>

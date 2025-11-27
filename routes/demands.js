@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const requireBusiness = require('../middleware/requireBusiness');
+const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 const DemandedProduct = require('../models/DemandedProduct');
 
 /**
@@ -28,7 +29,7 @@ router.get('/add', requireBusiness, (req, res) => {
   });
 });
 
-router.post('/add', requireBusiness, async (req, res) => {
+router.post('/add', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const b = req.session.business;
     const {
@@ -76,7 +77,7 @@ router.post('/add', requireBusiness, async (req, res) => {
   }
 });
 
-router.get('/mine', requireBusiness, async (req, res) => {
+router.get('/mine', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     const demands = await DemandedProduct.find({ business: business._id })

@@ -6,6 +6,7 @@ const Shipment = require('../models/Shipment');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
 const requireBusiness = require('../middleware/requireBusiness');
+const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 
 /* ---------------------------------------------
  * Helpers
@@ -93,7 +94,7 @@ router.get('/', requireBusiness, async (req, res) => {
 /* ===========================================================
  * GET: Add Shipment page
  * =========================================================== */
-router.get('/add', requireBusiness, async (req, res) => {
+router.get('/add', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   const theme = req.session.theme || 'light';
   const themeCss = theme === 'dark' ? '/css/dark.css' : '/css/light.css';
 
@@ -115,7 +116,7 @@ router.get('/add', requireBusiness, async (req, res) => {
 /* ===========================================================
  * POST: Create Shipment (optionally link to an Order by orderId)
  * =========================================================== */
-router.post('/add', requireBusiness, async (req, res) => {
+router.post('/add', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const {
       orderId,
@@ -298,7 +299,7 @@ router.post('/track', async (req, res) => {
 /* ===========================================================
  * POST: Update status + mirror + ONE-TIME inventory adjustment
  * =========================================================== */
-router.post('/update/:id', requireBusiness, async (req, res) => {
+router.post('/update/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const { status, trackingNumber, note, carrier } = req.body;
 
@@ -385,7 +386,7 @@ router.post('/update/:id', requireBusiness, async (req, res) => {
 /* ===========================================================
  * POST: Delete Shipment
  * =========================================================== */
-router.post('/delete/:id', requireBusiness, async (req, res) => {
+router.post('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const shipment = await Shipment.findOneAndDelete({
       _id: req.params.id,

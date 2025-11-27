@@ -1,5 +1,4 @@
 // models/Business.js
-//const mongoose = require("mongoose");
 const { mongoose } = require('../db'); // <-- use the shared instance
 
 const businessSchema = new mongoose.Schema(
@@ -66,6 +65,30 @@ const businessSchema = new mongoose.Schema(
       type: String,
       required: [true, 'ID or Passport number is required'],
       trim: true,
+    },
+
+    // 🔐 Email verification fields (same idea as user flow)
+    isVerified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    emailVerificationToken: {
+      type: String,
+      index: true,
+    },
+
+    emailVerificationExpires: {
+      type: Date,
+    },
+
+    verifiedAt: {
+      type: Date,
+    },
+
+    verificationEmailSentAt: {
+      type: Date,
     },
   },
   { timestamps: true },

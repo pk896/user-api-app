@@ -6,6 +6,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const Product = require('../models/Product');
 const Shipment = require('../models/Shipment');
 const requireBusiness = require('../middleware/requireBusiness');
+const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 
 const router = express.Router();
 
@@ -62,7 +63,7 @@ function randomKey(ext) {
 /* ---------------------------------------------
  * 🧾 GET /products/add — show Add Product form
  * ------------------------------------------- */
-router.get('/add', requireBusiness, (req, res) => {
+router.get('/add', requireBusiness, requireVerifiedBusiness, (req, res) => {
   const business = req.session.business; // ✅ Get from session
   res.render('add-product', {
     title: 'Add Product',
@@ -98,7 +99,7 @@ router.get('/sales', async (req, res) => {
 /* ---------------------------------------------
  * ➕ POST /products/add — create product
  * ------------------------------------------- */
-router.post('/add', requireBusiness, upload.single('imageFile'), async (req, res) => {
+router.post('/add', requireBusiness, requireVerifiedBusiness, upload.single('imageFile'), async (req, res) => {
   console.log('🟢 POST /products/add reached');
   try {
     const business = req.session.business;
@@ -267,7 +268,7 @@ router.get('/view/:id', async (req, res) => {
 });
 
 // BUSINESS-ONLY: view a product you own by customId
-router.get('/:id', requireBusiness, async (req, res) => {
+router.get('/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const customId = String(req.params.id || '').trim();
     const business = req.session.business;
@@ -310,7 +311,7 @@ router.get('/:id', requireBusiness, async (req, res) => {
 /* ===========================================================
  * ✏️ GET: Edit Product (only own)
  * =========================================================== */
-router.get('/edit/:id', requireBusiness, async (req, res) => {
+router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     const product = await Product.findOne({
@@ -341,7 +342,7 @@ router.get('/edit/:id', requireBusiness, async (req, res) => {
 /* ===========================================================
  * 💾 POST: Save Product Edits (only own)
  * =========================================================== */
-router.post('/edit/:id', requireBusiness, upload.single('imageFile'), async (req, res) => {
+router.post('/edit/:id', requireBusiness, requireVerifiedBusiness, upload.single('imageFile'), async (req, res) => {
   try {
     const business = req.session.business;
     const product = await Product.findOne({
@@ -413,7 +414,7 @@ router.post('/edit/:id', requireBusiness, upload.single('imageFile'), async (req
 /* ===========================================================
  * 🗑️ GET: Delete Product (only own)
  * =========================================================== */
-router.get('/delete/:id', requireBusiness, async (req, res) => {
+router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const business = req.session.business;
     const product = await Product.findOneAndDelete({

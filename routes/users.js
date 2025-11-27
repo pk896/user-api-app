@@ -9,6 +9,8 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const Shipment = require('../models/Shipment');
 const { sendMail, FROM } = require('../utils/mailer');
+const ResetToken = require('../models/ResetToken');
+
 
 // Optional wishlist model (if you have it)
 let Wishlist = null;
@@ -101,6 +103,19 @@ function loginUserIntoSession(req, userDoc, remember, cb) {
 
     cb(null);
   });
+}
+
+function maskEmail(email = '') {
+  const [name, domain] = String(email).split('@');
+  if (!name || !domain) return email;
+  const maskedName =
+    name.length <= 2
+      ? name[0] + '*'
+      : name[0] + '*'.repeat(Math.max(1, name.length - 2)) + name[name.length - 1];
+  const [domName, domExt] = domain.split('.');
+  const maskedDomain =
+    domName[0] + '*'.repeat(Math.max(1, domName.length - 2)) + domName[domName.length - 1];
+  return `${maskedName}@${maskedDomain}.${domExt || ''}`;
 }
 
 /* =======================================================
@@ -902,6 +917,204 @@ router.get('/payments', ensureVerifiedUser, async (req, res) => {
     business: req.session.business || null,
     payments,
   });
+});
+
+/* =======================================================
+   FORGOT PASSWORD (REQUEST RESET LINK)
+======================================================= */
+
+// GET /users/password/forgot
+router.get('/password/forgot', (req, res) => {
+  const { nonce = '' } = res.locals;
+  res.render('users-forgot', {
+    title: 'Forgot Password',
+    active: 'users',
+    styles: pageStyles(nonce),
+    scripts: pageScripts(nonce),
+    user: req.session.user || null,
+    business: req.session.business || null,
+  });
+});
+
+// POST /users/password/forgot
+router.post('/password/forgot', async (req, res) => {
+  try {
+    const rawEmail = (req.body && req.body.email) || '';
+    const email = String(rawEmail).trim().toLowerCase();
+
+    if (!email) {
+      req.flash('error', 'Please enter your email address.');
+      return res.redirect('/users/password/forgot');
+    }
+
+    const user = await User.findOne({ email });
+    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
+    if (user) {
+      // Remove old tokens for this user
+      await ResetToken.deleteMany({ userId: user._id });
+
+      // Create new token valid for 1 hour
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await ResetToken.create({
+        userId: user._id,
+        token,        // store the SAME token we send in the email
+        expiresAt,
+      });
+
+      const resetUrl = `${appUrl}/users/password/reset/${encodeURIComponent(token)}`;
+
+      const subject = 'Reset your Unicoporate.com password';
+      const text = [
+        `Hi ${user.name || 'there'},`,
+        '',
+        'We received a request to reset the password for your account.',
+        'If you made this request, open the link below to set a new password:',
+        '',
+        resetUrl,
+        '',
+        'This link will expire in 1 hour.',
+        'If you did not request a password reset, you can safely ignore this email.',
+      ].join('\n');
+
+      const html = `
+        <p>Hi ${user.name || 'there'},</p>
+        <p>We received a request to reset the password for your <strong>Unicoporate.com</strong> account.</p>
+        <p>If you made this request, click the button below to set a new password:</p>
+        <p style="margin:16px 0;">
+          <a href="${resetUrl}"
+             style="display:inline-block;padding:10px 16px;background:#2563eb;color:#ffffff;
+                    text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
+            Reset my password
+          </a>
+        </p>
+        <p style="font-size:12px;color:#6b7280;">
+          Or copy and paste this link into your browser:<br>
+          <span style="word-break:break-all;">${resetUrl}</span>
+        </p>
+        <p style="font-size:12px;color:#6b7280;">
+          This link will expire in 1 hour. If you did not request a password reset, you can ignore this email.
+        </p>
+      `;
+
+      await sendMail({
+        to: user.email,
+        subject,
+        text,
+        html,
+      });
+    }
+
+    // Always show the "check your email" screen, even if user not found
+    const { nonce = '' } = res.locals;
+    return res.render('users-forgot-sent', {
+      title: 'Check your email',
+      active: 'users',
+      styles: pageStyles(nonce),
+      scripts: pageScripts(nonce),
+      maskedEmail: maskEmail(email),
+      user: req.session.user || null,
+      business: req.session.business || null,
+    });
+  } catch (err) {
+    console.error('[POST /users/password/forgot] error:', err);
+    req.flash('error', 'Could not send reset link. Please try again.');
+    return res.redirect('/users/password/forgot');
+  }
+});
+
+/* =======================================================
+   RESET PASSWORD USING TOKEN
+======================================================= */
+
+// GET /users/password/reset/:token  -> show "set new password" form
+router.get('/password/reset/:token', async (req, res) => {
+  const { nonce = '' } = res.locals;
+  const token = String(req.params.token || '').trim();
+
+  if (!token) {
+    req.flash('error', 'Reset link is invalid or expired.');
+    return res.redirect('/users/password/forgot');
+  }
+
+  const now = new Date();
+
+  const resetDoc = await ResetToken.findOne({
+    token,
+    expiresAt: { $gt: now },
+  });
+
+  if (!resetDoc) {
+    req.flash('error', 'Reset link is invalid or expired.');
+    return res.redirect('/users/password/forgot');
+  }
+
+  res.render('users-reset', {
+    title: 'Set a new password',
+    active: 'users',
+    styles: pageStyles(nonce),
+    scripts: pageScripts(nonce),
+    token, // used in form action /users/password/reset/<%= token %>
+    user: null,
+    business: req.session.business || null,
+  });
+});
+
+// POST /users/password/reset/:token  -> actually change password
+router.post('/password/reset/:token', async (req, res) => {
+  try {
+    const token = String(req.params.token || '').trim();
+    const { password, confirm } = req.body || {};
+
+    if (!password || !confirm) {
+      req.flash('error', 'Please fill in both password fields.');
+      return res.redirect(`/users/password/reset/${encodeURIComponent(token)}`);
+    }
+    if (password !== confirm) {
+      req.flash('error', 'Passwords do not match.');
+      return res.redirect(`/users/password/reset/${encodeURIComponent(token)}`);
+    }
+    if (String(password).length < 6) {
+      req.flash('error', 'Password must be at least 6 characters.');
+      return res.redirect(`/users/password/reset/${encodeURIComponent(token)}`);
+    }
+
+    const now = new Date();
+    const resetDoc = await ResetToken.findOne({
+      token,
+      expiresAt: { $gt: now },
+    });
+
+    if (!resetDoc) {
+      req.flash('error', 'Reset link is invalid or expired.');
+      return res.redirect('/users/password/forgot');
+    }
+
+    const user = await User.findById(resetDoc.userId);
+    if (!user) {
+      req.flash('error', 'User not found.');
+      return res.redirect('/users/password/forgot');
+    }
+
+    // Update password
+    user.passwordHash = await bcrypt.hash(String(password).trim(), 12);
+    if (!user.provider || user.provider === 'google') {
+      user.provider = 'both'; // or 'local'
+    }
+    await user.save();
+
+    // Clean up tokens for this user
+    await ResetToken.deleteMany({ userId: user._id });
+
+    req.flash('success', 'Your password has been reset. You can now log in.');
+    return res.redirect('/users/login');
+  } catch (err) {
+    console.error('[POST /users/password/reset/:token] error:', err);
+    req.flash('error', 'Could not reset password. Please try again.');
+    return res.redirect('/users/password/forgot');
+  }
 });
 
 /* =======================================================
