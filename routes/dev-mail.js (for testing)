@@ -1,0 +1,32 @@
+// routes/dev-mail.js (for testing)
+const express = require('express');
+const router = express.Router();
+const { sendMail } = require('../utils/mailer');
+
+// Only enable in development
+if (process.env.NODE_ENV === 'development') {
+  router.get('/test-email', async (req, res) => {
+    try {
+      const result = await sendMail({
+        to: 'test@example.com', // Change this
+        subject: 'Test Email',
+        text: 'This is a test email from your app',
+        html: '<h1>Test Email</h1><p>If you see this, email is working!</p>'
+      });
+      
+      res.json({
+        success: true,
+        message: 'Test email sent',
+        result
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        details: error
+      });
+    }
+  });
+}
+
+module.exports = router;

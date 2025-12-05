@@ -1,70 +1,944 @@
-<!-views/demands/add-demand.ejs -->
-<section class="dashboard-home">
-  <h1 class="page-title">📝 Add Demand</h1>
+<!-- views/demands/add-demand.ejs -->
+<%
+const pageStyles = `
+  /* ✅ Brand Color System */
+  :root {
+    --blue: #2563EB;
+    --blue-dark: #1d4ed8;
+    --purple: #7C3AED;
+    --purple-dark: #6d28d9;
+    --green: #22C55E;
+    --green-dark: #16a34a;
+    --black: #0F172A;
+    
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    
+    --transition: all 0.2s ease;
+  }
 
+  .dark-theme {
+    --bg-primary: var(--black);
+    --bg-secondary: var(--gray-800);
+    --text-primary: var(--gray-100);
+    --text-secondary: var(--gray-300);
+    --text-muted: var(--gray-400);
+    --border: var(--gray-700);
+    --accent-bg: rgba(124, 58, 237, 0.1);
+  }
+
+  :root {
+    --bg-primary: var(--gray-50);
+    --bg-secondary: white;
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-500);
+    --border: var(--gray-200);
+    --accent-bg: rgba(124, 58, 237, 0.05);
+  }
+
+  /* ✅ Add Demand Container */
+  .add-demand-page {
+    max-width: 800px;
+    margin: 0.75rem auto;
+    background: linear-gradient(135deg, var(--green) 0%, #16a34a 100%);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .add-demand-content {
+    background: var(--bg-primary);
+    margin: 2px;
+    border-radius: calc(var(--radius-xl) - 2px);
+    padding: 1.25rem;
+  }
+
+  /* ✅ Header */
+  .demand-header {
+    text-align: center;
+    padding: 0.5rem 0 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .demand-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* ✅ Form Layout */
+  .demand-form {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  /* ✅ Form Sections */
+  .form-section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .form-section:hover {
+    border-color: var(--green);
+    box-shadow: var(--shadow-md);
+  }
+
+  .form-section::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(to bottom, var(--green), var(--blue));
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .section-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    color: white;
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 1.125rem;
+    color: var(--blue);
+    font-weight: 700;
+    margin: 0;
+    flex: 1;
+  }
+
+  /* ✅ Form Fields */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .form-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .form-label::after {
+    content: '*';
+    color: var(--green);
+    margin-left: 0.125rem;
+  }
+
+  .form-label.optional::after {
+    content: '(optional)';
+    color: var(--text-muted);
+    font-weight: normal;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+  }
+
+  .form-input {
+    padding: 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: var(--transition);
+    width: 100%;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  .form-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .form-textarea {
+    padding: 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: var(--transition);
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .form-textarea:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  /* ✅ Quantity Input */
+  .quantity-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .quantity-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 1.125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+
+  .quantity-btn:hover {
+    background: var(--green-dark);
+  }
+
+  .quantity-input {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+    color: var(--purple);
+  }
+
+  /* ✅ Notes Section */
+  .notes-section {
+    background: var(--accent-bg);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  /* ✅ Form Actions */
+  .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: 1.5rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+    min-width: 140px;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--green-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-secondary {
+    background: var(--blue);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: var(--blue-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .btn-outline:hover {
+    background: var(--bg-primary);
+    border-color: var(--purple);
+    transform: translateY(-2px);
+  }
+
+  /* ✅ Flash Messages */
+  .flash-container {
+    max-width: 800px;
+    margin: 0 auto 1rem;
+  }
+
+  .flash {
+    padding: 0.875rem 1rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideDown 0.3s ease-out;
+  }
+
+  .flash-success {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--green);
+    border-left: 4px solid var(--green);
+  }
+
+  .flash-error {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+    border-left: 4px solid #dc2626;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ✅ Mobile Optimizations */
+  @media (max-width: 480px) {
+    .add-demand-page {
+      margin: 0.5rem;
+    }
+    
+    .add-demand-content {
+      padding: 1rem;
+    }
+    
+    .page-title {
+      font-size: 1.25rem;
+    }
+    
+    .form-section {
+      padding: 1rem;
+    }
+    
+    .section-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+      flex-direction: column;
+    }
+    
+    .btn {
+      width: 100%;
+      min-width: auto;
+    }
+    
+    .quantity-wrapper {
+      max-width: 200px;
+    }
+  }
+
+  /* ✅ Very Small Screens */
+  @media (max-width: 360px) {
+    .add-demand-content {
+      padding: 0.75rem;
+    }
+    
+    .form-section {
+      padding: 0.875rem;
+    }
+    
+    .section-title {
+      font-size: 1rem;
+    }
+    
+    .form-label {
+      font-size: 0.85rem;
+    }
+    
+    .form-input, .form-textarea {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    
+    .quantity-btn {
+      width: 32px;
+      height: 32px;
+      font-size: 1rem;
+    }
+  }
+
+  /* ✅ Tablet Optimization */
+  @media (min-width: 481px) and (max-width: 768px) {
+    .add-demand-page {
+      margin: 1rem;
+    }
+    
+    .form-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* ✅ Form Validation Styles */
+  .form-input:invalid:not(:focus):not(:placeholder-shown) {
+    border-color: #dc2626;
+    background: rgba(220, 38, 38, 0.05);
+  }
+
+  .validation-message {
+    font-size: 0.75rem;
+    color: #dc2626;
+    margin-top: 0.25rem;
+    display: none;
+  }
+
+  .form-input:invalid:not(:focus):not(:placeholder-shown) + .validation-message {
+    display: block;
+  }
+
+  /* ✅ Required Field Indicator */
+  .required-fields-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 0.5rem;
+  }
+
+  .required-fields-note::before {
+    content: '*';
+    color: var(--green);
+    margin-right: 0.25rem;
+  }
+`;
+
+const pageScripts = `
+  document.addEventListener('DOMContentLoaded', function() {
+    // Quantity controls
+    const quantityInput = document.querySelector('input[name="quantity"]');
+    const increaseBtn = document.getElementById('increaseQuantity');
+    const decreaseBtn = document.getElementById('decreaseQuantity');
+    
+    if (quantityInput && increaseBtn && decreaseBtn) {
+      increaseBtn.addEventListener('click', function() {
+        const current = parseInt(quantityInput.value) || 1;
+        quantityInput.value = current + 1;
+        updateQuantityDisplay();
+      });
+      
+      decreaseBtn.addEventListener('click', function() {
+        const current = parseInt(quantityInput.value) || 1;
+        if (current > 1) {
+          quantityInput.value = current - 1;
+          updateQuantityDisplay();
+        }
+      });
+      
+      quantityInput.addEventListener('input', updateQuantityDisplay);
+      
+      function updateQuantityDisplay() {
+        const value = parseInt(quantityInput.value) || 1;
+        quantityInput.value = value;
+        
+        // Update visual feedback
+        quantityInput.style.color = value > 100 ? 'var(--purple)' : 'var(--blue)';
+        quantityInput.style.fontWeight = value > 50 ? '700' : '600';
+      }
+      
+      updateQuantityDisplay();
+    }
+    
+    // Form validation
+    const form = document.querySelector('.demand-form');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        const requiredFields = form.querySelectorAll('[required]');
+        let isValid = true;
+        
+        requiredFields.forEach(field => {
+          if (!field.value.trim()) {
+            isValid = false;
+            field.style.borderColor = '#dc2626';
+            field.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.1)';
+          }
+        });
+        
+        if (!isValid) {
+          e.preventDefault();
+          alert('Please fill in all required fields marked with *.');
+        } else {
+          // Show loading state
+          const submitBtn = form.querySelector('button[type="submit"]');
+          if (submitBtn) {
+            submitBtn.innerHTML = '<span>⏳</span> Creating Demand...';
+            submitBtn.disabled = true;
+          }
+        }
+      });
+      
+      // Reset field styles on input
+      form.addEventListener('input', function(e) {
+        if (e.target.hasAttribute('required')) {
+          e.target.style.borderColor = '';
+          e.target.style.boxShadow = '';
+        }
+      });
+    }
+    
+    // Auto-focus first field
+    const firstInput = form?.querySelector('input');
+    if (firstInput) {
+      setTimeout(() => {
+        firstInput.focus();
+      }, 300);
+    }
+    
+    // Character counters for textareas
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(textarea => {
+      const counter = document.createElement('div');
+      counter.className = 'char-counter';
+      counter.style.fontSize = '0.75rem';
+      counter.style.color = 'var(--text-muted)';
+      counter.style.textAlign = 'right';
+      counter.style.marginTop = '0.25rem';
+      
+      textarea.parentNode.appendChild(counter);
+      
+      function updateCounter() {
+        const maxLength = textarea.getAttribute('maxlength') || 500;
+        const currentLength = textarea.value.length;
+        counter.textContent = \`\${currentLength}/\${maxLength}\`;
+        
+        if (currentLength > maxLength * 0.9) {
+          counter.style.color = '#dc2626';
+        } else if (currentLength > maxLength * 0.7) {
+          counter.style.color = 'var(--warning)';
+        } else {
+          counter.style.color = 'var(--text-muted)';
+        }
+      }
+      
+      textarea.addEventListener('input', updateCounter);
+      updateCounter();
+    });
+    
+    // Auto-save form data (optional feature)
+    const autoSaveKey = 'demand-form-draft';
+    const formData = {};
+    
+    form?.addEventListener('input', function(e) {
+      if (e.target.name) {
+        formData[e.target.name] = e.target.value;
+        try {
+          localStorage.setItem(autoSaveKey, JSON.stringify(formData));
+        } catch (error) {
+          console.log('Local storage not available for auto-save');
+        }
+      }
+    });
+    
+    // Load saved draft on page load
+    try {
+      const saved = localStorage.getItem(autoSaveKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        Object.keys(draft).forEach(key => {
+          const field = form?.querySelector(\`[name="\${key}"]\`);
+          if (field && !field.value) {
+            field.value = draft[key];
+          }
+        });
+      }
+    } catch (error) {
+      // Ignore errors
+    }
+    
+    // Clear draft on successful submission
+    form?.addEventListener('submit', function() {
+      try {
+        localStorage.removeItem(autoSaveKey);
+      } catch (error) {
+        // Ignore errors
+      }
+    });
+    
+    // Add form section progress indicator
+    const sections = document.querySelectorAll('.form-section');
+    if (sections.length > 0) {
+      const progressContainer = document.createElement('div');
+      progressContainer.className = 'form-progress';
+      progressContainer.style.display = 'flex';
+      progressContainer.style.gap = '0.5rem';
+      progressContainer.style.marginBottom = '1.5rem';
+      progressContainer.style.overflowX = 'auto';
+      progressContainer.style.padding = '0.5rem 0';
+      
+      sections.forEach((section, index) => {
+        const step = document.createElement('button');
+        step.type = 'button';
+        step.className = 'progress-step';
+        step.textContent = \`Step \${index + 1}\`;
+        step.style.padding = '0.5rem 0.75rem';
+        step.style.borderRadius = 'var(--radius-md)';
+        step.style.border = '1px solid var(--border)';
+        step.style.background = 'var(--bg-secondary)';
+        step.style.color = 'var(--text-primary)';
+        step.style.fontSize = '0.75rem';
+        step.style.fontWeight = '600';
+        step.style.whiteSpace = 'nowrap';
+        step.style.transition = 'var(--transition)';
+        step.style.cursor = 'pointer';
+        
+        step.addEventListener('click', function() {
+          section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          
+          // Highlight active step
+          document.querySelectorAll('.progress-step').forEach(s => {
+            s.style.background = 'var(--bg-secondary)';
+            s.style.color = 'var(--text-primary)';
+            s.style.borderColor = 'var(--border)';
+          });
+          
+          step.style.background = 'var(--green)';
+          step.style.color = 'white';
+          step.style.borderColor = 'var(--green)';
+        });
+        
+        if (index === 0) {
+          step.style.background = 'var(--green)';
+          step.style.color = 'white';
+          step.style.borderColor = 'var(--green)';
+        }
+        
+        progressContainer.appendChild(step);
+      });
+      
+      form?.insertBefore(progressContainer, form.firstChild);
+    }
+  });
+`;
+%>
+
+<!-- ✅ Inject Styles -->
+<style nonce="<%= nonce %>">
+  <%= pageStyles %>
+</style>
+
+<!-- ✅ Flash Messages -->
+<div class="flash-container">
   <% if (error && error.length) { %>
     <div class="flash flash-error">❌ <%= error %></div>
   <% } %>
   <% if (success && success.length) { %>
     <div class="flash flash-success">✅ <%= success %></div>
   <% } %>
+</div>
 
-  <form method="POST" action="/demands/add" class="form">
-    <fieldset class="card">
-      <legend>Requester</legend>
-      <label>Business Name
-        <input name="requesterBusinessName" required
-               value="<%= typeof defaultBusinessName !== 'undefined' ? defaultBusinessName : '' %>"
-               placeholder="e.g., Phakisi Global (Buyer)"/>
-      </label>
-      <label>Your Name
-        <input name="requesterContactName" required placeholder="e.g., Phakisi Ngxongxela"/>
-      </label>
-      <label>Your Position
-        <input name="requesterPosition" required placeholder="e.g., Procurement Manager"/>
-      </label>
-    </fieldset>
+<!-- ✅ Add Demand Form -->
+<div class="add-demand-page">
+  <div class="add-demand-content">
+    <!-- Header -->
+    <header class="demand-header">
+      <div class="demand-badge">
+        <span>📝</span>
+        <span>Create New Demand</span>
+      </div>
+      <h1 class="page-title">Add Demand</h1>
+      <p class="page-subtitle">Fill in the details below to create a new product demand. All fields marked with * are required.</p>
+    </header>
 
-    <fieldset class="card">
-      <legend>Demand Details</legend>
-      <label>Type <input name="type" required placeholder="e.g., Electronics"/></label>
-      <label>Product Name <input name="productName" required placeholder="e.g., 55&quot; 4K Smart TV"/></label>
-      <label>Quantity <input name="quantity" type="number" min="1" value="1" required /></label>
-    </fieldset>
+    <!-- Form -->
+    <form method="POST" action="/demands/add" class="demand-form" novalidate>
+      <!-- Requester Section -->
+      <section class="form-section">
+        <div class="section-header">
+          <div class="section-icon">🏢</div>
+          <h2 class="section-title">Requester Information</h2>
+        </div>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Business Name</label>
+            <input 
+              type="text" 
+              name="requesterBusinessName" 
+              class="form-input" 
+              value="<%= typeof defaultBusinessName !== 'undefined' ? defaultBusinessName : '' %>"
+              placeholder="e.g., Phakisi Global (Buyer)" 
+              required
+              autocomplete="organization"
+            >
+            <div class="validation-message">Please enter your business name</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Your Name</label>
+            <input 
+              type="text" 
+              name="requesterContactName" 
+              class="form-input" 
+              placeholder="e.g., Phakisi Ngxongxela" 
+              required
+              autocomplete="name"
+            >
+            <div class="validation-message">Please enter your name</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Your Position</label>
+            <input 
+              type="text" 
+              name="requesterPosition" 
+              class="form-input" 
+              placeholder="e.g., Procurement Manager" 
+              required
+              autocomplete="organization-title"
+            >
+            <div class="validation-message">Please enter your position</div>
+          </div>
+        </div>
+      </section>
 
-    <fieldset class="card">
-      <legend>Location</legend>
-      <label>Country <input name="country" required placeholder="e.g., South Africa"/></label>
-      <label>Province <input name="province" placeholder="e.g., Gauteng"/></label>
-      <label>City <input name="city" placeholder="e.g., Johannesburg"/></label>
-      <label>Town <input name="town" placeholder="e.g., Sandton"/></label>
-    </fieldset>
+      <!-- Demand Details Section -->
+      <section class="form-section">
+        <div class="section-header">
+          <div class="section-icon">📦</div>
+          <h2 class="section-title">Demand Details</h2>
+        </div>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Product Type</label>
+            <input 
+              type="text" 
+              name="type" 
+              class="form-input" 
+              placeholder="e.g., Electronics, Clothing, Food" 
+              required
+              autocomplete="off"
+            >
+            <div class="validation-message">Please enter the product type</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Product Name</label>
+            <input 
+              type="text" 
+              name="productName" 
+              class="form-input" 
+              placeholder="e.g., 55&quot; 4K Smart TV" 
+              required
+              autocomplete="off"
+            >
+            <div class="validation-message">Please enter the product name</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Quantity</label>
+            <div class="quantity-wrapper">
+              <button type="button" id="decreaseQuantity" class="quantity-btn" aria-label="Decrease quantity">-</button>
+              <input 
+                type="number" 
+                name="quantity" 
+                class="form-input quantity-input" 
+                min="1" 
+                value="1" 
+                required
+                autocomplete="off"
+              >
+              <button type="button" id="increaseQuantity" class="quantity-btn" aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <fieldset class="card">
-      <legend>Notes (optional)</legend>
-      <label><textarea name="notes" rows="3" placeholder="Any specifications or delivery constraints..."></textarea></label>
-    </fieldset>
+      <!-- Location Section -->
+      <section class="form-section">
+        <div class="section-header">
+          <div class="section-icon">📍</div>
+          <h2 class="section-title">Location Information</h2>
+        </div>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <input 
+              type="text" 
+              name="country" 
+              class="form-input" 
+              placeholder="e.g., South Africa" 
+              required
+              autocomplete="country-name"
+            >
+            <div class="validation-message">Please enter the country</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Province/State</label>
+            <input 
+              type="text" 
+              name="province" 
+              class="form-input" 
+              placeholder="e.g., Gauteng" 
+              autocomplete="address-level1"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">City</label>
+            <input 
+              type="text" 
+              name="city" 
+              class="form-input" 
+              placeholder="e.g., Johannesburg" 
+              autocomplete="address-level2"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Town/Suburb</label>
+            <input 
+              type="text" 
+              name="town" 
+              class="form-input" 
+              placeholder="e.g., Sandton" 
+              autocomplete="address-level3"
+            >
+          </div>
+        </div>
+      </section>
 
-    <div class="actions">
-      <button class="btn btn-primary" type="submit">Submit Demand</button>
-      <a class="btn btn-secondary" href="/demands/mine">Back to My Demands</a>
-    </div>
-  </form>
-</section>
+      <!-- Notes Section -->
+      <section class="form-section notes-section">
+        <div class="section-header">
+          <div class="section-icon">📝</div>
+          <h2 class="section-title">Additional Notes</h2>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label optional">Specifications & Requirements</label>
+          <textarea 
+            name="notes" 
+            class="form-textarea" 
+            rows="4" 
+            placeholder="Any specifications, delivery constraints, quality requirements, or additional information..."
+            maxlength="1000"
+          ></textarea>
+        </div>
+      </section>
 
-<style>
-  .form { display:grid; gap:1rem; max-width:720px; margin:auto; }
-  .card { border:1px solid #e5e7eb; border-radius:.6rem; padding:1rem; background:#fff; }
-  legend { font-weight:600; padding:0 .25rem; }
-  .form label { display:grid; gap:.35rem; }
-  .form input, .form textarea { padding:.6rem; border:1px solid #d1d5db; border-radius:.45rem; }
-  .actions { display:flex; gap:.6rem; justify-content:flex-end; }
-  .btn { padding:.55rem .9rem; border-radius:.5rem; text-decoration:none; border:0; cursor:pointer; }
-  .btn-primary { background:#2563eb; color:#fff; }
-  .btn-secondary { background:#f3f4f6; color:#111; }
-  .flash { margin:.5rem 0; padding:.6rem .8rem; border-radius:.4rem; }
-  .flash-success { background:#ecfdf5; }
-  .flash-error { background:#fef2f2; }
-  body.dark-theme .card { background:#111827; border-color:#374151; }
-  body.dark-theme .form input, body.dark-theme .form textarea { background:#111; color:#eee; border-color:#374151; }
-</style>
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <a href="/demands/mine" class="btn btn-outline">
+          <span>←</span>
+          Back to My Demands
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <span>✓</span>
+          Submit Demand
+        </button>
+      </div>
+      
+      <div class="required-fields-note">Indicates required field</div>
+    </form>
+  </div>
+</div>
+
+<!-- ✅ Inject Scripts -->
+<script nonce="<%= nonce %>">
+  <%= pageScripts %>
+</script>

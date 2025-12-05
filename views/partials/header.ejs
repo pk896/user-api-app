@@ -1,156 +1,639 @@
 <!-- views/partials/header.ejs -->
-<header class="site-header <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <div class="header-inner">
-    <!-- Brand / Home link -->
-    <a href="/" class="brand">🌍
-Unicoporate.com
-</a>
+<header class="hd <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <div class="hd-inner">
+    <!-- Brand / Logo -->
+    <a href="/" class="hd-brand">
+      <svg class="hd-logo" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" 
+              stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      </svg>
+      <span class="hd-brand-text">Unicoporate</span>
+    </a>
 
-    <!-- Navigation links -->
-    <nav class="nav-links">
-      <a href="/users/about" class="<%= active === 'about' ? 'active' : '' %>">About</a>
-      <a href="/contact" class="<%= active === 'contact' ? 'active' : '' %>">Contact</a>
+    <!-- Mobile Menu Toggle -->
+    <button class="hd-menu-toggle" aria-label="Toggle menu" aria-expanded="false">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
 
-      <% if (user) { %>
-        <a href="/users/dashboard" class="<%= active === 'user-dashboard' ? 'active' : '' %>">Dashboard</a>
-        <a href="/users/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
-      <% } else if (business) { %>
-        <a href="/business/dashboard" class="<%= active === 'business-dashboard' ? 'active' : '' %>">Dashboard</a>
-        <a href="/business/profile" class="<%= active === 'business-profile' ? 'active' : '' %>">Profile</a>
-        <% if (business.role === 'seller') { %>
-          <a href="/products/all" class="<%= active === 'products' ? 'active' : '' %>">Products</a>
-          <a href="/products/add" class="<%= active === 'add-product' ? 'active' : '' %>">Add Product</a>
+    <!-- Navigation -->
+    <nav class="hd-nav" aria-label="Main navigation">
+      <div class="hd-nav-links">
+        <a href="/users/about" class="hd-link <%= active === 'about' ? 'active' : '' %>">About</a>
+        <a href="/contact" class="hd-link <%= active === 'contact' ? 'active' : '' %>">Contact</a>
+
+        <% if (user) { %>
+          <a href="/users/dashboard" class="hd-link <%= active === 'user-dashboard' ? 'active' : '' %>">Dashboard</a>
+          <a href="/users/profile" class="hd-link <%= active === 'profile' ? 'active' : '' %>">Profile</a>
+        <% } else if (business) { %>
+          <a href="/business/dashboard" class="hd-link <%= active === 'business-dashboard' ? 'active' : '' %>">Dashboard</a>
+          <a href="/business/profile" class="hd-link <%= active === 'business-profile' ? 'active' : '' %>">Profile</a>
+          <% if (business.role === 'seller') { %>
+            <a href="/products/all" class="hd-link <%= active === 'products' ? 'active' : '' %>">Products</a>
+            <a href="/products/add" class="hd-link <%= active === 'add-product' ? 'active' : '' %>">Add Product</a>
+          <% } %>
         <% } %>
-      <% } %>
+      </div>
+
+      <!-- User Actions -->
+      <div class="hd-user">
+        <% if (user) { %>
+          <div class="hd-welcome">
+            <span>Hi, <strong><%= user.name %></strong></span>
+            <form action="/users/logout" method="GET" class="hd-logout-form">
+              <button type="submit" class="hd-btn hd-btn-logout">Logout</button>
+            </form>
+          </div>
+        <% } else if (business) { %>
+          <div class="hd-welcome">
+            <span class="hd-role"><%= business.role.toUpperCase() %>:</span>
+            <strong><%= business.name %></strong>
+            <form action="/business/logout" method="POST" class="hd-logout-form">
+              <button type="submit" class="hd-btn hd-btn-logout">Logout</button>
+            </form>
+          </div>
+        <% } else { %>
+          <div class="hd-auth">
+            <a href="/users/login" class="hd-btn hd-btn-login">User Login</a>
+            <a href="/business/login" class="hd-btn hd-btn-secondary">Business</a>
+          </div>
+        <% } %>
+
+        <!-- Theme Toggle -->
+        <button id="hdThemeToggle" class="hd-theme-toggle" aria-label="Toggle theme">
+          <svg class="hd-theme-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3v1m0 16v1m9-9h1M4 12H3m15.364-6.364l.707.707M6.343 17.657l.707.707m12.728 0l-.707.707M6.343 6.343l-.707.707" 
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
     </nav>
-
-    <!-- Right side: user info + actions -->
-    <div class="header-actions">
-      <% if (user) { %>
-        <span class="welcome">👋 Hi, <strong><%= user.name %></strong></span>
-        <form action="/users/logout" method="GET" class="logout-form">
-          <button type="submit" class="btn-logout">Logout</button>
-        </form>
-      <% } else if (business) { %>
-        <span class="welcome">🏢 <%= business.role.toUpperCase() %>: <strong><%= business.name %></strong></span>
-        <form action="/business/logout" method="POST" class="logout-form">
-          <button type="submit" class="btn-logout">Logout</button>
-        </form>
-      <% } else { %>
-        <a href="/users/login" class="btn-login">User Login</a>
-        <a href="/business/login" class="btn-login">Business Login</a>
-      <% } %>
-
-      <!-- Theme toggle button -->
-      <button id="themeToggleBtn" class="theme-toggle" title="Toggle theme">🌓</button>
-    </div>
   </div>
 </header>
 
-<!-- 🌈 Modern styles -->
-<style>
-  .site-header {
-    border-bottom: 1px solid #e5e7eb;
-    background: var(--header-bg, #fff);
+<style nonce="<%= nonce %>">
+  /* ===== COMPANY COLORS & VARIABLES ===== */
+  .hd {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 8px;
+    --transition: all 0.2s ease;
+  }
+
+  /* ===== HEADER CONTAINER ===== */
+  .hd {
     position: sticky;
     top: 0;
-    z-index: 50;
+    z-index: 100;
+    background: #FFFFFF;
+    border-bottom: 1px solid #D1FAE5;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
   }
-  .dark-theme .site-header {
-    background: #1f2937;
-    border-color: #374151;
+
+  .dark-theme.hd {
+    background: #132813;
+    border-bottom-color: #2D5A2D;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
   }
-  .header-inner {
-    max-width: 1100px;
+
+  /* ===== INNER CONTAINER ===== */
+  .hd-inner {
+    max-width: 1200px;
     margin: 0 auto;
-    padding: .75rem 1rem;
+    padding: 12px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: .75rem;
+    gap: 16px;
   }
-  .brand {
-    text-decoration: none;
-    color: var(--brand-color, #111);
-    font-weight: 700;
-    font-size: 1.25rem;
-  }
-  .dark-theme .brand {
-    color: #f9fafb;
-  }
-  .nav-links a {
-    margin: 0 .5rem;
-    text-decoration: none;
-    color: #374151;
-    font-weight: 500;
-  }
-  .nav-links a.active {
-    color: #2563eb;
-    border-bottom: 2px solid #2563eb;
-  }
-  .dark-theme .nav-links a {
-    color: #d1d5db;
-  }
-  .dark-theme .nav-links a.active {
-    color: #60a5fa;
-    border-bottom: 2px solid #60a5fa;
-  }
-  .header-actions {
+
+  /* ===== BRAND ===== */
+  .hd-brand {
     display: flex;
     align-items: center;
-    gap: .75rem;
-  }
-  .welcome {
-    font-size: .9rem;
-    color: #374151;
-  }
-  .dark-theme .welcome {
-    color: #f3f4f6;
-  }
-  .btn-login,
-  .btn-logout {
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    padding: .45rem .9rem;
-    border-radius: .4rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background .2s ease;
+    gap: 8px;
     text-decoration: none;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--black);
+    transition: var(--transition);
   }
-  .btn-login:hover,
-  .btn-logout:hover {
-    background: #1d4ed8;
+
+  .hd-brand:hover {
+    color: var(--blue);
   }
-  .theme-toggle {
+
+  .hd-logo {
+    color: var(--green);
+    flex-shrink: 0;
+  }
+
+  .hd-brand-text {
+    display: none;
+  }
+
+  @media (min-width: 480px) {
+    .hd-brand-text {
+      display: inline;
+    }
+  }
+
+  .dark-theme .hd-brand {
+    color: #F1F5F9;
+  }
+
+  .dark-theme .hd-brand:hover {
+    color: #60A5FA;
+  }
+
+  /* ===== MOBILE MENU TOGGLE ===== */
+  .hd-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
     background: none;
     border: none;
+    color: var(--black);
     cursor: pointer;
-    font-size: 1.2rem;
-    transition: transform .2s ease;
+    border-radius: var(--radius);
+    transition: var(--transition);
   }
-  .theme-toggle:hover { transform: scale(1.1); }
+
+  .hd-menu-toggle:hover {
+    background: rgba(34, 197, 94, 0.1);
+  }
+
+  .dark-theme .hd-menu-toggle {
+    color: #E2E8F0;
+  }
+
+  @media (min-width: 768px) {
+    .hd-menu-toggle {
+      display: none;
+    }
+  }
+
+  /* ===== NAVIGATION ===== */
+  .hd-nav {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #FFFFFF;
+    border-top: 1px solid #D1FAE5;
+    padding: 20px;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+  }
+
+  .hd-nav[aria-expanded="true"] {
+    transform: translateX(0);
+  }
+
+  .dark-theme .hd-nav {
+    background: #132813;
+    border-top-color: #2D5A2D;
+  }
+
+  @media (min-width: 768px) {
+    .hd-nav {
+      position: static;
+      flex-direction: row;
+      align-items: center;
+      gap: 24px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      transform: none;
+      overflow: visible;
+    }
+  }
+
+  /* ===== NAV LINKS ===== */
+  .hd-nav-links {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  @media (min-width: 768px) {
+    .hd-nav-links {
+      flex-direction: row;
+      gap: 12px;
+    }
+  }
+
+  .hd-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748B;
+    border-radius: var(--radius);
+    transition: var(--transition);
+    white-space: nowrap;
+  }
+
+  .hd-link:hover,
+  .hd-link.active {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--green);
+  }
+
+  .hd-link.active {
+    font-weight: 600;
+    border-left: 3px solid var(--green);
+  }
+
+  @media (min-width: 768px) {
+    .hd-link.active {
+      border-left: none;
+      border-bottom: 2px solid var(--green);
+    }
+  }
+
+  .dark-theme .hd-link {
+    color: #94A3B8;
+  }
+
+  .dark-theme .hd-link:hover,
+  .dark-theme .hd-link.active {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22C55E;
+  }
+
+  /* ===== USER SECTION ===== */
+  .hd-user {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: auto;
+  }
+
+  @media (min-width: 768px) {
+    .hd-user {
+      margin-top: 0;
+    }
+  }
+
+  /* ===== WELCOME MESSAGE ===== */
+  .hd-welcome {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--black);
+  }
+
+  .hd-role {
+    font-size: 11px;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .dark-theme .hd-welcome {
+    color: #E2E8F0;
+  }
+
+  .dark-theme .hd-role {
+    color: #94A3B8;
+  }
+
+  /* ===== AUTH BUTTONS ===== */
+  .hd-auth {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ===== BUTTONS ===== */
+  .hd-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+  }
+
+  .hd-btn-login {
+    background: var(--blue);
+    color: white;
+  }
+
+  .hd-btn-login:hover {
+    background: #1D4ED8;
+    transform: translateY(-1px);
+  }
+
+  .hd-btn-secondary {
+    background: #F0FDF4;
+    color: var(--green);
+    border-color: #D1FAE5;
+  }
+
+  .hd-btn-secondary:hover {
+    background: #DCFCE7;
+    border-color: var(--green);
+  }
+
+  .hd-btn-logout {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .hd-btn-logout:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #EF4444;
+  }
+
+  .dark-theme .hd-btn-secondary {
+    background: #1A341A;
+    color: #22C55E;
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .hd-btn-secondary:hover {
+    background: #2D5A2D;
+    border-color: #22C55E;
+  }
+
+  .dark-theme .hd-btn-logout {
+    background: rgba(239, 68, 68, 0.15);
+    color: #F87171;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  /* ===== THEME TOGGLE ===== */
+  .hd-theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #F0FDF4;
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    color: var(--green);
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .hd-theme-toggle:hover {
+    background: #DCFCE7;
+    border-color: var(--green);
+    transform: rotate(15deg);
+  }
+
+  .dark-theme .hd-theme-toggle {
+    background: #1A341A;
+    border-color: #2D5A2D;
+    color: #22C55E;
+  }
+
+  .dark-theme .hd-theme-toggle:hover {
+    background: #2D5A2D;
+    border-color: #22C55E;
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .hd-inner {
+      padding: 10px 12px;
+    }
+    
+    .hd-auth {
+      flex-direction: column;
+      width: 100%;
+    }
+    
+    .hd-btn {
+      width: 100%;
+      padding: 10px;
+    }
+    
+    .hd-welcome {
+      font-size: 12px;
+    }
+  }
+
+  @media (min-width: 361px) and (max-width: 767px) {
+    .hd-nav {
+      padding: 20px 16px;
+    }
+  }
+
+  /* ===== DESKTOP OPTIMIZATION ===== */
+  @media (min-width: 768px) {
+    .hd-inner {
+      padding: 12px 24px;
+    }
+    
+    .hd-nav-links {
+      gap: 16px;
+    }
+    
+    .hd-user {
+      gap: 12px;
+    }
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .hd-menu-toggle:focus,
+  .hd-link:focus,
+  .hd-btn:focus,
+  .hd-theme-toggle:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .hd {
+    animation: fadeIn 0.3s ease-out;
+  }
 </style>
 
-<!-- ✅ Secure script (CSP nonce) -->
 <script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("themeToggleBtn");
-    if (!btn) return;
-
-    btn.addEventListener("click", async () => {
+document.addEventListener("DOMContentLoaded", () => {
+  // Mobile menu toggle
+  const menuToggle = document.querySelector('.hd-menu-toggle');
+  const nav = document.querySelector('.hd-nav');
+  
+  if (menuToggle && nav) {
+    menuToggle.addEventListener('click', () => {
+      const isExpanded = nav.getAttribute('aria-expanded') === 'true';
+      nav.setAttribute('aria-expanded', !isExpanded);
+      menuToggle.setAttribute('aria-expanded', !isExpanded);
+      
+      // Toggle menu icon
+      const icon = menuToggle.querySelector('svg');
+      if (icon) {
+        if (!isExpanded) {
+          icon.innerHTML = `
+            <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          `;
+        } else {
+          icon.innerHTML = `
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          `;
+        }
+      }
+    });
+    
+    // Close menu when clicking outside on mobile
+    document.addEventListener('click', (e) => {
+      if (window.innerWidth < 768 && 
+          nav.getAttribute('aria-expanded') === 'true' &&
+          !nav.contains(e.target) && 
+          !menuToggle.contains(e.target)) {
+        nav.setAttribute('aria-expanded', 'false');
+        menuToggle.setAttribute('aria-expanded', 'false');
+        
+        // Reset menu icon
+        const icon = menuToggle.querySelector('svg');
+        if (icon) {
+          icon.innerHTML = `
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          `;
+        }
+      }
+    });
+  }
+  
+  // Theme toggle
+  const themeToggle = document.getElementById('hdThemeToggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', async () => {
       try {
-        const res = await fetch("/theme-toggle", { method: "POST" });
-        const data = await res.json();
-        if (data.theme) {
-          document.body.classList.toggle("dark-theme", data.theme === "dark");
-          console.log(`🌗 Theme switched to ${data.theme}`);
+        // Add loading state
+        themeToggle.style.opacity = '0.7';
+        themeToggle.disabled = true;
+        
+        const res = await fetch("/theme-toggle", { 
+          method: "POST",
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.theme) {
+            // Toggle theme class on body
+            document.body.classList.toggle("dark-theme", data.theme === "dark");
+            
+            // Update theme icon
+            const icon = themeToggle.querySelector('.hd-theme-icon');
+            if (icon) {
+              if (data.theme === 'dark') {
+                // Moon icon for dark mode
+                icon.innerHTML = `
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" 
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                `;
+              } else {
+                // Sun icon for light mode
+                icon.innerHTML = `
+                  <path d="M12 3v1m0 16v1m9-9h1M4 12H3m15.364-6.364l.707.707M6.343 17.657l.707.707m12.728 0l-.707.707M6.343 6.343l-.707.707" 
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/>
+                `;
+              }
+            }
+            
+            // Haptic feedback on mobile
+            if (navigator.vibrate) navigator.vibrate(30);
+            
+            console.log(`Theme switched to ${data.theme}`);
+          }
+        } else {
+          console.error('Theme toggle failed:', res.status);
         }
       } catch (err) {
         console.error("Theme toggle failed:", err);
+      } finally {
+        // Reset button state
+        setTimeout(() => {
+          themeToggle.style.opacity = '';
+          themeToggle.disabled = false;
+        }, 300);
+      }
+    });
+    
+    // Add keyboard shortcut (Alt+T for theme toggle)
+    document.addEventListener('keydown', (e) => {
+      if (e.altKey && e.key === 't') {
+        e.preventDefault();
+        themeToggle.click();
+      }
+    });
+  }
+  
+  // Add active link indicator animation
+  const activeLink = document.querySelector('.hd-link.active');
+  if (activeLink) {
+    // Add subtle pulse animation to active link
+    activeLink.style.animation = 'pulse 2s ease-in-out infinite';
+  }
+  
+  // Close mobile menu when clicking a link
+  const navLinks = document.querySelectorAll('.hd-link');
+  navLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      if (window.innerWidth < 768) {
+        nav.setAttribute('aria-expanded', 'false');
+        menuToggle.setAttribute('aria-expanded', 'false');
+        
+        // Reset menu icon
+        const icon = menuToggle.querySelector('svg');
+        if (icon) {
+          icon.innerHTML = `
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          `;
+        }
       }
     });
   });
+  
+  // Add CSS animation for pulse
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.8; }
+    }
+  `;
+  document.head.appendChild(style);
+});
 </script>

@@ -6,7 +6,7 @@
   // Resolve id across shapes
   var ORDER_ID = String(o.id || o.orderId || o.paypalOrderId || '').trim();
 
-  // Currency + formatter (prefer Intl, fallback to map)
+  // Currency + formatter
   var C = String(o.currency || (o.amount && o.amount.currency_code) || 'USD').toUpperCase();
   var symMap = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' };
   function money(n){
@@ -76,116 +76,651 @@
   }
 %>
 
-<main class="rcpt-page <%= (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme' %>">
-  <header class="rcpt-head">
-    <div class="rcpt-title">
-      <h1>🧾 Order Receipt</h1>
-      <p class="muted">Keep this page for your records.</p>
+<main class="rcpt <%= (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme' %>">
+  <!-- Header -->
+  <div class="rcpt-header">
+    <div class="rcpt-brand">
+      <svg class="rcpt-logo" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="rcpt-brand-name">Receipt</span>
     </div>
-    <nav class="btns">
-      <a class="btn btn-primary" href="/sales" rel="nofollow">← Continue shopping</a>
-      <button id="btnPrintReceipt" class="btn btn-ghost" type="button">🖨️ Print / Save PDF</button>
-    </nav>
-  </header>
+    <div class="rcpt-actions">
+      <a href="/sales" class="rcpt-action-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Shop
+      </a>
+      <button id="btnPrintReceipt" class="rcpt-action-btn rcpt-action-print">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M6 14h12v8H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Print
+      </button>
+    </div>
+  </div>
 
-  <section class="card">
-    <div class="meta">
-      <div><strong>Order:</strong> <span class="wrap"><%= ORDER_ID || '—' %></span></div>
-      <div><strong>Status:</strong> <span><%= o.status || '—' %></span></div>
-      <div><strong>Date:</strong> <span><%= fmtZA(o.createdAt) %></span></div>
+  <!-- Receipt Content -->
+  <div class="rcpt-content">
+    <!-- Order Info -->
+    <div class="rcpt-card rcpt-info">
+      <div class="rcpt-info-row">
+        <span class="rcpt-label">Order #</span>
+        <span class="rcpt-value rcpt-order-id"><%= ORDER_ID || '—' %></span>
+      </div>
+      <div class="rcpt-info-row">
+        <span class="rcpt-label">Date</span>
+        <span class="rcpt-value"><%= fmtZA(o.createdAt) %></span>
+      </div>
+      <div class="rcpt-info-row">
+        <span class="rcpt-label">Status</span>
+        <span class="rcpt-status"><%= o.status || '—' %></span>
+      </div>
     </div>
 
-    <div class="items">
+    <!-- Items -->
+    <div class="rcpt-card rcpt-items">
+      <h3 class="rcpt-section-title">Items</h3>
       <% if (!items.length) { %>
-        <p class="muted">No line items.</p>
+        <p class="rcpt-empty">No items in this order</p>
       <% } else { %>
-        <% items.forEach(function(it){ %>
-          <article class="item">
-            <div class="name"><%= it.name %></div>
-            <div class="qty">× <%= it.qty %> @ <%= money(it.unit) %></div>
-            <div class="line"><strong><%= money(it.line) %></strong></div>
-          </article>
-        <% }); %>
+        <div class="rcpt-items-list">
+          <% items.forEach(function(it, index){ %>
+            <div class="rcpt-item <%= index === items.length - 1 ? 'last-item' : '' %>">
+              <div class="rcpt-item-name"><%= it.name %></div>
+              <div class="rcpt-item-details">
+                <span class="rcpt-item-qty"><%= it.qty %> × <%= money(it.unit) %></span>
+                <span class="rcpt-item-total"><%= money(it.line) %></span>
+              </div>
+            </div>
+          <% }); %>
+        </div>
       <% } %>
     </div>
 
-    <div class="totals">
-      <div class="row"><span>Subtotal</span><span><%= money(t_sub) %></span></div>
-      <div class="row"><span>VAT</span><span><%= money(t_tax) %></span></div>
-      <div class="row"><span>Shipping</span><span><%= money(t_ship) %></span></div>
-      <div class="row total"><span>Total</span><span><%= money(t_tot) %></span></div>
+    <!-- Totals -->
+    <div class="rcpt-card rcpt-totals">
+      <div class="rcpt-total-row">
+        <span>Subtotal</span>
+        <span><%= money(t_sub) %></span>
+      </div>
+      <% if (t_tax > 0) { %>
+        <div class="rcpt-total-row">
+          <span>Tax/VAT</span>
+          <span><%= money(t_tax) %></span>
+        </div>
+      <% } %>
+      <% if (t_ship > 0) { %>
+        <div class="rcpt-total-row">
+          <span>Shipping</span>
+          <span><%= money(t_ship) %></span>
+        </div>
+      <% } %>
+      <div class="rcpt-total-row rcpt-grand-total">
+        <span>Total</span>
+        <span><%= money(t_tot) %></span>
+      </div>
     </div>
 
+    <!-- Delivery -->
     <% if (o.delivery || o.shipping) { %>
-      <div class="ship">
-        <h3>Delivery</h3>
+      <div class="rcpt-card rcpt-delivery">
+        <h3 class="rcpt-section-title">Delivery</h3>
+        
         <% if (o.delivery) { %>
-          <div><strong>Method:</strong> <%= o.delivery.name || '—' %></div>
-          <div class="muted">
-            <%= (o.delivery.deliveryDays != null)
-                  ? ('ETA: ' + o.delivery.deliveryDays + ' day' + (Number(o.delivery.deliveryDays) === 1 ? '' : 's'))
-                  : '' %>
+          <div class="rcpt-delivery-info">
+            <div class="rcpt-delivery-row">
+              <span class="rcpt-label">Method</span>
+              <span class="rcpt-value"><%= o.delivery.name || 'Standard' %></span>
+            </div>
+            <% if (o.delivery.deliveryDays != null) { %>
+              <div class="rcpt-delivery-row">
+                <span class="rcpt-label">Est. Delivery</span>
+                <span class="rcpt-value">
+                  <%= o.delivery.deliveryDays %> day<%= Number(o.delivery.deliveryDays) === 1 ? '' : 's' %>
+                </span>
+              </div>
+            <% } %>
+            <% if (o.delivery.amount != null && o.delivery.amount > 0) { %>
+              <div class="rcpt-delivery-row">
+                <span class="rcpt-label">Cost</span>
+                <span class="rcpt-value"><%= money(o.delivery.amount) %></span>
+              </div>
+            <% } %>
           </div>
-          <% if (o.delivery.amount != null) { %>
-            <div class="muted">Delivery price: <%= money(o.delivery.amount) %></div>
-          <% } %>
         <% } %>
 
         <% if (o.shipping) { %>
-          <div class="ship-name"><%= o.shipping.name || '' %></div>
-          <div class="ship-addr muted">
-            <%= [
-                  o.shipping.address_line_1,
-                  o.shipping.admin_area_2,
-                  o.shipping.admin_area_1,
-                  o.shipping.postal_code,
-                  o.shipping.country_code
-                ].filter(function(p){ return !!p; }).join(', ')
-            %>
+          <div class="rcpt-address">
+            <div class="rcpt-address-label">Shipping Address</div>
+            <% if (o.shipping.name) { %>
+              <div class="rcpt-address-name"><%= o.shipping.name %></div>
+            <% } %>
+            <div class="rcpt-address-details">
+              <%= [o.shipping.address_line_1, o.shipping.address_line_2].filter(function(p){ return !!p; }).join(', ') %>
+              <br>
+              <%= [o.shipping.admin_area_2, o.shipping.admin_area_1, o.shipping.postal_code].filter(function(p){ return !!p; }).join(', ') %>
+              <br>
+              <%= o.shipping.country_code || '' %>
+            </div>
           </div>
         <% } %>
       </div>
     <% } %>
-  </section>
+
+    <!-- Footer Note -->
+    <div class="rcpt-footer">
+      <p class="rcpt-footer-note">
+        This is your official receipt. Keep it for your records.<br>
+        For questions, contact support@yourcompany.com
+      </p>
+      <div class="rcpt-footer-meta">
+        <span>Generated on <%= new Date().toLocaleDateString('en-ZA') %></span>
+        <span class="rcpt-footer-id">Ref: <%= ORDER_ID.slice(0, 8) %></span>
+      </div>
+    </div>
+  </div>
 </main>
 
 <style nonce="<%= NONCE %>">
-  :root{
-    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
-    --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
-    --radius:12px; --pad:12px;
+  /* Company Colors & Compact Variables */
+  :root {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    
+    /* Compact design */
+    --bg: #F0FDF4;
+    --text: var(--black);
+    --muted: #64748B;
+    --card: #FFFFFF;
+    --border: #D1FAE5;
+    --radius: 12px;
+    --shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
+    --space-xs: 8px;
+    --space-sm: 12px;
+    --space-md: 16px;
+    --space-lg: 20px;
+    
+    /* Typography */
+    --font-xs: 12px;
+    --font-sm: 13px;
+    --font-base: 14px;
+    --font-md: 15px;
+    --font-lg: 16px;
   }
-  .dark-theme{
-    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
-    --brand:#f3f4f6; --brand-contrast:#111;
+
+  .dark-theme {
+    --bg: #0A1F0A;
+    --text: #F1F5F9;
+    --muted: #94A3B8;
+    --card: #132813;
+    --border: #2D5A2D;
+    --shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
   }
-  html,body{background:var(--bg); color:var(--text); margin:0}
-  .rcpt-page{max-width:680px; margin:0 auto; padding:12px}
-  .rcpt-head{display:flex; flex-direction:column; gap:10px; margin:4px 0 12px}
-  .rcpt-title h1{font-size:clamp(18px,5.5vw,28px); margin:0 0 2px; line-height:1.2}
-  .muted{color:var(--muted)}
-  .wrap{word-break:break-word}
-  .btns{display:flex; flex-wrap:wrap; gap:8px}
-  .btn{flex:1 1 100%; text-align:center; border:1px solid var(--brand); border-radius:10px; padding:10px 12px; text-decoration:none; cursor:pointer; font-size:clamp(14px,4.2vw,16px)}
-  .btn-primary{background:var(--brand); color:var(--brand-contrast)}
-  .btn-ghost{border-color:var(--border); background:transparent; color:var(--text)}
-  .card{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad)}
-  .meta{display:grid; gap:6px; margin-bottom:10px}
-  .items{display:flex; flex-direction:column; gap:8px}
-  .item{display:grid; grid-template-columns:1fr auto auto; gap:8px; border-bottom:1px dashed var(--border); padding-bottom:6px}
-  .qty{text-align:right; min-width:56px}
-  .totals{display:grid; gap:6px; margin-top:.75rem}
-  .row{display:flex; justify-content:space-between}
-  .row.total{font-weight:900; border-top:1px solid var(--border); padding-top:.5rem}
-  .ship{margin-top:12px}
-  .ship h3{margin:0 0 6px}
-  @media (min-width:420px){ .btn{flex:0 0 auto; min-width:180px} }
-  @media print{ .btns{display:none !important} .rcpt-page{max-width:100%; padding:0} body{background:#fff} }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: var(--font-base);
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* Main Container */
+  .rcpt {
+    max-width: 100%;
+    min-height: 100vh;
+    background: var(--bg);
+  }
+
+  /* Header - Compact */
+  .rcpt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .rcpt-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .rcpt-logo {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .rcpt-brand-name {
+    font-weight: 600;
+    font-size: var(--font-md);
+  }
+
+  .rcpt-actions {
+    display: flex;
+    gap: var(--space-xs);
+  }
+
+  .rcpt-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    color: white;
+    text-decoration: none;
+    font-size: var(--font-xs);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .rcpt-action-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .rcpt-action-print {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .rcpt-action-print:hover {
+    background: #16A34A;
+    border-color: #16A34A;
+  }
+
+  /* Content Area */
+  .rcpt-content {
+    padding: var(--space-md);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* Cards */
+  .rcpt-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    box-shadow: var(--shadow);
+  }
+
+  /* Order Info */
+  .rcpt-info {
+    text-align: center;
+  }
+
+  .rcpt-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .rcpt-info-row:last-child {
+    border-bottom: none;
+  }
+
+  .rcpt-label {
+    color: var(--muted);
+    font-size: var(--font-sm);
+    font-weight: 500;
+  }
+
+  .rcpt-value {
+    font-weight: 600;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  .rcpt-order-id {
+    font-family: 'SF Mono', monospace;
+    font-size: var(--font-sm);
+    color: var(--blue);
+    background: rgba(37, 99, 235, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .rcpt-status {
+    color: var(--green);
+    font-weight: 600;
+    background: rgba(34, 197, 94, 0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: var(--font-sm);
+  }
+
+  /* Section Titles */
+  .rcpt-section-title {
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--black);
+    margin-bottom: var(--space-sm);
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--green);
+  }
+
+  .dark-theme .rcpt-section-title {
+    color: #F1F5F9;
+  }
+
+  /* Items */
+  .rcpt-empty {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    padding: var(--space-md);
+    font-size: var(--font-sm);
+  }
+
+  .rcpt-items-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .rcpt-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 10px;
+  }
+
+  .rcpt-item:not(.last-item) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rcpt-item-name {
+    font-weight: 500;
+    line-height: 1.3;
+  }
+
+  .rcpt-item-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--font-sm);
+  }
+
+  .rcpt-item-qty {
+    color: var(--muted);
+  }
+
+  .rcpt-item-total {
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  /* Totals */
+  .rcpt-totals {
+    background: rgba(34, 197, 94, 0.05);
+    border-color: var(--green);
+  }
+
+  .rcpt-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: var(--font-base);
+  }
+
+  .rcpt-total-row:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rcpt-grand-total {
+    font-size: var(--font-md);
+    font-weight: 700;
+    color: var(--green);
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 2px solid var(--border);
+  }
+
+  /* Delivery */
+  .rcpt-delivery-info {
+    display: grid;
+    gap: 8px;
+    margin-bottom: var(--space-sm);
+  }
+
+  .rcpt-delivery-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--font-sm);
+  }
+
+  .rcpt-address {
+    background: rgba(34, 197, 94, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: var(--space-sm);
+    margin-top: var(--space-sm);
+  }
+
+  .rcpt-address-label {
+    font-weight: 600;
+    font-size: var(--font-sm);
+    margin-bottom: 6px;
+    color: var(--muted);
+  }
+
+  .rcpt-address-name {
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .rcpt-address-details {
+    font-size: var(--font-sm);
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Footer */
+  .rcpt-footer {
+    text-align: center;
+    padding: var(--space-md) 0;
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-md);
+  }
+
+  .rcpt-footer-note {
+    color: var(--muted);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    margin-bottom: var(--space-sm);
+  }
+
+  .rcpt-footer-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--font-xs);
+    color: var(--muted);
+  }
+
+  .rcpt-footer-id {
+    font-family: 'SF Mono', monospace;
+    color: var(--blue);
+    background: rgba(37, 99, 235, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* Print Styles */
+  @media print {
+    .rcpt-header,
+    .rcpt-footer {
+      display: none !important;
+    }
+    
+    .rcpt-content {
+      padding: 0;
+      max-width: 100%;
+    }
+    
+    body {
+      background: white !important;
+      color: black !important;
+      font-size: 12px !important;
+    }
+    
+    .rcpt-card {
+      box-shadow: none !important;
+      border: 1px solid #ddd !important;
+      margin: 8px 0 !important;
+      padding: 12px !important;
+      break-inside: avoid;
+    }
+    
+    .rcpt-grand-total {
+      color: black !important;
+    }
+  }
+
+  /* Ultra Compact for Small Screens */
+  @media (max-width: 360px) {
+    :root {
+      --space-md: 12px;
+      --space-lg: 16px;
+    }
+    
+    .rcpt-header {
+      padding: 8px 12px;
+    }
+    
+    .rcpt-content {
+      padding: 12px;
+    }
+    
+    .rcpt-card {
+      padding: 12px;
+    }
+    
+    .rcpt-action-btn {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    
+    .rcpt-info-row,
+    .rcpt-total-row,
+    .rcpt-delivery-row {
+      font-size: var(--font-sm);
+    }
+  }
+
+  /* Hisense U50 Lite Optimization (720px width) */
+  @media (min-width: 361px) and (max-width: 720px) {
+    .rcpt-content {
+      padding: 16px;
+    }
+    
+    .rcpt-card {
+      padding: 16px;
+    }
+  }
+
+  /* Larger Screens */
+  @media (min-width: 721px) {
+    .rcpt-content {
+      padding: 24px;
+    }
+    
+    .rcpt-card {
+      padding: 20px;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .rcpt-card {
+    animation: slideIn 0.3s ease-out forwards;
+  }
+
+  .rcpt-card:nth-child(1) { animation-delay: 0.1s; }
+  .rcpt-card:nth-child(2) { animation-delay: 0.2s; }
+  .rcpt-card:nth-child(3) { animation-delay: 0.3s; }
+  .rcpt-card:nth-child(4) { animation-delay: 0.4s; }
 </style>
 
 <script nonce="<%= NONCE %>">
-  document.addEventListener('DOMContentLoaded', function(){
-    var btn = document.getElementById('btnPrintReceipt');
-    if (btn) btn.addEventListener('click', function(){ window.print(); });
+  document.addEventListener('DOMContentLoaded', function() {
+    // Print functionality
+    var printBtn = document.getElementById('btnPrintReceipt');
+    if (printBtn) {
+      printBtn.addEventListener('click', function() {
+        window.print();
+      });
+    }
+
+    // Copy order ID on click
+    var orderIdEl = document.querySelector('.rcpt-order-id');
+    if (orderIdEl) {
+      orderIdEl.style.cursor = 'pointer';
+      orderIdEl.title = 'Click to copy';
+      orderIdEl.addEventListener('click', function() {
+        var text = this.textContent;
+        navigator.clipboard.writeText(text).then(function() {
+          var original = orderIdEl.textContent;
+          orderIdEl.textContent = 'Copied!';
+          orderIdEl.style.color = 'var(--green)';
+          setTimeout(function() {
+            orderIdEl.textContent = original;
+            orderIdEl.style.color = '';
+          }, 1500);
+        });
+      });
+    }
+
+    // Add subtle interaction to cards
+    var cards = document.querySelectorAll('.rcpt-card');
+    cards.forEach(function(card) {
+      card.addEventListener('click', function() {
+        this.style.transform = 'scale(0.995)';
+        setTimeout(() => {
+          this.style.transform = '';
+        }, 150);
+      });
+    });
+
+    // Auto-scroll to top for better mobile UX
+    window.scrollTo(0, 0);
   });
 </script>

@@ -1,0 +1,309 @@
+<section class="out-stock-page">
+  <h1 class="page-title">📦 Out of Stock Products</h1>
+  <p class="subtitle">
+    These products currently have <strong>no stock</strong>. Update the stock
+    quantity below to make them available again.
+  </p>
+
+  <!-- Flash messages -->
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
+
+  <% if (!products || products.length === 0) { %>
+    <div class="empty-state">
+      <div class="empty-icon">🎉</div>
+      <p>Great news! You have no products that are completely out of stock.</p>
+    </div>
+  <% } else { %>
+    <div class="out-stock-grid">
+      <% products.forEach(function (p) { %>
+        <article class="product-card">
+          <div class="product-main">
+            <div class="product-image">
+              <% if (p.imageUrl) { %>
+                <img src="<%= p.imageUrl %>" alt="<%= p.name %>" />
+              <% } else { %>
+                <div class="image-placeholder">📦</div>
+              <% } %>
+            </div>
+
+            <div class="product-info">
+              <h2 class="product-name"><%= p.name || 'Unnamed product' %></h2>
+              <div class="product-meta">
+                <div class="meta-line">
+                  <span class="meta-label">Product ID:</span>
+                  <span class="meta-value"><%= p.customId %></span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Category:</span>
+                  <span class="meta-value"><%= p.category || '—' %></span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Price:</span>
+                  <span class="meta-value">
+                    <%= (p.price != null ? Number(p.price).toFixed(2) : '0.00') %> ZAR
+                  </span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Current stock:</span>
+                  <span class="meta-value stock-zero">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inline stock update form -->
+          <form
+            class="stock-form"
+            method="post"
+            action="/products/edit/<%= p.customId %>"
+          >
+            <div class="stock-input-group">
+              <label for="stock-<%= p.customId %>">New stock</label>
+              <input
+                id="stock-<%= p.customId %>"
+                type="number"
+                name="stock"
+                min="0"
+                step="1"
+                required
+                placeholder="e.g. 10"
+                value="10"
+              />
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+              💾 Save Stock
+            </button>
+
+            <!-- Optional: hidden field so you know from which page update came -->
+            <input type="hidden" name="source" value="out-of-stock-page" />
+          </form>
+        </article>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .out-stock-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  .out-stock-page .page-title {
+    font-size: 1.6rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .out-stock-page .subtitle {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin-bottom: 1.25rem;
+  }
+
+  .flash {
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .flash-success {
+    background: #ecfdf3;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .flash-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .empty-state {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    border-radius: 10px;
+    border: 1px dashed #cbd5f5;
+    text-align: center;
+    background: #f8fafc;
+  }
+
+  .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .out-stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .product-card {
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 0.9rem;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .product-main {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .product-image {
+    width: 80px;
+    height: 80px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #f1f5f9;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .image-placeholder {
+    font-size: 1.5rem;
+    color: #94a3b8;
+  }
+
+  .product-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .product-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    color: #0f172a;
+  }
+
+  .product-meta {
+    font-size: 0.8rem;
+    color: #64748b;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .meta-line {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .meta-label {
+    font-weight: 500;
+    color: #475569;
+  }
+
+  .meta-value {
+    color: #0f172a;
+  }
+
+  .stock-zero {
+    color: #b91c1c;
+    font-weight: 700;
+  }
+
+  .stock-form {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.6rem;
+    margin-top: 0.3rem;
+  }
+
+  .stock-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 120px;
+  }
+
+  .stock-input-group label {
+    font-size: 0.75rem;
+    color: #64748b;
+  }
+
+  .stock-input-group input {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    max-width: 120px;
+  }
+
+  .stock-input-group input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    gap: 0.25rem;
+  }
+
+  .btn-primary {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #1d4ed8;
+  }
+
+  .btn-primary:hover {
+    background: #1d4ed8;
+  }
+
+  @media (max-width: 480px) {
+    .out-stock-page {
+      padding: 0.75rem;
+    }
+
+    .product-main {
+      flex-direction: row;
+    }
+
+    .stock-form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .btn-primary {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+

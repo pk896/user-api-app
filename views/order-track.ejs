@@ -1,0 +1,334 @@
+<!-- views/order-track.ejs -->
+<section class="page order-track">
+  <h1 class="page-title">
+    📦 Track Order
+    <span class="muted">#<%= order._id.toString().slice(-6) %></span>
+  </h1>
+
+  <p class="subtitle">
+    Total:
+    <strong>
+      <%= order.amount && order.amount.value %>
+      <%= order.amount && order.amount.currency %>
+    </strong>
+  </p>
+
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
+
+  <% const st = order.shippingTracking || {}; %>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Shipping Status</h2>
+      <% if (st.trackingNumber) { %>
+        <button id="refreshTracking" class="btn btn-sm btn-outline">
+          🔄 Refresh
+        </button>
+      <% } %>
+    </div>
+
+    <% if (st.trackingNumber) { %>
+      <!-- Live Tracking Status -->
+      <% if (liveTracking) { %>
+        <div class="live-tracking">
+          <div class="status-badge status-<%= liveTracking.status.toLowerCase() %>">
+            <strong>Live Status:</strong> 
+            <%= liveTracking.status.replace('_', ' ') %>
+          </div>
+          
+          <% if (liveTracking.estimatedDelivery) { %>
+            <p>
+              <strong>Estimated Delivery:</strong>
+              <%= new Date(liveTracking.estimatedDelivery).toLocaleDateString() %>
+            </p>
+          <% } %>
+
+          <!-- Tracking Timeline -->
+          <% if (liveTracking.events && liveTracking.events.length > 0) { %>
+            <div class="tracking-timeline">
+              <h3>Tracking History</h3>
+              <div class="timeline">
+                <% liveTracking.events.slice(0, 10).forEach((event, index) => { %>
+                  <div class="timeline-item <%= index === 0 ? 'latest' : '' %>">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                      <div class="timeline-title"><%= event.description || event.status %></div>
+                      <div class="timeline-date">
+                        <%= event.date ? new Date(event.date).toLocaleString() : '' %>
+                        <% if (event.location) { %>
+                          • <%= event.location %>
+                        <% } %>
+                      </div>
+                    </div>
+                  </div>
+                <% }); %>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+
+      <!-- Basic Tracking Info -->
+      <div class="tracking-info">
+        <p>
+          <strong>Status:</strong>
+          <span class="badge badge-<%= st.liveStatus ? st.liveStatus.toLowerCase() : (st.status || 'shipped').toLowerCase() %>">
+            <%= st.liveStatus ? st.liveStatus.replace('_', ' ') : (st.status || 'SHIPPED') %>
+          </span>
+          <% if (st.liveStatus) { %>
+            <small class="muted">(Live)</small>
+          <% } %>
+        </p>
+
+        <p>
+          <strong>Courier:</strong>
+          <%= st.carrierLabel || st.carrier || 'N/A' %>
+        </p>
+
+        <p>
+          <strong>Tracking number:</strong>
+          <code class="tracking-number"><%= st.trackingNumber %></code>
+        </p>
+
+        <% if (st.trackingUrl) { %>
+          <p>
+            <a
+              href="<%= st.trackingUrl %>"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-primary btn-sm"
+            >
+              🔍 Track on courier website
+            </a>
+          </p>
+        <% } %>
+
+        <% if (st.lastTrackingUpdate) { %>
+          <p class="muted">
+            Last updated: <%= new Date(st.lastTrackingUpdate).toLocaleString() %>
+          </p>
+        <% } %>
+      </div>
+    <% } else { %>
+      <p class="muted">
+        Tracking details have not been added yet.
+        <% if (!isBusiness) { %>
+          Your order is probably still being prepared for shipment.
+        <% } %>
+      </p>
+    <% } %>
+  </div>
+
+  <!-- Rest of your existing code for business form and back button -->
+  <% if (isBusiness) { %>
+    <div class="card" style="margin-top: 1.5rem;">
+      <h2 class="card-title">Update tracking (business only)</h2>
+      <form
+        action="/orders/<%= order._id %>/track"
+        method="POST"
+        class="form"
+      >
+        <div class="form-row">
+          <label for="carrier">Courier</label>
+          <select id="carrier" name="carrier" required>
+            <option value="COURIER_GUY" <%= st.carrier === 'COURIER_GUY' ? 'selected' : '' %>>
+              Courier Guy
+            </option>
+            <option value="FASTWAY" <%= st.carrier === 'FASTWAY' ? 'selected' : '' %>>
+              Fastway Couriers
+            </option>
+            <option value="ARAMEX" <%= st.carrier === 'ARAMEX' ? 'selected' : '' %>>
+              Aramex
+            </option>
+            <option value="OTHER" <%= !st.carrier || st.carrier === 'OTHER' ? 'selected' : '' %>>
+              Other
+            </option>
+          </select>
+        </div>
+
+        <!-- Rest of your form remains the same -->
+        <div class="form-row">
+          <label for="carrierLabel">Courier label (optional)</label>
+          <input
+            id="carrierLabel"
+            name="carrierLabel"
+            type="text"
+            value="<%= st.carrierLabel || '' %>"
+            placeholder="e.g. Local driver, internal courier"
+          />
+        </div>
+
+        <div class="form-row">
+          <label for="trackingNumber">Tracking number</label>
+          <input
+            id="trackingNumber"
+            name="trackingNumber"
+            type="text"
+            required
+            value="<%= st.trackingNumber || '' %>"
+            placeholder="e.g. CG123456789ZA"
+          />
+        </div>
+
+        <div class="form-row">
+          <label for="trackingUrl">Tracking URL (optional)</label>
+          <input
+            id="trackingUrl"
+            name="trackingUrl"
+            type="url"
+            value="<%= st.trackingUrl || '' %>"
+            placeholder="https://track.thecourierguy.co.za/..."
+          />
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">
+            💾 Save tracking
+          </button>
+          <a href="/orders" class="btn btn-secondary">Back to orders</a>
+        </div>
+      </form>
+    </div>
+  <% } else { %>
+    <p style="margin-top: 1.5rem;">
+      <a href="/orders" class="btn btn-secondary">⬅ Back to my orders</a>
+    </p>
+  <% } %>
+</section>
+
+<style>
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .live-tracking {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #3b82f6;
+  }
+
+  .dark-theme .live-tracking {
+    background: #1e293b;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-delivered { background: #dcfce7; color: #166534; }
+  .status-out_for_delivery { background: #fef3c7; color: #92400e; }
+  .status-in_transit { background: #dbeafe; color: #1e40af; }
+  .status-processing { background: #f3f4f6; color: #374151; }
+
+  .tracking-timeline {
+    margin-top: 1rem;
+  }
+
+  .timeline {
+    position: relative;
+    padding-left: 1.5rem;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding: 0.5rem 0;
+    border-left: 2px solid #e5e7eb;
+  }
+
+  .timeline-item.latest {
+    border-left-color: #3b82f6;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: -0.5rem;
+    top: 0.75rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    background: #9ca3af;
+  }
+
+  .timeline-item.latest .timeline-marker {
+    background: #3b82f6;
+  }
+
+  .timeline-content {
+    margin-left: 1rem;
+  }
+
+  .timeline-title {
+    font-weight: 500;
+  }
+
+  .timeline-date {
+    font-size: 0.875rem;
+    color: #6b7280;
+  }
+
+  .tracking-number {
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+
+  .dark-theme .tracking-number {
+    background: #374151;
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid #d1d5db;
+    color: #374151;
+  }
+
+  .dark-theme .btn-outline {
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+</style>
+
+<script nonce="<%= nonce %>">
+document.addEventListener('DOMContentLoaded', function() {
+  const refreshBtn = document.getElementById('refreshTracking');
+  
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async function() {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Refreshing...';
+      
+      try {
+        const response = await fetch(`/orders/<%= order._id %>/refresh-tracking`);
+        const data = await response.json();
+        
+        if (data.success) {
+          location.reload(); // Reload to show updated data
+        } else {
+          alert('Could not refresh tracking data');
+        }
+      } catch (error) {
+        console.error('Error refreshing tracking:', error);
+        alert('Error refreshing tracking data');
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Refresh';
+      }
+    });
+  }
+});
+</script>

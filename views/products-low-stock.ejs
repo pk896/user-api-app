@@ -1,0 +1,420 @@
+<!-- views/products-low-stock.ejs -->
+<section class="low-stock-page">
+  <h1 class="page-title">⚠️ Low Stock Products</h1>
+  <p class="subtitle">
+    These products are below your low stock threshold
+    (<strong><%= typeof lowStockThreshold === 'number' ? lowStockThreshold : 15 %> units</strong>).
+    Update the stock quantity below to top them up.
+  </p>
+
+  <!-- Flash messages -->
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
+
+  <%
+    const items = Array.isArray(products) ? products : [];
+    const threshold = (typeof lowStockThreshold === 'number' ? lowStockThreshold : 15);
+  %>
+
+  <% if (!items.length) { %>
+    <div class="empty-state">
+      <div class="empty-icon">🎉</div>
+      <p>Great news! You have no low stock products (≤ <%= threshold %> units).</p>
+      <small>All good for now. Keep an eye on your inventory.</small>
+      <a href="/products/mine" class="btn btn-primary">← Back to My Products</a>
+    </div>
+  <% } else { %>
+    <div class="low-stock-summary">
+      <div class="summary-card">
+        <strong><%= items.length %></strong>
+        <span>products with low stock</span>
+      </div>
+      <a href="/products/mine" class="btn-outline">← Back to My Products</a>
+    </div>
+
+    <div class="low-stock-grid">
+      <% items.forEach(function (p) { 
+           const stock = Number(p.stock) || 0;
+           const price = (p.price != null ? Number(p.price) : 0);
+           const idVal = p.customId || (p._id && p._id.toString());
+      %>
+        <article class="product-card">
+          <div class="product-main">
+            <div class="product-image">
+              <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                <img src="<%= p.imageUrl %>" alt="<%= p.name %>" />
+              <% } else { %>
+                <div class="image-placeholder">📦</div>
+              <% } %>
+            </div>
+
+            <div class="product-info">
+              <h2 class="product-name"><%= p.name || 'Unnamed product' %></h2>
+              <div class="product-meta">
+                <div class="meta-line">
+                  <span class="meta-label">Product ID:</span>
+                  <span class="meta-value"><%= idVal || '—' %></span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Category:</span>
+                  <span class="meta-value"><%= p.category || '—' %></span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Price:</span>
+                  <span class="meta-value">
+                    <%= price.toFixed(2) %> ZAR
+                  </span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Current stock:</span>
+                  <span class="meta-value stock-low">
+                    <%= stock %> unit<%= stock === 1 ? '' : 's' %>
+                  </span>
+                </div>
+                <div class="meta-line">
+                  <span class="meta-label">Status:</span>
+                  <span class="meta-value">
+                    <% if (stock <= 0) { %>
+                      <span class="pill pill-out">Out of stock</span>
+                    <% } else if (stock <= threshold) { %>
+                      <span class="pill pill-low">Low stock</span>
+                    <% } else { %>
+                      <span class="pill pill-ok">OK</span>
+                    <% } %>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inline stock update form (like out-of-stock page) -->
+          <% if (idVal) { %>
+            <form
+              class="stock-form"
+              method="post"
+              action="/products/edit/<%= idVal %>"
+            >
+              <div class="stock-input-group">
+                <label for="stock-<%= idVal %>">New stock</label>
+                <input
+                  id="stock-<%= idVal %>"
+                  type="number"
+                  name="stock"
+                  min="0"
+                  step="1"
+                  required
+                  placeholder="e.g. 20"
+                  value="<%= stock || 10 %>"
+                />
+              </div>
+
+              <button type="submit" class="btn btn-primary">
+                💾 Save Stock
+              </button>
+
+              <!-- Optional: hidden field so you know from which page update came -->
+              <input type="hidden" name="source" value="low-stock-page" />
+            </form>
+          <% } else { %>
+            <div class="no-id-warning">
+              <small>⚠️ Cannot update stock: no product ID found.</small>
+            </div>
+          <% } %>
+        </article>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .low-stock-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  .low-stock-page .page-title {
+    font-size: 1.6rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .low-stock-page .subtitle {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin-bottom: 1.25rem;
+  }
+
+  .flash {
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .flash-success {
+    background: #ecfdf3;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .flash-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .low-stock-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 12px 0;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .low-stock-summary .summary-card {
+    background: rgba(249, 115, 22, 0.06);
+    border: 1px solid rgba(249, 115, 22, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #92400e;
+  }
+
+  .low-stock-summary .summary-card strong {
+    font-size: 16px;
+    margin-right: 4px;
+  }
+
+  .btn-outline {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    font-size: 12px;
+    text-decoration: none;
+    color: #0f172a;
+    white-space: nowrap;
+  }
+
+  .btn-outline:hover {
+    background: #e2e8f0;
+  }
+
+  .empty-state {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    border-radius: 10px;
+    border: 1px dashed #fed7aa;
+    text-align: center;
+    background: #fff7ed;
+  }
+
+  .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .low-stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .product-card {
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 0.9rem;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .product-main {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .product-image {
+    width: 80px;
+    height: 80px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #f1f5f9;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .image-placeholder {
+    font-size: 1.5rem;
+    color: #94a3b8;
+  }
+
+  .product-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .product-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    color: #0f172a;
+  }
+
+  .product-meta {
+    font-size: 0.8rem;
+    color: #64748b;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .meta-line {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+
+  .meta-label {
+    font-weight: 500;
+    color: #475569;
+  }
+
+  .meta-value {
+    color: #0f172a;
+  }
+
+  .stock-low {
+    color: #b45309;
+    font-weight: 700;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .pill-out {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+  }
+
+  .pill-low {
+    background: rgba(249, 115, 22, 0.12);
+    color: #9a3412;
+  }
+
+  .pill-ok {
+    background: rgba(34, 197, 94, 0.12);
+    color: #166534;
+  }
+
+  .stock-form {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.6rem;
+    margin-top: 0.3rem;
+  }
+
+  .stock-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 120px;
+  }
+
+  .stock-input-group label {
+    font-size: 0.75rem;
+    color: #64748b;
+  }
+
+  .stock-input-group input {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    max-width: 120px;
+  }
+
+  .stock-input-group input:focus {
+    outline: none;
+    border-color: #f97316;
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.25);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    gap: 0.25rem;
+  }
+
+  .btn-primary {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #1d4ed8;
+  }
+
+  .btn-primary:hover {
+    background: #1d4ed8;
+  }
+
+  .no-id-warning {
+    font-size: 0.75rem;
+    color: #b45309;
+    margin-top: 0.4rem;
+  }
+
+  @media (max-width: 480px) {
+    .low-stock-page {
+      padding: 0.75rem;
+    }
+
+    .product-main {
+      flex-direction: row;
+    }
+
+    .stock-form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .btn-primary {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>

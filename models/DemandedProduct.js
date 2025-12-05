@@ -1,5 +1,7 @@
 // models/DemandedProduct.js
-const { mongoose } = require('../db');
+//const { mongoose } = require('../db');
+const mongoose = require('mongoose');
+
 const { Schema } = mongoose;
 
 const trimSet = (s) => (s || '').trim();

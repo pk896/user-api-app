@@ -1,324 +1,1084 @@
 <!-- views/demands/my-demands.ejs -->
-<section class="dashboard-home">
-  <h1 class="page-title">📋 My Demands</h1>
-
-  <% if (error && error.length) { %>
-    <div class="flash flash-error">❌ <%= error %></div>
-  <% } %>
-
-  <% if (success && success.length) { %>
-    <div class="flash flash-success">✅ <%= success %></div>
-  <% } %>
-
-  <!-- KPI Cards -->
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Requests</div>
-      <div class="kpi-value" id="kpiTotalRequests">0</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Unique Product Names</div>
-      <div class="kpi-value" id="kpiUniqueNames">0</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Quantity</div>
-      <div class="kpi-value" id="kpiTotalQty">0</div>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="filters">
-    <input id="searchName" type="search" placeholder="🔎 Search by product name..." />
-    <select id="filterType">
-      <option value="">All Types</option>
-    </select>
-    <select id="filterStatus">
-      <option value="">All Statuses</option>
-    </select>
-    <button id="clearFilters" class="btn btn-secondary">Clear</button>
-    <a class="btn btn-primary" href="/demands/add" style="margin-left:auto;">➕ New Demand</a>
-  </div>
-
-  <% if (demands && demands.length) { %>
-    <table class="nice-table" id="tableMyDemands" style="margin-top:.6rem;">
-      <thead>
-        <tr>
-          <th>Requester</th>
-          <th>Type</th>
-          <th>Product</th>
-          <th>Qty</th>
-          <th>Location</th>
-          <th>Notes</th>
-          <th>Status</th>
-          <th>Created</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% demands.forEach(function(d){ 
-             const nm  = (d.productName || '').trim();
-             const typ = (d.type || d.productType || '').trim();
-             const status = (d.status || 'Open').trim();
-             const locParts = [d.country, d.province, d.city, d.town].filter(Boolean);
-        %>
-          <tr class="row-demand"
-              data-id="<%= d._id %>"
-              data-name="<%= nm.toLowerCase() %>"
-              data-type="<%= typ.toLowerCase() %>"
-              data-status="<%= status.toLowerCase() %>"
-              data-qty="<%= Number(d.quantity || 0) %>">
-
-            <!-- Requester -->
-            <td class="col-requester">
-              <div class="val-business-name"><%= (d.requester && d.requester.businessName) || (business && business.name) || '—' %></div>
-              <div>
-                <span class="val-contact-name"><%= (d.requester && d.requester.contactName) || '—' %></span>
-                <span class="sep">—</span>
-                <span class="val-position"><%= (d.requester && d.requester.position) || '—' %></span>
-              </div>
-            </td>
-
-            <!-- Type -->
-            <td class="col-type"><span class="val-type"><%= typ || '—' %></span></td>
-
-            <!-- Product -->
-            <td class="col-product"><span class="val-product-name"><%= nm || '—' %></span></td>
-
-            <!-- Quantity -->
-            <td class="col-qty"><span class="val-quantity"><%= Number(d.quantity || 0) %></span></td>
-
-            <!-- Location -->
-            <td class="col-location">
-              <% if (locParts.length) { %>
-                <%= locParts.join(", ") %>
-              <% } else { %>
-                —
-              <% } %>
-            </td>
-
-            <!-- Notes -->
-            <td class="col-notes">
-              <span class="val-notes">
-                <%= (d.notes || '').slice(0,120) %><%= (d.notes && d.notes.length > 120) ? '…' : '' %>
-              </span>
-            </td>
-
-            <!-- Status -->
-            <td class="col-status"><%= status %></td>
-
-            <!-- Created -->
-            <td class="col-created"><%= new Date(d.createdAt).toLocaleString() %></td>
-
-            <!-- Actions -->
-            <td class="col-actions">
-              <!-- Use GET for reliability; your routes support GET /matches/run/:id -->
-              <a class="btn btn-primary btn-find" 
-                 href="/matches/run/<%= d._id %>" 
-                 data-demand-id="<%= d._id %>">
-                 Find Matches
-              </a>
-
-              <!-- Goes to buyer matches list filtered by this demand -->
-              <a class="btn btn-secondary" href="/matches/buyer?demand=<%= d._id %>">View Matches</a>
-            </td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %>
-    <p>No demands yet.</p>
-  <% } %>
-</section>
-
-<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-(function(){
-  const $search = document.getElementById('searchName');
-  const $type   = document.getElementById('filterType');
-  const $status = document.getElementById('filterStatus');
-  const $clear  = document.getElementById('clearFilters');
-
-  const rows = Array.from(document.querySelectorAll('#tableMyDemands .row-demand'));
-
-  const kpiReq  = document.getElementById('kpiTotalRequests');
-  const kpiName = document.getElementById('kpiUniqueNames');
-  const kpiQty  = document.getElementById('kpiTotalQty');
-
-  // Build dropdowns from current rows
-  const typeSet = new Set();
-  const statusSet = new Set();
-  rows.forEach(function(tr){
-    const t = tr.dataset.type || '';
-    const s = tr.dataset.status || '';
-    if (t) typeSet.add(t);
-    if (s) statusSet.add(s);
-  });
-  Array.from(typeSet).sort().forEach(function(t){
-    const o = document.createElement('option');
-    o.value = t; o.textContent = t.charAt(0).toUpperCase() + t.slice(1);
-    $type.appendChild(o);
-  });
-  Array.from(statusSet).sort().forEach(function(s){
-    const o = document.createElement('option');
-    o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
-    $status.appendChild(o);
-  });
-
-  function recomputeKPIs(visibleRows){
-    let totalReq = 0, totalQty = 0;
-    const names = new Set();
-    visibleRows.forEach(function(tr){
-      totalReq += 1;
-      totalQty += Number(tr.dataset.qty || 0);
-      names.add((tr.dataset.name || '').trim());
-    });
-    if (kpiReq)  kpiReq.textContent  = String(totalReq);
-    if (kpiQty)  kpiQty.textContent  = String(totalQty);
-    if (kpiName) kpiName.textContent = String(names.size);
-  }
-
-  function applyFilters(){
-    const q = ($search.value || '').trim().toLowerCase();
-    const t = ($type.value   || '').trim().toLowerCase();
-    const s = ($status.value || '').trim().toLowerCase();
-
-    const visible = [];
-    rows.forEach(function(tr){
-      const name = tr.dataset.name || '';
-      const typ  = tr.dataset.type || '';
-      const st   = tr.dataset.status || '';
-      const show = (!q || name.includes(q)) && (!t || typ === t) && (!s || st === s);
-      tr.style.display = show ? '' : 'none';
-      if (show) visible.push(tr);
-    });
-    recomputeKPIs(visible);
-  }
-
-  if ($search) $search.addEventListener('input', applyFilters);
-  if ($type)   $type.addEventListener('change', applyFilters);
-  if ($status) $status.addEventListener('change', applyFilters);
-  if ($clear)  $clear.addEventListener('click', function(){
-    if ($search) $search.value = '';
-    if ($type)   $type.value   = '';
-    if ($status) $status.value = '';
-    applyFilters();
-  });
-
-  applyFilters();
-
-  // Progressive enhancement:
-  // Intercept Find Matches clicks to run matching, then navigate to the filtered matches list.
-  document.querySelectorAll('.btn-find').forEach(function(a){
-    a.addEventListener('click', function(ev){
-      // Allow normal navigation if JS/CSP blocks fetch
-      try {
-        ev.preventDefault();
-        const demandId = a.dataset.demandId;
-        fetch(a.href, { method: 'GET', credentials: 'include' })
-          .then(() => { window.location.href = `/matches/buyer?demand=${encodeURIComponent(demandId)}`; })
-          .catch(() => { window.location.href = a.href; }); // fallback to server redirect
-      } catch (_) {
-        // fallback: follow link
-        window.location.href = a.href;
-      }
-    });
-  });
-})();
-</script>
-
-<style>
+<%
+const pageStyles = `
+  /* ✅ Brand Color System */
   :root {
-    --col-green:#16a34a; --col-blue:#2563eb; --col-navy:#1f2937; --col-purple:#7c3aed; --col-maroon:#7a1f2b;
-    --col-violet:#6d28d9; --col-teal:#0f766e; --col-magenta:#be185d; --col-orange:#ea580c; --col-coral:#cc5533;
-    --col-navyblue:#1e3a8a; --col-muted:#6b7280; --card-bg:#ffffff; --border:#e5e7eb;
-    --kpi-bg-1:#f0fdf4; --kpi-bg-2:#fff7ed; --kpi-bg-3:#eef2ff; --kpi-fg-1:#166534; --kpi-fg-2:#9a3412; --kpi-fg-3:#4338ca;
-  }
-  body.dark-theme {
-    --col-navy:#cbd5e1; --col-navyblue:#93c5fd;
-    --kpi-bg-1:#052e16; --kpi-bg-2:#431407; --kpi-bg-3:#111827;
-    --kpi-fg-1:#86efac; --kpi-fg-2:#fdba74; --kpi-fg-3:#a5b4fc;
-    --card-bg:#111827; --border:#374151;
+    --blue: #2563EB;
+    --blue-dark: #1d4ed8;
+    --purple: #7C3AED;
+    --purple-dark: #6d28d9;
+    --green: #22C55E;
+    --green-dark: #16a34a;
+    --black: #0F172A;
+    
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    
+    --transition: all 0.2s ease;
   }
 
-  /* KPI */
+  .dark-theme {
+    --bg-primary: var(--black);
+    --bg-secondary: var(--gray-800);
+    --text-primary: var(--gray-100);
+    --text-secondary: var(--gray-300);
+    --text-muted: var(--gray-400);
+    --border: var(--gray-700);
+    --accent-bg: rgba(124, 58, 237, 0.1);
+  }
+
+  :root {
+    --bg-primary: var(--gray-50);
+    --bg-secondary: white;
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-500);
+    --border: var(--gray-200);
+    --accent-bg: rgba(124, 58, 237, 0.05);
+  }
+
+  /* ✅ My Demands Page Container */
+  .my-demands-page {
+    max-width: 1200px;
+    margin: 0.75rem auto;
+    background: linear-gradient(135deg, var(--green) 0%, #16a34a 100%);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .demands-content {
+    background: var(--bg-primary);
+    margin: 2px;
+    border-radius: calc(var(--radius-xl) - 2px);
+    padding: 1.25rem;
+  }
+
+  /* ✅ Header */
+  .demands-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .demands-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+
+  /* ✅ KPI Cards */
   .kpi-grid {
-    display:grid; gap:.8rem; grid-template-columns: repeat(3, minmax(0,1fr));
-    margin:.5rem 0 1rem;
-  }
-  .kpi-card { padding:1rem; border:1px solid var(--border); border-radius:.75rem; background:var(--card-bg); box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .kpi-grid .kpi-card:nth-child(1){ background:var(--kpi-bg-1); color:var(--kpi-fg-1); border:none; }
-  .kpi-grid .kpi-card:nth-child(2){ background:var(--kpi-bg-2); color:var(--kpi-fg-2); border:none; }
-  .kpi-grid .kpi-card:nth-child(3){ background:var(--kpi-bg-3); color:var(--kpi-fg-3); border:none; }
-  .kpi-label{ font-size:.85rem; color:#6b7280; }
-  .kpi-value{ font-size:1.35rem; font-weight:700; letter-spacing:.2px; }
-
-  /* Filters */
-  .filters {
-    display:flex; gap:.6rem; align-items:center; margin:.6rem 0 1rem; flex-wrap:wrap;
-  }
-  .filters input[type="search"], .filters select {
-    flex:1 1 220px; min-width:0; padding:.6rem .7rem; border:1px solid var(--border);
-    border-radius:.55rem; box-shadow:0 1px 0 rgba(0,0,0,.04); background:var(--card-bg); color:inherit;
-  }
-  .btn{ padding:.6rem .85rem; border-radius:.55rem; border:0; cursor:pointer; }
-  .btn-primary{ background:#2563eb; color:#fff; }
-  .btn-secondary{ background:#f3f4f6; color:#111; }
-
-  /* Table */
-  .nice-table{
-    width:100%; border-collapse:collapse; background:var(--card-bg);
-    border-radius:.6rem; overflow:hidden; border:1px solid var(--border);
-  }
-  .nice-table th, .nice-table td{
-    padding:.65rem .6rem; border-bottom:1px solid var(--border);
-    text-align:left; vertical-align:top; white-space:normal;
-  }
-  .nice-table thead th{ background:#f9fafb; font-weight:600; }
-  body.dark-theme .nice-table thead th{ background:#0b1220; }
-  .nice-table tbody tr:hover{ background: rgba(37,99,235,.06); }
-  body.dark-theme .nice-table tbody tr:hover{ background: rgba(59,130,246,.08); }
-
-  .col-qty { text-align:right; font-variant-numeric: tabular-nums; }
-  .col-actions{ white-space:nowrap; }
-
-  /* Colored bits */
-  .val-business-name{ color: var(--col-green); font-weight:700; }
-  .val-contact-name{ color: var(--col-blue); font-weight:600; }
-  .val-position{ color: var(--col-navy); }
-  .val-product-name{ color: var(--col-purple); font-weight:600; }
-  .val-type{ color: var(--col-maroon); font-weight:600; }
-  .val-quantity{ color: var(--col-violet); font-variant-numeric: tabular-nums; }
-
-  /* Mobile */
-  @media (max-width:420px){
-    .col-actions{ display:block; }
-    .col-actions .btn{ width:100%; margin-top:.35rem; }
-    .col-actions .btn:first-child{ margin-top:0; }
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
   }
 
-  /* Mobile card mode */
-  .nice-table{ overflow-x:auto; display:block; }
-  @media (max-width:420px){
-    .nice-table thead{ display:none; }
-    .nice-table tbody tr{ display:block; padding:.7rem .7rem; border-bottom:1px solid var(--border); }
-    .nice-table tbody tr:last-child{ border-bottom:none; }
-    .nice-table td{
-      display:flex; justify-content:space-between; align-items:flex-start;
-      gap:.75rem; padding:.45rem 0; border-bottom:none; white-space:normal;
+  .kpi-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--green);
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(to right, var(--green), var(--blue));
+  }
+
+  .kpi-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .kpi-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--purple);
+    line-height: 1;
+  }
+
+  /* ✅ Filters Section */
+  .filters-section {
+    background: var(--accent-bg);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+  }
+
+  .filters-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .filter-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: var(--transition);
+  }
+
+  .filter-input:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  .filter-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .filter-select {
+    padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary) url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/16px 12px;
+    color: var(--text-primary);
+    transition: var(--transition);
+    cursor: pointer;
+    min-width: 150px;
+  }
+
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  /* ✅ Buttons */
+  .btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--green-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-secondary {
+    background: var(--blue);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: var(--blue-dark);
+    transform: translateY(-2px);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .btn-outline:hover {
+    background: var(--bg-primary);
+    border-color: var(--purple);
+  }
+
+  .btn-find {
+    background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  }
+
+  .btn-find:hover {
+    background: linear-gradient(135deg, var(--purple-dark), var(--purple));
+  }
+
+  /* ✅ Table */
+  .table-container {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-top: 1.5rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+  }
+
+  .data-table th {
+    padding: 0.875rem 1rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .data-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--accent-bg);
+  }
+
+  /* ✅ Color-Coded Cells */
+  .cell-business { color: var(--green); font-weight: 600; }
+  .cell-contact { color: var(--blue); }
+  .cell-product { color: var(--purple); font-weight: 600; }
+  .cell-type { color: var(--green-dark); font-weight: 600; }
+  .cell-quantity { color: var(--purple-dark); font-weight: 700; text-align: right; }
+  .cell-location { color: var(--text-secondary); }
+  .cell-notes { color: var(--text-secondary); font-style: italic; }
+  .cell-created { color: var(--text-muted); font-size: 0.8rem; }
+
+  /* ✅ Status Badges */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-open { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+  .status-processing { background: rgba(59, 130, 246, 0.15); color: var(--blue); }
+  .status-matched { background: rgba(124, 58, 237, 0.15); color: var(--purple); }
+  .status-completed { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+  .status-cancelled { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+  /* ✅ Action Buttons */
+  .action-buttons {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .action-buttons .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  /* ✅ No Data Message */
+  .no-data {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+  }
+
+  .no-data-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .no-data-actions {
+    margin-top: 1.5rem;
+  }
+
+  /* ✅ Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 2px dashed var(--border);
+    margin: 2rem 0;
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-title {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .empty-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ✅ Mobile Optimizations */
+  @media (max-width: 480px) {
+    .my-demands-page {
+      margin: 0.5rem;
     }
-    .nice-table td::before{
+    
+    .demands-content {
+      padding: 1rem;
+    }
+    
+    .demands-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+    }
+    
+    .header-right {
+      width: 100%;
+    }
+    
+    .page-title {
+      font-size: 1.25rem;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .filters-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .filter-input,
+    .filter-select,
+    .btn {
+      width: 100%;
+      min-width: auto;
+    }
+    
+    .data-table {
+      min-width: 0;
+    }
+    
+    /* Mobile card view for table rows */
+    .table-container {
+      display: block;
+    }
+    
+    .data-table {
+      display: block;
+    }
+    
+    .data-table thead {
+      display: none;
+    }
+    
+    .data-table tbody {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    
+    .data-table tr {
+      display: block;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+    }
+    
+    .data-table td {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 0.5rem 0;
+      border: none;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .data-table td:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    
+    .data-table td::before {
       content: attr(data-label);
-      flex:0 0 auto; min-width:7.5rem; color: var(--col-muted); font-size:.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      min-width: 80px;
     }
-    #tableMyDemands tbody tr td:nth-child(1)::before { content: "Requester"; }
-    #tableMyDemands tbody tr td:nth-child(2)::before { content: "Type"; }
-    #tableMyDemands tbody tr td:nth-child(3)::before { content: "Product"; }
-    #tableMyDemands tbody tr td:nth-child(4)::before { content: "Qty"; }
-    #tableMyDemands tbody tr td:nth-child(5)::before { content: "Location"; }
-    #tableMyDemands tbody tr td:nth-child(6)::before { content: "Notes"; }
-    #tableMyDemands tbody tr td:nth-child(7)::before { content: "Status"; }
-    #tableMyDemands tbody tr td:nth-child(8)::before { content: "Created"; }
-    #tableMyDemands tbody tr td:nth-child(9)::before { content: "Actions"; }
-    .col-requester{ flex-direction:column; }
-    .col-requester .val-business-name{ display:block; margin-bottom:2px; }
+    
+    .action-buttons {
+      flex-direction: column;
+      width: 100%;
+    }
+    
+    .action-buttons .btn {
+      width: 100%;
+    }
   }
+
+  /* ✅ Very Small Screens */
+  @media (max-width: 360px) {
+    .demands-content {
+      padding: 0.75rem;
+    }
+    
+    .kpi-value {
+      font-size: 1.25rem;
+    }
+    
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 0.125rem 0.5rem;
+    }
+  }
+
+  /* ✅ Tablet Optimization */
+  @media (min-width: 481px) and (max-width: 768px) {
+    .my-demands-page {
+      margin: 1rem;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .action-buttons {
+      flex-direction: column;
+    }
+  }
+
+  /* ✅ Print Styles */
+  @media print {
+    .my-demands-page {
+      background: white !important;
+      box-shadow: none !important;
+    }
+    
+    .demands-content {
+      background: white !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    .btn,
+    .filters-section {
+      display: none !important;
+    }
+    
+    .table-container {
+      break-inside: avoid;
+    }
+  }
+
+  /* ✅ Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .kpi-card,
+  .table-container {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.2s; }
+
+  /* ✅ Loading States */
+  .loading {
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+  }
+
+  .loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`;
+
+const pageScripts = `
+  document.addEventListener('DOMContentLoaded', function() {
+    // Filter functionality
+    const searchInput = document.getElementById('searchName');
+    const filterType = document.getElementById('filterType');
+    const filterStatus = document.getElementById('filterStatus');
+    const clearFilters = document.getElementById('clearFilters');
+    
+    const rows = Array.from(document.querySelectorAll('.row-demand'));
+    
+    // KPI elements
+    const kpiRequests = document.getElementById('kpiTotalRequests');
+    const kpiUnique = document.getElementById('kpiUniqueNames');
+    const kpiQty = document.getElementById('kpiTotalQty');
+    
+    // Build filter dropdowns dynamically
+    const typeSet = new Set();
+    const statusSet = new Set();
+    
+    rows.forEach(row => {
+      const type = row.dataset.type || '';
+      const status = row.dataset.status || '';
+      if (type) typeSet.add(type.charAt(0).toUpperCase() + type.slice(1));
+      if (status) statusSet.add(status.charAt(0).toUpperCase() + status.slice(1));
+    });
+    
+    // Populate type filter
+    Array.from(typeSet).sort().forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.toLowerCase();
+      option.textContent = type;
+      filterType.appendChild(option);
+    });
+    
+    // Populate status filter
+    Array.from(statusSet).sort().forEach(status => {
+      const option = document.createElement('option');
+      option.value = status.toLowerCase();
+      option.textContent = status;
+      filterStatus.appendChild(option);
+    });
+    
+    function applyFilters() {
+      const searchQuery = (searchInput?.value || '').trim().toLowerCase();
+      const typeFilter = (filterType?.value || '').trim().toLowerCase();
+      const statusFilter = (filterStatus?.value || '').trim().toLowerCase();
+      
+      let visibleCount = 0;
+      let uniqueNames = new Set();
+      let totalQuantity = 0;
+      
+      rows.forEach(row => {
+        const name = row.dataset.name || '';
+        const type = row.dataset.type || '';
+        const status = row.dataset.status || '';
+        const quantity = Number(row.dataset.qty || 0);
+        
+        const matchesSearch = !searchQuery || name.includes(searchQuery);
+        const matchesType = !typeFilter || type === typeFilter;
+        const matchesStatus = !statusFilter || status === statusFilter;
+        
+        const shouldShow = matchesSearch && matchesType && matchesStatus;
+        row.style.display = shouldShow ? '' : 'none';
+        
+        if (shouldShow) {
+          visibleCount++;
+          uniqueNames.add(name);
+          totalQuantity += quantity;
+        }
+      });
+      
+      // Update KPIs
+      if (kpiRequests) kpiRequests.textContent = visibleCount;
+      if (kpiUnique) kpiUnique.textContent = uniqueNames.size;
+      if (kpiQty) kpiQty.textContent = totalQuantity;
+      
+      // Show/hide empty state
+      const hasVisibleRows = visibleCount > 0;
+      const emptyState = document.querySelector('.empty-state');
+      const tableContainer = document.querySelector('.table-container');
+      
+      if (hasVisibleRows) {
+        if (emptyState) emptyState.style.display = 'none';
+        if (tableContainer) tableContainer.style.display = 'block';
+      } else {
+        if (emptyState) emptyState.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        
+        // Update empty state message based on filters
+        if (searchQuery || typeFilter || statusFilter) {
+          const emptyTitle = document.querySelector('.empty-title');
+          const emptyDescription = document.querySelector('.empty-description');
+          if (emptyTitle) emptyTitle.textContent = 'No matching demands';
+          if (emptyDescription) {
+            emptyDescription.textContent = 'Try adjusting your filters to see more results.';
+          }
+        }
+      }
+    }
+    
+    // Event listeners for filters
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilters);
+    }
+    
+    if (filterType) {
+      filterType.addEventListener('change', applyFilters);
+    }
+    
+    if (filterStatus) {
+      filterStatus.addEventListener('change', applyFilters);
+    }
+    
+    if (clearFilters) {
+      clearFilters.addEventListener('click', function() {
+        if (searchInput) searchInput.value = '';
+        if (filterType) filterType.value = '';
+        if (filterStatus) filterStatus.value = '';
+        applyFilters();
+      });
+    }
+    
+    // Find Matches button enhancement
+    document.querySelectorAll('.btn-find').forEach(button => {
+      button.addEventListener('click', function(e) {
+        e.preventDefault();
+        const demandId = this.dataset.demandId;
+        const button = this;
+        const originalText = button.innerHTML;
+        
+        // Show loading state
+        button.innerHTML = '<span>⏳</span> Finding...';
+        button.classList.add('loading');
+        button.disabled = true;
+        
+        // Perform the matching and redirect
+        fetch(this.href, { 
+          method: 'GET',
+          credentials: 'include'
+        })
+          .then(response => {
+            if (response.ok) {
+              window.location.href = \`/matches/buyer?demand=\${encodeURIComponent(demandId)}\`;
+            } else {
+              throw new Error('Matching failed');
+            }
+          })
+          .catch(error => {
+            console.error('Matching error:', error);
+            button.innerHTML = originalText;
+            button.classList.remove('loading');
+            button.disabled = false;
+            alert('Failed to find matches. Please try again.');
+          });
+      });
+    });
+    
+    // Quick actions
+    document.querySelectorAll('.row-demand').forEach(row => {
+      row.addEventListener('click', function(e) {
+        // Don't trigger on button clicks
+        if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
+        
+        // Toggle expanded view
+        this.classList.toggle('expanded');
+      });
+    });
+    
+    // Export functionality
+    const exportBtn = document.getElementById('exportDemands');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function() {
+        const button = this;
+        const originalText = button.innerHTML;
+        
+        button.innerHTML = '<span>⏳</span> Exporting...';
+        button.disabled = true;
+        
+        // Simulate export
+        setTimeout(() => {
+          alert('Your demands have been exported successfully!');
+          button.innerHTML = originalText;
+          button.disabled = false;
+        }, 1500);
+      });
+    }
+    
+    // Bulk actions
+    const bulkSelect = document.getElementById('bulkSelect');
+    const bulkAction = document.getElementById('bulkAction');
+    const applyBulkAction = document.getElementById('applyBulkAction');
+    
+    if (bulkSelect && bulkAction && applyBulkAction) {
+      applyBulkAction.addEventListener('click', function() {
+        const selectedRows = Array.from(rows).filter(row => 
+          row.querySelector('.bulk-select')?.checked
+        );
+        
+        if (selectedRows.length === 0) {
+          alert('Please select at least one demand.');
+          return;
+        }
+        
+        const action = bulkAction.value;
+        const demandIds = selectedRows.map(row => row.dataset.id);
+        
+        // Confirm bulk action
+        if (confirm(\`Are you sure you want to \${action} \${selectedRows.length} demand(s)?\`)) {
+          // In a real app, this would send a request to the server
+          console.log(\`Bulk action "\${action}" on:\`, demandIds);
+          alert(\`\${selectedRows.length} demand(s) updated successfully.\`);
+        }
+      });
+    }
+    
+    // Initialize
+    applyFilters();
+    
+    // Add mobile-friendly table headers
+    if (window.innerWidth <= 480) {
+      const tableHeaders = [
+        'Requester', 'Type', 'Product', 'Qty', 'Location', 'Notes', 'Status', 'Created', 'Actions'
+      ];
+      
+      document.querySelectorAll('.data-table td').forEach((td, index) => {
+        const headerIndex = index % tableHeaders.length;
+        td.setAttribute('data-label', tableHeaders[headerIndex]);
+      });
+    }
+    
+    // Auto-refresh toggle (optional feature)
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    let refreshInterval;
+    
+    if (autoRefreshToggle) {
+      autoRefreshToggle.addEventListener('change', function() {
+        if (this.checked) {
+          refreshInterval = setInterval(() => {
+            console.log('Auto-refreshing demands...');
+            // In a real implementation, this would fetch fresh data
+            applyFilters();
+          }, 300000); // 5 minutes
+        } else {
+          clearInterval(refreshInterval);
+        }
+      });
+    }
+  });
+`;
+%>
+
+<!-- ✅ Inject Styles -->
+<style nonce="<%= nonce %>">
+  <%= pageStyles %>
 </style>
+
+<!-- ✅ My Demands Page -->
+<div class="my-demands-page">
+  <div class="demands-content">
+    <!-- Header -->
+    <header class="demands-header">
+      <div class="header-left">
+        <div class="demands-badge">
+          <span>📋</span>
+          <span>My Requests</span>
+        </div>
+        <h1 class="page-title">My Demands</h1>
+        <p class="page-subtitle">Manage and track your product demands</p>
+      </div>
+      <div class="header-right">
+        <a href="/demands/add" class="btn btn-primary">
+          <span>➕</span>
+          New Demand
+        </a>
+      </div>
+    </header>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Requests</div>
+        <div class="kpi-value" id="kpiTotalRequests">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Unique Products</div>
+        <div class="kpi-value" id="kpiUniqueNames">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Quantity</div>
+        <div class="kpi-value" id="kpiTotalQty">0</div>
+      </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <div class="filters-row">
+        <input type="search" 
+               id="searchName" 
+               class="filter-input" 
+               placeholder="Search by product name..." 
+               aria-label="Search demands">
+        <select id="filterType" class="filter-select">
+          <option value="">All Types</option>
+        </select>
+        <select id="filterStatus" class="filter-select">
+          <option value="">All Statuses</option>
+          <option value="open">Open</option>
+          <option value="processing">Processing</option>
+          <option value="matched">Matched</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <button id="clearFilters" class="btn btn-outline">Clear Filters</button>
+        
+        <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+          <button id="exportDemands" class="btn btn-secondary">
+            <span>📥</span>
+            Export
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk Actions (Optional) -->
+    <div class="filters-section" style="display: none;">
+      <div class="filters-row">
+        <select id="bulkAction" class="filter-select">
+          <option value="">Bulk Actions</option>
+          <option value="delete">Delete Selected</option>
+          <option value="archive">Archive Selected</option>
+          <option value="export">Export Selected</option>
+        </select>
+        <button id="applyBulkAction" class="btn btn-outline">Apply</button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <% if (!demands || demands.length === 0) { %>
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h2 class="empty-title">No Demands Yet</h2>
+        <p class="empty-description">
+          You haven't created any product demands yet. Start by creating your first demand 
+          to find suppliers for the products you need.
+        </p>
+        <div class="no-data-actions">
+          <a href="/demands/add" class="btn btn-primary">
+            <span>➕</span>
+            Create First Demand
+          </a>
+          <a href="/demands/aggregated" class="btn btn-outline" style="margin-left: 0.5rem;">
+            <span>📊</span>
+            View Market Demands
+          </a>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- Demands Table -->
+    <% if (demands && demands.length > 0) { %>
+      <div class="table-container">
+        <div class="table-wrapper">
+          <table class="data-table" id="tableMyDemands">
+            <thead>
+              <tr>
+                <th>Requester</th>
+                <th>Type</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Location</th>
+                <th>Notes</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% demands.forEach(function(d){ 
+                const nm  = (d.productName || '').trim();
+                const typ = (d.type || d.productType || '').trim();
+                const status = (d.status || 'Open').trim();
+                const locParts = [d.country, d.province, d.city, d.town].filter(Boolean);
+              %>
+                <tr class="row-demand"
+                    data-id="<%= d._id %>"
+                    data-name="<%= nm.toLowerCase() %>"
+                    data-type="<%= typ.toLowerCase() %>"
+                    data-status="<%= status.toLowerCase() %>"
+                    data-qty="<%= Number(d.quantity || 0) %>">
+                  
+                  <!-- Requester -->
+                  <td>
+                    <div class="cell-business">
+                      <%= (d.requester && d.requester.businessName) || (business && business.name) || '—' %>
+                    </div>
+                    <div class="cell-contact">
+                      <%= (d.requester && d.requester.contactName) || '—' %>
+                      <% if (d.requester?.position) { %>
+                        <span> • <%= d.requester.position %></span>
+                      <% } %>
+                    </div>
+                  </td>
+                  
+                  <!-- Type -->
+                  <td class="cell-type"><%= typ || '—' %></td>
+                  
+                  <!-- Product -->
+                  <td class="cell-product"><%= nm || '—' %></td>
+                  
+                  <!-- Quantity -->
+                  <td class="cell-quantity"><%= Number(d.quantity || 0) %></td>
+                  
+                  <!-- Location -->
+                  <td class="cell-location">
+                    <% if (locParts.length) { %>
+                      <%= locParts.join(", ") %>
+                    <% } else { %>
+                      —
+                    <% } %>
+                  </td>
+                  
+                  <!-- Notes -->
+                  <td class="cell-notes" title="<%= d.notes || '' %>">
+                    <%= (d.notes || '').slice(0, 80) %>
+                    <%= (d.notes && d.notes.length > 80) ? '…' : '' %>
+                  </td>
+                  
+                  <!-- Status -->
+                  <td>
+                    <span class="status-badge status-<%= status.toLowerCase() %>">
+                      <%= status %>
+                    </span>
+                  </td>
+                  
+                  <!-- Created -->
+                  <td class="cell-created">
+                    <%= new Date(d.createdAt).toLocaleDateString() %>
+                  </td>
+                  
+                  <!-- Actions -->
+                  <td>
+                    <div class="action-buttons">
+                      <a class="btn btn-primary btn-find" 
+                         href="/matches/run/<%= d._id %>" 
+                         data-demand-id="<%= d._id %>">
+                         <span>🔍</span>
+                         Find Matches
+                      </a>
+                      <a class="btn btn-secondary" href="/matches/buyer?demand=<%= d._id %>">
+                        <span>📋</span>
+                        View Matches
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<!-- ✅ Inject Scripts -->
+<script nonce="<%= nonce %>">
+  <%= pageScripts %>
+</script>

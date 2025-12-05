@@ -1,71 +1,1061 @@
-<% /* views/matches/matched-products.ejs */ %>
-<% const _nonce = (typeof nonce !== 'undefined' ? nonce : ''); %>
-<link rel="stylesheet" href="<%= themeCss %>">
-<section class="page matches-buyer">
-  <h1 class="page-title">🔎 Matched Products</h1>
+<!-- views/matches/matched-products.ejs -->
+<%
+const pageStyles = `
+  /* ✅ Brand Color System */
+  :root {
+    --blue: #2563EB;
+    --blue-dark: #1d4ed8;
+    --purple: #7C3AED;
+    --purple-dark: #6d28d9;
+    --green: #22C55E;
+    --green-dark: #16a34a;
+    --black: #0F172A;
+    
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    
+    --transition: all 0.2s ease;
+  }
 
-  <% if (success && success.length) { %>
-    <div class="flash flash-success">✅ <%= success %></div>
-  <% } %>
-  <% if (error && error.length) { %>
-    <div class="flash flash-error">❌ <%= error %></div>
-  <% } %>
+  .dark-theme {
+    --bg-primary: var(--black);
+    --bg-secondary: var(--gray-800);
+    --text-primary: var(--gray-100);
+    --text-secondary: var(--gray-300);
+    --text-muted: var(--gray-400);
+    --border: var(--gray-700);
+    --accent-bg: rgba(124, 58, 237, 0.1);
+  }
 
-  <div class="match-grid">
-    <% if (!matches || !matches.length) { %>
-      <p>No matches yet. Run matching from your Demands page.</p>
-    <% } else { %>
-      <% matches.forEach(m => { 
-        const p = m.productId || {};
-        const d = m.demandId || {};
-      %>
-        <article class="match-card">
-          <div class="match-head">
-            <span class="badge">Score: <%= m.score %></span>
-            <span class="status <%= m.status %>"><%= m.status %></span>
-          </div>
+  :root {
+    --bg-primary: var(--gray-50);
+    --bg-secondary: white;
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-500);
+    --border: var(--gray-200);
+    --accent-bg: rgba(124, 58, 237, 0.05);
+  }
 
-          <h2 class="product-name"><%= p.name || m.snapshot?.productName || 'Product' %></h2>
-          <p class="meta">
-            <strong>Type:</strong> <%= p.type || m.snapshot?.productType || '-' %><br>
-            <strong>Price:</strong> <%= (p.price ?? m.snapshot?.productPrice) ?? '-' %><br>
-            <strong>Location:</strong> <%= p.location || m.snapshot?.productLocation || '-' %>
-          </p>
+  /* ✅ Matched Products Page Container */
+  .matched-products-page {
+    max-width: 1200px;
+    margin: 0.75rem auto;
+    background: linear-gradient(135deg, var(--green) 0%, #16a34a 100%);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
 
-          <div class="divider"></div>
+  .matched-products-content {
+    background: var(--bg-primary);
+    margin: 2px;
+    border-radius: calc(var(--radius-xl) - 2px);
+    padding: 1.25rem;
+  }
 
-          <p class="demand">
-            <strong>Demand:</strong> <%= d.title || m.snapshot?.demandTitle || '-' %><br>
-            <strong>Quantity:</strong> <%= (d.quantity ?? m.snapshot?.demandQuantity) ?? '-' %><br>
-            <strong>Buyer location:</strong> <%= d.location || m.snapshot?.demandLocation || '-' %>
-          </p>
+  /* ✅ Header */
+  .matches-header {
+    text-align: center;
+    padding: 0.5rem 0 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+  }
 
-          <div class="actions">
-            <a href="/products/<%= p._id %>" class="btn btn-primary">View Product</a>
-          </div>
-        </article>
-      <% }) %>
-    <% } %>
-  </div>
-</section>
+  .matches-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
 
-<style nonce="<%= _nonce %>">
-.matches-buyer .match-grid{
-  display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px
-}
-@media(min-width:520px){.matches-buyer .match-grid{grid-template-columns:repeat(2,1fr)}}
-@media(min-width:920px){.matches-buyer .match-grid{grid-template-columns:repeat(3,1fr)}}
-.match-card{background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:12px}
-.match-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.badge{font-size:.8rem;padding:2px 8px;border-radius:999px;background:#eef}
-.status{font-size:.8rem;text-transform:capitalize}
-.status.accepted{background:#e6ffed;padding:2px 8px;border-radius:999px}
-.status.rejected{background:#ffecec;padding:2px 8px;border-radius:999px}
-.product-name{font-size:1.05rem;margin:.25rem 0}
-.meta,.demand{font-size:.9rem;line-height:1.35}
-.divider{height:1px;background:rgba(0,0,0,.08);margin:8px 0}
-.actions{display:flex;gap:8px}
-.btn{display:inline-block;padding:8px 12px;border-radius:10px;text-decoration:none;border:1px solid rgba(0,0,0,.12)}
-.btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
-@media(max-width:360px){.btn{padding:7px 10px;font-size:.9rem}}
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  /* ✅ Stats Overview */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .stat-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+    text-align: center;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--green);
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--purple);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ✅ Filters Section */
+  .filters-section {
+    background: var(--accent-bg);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+  }
+
+  .filters-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .filter-select {
+    padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary) url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/16px 12px;
+    color: var(--text-primary);
+    transition: var(--transition);
+    cursor: pointer;
+    min-width: 150px;
+  }
+
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  /* ✅ Buttons */
+  .btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--green-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-secondary {
+    background: var(--blue);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: var(--blue-dark);
+    transform: translateY(-2px);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .btn-outline:hover {
+    background: var(--bg-primary);
+    border-color: var(--purple);
+  }
+
+  /* ✅ Match Cards Grid */
+  .match-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+  }
+
+  .match-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 1.25rem;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .match-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--green);
+  }
+
+  .match-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(to right, var(--green), var(--blue));
+  }
+
+  .match-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+
+  .match-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .match-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+  }
+
+  .status-accepted {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--green);
+  }
+
+  .status-rejected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+  }
+
+  /* ✅ Card Content */
+  .product-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--purple);
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .info-section {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: var(--accent-bg);
+    border-radius: var(--radius-md);
+  }
+
+  .info-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.375rem;
+    font-size: 0.875rem;
+  }
+
+  .info-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .info-value {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .price-value {
+    color: var(--green);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .location-value {
+    color: var(--blue);
+    font-weight: 600;
+  }
+
+  /* ✅ Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0.75rem 0;
+    opacity: 0.5;
+  }
+
+  /* ✅ Card Actions */
+  .card-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 1rem;
+  }
+
+  .card-actions .btn {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  /* ✅ Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 2px dashed var(--border);
+    margin: 2rem 0;
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-title {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .empty-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ✅ Mobile Optimizations */
+  @media (max-width: 480px) {
+    .matched-products-page {
+      margin: 0.5rem;
+    }
+    
+    .matched-products-content {
+      padding: 1rem;
+    }
+    
+    .page-title {
+      font-size: 1.25rem;
+    }
+    
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .match-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .filters-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .filter-select,
+    .btn {
+      width: 100%;
+      min-width: auto;
+    }
+    
+    .card-actions {
+      flex-direction: column;
+    }
+    
+    .match-card {
+      padding: 1rem;
+    }
+  }
+
+  /* ✅ Very Small Screens */
+  @media (max-width: 360px) {
+    .matched-products-content {
+      padding: 0.75rem;
+    }
+    
+    .stat-value {
+      font-size: 1.5rem;
+    }
+    
+    .product-name {
+      font-size: 1rem;
+    }
+    
+    .info-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
+    
+    .match-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+  }
+
+  /* ✅ Tablet Optimization */
+  @media (min-width: 481px) and (max-width: 768px) {
+    .matched-products-page {
+      margin: 1rem;
+    }
+    
+    .match-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stats-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  /* ✅ Print Styles */
+  @media print {
+    .matched-products-page {
+      background: white !important;
+      box-shadow: none !important;
+    }
+    
+    .matched-products-content {
+      background: white !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    .btn,
+    .filters-section {
+      display: none !important;
+    }
+    
+    .match-grid {
+      display: block;
+    }
+    
+    .match-card {
+      break-inside: avoid;
+      margin-bottom: 1rem;
+    }
+  }
+
+  /* ✅ Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .match-card {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .match-card:nth-child(2) { animation-delay: 0.1s; }
+  .match-card:nth-child(3) { animation-delay: 0.2s; }
+  .match-card:nth-child(4) { animation-delay: 0.3s; }
+
+  /* ✅ Score-based styling */
+  .match-card[data-score="100"]::before {
+    background: linear-gradient(to right, #16a34a, #22c55e);
+  }
+
+  .match-card[data-score="75"]::before {
+    background: linear-gradient(to right, #3b82f6, #2563eb);
+  }
+
+  .match-card[data-score="50"]::before {
+    background: linear-gradient(to right, #f59e0b, #d97706);
+  }
+
+  .match-card[data-score="25"]::before {
+    background: linear-gradient(to right, #ef4444, #dc2626);
+  }
+`;
+
+const pageScripts = `
+  document.addEventListener('DOMContentLoaded', function() {
+    // Filter functionality
+    const statusFilter = document.getElementById('statusFilter');
+    const scoreFilter = document.getElementById('scoreFilter');
+    const matchCards = Array.from(document.querySelectorAll('.match-card'));
+    
+    function calculateStats() {
+      const totalMatches = matchCards.length;
+      const pendingMatches = matchCards.filter(card => 
+        card.querySelector('.match-status').classList.contains('status-pending')
+      ).length;
+      const acceptedMatches = matchCards.filter(card => 
+        card.querySelector('.match-status').classList.contains('status-accepted')
+      ).length;
+      const rejectedMatches = matchCards.filter(card => 
+        card.querySelector('.match-status').classList.contains('status-rejected')
+      ).length;
+      
+      // Update stat cards if they exist
+      const totalStat = document.querySelector('.stat-card:nth-child(1) .stat-value');
+      const pendingStat = document.querySelector('.stat-card:nth-child(2) .stat-value');
+      const acceptedStat = document.querySelector('.stat-card:nth-child(3) .stat-value');
+      const rejectedStat = document.querySelector('.stat-card:nth-child(4) .stat-value');
+      
+      if (totalStat) totalStat.textContent = totalMatches;
+      if (pendingStat) pendingStat.textContent = pendingMatches;
+      if (acceptedStat) acceptedStat.textContent = acceptedMatches;
+      if (rejectedStat) rejectedStat.textContent = rejectedMatches;
+    }
+    
+    function applyFilters() {
+      const statusValue = statusFilter?.value || '';
+      const scoreValue = scoreFilter?.value || '';
+      
+      matchCards.forEach(card => {
+        const status = card.dataset.status || '';
+        const score = parseInt(card.dataset.score) || 0;
+        
+        const matchesStatus = !statusValue || status === statusValue;
+        let matchesScore = true;
+        
+        if (scoreValue) {
+          if (scoreValue === 'high' && score < 75) matchesScore = false;
+          if (scoreValue === 'medium' && (score < 50 || score >= 75)) matchesScore = false;
+          if (scoreValue === 'low' && score >= 50) matchesScore = false;
+        }
+        
+        const shouldShow = matchesStatus && matchesScore;
+        card.style.display = shouldShow ? 'block' : 'none';
+      });
+      
+      // Show/hide empty state
+      const visibleCards = matchCards.filter(card => card.style.display !== 'none');
+      const emptyState = document.querySelector('.empty-state');
+      const matchGrid = document.querySelector('.match-grid');
+      
+      if (visibleCards.length === 0 && matchCards.length > 0) {
+        if (emptyState) emptyState.style.display = 'block';
+        if (matchGrid) matchGrid.style.display = 'none';
+        
+        // Update empty state message
+        const emptyTitle = document.querySelector('.empty-title');
+        const emptyDescription = document.querySelector('.empty-description');
+        if (emptyTitle) emptyTitle.textContent = 'No matching products';
+        if (emptyDescription) {
+          emptyDescription.textContent = 'Try adjusting your filters to see more matches.';
+        }
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        if (matchGrid) matchGrid.style.display = 'grid';
+      }
+    }
+    
+    // Event listeners for filters
+    if (statusFilter) {
+      statusFilter.addEventListener('change', applyFilters);
+    }
+    
+    if (scoreFilter) {
+      scoreFilter.addEventListener('change', applyFilters);
+    }
+    
+    // Clear filters button
+    const clearFilters = document.getElementById('clearFilters');
+    if (clearFilters) {
+      clearFilters.addEventListener('click', function() {
+        if (statusFilter) statusFilter.value = '';
+        if (scoreFilter) scoreFilter.value = '';
+        applyFilters();
+      });
+    }
+    
+    // Quick actions for cards
+    matchCards.forEach(card => {
+      const viewProductBtn = card.querySelector('.btn-view-product');
+      const contactSupplierBtn = card.querySelector('.btn-contact-supplier');
+      
+      if (viewProductBtn) {
+        viewProductBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          const productId = this.dataset.productId;
+          // Add loading state
+          const originalText = this.innerHTML;
+          this.innerHTML = '<span>⏳</span> Loading...';
+          this.disabled = true;
+          
+          setTimeout(() => {
+            window.location.href = this.href;
+          }, 500);
+        });
+      }
+      
+      if (contactSupplierBtn) {
+        contactSupplierBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          const supplierId = this.dataset.supplierId;
+          const productId = this.dataset.productId;
+          
+          // Show contact modal or redirect to chat
+          console.log('Contact supplier:', supplierId, 'for product:', productId);
+          alert('Contact feature would open a chat with the supplier.');
+        });
+      }
+    });
+    
+    // Export functionality
+    const exportBtn = document.getElementById('exportMatches');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function() {
+        const button = this;
+        const originalText = button.innerHTML;
+        
+        button.innerHTML = '<span>⏳</span> Exporting...';
+        button.disabled = true;
+        
+        // Simulate export
+        setTimeout(() => {
+          alert('Your matched products have been exported successfully!');
+          button.innerHTML = originalText;
+          button.disabled = false;
+        }, 1500);
+      });
+    }
+    
+    // Sort functionality (optional)
+    const sortSelect = document.getElementById('sortSelect');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', function() {
+        const sortBy = this.value;
+        const container = document.querySelector('.match-grid');
+        const cards = Array.from(container.querySelectorAll('.match-card'));
+        
+        cards.sort((a, b) => {
+          if (sortBy === 'score') {
+            const scoreA = parseInt(a.dataset.score) || 0;
+            const scoreB = parseInt(b.dataset.score) || 0;
+            return scoreB - scoreA; // Descending
+          } else if (sortBy === 'price') {
+            const priceA = parseFloat(a.querySelector('.price-value')?.textContent?.replace(/[^0-9.]/g, '') || 0);
+            const priceB = parseFloat(b.querySelector('.price-value')?.textContent?.replace(/[^0-9.]/g, '') || 0);
+            return priceA - priceB; // Ascending
+          } else if (sortBy === 'date') {
+            const dateA = new Date(a.dataset.date || 0);
+            const dateB = new Date(b.dataset.date || 0);
+            return dateB - dateA; // Newest first
+          }
+          return 0;
+        });
+        
+        // Reorder cards
+        cards.forEach(card => container.appendChild(card));
+      });
+    }
+    
+    // Initialize
+    calculateStats();
+    applyFilters();
+    
+    // Add score-based styling
+    matchCards.forEach(card => {
+      const score = parseInt(card.dataset.score) || 0;
+      if (score >= 90) {
+        card.classList.add('high-match');
+      } else if (score >= 70) {
+        card.classList.add('good-match');
+      } else if (score >= 50) {
+        card.classList.add('average-match');
+      } else {
+        card.classList.add('low-match');
+      }
+    });
+    
+    // Auto-refresh toggle (optional feature)
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    let refreshInterval;
+    
+    if (autoRefreshToggle) {
+      autoRefreshToggle.addEventListener('change', function() {
+        if (this.checked) {
+          refreshInterval = setInterval(() => {
+            console.log('Auto-refreshing matches...');
+            // In a real implementation, this would fetch fresh data
+            calculateStats();
+          }, 300000); // 5 minutes
+        } else {
+          clearInterval(refreshInterval);
+        }
+      });
+    }
+    
+    // Quick view functionality
+    matchCards.forEach(card => {
+      card.addEventListener('click', function(e) {
+        // Don't trigger on button clicks
+        if (e.target.tagName === 'BUTTON' || 
+            e.target.tagName === 'A' || 
+            e.target.closest('.card-actions')) {
+          return;
+        }
+        
+        // Toggle expanded view
+        this.classList.toggle('expanded');
+        
+        if (this.classList.contains('expanded')) {
+          const details = document.createElement('div');
+          details.className = 'expanded-details';
+          details.innerHTML = \`
+            <div class="details-content">
+              <h4>Additional Details</h4>
+              <p><strong>Supplier:</strong> \${this.dataset.supplier || 'Not available'}</p>
+              <p><strong>Match Date:</strong> \${new Date(this.dataset.date).toLocaleDateString()}</p>
+              <p><strong>Last Updated:</strong> \${new Date().toLocaleDateString()}</p>
+              <button class="btn btn-outline btn-close-details">Close Details</button>
+            </div>
+          \`;
+          
+          // Check if details already exist
+          const existingDetails = this.querySelector('.expanded-details');
+          if (existingDetails) {
+            existingDetails.remove();
+          } else {
+            this.appendChild(details);
+            
+            // Add close button functionality
+            details.querySelector('.btn-close-details').addEventListener('click', function(e) {
+              e.stopPropagation();
+              card.classList.remove('expanded');
+              details.remove();
+            });
+          }
+        } else {
+          const details = this.querySelector('.expanded-details');
+          if (details) details.remove();
+        }
+      });
+    });
+  });
+`;
+%>
+
+<!-- ✅ Inject Styles -->
+<style nonce="<%= nonce %>">
+  <%= pageStyles %>
 </style>
+
+<!-- ✅ Matched Products Page -->
+<div class="matched-products-page">
+  <div class="matched-products-content">
+    <!-- Header -->
+    <header class="matches-header">
+      <div class="matches-badge">
+        <span>🔎</span>
+        <span>Product Matches</span>
+      </div>
+      <h1 class="page-title">Matched Products</h1>
+      <p class="page-subtitle">Products that match your demands - find the best suppliers for your needs</p>
+    </header>
+
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value"><%= matches ? matches.length : 0 %></div>
+        <div class="stat-label">Total Matches</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">
+          <%= matches ? matches.filter(m => (m.status || 'pending').toLowerCase() === 'pending').length : 0 %>
+        </div>
+        <div class="stat-label">Pending</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">
+          <%= matches ? matches.filter(m => (m.status || '').toLowerCase() === 'accepted').length : 0 %>
+        </div>
+        <div class="stat-label">Accepted</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">
+          <%= matches ? matches.filter(m => (m.status || '').toLowerCase() === 'rejected').length : 0 %>
+        </div>
+        <div class="stat-label">Rejected</div>
+      </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <div class="filters-row">
+        <select id="statusFilter" class="filter-select">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="accepted">Accepted</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        
+        <select id="scoreFilter" class="filter-select">
+          <option value="">All Scores</option>
+          <option value="high">High (75+)</option>
+          <option value="medium">Medium (50-74)</option>
+          <option value="low">Low (&lt;50)</option>
+        </select>
+        
+        <select id="sortSelect" class="filter-select">
+          <option value="">Sort By</option>
+          <option value="score">Match Score</option>
+          <option value="price">Price</option>
+          <option value="date">Date</option>
+        </select>
+        
+        <button id="clearFilters" class="btn btn-outline">Clear Filters</button>
+        
+        <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+          <button id="exportMatches" class="btn btn-secondary">
+            <span>📥</span>
+            Export
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <% if (!matches || matches.length === 0) { %>
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <h2 class="empty-title">No Matches Yet</h2>
+        <p class="empty-description">
+          Run matching from your Demands page to find products that match your requirements.
+          When matches are found, they'll appear here.
+        </p>
+        <div class="no-data-actions">
+          <a href="/demands/mine" class="btn btn-primary">
+            <span>📋</span>
+            View My Demands
+          </a>
+          <a href="/demands/add" class="btn btn-primary" style="margin-left: 0.5rem;">
+            <span>➕</span>
+            Create New Demand
+          </a>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- Matched Products Grid -->
+    <div class="match-grid">
+      <% if (matches && matches.length > 0) { %>
+        <% matches.forEach(m => { 
+          const p = m.productId || {};
+          const d = m.demandId || {};
+          const supplier = m.supplierId || {};
+          
+          const productName = p.name || m.snapshot?.productName || 'Product';
+          const productType = p.type || m.snapshot?.productType || '-';
+          const productPrice = (p.price ?? m.snapshot?.productPrice) ?? '-';
+          const productLocation = p.location || m.snapshot?.productLocation || '-';
+          
+          const demandTitle = d.title || m.snapshot?.demandTitle || '-';
+          const demandQuantity = (d.quantity ?? m.snapshot?.demandQuantity) ?? '-';
+          const demandLocation = d.location || m.snapshot?.demandLocation || '-';
+          
+          const status = (m.status || "pending").toLowerCase();
+          const score = m.score || 0;
+        %>
+          <article class="match-card"
+                  data-match-id="<%= m._id %>"
+                  data-status="<%= status %>"
+                  data-score="<%= score %>"
+                  data-date="<%= m.createdAt %>"
+                  data-supplier="<%= supplier.name || supplier.businessName || '' %>">
+            
+            <!-- Match Header -->
+            <div class="match-header">
+              <div class="match-score">
+                <span>⭐</span>
+                <span>Score: <%= score %></span>
+              </div>
+              <span class="match-status status-<%= status %>">
+                <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+              </span>
+            </div>
+            
+            <!-- Product Info -->
+            <h3 class="product-name"><%= productName %></h3>
+            
+            <div class="info-section">
+              <div class="info-title">
+                <span>📦</span>
+                <span>Product Details</span>
+              </div>
+              
+              <div class="info-row">
+                <span class="info-label">Type</span>
+                <span class="info-value"><%= productType %></span>
+              </div>
+              
+              <div class="info-row">
+                <span class="info-label">Price</span>
+                <span class="info-value price-value">
+                  <% if (typeof productPrice === "number") { %>
+                    R<%= productPrice.toFixed(2) %>
+                  <% } else { %>
+                    <%= productPrice %>
+                  <% } %>
+                </span>
+              </div>
+              
+              <div class="info-row">
+                <span class="info-label">Location</span>
+                <span class="info-value location-value"><%= productLocation %></span>
+              </div>
+            </div>
+            
+            <!-- Divider -->
+            <div class="divider"></div>
+            
+            <!-- Demand Info -->
+            <div class="info-section">
+              <div class="info-title">
+                <span>📝</span>
+                <span>Your Demand</span>
+              </div>
+              
+              <div class="info-row">
+                <span class="info-label">Demand</span>
+                <span class="info-value"><%= demandTitle %></span>
+              </div>
+              
+              <div class="info-row">
+                <span class="info-label">Quantity</span>
+                <span class="info-value"><%= demandQuantity %></span>
+              </div>
+              
+              <div class="info-row">
+                <span class="info-label">Your Location</span>
+                <span class="info-value"><%= demandLocation %></span>
+              </div>
+            </div>
+            
+            <!-- Card Actions -->
+            <div class="card-actions">
+              <a href="/products/<%= p._id %>" 
+                 class="btn btn-primary btn-view-product" 
+                 data-product-id="<%= p._id %>">
+                <span>👁️</span>
+                View Product
+              </a>
+              
+              <% if (supplier._id) { %>
+                <button class="btn btn-secondary btn-contact-supplier"
+                        data-supplier-id="<%= supplier._id %>"
+                        data-product-id="<%= p._id %>">
+                  <span>💬</span>
+                  Contact Supplier
+                </button>
+              <% } %>
+            </div>
+          </article>
+        <% }) %>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ Inject Scripts -->
+<script nonce="<%= nonce %>">
+  <%= pageScripts %>
+</script>

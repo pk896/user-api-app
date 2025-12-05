@@ -1,5 +1,6 @@
 // models/Wishlist.js
-const { mongoose } = require('../db');
+//const { mongoose } = require('../db');
+const mongoose = require('mongoose');
 
 const wishlistSchema = new mongoose.Schema(
   {

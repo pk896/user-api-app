@@ -1,31 +1,68 @@
+<!--views/matches/partials/buyer-stats.ejs-->
 <% const _nonce = (typeof nonce !== 'undefined' ? nonce : ''); %>
 <section class="buyer-stats">
+  <!-- Stats Overview Cards -->
   <div class="stats-grid">
-    <div class="stat-card"><div class="label">Total matches</div><div id="stTotal" class="value">—</div></div>
-    <div class="stat-card"><div class="label">Pending</div><div id="stPending" class="value">—</div></div>
-    <div class="stat-card"><div class="label">Accepted</div><div id="stAccepted" class="value">—</div></div>
-    <div class="stat-card"><div class="label">Rejected</div><div id="stRejected" class="value">—</div></div>
-    <div class="stat-card new"><div class="label">New since last visit</div><div id="stNew" class="value">0</div></div>
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="label">Total matches</div>
+      <div id="stTotal" class="value">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⏳</div>
+      <div class="label">Pending</div>
+      <div id="stPending" class="value">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="label">Accepted</div>
+      <div id="stAccepted" class="value">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">❌</div>
+      <div class="label">Rejected</div>
+      <div id="stRejected" class="value">—</div>
+    </div>
+    <div class="stat-card highlight-card">
+      <div class="stat-icon">🆕</div>
+      <div class="label">New since last visit</div>
+      <div id="stNew" class="value highlight-value">0</div>
+    </div>
   </div>
 
-  <h3 class="subhead">By demand</h3>
+  <!-- Demand Breakdown Section -->
+  <div class="section-header">
+    <h3 class="subhead">By demand category</h3>
+    <span class="section-info">Click any to filter</span>
+  </div>
   <div id="perDemand" class="demand-list"></div>
 
+  <!-- Action Buttons -->
   <div class="actions">
     <form id="markSeenForm" method="POST" action="/matches/buyer/mark-seen">
-      <button class="btn btn-secondary" type="submit">Mark as seen</button>
+      <button class="btn btn-secondary" type="submit">
+        <span class="btn-icon">👁️</span>
+        Mark all as seen
+      </button>
     </form>
-    <a class="btn btn-primary" href="/matches/buyer">Open matched products</a>
+    <a class="btn btn-primary" href="/matches/buyer">
+      <span class="btn-icon">🔍</span>
+      View all matches
+    </a>
   </div>
 </section>
 
 <script nonce="<%= _nonce %>">
 (async function(){
-  async function fetchJSON(url, opts){ const r = await fetch(url, opts); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+  async function fetchJSON(url, opts){ 
+    const r = await fetch(url, opts); 
+    if(!r.ok) throw new Error('HTTP '+r.status); 
+    return r.json(); 
+  }
 
   try {
     const data = await fetchJSON('/matches/buyer/summary');
-    if (!data.ok) throw new Error('Failed');
+    if (!data.ok) throw new Error('Failed to load stats');
 
     const c = data.counters || {};
     document.getElementById('stTotal').textContent    = c.total ?? 0;
@@ -41,8 +78,16 @@
       el.className = 'demand-pill';
       el.href = '/matches/buyer?demand=' + item.demandId;
       el.innerHTML = `
-        <span class="title">${item.title}</span>
-        <span class="counts">T:${item.total} • P:${item.pending || 0} • A:${item.accepted || 0} • R:${item.rejected || 0}</span>
+        <div class="pill-content">
+          <span class="title">${item.title}</span>
+          <div class="pill-stats">
+            <span class="stat total">${item.total}</span>
+            <span class="stat pending">${item.pending || 0}</span>
+            <span class="stat accepted">${item.accepted || 0}</span>
+            <span class="stat rejected">${item.rejected || 0}</span>
+          </div>
+        </div>
+        <span class="pill-arrow">→</span>
       `;
       wrap.appendChild(el);
     });
@@ -51,32 +96,437 @@
     const form = document.getElementById('markSeenForm');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = form.querySelector('button');
+      const originalText = btn.innerHTML;
+      
+      btn.disabled = true;
+      btn.innerHTML = '<span class="btn-icon">⏳</span> Marking...';
+      
       try {
-        await fetchJSON('/matches/buyer/mark-seen', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+        await fetchJSON('/matches/buyer/mark-seen', { 
+          method:'POST', 
+          headers:{'Content-Type':'application/json'}, 
+          body: '{}' 
+        });
         document.getElementById('stNew').textContent = '0';
-      } catch(_) {}
+        
+        // Visual feedback
+        btn.innerHTML = '<span class="btn-icon">✅</span> Marked!';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+        }, 1500);
+      } catch(err) {
+        btn.innerHTML = '<span class="btn-icon">❌</span> Failed';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+        }, 1500);
+        console.error('Mark seen failed:', err);
+      }
     });
   } catch (err) {
     console.error('buyer-stats load failed', err);
+    // Optional: Show error message to user
   }
 })();
 </script>
 
 <style nonce="<%= _nonce %>">
-.buyer-stats .stats-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.6rem;margin:.5rem 0 1rem}
-.buyer-stats .stat-card{background:var(--card-bg,#fff);border:1px solid var(--border,#e5e7eb);border-radius:.75rem;padding:.8rem}
-.buyer-stats .stat-card.new{border-style:dashed}
-.buyer-stats .label{font-size:.85rem;color:#6b7280}
-.buyer-stats .value{font-size:1.35rem;font-weight:700}
-@media(max-width:900px){.buyer-stats .stats-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:520px){.buyer-stats .stats-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:360px){.buyer-stats .stats-grid{grid-template-columns:1fr}}
-.buyer-stats .subhead{margin:.2rem 0 .4rem;font-size:1rem}
-.buyer-stats .demand-list{display:flex;flex-wrap:wrap;gap:.5rem}
-.buyer-stats .demand-pill{display:inline-flex;gap:.5rem;align-items:center;text-decoration:none;border:1px solid var(--border,#e5e7eb);border-radius:999px;padding:.35rem .6rem;background:var(--card-bg,#fff)}
-.buyer-stats .demand-pill .title{font-weight:600}
-.buyer-stats .actions{display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap}
-.buyer-stats .btn{padding:.55rem .8rem;border-radius:.55rem;border:0;cursor:pointer}
-.buyer-stats .btn-primary{background:#2563eb;color:#fff;text-decoration:none;display:inline-block}
-.buyer-stats .btn-secondary{background:#f3f4f6;color:#111}
+/* Base Styles */
+.buyer-stats {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Stats Grid */
+.buyer-stats .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.8rem;
+  margin-bottom: 2rem;
+}
+
+.buyer-stats .stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.buyer-stats .stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #2563EB;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.buyer-stats .stat-card:hover::before {
+  opacity: 1;
+}
+
+.buyer-stats .stat-card:hover {
+  border-color: #2563EB;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.buyer-stats .stat-card.highlight-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: #7C3AED;
+  border-width: 2px;
+}
+
+.buyer-stats .stat-card.highlight-card::before {
+  background: #7C3AED;
+  opacity: 1;
+}
+
+.buyer-stats .stat-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.8;
+}
+
+.buyer-stats .label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.buyer-stats .value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1;
+}
+
+.buyer-stats .highlight-value {
+  color: #7C3AED;
+  font-size: 2rem;
+}
+
+/* Section Header */
+.buyer-stats .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.buyer-stats .subhead {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.buyer-stats .section-info {
+  font-size: 0.8rem;
+  color: #64748b;
+  background: #f8fafc;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+}
+
+/* Demand List */
+.buyer-stats .demand-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.buyer-stats .demand-pill {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-decoration: none;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  transition: all 0.2s ease;
+  color: #0F172A;
+}
+
+.buyer-stats .demand-pill:hover {
+  background: #22C55E;
+  border-color: #22C55E;
+  color: white;
+  transform: translateX(4px);
+}
+
+.buyer-stats .demand-pill:hover .pill-stats .stat {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.buyer-stats .demand-pill:hover .pill-arrow {
+  color: white;
+  transform: translateX(4px);
+}
+
+.buyer-stats .pill-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.buyer-stats .title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.buyer-stats .pill-stats {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.buyer-stats .pill-stats .stat {
+  background: #f1f5f9;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.buyer-stats .pill-stats .stat.total {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.buyer-stats .pill-stats .stat.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.buyer-stats .pill-stats .stat.accepted {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.buyer-stats .pill-stats .stat.rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.buyer-stats .pill-arrow {
+  color: #94a3b8;
+  font-weight: bold;
+  font-size: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+/* Action Buttons */
+.buyer-stats .actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #f1f5f9;
+}
+
+.buyer-stats .btn {
+  padding: 0.875rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.buyer-stats .btn-icon {
+  font-size: 1.1rem;
+}
+
+.buyer-stats .btn-primary {
+  background: linear-gradient(135deg, #2563EB 0%, #1d4ed8 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.buyer-stats .btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.buyer-stats .btn-secondary {
+  background: white;
+  color: #0F172A;
+  border: 2px solid #e2e8f0;
+}
+
+.buyer-stats .btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #22C55E;
+  color: #22C55E;
+  transform: translateY(-2px);
+}
+
+/* Responsive Design for Hisense U50 Lite (360px width) */
+@media (max-width: 900px) {
+  .buyer-stats .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .buyer-stats .actions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .buyer-stats .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+  }
+  
+  .buyer-stats .stat-card {
+    padding: 0.75rem;
+  }
+  
+  .buyer-stats .value {
+    font-size: 1.5rem;
+  }
+  
+  .buyer-stats .highlight-value {
+    font-size: 1.75rem;
+  }
+  
+  .buyer-stats .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .buyer-stats .demand-pill {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .buyer-stats .pill-arrow {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 360px) {
+  .buyer-stats {
+    padding: 1rem;
+  }
+  
+  .buyer-stats .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .buyer-stats .stat-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    padding: 0.75rem 1rem;
+  }
+  
+  .buyer-stats .stat-icon {
+    margin-bottom: 0;
+    margin-right: 0.75rem;
+    font-size: 1.25rem;
+  }
+  
+  .buyer-stats .value {
+    font-size: 1.25rem;
+  }
+  
+  .buyer-stats .demand-pill {
+    padding: 0.75rem;
+  }
+  
+  .buyer-stats .btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
+/* Loading State Animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.buyer-stats .loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Focus States for Accessibility */
+.buyer-stats .btn:focus,
+.buyer-stats .demand-pill:focus {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* Dark Mode Support (Optional) */
+@media (prefers-color-scheme: dark) {
+  .buyer-stats {
+    background: #1e293b;
+    color: #f1f5f9;
+  }
+  
+  .buyer-stats .stat-card {
+    background: #334155;
+    border-color: #475569;
+  }
+  
+  .buyer-stats .value,
+  .buyer-stats .subhead {
+    color: #f1f5f9;
+  }
+  
+  .buyer-stats .label {
+    color: #cbd5e1;
+  }
+  
+  .buyer-stats .demand-pill {
+    background: #334155;
+    border-color: #475569;
+    color: #f1f5f9;
+  }
+  
+  .buyer-stats .pill-stats .stat {
+    background: #475569;
+  }
+  
+  .buyer-stats .btn-secondary {
+    background: #334155;
+    color: #f1f5f9;
+    border-color: #475569;
+  }
+}
 </style>

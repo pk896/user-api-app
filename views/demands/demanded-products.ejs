@@ -1,613 +1,1207 @@
 <!-- views/demands/demanded-products.ejs -->
-<section class="dashboard-home">
-  <h1 class="page-title">📊 Demanded Products (Aggregated)</h1>
-
-  <% if (error && error.length) { %>
-    <div class="flash flash-error">❌ <%= error %></div>
-  <% } %>
-  <% if (success && success.length) { %>
-    <div class="flash flash-success">✅ <%= success %></div>
-  <% } %>
-
-  <!-- KPI Cards -->
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Requests</div>
-      <div class="kpi-value" id="kpiTotalRequests"><%= totals?.totalRequests || 0 %></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Unique Product Names</div>
-      <div class="kpi-value" id="kpiUniqueNames"><%= totals?.uniqueProductNames || 0 %></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Quantity Demanded</div>
-      <div class="kpi-value" id="kpiTotalQty"><%= totals?.totalQtyAll || 0 %></div>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="filters">
-    <input id="searchName" type="search" placeholder="🔎 Search by product name..." />
-    <select id="filterType">
-      <option value="">All Types</option>
-      <% (types || []).forEach(t => { %>
-        <option value="<%= t %>"><%= t %></option>
-      <% }) %>
-    </select>
-    <button id="clearFilters" class="btn btn-secondary">Clear</button>
-  </div>
-
-  <!-- All Demands (with requester info) -->
-  <h2 style="margin-top:1rem;">All Demands</h2>
-  <% if (demandsAll && demandsAll.length) { %>
-    <table class="nice-table" id="tableAllDemands">
-      <thead>
-        <tr>
-          <th>Requester</th>
-          <th>Type</th>
-          <th>Product</th>
-          <th>Qty</th>
-          <th>Location</th>
-          <th>Notes</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% demandsAll.forEach(d => { 
-             const nm = (d.productName || '').trim();
-             const typ = (d.type || '').trim();
-             const loc = [d.country, d.province, d.city, d.town].filter(Boolean).join(", ");
-        %>
-
-          <tr class="row-demand"
-              data-name="<%= nm.toLowerCase() %>"
-              data-type="<%= typ.toLowerCase() %>"
-              data-qty="<%= Number(d.quantity || 0) %>">
-
-            <!-- Requester -->
-            <td class="col-requester">
-              <div class="val-business-name"><%= d.requester?.businessName || '—' %></div>
-              <div>
-                <span class="val-contact-name"><%= d.requester?.contactName || '—' %></span>
-                <span class="sep">—</span>
-                <span class="val-position"><%= d.requester?.position || '—' %></span>
-              </div>
-            </td>
-
-            <!-- Type -->
-            <td class="col-type">
-              <span class="val-type"><%= typ || '—' %></span>
-            </td>
-
-            <!-- Product -->
-            <td class="col-product">
-              <span class="val-product-name"><%= nm || '—' %></span>
-            </td>
-
-            <!-- Quantity -->
-            <td class="col-qty">
-              <span class="val-quantity"><%= Number(d.quantity || 0) %></span>
-            </td>
-
-            <!-- Location -->
-            <td class="col-location">
-              <% const _country = (d.country || '').trim(); %>
-              <% const _province = (d.province || '').trim(); %>
-              <% const _city = (d.city || '').trim(); %>
-              <% const _town = (d.town || '').trim(); %>
-
-              <% if (_country) { %><span class="val-country"><%= _country %></span><% } %>
-              <% if (_province) { %><span class="sep">•</span><span class="val-province"><%= _province %></span><% } %>
-              <% if (_city) { %><span class="sep">•</span><span class="val-city"><%= _city %></span><% } %>
-              <% if (_town) { %><span class="sep">•</span><span class="val-town"><%= _town %></span><% } %>
-              <% if (!_country && !_province && !_city && !_town) { %>—<% } %>
-            </td>
-
-            <!-- Notes -->
-            <td class="col-notes">
-              <span class="val-notes"><%= (d.notes || '').slice(0,120) %><%= (d.notes && d.notes.length > 120) ? '…' : '' %></span>
-            </td>
-
-            <!-- Created -->
-            <td class="col-created">
-              <%= new Date(d.createdAt).toLocaleString() %>
-            </td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %>
-    <p>No demands found.</p>
-  <% } %>
-
-  <!-- Product Name Summary -->
-  <h2 style="margin-top:1.25rem;">Summary by Product Name</h2>
-  <% if (summaryByName && summaryByName.length) { %>
-    <table class="nice-table" id="tableSummaryByName">
-      <thead>
-        <tr>
-          <th>Product Name</th>
-          <th>Types (seen)</th>
-          <th>Requests</th>
-          <th>Total Qty</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% summaryByName.forEach(s => { %>
-          <tr class="row-name"
-              data-name="<%= (s.name || '').toLowerCase() %>"
-              data-types="<%= (s.types || []).map(t => t.toLowerCase()).join('|') %>"
-              data-totalqty="<%= Number(s.totalQty || 0) %>">
-            <td><%= s.name || '—' %></td>
-            <td><%= (s.types || []).join(', ') || '—' %></td>
-            <td class="col-reqs"><%= Number(s.requests || 0) %></td>
-            <td class="col-totalqty"><%= Number(s.totalQty || 0) %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %>
-    <p>No summary available.</p>
-  <% } %>
-
-  <!-- Existing Aggregations -->
-  <h2 style="margin-top:1.25rem;">By Type</h2>
-  <% if (byType && byType.length) { %>
-    <table class="nice-table">
-      <thead><tr><th>Type</th><th>Total Qty</th><th>Requests</th></tr></thead>
-      <tbody>
-        <% byType.forEach(r => { %>
-          <tr>
-            <td><%= r._id || '—' %></td>
-            <td><%= r.totalQty %></td>
-            <td><%= r.docs %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %><p>No data.</p><% } %>
-
-  <h2 style="margin-top:1rem;">By Type & Location</h2>
-  <% if (byTypeAndLocation && byTypeAndLocation.length) { %>
-    <table class="nice-table">
-      <thead><tr><th>Type</th><th>Country</th><th>Province</th><th>City</th><th>Town</th><th>Total Qty</th><th>Requests</th></tr></thead>
-      <tbody>
-        <% byTypeAndLocation.forEach(r => { %>
-          <tr>
-            <td><%= r._id.type || '—' %></td>
-            <td><%= r._id.country || '—' %></td>
-            <td><%= r._id.province || '—' %></td>
-            <td><%= r._id.city || '—' %></td>
-            <td><%= r._id.town || '—' %></td>
-            <td><%= r.totalQty %></td>
-            <td><%= r.docs %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %><p>No data.</p><% } %>
-</section>
-
-<script nonce="<%= nonce %>">
-(function(){
-  const $search = document.getElementById('searchName');
-  const $type   = document.getElementById('filterType');
-  const $clear  = document.getElementById('clearFilters');
-
-  const rowsAll   = Array.from(document.querySelectorAll('#tableAllDemands .row-demand'));
-  const rowsNames = Array.from(document.querySelectorAll('#tableSummaryByName .row-name'));
-
-  const kpiUnique = document.getElementById('kpiUniqueNames');
-  const kpiQty    = document.getElementById('kpiTotalQty');
-
-  function applyFilters(){
-    const q = ($search.value || '').trim().toLowerCase();
-    const t = ($type.value || '').trim().toLowerCase();
-
-    // Filter "All Demands"
-    let runningQty = 0;
-    rowsAll.forEach(tr => {
-      const name = tr.dataset.name || '';
-      const typ  = tr.dataset.type || '';
-      const matchName = !q || name.includes(q);
-      const matchType = !t || typ === t;
-
-      const show = matchName && matchType;
-      tr.style.display = show ? '' : 'none';
-      if (show) runningQty += Number(tr.dataset.qty || 0);
-    });
-
-    // Filter "Summary by Product Name"
-    let visibleNameCount = 0;
-    let visibleTotalQty  = 0;
-
-    rowsNames.forEach(tr => {
-      const name = tr.dataset.name || '';
-      const typesStr = tr.dataset.types || '';
-      const hasType = !t || typesStr.split('|').includes(t);
-
-      const matchName = !q || name.includes(q);
-      const matchType = hasType;
-
-      const show = matchName && matchType;
-      tr.style.display = show ? '' : 'none';
-
-      if (show) {
-        visibleNameCount += 1;
-        visibleTotalQty  += Number(tr.dataset.totalqty || 0);
-      }
-    });
-
-    // Update KPIs to reflect filtered view of summary
-    if (kpiUnique) kpiUnique.textContent = String(visibleNameCount);
-    if (kpiQty)    kpiQty.textContent    = String(visibleTotalQty);
+<%
+const pageStyles = `
+  /* ✅ Brand Color System */
+  :root {
+    --blue: #2563EB;
+    --blue-dark: #1d4ed8;
+    --purple: #7C3AED;
+    --purple-dark: #6d28d9;
+    --green: #22C55E;
+    --green-dark: #16a34a;
+    --black: #0F172A;
+    
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    
+    --transition: all 0.2s ease;
   }
 
-  $search && $search.addEventListener('input', applyFilters);
-  $type && $type.addEventListener('change', applyFilters);
-  $clear && $clear.addEventListener('click', function(){
-    if ($search) $search.value = '';
-    if ($type)   $type.value   = '';
-    applyFilters();
-  });
+  .dark-theme {
+    --bg-primary: var(--black);
+    --bg-secondary: var(--gray-800);
+    --text-primary: var(--gray-100);
+    --text-secondary: var(--gray-300);
+    --text-muted: var(--gray-400);
+    --border: var(--gray-700);
+    --accent-bg: rgba(124, 58, 237, 0.1);
+  }
 
-  // initial pass
-  applyFilters();
-})();
-</script>
+  :root {
+    --bg-primary: var(--gray-50);
+    --bg-secondary: white;
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-500);
+    --border: var(--gray-200);
+    --accent-bg: rgba(124, 58, 237, 0.05);
+  }
 
-<style>
+  /* ✅ Demands Page Container */
+  .demands-page {
+    max-width: 1200px;
+    margin: 0.75rem auto;
+    background: linear-gradient(135deg, var(--green) 0%, #16a34a 100%);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .demands-content {
+    background: var(--bg-primary);
+    margin: 2px;
+    border-radius: calc(var(--radius-xl) - 2px);
+    padding: 1.25rem;
+  }
+
+  /* ✅ Header */
+  .demands-header {
+    text-align: center;
+    padding: 0.5rem 0 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .demands-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  /* ✅ KPI Cards */
   .kpi-grid {
-    display:grid; gap:.8rem; grid-template-columns: repeat(3, minmax(0,1fr));
-    margin:.5rem 0 1rem;
-  }
-  .kpi-card { padding:1rem; border:1px solid #e5e7eb; border-radius:.6rem; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .kpi-label { font-size:.85rem; color:#6b7280; }
-  .kpi-value { font-size:1.4rem; font-weight:700; }
-
-  .filters { display:flex; gap:.6rem; align-items:center; margin:.4rem 0 1rem; }
-  .filters input[type="search"], .filters select {
-    padding:.55rem .65rem; border:1px solid #d1d5db; border-radius:.45rem;
-  }
-  .btn { padding:.5rem .8rem; border-radius:.45rem; border:0; cursor:pointer; }
-  .btn-secondary { background:#f3f4f6; }
-
-  .nice-table { width:100%; border-collapse: collapse; }
-  .nice-table th, .nice-table td { padding:.6rem .55rem; border-bottom:1px solid #e5e7eb; text-align:left; }
-  .nice-table thead th { background:#f9fafb; font-weight:600; }
-  .col-qty, .col-totalqty, .col-reqs { text-align:right; }
-
-  .flash { margin:.5rem 0; padding:.6rem .8rem; border-radius:.4rem; }
-  .flash-success { background:#ecfdf5; }
-  .flash-error { background:#fef2f2; }
-
-  body.dark-theme .kpi-card, body.dark-theme .filters select, body.dark-theme .filters input {
-    background:#111827; border-color:#374151; color:#eee;
-  }
-  body.dark-theme .nice-table thead th { background:#111827; }
-  body.dark-theme .nice-table td, body.dark-theme .nice-table th { border-color:#374151; }
-
-  /* ============================
-   🎨 Demand Color Legend
-   - Business Name: green
-   - Contact Name: blue
-   - Position: navy
-   - Product Name (All Demands): purple
-   - Product Name (Summary Table): golden
-   - Type: maroon
-   - Quantity: violet
-   - Country: teal
-   - Province: magenta
-   - City: orange
-   - Town: coral/rust
-   - Notes: navy blue
-   - KPI accents: subtle branded tones
-   ============================ */
-
-:root {
-  --col-green:        #16a34a;  /* business name */
-  --col-blue:         #2563eb;  /* contact name */
-  --col-navy:         #1f2937;  /* position / notes (navy-ish) */
-  --col-purple:       #7c3aed;  /* product name (table 1) */
-  --col-golden:       #b08900;  /* product name (summary table) */
-  --col-maroon:       #7a1f2b;  /* type */
-  --col-violet:       #6d28d9;  /* quantity */
-  --col-teal:         #0f766e;  /* country */
-  --col-magenta:      #be185d;  /* province */
-  --col-orange:       #ea580c;  /* city */
-  --col-coral:        #cc5533;  /* town (coral/rust) */
-  --col-navyblue:     #1e3a8a;  /* notes */
-  --col-muted:        #6b7280;
-
-  --kpi-bg-1: #f0fdf4; /* light green */
-  --kpi-bg-2: #fff7ed; /* light orange */
-  --kpi-bg-3: #eef2ff; /* light indigo */
-  --kpi-fg-1: #166534;
-  --kpi-fg-2: #9a3412;
-  --kpi-fg-3: #4338ca;
-}
-
-/* Dark theme tweaks (if you use body.dark-theme) */
-body.dark-theme {
-  --col-navy:     #cbd5e1;
-  --col-navyblue: #93c5fd;
-  --kpi-bg-1: #052e16;
-  --kpi-bg-2: #431407;
-  --kpi-bg-3: #111827;
-  --kpi-fg-1: #86efac;
-  --kpi-fg-2: #fdba74;
-  --kpi-fg-3: #a5b4fc;
-}
-
-/* === KPI color blocks === */
-.kpi-grid .kpi-card:nth-child(1) { background: var(--kpi-bg-1); color: var(--kpi-fg-1); }
-.kpi-grid .kpi-card:nth-child(2) { background: var(--kpi-bg-2); color: var(--kpi-fg-2); }
-.kpi-grid .kpi-card:nth-child(3) { background: var(--kpi-bg-3); color: var(--kpi-fg-3); }
-.kpi-grid .kpi-card { border: none; }
-.kpi-value { letter-spacing: 0.2px; }
-
-/* === All Demands table value colors === */
-.val-business-name { color: var(--col-green); font-weight: 700; }
-.val-contact-name  { color: var(--col-blue); font-weight: 600; }
-.val-position      { color: var(--col-navy); }
-.val-product-name  { color: var(--col-purple); font-weight: 600; }
-.val-type          { color: var(--col-maroon); font-weight: 600; }
-.val-quantity      { color: var(--col-violet); font-variant-numeric: tabular-nums; }
-
-.val-country  { color: var(--col-teal); font-weight: 600; }
-.val-province { color: var(--col-magenta); }
-.val-city     { color: var(--col-orange); }
-.val-town     { color: var(--col-coral); }
-.val-notes    { color: var(--col-navyblue); }
-
-/* tiny separator dot between location parts */
-.col-location .sep { margin: 0 .35rem; color: var(--col-muted); }
-
-/* === Summary table: make product names golden for contrast === */
-#tableSummaryByName tbody tr td:first-child { color: var(--col-golden); font-weight: 700; }
-
-/* Optional: make numeric columns slightly right-aligned and tabular for readability */
-.col-qty, .col-totalqty, .col-reqs { text-align: right; font-variant-numeric: tabular-nums; }
-
-/* Hover affordance to help scanning */
-.nice-table tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
-body.dark-theme .nice-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
-
-/* Inputs and select in filters—slight emphasis so they pop above colored values */
-.filters input[type="search"], .filters select {
-  box-shadow: 0 1px 0 rgba(0,0,0,.04);
-}
-
-/* Make the requester cell breathe a bit */
-.col-requester .val-business-name { display:block; margin-bottom: 2px; }
-
-/* ============================
-   🎨 COLOR TOKENS (unchanged)
-   ============================ */
-:root {
-  --col-green:        #16a34a;  /* business name */
-  --col-blue:         #2563eb;  /* contact name */
-  --col-navy:         #1f2937;  /* position / notes (navy-ish) */
-  --col-purple:       #7c3aed;  /* product name (table 1) */
-  --col-golden:       #b08900;  /* product name (summary table) */
-  --col-maroon:       #7a1f2b;  /* type */
-  --col-violet:       #6d28d9;  /* quantity */
-  --col-teal:         #0f766e;  /* country */
-  --col-magenta:      #be185d;  /* province */
-  --col-orange:       #ea580c;  /* city */
-  --col-coral:        #cc5533;  /* town (coral/rust) */
-  --col-navyblue:     #1e3a8a;  /* notes */
-  --col-muted:        #6b7280;
-
-  --kpi-bg-1: #f0fdf4; /* light green */
-  --kpi-bg-2: #fff7ed; /* light orange */
-  --kpi-bg-3: #eef2ff; /* light indigo */
-  --kpi-fg-1: #166534;
-  --kpi-fg-2: #9a3412;
-  --kpi-fg-3: #4338ca;
-
-  --card-bg: #ffffff;
-  --border: #e5e7eb;
-}
-
-body.dark-theme {
-  --col-navy:     #cbd5e1;
-  --col-navyblue: #93c5fd;
-  --kpi-bg-1: #052e16;
-  --kpi-bg-2: #431407;
-  --kpi-bg-3: #111827;
-  --kpi-fg-1: #86efac;
-  --kpi-fg-2: #fdba74;
-  --kpi-fg-3: #a5b4fc;
-
-  --card-bg: #111827;
-  --border: #374151;
-}
-
-/* ============================
-   ⚙️ BASE / LAYOUT
-   ============================ */
-.kpi-grid {
-  display:grid;
-  gap:.8rem;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  margin:.5rem 0 1rem;
-}
-.kpi-card {
-  padding:1rem;
-  border:1px solid var(--border);
-  border-radius:.75rem;
-  background:var(--card-bg);
-  box-shadow:0 1px 2px rgba(0,0,0,.04);
-}
-.kpi-grid .kpi-card:nth-child(1) { background: var(--kpi-bg-1); color: var(--kpi-fg-1); border:none; }
-.kpi-grid .kpi-card:nth-child(2) { background: var(--kpi-bg-2); color: var(--kpi-fg-2); border:none; }
-.kpi-grid .kpi-card:nth-child(3) { background: var(--kpi-bg-3); color: var(--kpi-fg-3); border:none; }
-.kpi-label { font-size:.85rem; color:#6b7280; }
-.kpi-value { font-size:1.35rem; font-weight:700; letter-spacing:.2px; }
-
-.filters {
-  display:flex; gap:.6rem; align-items:center; margin:.6rem 0 1rem; flex-wrap:wrap;
-}
-.filters input[type="search"], .filters select {
-  flex:1 1 220px;
-  min-width: 0;
-  padding:.6rem .7rem;
-  border:1px solid var(--border);
-  border-radius:.55rem;
-  box-shadow:0 1px 0 rgba(0,0,0,.04);
-  background:var(--card-bg);
-  color:inherit;
-}
-.btn { padding:.6rem .85rem; border-radius:.55rem; border:0; cursor:pointer; }
-.btn-secondary { background:#f3f4f6; color:#111; }
-
-/* For super small screens: make filters stack cleanly */
-@media (max-width: 480px) {
-  .kpi-grid { grid-template-columns: 1fr 1fr; }
-  .filters { flex-direction: column; align-items: stretch; gap:.5rem; }
-  .filters input[type="search"], .filters select, .filters .btn { width:100%; }
-}
-@media (max-width: 400px) {
-  .kpi-grid { grid-template-columns: 1fr; }
-}
-
-/* ============================
-   📋 TABLES (desktop & fallback)
-   ============================ */
-.nice-table {
-  width:100%;
-  border-collapse: collapse;
-  background:var(--card-bg);
-  border-radius:.6rem;
-  overflow:hidden;
-  border:1px solid var(--border);
-}
-.nice-table th, .nice-table td {
-  padding:.65rem .6rem;
-  border-bottom:1px solid var(--border);
-  text-align:left;
-  vertical-align: top;
-  white-space:normal;
-}
-.nice-table thead th {
-  background:#f9fafb;
-  font-weight:600;
-}
-body.dark-theme .nice-table thead th { background:#0b1220; }
-.nice-table tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
-body.dark-theme .nice-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
-
-/* Numeric alignment */
-.col-qty, .col-totalqty, .col-reqs { text-align:right; font-variant-numeric: tabular-nums; }
-
-/* Colored value classes (unchanged) */
-.val-business-name { color: var(--col-green); font-weight: 700; }
-.val-contact-name  { color: var(--col-blue); font-weight: 600; }
-.val-position      { color: var(--col-navy); }
-.val-product-name  { color: var(--col-purple); font-weight: 600; }
-.val-type          { color: var(--col-maroon); font-weight: 600; }
-.val-quantity      { color: var(--col-violet); font-variant-numeric: tabular-nums; }
-.val-country  { color: var(--col-teal); font-weight: 600; }
-.val-province { color: var(--col-magenta); }
-.val-city     { color: var(--col-orange); }
-.val-town     { color: var(--col-coral); }
-.val-notes    { color: var(--col-navyblue); }
-.col-location .sep { margin: 0 .35rem; color: var(--col-muted); }
-
-/* Summary table: golden product names */
-#tableSummaryByName tbody tr td:first-child { color: var(--col-golden); font-weight: 700; }
-
-/* Horizontal scroll fallback if needed */
-.nice-table { overflow-x: auto; display: block; }
-
-/* ============================
-   📱 MOBILE CARD MODE (≤420px)
-   - Convert tables into stacked cards with CSS only
-   - We hide thead and add labels via ::before
-   - We also hide some less-critical columns to keep cards short
-   ============================ */
-@media (max-width: 420px) {
-  .nice-table { border-radius:.75rem; }
-
-  /* Hide headers in mobile card mode */
-  .nice-table thead { display:none; }
-
-  /* Each row becomes a card */
-  .nice-table tbody tr {
-    display:block;
-    padding:.7rem .7rem;
-    border-bottom:1px solid var(--border);
-  }
-  .nice-table tbody tr:last-child { border-bottom:none; }
-
-  /* Each cell becomes a labeled line */
-  .nice-table td {
-    display:flex;
-    justify-content: space-between;
-    align-items:flex-start;
-    gap:.75rem;
-    padding:.45rem 0;
-    border-bottom:none;
-    white-space:normal; /* allow wrapping */
-  }
-  .nice-table td::before {
-    content: attr(data-label);
-    flex:0 0 auto;
-    min-width: 7.5rem;
-    color: var(--col-muted);
-    font-size:.85rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
   }
 
-  /* ---------- All Demands table (id=tableAllDemands) ---------- */
-  #tableAllDemands tbody tr td:nth-child(1) { /* Requester */
+  .kpi-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--green);
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(to right, var(--green), var(--blue));
+  }
+
+  .kpi-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .kpi-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--purple);
+    line-height: 1;
+  }
+
+  /* ✅ Filters */
+  .filters-section {
+    background: var(--accent-bg);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+  }
+
+  .filters-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .filters-header .section-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    color: white;
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+  }
+
+  .filters-header h2 {
+    font-size: 1.125rem;
+    color: var(--blue);
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .filters-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .filter-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: var(--transition);
+  }
+
+  .filter-input:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  .filter-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .filter-select {
+    padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary) url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/16px 12px;
+    color: var(--text-primary);
+    transition: var(--transition);
+    cursor: pointer;
+    min-width: 150px;
+  }
+
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  /* ✅ Buttons */
+  .btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-secondary {
+    background: var(--blue);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: var(--blue-dark);
+    transform: translateY(-2px);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .btn-outline:hover {
+    background: var(--bg-primary);
+    border-color: var(--purple);
+  }
+
+  /* ✅ Tables Container */
+  .tabs-section {
+    margin: 2rem 0;
+  }
+
+  .tabs-header {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    padding: 0.75rem 1.25rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+  }
+
+  .tab-btn:hover {
+    color: var(--purple);
+  }
+
+  .tab-btn.active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
+  }
+
+  /* ✅ Tables */
+  .table-container {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .table-header {
+    padding: 1rem 1.25rem;
+    background: var(--accent-bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-header h3 {
+    font-size: 1.125rem;
+    color: var(--blue);
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+  }
+
+  .data-table th {
+    padding: 0.875rem 1rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .data-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    vertical-align: top;
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--accent-bg);
+  }
+
+  /* ✅ Color-Coded Cells */
+  .cell-business { color: var(--green); font-weight: 600; }
+  .cell-contact { color: var(--blue); }
+  .cell-product { color: var(--purple); font-weight: 600; }
+  .cell-type { color: var(--green-dark); font-weight: 600; }
+  .cell-quantity { color: var(--purple-dark); font-weight: 700; text-align: right; }
+  .cell-country { color: var(--blue); font-weight: 600; }
+  .cell-province { color: var(--blue-dark); }
+  .cell-city { color: var(--purple); }
+  .cell-town { color: var(--purple-dark); }
+  .cell-notes { color: var(--text-secondary); font-style: italic; }
+
+  .location-parts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .location-part {
+    background: var(--accent-bg);
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+  }
+
+  /* ✅ Summary Cards (for mobile) */
+  .summary-cards {
+    display: none;
     flex-direction: column;
+    gap: 1rem;
+    margin: 1.5rem 0;
   }
-  #tableAllDemands tbody tr td:nth-child(1)::before { content: "Requester"; }
-  #tableAllDemands tbody tr td:nth-child(2)::before { content: "Type"; }
-  #tableAllDemands tbody tr td:nth-child(3)::before { content: "Product"; }
-  #tableAllDemands tbody tr td:nth-child(4)::before { content: "Qty"; }
-  #tableAllDemands tbody tr td:nth-child(5)::before { content: "Location"; }
-  #tableAllDemands tbody tr td:nth-child(6)::before { content: "Notes"; }
-  #tableAllDemands tbody tr td:nth-child(7)::before { content: "Created"; }
 
-  /* Hide least-crucial columns on tiny screens (tweak if you prefer) */
-  #tableAllDemands tbody tr td:nth-child(7) { display:none; } /* hide Created */
-  /* You may also hide Notes by uncommenting: */
-  /* #tableAllDemands tbody tr td:nth-child(6) { display:none; } */
+  .summary-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    border: 1px solid var(--border);
+  }
 
-  .col-requester .val-business-name { display:block; margin-bottom: 2px; }
+  .summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
 
-  /* ---------- Summary by Product Name (id=tableSummaryByName) ---------- */
-  #tableSummaryByName tbody tr { display:block; padding:.7rem .7rem; }
-  #tableSummaryByName tbody tr td { display:flex; gap:.75rem; padding:.45rem 0; }
-  #tableSummaryByName tbody tr td:nth-child(1)::before { content: "Product Name"; }
-  #tableSummaryByName tbody tr td:nth-child(2)::before { content: "Types"; }
-  #tableSummaryByName tbody tr td:nth-child(3)::before { content: "Requests"; }
-  #tableSummaryByName tbody tr td:nth-child(4)::before { content: "Total Qty"; }
+  .summary-title {
+    font-weight: 600;
+    color: var(--blue);
+    font-size: 0.95rem;
+  }
 
-  /* Optional: hide "Types" to shorten cards */
-  /* #tableSummaryByName tbody tr td:nth-child(2) { display:none; } */
+  .summary-values {
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+  }
 
-  /* ---------- By Type table (no id, but structure is 3 cols) ---------- */
-  /* First "By Type" after the heading is the first .nice-table following that h2.
-     If you have multiple .nice-table, safer to scope by thead contents, but here we can keep general: */
-  .dashboard-home h2 + .nice-table tbody tr td:nth-child(1)::before { content: "Type"; }
-  .dashboard-home h2 + .nice-table tbody tr td:nth-child(2)::before { content: "Total Qty"; }
-  .dashboard-home h2 + .nice-table tbody tr td:nth-child(3)::before { content: "Requests"; }
+  .summary-value {
+    text-align: center;
+  }
 
-  /* ---------- By Type & Location table (7 cols) ---------- */
-  /* It's the next .nice-table after the second h2 */
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(1)::before { content: "Type"; }
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(2)::before { content: "Country"; }
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(3)::before { content: "Province"; }
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(4)::before { content: "City"; }
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(5)::before { content: "Town"; }
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(6)::before { content: "Total Qty"; }
-  .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(7)::before { content: "Requests"; }
+  .summary-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
 
-  /* Optionally hide some location columns to shorten cards */
-  /* .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(3),
-     .dashboard-home h2 + .nice-table + h2 + .nice-table tbody tr td:nth-child(5) { display:none; } */
-}
+  .summary-number {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--purple);
+  }
+
+  /* ✅ No Data Message */
+  .no-data {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+  }
+
+  .no-data-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  /* ✅ Export Button */
+  .export-section {
+    text-align: right;
+    margin: 1.5rem 0;
+  }
+
+  .btn-export {
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    color: white;
+  }
+
+  .btn-export:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* ✅ Mobile Optimizations */
+  @media (max-width: 480px) {
+    .demands-page {
+      margin: 0.5rem;
+    }
+    
+    .demands-content {
+      padding: 1rem;
+    }
+    
+    .page-title {
+      font-size: 1.25rem;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .filters-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .filter-input,
+    .filter-select,
+    .btn {
+      width: 100%;
+      min-width: auto;
+    }
+    
+    .tabs-header {
+      flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+    }
+    
+    /* Show cards, hide tables on mobile */
+    .table-container {
+      display: none;
+    }
+    
+    .summary-cards {
+      display: flex;
+    }
+    
+    .data-table {
+      min-width: 0;
+    }
+  }
+
+  /* ✅ Very Small Screens */
+  @media (max-width: 360px) {
+    .demands-content {
+      padding: 0.75rem;
+    }
+    
+    .kpi-value {
+      font-size: 1.5rem;
+    }
+    
+    .summary-values {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
+
+  /* ✅ Tablet Optimization */
+  @media (min-width: 481px) and (max-width: 768px) {
+    .demands-page {
+      margin: 1rem;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* ✅ Print Styles */
+  @media print {
+    .demands-page {
+      background: white !important;
+      box-shadow: none !important;
+    }
+    
+    .demands-content {
+      background: white !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    .btn,
+    .filters-section,
+    .tabs-header {
+      display: none !important;
+    }
+    
+    .table-container {
+      break-inside: avoid;
+    }
+  }
+
+  /* ✅ Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .kpi-card,
+  .table-container {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.2s; }
+`;
+
+const pageScripts = `
+  document.addEventListener('DOMContentLoaded', function() {
+    // Tab functionality
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tableContainers = document.querySelectorAll('.table-container');
+    const summaryCards = document.querySelectorAll('.summary-cards');
+    
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', function() {
+        const target = this.getAttribute('data-target');
+        
+        // Update active tab
+        tabBtns.forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        // Show/hide tables
+        tableContainers.forEach(container => {
+          if (container.id === target) {
+            container.style.display = 'block';
+          } else {
+            container.style.display = 'none';
+          }
+        });
+        
+        // Show/hide summary cards on mobile
+        summaryCards.forEach(card => {
+          if (card.id === \`\${target}-cards\`) {
+            card.style.display = 'flex';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    });
+    
+    // Filter functionality
+    const searchInput = document.getElementById('searchName');
+    const filterType = document.getElementById('filterType');
+    const clearFilters = document.getElementById('clearFilters');
+    
+    const rowsAll = Array.from(document.querySelectorAll('#tableAllDemands .row-demand'));
+    const rowsNames = Array.from(document.querySelectorAll('#tableSummaryByName .row-name'));
+    
+    const kpiUnique = document.getElementById('kpiUniqueNames');
+    const kpiQty = document.getElementById('kpiTotalQty');
+    const kpiRequests = document.getElementById('kpiTotalRequests');
+    
+    function applyFilters() {
+      const searchQuery = (searchInput?.value || '').trim().toLowerCase();
+      const typeFilter = (filterType?.value || '').trim().toLowerCase();
+      
+      // Filter "All Demands" table
+      let visibleRequests = 0;
+      let runningQty = 0;
+      
+      rowsAll.forEach(row => {
+        const name = row.dataset.name || '';
+        const type = row.dataset.type || '';
+        const qty = Number(row.dataset.qty || 0);
+        
+        const matchesSearch = !searchQuery || name.includes(searchQuery);
+        const matchesType = !typeFilter || type === typeFilter;
+        
+        const shouldShow = matchesSearch && matchesType;
+        row.style.display = shouldShow ? '' : 'none';
+        
+        if (shouldShow) {
+          visibleRequests++;
+          runningQty += qty;
+        }
+      });
+      
+      // Filter "Summary by Product Name" table
+      let visibleNames = 0;
+      let summaryTotalQty = 0;
+      
+      rowsNames.forEach(row => {
+        const name = row.dataset.name || '';
+        const types = row.dataset.types || '';
+        const totalQty = Number(row.dataset.totalqty || 0);
+        
+        const matchesSearch = !searchQuery || name.includes(searchQuery);
+        const matchesType = !typeFilter || types.includes(typeFilter);
+        
+        const shouldShow = matchesSearch && matchesType;
+        row.style.display = shouldShow ? '' : 'none';
+        
+        if (shouldShow) {
+          visibleNames++;
+          summaryTotalQty += totalQty;
+        }
+      });
+      
+      // Update KPI displays
+      if (kpiUnique) kpiUnique.textContent = visibleNames;
+      if (kpiQty) kpiQty.textContent = summaryTotalQty;
+      if (kpiRequests) kpiRequests.textContent = visibleRequests;
+      
+      // Update mobile summary cards
+      updateMobileSummary(visibleRequests, visibleNames, summaryTotalQty);
+    }
+    
+    function updateMobileSummary(requests, names, qty) {
+      const requestCard = document.querySelector('.summary-card[data-type="requests"]');
+      const namesCard = document.querySelector('.summary-card[data-type="names"]');
+      const qtyCard = document.querySelector('.summary-card[data-type="qty"]');
+      
+      if (requestCard) {
+        requestCard.querySelector('.summary-number').textContent = requests;
+      }
+      if (namesCard) {
+        namesCard.querySelector('.summary-number').textContent = names;
+      }
+      if (qtyCard) {
+        qtyCard.querySelector('.summary-number').textContent = qty;
+      }
+    }
+    
+    // Event listeners for filters
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilters);
+    }
+    
+    if (filterType) {
+      filterType.addEventListener('change', applyFilters);
+    }
+    
+    if (clearFilters) {
+      clearFilters.addEventListener('click', function() {
+        if (searchInput) searchInput.value = '';
+        if (filterType) filterType.value = '';
+        applyFilters();
+      });
+    }
+    
+    // Export functionality
+    const exportBtn = document.getElementById('exportData');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function() {
+        // Show loading state
+        const originalText = this.innerHTML;
+        this.innerHTML = '<span>⏳</span> Preparing Export...';
+        this.disabled = true;
+        
+        // Simulate export preparation
+        setTimeout(() => {
+          // In a real implementation, this would trigger a server-side export
+          alert('Export feature would download a CSV file with current filtered data.');
+          this.innerHTML = originalText;
+          this.disabled = false;
+        }, 1000);
+      });
+    }
+    
+    // Sort functionality for tables
+    function makeTableSortable(table) {
+      const headers = table.querySelectorAll('th[data-sort]');
+      
+      headers.forEach(header => {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', function() {
+          const column = this.getAttribute('data-sort');
+          const isAsc = this.getAttribute('data-sort-direction') === 'asc';
+          
+          // Clear other headers
+          headers.forEach(h => {
+            h.removeAttribute('data-sort-direction');
+            h.innerHTML = h.innerHTML.replace(' ↑↓', '');
+          });
+          
+          // Set new direction
+          const newDirection = isAsc ? 'desc' : 'asc';
+          this.setAttribute('data-sort-direction', newDirection);
+          this.innerHTML += newDirection === 'asc' ? ' ↑' : ' ↓';
+          
+          // Sort table
+          sortTable(table, column, newDirection);
+        });
+      });
+    }
+    
+    function sortTable(table, column, direction) {
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      rows.sort((a, b) => {
+        let aVal = a.querySelector(\`td[data-column="\${column}"]\`)?.textContent || '';
+        let bVal = b.querySelector(\`td[data-column="\${column}"]\`)?.textContent || '';
+        
+        // Try to parse as number
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          aVal = aNum;
+          bVal = bNum;
+        }
+        
+        if (direction === 'asc') {
+          return aVal > bVal ? 1 : -1;
+        } else {
+          return aVal < bVal ? 1 : -1;
+        }
+      });
+      
+      // Reorder rows
+      rows.forEach(row => tbody.appendChild(row));
+    }
+    
+    // Initialize sortable tables
+    document.querySelectorAll('.data-table').forEach(table => {
+      makeTableSortable(table);
+    });
+    
+    // Initialize filters
+    applyFilters();
+    
+    // Auto-refresh data every 5 minutes
+    let refreshInterval;
+    const refreshToggle = document.getElementById('autoRefreshToggle');
+    
+    if (refreshToggle) {
+      refreshToggle.addEventListener('change', function() {
+        if (this.checked) {
+          refreshInterval = setInterval(() => {
+            console.log('Auto-refreshing data...');
+            // In a real implementation, this would fetch fresh data
+            // For now, just re-apply filters
+            applyFilters();
+          }, 5 * 60 * 1000); // 5 minutes
+        } else {
+          clearInterval(refreshInterval);
+        }
+      });
+    }
+    
+    // Quick actions for rows
+    document.querySelectorAll('.row-demand').forEach(row => {
+      row.addEventListener('dblclick', function() {
+        const productName = this.querySelector('.val-product-name')?.textContent;
+        if (productName) {
+          window.open(\`/demands/search?q=\${encodeURIComponent(productName)}\`, '_blank');
+        }
+      });
+    });
+  });
+`;
+%>
+
+<!-- ✅ Inject Styles -->
+<style nonce="<%= nonce %>">
+  <%= pageStyles %>
 </style>
+
+<!-- ✅ Demanded Products Page -->
+<div class="demands-page">
+  <div class="demands-content">
+    <!-- Header -->
+    <header class="demands-header">
+      <div class="demands-badge">
+        <span>📊</span>
+        <span>Market Intelligence</span>
+      </div>
+      <h1 class="page-title">Demanded Products</h1>
+      <p class="page-subtitle">Aggregated view of all product demands across the platform. Filter and analyze market trends.</p>
+    </header>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Requests</div>
+        <div class="kpi-value" id="kpiTotalRequests"><%= totals?.totalRequests || 0 %></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Unique Product Names</div>
+        <div class="kpi-value" id="kpiUniqueNames"><%= totals?.uniqueProductNames || 0 %></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Quantity Demanded</div>
+        <div class="kpi-value" id="kpiTotalQty"><%= totals?.totalQtyAll || 0 %></div>
+      </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <div class="filters-header">
+        <div class="section-icon">🔍</div>
+        <h2>Filter & Search</h2>
+      </div>
+      <div class="filters-row">
+        <input type="search" 
+               id="searchName" 
+               class="filter-input" 
+               placeholder="Search by product name..." 
+               aria-label="Search products">
+        <select id="filterType" class="filter-select">
+          <option value="">All Types</option>
+          <% (types || []).forEach(t => { %>
+            <option value="<%= t %>"><%= t %></option>
+          <% }) %>
+        </select>
+        <button id="clearFilters" class="btn btn-secondary">Clear Filters</button>
+      </div>
+    </div>
+
+    <!-- Export Controls -->
+    <div class="export-section">
+      <button id="exportData" class="btn btn-export">
+        <span>📥</span>
+        Export Data
+      </button>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="tabs-section">
+      <div class="tabs-header">
+        <button class="tab-btn active" data-target="tableAllDemands">
+          <span>📋</span>
+          All Demands
+        </button>
+        <button class="tab-btn" data-target="tableSummaryByName">
+          <span>📈</span>
+          Product Summary
+        </button>
+        <button class="tab-btn" data-target="tableByType">
+          <span>🏷️</span>
+          By Type
+        </button>
+        <button class="tab-btn" data-target="tableByLocation">
+          <span>📍</span>
+          By Location
+        </button>
+      </div>
+
+      <!-- All Demands Table (Desktop) -->
+      <div id="tableAllDemands" class="table-container" style="display: block;">
+        <div class="table-header">
+          <h3><span>📋</span> All Demands</h3>
+        </div>
+        <div class="table-wrapper">
+          <% if (demandsAll && demandsAll.length) { %>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th data-sort="requester">Requester</th>
+                  <th data-sort="type">Type</th>
+                  <th data-sort="product">Product</th>
+                  <th data-sort="quantity">Qty</th>
+                  <th data-sort="location">Location</th>
+                  <th data-sort="notes">Notes</th>
+                  <th data-sort="created">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% demandsAll.forEach(d => { 
+                  const nm = (d.productName || '').trim();
+                  const typ = (d.type || '').trim();
+                  const loc = [d.country, d.province, d.city, d.town].filter(Boolean).join(", ");
+                %>
+                  <tr class="row-demand"
+                      data-name="<%= nm.toLowerCase() %>"
+                      data-type="<%= typ.toLowerCase() %>"
+                      data-qty="<%= Number(d.quantity || 0) %>">
+                    <td data-column="requester">
+                      <div class="cell-business"><%= d.requester?.businessName || '—' %></div>
+                      <div class="cell-contact">
+                        <%= d.requester?.contactName || '—' %>
+                        <% if (d.requester?.position) { %>
+                          <span> • <%= d.requester.position %></span>
+                        <% } %>
+                      </div>
+                    </td>
+                    <td data-column="type" class="cell-type"><%= typ || '—' %></td>
+                    <td data-column="product" class="cell-product"><%= nm || '—' %></td>
+                    <td data-column="quantity" class="cell-quantity"><%= Number(d.quantity || 0) %></td>
+                    <td data-column="location">
+                      <div class="location-parts">
+                        <% if (d.country) { %><span class="location-part cell-country"><%= d.country %></span><% } %>
+                        <% if (d.province) { %><span class="location-part cell-province"><%= d.province %></span><% } %>
+                        <% if (d.city) { %><span class="location-part cell-city"><%= d.city %></span><% } %>
+                        <% if (d.town) { %><span class="location-part cell-town"><%= d.town %></span><% } %>
+                      </div>
+                    </td>
+                    <td data-column="notes" class="cell-notes" title="<%= d.notes || '' %>">
+                      <%= (d.notes || '').slice(0, 80) %>
+                      <%= (d.notes && d.notes.length > 80) ? '…' : '' %>
+                    </td>
+                    <td data-column="created">
+                      <%= new Date(d.createdAt).toLocaleDateString() %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <div class="no-data">
+              <div class="no-data-icon">📭</div>
+              <p>No demands found</p>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Product Summary Table -->
+      <div id="tableSummaryByName" class="table-container" style="display: none;">
+        <div class="table-header">
+          <h3><span>📈</span> Summary by Product Name</h3>
+        </div>
+        <div class="table-wrapper">
+          <% if (summaryByName && summaryByName.length) { %>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th data-sort="name">Product Name</th>
+                  <th data-sort="types">Types (seen)</th>
+                  <th data-sort="requests">Requests</th>
+                  <th data-sort="totalqty">Total Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% summaryByName.forEach(s => { %>
+                  <tr class="row-name"
+                      data-name="<%= (s.name || '').toLowerCase() %>"
+                      data-types="<%= (s.types || []).map(t => t.toLowerCase()).join('|') %>"
+                      data-totalqty="<%= Number(s.totalQty || 0) %>">
+                    <td data-column="name" class="cell-product"><%= s.name || '—' %></td>
+                    <td data-column="types">
+                      <% (s.types || []).forEach((type, idx) => { %>
+                        <span class="cell-type"><%= type %></span><%= idx < (s.types.length - 1) ? ', ' : '' %>
+                      <% }) %>
+                    </td>
+                    <td data-column="requests" class="cell-quantity"><%= Number(s.requests || 0) %></td>
+                    <td data-column="totalqty" class="cell-quantity"><%= Number(s.totalQty || 0) %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <div class="no-data">
+              <div class="no-data-icon">📊</div>
+              <p>No summary data available</p>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- By Type Table -->
+      <div id="tableByType" class="table-container" style="display: none;">
+        <div class="table-header">
+          <h3><span>🏷️</span> By Type</h3>
+        </div>
+        <div class="table-wrapper">
+          <% if (byType && byType.length) { %>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th data-sort="type">Type</th>
+                  <th data-sort="totalqty">Total Qty</th>
+                  <th data-sort="requests">Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% byType.forEach(r => { %>
+                  <tr>
+                    <td data-column="type" class="cell-type"><%= r._id || '—' %></td>
+                    <td data-column="totalqty" class="cell-quantity"><%= r.totalQty %></td>
+                    <td data-column="requests" class="cell-quantity"><%= r.docs %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <div class="no-data">
+              <div class="no-data-icon">🏷️</div>
+              <p>No type data available</p>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- By Location Table -->
+      <div id="tableByLocation" class="table-container" style="display: none;">
+        <div class="table-header">
+          <h3><span>📍</span> By Type & Location</h3>
+        </div>
+        <div class="table-wrapper">
+          <% if (byTypeAndLocation && byTypeAndLocation.length) { %>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th data-sort="type">Type</th>
+                  <th data-sort="country">Country</th>
+                  <th data-sort="province">Province</th>
+                  <th data-sort="city">City</th>
+                  <th data-sort="town">Town</th>
+                  <th data-sort="totalqty">Total Qty</th>
+                  <th data-sort="requests">Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% byTypeAndLocation.forEach(r => { %>
+                  <tr>
+                    <td data-column="type" class="cell-type"><%= r._id.type || '—' %></td>
+                    <td data-column="country" class="cell-country"><%= r._id.country || '—' %></td>
+                    <td data-column="province" class="cell-province"><%= r._id.province || '—' %></td>
+                    <td data-column="city" class="cell-city"><%= r._id.city || '—' %></td>
+                    <td data-column="town" class="cell-town"><%= r._id.town || '—' %></td>
+                    <td data-column="totalqty" class="cell-quantity"><%= r.totalQty %></td>
+                    <td data-column="requests" class="cell-quantity"><%= r.docs %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <div class="no-data">
+              <div class="no-data-icon">📍</div>
+              <p>No location data available</p>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Summary Cards (hidden on desktop) -->
+    <div class="summary-cards" id="tableAllDemands-cards" style="display: none;">
+      <% demandsAll && demandsAll.slice(0, 5).forEach((d, idx) => { %>
+        <div class="summary-card">
+          <div class="summary-header">
+            <div class="summary-title"><%= (d.productName || '').trim() || 'Product' %></div>
+            <span class="cell-type"><%= (d.type || '').trim() || '—' %></span>
+          </div>
+          <div class="summary-values">
+            <div class="summary-value">
+              <div class="summary-label">Quantity</div>
+              <div class="summary-number cell-quantity"><%= Number(d.quantity || 0) %></div>
+            </div>
+            <div class="summary-value">
+              <div class="summary-label">Location</div>
+              <div class="cell-country"><%= d.country || '—' %></div>
+            </div>
+            <div class="summary-value">
+              <div class="summary-label">Requester</div>
+              <div class="cell-business"><%= d.requester?.businessName?.slice(0, 15) || '—' %></div>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="summary-cards" id="tableSummaryByName-cards" style="display: none;">
+      <% summaryByName && summaryByName.slice(0, 5).forEach(s => { %>
+        <div class="summary-card" data-type="product">
+          <div class="summary-header">
+            <div class="summary-title"><%= s.name || 'Product' %></div>
+            <span class="cell-quantity"><%= s.requests || 0 %> requests</span>
+          </div>
+          <div class="summary-values">
+            <div class="summary-value">
+              <div class="summary-label">Total Qty</div>
+              <div class="summary-number cell-quantity"><%= s.totalQty || 0 %></div>
+            </div>
+            <div class="summary-value">
+              <div class="summary-label">Types</div>
+              <div><%= (s.types || []).slice(0, 2).join(', ') %></div>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <!-- KPI Summary Cards for Mobile -->
+    <div class="summary-cards" style="display: none;">
+      <div class="summary-card" data-type="requests">
+        <div class="summary-header">
+          <div class="summary-title">Total Requests</div>
+        </div>
+        <div class="summary-number"><%= totals?.totalRequests || 0 %></div>
+      </div>
+      <div class="summary-card" data-type="names">
+        <div class="summary-header">
+          <div class="summary-title">Unique Products</div>
+        </div>
+        <div class="summary-number"><%= totals?.uniqueProductNames || 0 %></div>
+      </div>
+      <div class="summary-card" data-type="qty">
+        <div class="summary-header">
+          <div class="summary-title">Total Quantity</div>
+        </div>
+        <div class="summary-number"><%= totals?.totalQtyAll || 0 %></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ Inject Scripts -->
+<script nonce="<%= nonce %>">
+  <%= pageScripts %>
+</script>

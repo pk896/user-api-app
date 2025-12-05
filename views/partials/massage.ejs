@@ -1,117 +1,413 @@
 <!-- views/partials/massage.ejs -->
-<div id="flash-messages" class="flash-container">
+<div id="fm" class="fm-container">
   <% if (success && success.length > 0) { %>
     <% success.forEach(msg => { %>
-      <div class="flash flash-success">✅ <%= msg %></div>
+      <div class="fm fm-success">
+        <svg class="fm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="fm-text"><%= msg %></span>
+        <button type="button" class="fm-close" aria-label="Close message">×</button>
+      </div>
     <% }) %>
   <% } %>
 
   <% if (error && error.length > 0) { %>
     <% error.forEach(msg => { %>
-      <div class="flash flash-error">❌ <%= msg %></div>
+      <div class="fm fm-error">
+        <svg class="fm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="fm-text"><%= msg %></span>
+        <button type="button" class="fm-close" aria-label="Close message">×</button>
+      </div>
     <% }) %>
   <% } %>
 
   <% if (info && info.length > 0) { %>
     <% info.forEach(msg => { %>
-      <div class="flash flash-info">ℹ️ <%= msg %></div>
+      <div class="fm fm-info">
+        <svg class="fm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="fm-text"><%= msg %></span>
+        <button type="button" class="fm-close" aria-label="Close message">×</button>
+      </div>
     <% }) %>
   <% } %>
 
   <% if (warning && warning.length > 0) { %>
     <% warning.forEach(msg => { %>
-      <div class="flash flash-warning">⚠️ <%= msg %></div>
+      <div class="fm fm-warning">
+        <svg class="fm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="fm-text"><%= msg %></span>
+        <button type="button" class="fm-close" aria-label="Close message">×</button>
+      </div>
     <% }) %>
   <% } %>
 
   <% if (errors && errors.length > 0) { %>
     <% errors.forEach(err => { %>
-      <div class="flash flash-error">❌ <%= err.msg || err %></div>
+      <div class="fm fm-error">
+        <svg class="fm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="fm-text"><%= err.msg || err %></span>
+        <button type="button" class="fm-close" aria-label="Close message">×</button>
+      </div>
     <% }) %>
   <% } %>
 </div>
 
-<script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    const flashes = document.querySelectorAll(".flash");
-
-    flashes.forEach(flash => {
-      // Add close button
-      const close = document.createElement("button");
-      close.setAttribute("type", "button");
-      close.className = "flash-close";
-      close.textContent = "×";
-      close.addEventListener("click", () => flash.remove());
-      flash.appendChild(close);
-
-      // Never auto-hide errors; others hide after 8s (pause on hover)
-      if (!flash.classList.contains("flash-error")) {
-        let hideTimer = setTimeout(() => fadeOutAndRemove(flash), 8000);
-        flash.addEventListener("mouseenter", () => clearTimeout(hideTimer));
-        flash.addEventListener("mouseleave", () => {
-          hideTimer = setTimeout(() => fadeOutAndRemove(flash), 3000);
-        });
-      }
-    });
-
-    function fadeOutAndRemove(el) {
-      el.classList.add("fade-out");
-      setTimeout(() => el.remove(), 160);
-    }
-  });
-</script>
-
 <style nonce="<%= nonce %>">
-  .flash-container {
+  /* ===== COMPANY COLORS ===== */
+  .fm-container {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+  }
+
+  /* ===== MESSAGE CONTAINER ===== */
+  .fm-container {
     position: fixed;
-    top: 1rem;
-    right: 1rem;
+    top: 12px;
+    right: 12px;
     z-index: 9999;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    width: 340px;
-    max-width: calc(100vw - 2rem);
+    gap: 8px;
+    width: 320px;
+    max-width: calc(100vw - 24px);
   }
 
-  .flash {
+  /* ===== INDIVIDUAL MESSAGE ===== */
+  .fm {
     position: relative;
-    padding: 0.9rem 1rem 0.9rem 0.9rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
     border-radius: 10px;
-    font-weight: 700;               /* strong text */
-    font-size: 0.95rem;             /* bigger text */
-    line-height: 1.25rem;
-    color: black;         /* force white text */
-    box-shadow: 0 6px 18px rgba(0,0,0,0.20);
-    filter: drop-shadow(0 0 1px rgba(0,0,0,0.25)); /* edge outline for readability */
-    animation: slideIn 0.2s ease;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: fmSlideIn 0.25s ease-out;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .flash-success { background-color: #16a34a; }  /* green */
-  .flash-error   { background-color: #b91c1c; }  /* deep red */
-  .flash-info    { background-color: #1e40af; }  /* deep blue */
-  .flash-warning { background-color: #b45309; }  /* deep amber */
+  /* ===== MESSAGE TYPES ===== */
+  .fm-success {
+    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
+    color: white;
+  }
 
-  /* If you ever switch to lighter backgrounds, set color to dark here:
-     .flash-light { background:#fef3c7; color:#111 !important; } */
+  .fm-error {
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+    color: white;
+  }
 
-  .flash-close {
+  .fm-info {
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: white;
+  }
+
+  .fm-warning {
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    color: white;
+  }
+
+  /* ===== MESSAGE ICON ===== */
+  .fm-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ===== MESSAGE TEXT ===== */
+  .fm-text {
+    flex: 1;
+    padding-right: 20px;
+    word-wrap: break-word;
+  }
+
+  /* ===== CLOSE BUTTON ===== */
+  .fm-close {
     position: absolute;
-    top: 6px; right: 10px;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
     background: transparent;
-    border: 0;
-    color: rgba(255,255,255,0.95);
-    font-size: 20px;
+    border: none;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 18px;
     line-height: 1;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
   }
 
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(40px); }
-    to   { opacity: 1; transform: translateX(0); }
+  .fm-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
   }
-  .fade-out { opacity: 0; transition: opacity 0.16s ease; }
 
-  /* Respect your dark theme—no change needed since we force bg + white text */
-  .dark-theme .flash { box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+  /* ===== ANIMATIONS ===== */
+  @keyframes fmSlideIn {
+    from {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes fmFadeOut {
+    to {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+  }
+
+  .fm.fm-exiting {
+    animation: fmFadeOut 0.2s ease-out forwards;
+  }
+
+  /* ===== DARK THEME ADJUSTMENTS ===== */
+  .dark-theme .fm {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .fm-container {
+      top: 8px;
+      right: 8px;
+      left: 8px;
+      width: auto;
+      max-width: none;
+    }
+    
+    .fm {
+      padding: 10px;
+      font-size: 12px;
+    }
+    
+    .fm-icon {
+      width: 14px;
+      height: 14px;
+    }
+    
+    .fm-close {
+      top: 6px;
+      right: 6px;
+      width: 18px;
+      height: 18px;
+      font-size: 16px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .fm-container {
+      width: 280px;
+    }
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .fm-close:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 1px;
+  }
+
+  /* ===== PROGRESS BAR (optional) ===== */
+  .fm-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 0 0 10px 10px;
+    transform-origin: left;
+    animation: fmProgress 8s linear forwards;
+  }
+
+  .fm-error .fm-progress {
+    animation: none;
+    display: none;
+  }
+
+  @keyframes fmProgress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+</style>
+
+<script nonce="<%= nonce %>">
+document.addEventListener("DOMContentLoaded", () => {
+  const container = document.getElementById('fm');
+  if (!container) return;
+
+  const messages = container.querySelectorAll('.fm');
+  
+  messages.forEach(message => {
+    const closeBtn = message.querySelector('.fm-close');
+    const isError = message.classList.contains('fm-error');
+    
+    // Add close functionality
+    closeBtn.addEventListener('click', () => {
+      dismissMessage(message);
+    });
+    
+    // Add click-to-dismiss (optional, can be commented out)
+    message.addEventListener('click', (e) => {
+      if (e.target !== closeBtn) {
+        dismissMessage(message);
+      }
+    });
+    
+    // Auto-dismiss for non-error messages
+    if (!isError) {
+      const duration = 8000; // 8 seconds
+      let dismissTimer = setTimeout(() => dismissMessage(message), duration);
+      
+      // Pause on hover
+      message.addEventListener('mouseenter', () => {
+        clearTimeout(dismissTimer);
+        
+        // Pause progress bar if exists
+        const progress = message.querySelector('.fm-progress');
+        if (progress) {
+          progress.style.animationPlayState = 'paused';
+        }
+      });
+      
+      // Resume on mouse leave
+      message.addEventListener('mouseleave', () => {
+        dismissTimer = setTimeout(() => dismissMessage(message), 3000);
+        
+        // Resume progress bar if exists
+        const progress = message.querySelector('.fm-progress');
+        if (progress) {
+          progress.style.animationPlayState = 'running';
+        }
+      });
+    }
+    
+    // Add progress bar for non-error messages (optional)
+    if (!isError) {
+      const progressBar = document.createElement('div');
+      progressBar.className = 'fm-progress';
+      message.appendChild(progressBar);
+    }
+    
+    // Haptic feedback on mobile
+    if ('vibrate' in navigator) {
+      message.addEventListener('click', () => {
+        navigator.vibrate(20);
+      });
+    }
+  });
+  
+  // Dismiss function with animation
+  function dismissMessage(message) {
+    if (message.classList.contains('fm-exiting')) return;
+    
+    message.classList.add('fm-exiting');
+    
+    setTimeout(() => {
+      message.remove();
+      
+      // Update container position if empty
+      if (container.children.length === 0) {
+        container.style.display = 'none';
+      }
+    }, 200);
+  }
+  
+  // Group messages by type (optional visual enhancement)
+  function groupMessages() {
+    const successMsgs = container.querySelectorAll('.fm-success');
+    const errorMsgs = container.querySelectorAll('.fm-error');
+    const infoMsgs = container.querySelectorAll('.fm-info');
+    const warningMsgs = container.querySelectorAll('.fm-warning');
+    
+    // Add grouping indicators (optional)
+    if (successMsgs.length > 1) addGroupIndicator(successMsgs, 'success');
+    if (errorMsgs.length > 1) addGroupIndicator(errorMsgs, 'error');
+    if (infoMsgs.length > 1) addGroupIndicator(infoMsgs, 'info');
+    if (warningMsgs.length > 1) addGroupIndicator(warningMsgs, 'warning');
+  }
+  
+  // Add group indicator (first message gets a badge)
+  function addGroupIndicator(messages, type) {
+    if (messages.length > 0) {
+      const firstMsg = messages[0];
+      const badge = document.createElement('span');
+      badge.className = 'fm-group-badge';
+      badge.textContent = `${messages.length}`;
+      badge.title = `${messages.length} ${type} messages`;
+      firstMsg.appendChild(badge);
+    }
+  }
+  
+  // Apply grouping
+  if (messages.length > 1) {
+    groupMessages();
+  }
+  
+  // Show container if there are messages
+  if (messages.length > 0) {
+    container.style.display = 'flex';
+  }
+});
+</script>
+
+<style nonce="<%= nonce %>">
+  /* Additional styles for grouping (optional) */
+  .fm-group-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: white;
+    color: var(--black);
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  
+  .fm-success .fm-group-badge {
+    background: white;
+    color: #16A34A;
+  }
+  
+  .fm-error .fm-group-badge {
+    background: white;
+    color: #DC2626;
+  }
+  
+  .fm-info .fm-group-badge {
+    background: white;
+    color: #1D4ED8;
+  }
+  
+  .fm-warning .fm-group-badge {
+    background: white;
+    color: #D97706;
+  }
 </style>

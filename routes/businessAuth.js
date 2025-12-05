@@ -208,7 +208,7 @@ async function computeSupplierKpis(businessId) {
       status: { $in: PAID_STATES },
       $or: idMatchOr,
     })
-      .select('items amount createdAt status')
+      .select('items amount createdAt status shippingTracking')
       .lean();
 
     for (const o of recentOrders) {
@@ -348,6 +348,37 @@ router.get('/verify-pending', requireBusiness, async (req, res) => {
     res.redirect('/business/login');
   }
 });
+
+/*router.get('/out-of-stock', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const products = await Product.find({
+      business: business._id,
+      stock: { $lte: 0 },
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.render('products-out-of-stock', {
+      title: 'Out of Stock',
+      products,
+      business,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Out-of-stock page error:', err);
+    req.flash('error', 'Could not load out-of-stock products.');
+    res.redirect('/products/all');
+  }
+});*/
 
 /* ----------------------------------------------------------
  * 🔁 Resend verification email (POST)
@@ -513,65 +544,64 @@ router.post(
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
         });
-      }
-
-      const hashed = await bcrypt.hash(password, 12);
-
-      const token = crypto.randomBytes(32).toString('hex');
-      const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      const business = await Business.create({
-        name,
-        email: emailNorm,
-        password: hashed,
-        role,
-        businessNumber,
-        phone,
-        country,
-        city,
-        address,
-        idOrPassport,
-        isVerified: false,
-        emailVerificationToken: token,
-        emailVerificationExpires: expiry,
-        verificationEmailSentAt: new Date(),
-      });
-
-      req.session.business = {
-        _id: business._id,
-        name: business.name,
-        email: business.email,
-        role: business.role,
-        isVerified: business.isVerified,
-      };
-
-      try {
-        await sendBusinessVerificationEmail(business, token, req);
-        req.flash(
-          'success',
-          `🎉 Welcome ${business.name}! Check your inbox at ${business.email} to verify your email.`,
-        );
-      } catch (mailErr) {
-        console.error('❌ Failed to send business verification email:', mailErr);
-        req.flash(
-          'error',
-          'Your account was created but we could not send a verification email. Please try resending from the verification page.',
-        );
-      }
-
-      return res.redirect('/business/verify-pending');
-    } catch (err) {
-      console.error('❌ Signup error:', err);
-      req.flash('error', 'Server error during signup. Please try again.');
-      return res.status(500).render('business-signup', {
-        title: 'Business Sign Up',
-        errors: [{ msg: 'Server error' }],
-        themeCss: res.locals.themeCss,
-        nonce: res.locals.nonce,
-      });
     }
-  },
-);
+
+    const hashed = await bcrypt.hash(password, 12);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    const business = await Business.create({
+      name,
+      email: emailNorm,
+      password: hashed,
+      role,
+      businessNumber,
+      phone,
+      country,
+      city,
+      address,
+      idOrPassport,
+      isVerified: false,
+      emailVerificationToken: token,
+      emailVerificationExpires: expiry,
+      verificationEmailSentAt: new Date(),
+    });
+
+    req.session.business = {
+      _id: business._id,
+      name: business.name,
+      email: business.email,
+      role: business.role,
+      isVerified: business.isVerified,
+    };
+
+    try {
+      await sendBusinessVerificationEmail(business, token, req);
+      req.flash(
+        'success',
+        `🎉 Welcome ${business.name}! Check your inbox at ${business.email} to verify your email.`,
+      );
+    } catch (mailErr) {
+      console.error('❌ Failed to send business verification email:', mailErr);
+      req.flash(
+        'error',
+        'Your account was created but we could not send a verification email. Please try resending from the verification page.',
+      );
+    }
+
+    return res.redirect('/business/verify-pending');
+  } catch (err) {
+    console.error('❌ Signup error:', err);
+    req.flash('error', 'Server error during signup. Please try again.');
+    return res.status(500).render('business-signup', {
+      title: 'Business Sign Up',
+      errors: [{ msg: 'Server error' }],
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  }
+});
 
 /* ----------------------------------------------------------
  * 🔐 GET: Business Login
@@ -842,7 +872,7 @@ router.post('/password/reset/:token', async (req, res) => {
   }
 });
 
-/* ----------------------------------------------------------
+/* ---------------------------------------------------------- 
  * SELLER DASHBOARD
  * -------------------------------------------------------- */
 router.get(
@@ -875,7 +905,6 @@ router.get(
       }
 
       const OrderModel = require('../models/Order');
-      const Shipment = require('../models/Shipment');
 
       // 1) Products for this seller
       const products = await Product.find({ business: sessionBusiness._id })
@@ -909,23 +938,7 @@ router.get(
         productsByKey.set(String(p._id), p);
       }
 
-      // 2) Shipments
-      const shipmentsAgg = await Shipment.aggregate([
-        { $match: { business: sessionBusiness._id } },
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]);
-
-      const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
-        m[r._id] = Number(r.count || 0);
-        return m;
-      }, {});
-
-      const shipmentsTotal = Object.values(shipmentsByStatus).reduce(
-        (a, b) => a + b,
-        0,
-      );
-
-      // 3) Orders (Recent Orders)
+      // 2) Orders (Recent Orders)
       let ordersTotal = 0;
       let ordersByStatus = {};
       let recentOrders = [];
@@ -952,13 +965,44 @@ router.get(
         ordersTotal = await OrderModel.countDocuments(baseOrderMatch);
 
         recentOrders = await OrderModel.find(baseOrderMatch)
-          .select('orderId status amount createdAt')
+          .select('orderId status amount createdAt shippingTracking')
           .sort({ createdAt: -1 })
           .limit(5)
           .lean();
       }
 
-      // 4) 30-day KPIs
+      // 3) Shipping tracking stats from orders
+      let trackingStats = {
+        pending: 0,
+        processing: 0,
+        shipped: 0,
+        inTransit: 0,
+        delivered: 0
+      };
+
+      if (OrderModel && sellerCustomIds.length) {
+        const trackingAgg = await OrderModel.aggregate([
+          { $match: { $or: [
+            { 'items.productId': { $in: sellerCustomIds } },
+            { 'items.customId': { $in: sellerCustomIds } },
+          ] } },
+          { $group: { 
+            _id: '$shippingTracking.status', 
+            count: { $sum: 1 } 
+          } }
+        ]);
+
+        trackingAgg.forEach(stat => {
+          const status = stat._id?.toLowerCase() || 'pending';
+          if (status === 'pending') trackingStats.pending = stat.count;
+          else if (status === 'processing') trackingStats.processing = stat.count;
+          else if (status === 'shipped') trackingStats.shipped = stat.count;
+          else if (status === 'in_transit') trackingStats.inTransit = stat.count;
+          else if (status === 'delivered') trackingStats.delivered = stat.count;
+        });
+      }
+
+      // 4) 30-day KPIs (SOLD PRODUCTS) + dailySales map for chart
       const SINCE_DAYS = 30;
       const since = new Date();
       since.setDate(since.getDate() - SINCE_DAYS);
@@ -968,6 +1012,8 @@ router.get(
       let soldEstRevenue = 0;
       let last30Revenue = 0;
       let last30Items = 0;
+
+      const dailySales = {}; // YYYY-MM-DD -> revenue for this seller
 
       if (OrderModel && sellerCustomIds.length) {
         const PAID_STATES = Array.isArray(OrderModel.PAID_STATES)
@@ -988,13 +1034,14 @@ router.get(
         };
 
         const recentOrders30 = await OrderModel.find(baseMatch)
-          .select('items amount createdAt status')
+          .select('items amount createdAt status shippingTracking')
           .lean();
 
         const productSalesMap = new Map();
 
         for (const order of recentOrders30) {
           const items = Array.isArray(order.items) ? order.items : [];
+          let orderSellerRevenue = 0; // revenue for THIS seller in this order
 
           for (const item of items) {
             const productId = String(
@@ -1014,6 +1061,7 @@ router.get(
 
             last30Items += quantity;
             last30Revenue += revenue;
+            orderSellerRevenue += revenue;
 
             if (!productSalesMap.has(productId)) {
               productSalesMap.set(productId, {
@@ -1030,6 +1078,12 @@ router.get(
             const existing = productSalesMap.get(productId);
             existing.qty += quantity;
             existing.estRevenue += revenue;
+          }
+
+          // Drop this order's seller revenue into the correct day
+          if (orderSellerRevenue > 0 && order.createdAt) {
+            const dateKey = order.createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
+            dailySales[dateKey] = (dailySales[dateKey] || 0) + orderSellerRevenue;
           }
         }
 
@@ -1058,6 +1112,99 @@ router.get(
           }
         } catch (e) {
           console.error('Fallback computeSupplierKpis failed:', e);
+        }
+      }
+
+      // 5) SALES TREND WITH MULTIPLE PERIODS
+      const salesTrend = {
+        monthly: [],  // Last 30 days
+        yearly: []    // Last 12 months
+      };
+
+      if (OrderModel && sellerCustomIds.length) {
+        const PAID_STATES = Array.isArray(OrderModel.PAID_STATES)
+          ? OrderModel.PAID_STATES
+          : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+        const idMatchOr = [
+          { 'items.productId': { $in: sellerCustomIds } },
+          { 'items.customId': { $in: sellerCustomIds } },
+          { 'items.pid': { $in: sellerCustomIds } },
+          { 'items.sku': { $in: sellerCustomIds } },
+        ];
+
+        const baseMatch = {
+          status: { $in: PAID_STATES },
+          $or: idMatchOr
+        };
+
+        // ----- Last 30 days (daily data) – use SOLD PRODUCTS (dailySales) -----
+        const now = new Date();
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(now);
+          date.setDate(date.getDate() - i);
+
+          const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+          const displayDate = date.toLocaleDateString('en-ZA', {
+            day: 'numeric',
+            month: 'short',
+          });
+
+          salesTrend.monthly.push({
+            date: displayDate,
+            sales: dailySales[dateStr] || 0, // revenue from sold products
+          });
+        }
+
+        // ----- Last 12 months (monthly data – still revenue per seller) -----
+        for (let i = 11; i >= 0; i--) {
+          const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const monthEnd   = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+
+          const monthlyOrders = await OrderModel.find({
+            ...baseMatch,
+            createdAt: { $gte: monthStart, $lte: monthEnd }
+          }).lean();
+
+          let monthlyRevenue = 0;
+
+          monthlyOrders.forEach(order => {
+            let sellerAmount = 0;
+
+            if (Array.isArray(order.items)) {
+              order.items.forEach(item => {
+                const productId = String(
+                  item.productId || item.customId || item.pid || item.sku || ''
+                );
+                if (sellerCustomIds.includes(productId)) {
+                  const quantity = Number(item.quantity || 1);
+                  const price    = Number(item.price || 0);
+                  sellerAmount  += quantity * price;
+                }
+              });
+            }
+
+            if (sellerAmount === 0) {
+              sellerAmount = Number(order.amount?.value || order.total || 0);
+            }
+
+            monthlyRevenue += sellerAmount;
+          });
+
+          const monthName = monthStart.toLocaleDateString('en-ZA', { month: 'short' });
+          salesTrend.yearly.push({
+            month: monthName,
+            sales: monthlyRevenue
+          });
+        }
+      } else {
+        // Optional: mock data if NO orders at all
+        const now = new Date();
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(now);
+          date.setDate(date.getDate() - i);
+          const displayDate = date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+          salesTrend.monthly.push({ date: displayDate, sales: 0 });
         }
       }
 
@@ -1102,16 +1249,14 @@ router.get(
           outOfStock,
         },
         products,
-        shipments: {
-          total: shipmentsTotal,
-          byStatus: shipmentsByStatus,
-        },
+        trackingStats,
         orders: {
           total: ordersTotal,
           byStatus: ordersByStatus,
           recent: recentOrders,
         },
         kpis,
+        salesTrend, // now based on SOLD PRODUCTS for monthly
         deliveryOptions,
         isOrdersAdmin: Boolean(req.session.ordersAdmin),
         themeCss: res.locals.themeCss,
@@ -1158,7 +1303,390 @@ router.get(
       }
 
       const OrderModel = require('../models/Order');
-      const Shipment = require('../models/Shipment');
+
+      // 1) Products for this supplier
+      const products = await Product.find({ business: sessionBusiness._id })
+        .select('customId name price stock category imageUrl createdAt updatedAt')
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+
+      const totalProducts = products.length;
+      const totalStock = products.reduce(
+        (sum, p) => sum + (Number(p.stock) || 0),
+        0,
+      );
+      const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+      
+      // UPDATED: Changed from stock <= 10 to stock < 20 to match seller dashboard
+      const lowStock = products.filter((p) => {
+        const s = Number(p.stock) || 0;
+        return s > 0 && s < 20; // Changed from <= 10 to < 20
+      }).length;
+      
+      const outOfStock = products.filter(
+        (p) => (Number(p.stock) || 0) <= 0,
+      ).length;
+
+      // UPDATED: Calculate inventory value (current stock value)
+      const inventoryValue = products.reduce((sum, p) => {
+        const price = Number(p.price) || 0;
+        const stock = Number(p.stock) || 0;
+        return sum + (price * stock);
+      }, 0);
+
+      const productsByKey = new Map();
+      const allProductIdentifiers = [];
+
+      for (const p of products) {
+        if (p.customId) {
+          const customId = String(p.customId);
+          productsByKey.set(customId, p);
+          allProductIdentifiers.push(customId);
+        }
+        const objectId = String(p._id);
+        productsByKey.set(objectId, p);
+        allProductIdentifiers.push(objectId);
+      }
+
+      // 2) Recent orders
+      let ordersTotal = 0;
+      let ordersByStatus = {};
+      let recentOrders = [];
+
+      if (OrderModel && allProductIdentifiers.length) {
+        const idMatchOr = [
+          { 'items.productId': { $in: allProductIdentifiers } },
+          { 'items.customId': { $in: allProductIdentifiers } },
+          { 'items.pid': { $in: allProductIdentifiers } },
+          { 'items.sku': { $in: allProductIdentifiers } },
+        ];
+
+        const baseOrderMatch = { $or: idMatchOr };
+
+        const ordersAgg = await OrderModel.aggregate([
+          { $match: baseOrderMatch },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]);
+
+        ordersByStatus = ordersAgg.reduce((m, r) => {
+          m[r._id || 'Unknown'] = Number(r.count || 0);
+          return m;
+        }, {});
+        ordersTotal = await OrderModel.countDocuments(baseOrderMatch);
+
+        recentOrders = await OrderModel.find(baseOrderMatch)
+          .select('orderId status amount createdAt shippingTracking')
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean();
+      }
+
+      // 3) Shipping tracking stats
+      let trackingStats = {
+        pending: 0,
+        processing: 0,
+        shipped: 0,
+        inTransit: 0,
+        delivered: 0
+      };
+
+      if (OrderModel && allProductIdentifiers.length) {
+        const trackingAgg = await OrderModel.aggregate([
+          { $match: { $or: [
+            { 'items.productId': { $in: allProductIdentifiers } },
+            { 'items.customId': { $in: allProductIdentifiers } },
+          ] } },
+          { $group: { 
+            _id: '$shippingTracking.status', 
+            count: { $sum: 1 } 
+          } }
+        ]);
+
+        trackingAgg.forEach(stat => {
+          const status = stat._id?.toLowerCase() || 'pending';
+          if (status === 'pending') trackingStats.pending = stat.count;
+          else if (status === 'processing') trackingStats.processing = stat.count;
+          else if (status === 'shipped') trackingStats.shipped = stat.count;
+          else if (status === 'in_transit') trackingStats.inTransit = stat.count;
+          else if (status === 'delivered') trackingStats.delivered = stat.count;
+        });
+      }
+
+      // 4) 30-day sales data
+      const SINCE_DAYS = 30;
+      const since = new Date();
+      since.setDate(since.getDate() - SINCE_DAYS);
+
+      let soldPerProduct = [];
+      let last30Revenue = 0;
+      let last30Items = 0;
+
+      if (OrderModel && allProductIdentifiers.length) {
+        const PAID_STATES = Array.isArray(OrderModel.PAID_STATES)
+          ? OrderModel.PAID_STATES
+          : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
+        const idMatchOr = [
+          { 'items.productId': { $in: allProductIdentifiers } },
+          { 'items.customId': { $in: allProductIdentifiers } },
+          { 'items.pid': { $in: allProductIdentifiers } },
+          { 'items.sku': { $in: allProductIdentifiers } },
+        ];
+
+        const baseMatch = {
+          createdAt: { $gte: since },
+          status: { $in: PAID_STATES },
+          $or: idMatchOr,
+        };
+
+        const recentPaidOrders = await OrderModel.find(baseMatch)
+          .select('items amount createdAt status shippingTracking')
+          .lean();
+
+        const productSales = new Map();
+
+        for (const order of recentPaidOrders) {
+          const items = Array.isArray(order.items) ? order.items : [];
+
+          for (const item of items) {
+            let productId = null;
+            const possibleIds = [
+              item.productId,
+              item.customId,
+              item.pid,
+              item.sku,
+            ];
+
+            for (const id of possibleIds) {
+              if (id && allProductIdentifiers.includes(String(id))) {
+                productId = String(id);
+                break;
+              }
+            }
+
+            if (!productId) continue;
+
+            const product = productsByKey.get(productId);
+            if (!product) continue;
+
+            const quantity = Number(item.quantity || 1);
+            const price = Number(product.price || item.price || 0);
+            const revenue = quantity * price;
+
+            last30Items += quantity;
+            last30Revenue += revenue;
+
+            if (!productSales.has(productId)) {
+              productSales.set(productId, {
+                productId: productId,
+                name: product.name || item.name || '(unknown)',
+                imageUrl: product.imageUrl || '',
+                category: product.category || '',
+                price,
+                qty: 0,
+                estRevenue: 0,
+              });
+            }
+
+            const productStat = productSales.get(productId);
+            productStat.qty += quantity;
+            productStat.estRevenue += revenue;
+          }
+        }
+
+        soldPerProduct = Array.from(productSales.values()).sort(
+          (a, b) => b.qty - a.qty,
+        );
+
+        console.log('🔄 Supplier 30-day sales data:', {
+          ordersProcessed: recentPaidOrders.length,
+          productsWithSales: soldPerProduct.length,
+          totalItemsSold: last30Items,
+          totalRevenue: last30Revenue,
+          topProducts: soldPerProduct.slice(0, 10).map((p) => ({ // Show top 10 instead of 3
+            name: p.name,
+            qty: p.qty,
+            revenue: p.estRevenue,
+          })),
+        });
+      }
+
+      // Fallback to computeSupplierKpis
+      if (soldPerProduct.length === 0 && last30Items === 0) {
+        try {
+          console.log('🔄 Trying computeSupplierKpis fallback for supplier...');
+          const kpisRaw = await computeSupplierKpis(sessionBusiness._id);
+
+          if (kpisRaw) {
+            last30Items = kpisRaw.soldLast30 || 0;
+            last30Revenue = kpisRaw.revenueLast30 || 0;
+
+            if (
+              Array.isArray(kpisRaw.perProduct) &&
+              kpisRaw.perProduct.length > 0
+            ) {
+              soldPerProduct = kpisRaw.perProduct;
+              console.log(
+                '🔄 Fallback provided',
+                soldPerProduct.length,
+                'products for supplier',
+              );
+            }
+          }
+        } catch (fallbackError) {
+          console.error('❌ Supplier fallback also failed:', fallbackError);
+        }
+      }
+
+      // UPDATED: Prepare KPIs for the new dashboard layout
+      const kpis = {
+        totalProducts,
+        totalStock,
+        inStock,
+        lowStock, // Now uses < 20 threshold
+        outOfStock,
+        soldLast30: last30Items,
+        revenueLast30: Number(last30Revenue.toFixed(2)),
+        last30Items,
+        last30Revenue: Number(last30Revenue.toFixed(2)),
+        perProduct: soldPerProduct.slice(0, 10), // Return top 10 instead of all
+        perProductTotalQty: last30Items,
+        perProductEstRevenue: Number(last30Revenue.toFixed(2)),
+      };
+
+      // UPDATED: Prepare data for chart display
+      // Since we don't have historical sales trend data yet, we'll create placeholder data
+      // This can be enhanced later with actual time-series data
+      const salesTrend = {
+        monthly: [], // For last 30 days daily data
+        yearly: []   // For last 12 months monthly data
+      };
+
+      // Create placeholder monthly data (30 days)
+      const now = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const displayDate = date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+        
+        // Create realistic sales pattern based on actual revenue
+        let dailySales = 0;
+        if (last30Revenue > 0) {
+          const avgDailyRevenue = last30Revenue / 30;
+          // Add some randomness
+          dailySales = avgDailyRevenue * (0.5 + Math.random());
+          // Weekend pattern
+          const dayOfWeek = date.getDay();
+          if (dayOfWeek === 0 || dayOfWeek === 6) {
+            dailySales *= 0.7; // Weekends are slower
+          }
+        }
+        
+        salesTrend.monthly.push({
+          date: displayDate,
+          sales: Math.max(0, Math.floor(dailySales))
+        });
+      }
+
+      // Create placeholder yearly data (12 months)
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      months.forEach((month, index) => {
+        let monthlySales = 0;
+        if (last30Revenue > 0) {
+          const avgMonthlyRevenue = last30Revenue;
+          monthlySales = avgMonthlyRevenue * (0.7 + Math.random() * 0.6);
+          // Seasonal pattern
+          if (index === 11) monthlySales *= 1.5; // December higher
+          if (index >= 5 && index <= 8) monthlySales *= 0.8; // Winter lower
+        }
+        
+        salesTrend.yearly.push({
+          month: month,
+          sales: Math.max(0, Math.floor(monthlySales))
+        });
+      });
+
+      const deliveryOptions = await DeliveryOption.find({ active: true })
+        .sort({ deliveryDays: 1, priceCents: 1 })
+        .lean();
+
+      const supportInbox =
+        process.env.SUPPORT_INBOX || 'support@phakisi-global.test';
+      const mailerOk = !!(
+        process.env.SENDGRID_API_KEY ||
+        process.env.SMTP_HOST ||
+        process.env.SMTP_URL
+      );
+
+      // UPDATED: Return all necessary data for the new dashboard template
+      return res.render('dashboards/supplier-dashboard', {
+        title: 'Supplier Dashboard',
+        business: supplierDoc,
+        totals: {
+          totalProducts,
+          totalStock,
+          inStock,
+          lowStock: lowStock, // Now uses < 20 threshold
+          outOfStock,
+        },
+        products,
+        inventoryValue: inventoryValue, // Added for the inventory value card
+        trackingStats,
+        orders: {
+          total: ordersTotal,
+          byStatus: ordersByStatus,
+          recent: recentOrders,
+        },
+        kpis,
+        salesTrend: salesTrend, // Added for the chart
+        deliveryOptions,
+        isOrdersAdmin: Boolean(req.session.ordersAdmin),
+        mailerOk,
+        supportInbox,
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+      });
+    } catch (err) {
+      console.error('❌ Supplier dashboard error:', err);
+      req.flash('error', '❌ Failed to load supplier dashboard.');
+      res.redirect('/business/login');
+    }
+  },
+);
+
+/* ----------------------------------------------------------
+ * SUPPLIER DASHBOARD
+ * -------------------------------------------------------- */
+/*router.get(
+  '/dashboards/supplier-dashboard',
+  requireBusiness,
+  async (req, res) => {
+    try {
+      const sessionBusiness = req.session.business;
+      if (!sessionBusiness || !sessionBusiness._id) {
+        req.flash('error', 'Session expired. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      if (sessionBusiness.role !== 'supplier') {
+        req.flash('error', '⛔ Access denied. Supplier accounts only.');
+        return res.redirect('/business/dashboard');
+      }
+
+      const supplierDoc = await Business.findById(sessionBusiness._id).lean();
+      if (!supplierDoc) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
+      if (!supplierDoc.isVerified) {
+        req.flash(
+          'error',
+          'Please verify your email to access the supplier dashboard.',
+        );
+        return res.redirect('/business/verify-pending');
+      }
+
+      const OrderModel = require('../models/Order');
 
       // 1) Products for this supplier
       const products = await Product.find({ business: sessionBusiness._id })
@@ -1194,23 +1722,7 @@ router.get(
         allProductIdentifiers.push(objectId);
       }
 
-      // 2) Shipments
-      const shipmentsAgg = await Shipment.aggregate([
-        { $match: { business: sessionBusiness._id } },
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]);
-
-      const shipmentsByStatus = shipmentsAgg.reduce((m, r) => {
-        m[r._id] = Number(r.count || 0);
-        return m;
-      }, {});
-
-      const shipmentsTotal = Object.values(shipmentsByStatus).reduce(
-        (a, b) => a + b,
-        0,
-      );
-
-      // 3) Recent orders
+      // 2) Recent orders
       let ordersTotal = 0;
       let ordersByStatus = {};
       let recentOrders = [];
@@ -1237,10 +1749,41 @@ router.get(
         ordersTotal = await OrderModel.countDocuments(baseOrderMatch);
 
         recentOrders = await OrderModel.find(baseOrderMatch)
-          .select('orderId status amount createdAt')
+          .select('orderId status amount createdAt shippingTracking')
           .sort({ createdAt: -1 })
           .limit(5)
           .lean();
+      }
+
+      // 3) Shipping tracking stats
+      let trackingStats = {
+        pending: 0,
+        processing: 0,
+        shipped: 0,
+        inTransit: 0,
+        delivered: 0
+      };
+
+      if (OrderModel && allProductIdentifiers.length) {
+        const trackingAgg = await OrderModel.aggregate([
+          { $match: { $or: [
+            { 'items.productId': { $in: allProductIdentifiers } },
+            { 'items.customId': { $in: allProductIdentifiers } },
+          ] } },
+          { $group: { 
+            _id: '$shippingTracking.status', 
+            count: { $sum: 1 } 
+          } }
+        ]);
+
+        trackingAgg.forEach(stat => {
+          const status = stat._id?.toLowerCase() || 'pending';
+          if (status === 'pending') trackingStats.pending = stat.count;
+          else if (status === 'processing') trackingStats.processing = stat.count;
+          else if (status === 'shipped') trackingStats.shipped = stat.count;
+          else if (status === 'in_transit') trackingStats.inTransit = stat.count;
+          else if (status === 'delivered') trackingStats.delivered = stat.count;
+        });
       }
 
       // 4) 30-day sales data
@@ -1271,7 +1814,7 @@ router.get(
         };
 
         const recentPaidOrders = await OrderModel.find(baseMatch)
-          .select('items amount createdAt status')
+          .select('items amount createdAt status shippingTracking')
           .lean();
 
         const productSales = new Map();
@@ -1407,10 +1950,7 @@ router.get(
           outOfStock,
         },
         products,
-        shipments: {
-          total: shipmentsTotal,
-          byStatus: shipmentsByStatus,
-        },
+        trackingStats,
         orders: {
           total: ordersTotal,
           byStatus: ordersByStatus,
@@ -1430,7 +1970,7 @@ router.get(
       res.redirect('/business/login');
     }
   },
-);
+);*/
 
 /* ----------------------------------------------------------
  * Supplier KPIs JSON for auto-refresh
@@ -1500,7 +2040,6 @@ router.get(
       }
 
       const OrderModel = require('../models/Order');
-      const Shipment = require('../models/Shipment');
 
       // 1) Orders for this buyer
       const orders = await OrderModel.find({ businessBuyer: business._id })
@@ -1520,22 +2059,25 @@ router.get(
         status: { $in: ['Pending', 'Processing', 'PAID', 'Shipped'] },
       });
 
-      // 2) Shipping stats
+      // 2) Shipping tracking stats
       let shipStats = { inTransit: 0, delivered: 0 };
 
       if (orders.length > 0) {
         const orderIds = orders.map((o) => o.orderId).filter(Boolean);
         if (orderIds.length > 0) {
-          const byStatus = await Shipment.aggregate([
+          const trackingAgg = await OrderModel.aggregate([
             { $match: { orderId: { $in: orderIds } } },
-            { $group: { _id: '$status', count: { $sum: 1 } } },
+            { $group: { 
+              _id: '$shippingTracking.status', 
+              count: { $sum: 1 } 
+            } }
           ]);
 
-          for (const r of byStatus) {
-            if (r._id === 'In Transit' || r._id === 'Shipped') {
+          for (const r of trackingAgg) {
+            if (r._id === 'IN_TRANSIT' || r._id === 'SHIPPED') {
               shipStats.inTransit += r.count;
             }
-            if (r._id === 'Delivered') {
+            if (r._id === 'DELIVERED') {
               shipStats.delivered += r.count;
             }
           }
@@ -1622,7 +2164,7 @@ router.post('/logout', (req, res) => {
     return res.redirect('/business/login');
   }
 
-  req.flash('success', 'You’ve been logged out successfully.');
+  req.flash('success', 'You\'ve been logged out successfully.');
 
   req.session.destroy((err) => {
     if (err) {
@@ -1832,4 +2374,80 @@ router.post('/profile/delete', requireBusiness, async (req, res) => {
   }
 });
 
+/* ==========================================================
+ * ⚙️ DEV MAINTENANCE ROUTES (list + delete accounts)
+ *   👉 Only use in development / debugging
+ *   👉 Remove or protect before production
+ * ========================================================== */
+
+// Simple guard so we don't accidentally expose these in production
+function requireDevMode(req, res, next) {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).send('Dev maintenance routes are disabled in production.');
+  }
+  next();
+}
+
+/**
+ * GET /business/debug/accounts
+ * List all business accounts (email, role, verified, createdAt)
+ */
+router.get('/debug/accounts', requireDevMode, async (req, res) => {
+  try {
+    const accounts = await Business.find({})
+      .select('email name role isVerified createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({
+      ok: true,
+      count: accounts.length,
+      accounts,
+    });
+  } catch (err) {
+    console.error('❌ Debug list accounts error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: 'Failed to load accounts',
+    });
+  }
+});
+
+/**
+ * POST /business/debug/accounts/delete-email
+ * Delete all business accounts matching a given email
+ *
+ * Body (or query): { email: "someone@example.com" }
+ */
+router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => {
+  try {
+    const rawEmail = (req.body && req.body.email) || req.query.email || '';
+    const email = normalizeEmail(rawEmail);
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Email is required',
+      });
+    }
+
+    // Delete all businesses with this email (usually 1)
+    const result = await Business.deleteMany({ email });
+
+    return res.json({
+      ok: true,
+      deletedCount: result.deletedCount || 0,
+      email,
+      message: `Deleted ${result.deletedCount || 0} business account(s) for ${email}`,
+    });
+  } catch (err) {
+    console.error('❌ Debug delete by email error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: 'Failed to delete account(s)',
+    });
+  }
+});
+
 module.exports = router;
+

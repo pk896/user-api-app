@@ -7,8 +7,7 @@ const crypto = require('crypto');
 
 const User = require('../models/User');
 const Order = require('../models/Order');
-const Shipment = require('../models/Shipment');
-const { sendMail, FROM } = require('../utils/mailer');
+const { sendMail, _FROM } = require('../utils/mailer');
 const ResetToken = require('../models/ResetToken');
 
 
@@ -623,127 +622,104 @@ router.get('/profile', ensureUser, async (req, res) => {
 /* =======================================================
    DASHBOARD
 ======================================================= */
-router.get('/dashboard',ensureVerifiedUser, async (req, res) => {
+router.get('/dashboard', ensureVerifiedUser, async (req, res) => {
   const { nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
-  const userObjectId = mongoose.Types.ObjectId.isValid(uid)
-    ? new mongoose.Types.ObjectId(uid)
-    : null;
+  try {
+    const PAID_STATES = ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
 
-  const [orders, shipments, totalOrders, paidOrders, spentAgg, wishlistItems] =
-    await Promise.all([
-      Order.find({ userId: uid }).sort({ createdAt: -1 }).limit(20).lean(),
-      Shipment.find({ userId: uid }).sort({ createdAt: -1 }).limit(20).lean().catch(() => []),
-      Order.countDocuments({ userId: uid }),
-      Order.countDocuments({ userId: uid, status: 'paid' }).catch(() => 0),
-      userObjectId
-        ? Order.aggregate([
-            { $match: { userId: userObjectId } },
-            {
-              $group: {
-                _id: null,
-                total: {
-                  $sum: {
-                    $ifNull: ['$amount.total', '$total'],
-                  },
-                },
-              },
-            },
-          ]).catch(() => [])
-        : [],
-      Wishlist ? Wishlist.find({ userId: uid }).lean().catch(() => []) : [],
-    ]);
+    // Get orders with shippingTracking data
+    const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).limit(10).lean();
+    
+    // Extract shipments from orders that have tracking info
+    const shipments = orders
+      .filter(order => order.shippingTracking && order.shippingTracking.trackingNumber)
+      .map(order => ({
+        orderId: order._id,
+        status: order.shippingTracking.status || 'PENDING',
+        carrier: order.shippingTracking.carrierLabel || order.shippingTracking.carrier,
+        trackingNumber: order.shippingTracking.trackingNumber,
+        trackingUrl: order.shippingTracking.trackingUrl,
+        updatedAt: order.shippingTracking.lastTrackingUpdate || order.updatedAt || order.createdAt,
+        shippedAt: order.shippingTracking.shippedAt,
+        deliveredAt: order.shippingTracking.deliveredAt,
+        // For convenience, include the order status too
+        orderStatus: order.status
+      }))
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      .slice(0, 5); // Limit to 5 most recent
 
-  const totalSpent = spentAgg?.[0]?.total || 0;
-
-  const shipStats = {
-    inTransit: shipments.filter(
-      (s) => (s?.status || '').toLowerCase().replace(/\s+/g, ' ') === 'in transit',
-    ).length,
-    delivered: shipments.filter(
-      (s) => (s?.status || '').toLowerCase().replace(/\s+/g, ' ') === 'delivered',
-    ).length,
-  };
-
-  // Extract payments from Orders (similar to your /users/payments route)
-  const payments = [];
-  for (const o of orders) {
-    if (!o) continue;
-
-    const addCapture = (c) => {
-      if (!c) return;
-      const rawValue =
-        (c.amount && (c.amount.value || c.amount.total)) ||
-        c.amount ||
-        (o.amount && (o.amount.total || o.amount.value)) ||
-        o.total ||
-        0;
-      const currency =
-        (c.amount && (c.amount.currency_code || c.amount.currency)) ||
-        (o.amount && (o.amount.currency_code || o.amount.currency)) ||
-        o.currency ||
-        'USD';
-      const valueNum = Number(rawValue) || 0;
-
-      payments.push({
-        orderId: o._id,
-        captureId: c.id || c.capture_id || null,
-        provider: 'PayPal',
-        amount: { value: valueNum.toFixed(2), currency },
-        status: c.status || o.status || 'PAID',
-        createdAt: c.create_time ? new Date(c.create_time) : o.createdAt,
-        updateTime: c.update_time ? new Date(c.update_time) : o.updatedAt || o.createdAt,
-      });
-    };
-
-    if (Array.isArray(o?.captures)) {
-      o.captures.forEach(addCapture);
-    } else if (o?.payment && Array.isArray(o.payment.captures)) {
-      o.payment.captures.forEach(addCapture);
-    } else if (o?.paypalCaptureId) {
-      const rawValue =
-        (o.amount && (o.amount.total || o.amount.value)) ||
-        o.total ||
-        0;
-      const currency =
-        (o.amount && (o.amount.currency_code || o.amount.currency)) ||
-        o.currency ||
-        'USD';
-      const valueNum = Number(rawValue) || 0;
-
-      payments.push({
-        orderId: o._id,
-        captureId: o.paypalCaptureId,
-        provider: 'PayPal',
-        amount: { value: valueNum.toFixed(2), currency },
-        status: o.status || 'PAID',
-        createdAt: o.createdAt,
-        updateTime: o.updatedAt || o.createdAt,
-      });
+    // Get wishlist items if available
+    let wishlistItems = [];
+    if (Wishlist) {
+      try {
+        wishlistItems = await Wishlist.find({ userId: uid }).lean();
+      } catch (wishlistErr) {
+        console.error('Wishlist fetch error:', wishlistErr);
+      }
     }
+
+    // Calculate metrics from the orders array
+    const totalOrders = orders.length;
+    const paidOrders = orders.filter(order => 
+      PAID_STATES.includes(order.status)
+    ).length;
+
+    // Calculate total spent
+    const totalSpent = orders.reduce((sum, order) => {
+      try {
+        let amountValue = 0;
+        
+        if (order.breakdown?.grandTotal) {
+          amountValue = Number(order.breakdown.grandTotal);
+        }
+        else if (order.amount?.value) {
+          amountValue = Number(order.amount.value);
+        }
+        else if (order.breakdown) {
+          const itemTotal = Number(order.breakdown.itemTotal?.value || order.breakdown.subTotal || 0);
+          const taxTotal = Number(order.breakdown.taxTotal?.value || order.breakdown.vatTotal || 0);
+          const shipping = Number(order.breakdown.shipping?.value || order.breakdown.delivery || 0);
+          amountValue = itemTotal + taxTotal + shipping;
+        }
+        else if (order.purchase_units?.[0]?.amount?.value) {
+          amountValue = Number(order.purchase_units[0].amount.value);
+        }
+        
+        return sum + amountValue;
+      } catch (error) {
+        console.error(`Error calculating amount for order ${order._id}:`, error);
+        return sum;
+      }
+    }, 0);
+
+    // Render with the professional template
+    res.render('dashboards/users-dashboard', {
+      title: 'Dashboard',
+      active: 'dashboard',
+      styles: pageStyles(nonce),
+      scripts: pageScripts(nonce),
+      user: req.session.user,
+      business: req.session.business || null,
+      orders: orders,
+      shipments: shipments,
+      wishlistItems: wishlistItems,
+      kpis: { 
+        totalOrders, 
+        paidOrders, 
+        totalSpent 
+      },
+      // Flash messages if any
+      success: req.flash('success'),
+      error: req.flash('error')
+    });
+
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    req.flash('error', 'Unable to load dashboard. Please try again.');
+    res.redirect('/users/profile');
   }
-
-  payments.sort((a, b) => {
-    const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return bd - ad;
-  });
-
-  res.render('users-dashboard', {
-    title: 'User Dashboard',
-    active: 'users',
-    styles: pageStyles(nonce),
-    scripts: pageScripts(nonce),
-    user: req.session.user,
-    business: req.session.business || null,
-    orders,
-    shipments,
-    wishlistItems,
-    payments,
-    shipStats,
-    kpis: { totalOrders, paidOrders, totalSpent },
-  });
 });
 
 /* =======================================================
@@ -755,12 +731,6 @@ router.get('/orders', ensureUser, async (req, res) => {
 
   const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).lean();
   const orderIds = orders.map((o) => o._id);
-  const shipments = await Shipment.find({ orderId: { $in: orderIds } })
-    .lean()
-    .catch(() => []);
-
-  const byOrder = shipments.reduce((acc, s) => ((acc[String(s.orderId)] = s), acc), {});
-  const withShip = orders.map((o) => ({ ...o, shipment: byOrder[String(o._id)] || null }));
 
   res.render('users-orders', {
     title: 'My Orders',
@@ -769,7 +739,7 @@ router.get('/orders', ensureUser, async (req, res) => {
     scripts: pageScripts(nonce),
     user: req.session.user,
     business: req.session.business || null,
-    orders: withShip,
+    orders,
   });
 });
 
@@ -786,9 +756,8 @@ router.get('/orders/:id', ensureVerifiedUser, async (req, res) => {
     return res.redirect('/users/orders');
   }
 
-  const shipment = await Shipment.findOne({ orderId: order._id })
-    .lean()
-    .catch(() => null);
+  // Check if there's shipping tracking data
+  const hasShipment = !!(order.shippingTracking && order.shippingTracking.trackingNumber);
 
   res.render('users-order-detail', {
     title: `Order #${order._id.toString().slice(-6)}`,
@@ -798,7 +767,8 @@ router.get('/orders/:id', ensureVerifiedUser, async (req, res) => {
     user: req.session.user,
     business: req.session.business || null,
     order,
-    shipment,
+    hasShipment, // Pass this flag to the template
+    // You could also pass shippingTracking separately if you want, but the template can access it from order
   });
 });
 
@@ -822,8 +792,6 @@ router.get('/orders/by-order-id/:orderId', ensureVerifiedUser, async (req, res) 
     return res.redirect('/users/orders');
   }
 
-  const shipment = await Shipment.findOne({ orderId: order._id }).lean().catch(() => null);
-
   res.render('users-order-detail', {
     title: `Order #${order._id.toString().slice(-6)}`,
     active: 'users',
@@ -832,7 +800,7 @@ router.get('/orders/by-order-id/:orderId', ensureVerifiedUser, async (req, res) 
     user: req.session.user,
     business: req.session.business || null,
     order,
-    shipment,
+    hasShipment: !!(order.shippingTracking && order.shippingTracking.trackingNumber),
   });
 });
 
@@ -933,6 +901,7 @@ router.get('/password/forgot', (req, res) => {
     scripts: pageScripts(nonce),
     user: req.session.user || null,
     business: req.session.business || null,
+    messages: req.flash(), // Add this line
   });
 });
 
@@ -1341,6 +1310,118 @@ router.get('/about', (req, res) => {
     user: req.session.user || null,
     business: req.session.business || null,
   });
+});
+
+// ADD THIS TEST ROUTE - TEMPORARY
+router.get('/dashboard-test', ensureVerifiedUser, async (req, res) => {
+  const { nonce = '' } = res.locals;
+  const uid = req.session.user._id;
+
+  try {
+    const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).limit(20).lean();
+    
+    // SIMPLE TEST - render a basic page without layout
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><title>TEST Dashboard</title></head>
+    <body>
+      <h1>TEST DASHBOARD - NO CACHING</h1>
+      <div style="border: 5px solid green; padding: 20px; background: lightgreen;">
+        <h2>✅ TEST ROUTE LOADED</h2>
+        <p>Orders count: ${orders.length}</p>
+      </div>
+      
+      ${orders.map(o => `
+        <div style="border: 2px solid blue; margin: 10px; padding: 10px;">
+          <h3>Order: ${o._id}</h3>
+          <p>Amount object: ${JSON.stringify(o.amount)}</p>
+          <p style="color: red; font-size: 20px; font-weight: bold;">
+            DIRECT DISPLAY: ${o.amount?.currency || 'USD'} ${o.amount?.value || 'NO VALUE'}
+          </p>
+        </div>
+      `).join('')}
+    </body>
+    </html>
+    `;
+    
+    res.send(html);
+  } catch (error) {
+    res.send(`Error: ${error.message}`);
+  }
+});
+
+/* =======================================================
+   DEV MAINTENANCE ROUTES – LIST + DELETE USERS BY EMAIL
+   ⚠️ Disabled automatically in production
+======================================================= */
+
+function requireDevMode(req, res, next) {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).send('Dev maintenance routes are disabled in production.');
+  }
+  next();
+}
+
+/**
+ * GET /users/debug/accounts
+ * List all user accounts (email, username, provider, verified, createdAt)
+ */
+router.get('/debug/accounts', requireDevMode, async (req, res) => {
+  try {
+    const users = await User.find({})
+      .select('email username name provider isEmailVerified createdAt lastLogin')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({
+      ok: true,
+      count: users.length,
+      users,
+    });
+  } catch (err) {
+    console.error('❌ Debug list users error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: 'Failed to load users',
+    });
+  }
+});
+
+
+/**
+ * POST /users/debug/accounts/delete-email
+ * Delete all user accounts matching the given email
+ *
+ * Body or query: { email: "someone@example.com" }
+ */
+router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => {
+  try {
+    const rawEmail = (req.body && req.body.email) || req.query.email || '';
+    const email = String(rawEmail).trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Email is required',
+      });
+    }
+
+    const result = await User.deleteMany({ email });
+
+    return res.json({
+      ok: true,
+      deletedCount: result.deletedCount || 0,
+      email,
+      message: `Deleted ${result.deletedCount || 0} user account(s) for ${email}`,
+    });
+  } catch (err) {
+    console.error('❌ Debug delete user by email error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: 'Failed to delete user account(s)',
+    });
+  }
 });
 
 module.exports = router;

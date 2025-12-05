@@ -1,54 +1,667 @@
-<!--views/users-forgot.ejs-->
-<section class="auth-page">
-  <h1 class="page-title">🔐 Forgot Password</h1>
+<!-- views/users-forgot.ejs -->
+<section class="auth-page mini">
+  <!-- Brand Header -->
+  <div class="brand-header">
+    <div class="logo-preview">
+      <div class="logo-color blue"></div>
+      <div class="logo-color purple"></div>
+      <div class="logo-color green"></div>
+      <div class="logo-color black"></div>
+    </div>
+    <h1 class="page-title">🔒 Reset Your Password</h1>
+    <p class="page-subtitle">
+      Enter your email and we'll send you a link to reset your password
+    </p>
+  </div>
 
-  <% (success || []).forEach(msg => { %>
-  <div class="flash flash-success">✅ <%= msg %></div>
-<% }) %>
+  <!-- Flash Messages from Server -->
+  <% if (messages && messages.error) { %>
+    <div class="flash flash-error">
+      <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </svg>
+      <div class="flash-content">
+        <strong>Error:</strong> <%= messages.error[0] %>
+      </div>
+    </div>
+  <% } %>
 
-<% (error || []).forEach(msg => { %>
-  <div class="flash flash-error">❌ <%= msg %></div>
-<% }) %>
+  <% if (messages && messages.success) { %>
+    <div class="flash flash-success">
+      <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <div class="flash-content">
+        <strong>Success!</strong> <%= messages.success[0] %>
+      </div>
+    </div>
+  <% } %>
 
-  <form action="/users/password/forgot" method="POST" class="form">
-    <div class="form-group">
-      <label for="email">Email address</label>
-      <input id="email" name="email" type="email" required placeholder="you@example.com" class="input">
+  <!-- Recovery Status -->
+  <div class="recovery-status">
+    <svg class="status-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+    </svg>
+    <div class="status-info">
+      <h3>Password Recovery</h3>
+      <p>We'll send a secure reset link to your email address</p>
+    </div>
+  </div>
+
+  <!-- SIMPLE HTML FORM - NO JAVASCRIPT INTERFERENCE -->
+  <form action="/users/password/forgot" method="POST" class="auth-form card" novalidate>
+    <div class="form-section">
+      <!-- Email Input -->
+      <div class="input-group">
+        <label class="floating-label">
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            placeholder=" "
+            class="input"
+            autocomplete="email"
+            inputmode="email"
+            value="<%= typeof email !== 'undefined' ? email : '' %>"
+          />
+          <span class="label-text">Email Address</span>
+          <div class="input-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+              <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>
+          </div>
+        </label>
+      </div>
     </div>
 
-    <button type="submit" class="btn xs primary wfull">Send reset link</button>
+    <!-- Instructions -->
+    <div class="instructions">
+      <h4>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        What happens next?
+      </h4>
+      
+      <ol class="steps-list">
+        <li class="step-item">
+          <span class="step-number">1</span>
+          <div class="step-details">
+            <strong>Check your inbox</strong>
+            <p>We'll send a password reset link to your email</p>
+          </div>
+        </li>
+        
+        <li class="step-item">
+          <span class="step-number">2</span>
+          <div class="step-details">
+            <strong>Click the link</strong>
+            <p>The link expires in 1 hour for security</p>
+          </div>
+        </li>
+        
+        <li class="step-item">
+          <span class="step-number">3</span>
+          <div class="step-details">
+            <strong>Set new password</strong>
+            <p>Create a strong, secure password</p>
+          </div>
+        </li>
+        
+        <li class="step-item">
+          <span class="step-number">4</span>
+          <div class="step-details">
+            <strong>Sign in</strong>
+            <p>Use your new password to access your account</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <!-- SIMPLE SUBMIT BUTTON - NO JAVASCRIPT -->
+    <button type="submit" class="btn primary wfull">
+      Send Reset Link
+    </button>
   </form>
 
-  <p class="muted"><a href="/users/login">Back to sign in</a></p>
+  <!-- Navigation Links -->
+  <div class="navigation-links">
+    <a href="/users/login" class="nav-link back-link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+      Back to Sign In
+    </a>
+    
+    <span class="link-divider">•</span>
+    
+    <a href="/users/signup" class="nav-link signup-link">
+      Create New Account
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </a>
+  </div>
 </section>
 
-<style>
-.auth-page{max-width:420px;margin:24px auto;padding:16px}
-.page-title{font-size:1.4rem;margin-bottom:12px}
-.form-group{margin:12px 0}
-.input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}
-.btn{border:0;padding:10px 14px;border-radius:10px}
-.btn.primary{background:#2563eb;color:#fff}
-.btn.wfull{width:100%}
-.flash{margin:10px 0;padding:10px;border-radius:8px}
-.flash-success{background:#ecfdf5;border:1px solid #10b981}
-.flash-error{background:#fef2f2;border:1px solid #ef4444}
-.muted{color:#555;margin-top:8px}
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  /* ============================================
+     COMPANY COLOR THEME - Unicoporate Identity
+     ============================================ */
+  :root {
+    /* Brand Colors */
+    --unicoporate-blue: #2563EB;    /* Trust & Reliability */
+    --unicoporate-purple: #7C3AED;  /* Innovation & Creativity */
+    --unicoporate-green: #22C55E;   /* Growth & Success - PRIMARY */
+    --unicoporate-black: #0F172A;   /* Sophistication & Premium */
+    
+    /* Green-Focused Color Scheme */
+    --primary: var(--unicoporate-green);
+    --secondary: #16a34a;
+    --accent-blue: var(--unicoporate-blue);
+    --accent-purple: var(--unicoporate-purple);
+    
+    /* Light Theme */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f0fdf4;        /* Light green tint */
+    --bg-surface: #ffffff;
+    --bg-surface-hover: #f8fafc;
+    
+    --text-primary: var(--unicoporate-black);
+    --text-secondary: #475569;
+    --text-tertiary: #64748b;
+    --text-on-color: #ffffff;
+    
+    --border-light: #e2e8f0;
+    --border-medium: #cbd5e1;
+    --border-green: #a7f3d0;
+    
+    --success-bg: #dcfce7;
+    --success-text: #065f46;
+    --error-bg: #fee2e2;
+    --error-text: #991b1b;
+    --warning-bg: #fef3c7;
+    --warning-text: #92400e;
+    --info-bg: #dbeafe;
+    --info-text: #1e40af;
+    
+    --shadow-sm: 0 1px 2px rgba(34, 197, 94, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(34, 197, 94, 0.08);
+    --shadow-lg: 0 10px 15px -3px rgba(34, 197, 94, 0.08);
+    --shadow-xl: 0 20px 25px -5px rgba(34, 197, 94, 0.1);
+    
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-full: 9999px;
+  }
+
+  .dark-theme {
+    --bg-primary: #0f172a;
+    --bg-secondary: #052e16;        /* Dark green */
+    --bg-surface: #1e293b;
+    --bg-surface-hover: #334155;
+    
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-tertiary: #94a3b8;
+    
+    --border-light: #334155;
+    --border-medium: #475569;
+    --border-green: #064e3b;
+    
+    --success-bg: #064e3b;
+    --success-text: #a7f3d0;
+    --error-bg: #7f1d1d;
+    --error-text: #fecaca;
+    --warning-bg: #78350f;
+    --warning-text: #fbbf24;
+    --info-bg: #1e3a8a;
+    --info-text: #93c5fd;
+  }
+
+  /* ============================================
+     BASE STYLES
+     ============================================ */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.4;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  /* ============================================
+     MAIN CONTAINER - Responsive
+     ============================================ */
+  .auth-page.mini {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0.5rem;
+  }
+
+  @media (max-width: 360px) {
+    .auth-page.mini {
+      padding: 0.25rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .auth-page.mini {
+      max-width: 440px;
+      padding: 1rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .auth-page.mini {
+      max-width: 480px;
+    }
+  }
+
+  /* ============================================
+     BRAND HEADER
+     ============================================ */
+  .brand-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    padding: 0 0.5rem;
+  }
+
+  .logo-preview {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 0.75rem;
+  }
+
+  .logo-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  .logo-color.blue { background: var(--unicoporate-blue); }
+  .logo-color.purple { background: var(--unicoporate-purple); }
+  .logo-color.green { background: var(--unicoporate-green); }
+  .logo-color.black { background: var(--unicoporate-black); }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.375rem;
+    background: linear-gradient(135deg, var(--unicoporate-blue), var(--unicoporate-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  /* ============================================
+     FLASH MESSAGES
+     ============================================ */
+  .flash {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .flash-success {
+    background: var(--success-bg);
+    color: var(--success-text);
+    border: 1px solid var(--border-green);
+  }
+
+  .flash-error {
+    background: var(--error-bg);
+    color: var(--error-text);
+    border: 1px solid var(--error-bg);
+  }
+
+  .flash-icon {
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+  }
+
+  .flash-content {
+    flex: 1;
+  }
+
+  .flash-content strong {
+    font-weight: 600;
+  }
+
+  /* ============================================
+     RECOVERY STATUS
+     ============================================ */
+  .recovery-status {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 163, 74, 0.05));
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.25rem;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .status-icon {
+    color: var(--primary);
+    flex-shrink: 0;
+  }
+
+  .status-info h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.125rem;
+    color: var(--text-primary);
+  }
+
+  .status-info p {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  /* ============================================
+     CARD
+     ============================================ */
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--unicoporate-green), #4ade80);
+  }
+
+  /* ============================================
+     FORM
+     ============================================ */
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .input-group {
+    position: relative;
+  }
+
+  .floating-label {
+    position: relative;
+    display: block;
+  }
+
+  .floating-label input {
+    width: 100%;
+    padding: 0.875rem 3rem 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    background: var(--bg-surface);
+    border: 1.5px solid var(--border-light);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    height: 44px;
+  }
+
+  .floating-label input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+  }
+
+  .label-text {
+    position: absolute;
+    top: 0.875rem;
+    left: 0.875rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    pointer-events: none;
+    background: var(--bg-surface);
+    padding: 0 0.25rem;
+  }
+
+  .input-icon {
+    position: absolute;
+    right: 2.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+  }
+
+  /* ============================================
+     INSTRUCTIONS
+     ============================================ */
+  .instructions {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(124, 58, 237, 0.05));
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    border: 1px solid rgba(124, 58, 237, 0.1);
+  }
+
+  .instructions h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+
+  .instructions h4 svg {
+    color: var(--accent-blue);
+  }
+
+  .steps-list {
+    list-style: none;
+  }
+
+  .step-item {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .step-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .step-number {
+    width: 22px;
+    height: 22px;
+    background: var(--bg-surface);
+    border: 2px solid var(--accent-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--accent-blue);
+  }
+
+  .step-details strong {
+    display: block;
+    margin-bottom: 0.125rem;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+  }
+
+  .step-details p {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+  }
+
+  /* ============================================
+     BUTTONS
+     ============================================ */
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    height: 44px;
+    width: 100%;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: var(--text-on-color);
+  }
+
+  .btn:hover {
+    background: linear-gradient(135deg, var(--secondary), #15803d);
+  }
+
+  /* ============================================
+     NAVIGATION LINKS
+     ============================================ */
+  .navigation-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .nav-link:hover {
+    color: var(--accent-purple);
+    text-decoration: underline;
+  }
+
+  .link-divider {
+    color: var(--text-tertiary);
+    font-size: 0.8125rem;
+    opacity: 0.5;
+  }
+
+  /* ============================================
+     MOBILE RESPONSIVE
+     ============================================ */
+  @media (max-width: 360px) {
+    body {
+      padding: 0.5rem;
+    }
+
+    .auth-page.mini {
+      padding: 0.25rem;
+    }
+
+    .card {
+      padding: 1.25rem;
+    }
+
+    .page-title {
+      font-size: 1.375rem;
+    }
+
+    .page-subtitle {
+      font-size: 0.75rem;
+    }
+
+    .btn {
+      padding: 0.625rem 1rem;
+      height: 42px;
+    }
+
+    .floating-label input {
+      height: 42px;
+      padding: 0.75rem 2.75rem 0.375rem 0.75rem;
+    }
+
+    .input-icon {
+      right: 2.25rem;
+    }
+
+    .instructions {
+      padding: 1rem;
+    }
+
+    .step-item {
+      flex-direction: column;
+      text-align: center;
+      gap: 0.5rem;
+    }
+
+    .step-number {
+      margin: 0 auto;
+    }
+
+    .navigation-links {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .link-divider {
+      display: none;
+    }
+
+    .recovery-status {
+      flex-direction: column;
+      text-align: center;
+      gap: 0.5rem;
+    }
+  }
 </style>
 
-<script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.querySelector('form[action="/users/password/forgot"]');
-  if (!form) return;
-  form.addEventListener("submit", () => {
-    const btn = form.querySelector('button[type="submit"]');
-    if (btn) {
-      btn.disabled = true;
-      const original = btn.textContent;
-      btn.dataset.original = original;
-      btn.textContent = "Sending…";
-    }
-  });
-});
-</script>
-
+<!-- NO JAVASCRIPT AT ALL - Let HTML form work naturally -->

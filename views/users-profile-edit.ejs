@@ -1,161 +1,670 @@
 <!-- views/users-profile-edit.ejs -->
-<section class="profile-edit-page mini">
+<div class="pe <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
   <% const profileUser = user || locals.user || {}; %>
 
-  <h1 class="page-title">👤 Edit Your Profile</h1>
+  <h1 class="pe-title">Edit Profile</h1>
 
-  <form action="/users/profile/edit" method="POST" class="card form" novalidate>
-    <div class="field">
-      <label for="email">Email <span class="muted">(read-only)</span></label>
-      <input
-        id="email"
-        name="email"
-        type="email"
-        value="<%= profileUser.email || '' %>"
-        readonly
-        disabled
-      >
-      <small class="muted tiny">
-        This is your contact email (Gmail / Outlook). Changing it will be handled via email verification in future.
-      </small>
+  <form action="/users/profile/edit" method="POST" class="pe-form" novalidate>
+    <!-- Email Field (Read-only) -->
+    <div class="pe-field">
+      <label for="pe-email" class="pe-label">
+        <span>Email</span>
+        <span class="pe-hint">Read-only</span>
+      </label>
+      <div class="pe-input-group">
+        <input
+          id="pe-email"
+          name="email"
+          type="email"
+          value="<%= profileUser.email || '' %>"
+          readonly
+          disabled
+          class="pe-input pe-input-disabled"
+          aria-describedby="pe-email-hint"
+        >
+        <div class="pe-input-suffix">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 4l6-4 6 4v6a2 2 0 01-2 2H4a2 2 0 01-2-2V4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 4l6 4 6-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div id="pe-email-hint" class="pe-hint">
+        This is your contact email. Changing it will require email verification.
+      </div>
     </div>
 
-    <div class="field">
-      <label for="username">Username</label>
+    <!-- Username Field -->
+    <div class="pe-field">
+      <label for="pe-username" class="pe-label">
+        <span>Username</span>
+        <span class="pe-hint">Required</span>
+      </label>
       <input
-        id="username"
+        id="pe-username"
         name="username"
         type="text"
         minlength="3"
         maxlength="30"
         value="<%= profileUser.username || '' %>"
         required
+        class="pe-input"
+        placeholder="Choose a username"
+        aria-describedby="pe-username-hint"
       >
-      <small class="muted tiny">
-        Used for login with password. Do not use your email password here.
-      </small>
+      <div id="pe-username-hint" class="pe-hint">
+        Used for login with password. 3-30 characters.
+      </div>
     </div>
 
-    <div class="field">
-      <label for="name">Full name</label>
+    <!-- Full Name Field -->
+    <div class="pe-field">
+      <label for="pe-name" class="pe-label">
+        <span>Full Name</span>
+        <span class="pe-hint">Required</span>
+      </label>
       <input
-        id="name"
+        id="pe-name"
         name="name"
         type="text"
         minlength="2"
         maxlength="120"
         value="<%= profileUser.name || '' %>"
         required
+        class="pe-input"
+        placeholder="Your full name"
       >
     </div>
 
-    <div class="field">
-      <label for="age">Age <span class="muted">(optional)</span></label>
-      <input
-        id="age"
-        name="age"
-        type="number"
-        min="0"
-        max="120"
-        value="<%= (typeof profileUser.age !== 'undefined' && profileUser.age !== null) ? profileUser.age : '' %>"
-      >
-    </div>
-
-    <div class="field">
-      <label for="password">
-        New password
-        <span class="muted">(min 6; leave blank to keep current)</span>
+    <!-- Age Field (Optional) -->
+    <div class="pe-field">
+      <label for="pe-age" class="pe-label">
+        <span>Age</span>
+        <span class="pe-hint">Optional</span>
       </label>
-      <input
-        id="password"
-        name="password"
-        type="password"
-        minlength="6"
-        placeholder="••••••••"
-        autocomplete="new-password"
-      >
+      <div class="pe-input-group">
+        <input
+          id="pe-age"
+          name="age"
+          type="number"
+          min="0"
+          max="120"
+          value="<%= (typeof profileUser.age !== 'undefined' && profileUser.age !== null) ? profileUser.age : '' %>"
+          class="pe-input"
+          placeholder="18"
+          aria-describedby="pe-age-hint"
+        >
+        <div class="pe-input-suffix">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+      <div id="pe-age-hint" class="pe-hint">
+        Optional. Must be between 0 and 120.
+      </div>
     </div>
 
-    <div class="actions">
-      <a class="btn xs subtle" href="/users/profile">← Cancel</a>
-      <button class="btn xs primary" type="submit">💾 Save</button>
+    <!-- Password Field -->
+    <div class="pe-field">
+      <label for="pe-password" class="pe-label">
+        <span>New Password</span>
+        <span class="pe-hint">Optional</span>
+      </label>
+      <div class="pe-input-group">
+        <input
+          id="pe-password"
+          name="password"
+          type="password"
+          minlength="6"
+          placeholder="••••••••"
+          autocomplete="new-password"
+          class="pe-input"
+          aria-describedby="pe-password-hint"
+        >
+        <button type="button" class="pe-password-toggle" aria-label="Show password">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 3C5 3 2.5 5 1 8c1.5 3 4 5 7 5s5.5-2 7-5c-1.5-3-4-5-7-5z" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div id="pe-password-hint" class="pe-hint">
+        Leave blank to keep current password. Minimum 6 characters.
+      </div>
+    </div>
+
+    <!-- Form Actions -->
+    <div class="pe-actions">
+      <a href="/users/profile" class="pe-btn pe-btn-secondary">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Cancel
+      </a>
+      <button type="submit" class="pe-btn pe-btn-primary">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M4 8l3 3 5-6M2 8a6 6 0 1112 0A6 6 0 012 8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Save Changes
+      </button>
     </div>
   </form>
-</section>
+</div>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-  .profile-edit-page.mini{
-    max-width:420px; margin:.8rem auto 1.2rem; padding:0 .6rem;
-  }
-  .page-title{
-    text-align:center; font-size:1.05rem; font-weight:800; margin:.2rem 0 .7rem;
-  }
-
-  .card.form{
-    background:var(--card-bg,#fff); border:1px solid var(--card-bd,#e5e7eb);
-    border-radius:12px; padding:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.06);
-  }
-  .dark-theme .card.form{
-    --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb;
+  /* ===== COMPANY COLORS & VARIABLES ===== */
+  .pe {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 10px;
+    --transition: all 0.2s ease;
   }
 
-  .field{
-    display:grid; gap:.35rem; margin-bottom:.8rem;
-  }
-  label{
-    font-weight:700; font-size:.85rem;
-  }
-  .muted{
-    font-weight:500; color:#6b7280;
-  }
-  .tiny{
-    font-size:.75rem;
-  }
-  .dark-theme .muted{
-    color:#9ca3af;
-  }
-  input{
-    border:1px solid #d1d5db; border-radius:10px; padding:.55rem .65rem; background:#fff; font-size:.9rem;
-  }
-  input[readonly], input[disabled]{
-    background:#f9fafb; color:#6b7280;
-  }
-  .dark-theme input{
-    background:#0b1220; border-color:#334155; color:#e5e7eb;
-  }
-  .dark-theme input[readonly], .dark-theme input[disabled]{
-    background:#020617; color:#9ca3af;
+  /* ===== MAIN CONTAINER ===== */
+  .pe {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
   }
 
-  .actions{
-    display:flex; gap:.4rem; justify-content:flex-end; flex-wrap:wrap; margin-top:.2rem;
-  }
-  .btn{
-    display:inline-block; padding:.35rem .55rem; border-radius:8px; text-decoration:none;
-    border:1px solid #d1d5db; background:#f3f4f6; color:#111827; font-size:.78rem;
-  }
-  .btn.xs{
-    padding:.3rem .5rem; font-size:.72rem; border-radius:7px;
-  }
-  .btn.primary{
-    background:#2563eb; color:#fff; border-color:#2563eb;
-  }
-  .btn.primary:hover{
-    opacity:.95;
-  }
-  .btn.subtle{
-    background:#e5e7eb; color:#111827;
-  }
-  .dark-theme .btn{
-    background:#374151; border-color:#4b5563; color:#e5e7eb;
-  }
-  .dark-theme .btn.primary{
-    background:#1d4ed8; border-color:#1d4ed8;
+  /* ===== TITLE ===== */
+  .pe-title {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    margin: 0 0 24px 0;
+    color: var(--black);
   }
 
-  @media (max-width:360px){
-    .profile-edit-page.mini{ padding:0 .5rem; }
-    .page-title{ font-size:1rem; }
-    input{ font-size:.85rem; padding:.5rem .6rem; }
+  .dark-theme .pe-title {
+    color: #F1F5F9;
+  }
+
+  /* ===== FORM ===== */
+  .pe-form {
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
+  }
+
+  .dark-theme .pe-form {
+    background: #132813;
+    border-color: #2D5A2D;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
+  }
+
+  /* ===== FORM FIELDS ===== */
+  .pe-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .pe-field:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ===== LABELS ===== */
+  .pe-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .pe-label .pe-hint {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .dark-theme .pe-label {
+    color: #F1F5F9;
+  }
+
+  /* ===== INPUTS ===== */
+  .pe-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #D1FAE5;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #FFFFFF;
+    color: var(--black);
+    transition: var(--transition);
+    font-family: inherit;
+  }
+
+  .pe-input:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  .pe-input::placeholder {
+    color: #94A3B8;
+  }
+
+  .pe-input.pe-input-disabled {
+    background: #F8FAFC;
+    color: #64748B;
+    cursor: not-allowed;
+    border-color: #E5E7EB;
+  }
+
+  .dark-theme .pe-input {
+    background: #1A341A;
+    border-color: #2D5A2D;
+    color: #F1F5F9;
+  }
+
+  .dark-theme .pe-input:focus {
+    background: #0F230F;
+    border-color: var(--blue);
+  }
+
+  .dark-theme .pe-input.pe-input-disabled {
+    background: #0A1F0A;
+    color: #64748B;
+    border-color: #2D5A2D;
+  }
+
+  /* ===== INPUT GROUPS ===== */
+  .pe-input-group {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+  }
+
+  .pe-input-group .pe-input {
+    flex: 1;
+    padding-right: 40px;
+  }
+
+  .pe-input-suffix,
+  .pe-password-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #64748B;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 4px;
+    transition: var(--transition);
+  }
+
+  .pe-password-toggle:hover {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--blue);
+  }
+
+  .dark-theme .pe-input-suffix,
+  .dark-theme .pe-password-toggle {
+    color: #94A3B8;
+  }
+
+  .dark-theme .pe-password-toggle:hover {
+    background: rgba(37, 99, 235, 0.2);
+    color: #60A5FA;
+  }
+
+  /* ===== HINT TEXT ===== */
+  .pe-hint {
+    font-size: 12px;
+    color: #64748B;
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+
+  .dark-theme .pe-hint {
+    color: #94A3B8;
+  }
+
+  /* ===== FORM ACTIONS ===== */
+  .pe-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #D1FAE5;
+  }
+
+  .dark-theme .pe-actions {
+    border-top-color: #2D5A2D;
+  }
+
+  /* ===== BUTTONS ===== */
+  .pe-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    flex: 1;
+  }
+
+  .pe-btn-primary {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    color: white;
+  }
+
+  .pe-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+
+  .pe-btn-secondary {
+    background: #FFFFFF;
+    color: var(--blue);
+    border-color: #D1FAE5;
+  }
+
+  .pe-btn-secondary:hover {
+    background: #F8FAFC;
+    border-color: var(--blue);
+  }
+
+  .dark-theme .pe-btn-secondary {
+    background: #1A341A;
+    color: #60A5FA;
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .pe-btn-secondary:hover {
+    background: #2D5A2D;
+    border-color: var(--blue);
+  }
+
+  /* ===== VALIDATION STATES ===== */
+  .pe-input:invalid:not(:focus):not(:placeholder-shown) {
+    border-color: #EF4444;
+  }
+
+  .pe-input:invalid:not(:focus):not(:placeholder-shown):focus {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  }
+
+  /* ===== CHARACTER COUNTERS ===== */
+  .pe-char-counter {
+    font-size: 11px;
+    text-align: right;
+    color: #64748B;
+    margin-top: 2px;
+  }
+
+  .pe-char-counter.warning {
+    color: #F59E0B;
+  }
+
+  .pe-char-counter.error {
+    color: #EF4444;
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .pe {
+      padding: 12px;
+    }
+    
+    .pe-form {
+      padding: 16px;
+    }
+    
+    .pe-title {
+      font-size: 18px;
+      margin-bottom: 20px;
+    }
+    
+    .pe-field {
+      margin-bottom: 16px;
+    }
+    
+    .pe-input {
+      padding: 10px;
+      font-size: 13px;
+    }
+    
+    .pe-btn {
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+    
+    .pe-actions {
+      margin-top: 24px;
+      padding-top: 16px;
+    }
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes peSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .pe-form {
+    animation: peSlideIn 0.3s ease-out;
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .pe-btn:focus,
+  .pe-input:focus,
+  .pe-password-toggle:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  .pe-password-toggle:focus {
+    outline-offset: 1px;
   }
 </style>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+document.addEventListener("DOMContentLoaded", () => {
+  // Password toggle functionality
+  const passwordToggle = document.querySelector('.pe-password-toggle');
+  const passwordInput = document.getElementById('pe-password');
+  
+  if (passwordToggle && passwordInput) {
+    passwordToggle.addEventListener('click', () => {
+      const type = passwordInput.getAttribute('type');
+      const isPassword = type === 'password';
+      
+      passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+      
+      // Update icon
+      const icon = passwordToggle.querySelector('svg');
+      if (icon) {
+        if (isPassword) {
+          icon.innerHTML = `
+            <path d="M8 3C5 3 2.5 5 1 8c1.5 3 4 5 7 5s5.5-2 7-5c-1.5-3-4-5-7-5z" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
+          `;
+          passwordToggle.setAttribute('aria-label', 'Hide password');
+        } else {
+          icon.innerHTML = `
+            <path d="M2 2l12 12M9.4 9.4a2 2 0 11-2.8-2.8m4.3 1.7c.3.8.3 1.7 0 2.5M3.2 3.2C2 4.4 1 6 1 8c1.5 3 4 5 7 5 1.5 0 2.9-.5 4-1.3M12 10c.5-.5.9-1.1 1.2-1.8.3-.8.3-1.7 0-2.5C13.5 5 11 3 8 3c-.7 0-1.4.1-2 .3" 
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          `;
+          passwordToggle.setAttribute('aria-label', 'Show password');
+        }
+      }
+    });
+  }
+  
+  // Character counters
+  const usernameInput = document.getElementById('pe-username');
+  const nameInput = document.getElementById('pe-name');
+  
+  function createCharCounter(input, maxLength) {
+    const counter = document.createElement('div');
+    counter.className = 'pe-char-counter';
+    
+    function updateCounter() {
+      const length = input.value.length;
+      counter.textContent = `${length}/${maxLength}`;
+      
+      if (length > maxLength * 0.9) {
+        counter.classList.add('warning');
+      } else {
+        counter.classList.remove('warning');
+      }
+      
+      if (length > maxLength) {
+        counter.classList.add('error');
+      } else {
+        counter.classList.remove('error');
+      }
+    }
+    
+    input.addEventListener('input', updateCounter);
+    updateCounter();
+    
+    return counter;
+  }
+  
+  // Add character counters
+  if (usernameInput) {
+    const counter = createCharCounter(usernameInput, 30);
+    usernameInput.parentNode.insertBefore(counter, usernameInput.nextSibling);
+  }
+  
+  if (nameInput) {
+    const counter = createCharCounter(nameInput, 120);
+    nameInput.parentNode.insertBefore(counter, nameInput.nextSibling);
+  }
+  
+  // Form validation
+  const form = document.querySelector('.pe-form');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      let isValid = true;
+      
+      // Check required fields
+      const requiredFields = form.querySelectorAll('[required]');
+      requiredFields.forEach(field => {
+        if (!field.value.trim()) {
+          isValid = false;
+          field.classList.add('pe-input-error');
+          
+          // Add error message if not exists
+          if (!field.nextElementSibling || !field.nextElementSibling.classList.contains('pe-error')) {
+            const error = document.createElement('div');
+            error.className = 'pe-error';
+            error.textContent = 'This field is required';
+            error.style.color = '#EF4444';
+            error.style.fontSize = '12px';
+            error.style.marginTop = '4px';
+            field.parentNode.insertBefore(error, field.nextSibling);
+          }
+        } else {
+          field.classList.remove('pe-input-error');
+          const error = field.nextElementSibling;
+          if (error && error.classList.contains('pe-error')) {
+            error.remove();
+          }
+        }
+      });
+      
+      // Check password length if provided
+      const password = document.getElementById('pe-password');
+      if (password && password.value.trim() && password.value.length < 6) {
+        isValid = false;
+        password.classList.add('pe-input-error');
+        
+        if (!password.nextElementSibling || !password.nextElementSibling.classList.contains('pe-error')) {
+          const error = document.createElement('div');
+          error.className = 'pe-error';
+          error.textContent = 'Password must be at least 6 characters';
+          error.style.color = '#EF4444';
+          error.style.fontSize = '12px';
+          error.style.marginTop = '4px';
+          password.parentNode.insertBefore(error, password.nextSibling);
+        }
+      }
+      
+      if (!isValid) {
+        e.preventDefault();
+        
+        // Scroll to first error
+        const firstError = form.querySelector('.pe-input-error');
+        if (firstError) {
+          firstError.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+          firstError.focus();
+        }
+      } else {
+        // Add loading state to submit button
+        const submitBtn = form.querySelector('.pe-btn-primary');
+        if (submitBtn) {
+          const originalHTML = submitBtn.innerHTML;
+          submitBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20"/>
+            </svg>
+            Saving...
+          `;
+          submitBtn.disabled = true;
+        }
+      }
+    });
+  }
+  
+  // Add visual feedback to inputs
+  const inputs = form.querySelectorAll('.pe-input');
+  inputs.forEach(input => {
+    input.addEventListener('input', function() {
+      this.classList.remove('pe-input-error');
+      const error = this.nextElementSibling;
+      if (error && error.classList.contains('pe-error')) {
+        error.remove();
+      }
+    });
+  });
+  
+  // Age input validation
+  const ageInput = document.getElementById('pe-age');
+  if (ageInput) {
+    ageInput.addEventListener('input', function() {
+      const value = parseInt(this.value);
+      if (!isNaN(value)) {
+        if (value < 0 || value > 120) {
+          this.classList.add('pe-input-error');
+        } else {
+          this.classList.remove('pe-input-error');
+        }
+      }
+    });
+  }
+});
+</script>

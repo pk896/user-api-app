@@ -15,252 +15,966 @@
   var currency = (cap.amount && cap.amount.currency_code) || (pu.amount && pu.amount.currency_code) || "USD";
   var grandTotal = (cap.amount && cap.amount.value) || (pu.amount && pu.amount.value) || "0.00";
 
-  function fmt(v) { var n = Number(v); return isNaN(n) ? (v || "0.00") : n.toFixed(2); }
+  function fmt(v) { 
+    var n = Number(v); 
+    return isNaN(n) ? (v || "0.00") : n.toFixed(2); 
+  }
 
   var NONCE = (typeof nonce !== 'undefined') ? nonce : '';
   var THEME_CLASS = (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme';
 %>
 
 <style nonce="<%= NONCE %>">
-  /* Root + dark theme tokens */
-  :root{
-    --card-bg:#fff;--card-border:#e5e7eb;--muted:#6b7280;--text:#111827;--surface:#f9fafb;
-    --shadow:0 6px 18px rgba(0,0,0,.06);--r:14px;--g:14px;--p:14px;
-    --fs:clamp(13px,3.5vw,16px);--fs-sm:clamp(12px,3.2vw,14px);--fs-lg:clamp(15px,4vw,18px);
-    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  /* Company Colors */
+  :root {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    
+    /* Green as primary body color */
+    --bg: #F0FDF4;
+    --text: var(--black);
+    --muted: #64748B;
+    --card-bg: #FFFFFF;
+    --card-border: #D1FAE5;
+    --surface: #FFFFFF;
+    --shadow: 0 4px 12px rgba(34, 197, 94, 0.08);
+    --radius: 16px;
+    --padding: 20px;
+    --gap: 20px;
+    
+    --fs: clamp(14px, 3.5vw, 16px);
+    --fs-sm: clamp(13px, 3.2vw, 14px);
+    --fs-lg: clamp(16px, 4vw, 20px);
+    --fs-xl: clamp(20px, 5vw, 28px);
+    
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  .dark-theme{
-    --card-bg:#0b1220;--card-border:rgba(255,255,255,0.1);--muted:#9ca3af;--text:#e5e7eb;--surface:#101826;
-    --shadow:0 6px 18px rgba(0,0,0,.4);
+
+  .dark-theme {
+    --bg: #0A1F0A;
+    --text: #F1F5F9;
+    --muted: #94A3B8;
+    --card-bg: #132813;
+    --card-border: #2D5A2D;
+    --surface: #0F230F;
+    --shadow: 0 4px 12px rgba(34, 197, 94, 0.12);
   }
 
-  html,body{margin:0;background:var(--surface);color:var(--text)}
-  .page{max-width:900px;margin:0 auto;padding:12px}
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-  /* Clamp page to viewport — no sideways scroll */
-  .page, .page *{max-width:100%}
-  .wrap{display:grid;gap:var(--g);}
-  .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--r);padding:var(--p);box-shadow:var(--shadow);}
-  .success-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#ecfdf5;color:#065f46;font-weight:700;font-size:var(--fs);}
-  .dark-theme .success-badge{background:#073b2c;color:#c0ffe6;}
-  .sub{color:var(--muted);margin:4px 0 10px;font-size:var(--fs);}
-  .btns{display:flex;gap:10px;flex-wrap:wrap}
-  .btn{display:inline-flex;justify-content:center;align-items:center;gap:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--card-border);text-decoration:none;background:var(--card-bg);min-height:44px;min-width:44px;font-weight:600;font-size:var(--fs);}
-  .btn:hover{background:var(--surface)}
-  .grid-2{display:grid;grid-template-columns:1fr;gap:var(--g)}
-  @media(min-width:640px){.grid-2{grid-template-columns:1fr 1fr}}
-  .section-title{margin:0 0 8px;font-size:var(--fs-lg);font-weight:700}
-  .totals{display:grid;gap:8px;font-size:var(--fs)}
-  .totals .row{display:flex;justify-content:space-between;gap:10px}
-  .k{color:var(--muted)}
-  .v{font-weight:600}
-  .monospace{font-family:var(--mono);word-break:break-all;overflow-wrap:anywhere}
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
 
-  .pill{display:inline-block;padding:2px 8px;border-radius:10px;background:#f3f4f6;font-size:var(--fs-sm)}
-  .dark-theme .pill{background:#111827;color:#e5e7eb}
+  .page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+  }
 
-  /* Tables: default responsive with soft scroll, but convert to stacked cards on ultra-small screens */
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:transparent;border-radius:10px}
-  table.receipt{width:100%;border-collapse:collapse;font-size:var(--fs)}
-  table.receipt th,table.receipt td{border-bottom:1px solid var(--card-border);padding:10px;text-align:left;vertical-align:top}
-  table.receipt th{font-weight:600;color:#374151;background:var(--surface)}
-  .dark-theme table.receipt th{color:#d1d5db}
-  .tr-total td{border-bottom:none;font-weight:700}
+  .wrap {
+    display: grid;
+    gap: var(--gap);
+  }
 
-  /* Ultra-small screen layout (≤360px): stack table rows into cards */
-  @media(max-width:360px){
-    .btn{flex:1 1 100%; width:100%}
-    .card{padding:12px}
-    .section-title{font-size:15px}
-    table.receipt, thead.receipt, tbody.receipt, th.receipt, td.receipt, tr.receipt {display:block;}
-    table.receipt thead{display:none}
-    table.receipt tr{display:block;border:1px solid var(--card-border);border-radius:10px;margin:10px 0;overflow:hidden}
-    table.receipt td{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--card-border);padding:8px 10px}
-    table.receipt td:last-child{border-bottom:none}
-    table.receipt td::before{
-      content:attr(data-label);
-      font-weight:600;color:var(--muted);margin-right:12px;flex:0 0 44%;
+  /* Success Header Card */
+  .success-header {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    border-radius: var(--radius);
+    padding: var(--padding);
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .success-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+    border-radius: 50%;
+  }
+
+  .success-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 100px;
+    font-weight: 600;
+    font-size: var(--fs);
+    margin-bottom: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .success-badge::before {
+    content: '✓';
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  .success-title {
+    font-size: var(--fs-xl);
+    margin: 0 0 8px;
+    font-weight: 700;
+  }
+
+  .success-subtitle {
+    opacity: 0.9;
+    font-size: var(--fs);
+    margin-bottom: 24px;
+    max-width: 600px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: var(--padding);
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+  }
+
+  .card:hover {
+    box-shadow: 0 8px 24px rgba(34, 197, 94, 0.12);
+    transform: translateY(-2px);
+  }
+
+  /* Buttons */
+  .btns {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 24px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    text-decoration: none;
+    background: white;
+    color: var(--blue);
+    min-height: 48px;
+    min-width: 44px;
+    font-weight: 600;
+    font-size: var(--fs);
+    cursor: pointer;
+    transition: var(--transition);
+    flex: 1;
+  }
+
+  .btn-primary {
+    background: white;
+    color: var(--blue);
+    font-weight: 600;
+  }
+
+  .btn-primary:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: white;
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: white;
+  }
+
+  /* Grid Layout */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--gap);
+  }
+
+  @media (min-width: 640px) {
+    .grid-2 {
+      grid-template-columns: repeat(2, 1fr);
     }
-    .tr-total{border:none}
-    .tr-total td{display:flex;justify-content:space-between;border:0;padding:8px 0}
+    
+    .btn {
+      flex: 0 1 auto;
+      min-width: 160px;
+    }
   }
 
-  @media print{
-    .btns{display:none !important}
-    .page{max-width:100%;padding:0}
-    body{background:#fff}
+  /* Section Titles */
+  .section-title {
+    margin: 0 0 16px;
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    color: var(--black);
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
-  /* Debug JSON wraps; never overflow */
-  pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:var(--fs-sm);margin:0}
+  .section-title::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 20px;
+    background: var(--green);
+    border-radius: 2px;
+  }
+
+  .dark-theme .section-title {
+    color: #F1F5F9;
+  }
+
+  /* Totals/Details */
+  .totals {
+    display: grid;
+    gap: 12px;
+    font-size: var(--fs);
+  }
+
+  .totals .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .totals .row:last-child {
+    border-bottom: none;
+  }
+
+  .k {
+    color: var(--muted);
+    font-weight: 500;
+    flex: 1;
+  }
+
+  .v {
+    font-weight: 600;
+    text-align: right;
+    flex: 1;
+    color: var(--text);
+  }
+
+  .highlight {
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  .monospace {
+    font-family: var(--mono);
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    font-size: var(--fs-sm);
+    background: rgba(34, 197, 94, 0.05);
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+  }
+
+  /* Status Pill */
+  .pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 100px;
+    background: linear-gradient(135deg, var(--green) 0%, #16A34A 100%);
+    color: white;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background: transparent;
+    border-radius: 12px;
+    margin: 0 -4px;
+    padding: 4px;
+  }
+
+  table.receipt {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs);
+    min-width: 500px;
+  }
+
+  table.receipt th {
+    background: rgba(34, 197, 94, 0.05);
+    color: var(--black);
+    font-weight: 600;
+    padding: 14px 16px;
+    text-align: left;
+    border-bottom: 2px solid var(--card-border);
+    white-space: nowrap;
+  }
+
+  table.receipt td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--card-border);
+    vertical-align: top;
+  }
+
+  .dark-theme table.receipt th {
+    color: #F1F5F9;
+    background: rgba(34, 197, 94, 0.1);
+  }
+
+  table.receipt tbody tr:hover {
+    background: rgba(34, 197, 94, 0.03);
+  }
+
+  .tr-total {
+    background: rgba(34, 197, 94, 0.05);
+  }
+
+  .tr-total td {
+    border-bottom: none;
+    font-weight: 700;
+    font-size: var(--fs-lg);
+    color: var(--green);
+    padding: 16px;
+  }
+
+  /* Amount Card Specific */
+  .amount-card .totals .row:last-child {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 2px solid var(--card-border);
+    font-size: var(--fs-lg);
+  }
+
+  /* Address Display */
+  .address-block {
+    background: rgba(34, 197, 94, 0.03);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border);
+    margin-top: 8px;
+  }
+
+  /* Ultra-small screen layout (≤360px) */
+  @media (max-width: 360px) {
+    .page {
+      padding: 12px;
+    }
+    
+    .card {
+      padding: 16px;
+    }
+    
+    .success-header {
+      padding: 16px;
+    }
+    
+    .success-title {
+      font-size: clamp(18px, 5vw, 24px);
+    }
+    
+    .btn {
+      flex: 1 1 100%;
+      width: 100%;
+    }
+    
+    table.receipt,
+    table.receipt thead,
+    table.receipt tbody,
+    table.receipt th,
+    table.receipt td,
+    table.receipt tr {
+      display: block;
+    }
+    
+    table.receipt thead {
+      display: none;
+    }
+    
+    table.receipt tr {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      margin: 10px 0;
+      overflow: hidden;
+      padding: 0;
+    }
+    
+    table.receipt td {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid var(--card-border);
+      padding: 12px;
+    }
+    
+    table.receipt td:last-child {
+      border-bottom: none;
+    }
+    
+    table.receipt td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: var(--muted);
+      margin-right: 12px;
+      flex: 0 0 40%;
+    }
+    
+    .tr-total {
+      border: none;
+      background: transparent;
+    }
+    
+    .tr-total td {
+      display: flex;
+      justify-content: space-between;
+      border: 0;
+      padding: 12px 0;
+      font-size: var(--fs-lg);
+    }
+  }
+
+  /* Print Styles */
+  @media print {
+    .btns {
+      display: none !important;
+    }
+    
+    .page {
+      max-width: 100%;
+      padding: 0;
+    }
+    
+    body {
+      background: white !important;
+      color: black !important;
+    }
+    
+    .success-header {
+      background: #2563EB !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    .card {
+      box-shadow: none !important;
+      border: 1px solid #ddd !important;
+      break-inside: avoid;
+    }
+  }
+
+  /* Debug JSON */
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--mono);
+    font-size: var(--fs-sm);
+    margin: 0;
+    padding: 16px;
+    background: rgba(34, 197, 94, 0.03);
+    border-radius: 8px;
+    border: 1px solid var(--card-border);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* Animation */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .page > * {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+
+  .page > *:nth-child(1) { animation-delay: 0.1s; }
+  .page > *:nth-child(2) { animation-delay: 0.2s; }
+  .page > *:nth-child(3) { animation-delay: 0.3s; }
+  .page > *:nth-child(4) { animation-delay: 0.4s; }
+  .page > *:nth-child(5) { animation-delay: 0.5s; }
 </style>
 
 <main class="page <%= THEME_CLASS %>">
-  <div class="wrap">
-    <div class="card">
-      <div class="success-badge">✅ Payment Successful</div>
-      <p class="sub">Thank you — your order is confirmed.</p>
-      <div class="btns" style="margin-top:10px">
-        <a class="btn" href="/sales">← Back to shop</a>
-        <button class="btn" id="btnPrint" type="button">🖨️ Print</button>
-      </div>
+  <!-- Success Header -->
+  <div class="success-header">
+    <div class="success-badge">Payment Successful</div>
+    <h1 class="success-title">Order Confirmed!</h1>
+    <p class="success-subtitle">Thank you for your purchase. Your order has been successfully processed and confirmed.</p>
+    
+    <div class="btns">
+      <a class="btn btn-primary" href="/sales">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
+          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Continue Shopping
+      </a>
+      <button class="btn btn-secondary" id="btnPrint" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
+          <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M6 14h12v8H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Print Receipt
+      </button>
     </div>
+  </div>
 
-    <div class="grid-2">
-      <!-- Order summary -->
-      <div class="card">
-        <div class="section-title">Order</div>
-        <div class="totals">
-          <div class="row"><span class="k">Order ID</span><span class="v monospace"><%= order.id %></span></div>
+  <!-- Order Details Grid -->
+  <div class="grid-2">
+    <!-- Order Summary Card -->
+    <div class="card order-card">
+      <h3 class="section-title">Order Details</h3>
+      <div class="totals">
+        <div class="row">
+          <span class="k">Order ID</span>
+          <span class="v monospace"><%= order.id %></span>
+        </div>
+        <div class="row">
+          <span class="k">Status</span>
+          <span class="v">
+            <span class="highlight"><%= order.status %></span>
+            <% if (cap.status && cap.status !== order.status) { %>
+              <span class="pill"><%= cap.status %></span>
+            <% } %>
+          </span>
+        </div>
+        <% if (cap.id) { %>
           <div class="row">
-            <span class="k">Status</span>
-            <span class="v">
-              <%= order.status %>
-              <% if (cap.status && cap.status !== order.status) { %>
-                <span class="pill">Capture: <%= cap.status %></span>
-              <% } %>
-            </span>
+            <span class="k">Capture ID</span>
+            <span class="v monospace"><%= cap.id %></span>
           </div>
-          <% if (cap.id) { %>
-            <div class="row"><span class="k">Capture ID</span><span class="v monospace"><%= cap.id %></span></div>
-          <% } %>
-          <div class="row"><span class="k">Reference</span><span class="v monospace"><%= pu.reference_id || "-" %></span></div>
-          <% if (cap.create_time) { %>
-            <div class="row"><span class="k">Captured at</span><span class="v"><%= cap.create_time %></span></div>
-          <% } %>
+        <% } %>
+        <div class="row">
+          <span class="k">Reference</span>
+          <span class="v monospace"><%= pu.reference_id || "—" %></span>
         </div>
-      </div>
-
-      <!-- Amounts -->
-      <div class="card">
-        <div class="section-title">Amount</div>
-        <div class="totals">
-          <% if (typeof itemTotal !== "undefined") { %>
-            <div class="row"><span>Items</span><span><%= currency %> <%= fmt(itemTotal) %></span></div>
-          <% } %>
-          <% if (typeof shippingTotal !== "undefined") { %>
-            <div class="row"><span>Shipping</span><span><%= currency %> <%= fmt(shippingTotal) %></span></div>
-          <% } %>
-          <% if (typeof taxTotal !== "undefined") { %>
-            <div class="row"><span>Tax</span><span><%= currency %> <%= fmt(taxTotal) %></span></div>
-          <% } %>
-          <div class="row" style="margin-top:6px"><span><strong>Total</strong></span><span><strong><%= currency %> <%= fmt(grandTotal) %></strong></span></div>
-          <% if (br && br.paypal_fee && br.paypal_fee.value) { %>
-            <div class="row"><span>Fee</span><span><%= currency %> <%= fmt(br.paypal_fee.value) %></span></div>
-          <% } %>
-          <% if (br && br.net_amount && br.net_amount.value) { %>
-            <div class="row"><span>Net</span><span><%= currency %> <%= fmt(br.net_amount.value) %></span></div>
-          <% } %>
-        </div>
+        <% if (cap.create_time) { %>
+          <div class="row">
+            <span class="k">Captured at</span>
+            <span class="v"><%= new Date(cap.create_time).toLocaleString() %></span>
+          </div>
+        <% } %>
       </div>
     </div>
 
-    <!-- Items -->
-    <% if (items && items.length) { %>
-      <div class="card">
-        <div class="section-title">Items</div>
-        <div class="table-wrap">
-          <table class="receipt">
-            <tbody>
-              <% for (var i = 0; i < items.length; i++) { 
-                   var it = items[i];
-                   var u  = it.unit_amount || {};
-                   var q  = Number(it.quantity || 1);
-                   var subtotal = (Number(u.value || 0) * q).toFixed(2);
-              %>
-                <tr class="receipt">
-                  <td class="receipt" data-label="Item"><%= it.name %></td>
-                  <td class="receipt" data-label="Unit"><%= u.currency_code || currency %> <%= fmt(u.value) %></td>
-                  <td class="receipt" data-label="Qty"><%= q %></td>
-                  <td class="receipt" data-label="Subtotal"><%= u.currency_code || currency %> <%= subtotal %></td>
-                </tr>
+    <!-- Amounts Card -->
+    <div class="card amount-card">
+      <h3 class="section-title">Payment Summary</h3>
+      <div class="totals">
+        <% if (typeof itemTotal !== "undefined") { %>
+          <div class="row">
+            <span class="k">Items Total</span>
+            <span class="v"><%= currency %> <%= fmt(itemTotal) %></span>
+          </div>
+        <% } %>
+        <% if (typeof shippingTotal !== "undefined") { %>
+          <div class="row">
+            <span class="k">Shipping</span>
+            <span class="v"><%= currency %> <%= fmt(shippingTotal) %></span>
+          </div>
+        <% } %>
+        <% if (typeof taxTotal !== "undefined") { %>
+          <div class="row">
+            <span class="k">Tax</span>
+            <span class="v"><%= currency %> <%= fmt(taxTotal) %></span>
+          </div>
+        <% } %>
+        <div class="row">
+          <span class="k"><strong>Total Amount</strong></span>
+          <span class="v highlight"><strong><%= currency %> <%= fmt(grandTotal) %></strong></span>
+        </div>
+        <% if (br && br.paypal_fee && br.paypal_fee.value) { %>
+          <div class="row">
+            <span class="k">Processing Fee</span>
+            <span class="v"><%= currency %> <%= fmt(br.paypal_fee.value) %></span>
+          </div>
+        <% } %>
+        <% if (br && br.net_amount && br.net_amount.value) { %>
+          <div class="row">
+            <span class="k">Net Amount</span>
+            <span class="v highlight"><%= currency %> <%= fmt(br.net_amount.value) %></span>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items Table -->
+  <% if (items && items.length) { %>
+    <div class="card items-card">
+      <h3 class="section-title">Order Items (<%= items.length %>)</h3>
+      <div class="table-wrap">
+        <table class="receipt">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Unit Price</th>
+              <th>Quantity</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (var i = 0; i < items.length; i++) { 
+                 var it = items[i];
+                 var u  = it.unit_amount || {};
+                 var q  = Number(it.quantity || 1);
+                 var subtotal = (Number(u.value || 0) * q).toFixed(2);
+            %>
+              <tr>
+                <td data-label="Item"><%= it.name %></td>
+                <td data-label="Unit Price"><%= u.currency_code || currency %> <%= fmt(u.value) %></td>
+                <td data-label="Quantity"><%= q %></td>
+                <td data-label="Subtotal" class="highlight"><%= u.currency_code || currency %> <%= subtotal %></td>
+              </tr>
+            <% } %>
+            <tr class="tr-total">
+              <td colspan="3" style="text-align: right"><strong>Items Total</strong></td>
+              <td data-label="Items Total" class="highlight">
+                <strong>
+                  <%= currency %> 
+                  <%= fmt(itemTotal || (function(){ 
+                        var s = 0; 
+                        for (var j = 0; j < items.length; j++) { 
+                          var it2 = items[j]; 
+                          var u2 = it2.unit_amount || {}; 
+                          var q2 = Number(it2.quantity || 1); 
+                          s += Number(u2.value || 0) * q2; 
+                        } 
+                        return s; 
+                      })()) %>
+                </strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Payer & Shipping Grid -->
+  <div class="grid-2">
+    <!-- Payer Card -->
+    <div class="card payer-card">
+      <h3 class="section-title">Payer Information</h3>
+      <div class="totals">
+        <div class="row">
+          <span class="k">Name</span>
+          <span class="v">
+            <%= (order.payer && order.payer.name && order.payer.name.given_name) || "" %> 
+            <%= (order.payer && order.payer.name && order.payer.name.surname) || "" %>
+          </span>
+        </div>
+        <div class="row">
+          <span class="k">Email</span>
+          <span class="v monospace"><%= (order.payer && order.payer.email_address) || "" %></span>
+        </div>
+        <div class="row">
+          <span class="k">Country</span>
+          <span class="v"><%= (order.payer && order.payer.address && order.payer.address.country_code) || "" %></span>
+        </div>
+        <% if (order.payer && order.payer.payer_id) { %>
+          <div class="row">
+            <span class="k">Payer ID</span>
+            <span class="v monospace"><%= order.payer.payer_id %></span>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Shipping Card -->
+    <div class="card shipping-card">
+      <h3 class="section-title">Shipping Details</h3>
+      <div class="totals">
+        <div class="row">
+          <span class="k">Recipient</span>
+          <span class="v"><%= (ship.name && ship.name.full_name) || "—" %></span>
+        </div>
+        <div class="row">
+          <span class="k">Address</span>
+          <span class="v">
+            <div class="address-block">
+              <div><%= addr.address_line_1 || "" %></div>
+              <% if (addr.address_line_2) { %>
+                <div><%= addr.address_line_2 %></div>
               <% } %>
-              <tr class="tr-total receipt">
-                <td class="receipt" data-label=" " colspan="3" style="text-align:right"><strong>Total</strong></td>
-                <td class="receipt" data-label="Items Total">
-                  <strong>
-                    <%= currency %> 
-                    <%= fmt(itemTotal || (function(){ 
-                          var s = 0; 
-                          for (var j=0;j<items.length;j++){ 
-                            var it2 = items[j]; 
-                            var u2 = it2.unit_amount || {}; 
-                            var q2 = Number(it2.quantity || 1); 
-                            s += Number(u2.value || 0) * q2; 
-                          } 
-                          return s; 
-                        })()) %>
-                  </strong>
+              <div><%= [addr.admin_area_2, addr.admin_area_1, addr.postal_code].filter(Boolean).join(", ") %></div>
+              <div><strong><%= addr.country_code || "" %></strong></div>
+            </div>
+          </span>
+        </div>
+        <% if (ship.type) { %>
+          <div class="row">
+            <span class="k">Shipping Type</span>
+            <span class="v"><%= ship.type %></span>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refunds Section -->
+  <% if (refunds && refunds.length) { %>
+    <div class="card refunds-card">
+      <h3 class="section-title">Refunds (<%= refunds.length %>)</h3>
+      <div class="table-wrap">
+        <table class="receipt">
+          <thead>
+            <tr>
+              <th>Refund ID</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (var r = 0; r < refunds.length; r++) { 
+                 var rf = refunds[r]; 
+                 var statusColor = rf.status === 'COMPLETED' ? 'var(--green)' : 
+                                  rf.status === 'PENDING' ? 'var(--blue)' : 'var(--muted)';
+            %>
+              <tr>
+                <td data-label="Refund ID">
+                  <span class="monospace"><%= rf.id %></span>
+                </td>
+                <td data-label="Amount" class="highlight">
+                  <%= (rf.amount && rf.amount.currency_code) || currency %> 
+                  <%= fmt(rf.amount && rf.amount.value) %>
+                </td>
+                <td data-label="Status">
+                  <span class="pill" style="background: <%= statusColor %>;">
+                    <%= rf.status %>
+                  </span>
+                </td>
+                <td data-label="Created">
+                  <%= rf.create_time ? new Date(rf.create_time).toLocaleString() : "—" %>
                 </td>
               </tr>
-            </tbody>
-          </table>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Debug Section -->
+  <% if (typeof showDebug !== "undefined" && showDebug) { %>
+    <div class="card debug-card">
+      <h3 class="section-title">Raw Response (Debug)</h3>
+      <pre><%= JSON.stringify(order, null, 2) %></pre>
+    </div>
+  <% } %>
+
+  <!-- Next Steps -->
+  <div class="card next-steps-card">
+    <h3 class="section-title">What's Next?</h3>
+    <div class="grid-2" style="gap: 16px;">
+      <div class="step">
+        <div class="step-icon" style="background: rgba(37, 99, 235, 0.1); color: var(--blue);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h4>Order Processing</h4>
+          <p class="muted">Your order is being prepared for shipment. You'll receive a confirmation email shortly.</p>
         </div>
       </div>
-    <% } %>
-
-    <div class="grid-2">
-      <!-- Payer -->
-      <div class="card">
-        <div class="section-title">Payer</div>
-        <div class="totals">
-          <div class="row"><span class="k">Name</span><span class="v"><%= (order.payer && order.payer.name && order.payer.name.given_name) || "" %> <%= (order.payer && order.payer.name && order.payer.name.surname) || "" %></span></div>
-          <div class="row"><span class="k">Email</span><span class="v monospace"><%= (order.payer && order.payer.email_address) || "" %></span></div>
-          <div class="row"><span class="k">Country</span><span class="v"><%= (order.payer && order.payer.address && order.payer.address.country_code) || "" %></span></div>
+      <div class="step">
+        <div class="step-icon" style="background: rgba(124, 58, 237, 0.1); color: var(--purple);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5zm4 16h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </div>
-      </div>
-
-      <!-- Shipping -->
-      <div class="card">
-        <div class="section-title">Shipping</div>
-        <div class="totals">
-          <div class="row"><span class="k">Recipient</span><span class="v"><%= (ship.name && ship.name.full_name) || "-" %></span></div>
-          <div class="row">
-            <span class="k">Address</span>
-            <span class="v">
-              <span class="monospace"><%= addr.address_line_1 || "" %></span><br/>
-              <span class="monospace"><%= [addr.admin_area_2, addr.admin_area_1, addr.postal_code].filter(Boolean).join(", ") %></span><br/>
-              <span class="monospace"><%= addr.country_code || "" %></span>
-            </span>
-          </div>
+        <div>
+          <h4>Track Your Order</h4>
+          <p class="muted">Track your order status from the "My Orders" page. We'll notify you when it ships.</p>
         </div>
       </div>
     </div>
-
-    <!-- Refunds -->
-    <% if (refunds && refunds.length) { %>
-      <div class="card">
-        <div class="section-title">Refunds</div>
-        <div class="table-wrap">
-          <table class="receipt">
-            <tbody>
-              <% for (var r = 0; r < refunds.length; r++) { var rf = refunds[r]; %>
-                <tr class="receipt">
-                  <td class="receipt" data-label="Refund ID"><span class="monospace"><%= rf.id %></span></td>
-                  <td class="receipt" data-label="Amount"><%= (rf.amount && rf.amount.currency_code) || currency %> <%= fmt(rf.amount && rf.amount.value) %></td>
-                  <td class="receipt" data-label="Status"><%= rf.status %></td>
-                  <td class="receipt" data-label="Created"><%= rf.create_time || "-" %></td>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    <% } %>
-
-    <% if (typeof showDebug !== "undefined" && showDebug) { %>
-      <div class="card">
-        <div class="section-title">Raw response (debug)</div>
-        <pre><%= JSON.stringify(order, null, 2) %></pre>
-      </div>
-    <% } %>
   </div>
 </main>
 
 <script nonce="<%= NONCE %>">
-  // CSP-safe: attach print handler via JS
-  document.addEventListener('DOMContentLoaded', function(){
-    var btn = document.getElementById('btnPrint');
-    if (btn) btn.addEventListener('click', function(){ window.print(); });
+  document.addEventListener('DOMContentLoaded', function() {
+    // Print functionality
+    var printBtn = document.getElementById('btnPrint');
+    if (printBtn) {
+      printBtn.addEventListener('click', function() {
+        window.print();
+      });
+    }
+
+    // Add subtle animations to cards
+    var cards = document.querySelectorAll('.card');
+    cards.forEach(function(card, index) {
+      card.style.animationDelay = (index * 0.1) + 's';
+    });
+
+    // Format dates in a more readable way
+    var dateElements = document.querySelectorAll('.v:contains("T")');
+    dateElements.forEach(function(el) {
+      if (el.textContent.includes('T')) {
+        try {
+          var date = new Date(el.textContent);
+          el.textContent = date.toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        } catch(e) {
+          // Keep original if parsing fails
+        }
+      }
+    });
+
+    // Add copy functionality to ID fields
+    var monospaceElements = document.querySelectorAll('.monospace');
+    monospaceElements.forEach(function(el) {
+      el.style.cursor = 'pointer';
+      el.title = 'Click to copy';
+      el.addEventListener('click', function() {
+        var text = this.textContent;
+        navigator.clipboard.writeText(text).then(function() {
+          var original = el.textContent;
+          el.textContent = 'Copied!';
+          el.style.color = 'var(--green)';
+          setTimeout(function() {
+            el.textContent = original;
+            el.style.color = '';
+          }, 2000);
+        });
+      });
+    });
   });
 </script>
+
+<style nonce="<%= NONCE %>">
+  /* Additional styles for new components */
+  .step {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .step-icon {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .step h4 {
+    margin: 0 0 4px;
+    font-size: var(--fs);
+    color: var(--black);
+  }
+
+  .step p {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .dark-theme .step h4 {
+    color: #F1F5F9;
+  }
+
+  /* Loading animation for placeholders */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .loading {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Enhanced responsive design */
+  @media (max-width: 480px) {
+    .page {
+      padding: 16px;
+    }
+    
+    .grid-2 .card {
+      grid-column: span 2;
+    }
+    
+    .success-header {
+      text-align: center;
+    }
+    
+    .success-badge {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    
+    .step {
+      flex-direction: column;
+      text-align: center;
+      align-items: center;
+    }
+    
+    .step-icon {
+      margin-bottom: 12px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .page {
+      padding: 32px 24px;
+    }
+    
+    .wrap {
+      gap: 24px;
+    }
+    
+    .card {
+      padding: 24px;
+    }
+  }
+</style>

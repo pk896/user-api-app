@@ -1,176 +1,1537 @@
-<!-- views/edit-product.ejs -->
-<h1 class="page-title">✏️ Edit Product</h1>
-
-<!-- Flash Messages -->
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
-
-<div class="page-wrapper <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-
-  <% if (!business) { %>
-    <!-- No business session -->
-    <div class="card">
-      <p>You must be logged in with a business account to access this page.</p>
-      <a class="btn" href="/business/login">Log in</a>
-    </div>
-
-  <% } else if (["seller", "supplier"].includes(business.role)) { %>
-    <!-- SELLER / SUPPLIER: Full edit form -->
-    <form 
-      id="editProductForm"
-      action="/products/edit/<%= product.customId %>"
-      method="POST"
-      enctype="multipart/form-data"
-      class="product-form"
-      novalidate
-    >
-      <div class="grid">
-        <div class="col">
-          <label for="name">Product Name <span class="required">*</span></label>
-          <input id="name" type="text" name="name" value="<%= product.name %>" required />
-
-          <label for="price">Price <span class="required">*</span></label>
-          <input id="price" type="number" name="price" step="0.01" value="<%= product.price %>" required />
-
-          <label for="stock">Stock</label>
-          <input id="stock" type="number" name="stock" min="0" value="<%= product.stock %>" />
-
-          <label for="category">Category</label>
-          <input id="category" type="text" name="category" value="<%= product.category || '' %>" />
-
-          <label for="type">Type</label>
-          <input id="type" type="text" name="type" value="<%= product.type || '' %>" />
-
-          <label for="manufacturer">Manufacturer</label>
-          <input id="manufacturer" type="text" name="manufacturer" value="<%= product.manufacturer || '' %>" />
-
-          <label for="made">Made in</label>
-          <input id="made" type="text" name="made" value="<%= product.made || '' %>" />
-        </div>
-
-        <div class="col">
-          <label for="color">Color</label>
-          <input id="color" type="text" name="color" value="<%= product.color || '' %>" />
-
-          <label for="size">Size</label>
-          <input id="size" type="text" name="size" value="<%= product.size || '' %>" />
-
-          <label for="quality">Quality</label>
-          <input id="quality" type="text" name="quality" value="<%= product.quality || '' %>" />
-
-          <label for="description">Description</label>
-          <textarea id="description" name="description" rows="5"><%= product.description || '' %></textarea>
-
-          <div class="image-block">
-            <label>Current Image</label>
-            <img 
-              src="<%= product.imageUrl %>" 
-              alt="Current image for <%= product.name %>" 
-              class="image-preview"
-            />
-          </div>
-
-          <label for="imageFile">Upload New Image (optional)</label>
-          <input id="imageFile" type="file" name="imageFile" accept="image/*" />
-          <div id="newImagePreviewWrapper" class="image-block" style="display:none;">
-            <label>New Image Preview</label>
-            <img id="newImagePreview" class="image-preview" alt="New image preview" />
-          </div>
-        </div>
+<div class="edit-product-page">
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
+        </svg>
       </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn primary">💾 Save Changes</button>
-        <a href="/products/all" class="btn">⬅ Back to All Products</a>
-        <a href="/products/<%= product.customId %>" class="btn subtle">🔎 View Details</a>
-      </div>
-    </form>
-
-  <% } else { %>
-    <!-- BUYER: Read-only view (no edit) -->
-    <div class="card">
-      <h2><%= product.name %></h2>
-      <div class="product-details">
-        <div class="media">
-          <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="image-preview" />
-        </div>
-        <div class="meta">
-          <p class="price">💲 <%= Number(product.price).toFixed(2) %></p>
-          <% if (product.stock > 0) { %>
-            <p class="stock in">✅ In stock: <%= product.stock %></p>
-          <% } else { %>
-            <p class="stock out">❌ Out of stock</p>
-          <% } %>
-          <p><strong>Category:</strong> <%= product.category || '—' %></p>
-          <p><strong>Type:</strong> <%= product.type || '—' %></p>
-          <p><strong>Color:</strong> <%= product.color || '—' %></p>
-          <p><strong>Size:</strong> <%= product.size || '—' %></p>
-          <p><strong>Quality:</strong> <%= product.quality || '—' %></p>
-          <p><strong>Made in:</strong> <%= product.made || '—' %></p>
-          <p><strong>Manufacturer:</strong> <%= product.manufacturer || '—' %></p>
-        </div>
-      </div>
-
-      <% if (product.description) { %>
-        <div class="description">
-          <h3>Description</h3>
-          <p><%= product.description %></p>
-        </div>
-      <% } %>
-
-      <div class="form-actions">
-        <a href="/products/all" class="btn">⬅ Back to All Products</a>
-        <a href="/api/cart/add?pid=<%= product.customId %>" class="btn primary">🛒 Add to Cart</a>
+      <div>
+        <h1 class="page-title">Edit Product</h1>
+        <p class="page-subtitle">Update your product information and images</p>
       </div>
     </div>
-  <% } %>
+    <a href="/products/all" class="back-button">
+      <svg viewBox="0 0 24 24" width="20" height="20">
+        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+      </svg>
+      All Products
+    </a>
+  </div>
+
+  <!-- Flash Messages -->
+  <div class="flash-container">
+    <% if (success && success.length > 0) { %>
+      <div class="flash flash-success">
+        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
+          <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+        </svg>
+        <div class="flash-content">
+          <strong>Success!</strong>
+          <p><%= success %></p>
+        </div>
+      </div>
+    <% } %>
+    <% if (error && error.length > 0) { %>
+      <div class="flash flash-error">
+        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
+          <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+        <div class="flash-content">
+          <strong>Error!</strong>
+          <p><%= error %></p>
+        </div>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="page-content <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+    <% if (!business) { %>
+      <!-- No business session -->
+      <div class="auth-required-card">
+        <div class="auth-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48">
+            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+          </svg>
+        </div>
+        <h3>Authentication Required</h3>
+        <p>You must be logged in with a business account to edit products.</p>
+        <div class="auth-actions">
+          <a href="/business/login" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M10 17v-3H3v-4h7V7l5 5-5 5z"/>
+            </svg>
+            Business Login
+          </a>
+          <a href="/business/register" class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            Register Business
+          </a>
+        </div>
+      </div>
+
+    <% } else if (["seller", "supplier"].includes(business.role)) { %>
+      <!-- SELLER / SUPPLIER: Full edit form -->
+      <div class="edit-form-container">
+        <div class="form-tabs">
+          <button type="button" class="tab active" data-tab="basic">Basic Info</button>
+          <button type="button" class="tab" data-tab="details">Details</button>
+          <button type="button" class="tab" data-tab="media">Media</button>
+        </div>
+
+        <form 
+          id="editProductForm"
+          action="/products/edit/<%= product.customId %>"
+          method="POST"
+          enctype="multipart/form-data"
+          class="product-form"
+          novalidate
+        >
+          <!-- Basic Info Tab -->
+          <div class="tab-content active" id="basic-tab">
+            <div class="form-section">
+              <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" d="M4 6h16v2H4zm0 4h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/>
+                </svg>
+                <h3>Product Information</h3>
+              </div>
+
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="name" class="form-label">
+                    Product Name
+                    <span class="required">*</span>
+                  </label>
+                  <input 
+                    id="name" 
+                    type="text" 
+                    name="name" 
+                    value="<%= product.name %>" 
+                    required
+                    class="form-input"
+                    placeholder="Enter product name"
+                  />
+                  <div class="form-hint">Make it descriptive and searchable</div>
+                </div>
+
+                <div class="form-group">
+                  <label for="price" class="form-label">
+                    Price ($)
+                    <span class="required">*</span>
+                  </label>
+                  <div class="input-with-icon">
+                    <span class="currency-icon">$</span>
+                    <input 
+                      id="price" 
+                      type="number" 
+                      name="price" 
+                      step="0.01" 
+                      min="0.01"
+                      value="<%= product.price %>" 
+                      required
+                      class="form-input"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="stock" class="form-label">
+                    Stock Quantity
+                  </label>
+                  <input 
+                    id="stock" 
+                    type="number" 
+                    name="stock" 
+                    min="0" 
+                    value="<%= product.stock %>"
+                    class="form-input"
+                    placeholder="Available units"
+                  />
+                  <div class="form-hint">Leave 0 for out of stock</div>
+                </div>
+
+                <div class="form-group">
+                  <label for="category" class="form-label">
+                    Category
+                  </label>
+                  <input 
+                    id="category" 
+                    type="text" 
+                    name="category" 
+                    value="<%= product.category || '' %>"
+                    class="form-input"
+                    placeholder="e.g., Electronics, Clothing"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm0-4c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1zm6 10H6v-1.53c0-2.5 3.97-3.58 6-3.58s6 1.08 6 3.58V18zm-9.69-2h7.38c-.69-.56-2.38-1.12-3.69-1.12s-3.01.56-3.69 1.12z"/>
+                </svg>
+                <h3>Description</h3>
+              </div>
+
+              <div class="form-group">
+                <label for="description" class="form-label">
+                  Product Description
+                </label>
+                <textarea 
+                  id="description" 
+                  name="description" 
+                  rows="6"
+                  class="form-textarea"
+                  placeholder="Describe your product features, benefits, and specifications..."
+                ><%= product.description || '' %></textarea>
+                <div class="form-hint">Include key details that help customers make decisions</div>
+                <div class="char-counter">
+                  <span id="charCount">0</span> / 2000 characters
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Details Tab -->
+          <div class="tab-content" id="details-tab">
+            <div class="form-section">
+              <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <h3>Product Specifications</h3>
+              </div>
+
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="type" class="form-label">
+                    Product Type
+                  </label>
+                  <input 
+                    id="type" 
+                    type="text" 
+                    name="type" 
+                    value="<%= product.type || '' %>"
+                    class="form-input"
+                    placeholder="e.g., Digital, Physical, Service"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="manufacturer" class="form-label">
+                    Manufacturer
+                  </label>
+                  <input 
+                    id="manufacturer" 
+                    type="text" 
+                    name="manufacturer" 
+                    value="<%= product.manufacturer || '' %>"
+                    class="form-input"
+                    placeholder="Brand or manufacturer name"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="made" class="form-label">
+                    Country of Origin
+                  </label>
+                  <input 
+                    id="made" 
+                    type="text" 
+                    name="made" 
+                    value="<%= product.made || '' %>"
+                    class="form-input"
+                    placeholder="e.g., USA, China, Germany"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="color" class="form-label">
+                    Color
+                  </label>
+                  <input 
+                    id="color" 
+                    type="text" 
+                    name="color" 
+                    value="<%= product.color || '' %>"
+                    class="form-input"
+                    placeholder="Product color(s)"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="size" class="form-label">
+                    Size/Dimensions
+                  </label>
+                  <input 
+                    id="size" 
+                    type="text" 
+                    name="size" 
+                    value="<%= product.size || '' %>"
+                    class="form-input"
+                    placeholder="e.g., Medium, 10x5x2 inches"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="quality" class="form-label">
+                    Quality Grade
+                  </label>
+                  <select id="quality" name="quality" class="form-select">
+                    <option value="">Select quality...</option>
+                    <option value="Premium" <%= product.quality === 'Premium' ? 'selected' : '' %>>Premium</option>
+                    <option value="Standard" <%= product.quality === 'Standard' ? 'selected' : '' %>>Standard</option>
+                    <option value="Economy" <%= product.quality === 'Economy' ? 'selected' : '' %>>Economy</option>
+                    <option value="Wholesale" <%= product.quality === 'Wholesale' ? 'selected' : '' %>>Wholesale</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Media Tab -->
+          <div class="tab-content" id="media-tab">
+            <div class="form-section">
+              <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                </svg>
+                <h3>Product Images</h3>
+              </div>
+
+              <div class="media-grid">
+                <div class="current-image-card">
+                  <div class="image-card-header">
+                    <h4>Current Image</h4>
+                    <span class="image-status">Active</span>
+                  </div>
+                  <img 
+                    src="<%= product.imageUrl %>" 
+                    alt="Current image for <%= product.name %>" 
+                    class="current-image-preview"
+                  />
+                  <div class="image-info">
+                    <div class="image-dimensions">Display image</div>
+                    <div class="image-hint">This is the image customers see</div>
+                  </div>
+                </div>
+
+                <div class="upload-image-card">
+                  <div class="image-card-header">
+                    <h4>Upload New Image</h4>
+                    <span class="image-optional">Optional</span>
+                  </div>
+                  
+                  <div class="upload-area" id="uploadArea">
+                    <svg class="upload-icon" viewBox="0 0 24 24" width="48" height="48">
+                      <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                    </svg>
+                    <p class="upload-text">Drag & drop or click to upload</p>
+                    <p class="upload-subtext">PNG, JPG up to 5MB</p>
+                    <input 
+                      id="imageFile" 
+                      type="file" 
+                      name="imageFile" 
+                      accept="image/*" 
+                      class="file-input"
+                    />
+                  </div>
+
+                  <div id="newImagePreviewWrapper" class="image-preview-wrapper" style="display:none;">
+                    <div class="preview-header">
+                      <h4>New Image Preview</h4>
+                      <button type="button" class="remove-preview" id="removePreview">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                          <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                      </button>
+                    </div>
+                    <img id="newImagePreview" class="new-image-preview" alt="New image preview" />
+                    <div class="preview-info">
+                      <span id="fileName"></span>
+                      <span id="fileSize"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form Actions -->
+          <div class="form-actions">
+            <div class="action-buttons">
+              <button type="submit" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                </svg>
+                Save Changes
+              </button>
+              <a href="/products/view/<%= product.customId %>" class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                </svg>
+                View Details
+              </a>
+              <button type="button" class="btn btn-danger" id="deleteProduct">
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+                Delete Product
+              </button>
+            </div>
+            <div class="form-note">
+              <svg viewBox="0 0 24 24" width="16" height="16">
+                <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+              </svg>
+              Fields marked with <span class="required">*</span> are required
+            </div>
+          </div>
+        </form>
+      </div>
+
+    <% } else { %>
+      <!-- BUYER: Read-only view -->
+      <div class="view-only-container">
+        <div class="product-view-card">
+          <div class="product-header">
+            <h2 class="product-title"><%= product.name %></h2>
+            <div class="product-price">
+              <span class="currency">$</span>
+              <span class="amount"><%= Number(product.price).toFixed(2) %></span>
+            </div>
+          </div>
+
+          <div class="product-content">
+            <div class="product-media">
+              <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
+              <div class="stock-status <%= product.stock > 0 ? 'in-stock' : 'out-of-stock' %>">
+                <% if (product.stock > 0) { %>
+                  <svg class="status-icon" viewBox="0 0 24 24" width="20" height="20">
+                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                  <span>In Stock: <strong><%= product.stock %></strong> units</span>
+                <% } else { %>
+                  <svg class="status-icon" viewBox="0 0 24 24" width="20" height="20">
+                    <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  </svg>
+                  <span>Out of Stock</span>
+                <% } %>
+              </div>
+            </div>
+
+            <div class="product-details">
+              <div class="details-section">
+                <h3>Product Details</h3>
+                <div class="details-grid">
+                  <% if (product.category) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Category</span>
+                      <span class="detail-value"><%= product.category %></span>
+                    </div>
+                  <% } %>
+                  <% if (product.type) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Type</span>
+                      <span class="detail-value"><%= product.type %></span>
+                    </div>
+                  <% } %>
+                  <% if (product.color) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Color</span>
+                      <span class="detail-value"><%= product.color %></span>
+                    </div>
+                  <% } %>
+                  <% if (product.size) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Size</span>
+                      <span class="detail-value"><%= product.size %></span>
+                    </div>
+                  <% } %>
+                  <% if (product.quality) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Quality</span>
+                      <span class="detail-value"><%= product.quality %></span>
+                    </div>
+                  <% } %>
+                  <% if (product.made) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Made In</span>
+                      <span class="detail-value"><%= product.made %></span>
+                    </div>
+                  <% } %>
+                  <% if (product.manufacturer) { %>
+                    <div class="detail-item">
+                      <span class="detail-label">Manufacturer</span>
+                      <span class="detail-value"><%= product.manufacturer %></span>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+
+              <% if (product.description) { %>
+                <div class="description-section">
+                  <h3>Description</h3>
+                  <div class="description-content">
+                    <%= product.description %>
+                  </div>
+                </div>
+              <% } %>
+            </div>
+          </div>
+
+          <div class="product-actions">
+            <a href="/products/all" class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+              Back to Products
+            </a>
+            <% if (product.stock > 0) { %>
+              <a href="/api/cart/add?pid=<%= product.customId %>" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+                Add to Cart
+              </a>
+            <% } else { %>
+              <button class="btn btn-disabled" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+                Out of Stock
+              </button>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    <% } %>
+  </div>
 </div>
 
-<!-- Minimal styles (optional; your main.css/dark.css will still apply) -->
 <style>
-  .page-title { margin-bottom: 1rem; }
-  .page-wrapper { display: block; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-  .col label { display:block; margin-top:.75rem; font-weight:600; }
-  .col input[type="text"], .col input[type="number"], .col textarea, .col input[type="file"] {
-    width:100%; padding:.6rem .7rem; border:1px solid var(--border, #ddd); border-radius:.5rem;
+  /* Page Container */
+  .edit-product-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
   }
-  .required { color: #e11d48; }
-  .image-block { margin-top:.75rem; }
-  .image-preview { max-width: 100%; height: auto; border-radius:.6rem; border:1px solid var(--border, #ddd); }
-  .form-actions { display:flex; gap:.5rem; margin-top:1rem; flex-wrap:wrap; }
-  .btn { display:inline-block; padding:.6rem .9rem; border-radius:.6rem; text-decoration:none; border:1px solid #d1d5db; }
-  .btn.primary { background:#111827; color:#fff; border-color:#111827; }
-  .btn.subtle { background:#f3f4f6; }
-  .card { padding:1rem; border:1px solid #e5e7eb; border-radius:.75rem; background:#fff; }
-  .product-details { display:grid; grid-template-columns: 280px 1fr; gap:1rem; align-items:start; }
-  .price { font-size:1.25rem; font-weight:700; margin:.25rem 0; }
-  .stock.in { color:#065f46; }
-  .stock.out { color:#991b1b; }
+
+  /* Page Header */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #22C55E; /* Green accent */
+  }
+
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .header-icon {
+    background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header-icon svg {
+    color: white;
+  }
+
+  .page-title {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #0F172A;
+  }
+
+  .dark-theme .page-title {
+    color: #F1F5F9;
+  }
+
+  .page-subtitle {
+    margin: 0.25rem 0 0;
+    color: #64748B;
+    font-size: 0.95rem;
+  }
+
+  .back-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563EB;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+
+  .back-button:hover {
+    background: rgba(37, 99, 235, 0.2);
+    transform: translateX(-2px);
+  }
+
+  /* Flash Messages */
+  .flash-container {
+    margin-bottom: 2rem;
+  }
+
+  .flash {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    animation: slideIn 0.3s ease;
+  }
+
+  .flash-success {
+    background: linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%);
+    border-left: 4px solid #22C55E;
+    color: #166534;
+  }
+
+  .flash-error {
+    background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+    border-left: 4px solid #EF4444;
+    color: #991B1B;
+  }
+
+  .flash-icon {
+    flex-shrink: 0;
+  }
+
+  .flash-content strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  /* Auth Required Card */
+  .auth-required-card {
+    background: white;
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    max-width: 500px;
+    margin: 2rem auto;
+  }
+
+  .dark-theme .auth-required-card {
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .auth-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+  }
+
+  .auth-icon svg {
+    color: #2563EB;
+  }
+
+  .auth-required-card h3 {
+    margin: 0 0 1rem;
+    color: #0F172A;
+    font-size: 1.5rem;
+  }
+
+  .dark-theme .auth-required-card h3 {
+    color: #F1F5F9;
+  }
+
+  .auth-required-card p {
+    color: #64748B;
+    margin-bottom: 2rem;
+  }
+
+  .auth-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  /* Edit Form Container */
+  .edit-form-container {
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark-theme .edit-form-container {
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Form Tabs */
+  .form-tabs {
+    display: flex;
+    background: #F8FAFC;
+    border-bottom: 1px solid #E2E8F0;
+    padding: 0 2rem;
+  }
+
+  .dark-theme .form-tabs {
+    background: rgba(15, 23, 42, 0.5);
+    border-bottom-color: #334155;
+  }
+
+  .tab {
+    padding: 1rem 1.5rem;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #64748B;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .tab:hover {
+    color: #2563EB;
+  }
+
+  .tab.active {
+    color: #2563EB;
+  }
+
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #2563EB;
+  }
+
+  /* Tab Content */
+  .tab-content {
+    display: none;
+    padding: 2rem;
+  }
+
+  .tab-content.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+  }
+
+  /* Form Sections */
+  .form-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-icon {
+    color: #2563EB;
+  }
+
+  .section-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .section-header h3 {
+    color: #F1F5F9;
+  }
+
+  /* Form Grid */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Form Elements */
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #0F172A;
+    font-size: 0.95rem;
+  }
+
+  .dark-theme .form-label {
+    color: #E2E8F0;
+  }
+
+  .required {
+    color: #EF4444;
+  }
+
+  .form-input,
+  .form-textarea,
+  .form-select {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    font-size: 1rem;
+    border: 2px solid #E2E8F0;
+    border-radius: 8px;
+    background: white;
+    color: #0F172A;
+    transition: all 0.3s ease;
+  }
+
+  .dark-theme .form-input,
+  .dark-theme .form-textarea,
+  .dark-theme .form-select {
+    background: rgba(15, 23, 42, 0.5);
+    border-color: #334155;
+    color: #F1F5F9;
+  }
+
+  .form-input:focus,
+  .form-textarea:focus,
+  .form-select:focus {
+    outline: none;
+    border-color: #2563EB;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  .form-textarea {
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  .input-with-icon {
+    position: relative;
+  }
+
+  .currency-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: 600;
+    color: #64748B;
+  }
+
+  .input-with-icon .form-input {
+    padding-left: 2.5rem;
+  }
+
+  .form-hint {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  .dark-theme .form-hint {
+    color: #94A3B8;
+  }
+
+  .char-counter {
+    text-align: right;
+    font-size: 0.875rem;
+    color: #64748B;
+    margin-top: 0.5rem;
+  }
+
+  /* Media Grid */
+  .media-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .media-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .current-image-card,
+  .upload-image-card {
+    background: #F8FAFC;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #E2E8F0;
+  }
+
+  .dark-theme .current-image-card,
+  .dark-theme .upload-image-card {
+    background: rgba(15, 23, 42, 0.5);
+    border-color: #334155;
+  }
+
+  .image-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .image-card-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .image-card-header h4 {
+    color: #F1F5F9;
+  }
+
+  .image-status {
+    background: #22C55E;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .image-optional {
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563EB;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .current-image-preview {
+    width: 100%;
+    height: 200px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: white;
+    border: 1px solid #E2E8F0;
+    margin-bottom: 1rem;
+  }
+
+  .image-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .image-dimensions {
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  /* Upload Area */
+  .upload-area {
+    border: 2px dashed #CBD5E1;
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .upload-area:hover {
+    border-color: #2563EB;
+    background: rgba(37, 99, 235, 0.05);
+  }
+
+  .upload-icon {
+    color: #CBD5E1;
+    margin-bottom: 1rem;
+  }
+
+  .upload-text {
+    margin: 0 0 0.5rem;
+    font-weight: 600;
+    color: #0F172A;
+  }
+
+  .dark-theme .upload-text {
+    color: #F1F5F9;
+  }
+
+  .upload-subtext {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  .file-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* Image Preview */
+  .image-preview-wrapper {
+    margin-top: 1rem;
+    animation: slideIn 0.3s ease;
+  }
+
+  .preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .remove-preview {
+    background: rgba(239, 68, 68, 0.1);
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .remove-preview:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  .remove-preview svg {
+    color: #EF4444;
+  }
+
+  .new-image-preview {
+    width: 100%;
+    height: 150px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: white;
+    border: 1px solid #E2E8F0;
+  }
+
+  .preview-info {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  /* Form Actions */
+  .form-actions {
+    padding: 2rem;
+    border-top: 1px solid #E2E8F0;
+    background: #F8FAFC;
+  }
+
+  .dark-theme .form-actions {
+    background: rgba(15, 23, 42, 0.5);
+    border-top-color: #334155;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
+    color: white;
+    box-shadow: 0 2px 10px rgba(34, 197, 94, 0.2);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+  }
+
+  .btn-secondary {
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563EB;
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(37, 99, 235, 0.2);
+  }
+
+  .btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  .btn-disabled {
+    background: #E2E8F0;
+    color: #94A3B8;
+    cursor: not-allowed;
+  }
+
+  .form-note {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  .form-note svg {
+    color: #7C3AED;
+  }
+
+  /* View Only Styles */
+  .view-only-container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .product-view-card {
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    padding: 2rem;
+  }
+
+  .dark-theme .product-view-card {
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .product-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #E2E8F0;
+  }
+
+  .dark-theme .product-header {
+    border-bottom-color: #334155;
+  }
+
+  .product-title {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .product-title {
+    color: #F1F5F9;
+  }
+
+  .product-price {
+    display: flex;
+    align-items: baseline;
+  }
+
+  .currency {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #22C55E;
+  }
+
+  .amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #22C55E;
+  }
+
+  .product-content {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .product-content {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .product-media {
+    position: relative;
+  }
+
+  .product-image {
+    width: 100%;
+    height: 300px;
+    object-fit: contain;
+    border-radius: 12px;
+    background: white;
+    border: 1px solid #E2E8F0;
+  }
+
+  .stock-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    font-weight: 500;
+  }
+
+  .in-stock {
+    background: linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%);
+    color: #166534;
+  }
+
+  .out-of-stock {
+    background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+    color: #991B1B;
+  }
+
+  .status-icon {
+    flex-shrink: 0;
+  }
+
+  .details-section h3,
+  .description-section h3 {
+    margin: 0 0 1rem;
+    font-size: 1.2rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .details-section h3,
+  .dark-theme .description-section h3 {
+    color: #F1F5F9;
+  }
+
+  .details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  @media (max-width: 480px) {
+    .details-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #F8FAFC;
+    border-radius: 8px;
+  }
+
+  .dark-theme .detail-item {
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  .detail-label {
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .dark-theme .detail-label {
+    color: #94A3B8;
+  }
+
+  .detail-value {
+    color: #0F172A;
+    font-weight: 500;
+  }
+
+  .dark-theme .detail-value {
+    color: #F1F5F9;
+  }
+
+  .description-section {
+    padding-top: 1.5rem;
+    border-top: 1px solid #E2E8F0;
+  }
+
+  .dark-theme .description-section {
+    border-top-color: #334155;
+  }
+
+  .description-content {
+    line-height: 1.6;
+    color: #475569;
+  }
+
+  .dark-theme .description-content {
+    color: #94A3B8;
+  }
+
+  .product-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding-top: 2rem;
+    border-top: 1px solid #E2E8F0;
+  }
+
+  .dark-theme .product-actions {
+    border-top-color: #334155;
+  }
+
+  /* Animations */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 </style>
 
-<!-- 🧩 Secure Inline Script: Add Nonce -->
+<!-- Secure Inline Script -->
 <script nonce="<%= nonce %>">
-  (function () {
-    const input = document.getElementById('imageFile');
-    const wrapper = document.getElementById('newImagePreviewWrapper');
-    const img = document.getElementById('newImagePreview');
-    if (!input || !wrapper || !img) return;
-
-    input.addEventListener('change', () => {
-      const file = input.files && input.files[0];
-      if (!file) {
-        wrapper.style.display = 'none';
-        img.src = '';
-        return;
-      }
-      const url = URL.createObjectURL(file);
-      img.src = url;
-      wrapper.style.display = 'block';
+  document.addEventListener("DOMContentLoaded", () => {
+    console.log("✏️ Edit Product page loaded securely with CSP nonce ✅");
+    
+    // Tab functionality
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabId = tab.getAttribute('data-tab');
+        
+        // Update active tab
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Show corresponding content
+        tabContents.forEach(content => {
+          content.classList.remove('active');
+          if (content.id === `${tabId}-tab`) {
+            content.classList.add('active');
+          }
+        });
+      });
     });
-  })();
+    
+    // Character counter for description
+    const descriptionTextarea = document.getElementById('description');
+    const charCount = document.getElementById('charCount');
+    
+    if (descriptionTextarea && charCount) {
+      // Set initial count
+      charCount.textContent = descriptionTextarea.value.length;
+      
+      descriptionTextarea.addEventListener('input', function() {
+        charCount.textContent = this.value.length;
+        
+        // Add warning for long text
+        if (this.value.length > 2000) {
+          charCount.style.color = '#EF4444';
+        } else if (this.value.length > 1500) {
+          charCount.style.color = '#F59E0B';
+        } else {
+          charCount.style.color = '#64748B';
+        }
+      });
+    }
+    
+    // Image upload preview
+    const imageInput = document.getElementById('imageFile');
+    const uploadArea = document.getElementById('uploadArea');
+    const previewWrapper = document.getElementById('newImagePreviewWrapper');
+    const newImagePreview = document.getElementById('newImagePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const removePreviewBtn = document.getElementById('removePreview');
+    
+    if (imageInput && uploadArea) {
+      // Click on upload area
+      uploadArea.addEventListener('click', () => {
+        imageInput.click();
+      });
+      
+      // Drag and drop
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, preventDefaults, false);
+      });
+      
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      ['dragenter', 'dragover'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, highlight, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, unhighlight, false);
+      });
+      
+      function highlight() {
+        uploadArea.style.borderColor = '#2563EB';
+        uploadArea.style.background = 'rgba(37, 99, 235, 0.05)';
+      }
+      
+      function unhighlight() {
+        uploadArea.style.borderColor = '#CBD5E1';
+        uploadArea.style.background = '';
+      }
+      
+      // Handle file drop
+      uploadArea.addEventListener('drop', handleDrop, false);
+      
+      function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+      }
+      
+      // Handle file input change
+      imageInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+          handleFiles(this.files);
+        }
+      });
+      
+      function handleFiles(files) {
+        const file = files[0];
+        if (!file.type.startsWith('image/')) {
+          alert('Please select an image file');
+          return;
+        }
+        
+        if (file.size > 5 * 1024 * 1024) {
+          alert('File size must be less than 5MB');
+          return;
+        }
+        
+        const url = URL.createObjectURL(file);
+        newImagePreview.src = url;
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        previewWrapper.style.display = 'block';
+      }
+      
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+    }
+    
+    // Remove preview
+    if (removePreviewBtn) {
+      removePreviewBtn.addEventListener('click', () => {
+        imageInput.value = '';
+        previewWrapper.style.display = 'none';
+        newImagePreview.src = '';
+      });
+    }
+    
+    // Delete product confirmation
+    const deleteBtn = document.getElementById('deleteProduct');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+          window.location.href = `/products/<%= product.customId %>/delete`;
+        }
+      });
+    }
+    
+    // Form validation
+    const form = document.getElementById('editProductForm');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        const requiredFields = this.querySelectorAll('[required]');
+        let isValid = true;
+        
+        requiredFields.forEach(field => {
+          if (!field.value.trim()) {
+            isValid = false;
+            field.style.borderColor = '#EF4444';
+            
+            // Scroll to first error
+            if (isValid === false) {
+              field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          } else {
+            field.style.borderColor = '';
+          }
+        });
+        
+        if (!isValid) {
+          e.preventDefault();
+          alert('Please fill in all required fields marked with *');
+        }
+      });
+    }
+  });
 </script>

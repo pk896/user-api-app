@@ -1,134 +1,1413 @@
 <!-- views/order-list.ejs -->
-<% const NONCE = typeof nonce !== 'undefined' ? nonce : ''; %>
+<%
+  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
+%>
 
-<!-- Flash -->
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
-
-<main class="orders-page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <header class="orders-head">
-    <div>
-      <h1>🧾 My Orders</h1>
-      <p class="muted">View your recent orders and receipts.</p>
+<main class="orders-list-page">
+  <!-- Header Section -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="header-main">
+        <h1 class="page-title">
+          <span class="title-icon">📦</span>
+          Order History
+        </h1>
+        <div class="header-subtitle">
+          <p class="subtitle">View and manage your recent orders</p>
+          <div class="order-stats">
+            <div class="stat-item">
+              <span class="stat-icon">📊</span>
+              <span class="stat-label">Total Orders</span>
+              <span class="stat-value" id="total-orders">—</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-icon">⏳</span>
+              <span class="stat-label">Active</span>
+              <span class="stat-value" id="active-orders">—</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-icon">✅</span>
+              <span class="stat-label">Completed</span>
+              <span class="stat-value" id="completed-orders">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="header-actions">
+        <a href="/sales" class="btn btn-primary btn-with-icon">
+          <span class="btn-icon">←</span>
+          Continue Shopping
+        </a>
+        <div class="view-toggle">
+          <button class="view-btn active" data-view="grid" aria-label="Grid view">
+            <span class="view-icon">⬜</span>
+          </button>
+          <button class="view-btn" data-view="list" aria-label="List view">
+            <span class="view-icon">☰</span>
+          </button>
+        </div>
+      </div>
     </div>
-    <a href="/sales" class="btn-back" aria-label="Continue shopping">← Continue shopping</a>
-  </header>
+  </div>
 
-  <section class="card" aria-live="polite" aria-busy="true">
-    <div id="ordersWrap">
-      <p class="muted">Loading orders…</p>
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Notifications -->
+    <div class="notifications-container" id="notifications">
+      <% if (success && success.length > 0) { %>
+        <div class="notification notification-success">
+          <span class="notification-icon">✓</span>
+          <span class="notification-text"><%= success %></span>
+          <button class="notification-close">&times;</button>
+        </div>
+      <% } %>
+      <% if (error && error.length > 0) { %>
+        <div class="notification notification-error">
+          <span class="notification-icon">!</span>
+          <span class="notification-text"><%= error %></span>
+          <button class="notification-close">&times;</button>
+        </div>
+      <% } %>
     </div>
-  </section>
+
+    <!-- Orders Container -->
+    <div class="orders-container">
+      <div class="orders-header">
+        <h2 class="orders-title">Recent Orders</h2>
+        <div class="orders-controls">
+          <div class="search-box">
+            <input type="text" 
+                   id="order-search" 
+                   placeholder="Search orders..." 
+                   class="search-input"
+                   aria-label="Search orders">
+            <span class="search-icon">🔍</span>
+          </div>
+          <select class="sort-select" id="sort-orders" aria-label="Sort orders by">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="amount-high">Amount (High to Low)</option>
+            <option value="amount-low">Amount (Low to High)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Orders Grid/List -->
+      <div id="ordersWrap" class="orders-view grid-view">
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <p>Loading your orders…</p>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state" style="display: none;">
+        <div class="empty-content">
+          <span class="empty-icon">📦</span>
+          <h3>No Orders Found</h3>
+          <p>You haven't placed any orders yet.</p>
+          <a href="/sales" class="btn btn-primary">Browse Products</a>
+        </div>
+      </div>
+
+      <!-- Loading More -->
+      <div id="loading-more" class="loading-more" style="display: none;">
+        <div class="loading-spinner"></div>
+        <span>Loading more orders…</span>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+      <div class="action-card">
+        <div class="action-icon">📱</div>
+        <div class="action-content">
+          <h4>Mobile Friendly</h4>
+          <p>View orders on any device</p>
+        </div>
+      </div>
+      <div class="action-card">
+        <div class="action-icon">🚚</div>
+        <div class="action-content">
+          <h4>Track Shipments</h4>
+          <p>Monitor delivery status</p>
+        </div>
+      </div>
+      <div class="action-card">
+        <div class="action-icon">📄</div>
+        <div class="action-content">
+          <h4>Download Receipts</h4>
+          <p>Save or print invoices</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="page-footer">
+    <div class="footer-content">
+      <div class="footer-section">
+        <h4>Need Help?</h4>
+        <a href="/contact" class="footer-link">Contact Support</a>
+        <a href="/help/returns" class="footer-link">Returns & Refunds</a>
+        <a href="/help/shipping" class="footer-link">Shipping Info</a>
+      </div>
+      
+      <div class="footer-section">
+        <h4>Quick Links</h4>
+        <button class="footer-action" onclick="window.print()">
+          <span class="action-icon">🖨️</span>
+          Print Order History
+        </button>
+        <a href="/cart" class="footer-action">
+          <span class="action-icon">🛒</span>
+          View Cart
+        </a>
+        <a href="/account" class="footer-action">
+          <span class="action-icon">👤</span>
+          My Account
+        </a>
+      </div>
+      
+      <div class="footer-section">
+        <h4>Order Status Guide</h4>
+        <div class="status-guide">
+          <div class="status-item">
+            <span class="status-dot processing"></span>
+            <span>Processing - Order confirmed</span>
+          </div>
+          <div class="status-item">
+            <span class="status-dot shipped"></span>
+            <span>Shipped - On its way</span>
+          </div>
+          <div class="status-item">
+            <span class="status-dot delivered"></span>
+            <span>Delivered - Received</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
 
 <style nonce="<%= NONCE %>">
-  :root{
-    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
-    --shadow:0 6px 18px rgba(0,0,0,.08); --brand:#111827; --brand-contrast:#fff;
-    --radius:12px; --pad:12px; --chip:#f3f4f6;
-  }
-  .dark-theme{
-    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
-    --brand:#f3f4f6; --brand-contrast:#111; --chip:#1f2937;
+  /* ===== VARIABLES ===== */
+  .orders-list-page {
+    --primary-blue: #2563EB;
+    --primary-purple: #7C3AED;
+    --primary-green: #22C55E;
+    --primary-black: #0F172A;
+    --gray-50: #F8FAFC;
+    --gray-100: #F1F5F9;
+    --gray-200: #E2E8F0;
+    --gray-300: #CBD5E1;
+    --gray-400: #94A3B8;
+    --gray-500: #64748B;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1E293B;
+    --gray-900: #0F172A;
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 8px;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    background: var(--primary-green);
+    min-height: 100vh;
   }
 
-  html,body{background:var(--bg); color:var(--text); margin:0}
-  .orders-page{max-width:680px; margin:0 auto; padding:12px}
-
-  .orders-head{
-    display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin:4px 0 12px;
-  }
-  .orders-head h1{font-size:clamp(18px,5.5vw,28px); margin:0 0 2px; line-height:1.2}
-  .muted{color:var(--muted)}
-  .btn-back{
-    display:inline-block; padding:10px 12px; border-radius:10px; text-decoration:none;
-    border:1px solid var(--brand); color:var(--brand); background:transparent;
-    font-size:clamp(14px,4.2vw,16px)
+  /* ===== PAGE HEADER ===== */
+  .page-header {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-md);
   }
 
-  .card{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:var(--pad)}
-  #ordersWrap{display:flex; flex-direction:column; gap:8px}
-
-  .row{
-    display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;
-    border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--chip);
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1.5rem;
   }
-  .main{display:flex; flex-direction:column; gap:4px}
-  .oid{font-weight:700; font-size:clamp(14px,4.5vw,16px); word-break:break-all}
-  .sub{font-size:clamp(13px,4vw,15px); color:var(--muted)}
-  .right{display:flex; flex-direction:column; align-items:flex-end; gap:6px}
-  .amt{font-weight:800; font-size:clamp(14px,4.6vw,16px)}
-  .link{display:inline-block; text-decoration:none; border:1px solid var(--border); padding:8px 10px; border-radius:10px}
 
-  .flash{margin:.6rem 0; padding:.6rem .8rem; border-radius:10px; font-size:clamp(14px,4.2vw,16px)}
-  .flash-success{background:#ecfdf5; color:#065f46; border:1px solid #34d399}
-  .flash-error{background:#fef2f2; color:#991b1b; border:1px solid #fca5a5}
+  .header-main {
+    flex: 1;
+    min-width: 300px;
+  }
+
+  .page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-black);
+    margin: 0 0 0.5rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .title-icon {
+    font-size: 1.8rem;
+  }
+
+  .header-subtitle {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+    color: var(--gray-600);
+    margin: 0;
+  }
+
+  .order-stats {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+  }
+
+  .stat-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.125rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--primary-black);
+  }
+
+  .header-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-end;
+  }
+
+  .view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--gray-100);
+    padding: 0.25rem;
+    border-radius: var(--radius-md);
+  }
+
+  .view-btn {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--gray-500);
+    transition: all 0.2s ease;
+  }
+
+  .view-btn.active {
+    background: white;
+    color: var(--primary-blue);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .view-icon {
+    font-size: 1rem;
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ===== NOTIFICATIONS ===== */
+  .notifications-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .notification {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    animation: slideIn 0.3s ease-out;
+    border-left: 4px solid transparent;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .notification-success {
+    background: rgba(34, 197, 94, 0.1);
+    color: #166534;
+    border-left-color: var(--primary-green);
+  }
+
+  .notification-error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #b91c1c;
+    border-left-color: #EF4444;
+  }
+
+  .notification-icon {
+    font-weight: bold;
+    font-size: 1rem;
+  }
+
+  .notification-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.7;
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .notification-close:hover {
+    opacity: 1;
+  }
+
+  /* ===== ORDERS CONTAINER ===== */
+  .orders-container {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-md);
+  }
+
+  .orders-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .orders-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--primary-black);
+    margin: 0;
+  }
+
+  .orders-controls {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    position: relative;
+    min-width: 200px;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 0.5rem 2.5rem 0.5rem 1rem;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    color: var(--gray-700);
+    background: white;
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  .search-icon {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    font-size: 0.875rem;
+  }
+
+  .sort-select {
+    appearance: none;
+    background: white;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 2rem 0.5rem 1rem;
+    font-size: 0.875rem;
+    color: var(--gray-700);
+    cursor: pointer;
+    min-width: 160px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748B'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+  }
+
+  .sort-select:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  /* ===== ORDERS VIEW ===== */
+  .orders-view {
+    transition: all 0.3s ease;
+  }
+
+  .orders-view.grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+
+  .orders-view.list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .orders-view.grid-view {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ===== ORDER CARD ===== */
+  .order-card {
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    border: 1px solid var(--gray-200);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .orders-view.grid-view .order-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .orders-view.list-view .order-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  @media (max-width: 768px) {
+    .orders-view.list-view .order-card {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .order-card:hover {
+    border-color: var(--primary-blue);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .order-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--gray-300);
+  }
+
+  .order-card.processing::before {
+    background: #F59E0B;
+  }
+
+  .order-card.shipped::before {
+    background: var(--primary-blue);
+  }
+
+  .order-card.delivered::before {
+    background: var(--primary-green);
+  }
+
+  .order-card.cancelled::before {
+    background: #EF4444;
+  }
+
+  .order-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .order-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--primary-black);
+  }
+
+  .order-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .order-status.processing {
+    background: rgba(245, 158, 11, 0.1);
+    color: #92400E;
+  }
+
+  .order-status.shipped {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary-blue);
+  }
+
+  .order-status.delivered {
+    background: rgba(34, 197, 94, 0.1);
+    color: #166534;
+  }
+
+  .order-status.cancelled {
+    background: rgba(239, 68, 68, 0.1);
+    color: #B91C1C;
+  }
+
+  .order-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .order-date {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+  }
+
+  .order-items {
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .order-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.75rem;
+    min-width: 120px;
+  }
+
+  .orders-view.list-view .order-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .order-amount {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--primary-black);
+  }
+
+  .order-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .orders-view.grid-view .order-actions {
+    flex-direction: column;
+  }
+
+  @media (max-width: 768px) {
+    .order-actions {
+      flex-direction: column;
+    }
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+  }
+
+  .btn-primary {
+    background: var(--primary-blue);
+    color: white;
+    border-color: var(--primary-blue);
+  }
+
+  .btn-primary:hover {
+    background: #1D4ED8;
+    border-color: #1D4ED8;
+    transform: translateY(-1px);
+  }
+
+  .btn-with-icon {
+    padding: 0.5rem 1rem;
+  }
+
+  .btn-icon {
+    font-size: 1rem;
+  }
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    min-width: 80px;
+  }
+
+  .action-btn.receipt {
+    background: rgba(6, 182, 212, 0.1);
+    color: #0891B2;
+    border-color: rgba(6, 182, 212, 0.2);
+  }
+
+  .action-btn.receipt:hover {
+    background: #06B6D4;
+    color: white;
+    transform: translateY(-1px);
+  }
+
+  .action-btn.track {
+    background: rgba(245, 158, 11, 0.1);
+    color: #D97706;
+    border-color: rgba(245, 158, 11, 0.2);
+  }
+
+  .action-btn.track:hover {
+    background: #F59E0B;
+    color: white;
+    transform: translateY(-1px);
+  }
+
+  /* ===== LOADING STATES ===== */
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    color: var(--gray-500);
+    grid-column: 1 / -1;
+  }
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--gray-200);
+    border-top-color: var(--primary-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .loading-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2rem;
+    color: var(--gray-500);
+    grid-column: 1 / -1;
+  }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state {
+    padding: 3rem;
+    text-align: center;
+    grid-column: 1 / -1;
+  }
+
+  .empty-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: var(--gray-500);
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    opacity: 0.5;
+  }
+
+  .empty-content h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin: 0;
+  }
+
+  .empty-content p {
+    margin: 0;
+    max-width: 400px;
+  }
+
+  /* ===== QUICK ACTIONS ===== */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .action-card {
+    background: white;
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    border: 1px solid var(--gray-200);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.2s ease;
+  }
+
+  .action-card:hover {
+    border-color: var(--primary-blue);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .action-icon {
+    font-size: 1.5rem;
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gray-100);
+    border-radius: var(--radius-sm);
+  }
+
+  .action-content {
+    flex: 1;
+  }
+
+  .action-content h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--primary-black);
+    margin: 0 0 0.25rem 0;
+  }
+
+  .action-content p {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    margin: 0;
+  }
+
+  /* ===== PAGE FOOTER ===== */
+  .page-footer {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-top: 2rem;
+    box-shadow: var(--shadow-md);
+  }
+
+  .footer-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+  }
+
+  .footer-section h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--primary-black);
+    margin: 0 0 1rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .footer-link {
+    display: block;
+    padding: 0.5rem 0;
+    color: var(--gray-600);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color 0.2s ease;
+  }
+
+  .footer-link:hover {
+    color: var(--primary-blue);
+  }
+
+  .footer-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    color: var(--gray-600);
+    text-decoration: none;
+    font-size: 0.875rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: color 0.2s ease;
+  }
+
+  .footer-action:hover {
+    color: var(--primary-blue);
+  }
+
+  .action-icon {
+    font-size: 1rem;
+  }
+
+  .status-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--gray-600);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .status-dot.processing {
+    background: #F59E0B;
+  }
+
+  .status-dot.shipped {
+    background: var(--primary-blue);
+  }
+
+  .status-dot.delivered {
+    background: var(--primary-green);
+  }
+
+  /* ===== MOBILE OPTIMIZATIONS ===== */
+  @media (max-width: 768px) {
+    .orders-list-page {
+      padding: 0.75rem;
+    }
+
+    .page-header,
+    .orders-container,
+    .page-footer {
+      padding: 1rem;
+    }
+
+    .header-content {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+    }
+
+    .header-actions {
+      align-items: stretch;
+    }
+
+    .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .orders-controls {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .search-box,
+    .sort-select {
+      width: 100%;
+    }
+
+    .quick-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .footer-content {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .order-stats {
+      justify-content: space-between;
+    }
+
+    .stat-item {
+      min-width: 60px;
+    }
+
+    .orders-view.list-view .order-card {
+      padding: 1rem;
+    }
+
+    .order-actions {
+      flex-direction: column;
+    }
+
+    .action-btn {
+      width: 100%;
+    }
+  }
+
+  /* ===== DARK THEME SUPPORT ===== */
+  @media (prefers-color-scheme: dark) {
+    .orders-list-page {
+      background: var(--gray-900);
+    }
+
+    .page-header,
+    .orders-container,
+    .quick-actions .action-card,
+    .page-footer {
+      background: var(--gray-800);
+    }
+
+    .page-title,
+    .orders-title,
+    .order-id,
+    .order-amount,
+    .action-content h4,
+    .footer-section h4,
+    .stat-value {
+      color: var(--gray-100);
+    }
+
+    .subtitle,
+    .stat-label,
+    .order-date,
+    .order-items,
+    .action-content p,
+    .footer-link,
+    .footer-action,
+    .status-item {
+      color: var(--gray-400);
+    }
+
+    .view-toggle {
+      background: var(--gray-700);
+    }
+
+    .view-btn.active {
+      background: var(--gray-600);
+    }
+
+    .search-input,
+    .sort-select {
+      background: var(--gray-700);
+      border-color: var(--gray-600);
+      color: var(--gray-300);
+    }
+
+    .search-icon {
+      color: var(--gray-400);
+    }
+
+    .sort-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23CBD5E1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    }
+
+    .order-card {
+      background: var(--gray-700);
+      border-color: var(--gray-600);
+    }
+
+    .action-card {
+      background: var(--gray-700);
+      border-color: var(--gray-600);
+    }
+
+    .action-icon {
+      background: var(--gray-600);
+    }
+
+    .loading-spinner {
+      border-color: var(--gray-700);
+      border-top-color: var(--primary-blue);
+    }
+  }
 </style>
 
 <script nonce="<%= NONCE %>">
-(function(){
-  function qs(s, c){ return (c||document).querySelector(s); }
-  function fmtZA(d){
-    try{
-      if (!d) return '';
-      var dd = (d instanceof Date) ? d : new Date(d);
-      return dd.toLocaleString('en-ZA', { timeZone:'Africa/Johannesburg', dateStyle:'medium', timeStyle:'short' });
-    } catch(_) { return String(d || ''); }
-  }
-  function money(n, cur){
-    var C = (cur || 'USD').toUpperCase();
-    try{
-      if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
-        return new Intl.NumberFormat('en-ZA', { style:'currency', currency:C, currencyDisplay:'symbol' }).format(Number(n||0));
+  (function(){
+    // DOM Elements
+    const ordersWrap = document.getElementById('ordersWrap');
+    const emptyState = document.getElementById('empty-state');
+    const loadingMore = document.getElementById('loading-more');
+    const notifications = document.getElementById('notifications');
+    const orderSearch = document.getElementById('order-search');
+    const sortSelect = document.getElementById('sort-orders');
+    const viewBtns = document.querySelectorAll('.view-btn');
+    const statTotal = document.getElementById('total-orders');
+    const statActive = document.getElementById('active-orders');
+    const statCompleted = document.getElementById('completed-orders');
+
+    // State
+    let allOrders = [];
+    let filteredOrders = [];
+    let currentView = 'grid';
+    let currentSearch = '';
+    let currentSort = 'newest';
+
+    // Utility Functions
+    function formatCurrency(amount, currency = 'ZAR') {
+      const symbols = { USD: '$', ZAR: 'R', EUR: '€', GBP: '£' };
+      const symbol = symbols[currency.toUpperCase()] || currency + ' ';
+      return symbol + Number(amount || 0).toFixed(2);
+    }
+
+    function formatDate(dateString) {
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-ZA', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+      } catch {
+        return '—';
       }
-    }catch(_){}
-    var sym = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[C] || (C + ' ');
-    return sym + Number(n||0).toFixed(2);
-  }
+    }
 
-  document.addEventListener('DOMContentLoaded', function(){
-    var wrap = qs('#ordersWrap');
-    var host = wrap && wrap.closest('.card');
-    if (host) host.setAttribute('aria-busy','true');
+    function getStatusClass(status) {
+      if (!status) return 'processing';
+      status = String(status).toLowerCase();
+      if (status.includes('shipped') || status.includes('transit')) return 'shipped';
+      if (status.includes('delivered') || status.includes('completed')) return 'delivered';
+      if (status.includes('cancelled') || status.includes('refunded')) return 'cancelled';
+      return 'processing';
+    }
 
-    fetch('/payment/my-orders', { credentials:'same-origin' })
-      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return {ok:r.ok, j:j}; }); })
-      .then(function(res){
-        if (host) host.removeAttribute('aria-busy');
-        if (!res.ok || !res.j || !res.j.ok) throw new Error('Load failed');
-        var orders = res.j.orders || [];
-        if (!orders.length){
-          wrap.innerHTML = '<p class="muted">No recent orders found.</p>';
-          return;
-        }
-        var html = orders.map(function(o){
-          var id  = String(o.orderId || o.id || o.paypalOrderId || '').trim();
-          var dt  = o.createdAt ? fmtZA(o.createdAt) : '';
-          var amt = (o.amount != null && o.currency) ? money(o.amount, o.currency) : '';
-          var href = '/payment/receipt/' + encodeURIComponent(id);
-          return ''+
-            '<article class="row" role="article">'+
-              '<div class="main">'+
-                '<div class="oid">'+(id || '—')+'</div>'+
-                '<div class="sub">'+(o.status || '—')+(dt ? ' • '+dt : '')+'</div>'+
-              '</div>'+
-              '<div class="right">'+
-                (amt ? '<div class="amt">'+amt+'</div>' : '')+
-                '<a class="link" href="'+href+'" aria-label="Open receipt for order '+(id || '')+'">Open</a>'+
-              '</div>'+
-            '</article>';
-        }).join('');
-        wrap.innerHTML = html;
-      })
-      .catch(function(err){
-        if (host) host.removeAttribute('aria-busy');
-        console.error(err);
-        wrap.innerHTML = '<p class="muted">Could not load orders. Please try again later.</p>';
+    function getStatusIcon(status) {
+      if (!status) return '⏳';
+      status = String(status).toLowerCase();
+      if (status.includes('shipped') || status.includes('transit')) return '🚚';
+      if (status.includes('delivered') || status.includes('completed')) return '✅';
+      if (status.includes('cancelled') || status.includes('refunded')) return '❌';
+      return '⏳';
+    }
+
+    // Notification Management
+    function setupNotifications() {
+      document.querySelectorAll('.notification-close').forEach(button => {
+        button.addEventListener('click', (e) => {
+          const notification = e.target.closest('.notification');
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateY(-10px)';
+          setTimeout(() => notification.remove(), 300);
+        });
       });
-  });
-})();
+
+      // Auto-hide success notifications after 5 seconds
+      setTimeout(() => {
+        document.querySelectorAll('.notification-success').forEach(notification => {
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateY(-10px)';
+          setTimeout(() => notification.remove(), 300);
+        });
+      }, 5000);
+    }
+
+    // Order Card Template
+    function createOrderCard(order) {
+      const orderId = (order.orderId || order.id || order.paypalOrderId || '').toString().trim();
+      const shortId = orderId.slice(-8) || '—';
+      const date = formatDate(order.createdAt);
+      const amount = formatCurrency(order.amount, order.currency);
+      const status = order.status || 'Processing';
+      const statusClass = getStatusClass(status);
+      const statusIcon = getStatusIcon(status);
+      
+      const receiptHref = `/payment/receipt/${encodeURIComponent(orderId)}`;
+      const trackHref = `/orders/${encodeURIComponent(orderId)}/track`;
+
+      // Count items
+      const itemCount = order.items ? order.items.length : 0;
+      const itemsText = itemCount === 1 ? '1 item' : `${itemCount} items`;
+
+      return `
+        <div class="order-card ${statusClass}">
+          <div class="order-main">
+            <div class="order-header">
+              <div class="order-id">Order #${shortId}</div>
+              <span class="order-status ${statusClass}">${statusIcon} ${status}</span>
+            </div>
+            <div class="order-meta">
+              <div class="order-date">${date}</div>
+              ${itemCount > 0 ? `<div class="order-items">${itemsText}</div>` : ''}
+            </div>
+          </div>
+          
+          <div class="order-right">
+            <div class="order-amount">${amount}</div>
+            <div class="order-actions">
+              <a href="${receiptHref}" class="action-btn receipt" title="View receipt">
+                <span class="btn-icon">📄</span>
+                Receipt
+              </a>
+              <a href="${trackHref}" class="action-btn track" title="Track shipment">
+                <span class="btn-icon">🚚</span>
+                Track
+              </a>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Load Orders
+    async function loadOrders() {
+      ordersWrap.innerHTML = `
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <p>Loading your orders…</p>
+        </div>
+      `;
+      
+      emptyState.style.display = 'none';
+      loadingMore.style.display = 'none';
+
+      try {
+        const response = await fetch('/payment/my-orders', {
+          credentials: 'same-origin',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) throw new Error('Failed to load orders');
+
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'Invalid response');
+
+        allOrders = data.orders || [];
+        updateOrderStats();
+        applyFiltersAndSort();
+        
+        if (allOrders.length === 0) {
+          showEmptyState();
+        }
+
+      } catch (error) {
+        console.error('Error loading orders:', error);
+        ordersWrap.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-content">
+              <span class="empty-icon">⚠️</span>
+              <h3>Unable to Load Orders</h3>
+              <p>Please try again later.</p>
+              <button onclick="window.location.reload()" class="btn btn-primary">Retry</button>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Update Order Statistics
+    function updateOrderStats() {
+      const total = allOrders.length;
+      const active = allOrders.filter(o => {
+        const status = (o.status || '').toLowerCase();
+        return !status.includes('delivered') && 
+               !status.includes('completed') && 
+               !status.includes('cancelled');
+      }).length;
+      const completed = allOrders.filter(o => {
+        const status = (o.status || '').toLowerCase();
+        return status.includes('delivered') || status.includes('completed');
+      }).length;
+
+      statTotal.textContent = total;
+      statActive.textContent = active;
+      statCompleted.textContent = completed;
+    }
+
+    // Apply Filters and Sort
+    function applyFiltersAndSort() {
+      let filtered = [...allOrders];
+
+      // Apply search filter
+      if (currentSearch) {
+        const searchTerm = currentSearch.toLowerCase();
+        filtered = filtered.filter(order => {
+          const orderId = (order.orderId || order.id || '').toString().toLowerCase();
+          const status = (order.status || '').toLowerCase();
+          return orderId.includes(searchTerm) || status.includes(searchTerm);
+        });
+      }
+
+      // Apply sorting
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        const amountA = parseFloat(a.amount || 0);
+        const amountB = parseFloat(b.amount || 0);
+
+        switch (currentSort) {
+          case 'newest':
+            return dateB - dateA;
+          case 'oldest':
+            return dateA - dateB;
+          case 'amount-high':
+            return amountB - amountA;
+          case 'amount-low':
+            return amountA - amountB;
+          default:
+            return dateB - dateA;
+        }
+      });
+
+      filteredOrders = filtered;
+      renderOrders();
+    }
+
+    // Render Orders
+    function renderOrders() {
+      if (filteredOrders.length === 0) {
+        showEmptyState();
+        return;
+      }
+
+      ordersWrap.className = `orders-view ${currentView}-view`;
+      const ordersHtml = filteredOrders.map(order => createOrderCard(order)).join('');
+      ordersWrap.innerHTML = ordersHtml;
+      emptyState.style.display = 'none';
+    }
+
+    // Show Empty State
+    function showEmptyState() {
+      ordersWrap.innerHTML = '';
+      emptyState.style.display = 'block';
+    }
+
+    // Event Listeners
+    function setupEventListeners() {
+      // View toggle
+      viewBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          viewBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentView = btn.dataset.view;
+          renderOrders();
+        });
+      });
+
+      // Search
+      let searchTimeout;
+      orderSearch.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentSearch = e.target.value.trim().toLowerCase();
+          applyFiltersAndSort();
+        }, 300);
+      });
+
+      // Sort
+      sortSelect.addEventListener('change', (e) => {
+        currentSort = e.target.value;
+        applyFiltersAndSort();
+      });
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      setupNotifications();
+      setupEventListeners();
+      loadOrders();
+    });
+
+    // Expose functions for debugging
+    window.orderListApp = {
+      loadOrders,
+      applyFiltersAndSort,
+      renderOrders
+    };
+
+  })();
 </script>

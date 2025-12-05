@@ -33,7 +33,7 @@ function productUnitPriceNumber(p) {
   return Number(p.price || 0);
 }
 
-function normalizeCartItem(p, qty) {
+function normalizeCartItem(p, qty, variants = {}) {
   return {
     productId: String(p._id),
     customId: p.customId,
@@ -41,11 +41,21 @@ function normalizeCartItem(p, qty) {
     price: productUnitPriceNumber(p),
     imageUrl: p.imageUrl || p.image || '',
     quantity: Math.max(1, Math.floor(Number(qty || 1))),
+    variants: variants, // Add variants parameter
   };
 }
 
-function findIndexById(items, id) {
-  return (items || []).findIndex((it) => String(it.productId) === String(id));
+function findIndexById(items, id, variants = {}) {
+  if (Object.keys(variants).length === 0) {
+    // If no variants, just match by productId
+    return (items || []).findIndex((it) => String(it.productId) === String(id));
+  } else {
+    // Match by productId AND variants
+    return (items || []).findIndex((it) => 
+      String(it.productId) === String(id) &&
+      JSON.stringify(it.variants || {}) === JSON.stringify(variants)
+    );
+  }
 }
 
 function wantsJson(req) {
@@ -104,6 +114,25 @@ router.get('/add', async (req, res) => {
       return res.redirect(back);
     }
 
+        // Parse variants from query parameter (JSON or simple size/color)
+    let variantData = {};
+    if (req.query.variants) {
+      try {
+        variantData = JSON.parse(req.query.variants);
+      } catch (e) {
+        console.error('Failed to parse variants:', e);
+        // Don't fail, we’ll still look at ?size & ?color below
+      }
+    }
+
+    // Fallback: support simple ?size=&color= from the frontend
+    if (!variantData.size && req.query.size) {
+      variantData.size = String(req.query.size).trim();
+    }
+    if (!variantData.color && req.query.color) {
+      variantData.color = String(req.query.color).trim();
+    }
+
     // Optional stock check (only if your Product has stock)
     if (typeof product.stock === 'number' && product.stock <= 0) {
       if (wantsJson(req)) {return res.status(400).json({ success: false, message: 'Out of stock.' });}
@@ -112,19 +141,92 @@ router.get('/add', async (req, res) => {
       return res.redirect(back);
     }
 
+    // For clothing products, validate size/color selections
+    if (product.role === 'clothes') {
+      // Validate size if product has size options
+      if (product.sizes && product.sizes.length > 0) {
+        if (!variantData.size) {
+          if (wantsJson(req)) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Please select a size' 
+            });
+          }
+          if (typeof req.flash === 'function') {req.flash('error', 'Please select a size');}
+          const back = req.query.back || req.get('referer') || '/sales';
+          return res.redirect(back);
+        }
+        
+        // Check if selected size is available
+        if (!product.sizes.includes(variantData.size)) {
+          if (wantsJson(req)) {
+            return res.status(400).json({ 
+              success: false, 
+              message: `Size "${variantData.size}" is not available for this product` 
+            });
+          }
+          if (typeof req.flash === 'function') {req.flash('error', 'Selected size is not available');}
+          const back = req.query.back || req.get('referer') || '/sales';
+          return res.redirect(back);
+        }
+      }
+
+      // Validate color if product has color options
+      if (product.colors && product.colors.length > 0) {
+        if (!variantData.color) {
+          if (wantsJson(req)) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Please select a color' 
+            });
+          }
+          if (typeof req.flash === 'function') {req.flash('error', 'Please select a color');}
+          const back = req.query.back || req.get('referer') || '/sales';
+          return res.redirect(back);
+        }
+        
+        // Check if selected color is available
+        if (!product.colors.includes(variantData.color)) {
+          if (wantsJson(req)) {
+            return res.status(400).json({ 
+              success: false, 
+              message: `Color "${variantData.color}" is not available for this product` 
+            });
+          }
+          if (typeof req.flash === 'function') {req.flash('error', 'Selected color is not available');}
+          const back = req.query.back || req.get('referer') || '/sales';
+          return res.redirect(back);
+        }
+      }
+    }
+
     const cart = ensureCart(req);
     const id = String(product._id);
-    const idx = findIndexById(cart.items, id);
+    
+    // Find item with same product AND same variants
+    const idx = cart.items.findIndex((it) => 
+      String(it.productId) === id &&
+      JSON.stringify(it.variants || {}) === JSON.stringify(variantData)
+    );
 
     if (idx >= 0) {
       cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + qty;
     } else {
-      cart.items.push(normalizeCartItem(product, qty));
+      // Create cart item with variants
+      const cartItem = normalizeCartItem(product, qty);
+      cartItem.variants = variantData; // Add variants to cart item
+      cart.items.push(cartItem);
     }
+    
     req.session.cart = cart;
 
     if (wantsJson(req))
-      {return res.json({ success: true, message: 'Added to cart.', cart: { items: cart.items } });}
+      {return res.json({ 
+        success: true, 
+        message: 'Added to cart.', 
+        cart: { items: cart.items },
+        variants: variantData // Optional: return selected variants in response
+      });}
     if (typeof req.flash === 'function') {req.flash('success', 'Added to cart.');}
     const back = req.query.back || req.get('referer') || '/sales';
     return res.redirect(back);
@@ -206,6 +308,8 @@ router.get('/remove', async (req, res) => {
 router.post('/increase', express.json(), async (req, res) => {
   try {
     const pid = String(req.body?.pid || '').trim();
+    const variants = req.body?.variants || {};
+    
     if (!pid) {return res.status(400).json({ message: 'pid is required' });}
 
     const product = await findProductByPid(pid);
@@ -218,13 +322,21 @@ router.post('/increase', express.json(), async (req, res) => {
 
     const cart = ensureCart(req);
     const id = String(product._id);
-    const idx = findIndexById(cart.items, id);
+    
+    // Find item with same product AND same variants
+    const idx = cart.items.findIndex((it) => 
+      String(it.productId) === id &&
+      JSON.stringify(it.variants || {}) === JSON.stringify(variants)
+    );
 
     if (idx >= 0) {
       cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + 1;
     } else {
-      cart.items.push(normalizeCartItem(product, 1));
+      const cartItem = normalizeCartItem(product, 1, variants);
+      cartItem.variants = variants;
+      cart.items.push(cartItem);
     }
+    
     req.session.cart = cart;
 
     return res.json({ items: cart.items });

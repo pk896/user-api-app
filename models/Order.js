@@ -1,5 +1,6 @@
 // models/Order.js
-const { mongoose } = require('../db');
+const mongoose = require('mongoose');
+
 const { Schema } = mongoose;
 
 // --- Reusable helpers ---
@@ -102,6 +103,49 @@ const DeliverySnapshotSchema = new Schema(
   { _id: false },
 );
 
+// --- Tracking (NEW) ---
+// This does NOT replace shipping address – it lives next to it.
+// Optional fields only, so no existing orders/flows break.
+const ShippingTrackingSchema = new Schema(
+  {
+    // internal code you can use in dashboards/switches
+    carrier: {
+      type: String,
+      enum: [
+        'COURIER_GUY',
+        'FASTWAY',
+        'POSTNET',
+        'PAXI',
+        'ARAMEX_STORE_TO_DOOR',
+        'DSV',
+        'RAM',
+        'OTHER',
+      ],
+      default: 'OTHER',
+    },
+
+    // nice display label, e.g. "Courier Guy", "Fastway Couriers"
+    carrierLabel: String,
+
+    // e.g. "CG123456789ZA"
+    trackingNumber: String,
+
+    // direct link to courier tracking page if you have it
+    trackingUrl: String,
+
+    // shipping progress (independent from PayPal status)
+    status: {
+      type: String,
+      enum: ['PENDING', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
+      default: 'PENDING',
+    },
+
+    shippedAt: Date,
+    deliveredAt: Date,
+  },
+  { _id: false },
+);
+
 const RefundSchema = new Schema(
   {
     refundId: String,
@@ -126,7 +170,14 @@ const OrderSchema = new Schema(
     purchaseUnitRef: String,
 
     payer: PayerSchema,
+
+    // PayPal shipping address snapshot
     shipping: ShippingAddressSchema,
+
+    // --- Tracking (NEW) ---
+    // Courier + tracking info (Courier Guy, Fastway, etc.)
+    // Completely separate from PayPal address and status.
+    shippingTracking: ShippingTrackingSchema,
 
     amount: MoneySchema,      // captured total
     breakdown: BreakdownSchema,
@@ -158,6 +209,9 @@ OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ 'items.productId': 1, createdAt: -1 });  // fast seller/per-product lookups
 OrderSchema.index({ businessBuyer: 1, createdAt: -1 });      // fast buyer dashboard
 
+// (optional later) you can add e.g.
+// OrderSchema.index({ 'shippingTracking.status': 1, createdAt: -1 });
+
 // ---------- Statics / helpers ----------
 OrderSchema.statics.PAID_STATES = PAID_STATES;
 OrderSchema.methods.isPaidLike = function isPaidLike() {
@@ -166,3 +220,14 @@ OrderSchema.methods.isPaidLike = function isPaidLike() {
 
 // ✅ Guard against OverwriteModelError in dev
 module.exports = mongoose.models.Order || mongoose.model('Order', OrderSchema);
+
+
+
+
+
+
+
+
+
+
+

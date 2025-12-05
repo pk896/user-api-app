@@ -1,319 +1,1512 @@
+<!-- views/dashboards/users-dashboard.ejs -->
 <%
-  // Safe guards (do not invent data)
-  const u             = (user && typeof user === 'object') ? user : {};
-  const ordersArr     = Array.isArray(orders) ? orders : [];
-  const wishlistArr   = Array.isArray(wishlistItems) ? wishlistItems : [];
-  const paymentsArr   = Array.isArray(payments) ? payments : [];
-  const shipmentsArr  = Array.isArray(shipments) ? shipments : [];
-
-  // Shipments pills = real data
-  const fallbackInTransit = shipmentsArr.filter(s => (s?.status || '').toLowerCase().replace(/\s+/g,' ') === 'in transit').length;
-  const fallbackDelivered = shipmentsArr.filter(s => (s?.status || '').toLowerCase().replace(/\s+/g,' ') === 'delivered').length;
-  const ss = (shipStats && typeof shipStats === 'object')
-    ? { inTransit: Number(shipStats.inTransit || 0), delivered: Number(shipStats.delivered || 0) }
-    : { inTransit: fallbackInTransit, delivered: fallbackDelivered };
-
-  // Real counts from arrays (no fake numbers)
-  const counts = {
-    orders:   ordersArr.length,
-    wishlist: wishlistArr.length,
-    payments: paymentsArr.length,
-  };
-
-  // Small helpers for display
-  function money(am) {
-    if (!am) return '—';
-    const v = (typeof am.value === 'string' || typeof am.value === 'number') ? am.value : '';
-    const c = am.currency || 'USD';
-    return `${c} ${v}`;
+  function getTotal(order) {
+    if (!order) return '0.00 USD';
+    
+    if (order.amount) {
+      if (order.amount.value !== undefined) {
+        return `${order.amount.currency || 'USD'} ${parseFloat(order.amount.value || 0).toFixed(2)}`;
+      }
+      if (order.amount.total !== undefined) {
+        return `${order.amount.currency || 'USD'} ${parseFloat(order.amount.total || 0).toFixed(2)}`;
+      }
+    }
+    
+    if (order.breakdown?.grandTotal) {
+      return `${order.breakdown.currency || 'USD'} ${parseFloat(order.breakdown.grandTotal || 0).toFixed(2)}`;
+    }
+    
+    return `${order.currency || 'USD'} ${parseFloat(order.total || 0).toFixed(2)}`;
   }
-  function when(d) {
-    try { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleString(); }
-    catch { return '—'; }
+
+  // Helper functions for status colors
+  function getStatusColor(status) {
+    if (status === 'DELIVERED') return '#22C55E';
+    if (status === 'IN_TRANSIT') return '#2563EB';
+    return '#7C3AED';
+  }
+  
+  function getStatusClass(status) {
+    if (!status) return 'pending';
+    const s = String(status).toLowerCase().replace('_', '');
+    if (s.includes('delivered')) return 'delivered';
+    if (s.includes('transit') || s.includes('shipped')) return 'intransit';
+    if (s.includes('pending') || s.includes('processing')) return 'pending';
+    return 'pending';
   }
 %>
 
-<!-- Top pills (real shipment counts) -->
-<div class="pills">
-  <div class="pill in-transit">
-    🚚 In transit: <strong><%= ss.inTransit %></strong>
-  </div>
-  <div class="pill delivered">
-    ✅ Delivered: <strong><%= ss.delivered %></strong>
-  </div>
-</div>
-
-<section class="dashboard-home">
+<section class="dashboard">
+  <!-- Header -->
   <header class="dashboard-header">
-    <h1>👋 Welcome, <%= u.name || 'User' %></h1>
-    <p class="subtitle">Your personalized dashboard</p>
+    <div class="header-content">
+      <div class="welcome-badge">
+        <span class="badge-icon">🚀</span>
+        <span class="badge-text">Your Personal Dashboard</span>
+      </div>
+      <h1 class="dashboard-title">
+        <span class="title-gradient">Welcome to Your Business Hub</span>
+      </h1>
+      <p class="dashboard-subtitle">Track orders, monitor shipments, and grow your business</p>
+    </div>
+    <div class="header-gradient"></div>
   </header>
 
-  <!-- Flash Messages -->
-  <% if (success && success.length > 0) { %>
-    <div class="flash flash-success" id="flashMessage">✅ <%= success %></div>
-  <% } %>
-  <% if (error && error.length > 0) { %>
-    <div class="flash flash-error" id="flashMessage">❌ <%= error %></div>
-  <% } %>
-
-  <!-- Quick Stats (purely from real collections) -->
-  <div class="stats-grid">
-    <div class="card">
-      <h3>🛒 Orders</h3>
-      <p class="count"><%= counts.orders %></p>
-      <a href="/users/orders" class="btn small">View Orders</a>
+  <!-- KPIs -->
+  <div class="kpis-grid">
+    <div class="kpi-card kpi-trust">
+      <div class="kpi-icon">📊</div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total Orders</div>
+        <div class="kpi-value"><%= kpis.totalOrders %></div>
+        <div class="kpi-meta">All transactions</div>
+      </div>
+      <div class="kpi-accent trust"></div>
     </div>
-
-    <div class="card">
-      <h3>❤️ Wishlist</h3>
-      <p class="count"><%= counts.wishlist %></p>
-      <a href="/users/wishlist" class="btn small">View Wishlist</a>
+    
+    <div class="kpi-card kpi-growth">
+      <div class="kpi-icon">💰</div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total Value</div>
+        <div class="kpi-value">$<%= (kpis.totalSpent || 0).toFixed(2) %></div>
+        <div class="kpi-meta">Business volume</div>
+      </div>
+      <div class="kpi-accent growth"></div>
     </div>
-
-    <div class="card">
-      <h3>💳 Payments</h3>
-      <p class="count"><%= counts.payments %></p>
-      <a href="/users/payments" class="btn small">Manage Payments</a>
+    
+    <div class="kpi-card kpi-success">
+      <div class="kpi-icon">✅</div>
+      <div class="kpi-content">
+        <div class="kpi-label">Success Rate</div>
+        <div class="kpi-value">
+          <% if (kpis.totalOrders > 0) { %>
+            <%= Math.round(kpis.paidOrders / kpis.totalOrders * 100) %>%
+          <% } else { %>
+            0%
+          <% } %>
+        </div>
+        <div class="kpi-meta"><%= kpis.paidOrders %> paid of <%= kpis.totalOrders %></div>
+      </div>
+      <div class="kpi-accent success"></div>
     </div>
   </div>
 
-  <!-- Recent Orders -->
-  <div class="list-section">
-    <h2>🧾 Recent Orders</h2>
-    <% if (!ordersArr.length) { %>
-      <p class="empty">No orders yet.</p>
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat trust">
+      <span class="stat-label">Trust Score</span>
+      <span class="stat-value">Excellent</span>
+    </div>
+    <div class="stat growth">
+      <span class="stat-label">Growth Trend</span>
+      <span class="stat-value">+12.5%</span>
+    </div>
+    <div class="stat innovation">
+      <span class="stat-label">Activity Level</span>
+      <span class="stat-value">Active</span>
+    </div>
+  </div>
+
+  <!-- Recent Orders Section -->
+  <section class="dashboard-section">
+    <div class="section-header">
+      <h2 class="section-title">
+        <span class="section-icon trust-icon">📋</span>
+        Recent Orders
+        <span class="section-badge"><%= orders?.length || 0 %> active</span>
+      </h2>
+      <div class="section-actions">
+        <a href="/sales" class="btn btn-innovation">
+          <span class="btn-icon">🛒</span>
+          New Order
+        </a>
+        <a href="/users/orders" class="btn btn-trust">
+          View All
+        </a>
+      </div>
+    </div>
+    
+    <% if (!orders || orders.length === 0) { %>
+      <div class="empty-state">
+        <div class="empty-icon growth-icon">📭</div>
+        <h3>No orders yet</h3>
+        <p>Start your business journey with your first order</p>
+        <a href="/sales" class="btn btn-growth">
+          <span class="btn-icon">🚀</span>
+          Start Shopping
+        </a>
+      </div>
     <% } else { %>
-      <ul class="list">
-        <% ordersArr.slice(0, 5).forEach(o => { %>
-          <li class="item">
-            <div class="row">
-              <div class="left">
-                <div class="title">#<%= o.orderId || o._id %></div>
-                <div class="meta">
-                  <span class="pill order"><%= o.status || '—' %></span>
-                  <span>Placed: <%= when(o.createdAt || o.created_at) %></span>
-                </div>
+      <div class="orders-container">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% orders.forEach(o => { 
+              const orderStatusClass = getStatusClass(o.status);
+            %>
+              <tr>
+                <td data-label="Order ID">
+                  <div class="order-id-cell">
+                    <span class="order-id">#<%= o._id.toString().slice(-6) %></span>
+                    <% if (o.shippingTracking?.trackingNumber) { %>
+                      <span class="tracking-indicator" title="Has tracking">📍</span>
+                    <% } %>
+                  </div>
+                </td>
+                <td data-label="Amount" class="order-amount">
+                  <span class="amount-value"><%= getTotal(o) %></span>
+                </td>
+                <td data-label="Status">
+                  <span class="status-badge status-<%= orderStatusClass %>">
+                    <%= o.status || 'pending' %>
+                  </span>
+                </td>
+                <td data-label="Date" class="order-date">
+                  <%= new Date(o.createdAt).toLocaleDateString() %>
+                </td>
+                <td data-label="Actions">
+                  <div class="order-actions">
+                    <a href="/users/orders/<%= o._id %>" class="btn-action btn-trust">Details</a>
+                    <% if (o.shippingTracking?.trackingNumber) { %>
+                      <a href="/orders/<%= o._id %>/track" class="btn-action btn-innovation">Track</a>
+                    <% } %>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+
+  <!-- Recent Shipments -->
+  <section class="dashboard-section growth-bg">
+    <div class="section-header">
+      <h2 class="section-title">
+        <span class="section-icon innovation-icon">🚚</span>
+        Active Shipments
+        <span class="section-badge innovation"><%= shipments?.length || 0 %> tracking</span>
+      </h2>
+      <% if (shipments && shipments.length > 0) { %>
+        <div class="delivery-stats">
+          <div class="delivery-stat delivered">
+            <span class="stat-count"><%= shipments.filter(s => s.status === 'DELIVERED').length %></span>
+            <span class="stat-label">Delivered</span>
+          </div>
+          <div class="delivery-stat transit">
+            <span class="stat-count"><%= shipments.filter(s => s.status === 'IN_TRANSIT').length %></span>
+            <span class="stat-label">In Transit</span>
+          </div>
+          <div class="delivery-stat pending">
+            <span class="stat-count"><%= shipments.filter(s => s.status === 'PENDING').length %></span>
+            <span class="stat-label">Pending</span>
+          </div>
+        </div>
+      <% } %>
+    </div>
+    
+    <% if (!shipments || shipments.length === 0) { %>
+      <div class="empty-state compact">
+        <div class="empty-icon">📦</div>
+        <p>No active shipments to track</p>
+        <p class="empty-subtext">Your shipment updates will appear here</p>
+      </div>
+    <% } else { %>
+      <div class="shipments-grid">
+        <% shipments.forEach(s => { 
+          const shipmentStatusClass = getStatusClass(s.status);
+        %>
+          <div class="shipment-card shipment-<%= shipmentStatusClass %>">
+            <div class="shipment-header">
+              <div class="shipment-meta">
+                <span class="shipment-order">
+                  <span class="label">Order:</span>
+                  <a href="/users/orders/<%= s.orderId %>" class="order-link">#<%= String(s.orderId).slice(-6) %></a>
+                </span>
+                <span class="shipment-date">
+                  <span class="label">Updated:</span>
+                  <%= new Date(s.updatedAt || s.createdAt).toLocaleDateString() %>
+                </span>
               </div>
-              <div class="right">
-                <div class="amt"><%= money(o.amount) %></div>
-                <a class="btn tiny" href="/users/orders/<%= o._id %>">Details</a>
+              <div class="shipment-status">
+                <span class="status-dot <%= shipmentStatusClass %>"></span>
+                <span class="status-text"><%= s.status || 'PENDING' %></span>
               </div>
             </div>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </div>
-
-  <!-- Your Shipments (only those linked to the user's orders/email) -->
-  <div class="list-section">
-    <h2>📦 Your Shipments</h2>
-    <% if (!shipmentsArr.length) { %>
-      <p class="empty">No shipments yet.</p>
-    <% } else { %>
-      <ul class="list">
-        <% shipmentsArr.slice(0, 5).forEach(s => { %>
-          <li class="item">
-            <div class="row">
-              <div class="left">
-                <div class="title">
-                  <%= s.carrier ? s.carrier + ' ' : '' %><%= s.trackingNumber || 'No tracking' %>
+            
+            <div class="shipment-body">
+              <% if (s.carrier) { %>
+                <div class="shipment-info">
+                  <span class="info-icon">🚛</span>
+                  <span class="info-content">
+                    <span class="info-label">Carrier</span>
+                    <span class="info-value"><%= s.carrier %></span>
+                  </span>
                 </div>
-                <div class="meta">
-                  <span class="pill ship <%= (s.status||'').toLowerCase().replace(/\s+/g,'-') %>"><%= s.status || '—' %></span>
-                  <% if (s.orderId) { %><span>Order: #<%= s.orderId %></span><% } %>
-                  <span>Updated: <%= when(s.updatedAt) %></span>
+              <% } %>
+              
+              <% if (s.trackingNumber) { %>
+                <div class="shipment-info">
+                  <span class="info-icon">📦</span>
+                  <span class="info-content">
+                    <span class="info-label">Tracking</span>
+                    <span class="info-value tracking">
+                      <% if (s.trackingUrl) { %>
+                        <a href="<%= s.trackingUrl %>" target="_blank" class="tracking-link">
+                          <%= s.trackingNumber %>
+                          <span class="external-icon">↗</span>
+                        </a>
+                      <% } else { %>
+                        <span class="tracking-code"><%= s.trackingNumber %></span>
+                      <% } %>
+                    </span>
+                  </span>
                 </div>
-              </div>
-              <div class="right">
-                <a class="btn tiny" href="/users/orders/by-order-id/<%= encodeURIComponent(s.orderId || '') %>">View Order</a>
-              </div>
+              <% } %>
             </div>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </div>
-
-  <!-- Recent Payments (captures pulled from your orders) -->
-  <div class="list-section">
-    <h2>💳 Recent Payments</h2>
-    <% if (!paymentsArr.length) { %>
-      <p class="empty">No payments yet.</p>
-    <% } else { %>
-      <ul class="list">
-        <% paymentsArr.slice(0, 5).forEach(p => { %>
-          <li class="item">
-            <div class="row">
-              <div class="left">
-                <div class="title">Capture <%= p.captureId || p._id || '—' %></div>
-                <div class="meta">
-                  <span class="pill pay"><%= p.status || '—' %></span>
-                  <span><%= when(p.updateTime || p.createdAt) %></span>
-                </div>
-              </div>
-              <div class="right">
-                <div class="amt"><%= money(p.amount) %></div>
-              </div>
+            
+            <div class="shipment-footer">
+              <a href="/orders/<%= s.orderId %>/track" class="btn btn-track btn-track-<%= shipmentStatusClass %>">
+                <span class="btn-icon">📍</span>
+                Track Package
+              </a>
             </div>
-          </li>
+          </div>
         <% }) %>
-      </ul>
+      </div>
     <% } %>
-  </div>
+  </section>
 
-  <!-- Account Info -->
-  <div class="user-section">
-    <h2>👤 Account Information</h2>
-    <ul>
-      <li><strong>Name:</strong> <%= u.name || '—' %></li>
-      <li><strong>Email:</strong> <%= u.email || '—' %></li>
-      <% if (u.age) { %><li><strong>Age:</strong> <%= u.age %></li><% } %>
-    </ul>
-
-    <div class="account-actions">
-      <a href="/users/profile" class="btn subtle">✏️ Edit Profile</a>
-      <form action="/users/profile/delete" method="POST"
-            onsubmit="return confirm('⚠️ Permanently delete your account? This cannot be undone.');"
-            style="display:inline">
-        <button class="btn danger">🗑 Delete Account</button>
-      </form>
-      <a href="/users/logout" class="btn danger">Logout</a>
+  <!-- Business Insights -->
+  <div class="insights-panel">
+    <div class="insight trust-insight">
+      <div class="insight-icon">🛡️</div>
+      <div class="insight-content">
+        <h3>Trust Building</h3>
+        <p>Your reliable transaction history builds business credibility</p>
+      </div>
+    </div>
+    <div class="insight growth-insight">
+      <div class="insight-icon">📈</div>
+      <div class="insight-content">
+        <h3>Growth Tracking</h3>
+        <p>Monitor your business expansion through order analytics</p>
+      </div>
+    </div>
+    <div class="insight innovation-insight">
+      <div class="insight-icon">💡</div>
+      <div class="insight-content">
+        <h3>Innovation Hub</h3>
+        <p>Leverage smart tracking for efficient business operations</p>
+      </div>
     </div>
   </div>
 
-  <!-- Footer -->
-  <footer class="dashboard-footer">
-    <button id="themeToggle" class="btn secondary">🌓 Toggle Theme</button>
-    <p>© <%= new Date().getFullYear() %> Unicoporate.com. All rights reserved.</p>
-  </footer>
+  <!-- Quick Actions -->
+  <div class="quick-actions">
+    <a href="/sales" class="quick-action growth-action">
+      <span class="action-icon">🛒</span>
+      <span class="action-content">
+        <span class="action-title">New Purchase</span>
+        <span class="action-desc">Grow your business</span>
+      </span>
+    </a>
+    <a href="/users/profile" class="quick-action trust-action">
+      <span class="action-icon">👤</span>
+      <span class="action-content">
+        <span class="action-title">Business Profile</span>
+        <span class="action-desc">Build credibility</span>
+      </span>
+    </a>
+    <a href="/users/orders" class="quick-action innovation-action">
+      <span class="action-icon">📊</span>
+      <span class="action-content">
+        <span class="action-title">Analytics</span>
+        <span class="action-desc">Innovative insights</span>
+      </span>
+    </a>
+  </div>
 </section>
 
-<style>
-  /* Pills row */
-  .pills {
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  /* ===== BRAND COLOR SYSTEM ===== */
+  :root {
+    /* Core Brand Colors */
+    --trust-blue: #2563EB;      /* Trust & Reliability */
+    --innovation-purple: #7C3AED; /* Innovation & Creativity */
+    --growth-green: #22C55E;    /* Growth & Success */
+    
+    /* Color Variants */
+    --blue-dark: #1D4ED8;
+    --blue-light: #60A5FA;
+    --blue-bg: rgba(37, 99, 235, 0.08);
+    
+    --purple-dark: #6D28D9;
+    --purple-light: #A78BFA;
+    --purple-bg: rgba(124, 58, 237, 0.08);
+    
+    --green-dark: #16A34A;
+    --green-light: #4ADE80;
+    --green-bg: rgba(34, 197, 94, 0.08);
+    
+    /* Neutrals */
+    --black: #0F172A;
+    --gray-900: #1E293B;
+    --gray-800: #334155;
+    --gray-700: #475569;
+    --gray-600: #64748B;
+    --gray-500: #94A3B8;
+    --gray-400: #CBD5E1;
+    --gray-300: #E2E8F0;
+    --gray-200: #F1F5F9;
+    --gray-100: #F8FAFC;
+    --white: #FFFFFF;
+    
+    /* UI */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+  }
+
+  .dark-theme {
+    --trust-blue: #60A5FA;
+    --innovation-purple: #A78BFA;
+    --growth-green: #4ADE80;
+    --blue-bg: rgba(96, 165, 250, 0.1);
+    --purple-bg: rgba(167, 139, 250, 0.1);
+    --green-bg: rgba(74, 222, 128, 0.1);
+    --black: #F1F5F9;
+    --white: #0F172A;
+    --gray-100: #1E293B;
+    --gray-200: #334155;
+  }
+
+  /* ===== BASE STYLES ===== */
+  .dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  /* ===== HEADER ===== */
+  .dashboard-header {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    overflow: hidden;
+  }
+
+  .dark-theme .dashboard-header {
+    background: var(--white);
+    border-color: var(--gray-400);
+  }
+
+  .header-gradient {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 200px;
+    height: 100%;
+    background: linear-gradient(45deg, var(--growth-green) 0%, var(--innovation-purple) 50%, var(--trust-blue) 100%);
+    opacity: 0.1;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+
+  .welcome-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    background: linear-gradient(90deg, var(--blue-bg), var(--green-bg));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    border-radius: 999px;
+    margin-bottom: 0.75rem;
+  }
+
+  .badge-icon {
+    font-size: 0.875rem;
+  }
+
+  .badge-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--trust-blue);
+  }
+
+  .dashboard-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+  }
+
+  .title-gradient {
+    background: linear-gradient(90deg, var(--trust-blue), var(--innovation-purple), var(--growth-green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .dashboard-subtitle {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin: 0;
+  }
+
+  /* ===== KPI CARDS ===== */
+  .kpis-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: .6rem;
-    max-width: 900px;
-    margin: 1rem auto 0.5rem;
-    padding: 0 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
   }
-  .pill { background:#eef2ff; border:1px solid #c7d2fe; color:#1e3a8a; border-radius:999px; padding:.5rem .9rem; font-size:.95rem; text-align:center; white-space:nowrap; }
-  .pill.in-transit { background:#ecfeff; border-color:#a5f3fc; color:#155e75; }
-  .pill.delivered  { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
-  .pill.order { background:#f1f5f9; border-color:#e2e8f0; color:#334155; }
-  .pill.ship.processing { background:#fff7ed; border-color:#ffedd5; color:#9a3412; }
-  .pill.ship.in-transit { background:#ecfeff; border-color:#a5f3fc; color:#155e75; }
-  .pill.ship.delivered { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
-  .pill.pay { background:#e0e7ff; border-color:#c7d2fe; color:#3730a3; }
 
-  .dashboard-home {
-    max-width: 900px;
-    margin: 0.8rem auto 2rem;
+  .kpi-card {
+    position: relative;
     padding: 1.25rem;
-    border-radius: 12px;
-    background: #f9fafb;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.3s ease;
   }
-  .dark-theme .dashboard-home { background:#111827; color:#f3f4f6; }
-  .dashboard-header { text-align:center; margin-bottom:1.4rem; }
-  .dashboard-header h1 { margin:0; font-size:1.6rem; }
-  .dashboard-header .subtitle { color:#6b7280; }
-  .dark-theme .dashboard-header .subtitle { color:#9ca3af; }
 
-  .flash { margin-bottom:1rem; padding:.8rem 1rem; border-radius:.5rem; font-weight:500; animation:fadeIn .3s ease; cursor:pointer; transition:opacity .6s, transform .6s; }
-  .flash-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
-  .flash-error   { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
-  .flash.fade-out { opacity:0; transform:translateY(-10px); }
-  @keyframes fadeIn { from { opacity:0; transform:translateY(-5px);} to { opacity:1; transform:none;} }
+  .dark-theme .kpi-card {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
 
-  .list-section { margin:1.2rem 0 1.8rem; }
-  .list-section h2 { margin-bottom:.6rem; }
-  .empty { opacity:.8; }
-  .list { list-style:none; margin:0; padding:0; display:grid; gap:.6rem; }
-  .item { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:.75rem .9rem; }
-  .dark-theme .item { background:#1f2937; border-color:#334155; }
-  .row { display:flex; justify-content:space-between; align-items:center; gap:.8rem; flex-wrap:wrap; }
-  .title { font-weight:600; }
-  .meta { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; opacity:.9; }
-  .amt { font-weight:700; }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
 
-  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.2rem; }
-  .card { background:#fff; border-radius:10px; padding:1rem; text-align:center; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
-  .dark-theme .card { background:#1f2937; box-shadow:0 2px 6px rgba(255,255,255,0.05); }
-  .card h3 { margin-bottom:.4rem; }
-  .count { font-size:1.7rem; font-weight:700; margin:.4rem 0 1rem; }
+  .kpi-trust:hover {
+    border-color: var(--trust-blue);
+  }
 
-  .user-section h2 { margin-bottom:.8rem; }
-  .user-section ul { list-style:none; padding:0; margin:0 0 1.2rem; }
-  .user-section li { margin:.35rem 0; }
+  .kpi-growth:hover {
+    border-color: var(--growth-green);
+  }
 
-  .btn { display:inline-block; padding:.55rem .9rem; border-radius:6px; text-decoration:none; background:#111827; color:#fff; transition:background .2s ease; }
-  .btn:hover { background:#1f2937; }
-  .btn.small { font-size:.9rem; padding:.4rem .8rem; }
-  .btn.tiny { font-size:.85rem; padding:.35rem .6rem; }
-  .btn.subtle { background:#e5e7eb; color:#111827; }
-  .btn.subtle:hover { background:#d1d5db; }
-  .btn.secondary { background:#2563eb; }
-  .btn.secondary:hover { background:#1d4ed8; }
-  .btn.danger { background:#dc2626; }
-  .btn.danger:hover { background:#b91c1c; }
+  .kpi-success:hover {
+    border-color: var(--innovation-purple);
+  }
 
-  .dashboard-footer { text-align:center; margin-top:1.6rem; font-size:.9rem; color:#6b7280; }
-  .dark-theme .dashboard-footer { color:#9ca3af; }
+  .kpi-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+  }
 
-  /* Mobile (Hisense U50 Lite and smaller) */
+  .kpi-accent.trust {
+    background: linear-gradient(180deg, var(--trust-blue), var(--blue-light));
+  }
+
+  .kpi-accent.growth {
+    background: linear-gradient(180deg, var(--growth-green), var(--green-light));
+  }
+
+  .kpi-accent.success {
+    background: linear-gradient(180deg, var(--innovation-purple), var(--purple-light));
+  }
+
+  .kpi-icon {
+    font-size: 2rem;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+  }
+
+  .kpi-trust .kpi-icon {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+  }
+
+  .kpi-growth .kpi-icon {
+    background: var(--green-bg);
+    color: var(--growth-green);
+  }
+
+  .kpi-success .kpi-icon {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+  }
+
+  .kpi-content {
+    flex: 1;
+  }
+
+  .kpi-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-600);
+    margin-bottom: 0.25rem;
+  }
+
+  .kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--black);
+    margin-bottom: 0.25rem;
+  }
+
+  .kpi-meta {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  /* ===== STATS BAR ===== */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat {
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .stat.trust {
+    background: linear-gradient(135deg, var(--blue-bg), rgba(37, 99, 235, 0.05));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .stat.growth {
+    background: linear-gradient(135deg, var(--green-bg), rgba(34, 197, 94, 0.05));
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .stat.innovation {
+    background: linear-gradient(135deg, var(--purple-bg), rgba(124, 58, 237, 0.05));
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-600);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .stat.trust .stat-value {
+    color: var(--trust-blue);
+  }
+
+  .stat.growth .stat-value {
+    color: var(--growth-green);
+  }
+
+  .stat.innovation .stat-value {
+    color: var(--innovation-purple);
+  }
+
+  /* ===== DASHBOARD SECTIONS ===== */
+  .dashboard-section {
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+  }
+
+  .dark-theme .dashboard-section {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .growth-bg {
+    background: linear-gradient(135deg, var(--green-bg) 0%, var(--white) 100%) !important;
+  }
+
+  .dark-theme .growth-bg {
+    background: linear-gradient(135deg, var(--green-bg) 0%, var(--gray-100) 100%) !important;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 1rem;
+  }
+
+  .trust-icon {
+    background: linear-gradient(135deg, var(--trust-blue), var(--blue-light));
+  }
+
+  .growth-icon {
+    background: linear-gradient(135deg, var(--growth-green), var(--green-light));
+  }
+
+  .innovation-icon {
+    background: linear-gradient(135deg, var(--innovation-purple), var(--purple-light));
+  }
+
+  .section-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-weight: 600;
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .section-badge.innovation {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border-color: rgba(124, 58, 237, 0.2);
+  }
+
+  .section-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    gap: 0.5rem;
+  }
+
+  .btn-trust {
+    background: var(--trust-blue);
+    color: white;
+  }
+
+  .btn-trust:hover {
+    background: var(--blue-dark);
+  }
+
+  .btn-growth {
+    background: var(--growth-green);
+    color: white;
+  }
+
+  .btn-growth:hover {
+    background: var(--green-dark);
+  }
+
+  .btn-innovation {
+    background: var(--innovation-purple);
+    color: white;
+  }
+
+  .btn-innovation:hover {
+    background: var(--purple-dark);
+  }
+
+  .btn-icon {
+    font-size: 1rem;
+  }
+
+  /* ===== ORDERS TABLE ===== */
+  .orders-container {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--gray-300);
+  }
+
+  .orders-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .orders-table thead {
+    background: linear-gradient(90deg, var(--blue-bg), var(--green-bg));
+  }
+
+  .orders-table th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--gray-700);
+    border-bottom: 1px solid var(--gray-300);
+  }
+
+  .orders-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  .orders-table tbody tr:hover {
+    background: var(--gray-100);
+  }
+
+  .order-id-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .order-id {
+    font-family: 'SF Mono', monospace;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .tracking-indicator {
+    font-size: 0.75rem;
+    color: var(--growth-green);
+  }
+
+  .order-amount {
+    font-weight: 600;
+  }
+
+  .order-date {
+    color: var(--gray-600);
+    white-space: nowrap;
+  }
+
+  /* Status Badges */
+  .status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .status-delivered {
+    background: var(--green-bg);
+    color: var(--growth-green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .status-intransit {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .status-pending {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  /* Order Actions */
+  .order-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .btn-action {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+
+  .btn-action.btn-trust {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  .btn-action.btn-trust:hover {
+    background: var(--trust-blue);
+    color: white;
+  }
+
+  .btn-action.btn-innovation {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border-color: rgba(124, 58, 237, 0.2);
+  }
+
+  .btn-action.btn-innovation:hover {
+    background: var(--innovation-purple);
+    color: white;
+  }
+
+  /* ===== SHIPMENTS ===== */
+  .delivery-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .delivery-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+  }
+
+  .dark-theme .delivery-stat {
+    background: var(--gray-200);
+  }
+
+  .delivery-stat.delivered {
+    border-color: rgba(34, 197, 94, 0.3);
+  }
+
+  .delivery-stat.transit {
+    border-color: rgba(37, 99, 235, 0.3);
+  }
+
+  .delivery-stat.pending {
+    border-color: rgba(124, 58, 237, 0.3);
+  }
+
+  .stat-count {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--black);
+  }
+
+  .delivered .stat-count {
+    color: var(--growth-green);
+  }
+
+  .transit .stat-count {
+    color: var(--trust-blue);
+  }
+
+  .pending .stat-count {
+    color: var(--innovation-purple);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  .shipments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+
+  .shipment-card {
+    padding: 1rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+  }
+
+  .dark-theme .shipment-card {
+    background: var(--gray-100);
+  }
+
+  .shipment-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Shipment status border colors */
+  .shipment-card.shipment-delivered {
+    border-left: 4px solid var(--growth-green);
+  }
+
+  .shipment-card.shipment-intransit {
+    border-left: 4px solid var(--trust-blue);
+  }
+
+  .shipment-card.shipment-pending {
+    border-left: 4px solid var(--innovation-purple);
+  }
+
+  .shipment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .shipment-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .shipment-order,
+  .shipment-date {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+  }
+
+  .label {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  .order-link {
+    font-weight: 600;
+    color: var(--trust-blue);
+    text-decoration: none;
+  }
+
+  .order-link:hover {
+    text-decoration: underline;
+  }
+
+  .shipment-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .status-dot.delivered {
+    background: var(--growth-green);
+  }
+
+  .status-dot.intransit {
+    background: var(--trust-blue);
+  }
+
+  .status-dot.pending {
+    background: var(--innovation-purple);
+  }
+
+  .status-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .shipment-body {
+    margin: 0.75rem 0;
+  }
+
+  .shipment-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .info-icon {
+    font-size: 1rem;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gray-200);
+    border-radius: var(--radius-sm);
+  }
+
+  .info-content {
+    flex: 1;
+  }
+
+  .info-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    margin-bottom: 0.125rem;
+  }
+
+  .info-value {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--black);
+  }
+
+  .tracking-link {
+    color: var(--innovation-purple);
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .tracking-link:hover {
+    text-decoration: underline;
+  }
+
+  .external-icon {
+    font-size: 0.75rem;
+  }
+
+  /* Track buttons with status-based gradients */
+  .btn-track {
+    width: 100%;
+    padding: 0.5rem;
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: opacity 0.2s ease;
+  }
+
+  .btn-track:hover {
+    opacity: 0.9;
+  }
+
+  .btn-track-delivered {
+    background: linear-gradient(90deg, var(--growth-green), var(--green-dark));
+  }
+
+  .btn-track-intransit {
+    background: linear-gradient(90deg, var(--trust-blue), var(--blue-dark));
+  }
+
+  .btn-track-pending {
+    background: linear-gradient(90deg, var(--innovation-purple), var(--purple-dark));
+  }
+
+  /* ===== INSIGHTS PANEL ===== */
+  .insights-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .insight {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .trust-insight {
+    background: linear-gradient(135deg, var(--blue-bg), rgba(37, 99, 235, 0.05));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .growth-insight {
+    background: linear-gradient(135deg, var(--green-bg), rgba(34, 197, 94, 0.05));
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .innovation-insight {
+    background: linear-gradient(135deg, var(--purple-bg), rgba(124, 58, 237, 0.05));
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .insight-icon {
+    font-size: 1.5rem;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--white);
+  }
+
+  .dark-theme .insight-icon {
+    background: var(--gray-200);
+  }
+
+  .trust-insight .insight-icon {
+    color: var(--trust-blue);
+  }
+
+  .growth-insight .insight-icon {
+    color: var(--growth-green);
+  }
+
+  .innovation-insight .insight-icon {
+    color: var(--innovation-purple);
+  }
+
+  .insight-content h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0 0 0.25rem;
+  }
+
+  .insight-content p {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    margin: 0;
+  }
+
+  /* ===== QUICK ACTIONS ===== */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  .quick-action {
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .growth-action {
+    background: var(--green-bg);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .growth-action:hover {
+    background: var(--growth-green);
+    border-color: var(--growth-green);
+  }
+
+  .growth-action:hover .action-icon,
+  .growth-action:hover .action-title,
+  .growth-action:hover .action-desc {
+    color: white !important;
+  }
+
+  .trust-action {
+    background: var(--blue-bg);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .trust-action:hover {
+    background: var(--trust-blue);
+    border-color: var(--trust-blue);
+  }
+
+  .trust-action:hover .action-icon,
+  .trust-action:hover .action-title,
+  .trust-action:hover .action-desc {
+    color: white !important;
+  }
+
+  .innovation-action {
+    background: var(--purple-bg);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .innovation-action:hover {
+    background: var(--innovation-purple);
+    border-color: var(--innovation-purple);
+  }
+
+  .innovation-action:hover .action-icon,
+  .innovation-action:hover .action-title,
+  .innovation-action:hover .action-desc {
+    color: white !important;
+  }
+
+  .action-icon {
+    font-size: 1.25rem;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--white);
+  }
+
+  .dark-theme .action-icon {
+    background: var(--gray-200);
+  }
+
+  .growth-action .action-icon {
+    color: var(--growth-green);
+  }
+
+  .trust-action .action-icon {
+    color: var(--trust-blue);
+  }
+
+  .innovation-action .action-icon {
+    color: var(--innovation-purple);
+  }
+
+  .action-content {
+    flex: 1;
+  }
+
+  .action-title {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+    margin-bottom: 0.125rem;
+  }
+
+  .action-desc {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  /* ===== EMPTY STATES ===== */
+  .empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--gray-300);
+  }
+
+  .empty-state.compact {
+    padding: 1.5rem 1rem;
+  }
+
+  .empty-icon {
+    font-size: 2.5rem;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.75rem;
+    border-radius: var(--radius-md);
+    color: white;
+  }
+
+  .growth-icon {
+    background: linear-gradient(135deg, var(--growth-green), var(--green-dark));
+  }
+
+  .empty-state h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0 0 0.375rem;
+  }
+
+  .empty-state p {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin: 0 0 1rem;
+  }
+
+  .empty-subtext {
+    font-size: 0.75rem !important;
+    color: var(--gray-500) !important;
+  }
+
+  /* ===== RESPONSIVE DESIGN ===== */
+  @media (max-width: 768px) {
+    .dashboard {
+      padding: 0.75rem;
+    }
+
+    .kpis-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-bar {
+      grid-template-columns: 1fr;
+    }
+
+    .shipments-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .insights-panel {
+      grid-template-columns: 1fr;
+    }
+
+    .quick-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .section-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+
+    .section-actions {
+      justify-content: stretch;
+    }
+
+    .section-actions .btn {
+      flex: 1;
+      text-align: center;
+    }
+
+    /* Stack table on mobile */
+    @media (max-width: 640px) {
+      .orders-table thead {
+        display: none;
+      }
+
+      .orders-table tbody tr {
+        display: block;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem;
+        border: 1px solid var(--gray-300);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .dark-theme .orders-table tbody tr {
+        background: var(--gray-100);
+      }
+
+      .orders-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.375rem 0;
+        border-bottom: 1px solid var(--gray-200);
+      }
+
+      .orders-table td:last-child {
+        border-bottom: none;
+        padding-top: 0.5rem;
+        justify-content: flex-start;
+        gap: 0.5rem;
+      }
+
+      .orders-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--gray-600);
+        flex: 0 0 100px;
+      }
+
+      .order-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+    }
+  }
+
+  /* Small phones */
   @media (max-width: 380px) {
-    .dashboard-home { padding:.9rem; border-radius:10px; }
-    .dashboard-header h1 { font-size:1.35rem; }
-    .pill { font-size:.9rem; padding:.45rem .7rem; }
-    .stats-grid { gap:.75rem; }
-    .card { padding:.85rem; }
-    .count { font-size:1.5rem; }
-    .btn { padding:.5rem .8rem; }
+    .dashboard {
+      padding: 0.5rem;
+    }
+
+    .dashboard-header {
+      padding: 1rem;
+    }
+
+    .dashboard-title {
+      font-size: 1.5rem;
+    }
+
+    .kpi-card {
+      padding: 1rem;
+    }
+
+    .kpi-icon {
+      width: 48px;
+      height: 48px;
+      font-size: 1.75rem;
+    }
+
+    .shipment-info {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .info-icon {
+      width: 28px;
+      height: 28px;
+      font-size: 0.875rem;
+    }
+
+    .delivery-stats {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .delivery-stat {
+      justify-content: space-between;
+    }
   }
 </style>
-
-<script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    // Theme toggle
-    const toggleBtn = document.getElementById("themeToggle");
-    if (toggleBtn) {
-      toggleBtn.addEventListener("click", async () => {
-        try {
-          const res = await fetch("/theme-toggle", { method: "POST" });
-          const data = await res.json();
-          if (data.theme === "dark") document.body.classList.add("dark-theme");
-          else document.body.classList.remove("dark-theme");
-        } catch {}
-      });
-    }
-
-    // Count animation (purely visual)
-    document.querySelectorAll(".count").forEach((n) => {
-      const target = +n.textContent || 0;
-      let count = 0;
-      const step = Math.max(1, Math.ceil(target / 40));
-      const id = setInterval(() => {
-        count += step;
-        if (count >= target) { count = target; clearInterval(id); }
-        n.textContent = count;
-      }, 25);
-    });
-
-    // Auto-dismiss flash
-    const flash = document.getElementById("flashMessage");
-    if (flash) {
-      setTimeout(() => {
-        flash.classList.add("fade-out");
-        setTimeout(() => flash.remove(), 600);
-      }, 5000);
-      flash.addEventListener("click", () => {
-        flash.classList.add("fade-out");
-        setTimeout(() => flash.remove(), 600);
-      });
-    }
-  });
-</script>

@@ -1,25 +1,847 @@
-<section>
-  <h1 class="page-title">💳 My Payments</h1>
+<!-- views/users-payments.ejs -->
+<%
+  const payList = Array.isArray(payments) ? payments : [];
 
-  <% if (!payments || payments.length === 0) { %>
-    <p class="muted">No payments found.</p>
-  <% } else { %>
-    <table class="table">
-      <thead>
-        <tr><th>Order</th><th>Provider</th><th>Payment ID</th><th>Amount</th><th>Status</th><th>Date</th></tr>
-      </thead>
-      <tbody>
-        <% payments.forEach(p => { %>
-          <tr>
-            <td data-label="Order">#<%= p.orderId.toString().slice(-6) %></td>
-            <td data-label="Provider"><%= p.provider %></td>
-            <td data-label="Payment ID"><%= p.id %></td>
-            <td data-label="Amount"><%= p.amount.toFixed ? p.amount.toFixed(2) : p.amount %> <%= p.currency %></td>
-            <td data-label="Status" class="status <%= (p.status || 'paid').toLowerCase() %>"><%= p.status || 'paid' %></td>
-            <td data-label="Date"><%= new Date(p.createdAt).toLocaleString() %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+  function money(am) {
+    if (!am) return '—';
+    const v = (typeof am.value === 'string' || typeof am.value === 'number') ? am.value : '';
+    const c = am.currency || 'USD';
+    const sym = c === 'ZAR' ? 'R' : c === 'USD' ? '$' : c === 'EUR' ? '€' : c === 'GBP' ? '£' : c + ' ';
+    return `${sym}${Number(v || 0).toFixed(2)}`;
+  }
+
+  function when(d) {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d);
+      return dt.toLocaleDateString('en-ZA', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '—';
+    }
+  }
+
+  function shortId(id) {
+    if (!id) return '—';
+    const str = id.toString();
+    return str.length > 8 ? str.slice(0, 8) + '…' : str;
+  }
+
+  const totalAmount = payList.reduce((sum, p) => {
+    const amt = p.amount?.value || 0;
+    return sum + Number(amt);
+  }, 0);
+%>
+
+<div class="pm <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+  <h1 class="pm-title">My Payments</h1>
+  <p class="pm-subtitle">All successful captures from your orders</p>
+
+  <!-- Stats Summary -->
+  <% if (payList.length > 0) { %>
+    <div class="pm-stats">
+      <div class="pm-stat">
+        <span class="pm-stat-label">Total Payments</span>
+        <span class="pm-stat-value"><%= payList.length %></span>
+      </div>
+      <div class="pm-stat">
+        <span class="pm-stat-label">Total Amount</span>
+        <span class="pm-stat-value"><%= money({ value: totalAmount, currency: 'USD' }) %></span>
+      </div>
+      <div class="pm-stat">
+        <span class="pm-stat-label">Successful</span>
+        <span class="pm-stat-value pm-stat-success">
+          <%= payList.filter(p => (p.status || '').toLowerCase() === 'completed' || (p.status || '').toLowerCase() === 'paid').length %>
+        </span>
+      </div>
+    </div>
   <% } %>
-</section>
+
+  <!-- Payments Table -->
+  <% if (!payList.length) { %>
+    <div class="pm-empty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h3>No Payments Found</h3>
+      <p>You haven't made any payments yet.</p>
+      <a href="/sales" class="pm-btn pm-btn-primary">Browse Products</a>
+    </div>
+  <% } else { %>
+    <div class="pm-table-container">
+      <div class="pm-table-wrapper">
+        <table class="pm-table" aria-label="Payment history">
+          <thead>
+            <tr>
+              <th scope="col">Order</th>
+              <th scope="col">Provider</th>
+              <th scope="col">Amount</th>
+              <th scope="col">Status</th>
+              <th scope="col">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% payList.forEach(p => { 
+              const status = (p.status || 'PAID').toLowerCase();
+              const provider = p.provider || 'PayPal';
+            %>
+              <tr class="pm-row" data-payment-id="<%= p.captureId || p.capture_id || '' %>">
+                <td data-label="Order" class="pm-order">
+                  <a href="/payment/orders?orderId=<%= encodeURIComponent(p.orderId || '') %>" 
+                     class="pm-order-link" title="View order details">
+                    <%= shortId(p.orderId) %>
+                  </a>
+                </td>
+                <td data-label="Provider" class="pm-provider">
+                  <span class="pm-provider-badge pm-provider-<%= provider.toLowerCase() %>">
+                    <%= provider %>
+                  </span>
+                </td>
+                <td data-label="Amount" class="pm-amount">
+                  <span class="pm-amount-value"><%= money(p.amount) %></span>
+                </td>
+                <td data-label="Status" class="pm-status">
+                  <span class="pm-status-badge pm-status-<%= status %>">
+                    <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+                  </span>
+                </td>
+                <td data-label="Date" class="pm-date">
+                  <%= when(p.createdAt || p.updateTime) %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Summary Footer -->
+    <div class="pm-summary">
+      <div class="pm-summary-content">
+        <div class="pm-summary-row">
+          <span>Total Payments:</span>
+          <strong><%= payList.length %></strong>
+        </div>
+        <div class="pm-summary-row">
+          <span>Total Amount:</span>
+          <strong class="pm-total-amount"><%= money({ value: totalAmount, currency: 'USD' }) %></strong>
+        </div>
+      </div>
+    </div>
+  <% } %>
+</div>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  /* ===== COMPANY COLORS & VARIABLES ===== */
+  .pm {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 10px;
+    --transition: all 0.2s ease;
+  }
+
+  /* ===== MAIN CONTAINER ===== */
+  .pm {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  /* ===== HEADER ===== */
+  .pm-title {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    margin: 0 0 8px 0;
+    color: var(--black);
+  }
+
+  .pm-subtitle {
+    text-align: center;
+    margin: 0 0 24px 0;
+    color: #64748B;
+    font-size: 14px;
+  }
+
+  .dark-theme .pm-title {
+    color: #F1F5F9;
+  }
+
+  .dark-theme .pm-subtitle {
+    color: #94A3B8;
+  }
+
+  /* ===== STATS SUMMARY ===== */
+  .pm-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .pm-stat {
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+  }
+
+  .pm-stat-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748B;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .pm-stat-value {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--black);
+  }
+
+  .pm-stat-success {
+    color: var(--green);
+  }
+
+  .dark-theme .pm-stat {
+    background: #132813;
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .pm-stat-value {
+    color: #F1F5F9;
+  }
+
+  /* ===== EMPTY STATE ===== */
+  .pm-empty {
+    text-align: center;
+    padding: 40px 20px;
+    background: rgba(34, 197, 94, 0.05);
+    border-radius: var(--radius);
+    border: 1px solid #D1FAE5;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .pm-empty svg {
+    color: var(--green);
+    margin-bottom: 16px;
+  }
+
+  .pm-empty h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    color: var(--black);
+  }
+
+  .pm-empty p {
+    color: #64748B;
+    margin: 0 0 20px 0;
+    font-size: 14px;
+  }
+
+  .dark-theme .pm-empty {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .pm-empty h3 {
+    color: #F1F5F9;
+  }
+
+  .dark-theme .pm-empty p {
+    color: #94A3B8;
+  }
+
+  /* ===== TABLE CONTAINER ===== */
+  .pm-table-container {
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
+  }
+
+  .dark-theme .pm-table-container {
+    background: #132813;
+    border-color: #2D5A2D;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
+  }
+
+  .pm-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ===== TABLE ===== */
+  .pm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 600px;
+  }
+
+  .pm-table thead {
+    background: rgba(34, 197, 94, 0.05);
+  }
+
+  .pm-table th {
+    padding: 14px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #D1FAE5;
+    white-space: nowrap;
+  }
+
+  .pm-table tbody tr {
+    border-bottom: 1px solid #D1FAE5;
+    transition: var(--transition);
+  }
+
+  .pm-table tbody tr:hover {
+    background: rgba(34, 197, 94, 0.03);
+  }
+
+  .pm-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .pm-table td {
+    padding: 12px 16px;
+    vertical-align: middle;
+  }
+
+  .dark-theme .pm-table thead {
+    background: rgba(34, 197, 94, 0.1);
+  }
+
+  .dark-theme .pm-table th {
+    color: #94A3B8;
+    border-bottom-color: #2D5A2D;
+  }
+
+  .dark-theme .pm-table tbody tr {
+    border-bottom-color: #2D5A2D;
+  }
+
+  .dark-theme .pm-table tbody tr:hover {
+    background: rgba(34, 197, 94, 0.08);
+  }
+
+  /* ===== TABLE CELLS ===== */
+  .pm-order-link {
+    color: var(--blue);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 12px;
+    font-family: 'SF Mono', monospace;
+    transition: var(--transition);
+  }
+
+  .pm-order-link:hover {
+    text-decoration: underline;
+  }
+
+  .pm-provider-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .pm-provider-paypal {
+    background: rgba(0, 48, 135, 0.1);
+    color: #003087;
+  }
+
+  .pm-provider-stripe {
+    background: rgba(85, 102, 255, 0.1);
+    color: #5566FF;
+  }
+
+  .pm-provider-razorpay {
+    background: rgba(0, 98, 255, 0.1);
+    color: #0062FF;
+  }
+
+  .pm-amount-value {
+    font-weight: 700;
+    color: var(--black);
+    font-size: 14px;
+  }
+
+  .dark-theme .pm-amount-value {
+    color: #F1F5F9;
+  }
+
+  .pm-status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  .pm-status-completed,
+  .pm-status-paid {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .pm-status-pending {
+    background: rgba(245, 158, 11, 0.1);
+    color: #F59E0B;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+  }
+
+  .pm-status-failed,
+  .pm-status-declined,
+  .pm-status-refunded {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  .pm-date {
+    color: #64748B;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .dark-theme .pm-date {
+    color: #94A3B8;
+  }
+
+  /* ===== SUMMARY FOOTER ===== */
+  .pm-summary {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(34, 197, 94, 0.05);
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+  }
+
+  .pm-summary-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .pm-summary-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .pm-summary-row span {
+    color: #64748B;
+  }
+
+  .pm-summary-row strong {
+    color: var(--black);
+    font-weight: 700;
+  }
+
+  .pm-total-amount {
+    color: var(--green);
+    font-size: 16px;
+  }
+
+  .dark-theme .pm-summary {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .pm-summary-row span {
+    color: #94A3B8;
+  }
+
+  .dark-theme .pm-summary-row strong {
+    color: #F1F5F9;
+  }
+
+  /* ===== BUTTONS ===== */
+  .pm-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .pm-btn-primary {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    color: white;
+  }
+
+  .pm-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .pm {
+      padding: 12px;
+    }
+    
+    .pm-title {
+      font-size: 18px;
+    }
+    
+    .pm-stats {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    
+    .pm-stat {
+      padding: 12px;
+    }
+    
+    .pm-table td,
+    .pm-table th {
+      padding: 10px 12px;
+    }
+    
+    .pm-summary-content {
+      flex-direction: column;
+      align-items: stretch;
+      text-align: center;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pm-table {
+      min-width: 100%;
+    }
+    
+    .pm-table thead {
+      display: none;
+    }
+    
+    .pm-table tbody tr {
+      display: block;
+      padding: 16px;
+      border-bottom: 1px solid #D1FAE5;
+      margin-bottom: 8px;
+    }
+    
+    .pm-table tbody tr:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+    
+    .pm-table td {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border: none;
+    }
+    
+    .pm-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: #64748B;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 12px;
+      flex: 0 0 80px;
+    }
+    
+    .dark-theme .pm-table td::before {
+      color: #94A3B8;
+    }
+    
+    .pm-order-link,
+    .pm-amount-value,
+    .pm-date {
+      text-align: right;
+      flex: 1;
+    }
+    
+    .pm-provider-badge,
+    .pm-status-badge {
+      margin-left: auto;
+    }
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes pmSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .pm-table-container {
+    animation: pmSlideIn 0.3s ease-out;
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .pm-order-link:focus,
+  .pm-btn:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+</style>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+document.addEventListener("DOMContentLoaded", () => {
+  // Add click functionality to payment rows
+  const paymentRows = document.querySelectorAll('.pm-row');
+  paymentRows.forEach(row => {
+    const paymentId = row.dataset.paymentId;
+    const orderLink = row.querySelector('.pm-order-link');
+    
+    if (paymentId && paymentId !== '') {
+      row.style.cursor = 'pointer';
+      row.title = 'Click to view payment details';
+      
+      row.addEventListener('click', (e) => {
+        // Don't trigger if clicking on the order link
+        if (!orderLink.contains(e.target)) {
+          window.location.href = `/payment/receipt/${encodeURIComponent(paymentId)}`;
+        }
+      });
+      
+      // Add hover effect
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = 'rgba(34, 197, 94, 0.05)';
+      });
+      
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = '';
+      });
+    }
+  });
+  
+  // Add copy functionality to payment IDs
+  const orderLinks = document.querySelectorAll('.pm-order-link');
+  orderLinks.forEach(link => {
+    link.addEventListener('click', function(e) {
+      e.stopPropagation(); // Prevent row click
+      
+      // Add visual feedback
+      const originalText = this.textContent;
+      this.textContent = 'Copied!';
+      this.style.color = 'var(--green)';
+      
+      // Copy order ID to clipboard
+      const orderId = this.textContent.match(/#?(\w+)/)?.[1];
+      if (orderId) {
+        navigator.clipboard.writeText(orderId);
+      }
+      
+      setTimeout(() => {
+        this.textContent = originalText;
+        this.style.color = '';
+      }, 2000);
+    });
+  });
+  
+  // Filter functionality (optional)
+  const filterContainer = document.createElement('div');
+  filterContainer.className = 'pm-filter';
+  filterContainer.innerHTML = `
+    <div class="pm-filter-group">
+      <label for="pm-status-filter" class="pm-filter-label">Filter by status:</label>
+      <select id="pm-status-filter" class="pm-filter-select">
+        <option value="all">All Statuses</option>
+        <option value="completed">Completed</option>
+        <option value="paid">Paid</option>
+        <option value="pending">Pending</option>
+        <option value="failed">Failed</option>
+      </select>
+    </div>
+  `;
+  
+  // Insert filter before table if there are payments
+  const tableContainer = document.querySelector('.pm-table-container');
+  if (tableContainer && paymentRows.length > 0) {
+    tableContainer.parentNode.insertBefore(filterContainer, tableContainer);
+    
+    const statusFilter = document.getElementById('pm-status-filter');
+    statusFilter.addEventListener('change', function() {
+      const selectedStatus = this.value;
+      
+      paymentRows.forEach(row => {
+        const statusBadge = row.querySelector('.pm-status-badge');
+        const statusClass = statusBadge ? Array.from(statusBadge.classList)
+          .find(cls => cls.startsWith('pm-status-')) : '';
+        const rowStatus = statusClass ? statusClass.replace('pm-status-', '') : '';
+        
+        if (selectedStatus === 'all' || rowStatus === selectedStatus) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+      
+      // Update stats
+      updateFilteredStats();
+    });
+  }
+  
+  // Update filtered stats
+  function updateFilteredStats() {
+    const visibleRows = Array.from(paymentRows).filter(row => row.style.display !== 'none');
+    const visibleCount = visibleRows.length;
+    const visibleAmount = visibleRows.reduce((sum, row) => {
+      const amountText = row.querySelector('.pm-amount-value').textContent;
+      const amount = parseFloat(amountText.replace(/[^0-9.-]+/g, ''));
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0);
+    
+    // Update or create filtered stats
+    let filteredStats = document.querySelector('.pm-filtered-stats');
+    if (!filteredStats) {
+      filteredStats = document.createElement('div');
+      filteredStats.className = 'pm-filtered-stats';
+      filterContainer.appendChild(filteredStats);
+    }
+    
+    filteredStats.innerHTML = `
+      <div class="pm-filtered-stat">
+        Showing ${visibleCount} of ${paymentRows.length} payments
+        ${visibleCount < paymentRows.length ? 
+          `<span class="pm-filtered-amount">${formatCurrency(visibleAmount)}</span>` : 
+          ''}
+      </div>
+    `;
+  }
+  
+  // Currency formatting helper
+  function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: 'ZAR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  }
+  
+  // Add styles for filter
+  const style = document.createElement('style');
+  style.textContent = `
+    .pm-filter {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: white;
+      border: 1px solid #D1FAE5;
+      border-radius: var(--radius);
+      box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
+    }
+    
+    .dark-theme .pm-filter {
+      background: #132813;
+      border-color: #2D5A2D;
+    }
+    
+    .pm-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    
+    .pm-filter-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--black);
+    }
+    
+    .dark-theme .pm-filter-label {
+      color: #F1F5F9;
+    }
+    
+    .pm-filter-select {
+      padding: 8px 12px;
+      border: 1px solid #D1FAE5;
+      border-radius: 8px;
+      background: white;
+      color: var(--black);
+      font-size: 14px;
+      min-width: 160px;
+    }
+    
+    .dark-theme .pm-filter-select {
+      background: #1A341A;
+      border-color: #2D5A2D;
+      color: #F1F5F9;
+    }
+    
+    .pm-filtered-stats {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #D1FAE5;
+      font-size: 13px;
+      color: #64748B;
+    }
+    
+    .dark-theme .pm-filtered-stats {
+      border-top-color: #2D5A2D;
+      color: #94A3B8;
+    }
+    
+    .pm-filtered-amount {
+      margin-left: 8px;
+      font-weight: 600;
+      color: var(--green);
+    }
+    
+    @media (max-width: 640px) {
+      .pm-filter-group {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .pm-filter-select {
+        width: 100%;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+});
+</script>

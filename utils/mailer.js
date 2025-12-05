@@ -81,6 +81,14 @@ function mailerReady() {
 
 // Call this once at startup (e.g., in server.js after env is loaded)
 initMailerHealthOnce().catch(() => {});
-module.exports = { sendMail, mailerReady /*, ... */ };
+//module.exports = { sendMail, mailerReady /*, ... */ };
 
-module.exports = { sendMail, FROM };
+//module.exports = { sendMail, FROM };
+
+module.exports = {
+  sendMail,
+  mailerReady,
+  FROM,
+};
+
+

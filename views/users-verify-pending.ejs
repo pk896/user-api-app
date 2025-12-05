@@ -1,82 +1,1492 @@
 <!-- views/users-verify-pending.ejs -->
 <section class="verify-page mini">
   <% const profileUser = user || locals.user || {}; %>
-
-  <h1 class="page-title">📧 Verify your email</h1>
-
-  <div class="card">
-    <p class="lead">
-      We’ve sent a verification email to:
-    </p>
-    <p class="email">
-      <strong><%= profileUser.email || 'your email' %></strong>
-    </p>
-    <p class="hint">
-      Please open that email and click the <strong>“Verify my email”</strong> button
-      to confirm this is your real address.
-    </p>
-
-    <p class="hint small">
-      Didn’t get it? Check your spam folder or tap the button below to resend.
-    </p>
-
-    <form action="/users/verify-email/resend" method="post" class="actions">
-      <button type="submit" class="btn xs primary wfull">🔁 Resend verification email</button>
-    </form>
-
-    <p class="hint small">
-      After verification, you’ll be redirected to your dashboard.
+  
+  <!-- Brand Header -->
+  <div class="brand-header">
+    <div class="logo-preview">
+      <div class="logo-color blue"></div>
+      <div class="logo-color purple"></div>
+      <div class="logo-color green"></div>
+      <div class="logo-color black"></div>
+    </div>
+    <h1 class="page-title">📬 Verify Your Email</h1>
+    <p class="page-subtitle">
+      Complete your account setup to access all features
     </p>
   </div>
 
-  <p class="back-link">
-    <a href="/users/profile">← Back to profile</a>
-  </p>
+  <!-- Flash Messages -->
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">
+      <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <div class="flash-content">
+        <strong>Success!</strong> <%= msg %>
+      </div>
+    </div>
+  <% }) %>
+
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">
+      <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </svg>
+      <div class="flash-content">
+        <strong>Error:</strong> <%= msg %>
+      </div>
+    </div>
+  <% }) %>
+
+  <!-- Verification Card -->
+  <div class="verification-card card">
+    <!-- Progress Steps -->
+    <div class="verification-steps">
+      <div class="step completed">
+        <div class="step-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="step-content">
+          <span class="step-title">Account Created</span>
+          <span class="step-subtitle">Registration complete</span>
+        </div>
+      </div>
+      
+      <div class="step-divider"></div>
+      
+      <div class="step current">
+        <div class="step-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+        </div>
+        <div class="step-content">
+          <span class="step-title">Verify Email</span>
+          <span class="step-subtitle">Check your inbox</span>
+        </div>
+      </div>
+      
+      <div class="step-divider"></div>
+      
+      <div class="step pending">
+        <div class="step-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <div class="step-content">
+          <span class="step-title">Secure Account</span>
+          <span class="step-subtitle">Access dashboard</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Email Display -->
+    <div class="email-display">
+      <div class="email-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M8 12h8"></path>
+          <path d="M12 16V8"></path>
+        </svg>
+      </div>
+      <div class="email-content">
+        <p class="email-label">Verification email sent to:</p>
+        <p class="email-address">
+          <span class="email-text"><%= profileUser.email || 'your email' %></span>
+          <button type="button" class="copy-email" data-email="<%= profileUser.email || '' %>" aria-label="Copy email address">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </p>
+      </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="instructions">
+      <h3 class="instructions-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        Next Steps
+      </h3>
+      
+      <ol class="steps-list">
+        <li class="step-item">
+          <span class="step-number">1</span>
+          <div class="step-details">
+            <strong>Open your email</strong>
+            <p>Check your inbox at <span class="email-highlight"><%= profileUser.email || 'your email' %></span></p>
+          </div>
+        </li>
+        
+        <li class="step-item">
+          <span class="step-number">2</span>
+          <div class="step-details">
+            <strong>Find our email</strong>
+            <p>Look for "Verify your email" from our team</p>
+          </div>
+        </li>
+        
+        <li class="step-item">
+          <span class="step-number">3</span>
+          <div class="step-details">
+            <strong>Click the link</strong>
+            <p>Tap the <span class="highlight">"Verify My Email"</span> button in the email</p>
+          </div>
+        </li>
+        
+        <li class="step-item">
+          <span class="step-number">4</span>
+          <div class="step-details">
+            <strong>Complete verification</strong>
+            <p>You'll be redirected to your dashboard automatically</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <!-- Common Issues -->
+    <div class="issues-section">
+      <details class="issue-details">
+        <summary class="issue-summary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          Didn't receive the email?
+        </summary>
+        <div class="issue-content">
+          <ul class="issue-list">
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Check your <strong>spam or junk folder</strong>
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Ensure you entered <strong><%= profileUser.email || 'your email' %></strong> correctly
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Wait a few minutes – emails can be delayed
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Whitelist our domain to prevent future filtering
+            </li>
+          </ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- Actions -->
+    <div class="action-buttons">
+      <form action="/users/verify-email/resend" method="post" class="resend-form">
+        <button type="submit" class="btn primary wfull resend-btn" id="resendBtn">
+          <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"></path>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          <span class="btn-text">Resend Verification Email</span>
+          <div class="spinner hidden">
+            <div class="spinner-dot"></div>
+            <div class="spinner-dot"></div>
+            <div class="spinner-dot"></div>
+          </div>
+        </button>
+        <p class="resend-hint">
+          You can request a new verification email every 2 minutes
+          <span class="timer" id="resendTimer">(0:00)</span>
+        </p>
+      </form>
+
+      <div class="divider">
+        <span class="divider-line"></span>
+        <span class="divider-text">or</span>
+        <span class="divider-line"></span>
+      </div>
+
+      <a href="mailto:<%= profileUser.email || '' %>" class="btn secondary wfull">
+        <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+          <polyline points="22,6 12,13 2,6"></polyline>
+        </svg>
+        Open Email App
+      </a>
+    </div>
+
+    <!-- After Verification -->
+    <div class="post-verification">
+      <h4>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        After Verification
+      </h4>
+      <ul class="benefits-list">
+        <li>Full access to your dashboard</li>
+        <li>Enhanced account security</li>
+        <li>Receive important notifications</li>
+        <li>Access premium features (if applicable)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Navigation Links -->
+  <div class="navigation-links">
+    <a href="/users/profile" class="nav-link back-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+      Back to Profile
+    </a>
+    
+    <span class="link-divider">•</span>
+    
+    <a href="/users/logout" class="nav-link logout-link" data-nav="true">
+      Sign Out
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        <polyline points="16 17 21 12 16 7"></polyline>
+        <line x1="21" y1="12" x2="9" y2="12"></line>
+      </svg>
+    </a>
+  </div>
+
+  <!-- Email Preview Modal -->
+  <div class="modal" id="emailPreviewModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>What to Look For</h3>
+        <button type="button" class="modal-close" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="email-preview">
+          <div class="email-header">
+            <div class="sender">
+              <strong>From:</strong> verification@yourcompany.com
+            </div>
+            <div class="subject">
+              <strong>Subject:</strong> Verify your email address
+            </div>
+          </div>
+          <div class="email-body">
+            <p>Hello <%= profileUser.name || 'there' %>,</p>
+            <p>Please verify your email address by clicking the button below:</p>
+            <div class="verification-button">
+              <span class="button-preview">Verify My Email</span>
+            </div>
+            <p>Or copy this link:</p>
+            <div class="verification-link">
+              https://yourcompany.com/verify/[token]
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-  .verify-page.mini{
-    max-width:420px; margin:.9rem auto 1.2rem; padding:0 .6rem; font-size:.85rem;
+  /* Brand Color Variables */
+  :root {
+    --brand-blue: #2563EB;    /* Trust & Reliability */
+    --brand-purple: #7C3AED;  /* Innovation & Creativity */
+    --brand-green: #22C55E;   /* Growth & Success (Primary) */
+    --brand-black: #0F172A;   /* Sophistication & Premium */
+    
+    --bg-primary: #22C55E;
+    --bg-secondary: #f0fdf4;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --input-bg: #f8fafc;
+    --success-light: #dcfce7;
+    --error-light: #fee2e2;
+    --warning-light: #fef3c7;
   }
-  .page-title{
-    text-align:center; font-size:1.05rem; font-weight:800; margin:.2rem 0 .7rem;
+
+  .dark-theme {
+    --bg-primary: #16a34a;
+    --bg-secondary: #052e16;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --card-bg: #1e293b;
+    --card-border: #334155;
+    --input-bg: #0f172a;
+    --success-light: #064e3b;
+    --error-light: #7f1d1d;
+    --warning-light: #78350f;
   }
 
-  .card{
-    background:var(--card-bg,#fff); border:1px solid var(--card-bd,#e5e7eb);
-    border-radius:12px; padding:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.06);
+  /* Base Styles */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
-  .dark-theme .card{
-    --card-bg:#1f2937; --card-bd:#374151; color:#e5e7eb;
+
+  body {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, #ffffff 100%);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
   }
 
-  .lead{ margin-bottom:.35rem; }
-  .email{ margin:.1rem 0 .4rem; font-size:.9rem; }
-  .hint{ margin:.1rem 0 .3rem; color:#4b5563; }
-  .hint.small{ font-size:.78rem; color:#6b7280; }
-  .dark-theme .hint, .dark-theme .hint.small{ color:#9ca3af; }
-
-  .actions{ margin-top:.4rem; }
-
-  .btn{
-    display:inline-block; width:100%; padding:.35rem .55rem; border-radius:8px;
-    text-decoration:none; border:1px solid #2563eb; background:#2563eb; color:#fff;
-    font-size:.78rem; font-weight:700;
+  .dark-theme body {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, #0f172a 100%);
   }
-  .btn.xs{ padding:.3rem .5rem; font-size:.72rem; border-radius:7px; }
-  .btn.primary:hover{ opacity:.95; }
-  .wfull{ width:100%; }
 
-  .flash{
-    margin:.36rem 0; padding:.5rem .64rem; border-radius:.6rem; font-size:.84rem;
+  /* Main Container */
+  .verify-page.mini {
+    max-width: 500px;
+    width: 100%;
+    margin: 0 auto;
   }
-  .flash-success{ background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
-  .flash-error{ background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
 
-  .back-link{ margin-top:.6rem; text-align:center; font-size:.8rem; }
+  /* Brand Header */
+  .brand-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
 
-  @media (max-width:360px){
-    .verify-page.mini{ padding:0 .5rem; }
-    .page-title{ font-size:1rem; }
+  .logo-preview {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 1rem;
+  }
+
+  .logo-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+  }
+
+  .logo-color.blue { background: var(--brand-blue); }
+  .logo-color.purple { background: var(--brand-purple); }
+  .logo-color.green { background: var(--brand-green); }
+  .logo-color.black { background: var(--brand-black); }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+
+  /* Flash Messages */
+  .flash {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    margin-bottom: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    animation: slideIn 0.3s ease;
+  }
+
+  .flash-success {
+    background: var(--success-light);
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .flash-error {
+    background: var(--error-light);
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .flash-icon {
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+  }
+
+  .flash-content {
+    flex: 1;
+  }
+
+  .flash-content strong {
+    font-weight: 600;
+  }
+
+  .dark-theme .flash-success {
+    color: #a7f3d0;
+  }
+
+  .dark-theme .flash-error {
+    color: #fecaca;
+  }
+
+  /* Card */
+  .verification-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .verification-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--brand-blue), var(--brand-purple));
+  }
+
+  .dark-theme .verification-card {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Verification Steps */
+  .verification-steps {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    position: relative;
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+    border: 2px solid var(--card-border);
+    background: var(--input-bg);
+    transition: all 0.3s ease;
+  }
+
+  .step.completed .step-icon {
+    background: var(--brand-green);
+    border-color: var(--brand-green);
+    color: white;
+  }
+
+  .step.current .step-icon {
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
+    color: white;
+    animation: pulse 2s infinite;
+  }
+
+  .step.pending .step-icon {
+    background: var(--input-bg);
+    border-color: var(--card-border);
+    color: var(--text-secondary);
+  }
+
+  .step-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .step-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .step-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .step.completed .step-title {
+    color: var(--brand-green);
+  }
+
+  .step.current .step-title {
+    color: var(--brand-blue);
+  }
+
+  .step-divider {
+    flex: 1;
+    height: 2px;
+    background: var(--card-border);
+    margin: 0 1rem;
+    position: relative;
+    top: -24px;
+  }
+
+  /* Email Display */
+  .email-display {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.05), rgba(37, 99, 235, 0.05));
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(124, 58, 237, 0.1);
+  }
+
+  .email-icon {
+    flex-shrink: 0;
+    color: var(--brand-purple);
+  }
+
+  .email-content {
+    flex: 1;
+  }
+
+  .email-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+  }
+
+  .email-address {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .email-text {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-all;
+  }
+
+  .copy-email {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+
+  .copy-email:hover {
+    background: var(--input-bg);
+    color: var(--brand-green);
+  }
+
+  /* Instructions */
+  .instructions {
+    margin-bottom: 2rem;
+  }
+
+  .instructions-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+
+  .instructions-title svg {
+    color: var(--brand-blue);
+  }
+
+  .steps-list {
+    list-style: none;
+    counter-reset: step-counter;
+  }
+
+  .step-item {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    counter-increment: step-counter;
+  }
+
+  .step-number {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    background: var(--input-bg);
+    border: 2px solid var(--brand-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--brand-blue);
+  }
+
+  .step-details {
+    flex: 1;
+    padding-top: 0.25rem;
+  }
+
+  .step-details strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+  }
+
+  .step-details p {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  .email-highlight {
+    background: var(--input-bg);
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.875rem;
+  }
+
+  .highlight {
+    color: var(--brand-green);
+    font-weight: 600;
+  }
+
+  /* Issues Section */
+  .issues-section {
+    margin-bottom: 2rem;
+  }
+
+  .issue-details {
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .issue-summary {
+    padding: 1rem 1.25rem;
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: background-color 0.2s ease;
+  }
+
+  .issue-summary:hover {
+    background: rgba(0, 0, 0, 0.02);
+  }
+
+  .issue-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .issue-summary svg {
+    flex-shrink: 0;
+    color: var(--brand-purple);
+  }
+
+  .issue-content {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--card-border);
+  }
+
+  .issue-list {
+    list-style: none;
+  }
+
+  .issue-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .issue-list li:last-child {
+    margin-bottom: 0;
+  }
+
+  .issue-list li svg {
+    flex-shrink: 0;
+    color: var(--brand-green);
+    margin-top: 0.125rem;
+  }
+
+  /* Action Buttons */
+  .action-buttons {
+    margin-bottom: 2rem;
+  }
+
+  .resend-form {
+    margin-bottom: 1rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 1.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    gap: 0.75rem;
+  }
+
+  .btn.primary {
+    background: linear-gradient(135deg, var(--brand-green), #16a34a);
+    color: white;
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+  }
+
+  .btn.primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+
+  .btn.secondary {
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 2px solid var(--card-border);
+  }
+
+  .btn.secondary:hover {
+    background: var(--card-bg);
+    border-color: var(--brand-blue);
+  }
+
+  .btn.wfull {
+    width: 100%;
+  }
+
+  .btn-icon {
+    flex-shrink: 0;
+  }
+
+  .btn-text {
+    transition: opacity 0.2s ease;
+  }
+
+  .spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    gap: 4px;
+  }
+
+  .spinner.hidden {
+    display: none;
+  }
+
+  .spinner-dot {
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out both;
+  }
+
+  .spinner-dot:nth-child(1) { animation-delay: -0.32s; }
+  .spinner-dot:nth-child(2) { animation-delay: -0.16s; }
+
+  .resend-hint {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+  }
+
+  .timer {
+    color: var(--brand-purple);
+    font-weight: 500;
+  }
+
+  /* Divider */
+  .divider {
+    display: flex;
+    align-items: center;
+    margin: 1.25rem 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: var(--card-border);
+  }
+
+  .divider-text {
+    padding: 0 1rem;
+  }
+
+  /* Post Verification */
+  .post-verification {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.05), rgba(16, 163, 74, 0.05));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid rgba(34, 197, 94, 0.1);
+  }
+
+  .post-verification h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+
+  .post-verification h4 svg {
+    color: var(--brand-green);
+  }
+
+  .benefits-list {
+    list-style: none;
+    padding-left: 0.5rem;
+  }
+
+  .benefits-list li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .benefits-list li:before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--brand-green);
+    font-weight: bold;
+  }
+
+  /* Navigation Links */
+  .navigation-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--brand-blue);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--brand-purple);
+    text-decoration: underline;
+  }
+
+  .link-divider {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    opacity: 0.5;
+  }
+
+  .logout-link {
+    color: var(--text-secondary);
+  }
+
+  .logout-link:hover {
+    color: #ef4444;
+  }
+
+  /* Modal */
+  .modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .modal.active {
+    display: flex;
+  }
+
+  .modal-content {
+    background: var(--card-bg);
+    border-radius: 16px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow: hidden;
+    animation: modalSlideIn 0.3s ease;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .modal-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+
+  .modal-close:hover {
+    background: var(--input-bg);
+    color: var(--text-primary);
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+
+  .email-preview {
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+  }
+
+  .email-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .sender, .subject {
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .email-body {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .email-body p {
+    margin-bottom: 1rem;
+  }
+
+  .verification-button {
+    background: var(--brand-green);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    margin: 1rem 0;
+    font-weight: 600;
+  }
+
+  .verification-link {
+    background: var(--input-bg);
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+  }
+
+  /* Animations */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    }
+  }
+
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+  }
+
+  @keyframes modalSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Mobile Optimizations for Hisense U50 Lite (360px width) */
+  @media (max-width: 360px) {
+    body {
+      padding: 0.5rem;
+      align-items: flex-start;
+    }
+
+    .verify-page.mini {
+      padding: 0;
+    }
+
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .page-subtitle {
+      font-size: 0.875rem;
+    }
+
+    .verification-card {
+      padding: 1.5rem 1.25rem;
+      border-radius: 16px;
+    }
+
+    .verification-steps {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .step {
+      flex-direction: row;
+      text-align: left;
+      width: 100%;
+    }
+
+    .step-icon {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 0;
+      margin-right: 1rem;
+    }
+
+    .step-divider {
+      display: none;
+    }
+
+    .email-display {
+      flex-direction: column;
+      text-align: center;
+      gap: 0.75rem;
+      padding: 1rem;
+    }
+
+    .step-item {
+      flex-direction: column;
+      text-align: center;
+      gap: 0.5rem;
+    }
+
+    .step-number {
+      margin: 0 auto;
+    }
+
+    .btn {
+      padding: 0.875rem 1.25rem;
+      font-size: 0.875rem;
+    }
+
+    .navigation-links {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .link-divider {
+      display: none;
+    }
+
+    .modal-content {
+      max-height: 80vh;
+    }
+  }
+
+  /* Accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Focus styles for keyboard navigation */
+  :focus-visible {
+    outline: 2px solid var(--brand-green);
+    outline-offset: 2px;
   }
 </style>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  (function () {
+    'use strict';
+
+    // Navigation Helper
+    const initNavigation = () => {
+      document.querySelectorAll('a[data-nav="true"]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = link.href;
+        });
+      });
+    };
+
+    // Copy Email Functionality
+    const initCopyEmail = () => {
+      const copyBtn = document.querySelector('.copy-email');
+      if (!copyBtn) return;
+
+      copyBtn.addEventListener('click', async () => {
+        const email = copyBtn.getAttribute('data-email');
+        if (!email) return;
+
+        try {
+          await navigator.clipboard.writeText(email);
+          
+          // Show success feedback
+          const originalHTML = copyBtn.innerHTML;
+          copyBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+          `;
+          copyBtn.style.color = '#22C55E';
+          
+          // Show tooltip
+          const tooltip = document.createElement('div');
+          tooltip.className = 'copy-tooltip';
+          tooltip.textContent = 'Email copied!';
+          copyBtn.appendChild(tooltip);
+          
+          setTimeout(() => {
+            copyBtn.innerHTML = originalHTML;
+            copyBtn.style.color = '';
+            if (tooltip.parentNode === copyBtn) {
+              copyBtn.removeChild(tooltip);
+            }
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy email:', err);
+          alert('Failed to copy email to clipboard');
+        }
+      });
+    };
+
+    // Resend Timer Functionality
+    const initResendTimer = () => {
+      const resendBtn = document.getElementById('resendBtn');
+      const timerElement = document.getElementById('resendTimer');
+      const cooldownTime = 120; // 2 minutes in seconds
+      let cooldownEnd = localStorage.getItem('emailResendCooldown');
+      let countdownInterval;
+
+      const updateTimer = () => {
+        const now = Math.floor(Date.now() / 1000);
+        const remaining = cooldownEnd ? cooldownEnd - now : 0;
+
+        if (remaining > 0) {
+          const minutes = Math.floor(remaining / 60);
+          const seconds = remaining % 60;
+          timerElement.textContent = `(${minutes}:${seconds.toString().padStart(2, '0')})`;
+          resendBtn.disabled = true;
+          resendBtn.style.opacity = '0.6';
+        } else {
+          timerElement.textContent = '(ready)';
+          resendBtn.disabled = false;
+          resendBtn.style.opacity = '1';
+          clearInterval(countdownInterval);
+        }
+      };
+
+      const startCooldown = () => {
+        cooldownEnd = Math.floor(Date.now() / 1000) + cooldownTime;
+        localStorage.setItem('emailResendCooldown', cooldownEnd);
+        
+        countdownInterval = setInterval(updateTimer, 1000);
+        updateTimer();
+      };
+
+      // Initialize timer on page load
+      if (cooldownEnd) {
+        const now = Math.floor(Date.now() / 1000);
+        if (cooldownEnd > now) {
+          countdownInterval = setInterval(updateTimer, 1000);
+          updateTimer();
+        } else {
+          localStorage.removeItem('emailResendCooldown');
+        }
+      }
+
+      // Handle form submission
+      const resendForm = document.querySelector('.resend-form');
+      if (resendForm) {
+        resendForm.addEventListener('submit', (e) => {
+          const btnText = resendBtn.querySelector('.btn-text');
+          const spinner = resendBtn.querySelector('.spinner');
+          
+          if (btnText) btnText.style.opacity = '0';
+          if (spinner) spinner.classList.remove('hidden');
+          resendBtn.disabled = true;
+          
+          // Start cooldown timer
+          setTimeout(() => {
+            startCooldown();
+            
+            // Reset button state after a delay (simulating API call)
+            setTimeout(() => {
+              if (btnText) btnText.style.opacity = '1';
+              if (spinner) spinner.classList.add('hidden');
+              
+              // Show success message
+              const flashContainer = document.querySelector('.brand-header');
+              if (flashContainer) {
+                const successFlash = document.createElement('div');
+                successFlash.className = 'flash flash-success';
+                successFlash.innerHTML = `
+                  <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <div class="flash-content">
+                    <strong>Success!</strong> Verification email resent successfully!
+                  </div>
+                `;
+                flashContainer.parentNode.insertBefore(successFlash, flashContainer.nextSibling);
+                
+                // Remove flash after 5 seconds
+                setTimeout(() => {
+                  successFlash.remove();
+                }, 5000);
+              }
+            }, 1000);
+          }, 500);
+        });
+      }
+    };
+
+    // Modal Functionality
+    const initModal = () => {
+      const modal = document.getElementById('emailPreviewModal');
+      const closeBtn = modal?.querySelector('.modal-close');
+      const previewBtn = document.querySelector('.email-display');
+      
+      if (!modal) return;
+
+      // Close modal
+      const closeModal = () => {
+        modal.classList.remove('active');
+        document.body.style.overflow = 'auto';
+      };
+
+      // Open modal
+      const openModal = () => {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      };
+
+      // Close button click
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeModal);
+      }
+
+      // Close on outside click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+
+      // Close on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+          closeModal();
+        }
+      });
+
+      // Open modal on email display click
+      if (previewBtn) {
+        previewBtn.style.cursor = 'pointer';
+        previewBtn.addEventListener('click', openModal);
+      }
+    };
+
+    // Auto-check for verification completion
+    const initAutoCheck = () => {
+      // Check if user is already verified (for page refreshes)
+      const checkVerificationStatus = () => {
+        // This would typically make an API call to check verification status
+        console.log('Checking verification status...');
+        
+        // Simulate periodic check every 10 seconds
+        setTimeout(checkVerificationStatus, 10000);
+      };
+
+      // Start checking after page load
+      setTimeout(checkVerificationStatus, 5000);
+    };
+
+    // Initialize everything when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      initNavigation();
+      initCopyEmail();
+      initResendTimer();
+      initModal();
+      initAutoCheck();
+      
+      // Add entrance animation
+      const card = document.querySelector('.verification-card');
+      if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+          card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+          card.style.opacity = '1';
+          card.style.transform = 'translateY(0)';
+        }, 100);
+      }
+      
+      // Add tooltip styles
+      const style = document.createElement('style');
+      style.textContent = `
+        .copy-tooltip {
+          position: absolute;
+          top: -30px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: var(--brand-black);
+          color: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          white-space: nowrap;
+          z-index: 1000;
+        }
+        .copy-tooltip::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          border-width: 4px;
+          border-style: solid;
+          border-color: var(--brand-black) transparent transparent transparent;
+        }
+      `;
+      document.head.appendChild(style);
+    });
+
+  })();
+</script>

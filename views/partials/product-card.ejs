@@ -1,95 +1,387 @@
 <!-- views/partials/product-card.ejs -->
-<div class="product-card <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+<div class="pc <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
 
-  <!-- 🖼 Product image -->
-  <a href="/products/<%= product.customId %>" class="image-link">
-    <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
+  <!-- Product Image -->
+  <a href="/products/<%= product.customId %>" class="pc-image-link">
+    <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="pc-image" />
+    <% if (product.stock <= 0) { %>
+      <div class="pc-outstock">Out of Stock</div>
+    <% } %>
   </a>
 
-  <!-- 🏷 Name & price -->
-  <h2 class="product-name">
-    <a href="/products/<%= product.customId %>"><%= product.name %></a>
-  </h2>
-  <p class="price">💲 <%= product.price.toFixed(2) %></p>
+  <!-- Product Info -->
+  <div class="pc-info">
+    <h3 class="pc-name">
+      <a href="/products/<%= product.customId %>"><%= product.name %></a>
+    </h3>
+    
+    <div class="pc-meta">
+      <span class="pc-price">R <%= product.price.toFixed(2) %></span>
+      <% if (product.stock > 0) { %>
+        <span class="pc-stock pc-stock-in">• In Stock</span>
+      <% } else { %>
+        <span class="pc-stock pc-stock-out">• Out of Stock</span>
+      <% } %>
+    </div>
 
-  <!-- 📦 Stock -->
-  <% if (product.stock > 0) { %>
-    <p class="stock in">✅ In stock: <%= product.stock %></p>
-  <% } else { %>
-    <p class="stock out">❌ Out of stock</p>
-  <% } %>
+    <!-- Short Description -->
+    <% if (product.description) { %>
+      <p class="pc-desc">
+        <%= product.description.length > 80 
+              ? product.description.substring(0, 80) + "…" 
+              : product.description %>
+      </p>
+    <% } %>
+  </div>
 
-  <!-- ✏️ Short description -->
-  <% if (product.description) { %>
-    <p class="description">
-      <%= product.description.length > 100 
-            ? product.description.substring(0, 100) + "..." 
-            : product.description %>
-    </p>
-  <% } %>
+  <!-- Actions -->
+  <div class="pc-actions">
+    <!-- View Button -->
+    <a href="/products/<%= product.customId %>" class="pc-btn pc-btn-view">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+        <path d="M8 3C5 3 2.5 5 1 8c1.5 3 4 5 7 5s5.5-2 7-5c-1.5-3-4-5-7-5z" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      View
+    </a>
 
-  <!-- ⚙️ Actions -->
-  <div class="product-actions">
-
-    <!-- 👁 Everyone can view -->
-    <a href="/products/<%= product.customId %>" class="btn btn-view">🔍 View Details</a>
-
-    <!-- 👨‍💼 Seller / Supplier can manage -->
+    <!-- Role-based Actions -->
     <% if (business && ["seller","supplier"].includes(business.role)) { %>
-      <a href="/products/edit/<%= product.customId %>" class="btn btn-edit">✏️ Edit</a>
-
+      <a href="/products/edit/<%= product.customId %>" class="pc-btn pc-btn-edit">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <path d="M11.5 2.5l2 2L5.5 13.5H3.5v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Edit
+      </a>
+      
       <a href="/products/delete/<%= product.customId %>"
-         onclick="return confirm('Are you sure you want to delete this product?');"
-         class="btn btn-delete">🗑 Delete</a>
+         onclick="return confirm('Delete this product?');"
+         class="pc-btn pc-btn-delete">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Delete
+      </a>
     <% } %>
 
-    <!-- 🛒 Buyer can add to cart -->
     <% if (business && business.role === "buyer") { %>
-      <a href="/api/cart/add?pid=<%= product.customId %>" class="btn btn-cart">🛒 Add to Cart</a>
+      <a href="/api/cart/add?pid=<%= product.customId %>" 
+         class="pc-btn pc-btn-cart <%= product.stock <= 0 ? 'disabled' : '' %>"
+         <%= product.stock <= 0 ? 'onclick="return false;"' : '' %>>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <path d="M2 2h2l.8 4m1 6h8l2-8H4.8M5 10l-.6 1.8c-.2.6.1 1.2.7 1.2h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="6.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="12.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        Cart
+      </a>
     <% } %>
   </div>
 </div>
 
-<!-- 💅 Styles -->
 <style>
-  .product-card {
-    border: 1px solid var(--border, #e5e7eb);
-    border-radius: .75rem;
-    padding: 1rem;
-    background: var(--bg, #fff);
-    box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    transition: transform .2s ease, box-shadow .2s ease;
+  /* ===== COMPANY COLORS & COMPACT VARIABLES ===== */
+  .pc {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(34, 197, 94, 0.08);
+    --transition: all 0.2s ease;
   }
-  .product-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 4px 10px rgba(0,0,0,.1);
+
+  .pc {
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    background: #FFFFFF;
+    overflow: hidden;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 280px;
   }
-  .product-image {
+
+  .pc:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.12);
+    border-color: var(--green);
+  }
+
+  /* ===== PRODUCT IMAGE ===== */
+  .pc-image-link {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    background: #F0FDF4;
+  }
+
+  .pc-image {
     width: 100%;
-    height: 200px;
+    height: 140px;
     object-fit: cover;
-    border-radius: .5rem;
+    display: block;
+    transition: var(--transition);
   }
-  .product-name { font-size: 1.1rem; margin: .5rem 0; }
-  .price { font-weight: bold; color: #111827; }
-  .stock.in { color: #047857; }
-  .stock.out { color: #b91c1c; }
-  .description { margin: .5rem 0; font-size: .95rem; color: #4b5563; }
-  .product-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
-  .btn {
-    display: inline-block;
-    padding: .45rem .8rem;
-    border-radius: .5rem;
+
+  .pc:hover .pc-image {
+    transform: scale(1.02);
+  }
+
+  .pc-outstock {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== PRODUCT INFO ===== */
+  .pc-info {
+    padding: 10px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pc-name {
+    margin: 0 0 6px 0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .pc-name a {
+    color: var(--black);
     text-decoration: none;
-    font-size: .9rem;
-    border: 1px solid #d1d5db;
-    transition: background .2s ease, color .2s ease;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
-  .btn-view { background: #f3f4f6; }
-  .btn-edit { background: #2563eb; color: #fff; border-color: #2563eb; }
-  .btn-delete { background: #dc2626; color: #fff; border-color: #dc2626; }
-  .btn-cart { background: #065f46; color: #fff; border-color: #065f46; }
-  .btn:hover { opacity: .85; }
-  .dark-theme .product-card { background: #1f2937; color: #f3f4f6; border-color: #374151; }
-  .dark-theme .btn-view { background: #374151; color: #e5e7eb; }
+
+  .pc-name a:hover {
+    color: var(--blue);
+  }
+
+  .pc-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .pc-price {
+    font-weight: 700;
+    color: var(--blue);
+    font-size: 14px;
+  }
+
+  .pc-stock {
+    font-weight: 500;
+  }
+
+  .pc-stock-in {
+    color: var(--green);
+  }
+
+  .pc-stock-out {
+    color: #EF4444;
+  }
+
+  .pc-desc {
+    margin: 0;
+    font-size: 11px;
+    color: #64748B;
+    line-height: 1.4;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ===== BUTTONS ===== */
+  .pc-actions {
+    padding: 0 12px 12px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .pc-btn-view {
+    background: #F0FDF4;
+    color: var(--green);
+    border-color: #D1FAE5;
+  }
+
+  .pc-btn-view:hover {
+    background: #DCFCE7;
+    border-color: var(--green);
+  }
+
+  .pc-btn-edit {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--blue);
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  .pc-btn-edit:hover {
+    background: rgba(37, 99, 235, 0.2);
+    border-color: var(--blue);
+  }
+
+  .pc-btn-delete {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .pc-btn-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #EF4444;
+  }
+
+  .pc-btn-cart {
+    background: var(--green);
+    color: white;
+    border-color: var(--green);
+  }
+
+  .pc-btn-cart:hover {
+    background: #16A34A;
+    border-color: #16A34A;
+    transform: translateY(-1px);
+  }
+
+  .pc-btn-cart.disabled {
+    background: #94A3B8;
+    border-color: #94A3B8;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  /* ===== DARK THEME ===== */
+  .dark-theme.pc {
+    background: #132813;
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .pc-image-link {
+    background: #0F230F;
+  }
+
+  .dark-theme .pc-name a {
+    color: #F1F5F9;
+  }
+
+  .dark-theme .pc-name a:hover {
+    color: #60A5FA;
+  }
+
+  .dark-theme .pc-desc {
+    color: #94A3B8;
+  }
+
+  .dark-theme .pc-btn-view {
+    background: #1A341A;
+    color: #22C55E;
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .pc-btn-view:hover {
+    background: #2D5A2D;
+    border-color: #22C55E;
+  }
+
+  .dark-theme .pc-btn-edit {
+    background: rgba(37, 99, 235, 0.15);
+    color: #60A5FA;
+    border-color: rgba(37, 99, 235, 0.3);
+  }
+
+  .dark-theme .pc-btn-delete {
+    background: rgba(239, 68, 68, 0.15);
+    color: #F87171;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  .dark-theme .pc-btn-cart {
+    background: #22C55E;
+    color: white;
+  }
+
+  .dark-theme .pc-btn-cart:hover {
+    background: #16A34A;
+  }
+
+  /* ===== COMPACT RESPONSIVE ===== */
+  @media (max-width: 360px) {
+    .pc {
+      min-height: 260px;
+    }
+    
+    .pc-image {
+      height: 120px;
+    }
+    
+    .pc-info {
+      padding: 8px 10px;
+    }
+    
+    .pc-actions {
+      padding: 0 10px 10px;
+    }
+    
+    .pc-btn {
+      padding: 5px 8px;
+      font-size: 10px;
+    }
+  }
+
+  @media (min-width: 361px) and (max-width: 720px) {
+    .pc {
+      min-height: 280px;
+    }
+    
+    .pc-image {
+      height: 140px;
+    }
+  }
+
+  @media (min-width: 721px) {
+    .pc {
+      min-height: 300px;
+    }
+    
+    .pc-image {
+      height: 160px;
+    }
+  }
 </style>

@@ -1,34 +1,692 @@
+<!--views/matches/partiale/buyer-notifications.ejs-->
 <% const _nonce = (typeof nonce !== 'undefined' ? nonce : ''); %>
-<section class="buyer-notifs">
-  <div class="notif-head">
-    <h3>🔔 Matches</h3>
-    <span id="notifBadge" class="badge">0</span>
+<section class="buyer-notifications">
+  <!-- Header -->
+  <div class="notif-header">
+    <div class="notif-title">
+      <div class="notif-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      </div>
+      <h3>Match Alerts</h3>
+    </div>
+    <div class="notif-indicator">
+      <span id="notifBadge" class="badge pulse">0</span>
+      <span class="notif-subtitle">New matches</span>
+    </div>
   </div>
-  <div id="notifList" class="notif-list">Loading…</div>
+
+  <!-- Notification List -->
+  <div id="notifList" class="notif-list">
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <span>Loading matches...</span>
+    </div>
+  </div>
+
+  <!-- View All Button -->
+  <div class="notif-footer">
+    <a href="/matches/buyer" class="view-all-btn">
+      View all matches
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 18l6-6-6-6"/>
+      </svg>
+    </a>
+  </div>
 </section>
 
 <script nonce="<%= _nonce %>">
 (async function(){
-  function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text) e.textContent=text; return e; }
-  const r = await fetch('/matches/buyer/summary'); const j = await r.json();
-  if (!j.ok) return;
-  document.getElementById('notifBadge').textContent = j.counters?.newSince ?? 0;
+  // Create element helper with attributes
+  function createElement(tag, options = {}) {
+    const el = document.createElement(tag);
+    if (options.className) el.className = options.className;
+    if (options.text) el.textContent = options.text;
+    if (options.html) el.innerHTML = options.html;
+    if (options.attrs) {
+      Object.entries(options.attrs).forEach(([key, value]) => {
+        el.setAttribute(key, value);
+      });
+    }
+    return el;
+  }
 
-  const box = document.getElementById('notifList'); box.innerHTML='';
-  (j.perDemand||[]).slice(0,6).forEach(x=>{
-    const a = el('a','notif-item'); a.href='/matches/buyer?demand='+x.demandId;
-    a.append(el('span','title',x.title));
-    a.append(el('span','meta',`T:${x.total} • P:${x.pending||0} • A:${x.accepted||0}`));
-    box.append(a);
-  });
+  // Format number with plus sign if needed
+  function formatCount(num) {
+    return num > 99 ? '99+' : num;
+  }
+
+  // Load notifications
+  async function loadNotifications() {
+    const list = document.getElementById('notifList');
+    list.innerHTML = '';
+    
+    // Show loading state
+    const loading = createElement('div', {
+      className: 'loading-state',
+      html: `
+        <div class="loading-spinner"></div>
+        <span>Loading matches...</span>
+      `
+    });
+    list.appendChild(loading);
+
+    try {
+      const response = await fetch('/matches/buyer/summary');
+      const data = await response.json();
+      
+      if (!data.ok) {
+        showError('Failed to load notifications');
+        return;
+      }
+
+      // Update badge
+      const newMatches = data.counters?.newSince ?? 0;
+      const badge = document.getElementById('notifBadge');
+      badge.textContent = formatCount(newMatches);
+      
+      // Add animation for new notifications
+      if (newMatches > 0) {
+        badge.classList.add('has-new');
+        setTimeout(() => badge.classList.remove('has-new'), 300);
+      }
+
+      // Clear loading and show notifications
+      list.innerHTML = '';
+      
+      const perDemand = data.perDemand || [];
+      
+      if (perDemand.length === 0) {
+        const emptyState = createElement('div', {
+          className: 'empty-state',
+          html: `
+            <div class="empty-icon">📊</div>
+            <p class="empty-title">No matches yet</p>
+            <p class="empty-subtitle">Your matches will appear here</p>
+          `
+        });
+        list.appendChild(emptyState);
+        return;
+      }
+
+      // Show first 5 notifications
+      perDemand.slice(0, 5).forEach(item => {
+        const isNew = item.newSince > 0;
+        const total = item.total || 0;
+        const pending = item.pending || 0;
+        const accepted = item.accepted || 0;
+        const rejected = item.rejected || 0;
+
+        const notifItem = createElement('a', {
+          className: `notif-item ${isNew ? 'new-item' : ''}`,
+          attrs: {
+            href: '/matches/buyer?demand=' + item.demandId
+          }
+        });
+
+        // Notification content
+        notifItem.innerHTML = `
+          <div class="notif-content">
+            <div class="notif-row">
+              <h4 class="notif-title">${item.title}</h4>
+              ${isNew ? '<span class="new-indicator">New</span>' : ''}
+            </div>
+            <div class="notif-stats">
+              <div class="stat-item">
+                <span class="stat-label">Total</span>
+                <span class="stat-value total">${total}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Pending</span>
+                <span class="stat-value pending">${pending}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Accepted</span>
+                <span class="stat-value accepted">${accepted}</span>
+              </div>
+              ${rejected > 0 ? `
+                <div class="stat-item">
+                  <span class="stat-label">Rejected</span>
+                  <span class="stat-value rejected">${rejected}</span>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+          <div class="notif-arrow">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
+        `;
+
+        list.appendChild(notifItem);
+      });
+
+      // Show "more" indicator if there are more items
+      if (perDemand.length > 5) {
+        const moreItem = createElement('div', {
+          className: 'more-indicator',
+          text: `${perDemand.length - 5} more matches available`
+        });
+        list.appendChild(moreItem);
+      }
+
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+      showError('Unable to load matches. Please try again.');
+    }
+  }
+
+  function showError(message) {
+    const list = document.getElementById('notifList');
+    list.innerHTML = '';
+    
+    const error = createElement('div', {
+      className: 'error-state',
+      html: `
+        <div class="error-icon">⚠️</div>
+        <p class="error-message">${message}</p>
+        <button class="retry-btn">Retry</button>
+      `
+    });
+    
+    error.querySelector('.retry-btn').addEventListener('click', loadNotifications);
+    list.appendChild(error);
+  }
+
+  // Initial load
+  loadNotifications();
+  
+  // Auto-refresh every 30 seconds
+  setInterval(loadNotifications, 30000);
+
+  // Poll for new matches if badge is 0 (less frequent)
+  setInterval(async () => {
+    const badge = document.getElementById('notifBadge');
+    if (badge.textContent === '0') {
+      try {
+        const response = await fetch('/matches/buyer/summary');
+        const data = await response.json();
+        if (data.ok && data.counters?.newSince > 0) {
+          badge.textContent = formatCount(data.counters.newSince);
+          badge.classList.add('has-new');
+          setTimeout(() => badge.classList.remove('has-new'), 300);
+        }
+      } catch (error) {
+        // Silently fail for polling
+      }
+    }
+  }, 60000); // Check every minute
 })();
 </script>
 
 <style nonce="<%= _nonce %>">
-.buyer-notifs .notif-head{display:flex;align-items:center;gap:.5rem}
-.buyer-notifs .badge{background:#ef4444;color:#fff;border-radius:999px;padding:.1rem .5rem;font-weight:700}
-.buyer-notifs .notif-list{display:flex;flex-direction:column;margin-top:.5rem}
-.buyer-notifs .notif-item{display:flex;justify-content:space-between;gap:.5rem;padding:.45rem .6rem;border:1px solid var(--border,#e5e7eb);border-radius:.6rem;text-decoration:none;color:inherit;background:var(--card-bg,#fff);margin-bottom:.4rem}
-.buyer-notifs .notif-item .title{font-weight:600}
-.buyer-notifs .notif-item .meta{color:#6b7280}
+/* Base Styles */
+.buyer-notifications {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  border: 1px solid #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header */
+.buyer-notifications .notif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.buyer-notifications .notif-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.buyer-notifications .notif-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7C3AED 0%, #6d28d9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.buyer-notifications .notif-icon svg {
+  stroke: white;
+}
+
+.buyer-notifications h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.buyer-notifications .notif-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.buyer-notifications .badge {
+  background: linear-gradient(135deg, #22C55E 0%, #16a34a 100%);
+  color: white;
+  border-radius: 20px;
+  padding: 0.25rem 0.75rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  min-width: 2rem;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2);
+  transition: all 0.3s ease;
+}
+
+.buyer-notifications .badge.pulse {
+  animation: pulse 2s infinite;
+}
+
+.buyer-notifications .badge.has-new {
+  animation: pop 0.3s ease;
+}
+
+.buyer-notifications .notif-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Notification List */
+.buyer-notifications .notif-list {
+  min-height: 120px;
+}
+
+.buyer-notifications .notif-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  text-decoration: none;
+  color: inherit;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.buyer-notifications .notif-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #2563EB;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.buyer-notifications .notif-item:hover::before {
+  opacity: 1;
+}
+
+.buyer-notifications .notif-item:hover {
+  border-color: #2563EB;
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.buyer-notifications .notif-item.new-item {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: #7C3AED;
+  border-width: 2px;
+}
+
+.buyer-notifications .notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.buyer-notifications .notif-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  gap: 0.5rem;
+}
+
+.buyer-notifications .notif-row h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0F172A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buyer-notifications .new-indicator {
+  background: #22C55E;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.buyer-notifications .notif-stats {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.buyer-notifications .stat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.buyer-notifications .stat-label {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.buyer-notifications .stat-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.buyer-notifications .stat-value.total {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.buyer-notifications .stat-value.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.buyer-notifications .stat-value.accepted {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.buyer-notifications .stat-value.rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.buyer-notifications .notif-arrow {
+  color: #94a3b8;
+  margin-left: 0.75rem;
+  flex-shrink: 0;
+}
+
+.buyer-notifications .notif-arrow svg {
+  transition: transform 0.2s ease;
+}
+
+.buyer-notifications .notif-item:hover .notif-arrow svg {
+  transform: translateX(2px);
+}
+
+/* Footer */
+.buyer-notifications .notif-footer {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 2px solid #f1f5f9;
+}
+
+.buyer-notifications .view-all-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem;
+  background: #ffffff;
+  border: 2px solid #2563EB;
+  border-radius: 8px;
+  color: #2563EB;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.buyer-notifications .view-all-btn:hover {
+  background: #2563EB;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.buyer-notifications .view-all-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.buyer-notifications .view-all-btn:hover svg {
+  transform: translateX(2px);
+}
+
+/* States */
+.buyer-notifications .loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 1rem;
+  color: #64748b;
+}
+
+.buyer-notifications .loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563EB;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.buyer-notifications .empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #64748b;
+}
+
+.buyer-notifications .empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.5;
+}
+
+.buyer-notifications .empty-title {
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: #0F172A;
+}
+
+.buyer-notifications .empty-subtitle {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.buyer-notifications .error-state {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.buyer-notifications .error-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.buyer-notifications .error-message {
+  color: #dc2626;
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+}
+
+.buyer-notifications .retry-btn {
+  background: #2563EB;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.buyer-notifications .retry-btn:hover {
+  background: #1d4ed8;
+}
+
+.buyer-notifications .more-indicator {
+  text-align: center;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+
+/* Animations */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Responsive Design */
+@media (max-width: 900px) {
+  .buyer-notifications {
+    padding: 1rem;
+  }
+  
+  .buyer-notifications .notif-stats {
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .buyer-notifications .notif-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .buyer-notifications .notif-indicator {
+    align-items: flex-start;
+  }
+  
+  .buyer-notifications .notif-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .buyer-notifications .notif-arrow {
+    align-self: flex-end;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .buyer-notifications {
+    padding: 0.875rem;
+  }
+  
+  .buyer-notifications h3 {
+    font-size: 1rem;
+  }
+  
+  .buyer-notifications .notif-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .buyer-notifications .notif-stats {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .buyer-notifications .stat-item {
+    justify-content: space-between;
+  }
+  
+  .buyer-notifications .view-all-btn {
+    padding: 0.625rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .buyer-notifications {
+    background: #1e293b;
+    border-color: #334155;
+  }
+  
+  .buyer-notifications h3,
+  .buyer-notifications .notif-row h4 {
+    color: #f1f5f9;
+  }
+  
+  .buyer-notifications .notif-item {
+    background: #334155;
+    border-color: #475569;
+  }
+  
+  .buyer-notifications .notif-item.new-item {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+    border-color: #7C3AED;
+  }
+  
+  .buyer-notifications .view-all-btn {
+    background: #334155;
+    color: #60a5fa;
+    border-color: #2563EB;
+  }
+  
+  .buyer-notifications .view-all-btn:hover {
+    background: #2563EB;
+    color: white;
+  }
+  
+  .buyer-notifications .more-indicator {
+    background: #334155;
+    color: #cbd5e1;
+  }
+}
 </style>

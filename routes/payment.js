@@ -225,7 +225,6 @@ function shapeOrderForClient(doc) {
   };
 }
 
-// Build a session snapshot (used when DB isn’t available yet) — now includes items
 function buildSessionSnapshot(orderId, pending) {
   const items = Array.isArray(pending?.itemsBrief)
     ? pending.itemsBrief.map((it) => ({
@@ -255,7 +254,7 @@ function buildSessionSnapshot(orderId, pending) {
             amount: pending.deliveryPrice != null ? Number(pending.deliveryPrice) : null,
           }
         : null,
-    shipping: null,
+    shipping: null, // This will be overridden in capture-order if available
   };
 }
 
@@ -726,16 +725,67 @@ router.post('/capture-order', express.json(), async (req, res) => {
     const pending = req.session.pendingOrder || null;
     const cart = req.session.cart || { items: [] };
 
+    // 🔹 IMPROVED: Extract shipping info from PayPal response with better fallbacks
+    const pu = capture?.purchase_units?.[0] || {};
+    const puShipping = pu.shipping || {};
+    const puAddr = puShipping.address || {};
+    const payer = capture?.payer || {};
+    
+    // Get payer name from multiple possible locations
+    const payerName = payer?.name || {};
+    const payerGivenName = payerName.given_name || payerName.given || '';
+    const payerSurname = payerName.surname || payerName.surname || '';
+
+    // Build comprehensive shipping address object
+    const shippingAddress = {
+      // Shipping name from PayPal or fallback to payer name
+      name: puShipping.name?.full_name || 
+            puShipping.name?.name || 
+            [payerGivenName, payerSurname].filter(Boolean).join(' ') || 
+            'No name provided',
+      
+      // Address components with proper fallbacks
+      address_line_1: puAddr.address_line_1 || puAddr.line1 || '',
+      address_line_2: puAddr.address_line_2 || puAddr.line2 || '',
+      admin_area_2: puAddr.admin_area_2 || puAddr.city || '',
+      admin_area_1: puAddr.admin_area_1 || puAddr.state || '',
+      postal_code: puAddr.postal_code || puAddr.postal_code || '',
+      country_code: puAddr.country_code || puAddr.country_code || '',
+    };
+
+    // Debug logging to see what we're getting from PayPal
+    console.log('=== PAYPAL CAPTURE DATA ===');
+    console.log('Capture status:', capture.status);
+    console.log('Purchase unit amount:', pu.amount);
+    console.log('Captures:', pu.payments?.captures);
+    console.log('Shipping object:', JSON.stringify(puShipping, null, 2));
+
     // Build items to persist (with productId)
     const itemsFromPending = Array.isArray(pending?.itemsBrief)
       ? pending.itemsBrief.map((it) => ({
-          productId: String(it.productId || '').trim(), // 👈 critical for inventory
+          productId: String(it.productId || '').trim(),
           name: it.name,
           quantity: Number(it.quantity || 1),
-          price: { value: String(Number(it.unitPrice || 0).toFixed(2)) }, // Money schema (string)
+          price: { value: String(Number(it.unitPrice || 0).toFixed(2)) },
           imageUrl: it.imageUrl || '',
         }))
       : [];
+
+    // 🔹 CRITICAL FIX: Extract amount from PayPal capture response
+    const captureAmount = pu.payments?.captures?.[0]?.amount;
+    const orderAmount = pu.amount;
+    
+    // Use capture amount first, then order amount, then fallback to pending total
+    const finalAmount = captureAmount || orderAmount || {
+      value: String(pending?.grandTotal || '0'),
+      currency_code: upperCcy
+    };
+
+    console.log('=== FINAL AMOUNT DATA ===');
+    console.log('Capture amount:', captureAmount);
+    console.log('Order amount:', orderAmount);
+    console.log('Pending grandTotal:', pending?.grandTotal);
+    console.log('Final amount to save:', finalAmount);
 
     // Persist order (if model available)
     let doc = null;
@@ -747,89 +797,96 @@ router.post('/capture-order', express.json(), async (req, res) => {
             ? req.session.business._id
             : null;
 
-        doc = await Order.findOneAndUpdate(
-          { orderId: orderID }, // canonical key
-          {
-            orderId: orderID,
-            paypalOrderId: orderID, // legacy key if schema supports it
-            status: capture.status,
-            payer: capture?.payer || null,
-            purchase_units: capture?.purchase_units || [],
-            amount:
-              capture?.purchase_units?.[0]?.payments?.captures?.[0]?.amount || null,
-            delivery: pending
-              ? {
-                  id: pending.deliveryOptionId || null,
-                  name: pending.deliveryName || null,
-                  deliveryDays: pending.deliveryDays ?? null,
-                  amount:
-                    pending.deliveryPrice != null
-                      ? String(Number(pending.deliveryPrice).toFixed(2))
-                      : null,
-                }
-              : null,
-            breakdown: pending
-              ? {
-                  // flat numeric fields
-                  subTotal:
-                    pending.subTotal != null
-                      ? Number(pending.subTotal)
-                      : undefined,
-                  vatTotal:
-                    pending.vatTotal != null
-                      ? Number(pending.vatTotal)
-                      : undefined,
-                  delivery:
-                    pending.deliveryPrice != null
-                      ? Number(pending.deliveryPrice)
-                      : undefined,
-                  grandTotal:
-                    pending.grandTotal != null
-                      ? Number(pending.grandTotal)
-                      : undefined,
-                  currency: upperCcy,
-
-                  // nested "money" objects for compatibility
-                  itemTotal:
-                    pending.subTotal != null
-                      ? {
-                          value: String(
-                            Number(pending.subTotal).toFixed(2)
-                          ),
-                          currency: upperCcy,
-                        }
-                      : undefined,
-                  taxTotal:
-                    pending.vatTotal != null
-                      ? {
-                          value: String(
-                            Number(pending.vatTotal).toFixed(2)
-                          ),
-                          currency: upperCcy,
-                        }
-                      : undefined,
-                  shipping:
-                    pending.deliveryPrice != null
-                      ? {
-                          value: String(
-                            Number(pending.deliveryPrice).toFixed(2)
-                          ),
-                          currency: upperCcy,
-                        }
-                      : undefined,
-                }
-              : undefined,
-            items: itemsFromPending, // includes productId
-            raw: capture,
-            userId: req.session?.user?._id || null,
-            businessBuyer,
-            $setOnInsert: { createdAt: new Date() },
+        // Build the order data with proper amount and shipping address
+        const orderData = {
+          orderId: orderID,
+          paypalOrderId: orderID,
+          status: capture.status,
+          payer: {
+            payerId: payer.payer_id || null,
+            email: payer.email_address || null,
+            name: {
+              given: payerGivenName,
+              surname: payerSurname
+            },
+            countryCode: payer.address?.country_code || shippingAddress.country_code
           },
+          purchase_units: capture?.purchase_units || [],
+          
+          // 🔹 FIXED: Proper amount object that matches your Order model schema
+          amount: {
+            value: String(finalAmount.value || '0'),
+            currency: finalAmount.currency_code || upperCcy
+          },
+
+          // 🔹 FIXED: Proper shipping address that matches your Order model schema
+          shipping: shippingAddress,
+
+          delivery: pending
+            ? {
+                id: pending.deliveryOptionId || null,
+                name: pending.deliveryName || null,
+                deliveryDays: pending.deliveryDays ?? null,
+                amount:
+                  pending.deliveryPrice != null
+                    ? String(Number(pending.deliveryPrice).toFixed(2))
+                    : null,
+              }
+            : null,
+          breakdown: pending
+            ? {
+                subTotal: pending.subTotal != null ? Number(pending.subTotal) : undefined,
+                vatTotal: pending.vatTotal != null ? Number(pending.vatTotal) : undefined,
+                delivery: pending.deliveryPrice != null ? Number(pending.deliveryPrice) : undefined,
+                grandTotal: pending.grandTotal != null ? Number(pending.grandTotal) : undefined,
+                currency: upperCcy,
+                itemTotal: pending.subTotal != null
+                  ? {
+                      value: String(Number(pending.subTotal).toFixed(2)),
+                      currency: upperCcy,
+                    }
+                  : undefined,
+                taxTotal: pending.vatTotal != null
+                  ? {
+                      value: String(Number(pending.vatTotal).toFixed(2)),
+                      currency: upperCcy,
+                    }
+                  : undefined,
+                shipping: pending.deliveryPrice != null
+                  ? {
+                      value: String(Number(pending.deliveryPrice).toFixed(2)),
+                      currency: upperCcy,
+                    }
+                  : undefined,
+              }
+            : undefined,
+          items: itemsFromPending,
+          raw: capture,
+          userId: req.session?.user?._id || null,
+          businessBuyer,
+          $setOnInsert: { createdAt: new Date() },
+        };
+
+        doc = await Order.findOneAndUpdate(
+          { orderId: orderID },
+          orderData,
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
+
+        console.log('✅ Order saved successfully:', {
+          orderId: doc.orderId,
+          amount: doc.amount,
+          hasShipping: !!doc.shipping,
+          shippingName: doc.shipping?.name
+        });
       }
     } catch (e) {
-      console.warn('⚠️ Failed to persist Order:', e.message);
+      console.error('❌ Failed to persist Order:', e.message);
+      console.error('Order data that failed:', JSON.stringify({
+        amount: finalAmount,
+        shipping: shippingAddress,
+        itemsCount: itemsFromPending.length
+      }, null, 2));
     }
 
     // ---- Idempotent inventory adjustment ----
@@ -846,7 +903,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
               ? cart.items
               : [];
 
-          const perProduct = new Map(); // customId -> { qty, orderBump: 1 }
+          const perProduct = new Map();
           for (const it of srcItems) {
             const pid = String(
               it.productId != null
@@ -866,7 +923,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
             );
             const prev = perProduct.get(pid) || { qty: 0, orderBump: 0 };
             prev.qty += qty;
-            prev.orderBump = 1; // exactly once per product per order
+            prev.orderBump = 1;
             perProduct.set(pid, prev);
           }
 
@@ -905,12 +962,23 @@ router.post('/capture-order', express.json(), async (req, res) => {
     }
 
     // ---- Build thank-you snapshot & clear session ----
-    req.session.lastOrderSnapshot = buildSessionSnapshot(orderID, pending);
+    // Also include shipping in session snapshot for immediate display
+    req.session.lastOrderSnapshot = {
+      ...buildSessionSnapshot(orderID, pending),
+      shipping: shippingAddress, // Add shipping to session snapshot
+      amount: finalAmount // Add amount to session snapshot
+    };
     req.session.cart = { items: [] };
     req.session.pendingOrder = null;
     await saveSession(req);
 
-    return res.json({ ok: true, orderId: orderID, capture });
+    return res.json({ 
+      ok: true, 
+      orderId: orderID, 
+      capture,
+      hasShipping: !!shippingAddress.address_line_1,
+      amount: finalAmount
+    });
   } catch (err) {
     console.error('capture-order error:', err);
     return res

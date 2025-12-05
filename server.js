@@ -1,13 +1,59 @@
 // server.js
 require('dotenv').config();
+
+/* ---------------------------------------
+   IMPORTANT: Connect to DB FIRST, before anything else
+   This ensures DB is ready before any models/operations
+--------------------------------------- */
+const connectDB = require('./config/db');
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000; // 5 seconds
+let retryCount = 0;
+
+// Database state tracking
+let dbConnectionEstablished = false;
+
+async function initializeDatabase() {
+  try {
+    console.log('🔗 Attempting database connection...');
+    await connectDB();
+    dbConnectionEstablished = true;
+    console.log('✅ Database connected successfully');
+    return true;
+  } catch (err) {
+    console.error('❌ Failed to initialize database:', err.message);
+    
+    if (retryCount < MAX_RETRIES) {
+      retryCount++;
+      console.log(`🔄 Retry attempt ${retryCount}/${MAX_RETRIES} in ${RETRY_DELAY/1000} seconds...`);
+      
+      // Wait and retry
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return await initializeDatabase();
+    } else {
+      console.error('⚠️ Max retries reached. Starting server without database connection.');
+      console.error('⚠️ Database-dependent features will be unavailable.');
+      return false;
+    }
+  }
+}
+
+// Now validate environment (after DB connection attempt)
 const validateEnv = require("./config/validateEnv");
 try {
   validateEnv();
+  console.log('✅ Environment validation passed');
 } catch (err) {
-  console.error("Environment validation failed:", err && err.message);
-  throw err; // let Node exit non-zero without process.exit()
+  console.error("⚠️ Environment validation failed:", err && err.message);
+  console.error("⚠️ Continuing with invalid environment - some features may not work correctly");
+  // Don't throw, just log and continue
 }
 
+/* ---------------------------------------
+   Rest of imports (after DB connection)
+--------------------------------------- */
 const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash');
@@ -18,16 +64,14 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const expressLayouts = require('express-ejs-layouts');
-// const mongoose = require('mongoose');
 const compression = require('compression');
 const morgan = require('morgan');
 const MongoStore = require('connect-mongo');
 
 const app = express();
 
-const { S3Client, PutObjectCommand: _PutObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl: _getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-
+// AWS S3 configuration
+const { S3Client } = require("@aws-sdk/client-s3");
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -35,41 +79,49 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
+
 const upload = multer({ storage: multer.memoryStorage() });
 module.exports = { s3, upload };
 
+/* ---------------------------------------
+   Early middleware for app URLs
+--------------------------------------- */
 app.use((req, res, next) => {
-  // Your existing locals...
-  res.locals.appUrl = process.env.APP_URL || ''; // e.g. https://my-express-server-rq4a.onrender.com
+  res.locals.appUrl = process.env.APP_URL || '';
   res.locals.frontendUrl = process.env.FRONTEND_URL || '';
   next();
 });
 
 /* ---------------------------------------
-   Environment Validation
+   Database connection state middleware
 --------------------------------------- */
-/*['MONGO_URI', 'SESSION_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].forEach(name => {
-  if (!process.env[name]) {
-    console.error(`❌ Missing required env var: ${name}`);
-    process.exit(1);
-  }
-});*/
+app.use((req, res, next) => {
+  res.locals.dbAvailable = dbConnectionEstablished;
+  res.locals.dbWarning = !dbConnectionEstablished;
+  next();
+});
 
-
-// TEMP DEBUG ROUTE – remove later
+/* ---------------------------------------
+   TEMP DEBUG ROUTE – remove later
+--------------------------------------- */
 const Order = require('./models/Order');
 
 app.get('/debug-one-order', async (req, res) => {
   try {
+    if (!dbConnectionEstablished) {
+      return res.status(503).type('html').send(`
+        <h1>Database Unavailable</h1>
+        <p>The database connection could not be established.</p>
+        <p>Please check your database configuration and try again.</p>
+        <p><a href="/">Return to home</a></p>
+      `);
+    }
     const order = await Order.findOne().lean();
-
     if (!order) {
       return res
         .status(404)
         .send('<h1>No orders found</h1><p>Your Order collection is empty.</p>');
     }
-
-    // Show the order nicely on the page
     res.type('html').send(`
       <h1>Sample Order (from MongoDB)</h1>
       <p>Copy everything inside the box below and paste it into ChatGPT.</p>
@@ -83,28 +135,28 @@ ${JSON.stringify(order, null, 2)}
   }
 });
 
-
 /* ---------------------------------------
    Global Error Handlers
 --------------------------------------- */
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
+  // Don't exit, just log the error
+  console.error('⚠️ Continuing despite uncaught exception');
 });
 
 /* ---------------------------------------
-   Frontends + CORS allow-list
+   CORS Configuration
 --------------------------------------- */
 const DEV_VITE_1 = 'http://localhost:5173';
 const DEV_VITE_2 = 'http://localhost:5174';
 const DEV_BACKEND = 'http://localhost:3000';
 const DEV_BACKEND_127 = 'http://127.0.0.1:3000';
-
 const PROD_BACKEND = 'https://my-express-server-rq4a.onrender.com';
 const PROD_FRONTEND = 'https://my-vite-app-ra7d.onrender.com';
-
 const ENV_FRONTEND = process.env.FRONTEND_URL;
 const ENV_APP_URL = process.env.APP_URL;
 
@@ -153,7 +205,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 4) Helmet with CSP (kept your directives)
+// 4) Helmet with CSP
 app.use((req, res, next) => {
   helmet({
     contentSecurityPolicy: {
@@ -199,7 +251,7 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 
-// 5) Static
+// 5) Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 6) Views / layouts / logs / compression
@@ -210,7 +262,7 @@ app.set('layout', 'layout');
 app.use(morgan('combined'));
 app.use(compression());
 
-// 7) Rate limiter (scoped)
+// 7) Rate limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 100 : 1000,
@@ -227,15 +279,39 @@ app.use('/users/login', limiter);
 app.use('/users/signup', limiter);
 app.use('/users/rendersignup', limiter);
 
-// 8) Sessions → flash → passport → locals
+/* ---------------------------------------
+   Session Configuration
+   CRITICAL: Use the same mongoose connection for MongoStore
+--------------------------------------- */
 app.set('trust proxy', 1);
+
+// Import mongoose after DB connection is established
+const mongoose = require('mongoose');
+
+// Session configuration with fallback for no database
+let sessionStore;
+if (dbConnectionEstablished) {
+  sessionStore = MongoStore.create({
+    client: mongoose.connection.getClient(), // This is the key fix!
+    collectionName: 'sessions',
+    ttl: 14 * 24 * 60 * 60, // 14 days
+    autoRemove: 'native',
+    crypto: {
+      secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-production',
+    },
+  });
+} else {
+  console.warn('⚠️ Database not available - using memory session store (sessions will not persist)');
+  sessionStore = new session.MemoryStore();
+}
+
 app.use(
   session({
     name: 'sid',
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+    store: sessionStore,
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -247,10 +323,11 @@ app.use(
 
 app.use(flash());
 
-// server.js (after app.use(flash()) etc.)
+// Date helpers middleware
 const { attachDateHelpers } = require('./middleware/dates');
 app.use(attachDateHelpers);
 
+// Passport configuration
 const passport = require('./config/passport');
 app.use(passport.initialize());
 app.use(passport.session());
@@ -269,11 +346,15 @@ app.use((req, res, next) => {
 
   res.locals.theme = req.session.theme || 'light';
   res.locals.themeCss = res.locals.theme === 'dark' ? '/css/dark.css' : '/css/main.css';
+  
+  // Add database status to locals for templates
+  res.locals.dbAvailable = dbConnectionEstablished;
+  
   next();
 });
 
 /* ---------------------------------------
-   Google OAuth
+   Google OAuth Routes
 --------------------------------------- */
 app.get(
   '/auth/google',
@@ -286,8 +367,7 @@ app.get(
     failureRedirect: '/users/login',
     failureFlash: true,
   }),
-  async (req, res) => {   // 👈 make this async
-    // At this point, Passport has attached the full User doc to req.user
+  async (req, res) => {
     if (!req.user) {
       req.flash('error', 'Google login failed. Please try again.');
       return res.redirect('/users/login');
@@ -295,7 +375,6 @@ app.get(
 
     const keepBusiness = req.session?.business || null;
 
-    // Regenerate session to avoid fixation
     req.session.regenerate(async (err) => {
       if (err) {
         console.error('[Google callback] session regenerate error:', err);
@@ -307,7 +386,6 @@ app.get(
         req.session.business = keepBusiness;
       }
 
-      // Mirror the same structure you use for local login
       req.session.user = {
         _id: req.user._id.toString(),
         name: req.user.name,
@@ -317,10 +395,9 @@ app.get(
         isEmailVerified: !!req.user.isEmailVerified,
       };
 
-      // Track lastLogin for professionalism
       try {
         req.user.lastLogin = new Date();
-        await req.user.save();   // 👈 no .catch, we handle errors here
+        await req.user.save();
       } catch (e) {
         console.warn('[Google callback] lastLogin error:', e?.message);
       }
@@ -336,7 +413,7 @@ app.get(
 );
 
 /* ---------------------------------------
-   Cache & COOP
+   Cache & COOP Headers
 --------------------------------------- */
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -353,7 +430,7 @@ app.use((req, res, next) => {
 });
 
 /* ---------------------------------------
-   Routers
+   Import and Register Routers
 --------------------------------------- */
 const deliveryOptionRouter = require('./routes/deliveryOption');
 const productsRouter = require('./routes/products');
@@ -364,7 +441,6 @@ const cartRoutes = require('./routes/cart');
 const paymentModule = require('./routes/payment');
 const usersRouter = require('./routes/users');
 const businessAuthRoutes = require('./routes/businessAuth');
-const shipmentRoutes = require('./routes/shipments');
 const staticPagesRoutes = require('./routes/staticPages');
 const salesRoutes = require('./routes/sales');
 const someLinksRoutes = require('./routes/someRoute');
@@ -378,6 +454,7 @@ const notificationsRoutes = require('./routes/notifications');
 const wishlistRoutes = require('./routes/wishlist');
 const passwordResetRoutes = require('./routes/passwordReset');
 const productRatingsRoutes = require('./routes/productRatings');
+const orderTrackingRoutes = require('./routes/orderTracking');
 
 const paymentRouter = paymentModule.router;
 
@@ -402,7 +479,6 @@ app.use(deliveryOptionsApi);
 
 // Commerce / catalog
 app.use('/products', productsRouter);
-app.use('/shipments', shipmentRoutes);
 app.use('/payment', paymentRouter);
 
 // Public pages
@@ -417,6 +493,9 @@ app.use('/matches', matchesRoutes);
 // Notifications and unread counter
 app.use('/notifications', notificationsRoutes);
 
+// Disable EJS caching in development
+app.set('view cache', false);
+
 // Ratings
 app.use(productRatingsRoutes);
 
@@ -426,10 +505,8 @@ app.use('/users', wishlistRoutes);
 // Password reset
 app.use('/users/password', passwordResetRoutes);
 
-// Land on the shopping page by default (put this BEFORE staticPagesRoutes)
-app.get('/', (req, res) => {
-  res.redirect(302, '/products/sales'); // use 301 in production if you want it permanent
-});
+// Order tracking
+app.use('/orders', orderTrackingRoutes);
 
 // Dev mail test route
 app.use(require('./routes/dev-mail'));
@@ -438,8 +515,15 @@ app.use(require('./routes/dev-mail'));
 app.use('/', staticPagesRoutes);
 
 /* ---------------------------------------
-   Extra EJS page routes you added
+   Additional Routes
 --------------------------------------- */
+
+// Land on the shopping page by default
+app.get('/', (req, res) => {
+  res.redirect(302, '/products/sales');
+});
+
+// Cart count API
 app.get('/cart/count', (req, res) => {
   try {
     const count =
@@ -453,6 +537,7 @@ app.get('/cart/count', (req, res) => {
   }
 });
 
+// Checkout page
 app.get('/payment/checkout', (req, res) => {
   const cart = req.session.cart || { items: [] };
   res.render('checkout', {
@@ -460,47 +545,35 @@ app.get('/payment/checkout', (req, res) => {
     vatRate: Number(process.env.VAT_RATE || 0.15),
     shippingFlat: Number(process.env.SHIPPING_FLAT || 0),
     themeCss: res.locals.themeCss,
-    //success: req.flash('success'),
-    //error: req.flash('error'),
     nonce: res.locals.nonce,
+    dbAvailable: dbConnectionEstablished,
   });
 });
 
+// Thank you page
 app.get('/thank-you', (req, res) => {
   res.render('thank-you', {
     title: 'Thank you',
     orderID: req.query.orderID || '',
     themeCss: res.locals.themeCss,
-    //success: req.flash('success'),
-    //error: req.flash('error'),
     nonce: res.locals.nonce,
+    dbAvailable: dbConnectionEstablished,
   });
 });
 
-// REPLACE the whole /orders route with this:
+// Orders page
 app.get('/orders', (req, res) => {
-  // require either a logged-in personal user OR a logged-in business
   if (!(req.session?.user || req.session?.business)) {
     req.flash('error', 'Please log in to view your orders.');
     return res.redirect('/users/login');
   }
-
   res.render('orders', {
     title: 'My Orders',
     themeCss: res.locals.themeCss,
     nonce: res.locals.nonce,
+    dbAvailable: dbConnectionEstablished,
   });
 });
-
-/*app.get('/orders', (req, res) => {
-  res.render('order-list', {
-    title: 'My Orders',
-    themeCss: res.locals.themeCss,
-    //success: req.flash('success'),
-    //error: req.flash('error'),
-    nonce: res.locals.nonce,
-  });
-});*/
 
 /* ---------------------------------------
    Theme toggle
@@ -516,7 +589,12 @@ app.post('/theme-toggle', (req, res) => {
    Home + Debug + Health
 --------------------------------------- */
 app.get('/home', (req, res) => {
-  res.render('home', { layout: 'layout', title: 'Home', active: 'home' });
+  res.render('home', { 
+    layout: 'layout', 
+    title: 'Home', 
+    active: 'home',
+    dbAvailable: dbConnectionEstablished,
+  });
 });
 
 app.get('/session-test', (req, res) => {
@@ -532,16 +610,38 @@ app.get('/_debug/session', (req, res) => {
   });
 });
 
-app.get('/healthz', (req, res) => res.status(200).send('ok'));
+// Enhanced health check
+app.get('/healthz', (req, res) => {
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    database: dbConnectionEstablished ? 'connected' : 'disconnected',
+    memory: process.memoryUsage(),
+  };
+  
+  res.status(200).json(health);
+});
+
+// Database status endpoint
+app.get('/_status/database', (req, res) => {
+  res.json({
+    connected: dbConnectionEstablished,
+    mongooseState: mongoose.connection.readyState,
+    retryCount: retryCount,
+    maxRetries: MAX_RETRIES,
+  });
+});
 
 /* ---------------------------------------
-   404 & 500
+   404 & 500 Error Handlers
 --------------------------------------- */
 app.use((req, res) => {
   res.status(404).render('404', {
     layout: 'layout',
     title: 'Page Not Found',
     active: '',
+    dbAvailable: dbConnectionEstablished,
   });
 });
 
@@ -555,19 +655,40 @@ app.use((err, req, res, next) => {
 });
 
 /* ---------------------------------------
-   DB connect + listen
+   Server Startup
+   NOTE: We'll initialize DB first, then start server
 --------------------------------------- */
-const { connectDB } = require("./utils/db");
-
 const PORT = process.env.PORT || 3000;
 
-(async function start() {
-  try {
-    await connectDB(process.env.MONGO_URI);
-    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-  } catch (err) {
-    console.error("❌ Failed to start server:", err && err.message);
-    // Throw so Node exits non-zero; no process.exit() needed
-    throw err;
+async function startServer() {
+  // Try to initialize database first
+  await initializeDatabase();
+  
+  // Check database connection state
+  if (!dbConnectionEstablished) {
+    console.warn('⚠️  WARNING: Starting server without database connection');
+    console.warn('⚠️  Database-dependent features will be unavailable');
+    
+    // Add middleware to warn users on pages that need database
+    app.use((req, res, next) => {
+      if (req.path.includes('/admin') || req.path.includes('/orders') || req.path.includes('/users/dashboard')) {
+        req.flash('warning', 'Database is currently unavailable. Some features may not work.');
+      }
+      next();
+    });
   }
-})();
+  
+  // Start the server
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Database status: ${dbConnectionEstablished ? '✅ Connected' : '❌ Not connected'}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+// Start the server
+startServer().catch(err => {
+  console.error('💀 Failed to start server:', err);
+  console.error('💀 Server cannot start due to critical error');
+  // Still don't use process.exit - just log and let the process naturally end
+});

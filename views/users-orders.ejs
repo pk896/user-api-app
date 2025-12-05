@@ -1,30 +1,1348 @@
-<section>
-  <h1 class="page-title">📦 My Orders</h1>
+<!--views/users-orders.ejs-->
+<%
+  const ordersArr = Array.isArray(orders) ? orders : [];
+  
+  function money(am) {
+    if (!am) return '—';
+    if (am.value && am.currency) return `${am.currency} ${parseFloat(am.value).toFixed(2)}`;
+    if (typeof am === 'object') {
+      const value = am.value || am.amount || am.total;
+      const currency = am.currency || 'USD';
+      return value ? `${currency} ${parseFloat(value).toFixed(2)}` : '—';
+    }
+    return '—';
+  }
 
-  <% if (!orders || orders.length === 0) { %>
-    <p class="muted">You have no orders.</p>
+  function when(d) {
+    try {
+      if (!d) return '—';
+      return new Date(d).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch { return '—'; }
+  }
+
+  function shortId(o) {
+    const raw = o?.orderId || o?._id?.toString() || '';
+    return raw ? `#${raw.slice(-6)}` : '—';
+  }
+
+  function statusClass(status) {
+    if (!status) return 'status-other';
+    const s = String(status).toLowerCase().trim();
+    if (['completed', 'paid', 'captured'].includes(s)) return 'status-paid';
+    if (['shipped', 'in transit', 'in-transit'].includes(s)) return 'status-intransit';
+    if (['delivered'].includes(s)) return 'status-delivered';
+    if (['cancelled', 'canceled', 'refunded'].includes(s)) return 'status-cancelled';
+    return 'status-other';
+  }
+
+  function hasTracking(order) {
+    return !!(order?.shippingTracking?.trackingNumber);
+  }
+
+  function trackingStatus(order) {
+    if (!hasTracking(order)) return 'No tracking';
+    return order.shippingTracking.status || 'Tracking available';
+  }
+
+  function getStatusColor(status) {
+    if (status === 'delivered' || status === 'completed' || status === 'paid') return 'delivered';
+    if (status === 'intransit' || status === 'shipped') return 'intransit';
+    return 'pending';
+  }
+%>
+
+<section class="orders-page">
+  <!-- Header with brand gradient -->
+  <header class="page-header">
+    <div class="header-content">
+      <div class="page-badge">
+        <span class="badge-icon">📦</span>
+        <span class="badge-text">Order History</span>
+      </div>
+      <h1 class="page-title">
+        <span class="title-gradient">My Orders</span>
+      </h1>
+      <p class="page-subtitle">Track your purchases and shipment progress</p>
+    </div>
+    <div class="header-actions">
+      <a href="/users/dashboard" class="btn btn-trust">
+        <span class="btn-icon">←</span>
+        Dashboard
+      </a>
+      <a href="/sales" class="btn btn-growth">
+        <span class="btn-icon">🛒</span>
+        Continue Shopping
+      </a>
+    </div>
+    <div class="header-accent"></div>
+  </header>
+
+  <!-- Empty State -->
+  <% if (!ordersArr.length) { %>
+    <div class="empty-state">
+      <div class="empty-icon growth-icon">📭</div>
+      <h3>No Orders Yet</h3>
+      <p>Your order history will appear here once you make a purchase</p>
+      <div class="empty-actions">
+        <a href="/sales" class="btn btn-growth">
+          <span class="btn-icon">🚀</span>
+          Browse Products
+        </a>
+        <a href="/users/dashboard" class="btn btn-outline">
+          Return to Dashboard
+        </a>
+      </div>
+    </div>
   <% } else { %>
-    <table class="table">
-      <thead>
-        <tr><th>Order</th><th>Total</th><th>Status</th><th>Shipment</th><th>Placed</th><th></th></tr>
-      </thead>
-      <tbody>
-        <% orders.forEach(o => { %>
-          <tr>
-            <td data-label="Order">#<%= o._id.toString().slice(-6) %></td>
-            <td data-label="Total"><%= (o.amount?.total || o.total || 0).toFixed(2) %> <%= o.currency || 'USD' %></td>
-            <td data-label="Status" class="status <%= (o.status || 'pending').toLowerCase() %>"><%= o.status || 'pending' %></td>
-            <td data-label="Shipment">
-              <% if (o.shipment) { %>
-                <%= o.shipment.status || 'in transit' %>
-                <% if (o.shipment.trackingNumber) { %> — <small>#<%= o.shipment.trackingNumber %></small><% } %>
-              <% } else { %> — <% } %>
-            </td>
-            <td data-label="Placed"><%= new Date(o.createdAt).toLocaleString() %></td>
-            <td><a href="/users/orders/<%= o._id %>">View</a></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+    <!-- Stats Overview -->
+    <div class="overview-stats">
+      <div class="overview-card trust-card">
+        <div class="overview-icon">📊</div>
+        <div class="overview-content">
+          <div class="overview-value"><%= ordersArr.length %></div>
+          <div class="overview-label">Total Orders</div>
+        </div>
+      </div>
+      <div class="overview-card growth-card">
+        <div class="overview-icon">💰</div>
+        <div class="overview-content">
+          <div class="overview-value">
+            <% 
+              const totalValue = ordersArr.reduce((sum, o) => {
+                const val = o.amount?.value || o.total || 0;
+                return sum + parseFloat(val);
+              }, 0);
+            %>
+            $<%= totalValue.toFixed(2) %>
+          </div>
+          <div class="overview-label">Total Value</div>
+        </div>
+      </div>
+      <div class="overview-card innovation-card">
+        <div class="overview-icon">🚚</div>
+        <div class="overview-content">
+          <div class="overview-value">
+            <%= ordersArr.filter(o => hasTracking(o)).length %>
+          </div>
+          <div class="overview-label">With Tracking</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters & Stats -->
+    <div class="filters-bar">
+      <div class="status-filters">
+        <span class="filter-label">Filter by status:</span>
+        <div class="filter-chips">
+          <span class="filter-chip active">All (<%= ordersArr.length %>)</span>
+          <span class="filter-chip">
+            Completed (<%= ordersArr.filter(o => ['completed', 'paid', 'delivered'].includes(o.status?.toLowerCase())).length %>)
+          </span>
+          <span class="filter-chip">
+            In Transit (<%= ordersArr.filter(o => ['shipped', 'in transit'].includes(o.status?.toLowerCase())).length %>)
+          </span>
+          <span class="filter-chip">
+            Pending (<%= ordersArr.filter(o => !['completed', 'paid', 'delivered', 'shipped', 'in transit'].includes(o.status?.toLowerCase())).length %>)
+          </span>
+        </div>
+      </div>
+      <div class="sort-controls">
+        <span class="sort-label">Sort by:</span>
+        <select class="sort-select">
+          <option>Most Recent</option>
+          <option>Oldest First</option>
+          <option>Highest Amount</option>
+          <option>Lowest Amount</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Orders Grid -->
+    <div class="orders-container">
+      <% ordersArr.forEach(function(o) { 
+        const status = statusClass(o.status);
+        const statusColor = getStatusColor(status);
+        const hasShipment = hasTracking(o);
+      %>
+        <article class="order-card order-<%= statusColor %>">
+          <div class="order-card-header">
+            <div class="order-id-section">
+              <span class="order-id-label">ORDER</span>
+              <span class="order-id-value"><%= shortId(o) %></span>
+            </div>
+            <div class="order-date-section">
+              <span class="date-label">Placed on</span>
+              <span class="date-value"><%= when(o.createdAt) %></span>
+            </div>
+          </div>
+
+          <div class="order-card-body">
+            <!-- Status & Tracking -->
+            <div class="order-status-section">
+              <div class="status-badge status-<%= statusColor %>">
+                <span class="status-dot <%= statusColor %>"></span>
+                <span class="status-text"><%= o.status || 'Pending' %></span>
+              </div>
+              
+              <% if (hasShipment) { %>
+                <div class="tracking-indicator has-tracking">
+                  <span class="tracking-icon">📍</span>
+                  <span class="tracking-text">
+                    <%= o.shippingTracking.status || 'Tracking available' %>
+                  </span>
+                </div>
+              <% } else { %>
+                <div class="tracking-indicator no-tracking">
+                  <span class="tracking-icon">📦</span>
+                  <span class="tracking-text">Preparing shipment</span>
+                </div>
+              <% } %>
+            </div>
+
+            <!-- Items Preview -->
+            <% if (Array.isArray(o.items) && o.items.length) { %>
+              <div class="order-items-section">
+                <div class="items-count">
+                  <span class="count-number"><%= o.items.length %></span>
+                  <span class="count-label">item<%= o.items.length === 1 ? '' : 's' %></span>
+                </div>
+                <div class="items-preview">
+                  <span class="preview-label">Includes:</span>
+                  <span class="preview-items">
+                    <%= o.items.slice(0, 2).map(it => it.name).join(', ') %>
+                    <%= o.items.length > 2 ? ` +${o.items.length - 2} more` : '' %>
+                  </span>
+                </div>
+              </div>
+            <% } %>
+
+            <!-- Total Amount -->
+            <div class="order-amount-section">
+              <span class="amount-label">Total</span>
+              <span class="amount-value"><%= money(o.amount) %></span>
+            </div>
+          </div>
+
+          <div class="order-card-footer">
+            <div class="order-actions">
+              <a href="/users/orders/<%= o._id %>" class="btn-action btn-trust">
+                <span class="action-icon">👁️</span>
+                View Details
+              </a>
+              <% if (hasShipment) { %>
+                <a href="/orders/<%= o._id %>/track" class="btn-action btn-innovation">
+                  <span class="action-icon">📍</span>
+                  Track Package
+                </a>
+              <% } else { %>
+                <a href="/users/orders/<%= o._id %>" class="btn-action btn-outline">
+                  <span class="action-icon">📋</span>
+                  Order Details
+                </a>
+              <% } %>
+            </div>
+            <% if (o.shippingTracking?.carrier) { %>
+              <div class="carrier-info">
+                <span class="carrier-label">Carrier:</span>
+                <span class="carrier-name"><%= o.shippingTracking.carrier %></span>
+              </div>
+            <% } %>
+          </div>
+        </article>
+      <% }); %>
+    </div>
+
+    <!-- Pagination (if needed in future) -->
+    <div class="pagination">
+      <span class="pagination-info">
+        Showing <%= ordersArr.length %> of <%= ordersArr.length %> orders
+      </span>
+      <!-- <div class="pagination-controls">
+        <button class="pagination-btn prev" disabled>← Previous</button>
+        <span class="pagination-page">Page 1</span>
+        <button class="pagination-btn next">Next →</button>
+      </div> -->
+    </div>
   <% } %>
+
+  <!-- Quick Help -->
+  <div class="quick-help">
+    <div class="help-card">
+      <div class="help-icon trust-icon">❓</div>
+      <div class="help-content">
+        <h4>Need help with an order?</h4>
+        <p>Contact our support team for order-related questions</p>
+        <a href="/contact" class="help-link">Get Support →</a>
+      </div>
+    </div>
+    <div class="help-card">
+      <div class="help-icon growth-icon">📦</div>
+      <div class="help-content">
+        <h4>Track your shipments</h4>
+        <p>Real-time tracking for all your orders</p>
+        <a href="/users/dashboard" class="help-link">View Tracking →</a>
+      </div>
+    </div>
+  </div>
 </section>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  /* ===== BRAND COLOR SYSTEM ===== */
+  :root {
+    /* Core Brand Colors */
+    --trust-blue: #2563EB;      /* Trust & Reliability */
+    --innovation-purple: #7C3AED; /* Innovation & Creativity */
+    --growth-green: #22C55E;    /* Growth & Success */
+    
+    /* Color Variants */
+    --blue-dark: #1D4ED8;
+    --blue-light: #60A5FA;
+    --blue-bg: rgba(37, 99, 235, 0.08);
+    
+    --purple-dark: #6D28D9;
+    --purple-light: #A78BFA;
+    --purple-bg: rgba(124, 58, 237, 0.08);
+    
+    --green-dark: #16A34A;
+    --green-light: #4ADE80;
+    --green-bg: rgba(34, 197, 94, 0.08);
+    
+    /* Neutrals */
+    --black: #0F172A;
+    --gray-900: #1E293B;
+    --gray-800: #334155;
+    --gray-700: #475569;
+    --gray-600: #64748B;
+    --gray-500: #94A3B8;
+    --gray-400: #CBD5E1;
+    --gray-300: #E2E8F0;
+    --gray-200: #F1F5F9;
+    --gray-100: #F8FAFC;
+    --white: #FFFFFF;
+    
+    /* UI */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+  }
+
+  .dark-theme {
+    --trust-blue: #60A5FA;
+    --innovation-purple: #A78BFA;
+    --growth-green: #4ADE80;
+    --blue-bg: rgba(96, 165, 250, 0.1);
+    --purple-bg: rgba(167, 139, 250, 0.1);
+    --green-bg: rgba(74, 222, 128, 0.1);
+    --black: #F1F5F9;
+    --white: #0F172A;
+    --gray-100: #1E293B;
+    --gray-200: #334155;
+  }
+
+  /* ===== BASE LAYOUT ===== */
+  .orders-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  /* ===== PAGE HEADER ===== */
+  .page-header {
+    position: relative;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .dark-theme .page-header {
+    background: var(--white);
+    border-color: var(--gray-400);
+  }
+
+  .header-accent {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 150px;
+    height: 100%;
+    background: linear-gradient(45deg, var(--growth-green) 0%, var(--innovation-purple) 50%, var(--trust-blue) 100%);
+    opacity: 0.1;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+
+  .header-content {
+    position: relative;
+    z-index: 2;
+    margin-bottom: 1rem;
+  }
+
+  .page-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    background: linear-gradient(90deg, var(--blue-bg), var(--green-bg));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    border-radius: 999px;
+    margin-bottom: 0.75rem;
+  }
+
+  .badge-icon {
+    font-size: 0.875rem;
+  }
+
+  .badge-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--trust-blue);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+  }
+
+  .title-gradient {
+    background: linear-gradient(90deg, var(--trust-blue), var(--innovation-purple), var(--growth-green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .page-subtitle {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin: 0;
+  }
+
+  .header-actions {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    gap: 0.5rem;
+  }
+
+  .btn-trust {
+    background: var(--trust-blue);
+    color: white;
+  }
+
+  .btn-trust:hover {
+    background: var(--blue-dark);
+  }
+
+  .btn-growth {
+    background: var(--growth-green);
+    color: white;
+  }
+
+  .btn-growth:hover {
+    background: var(--green-dark);
+  }
+
+  .btn-innovation {
+    background: var(--innovation-purple);
+    color: white;
+  }
+
+  .btn-innovation:hover {
+    background: var(--purple-dark);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--black);
+    border: 1px solid var(--gray-400);
+  }
+
+  .btn-outline:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-500);
+  }
+
+  .btn-icon {
+    font-size: 1rem;
+  }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+    margin: 2rem 0;
+  }
+
+  .dark-theme .empty-state {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    border-radius: var(--radius-lg);
+    color: white;
+  }
+
+  .growth-icon {
+    background: linear-gradient(135deg, var(--growth-green), var(--green-dark));
+  }
+
+  .empty-state h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0 0 0.5rem;
+  }
+
+  .empty-state p {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin: 0 0 1.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .empty-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ===== OVERVIEW STATS ===== */
+  .overview-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .overview-card {
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.2s ease;
+  }
+
+  .overview-card:hover {
+    transform: translateY(-2px);
+  }
+
+  .trust-card {
+    background: linear-gradient(135deg, var(--blue-bg), rgba(37, 99, 235, 0.05));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .growth-card {
+    background: linear-gradient(135deg, var(--green-bg), rgba(34, 197, 94, 0.05));
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .innovation-card {
+    background: linear-gradient(135deg, var(--purple-bg), rgba(124, 58, 237, 0.05));
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .overview-icon {
+    font-size: 2rem;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--white);
+  }
+
+  .dark-theme .overview-icon {
+    background: var(--gray-200);
+  }
+
+  .trust-card .overview-icon {
+    color: var(--trust-blue);
+  }
+
+  .growth-card .overview-icon {
+    color: var(--growth-green);
+  }
+
+  .innovation-card .overview-icon {
+    color: var(--innovation-purple);
+  }
+
+  .overview-content {
+    flex: 1;
+  }
+
+  .overview-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--black);
+    margin-bottom: 0.25rem;
+  }
+
+  .overview-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-600);
+  }
+
+  /* ===== FILTERS BAR ===== */
+  .filters-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+  }
+
+  .dark-theme .filters-bar {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .status-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .filter-chips {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-chip {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 999px;
+    background: var(--gray-100);
+    color: var(--gray-700);
+    border: 1px solid var(--gray-300);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .filter-chip:hover {
+    background: var(--gray-200);
+    border-color: var(--gray-400);
+  }
+
+  .filter-chip.active {
+    background: var(--trust-blue);
+    color: white;
+    border-color: var(--trust-blue);
+  }
+
+  .sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sort-label {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  .sort-select {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--gray-400);
+    background: var(--white);
+    color: var(--black);
+    cursor: pointer;
+  }
+
+  .dark-theme .sort-select {
+    background: var(--gray-200);
+    border-color: var(--gray-500);
+    color: var(--black);
+  }
+
+  /* ===== ORDERS CONTAINER ===== */
+  .orders-container {
+    display: grid;
+    gap: 1rem;
+  }
+
+  /* ===== ORDER CARD ===== */
+  .order-card {
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .dark-theme .order-card {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .order-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--gray-400);
+  }
+
+  /* Status-based border accents */
+  .order-card.order-delivered {
+    border-left: 4px solid var(--growth-green);
+  }
+
+  .order-card.order-intransit {
+    border-left: 4px solid var(--trust-blue);
+  }
+
+  .order-card.order-pending {
+    border-left: 4px solid var(--innovation-purple);
+  }
+
+  .order-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: var(--gray-100);
+    border-bottom: 1px solid var(--gray-300);
+  }
+
+  .dark-theme .order-card-header {
+    background: var(--gray-200);
+    border-bottom-color: var(--gray-400);
+  }
+
+  .order-id-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .order-id-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gray-600);
+    font-weight: 600;
+  }
+
+  .order-id-value {
+    font-family: 'SF Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--trust-blue);
+  }
+
+  .order-date-section {
+    text-align: right;
+  }
+
+  .date-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    margin-bottom: 0.125rem;
+  }
+
+  .date-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--black);
+  }
+
+  .order-card-body {
+    padding: 1.25rem;
+  }
+
+  /* Status Section */
+  .order-status-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .status-delivered {
+    background: var(--green-bg);
+    color: var(--growth-green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .status-intransit {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .status-pending {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .status-dot.delivered {
+    background: var(--growth-green);
+  }
+
+  .status-dot.intransit {
+    background: var(--trust-blue);
+  }
+
+  .status-dot.pending {
+    background: var(--innovation-purple);
+  }
+
+  .tracking-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .has-tracking {
+    background: var(--green-bg);
+    color: var(--growth-green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .no-tracking {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .tracking-icon {
+    font-size: 0.875rem;
+  }
+
+  /* Items Section */
+  .order-items-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: var(--gray-100);
+    border-radius: var(--radius-sm);
+  }
+
+  .dark-theme .order-items-section {
+    background: var(--gray-200);
+  }
+
+  .items-count {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+  }
+
+  .count-number {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--trust-blue);
+  }
+
+  .count-label {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  .items-preview {
+    flex: 1;
+  }
+
+  .preview-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    margin-bottom: 0.25rem;
+  }
+
+  .preview-items {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--black);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  /* Amount Section */
+  .order-amount-section {
+    text-align: right;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--gray-300);
+  }
+
+  .amount-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+
+  .amount-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--black);
+  }
+
+  .order-card-footer {
+    padding: 1rem 1.25rem;
+    background: var(--gray-100);
+    border-top: 1px solid var(--gray-300);
+  }
+
+  .dark-theme .order-card-footer {
+    background: var(--gray-200);
+    border-top-color: var(--gray-400);
+  }
+
+  .order-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    gap: 0.375rem;
+    border: 1px solid transparent;
+  }
+
+  .btn-action.btn-trust {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  .btn-action.btn-trust:hover {
+    background: var(--trust-blue);
+    color: white;
+  }
+
+  .btn-action.btn-innovation {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border-color: rgba(124, 58, 237, 0.2);
+  }
+
+  .btn-action.btn-innovation:hover {
+    background: var(--innovation-purple);
+    color: white;
+  }
+
+  .btn-action.btn-outline {
+    background: transparent;
+    color: var(--gray-700);
+    border: 1px solid var(--gray-400);
+  }
+
+  .btn-action.btn-outline:hover {
+    background: var(--gray-300);
+  }
+
+  .action-icon {
+    font-size: 0.875rem;
+  }
+
+  .carrier-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .carrier-label {
+    color: var(--gray-600);
+  }
+
+  .carrier-name {
+    font-weight: 600;
+    color: var(--trust-blue);
+  }
+
+  /* ===== PAGINATION ===== */
+  .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    padding: 1rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+  }
+
+  .dark-theme .pagination {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .pagination-info {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+  }
+
+  .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .pagination-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    background: var(--gray-100);
+    border: 1px solid var(--gray-400);
+    border-radius: var(--radius-sm);
+    color: var(--gray-700);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .pagination-btn:hover:not(:disabled) {
+    background: var(--gray-200);
+  }
+
+  .pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .pagination-page {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  /* ===== QUICK HELP ===== */
+  .quick-help {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .help-card {
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    transition: all 0.2s ease;
+  }
+
+  .help-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .help-card:first-child {
+    background: linear-gradient(135deg, var(--blue-bg), rgba(37, 99, 235, 0.05));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .help-card:last-child {
+    background: linear-gradient(135deg, var(--green-bg), rgba(34, 197, 94, 0.05));
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .help-icon {
+    font-size: 1.5rem;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--white);
+  }
+
+  .dark-theme .help-icon {
+    background: var(--gray-200);
+  }
+
+  .trust-icon {
+    color: var(--trust-blue);
+  }
+
+  .growth-icon {
+    color: var(--growth-green);
+  }
+
+  .help-content {
+    flex: 1;
+  }
+
+  .help-content h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0 0 0.375rem;
+  }
+
+  .help-content p {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    margin: 0 0 0.75rem;
+    line-height: 1.5;
+  }
+
+  .help-link {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--trust-blue);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .help-link:hover {
+    text-decoration: underline;
+  }
+
+  /* ===== RESPONSIVE DESIGN ===== */
+  @media (max-width: 768px) {
+    .orders-page {
+      padding: 0.75rem;
+    }
+
+    .page-header {
+      padding: 1rem;
+    }
+
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .overview-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .filters-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+    }
+
+    .status-filters,
+    .sort-controls {
+      width: 100%;
+    }
+
+    .filter-chips {
+      justify-content: center;
+    }
+
+    .sort-controls {
+      justify-content: flex-end;
+    }
+
+    .order-card-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .order-date-section {
+      text-align: left;
+    }
+
+    .order-status-section {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .order-items-section {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .items-count {
+      flex-direction: row;
+      gap: 0.5rem;
+    }
+
+    .preview-items {
+      font-size: 0.8125rem;
+    }
+
+    .order-actions {
+      flex-direction: column;
+    }
+
+    .btn-action {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .quick-help {
+      grid-template-columns: 1fr;
+    }
+
+    .pagination {
+      flex-direction: column;
+      gap: 0.75rem;
+      text-align: center;
+    }
+  }
+
+  /* Small phones */
+  @media (max-width: 380px) {
+    .orders-page {
+      padding: 0.5rem;
+    }
+
+    .header-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .header-actions .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .filter-chips {
+      justify-content: flex-start;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+
+    .filter-chip {
+      white-space: nowrap;
+    }
+
+    .order-card {
+      margin: 0 -0.5rem;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+    }
+
+    .order-card.order-delivered,
+    .order-card.order-intransit,
+    .order-card.order-pending {
+      border-top: 4px solid;
+      border-left: none;
+    }
+
+    .order-card.order-delivered {
+      border-top-color: var(--growth-green);
+    }
+
+    .order-card.order-intransit {
+      border-top-color: var(--trust-blue);
+    }
+
+    .order-card.order-pending {
+      border-top-color: var(--innovation-purple);
+    }
+
+    .empty-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .empty-actions .btn {
+      width: 100%;
+    }
+  }
+</style>

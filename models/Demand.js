@@ -1,5 +1,7 @@
 // models/Demand.js
-const { mongoose } = require('../db');
+//const { mongoose } = require('../db');
+const mongoose = require('mongoose');
+
 const { Schema } = mongoose;
 
 /** Subdoc shown in your table */

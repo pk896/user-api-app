@@ -1,5 +1,5 @@
 // models/ResetToken.js
-const { mongoose } = require('../db');
+const { mongoose } = require('mongoose');
 
 const resetTokenSchema = new mongoose.Schema(
   {

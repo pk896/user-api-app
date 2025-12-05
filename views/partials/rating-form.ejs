@@ -3,55 +3,511 @@
 const existing = myRating || {};
 const stars = existing.stars || 0;
 %>
-<form class="rating-form card" action="/ratings/product/<%= productId %>" method="post" novalidate>
-  <h3 class="section-title">Rate this product</h3>
-
-  <fieldset class="stars" aria-label="Choose stars">
-    <% for (let i = 5; i >= 1; i--) { %>
-      <input type="radio" id="star-<%= i %>" name="stars" value="<%= i %>" <%= (i === stars) ? 'checked' : '' %> />
-      <label for="star-<%= i %>" title="<%= i %> star<%= i>1?'s':'' %>">★</label>
+<form class="rf" action="/ratings/product/<%= productId %>" method="post" novalidate>
+  <div class="rf-header">
+    <h3 class="rf-title">Rate this product</h3>
+    <% if (stars > 0) { %>
+      <span class="rf-status">Your rating: <%= stars %> ★</span>
     <% } %>
-  </fieldset>
+  </div>
 
-  <label>Title (optional)
-    <input type="text" name="title" maxlength="120" value="<%= existing.title || '' %>" />
-  </label>
+  <!-- Star Rating -->
+  <div class="rf-stars-container">
+    <span class="rf-stars-label">Your rating:</span>
+    <div class="rf-stars" role="radiogroup" aria-label="Choose rating from 1 to 5 stars">
+      <% for (let i = 5; i >= 1; i--) { %>
+        <input type="radio" 
+               id="star-<%= i %>" 
+               name="stars" 
+               value="<%= i %>" 
+               <%= (i === stars) ? 'checked' : '' %>
+               class="rf-star-input" />
+        <label for="star-<%= i %>" 
+               class="rf-star-label" 
+               title="<%= i %> star<%= i>1?'s':'' %>"
+               data-value="<%= i %>">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" 
+                  stroke="currentColor" 
+                  stroke-width="1.5"
+                  stroke-linejoin="round"/>
+          </svg>
+          <span class="rf-star-text"><%= i %></span>
+        </label>
+      <% } %>
+      <div class="rf-stars-preview">Select stars</div>
+    </div>
+  </div>
 
-  <label>Review (optional)
-    <textarea name="body" rows="4" maxlength="2000"><%= existing.body || '' %></textarea>
-  </label>
+  <!-- Review Inputs -->
+  <div class="rf-fields">
+    <div class="rf-field">
+      <label class="rf-field-label">
+        <span>Title (optional)</span>
+        <input type="text" 
+               name="title" 
+               maxlength="80" 
+               value="<%= existing.title || '' %>" 
+               placeholder="Short summary of your experience"
+               class="rf-input" />
+        <div class="rf-field-hint">Max 80 characters</div>
+      </label>
+    </div>
 
-  <button type="submit" class="btn primary">Save rating</button>
+    <div class="rf-field">
+      <label class="rf-field-label">
+        <span>Review (optional)</span>
+        <textarea name="body" 
+                  rows="3" 
+                  maxlength="500" 
+                  placeholder="Share your thoughts about this product..."
+                  class="rf-textarea"><%= existing.body || '' %></textarea>
+        <div class="rf-field-hint">Max 500 characters</div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <button type="submit" class="rf-submit">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <%= stars > 0 ? 'Update Rating' : 'Submit Rating' %>
+  </button>
 </form>
 
 <style>
-.rating-form.card { padding:1rem; border:1px solid var(--border,#ddd); border-radius:12px; }
-.rating-form .stars { display:flex; flex-direction:row-reverse; justify-content:flex-end; gap:.2rem; margin-bottom:.75rem; }
-.rating-form .stars input { display:none; }
-.rating-form .stars label { cursor:pointer; font-size:1.6rem; }
-.rating-form .stars input:checked ~ label,
-.rating-form .stars label:hover,
-.rating-form .stars label:hover ~ label { color:gold; }
-@media (max-width: 420px){
-  .rating-form.card{ padding:.75rem; }
-  .rating-form .stars label{ font-size:1.4rem; }
-}
+  /* ===== COMPANY COLORS & VARIABLES ===== */
+  .rf {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 10px;
+    --transition: all 0.2s ease;
+  }
+
+  /* ===== FORM CONTAINER ===== */
+  .rf {
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
+    max-width: 100%;
+  }
+
+  /* ===== HEADER ===== */
+  .rf-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #D1FAE5;
+  }
+
+  .rf-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .rf-status {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    background: rgba(34, 197, 94, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+  }
+
+  /* ===== STAR RATING ===== */
+  .rf-stars-container {
+    margin-bottom: 20px;
+  }
+
+  .rf-stars-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--black);
+    margin-bottom: 8px;
+  }
+
+  .rf-stars {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+  }
+
+  .rf-star-input {
+    display: none;
+  }
+
+  .rf-star-label {
+    cursor: pointer;
+    position: relative;
+    padding: 4px;
+    border-radius: 6px;
+    transition: var(--transition);
+  }
+
+  .rf-star-label:hover {
+    background: rgba(37, 99, 235, 0.05);
+  }
+
+  .rf-star-label svg {
+    width: 24px;
+    height: 24px;
+    display: block;
+    color: #E5E7EB;
+    transition: var(--transition);
+  }
+
+  .rf-star-input:checked + .rf-star-label svg,
+  .rf-star-label:hover svg,
+  .rf-star-label:hover ~ .rf-star-label svg {
+    color: #F59E0B;
+  }
+
+  .rf-star-input:checked + .rf-star-label svg {
+    fill: #F59E0B;
+  }
+
+  .rf-star-text {
+    position: absolute;
+    top: -8px;
+    right: -4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--blue);
+    background: white;
+    border-radius: 8px;
+    padding: 1px 4px;
+    border: 1px solid var(--blue);
+    opacity: 0;
+    transition: var(--transition);
+  }
+
+  .rf-star-label:hover .rf-star-text {
+    opacity: 1;
+  }
+
+  .rf-stars-preview {
+    margin-left: 12px;
+    font-size: 13px;
+    color: #64748B;
+    min-height: 20px;
+  }
+
+  /* ===== INPUT FIELDS ===== */
+  .rf-fields {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .rf-field-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--black);
+  }
+
+  .rf-field-label span {
+    font-weight: 600;
+  }
+
+  .rf-input,
+  .rf-textarea {
+    padding: 10px;
+    border: 1px solid #D1FAE5;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #F8FAFC;
+    color: var(--black);
+    transition: var(--transition);
+  }
+
+  .rf-input:focus,
+  .rf-textarea:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    background: white;
+  }
+
+  .rf-textarea {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.4;
+  }
+
+  .rf-field-hint {
+    font-size: 11px;
+    color: #94A3B8;
+    text-align: right;
+  }
+
+  /* ===== SUBMIT BUTTON ===== */
+  .rf-submit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .rf-submit:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+
+  .rf-submit:active {
+    transform: translateY(0);
+  }
+
+  /* ===== DARK THEME ===== */
+  .dark-theme .rf {
+    background: #132813;
+    border-color: #2D5A2D;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
+  }
+
+  .dark-theme .rf-title {
+    color: #F1F5F9;
+  }
+
+  .dark-theme .rf-header {
+    border-bottom-color: #2D5A2D;
+  }
+
+  .dark-theme .rf-stars-label,
+  .dark-theme .rf-field-label {
+    color: #E2E8F0;
+  }
+
+  .dark-theme .rf-input,
+  .dark-theme .rf-textarea {
+    background: #1A341A;
+    border-color: #2D5A2D;
+    color: #F1F5F9;
+  }
+
+  .dark-theme .rf-input:focus,
+  .dark-theme .rf-textarea:focus {
+    background: #0F230F;
+    border-color: var(--blue);
+  }
+
+  .dark-theme .rf-star-text {
+    background: #132813;
+    border-color: var(--blue);
+  }
+
+  .dark-theme .rf-stars-preview {
+    color: #94A3B8;
+  }
+
+  .dark-theme .rf-field-hint {
+    color: #64748B;
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .rf {
+      padding: 12px;
+    }
+    
+    .rf-title {
+      font-size: 15px;
+    }
+    
+    .rf-star-label svg {
+      width: 20px;
+      height: 20px;
+    }
+    
+    .rf-input,
+    .rf-textarea {
+      padding: 8px;
+      font-size: 13px;
+    }
+    
+    .rf-textarea {
+      min-height: 70px;
+    }
+    
+    .rf-submit {
+      padding: 10px;
+      font-size: 13px;
+    }
+  }
+
+  @media (min-width: 361px) and (max-width: 720px) {
+    .rf {
+      padding: 16px;
+    }
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .rf-star-input:focus + .rf-star-label {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  .rf-submit:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  /* ===== ANIMATION ===== */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .rf {
+    animation: fadeIn 0.3s ease-out;
+  }
 </style>
 
 <script nonce="<%= NONCE %>">
-  // Optional: click label should check radio on some browsers; most already do.
-  document.currentScript && (function(){
-    const form = document.currentScript.closest('form');
-    if (!form) return;
-    form.querySelectorAll('.stars label').forEach(lb=>{
-      lb.addEventListener('keydown', (e)=>{
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const forId = lb.getAttribute('for');
-          const radio = document.getElementById(forId);
-          if (radio) { radio.checked = true; }
-        }
-      });
+(function() {
+  const form = document.querySelector('.rf');
+  if (!form) return;
+
+  // Star rating preview text
+  const stars = form.querySelectorAll('.rf-star-input');
+  const preview = form.querySelector('.rf-stars-preview');
+  const starLabels = form.querySelectorAll('.rf-star-label');
+
+  function updatePreview(value) {
+    if (!preview) return;
+    const messages = [
+      'Select stars',
+      'Poor',
+      'Fair',
+      'Good',
+      'Very Good',
+      'Excellent'
+    ];
+    preview.textContent = messages[value] || messages[0];
+    
+    // Color preview based on rating
+    const colors = ['#64748B', '#EF4444', '#F97316', '#F59E0B', '#22C55E', '#16A34A'];
+    preview.style.color = colors[value] || colors[0];
+  }
+
+  // Update preview on hover and selection
+  starLabels.forEach(label => {
+    const value = label.getAttribute('data-value');
+    
+    // Hover preview
+    label.addEventListener('mouseenter', () => {
+      updatePreview(parseInt(value));
     });
-  })();
+    
+    // Reset preview when leaving stars area
+    label.addEventListener('mouseleave', () => {
+      const checked = form.querySelector('.rf-star-input:checked');
+      updatePreview(checked ? parseInt(checked.value) : 0);
+    });
+  });
+
+  // Update on selection
+  stars.forEach(star => {
+    star.addEventListener('change', () => {
+      updatePreview(parseInt(star.value));
+      
+      // Add visual feedback
+      const label = form.querySelector(`label[for="star-${star.value}"]`);
+      if (label) {
+        label.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+          label.style.transform = '';
+        }, 200);
+      }
+    });
+  });
+
+  // Character counters
+  const titleInput = form.querySelector('input[name="title"]');
+  const bodyTextarea = form.querySelector('textarea[name="body"]');
+  const titleHint = form.querySelector('.rf-field-hint');
+  const bodyHint = form.querySelectorAll('.rf-field-hint')[1];
+
+  function updateCounters() {
+    if (titleInput && titleHint) {
+      const count = titleInput.value.length;
+      titleHint.textContent = `${count}/80 characters`;
+    }
+    
+    if (bodyTextarea && bodyHint) {
+      const count = bodyTextarea.value.length;
+      bodyHint.textContent = `${count}/500 characters`;
+    }
+  }
+
+  if (titleInput) {
+    titleInput.addEventListener('input', updateCounters);
+  }
+  
+  if (bodyTextarea) {
+    bodyTextarea.addEventListener('input', updateCounters);
+  }
+
+  // Initialize counters
+  updateCounters();
+
+  // Form submission feedback
+  form.addEventListener('submit', function(e) {
+    const submitBtn = this.querySelector('.rf-submit');
+    if (submitBtn && !submitBtn.classList.contains('submitting')) {
+      submitBtn.classList.add('submitting');
+      const originalHTML = submitBtn.innerHTML;
+      submitBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20"/>
+        </svg>
+        Saving...
+      `;
+      submitBtn.disabled = true;
+      
+      // Revert after 3 seconds (in case submission fails)
+      setTimeout(() => {
+        if (submitBtn.classList.contains('submitting')) {
+          submitBtn.classList.remove('submitting');
+          submitBtn.innerHTML = originalHTML;
+          submitBtn.disabled = false;
+        }
+      }, 3000);
+    }
+  });
+
+  // Initialize preview based on existing rating
+  const checkedStar = form.querySelector('.rf-star-input:checked');
+  updatePreview(checkedStar ? parseInt(checkedStar.value) : 0);
+})();
 </script>

@@ -1,5 +1,7 @@
 // models/Notification.js
-const { mongoose } = require('../db');
+//const { mongoose } = require('../db');
+const mongoose = require('mongoose');
+
 const { Schema } = mongoose;
 
 const NotificationSchema = new Schema(

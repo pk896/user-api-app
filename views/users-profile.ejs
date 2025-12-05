@@ -1,317 +1,611 @@
 <!-- views/users-profile.ejs -->
-<section class="profile-page mini">
+<div class="up <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
   <% const profileUser = user || locals.user || {}; %>
 
-  <h1 class="page-title">🙍 My Profile</h1>
+  <h1 class="up-title">My Profile</h1>
 
+  <!-- Email Verification Alert -->
   <% if (!profileUser.isEmailVerified && profileUser.email) { %>
-    <div class="card verify-card">
-      <p class="verify-title">⚠ Email not verified</p>
-      <p class="verify-text">
-        We’ve sent a verification email to
-        <strong><%= profileUser.email %></strong>.
-      </p>
-      <p class="verify-text small">
-        Please verify your email to unlock your dashboard, orders and other features.
-        You can resend the verification email from the next page.
-      </p>
-      <a href="/users/verify-pending" class="btn xs warn wfull">
-        📧 Verify / resend email
+    <div class="up-card up-verify">
+      <div class="up-verify-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.268-.833-3.036 0L4.33 16.5c-.77.833.192 2.5 1.732 2.5z" 
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="up-verify-content">
+        <p class="up-verify-title">Email Verification Required</p>
+        <p class="up-verify-text">
+          Please verify <strong><%= profileUser.email %></strong> to unlock your dashboard and full features.
+        </p>
+      </div>
+      <a href="/users/verify-pending" class="up-btn up-btn-warning">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2 2h2l.8 4m1 6h8l2-8H4.8M5 10l-.6 1.8c-.2.6.1 1.2.7 1.2h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="6.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="12.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        Verify Email
       </a>
     </div>
   <% } %>
 
-  <div class="card info">
-    <div class="row">
-      <span class="label">Name</span>
-      <span class="value">
-        <%= profileUser.name || '' %>
-      </span>
+  <!-- Profile Information -->
+  <div class="up-card up-info">
+    <div class="up-detail">
+      <span class="up-detail-label">Name</span>
+      <span class="up-detail-value"><%= profileUser.name || '' %></span>
     </div>
 
-    <div class="row">
-      <span class="label">Username</span>
-      <span class="value">
-        <%= profileUser.username || '—' %>
-      </span>
+    <div class="up-detail">
+      <span class="up-detail-label">Username</span>
+      <span class="up-detail-value"><%= profileUser.username || '—' %></span>
     </div>
 
-    <div class="row">
-      <span class="label">Email</span>
-      <span
-        class="value ellipsis"
-        title="<%= profileUser.email || '' %>">
-        <%= profileUser.email || '—' %>
-      </span>
-    </div>
-
-    <div class="row">
-      <span class="label">Email status</span>
-      <span class="value">
+    <div class="up-detail">
+      <span class="up-detail-label">Email</span>
+      <div class="up-detail-email">
+        <span class="up-detail-value"><%= profileUser.email || '—' %></span>
         <% if (profileUser.isEmailVerified) { %>
-          ✅ Verified
+          <span class="up-badge up-badge-success">Verified</span>
         <% } else { %>
-          ⚠️ Not verified
+          <span class="up-badge up-badge-warning">Unverified</span>
         <% } %>
-      </span>
+      </div>
     </div>
 
-    <div class="row">
-      <span class="label">Sign-in</span>
-      <span class="value">
+    <div class="up-detail">
+      <span class="up-detail-label">Login Method</span>
+      <span class="up-detail-value">
         <% if (profileUser.provider === 'google') { %>
-          Google
+          <span class="up-provider">Google</span>
         <% } else if (profileUser.provider === 'both') { %>
-          Email &amp; Google
+          <span class="up-provider">Email & Google</span>
         <% } else { %>
-          Email / Username
+          <span class="up-provider">Email</span>
         <% } %>
       </span>
     </div>
 
     <% if (typeof profileUser.age !== 'undefined' && profileUser.age !== null) { %>
-      <div class="row">
-        <span class="label">Age</span>
-        <span class="value"><%= profileUser.age %></span>
+      <div class="up-detail">
+        <span class="up-detail-label">Age</span>
+        <span class="up-detail-value"><%= profileUser.age %></span>
       </div>
     <% } %>
 
-    <div class="row">
-      <span class="label">Joined</span>
-      <span class="value">
-        <%= profileUser.createdAt ? new Date(profileUser.createdAt).toLocaleString() : '' %>
+    <div class="up-detail">
+      <span class="up-detail-label">Joined</span>
+      <span class="up-detail-value">
+        <%= profileUser.createdAt ? new Date(profileUser.createdAt).toLocaleDateString('en-ZA', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        }) : '' %>
       </span>
     </div>
 
     <% if (profileUser.lastLogin) { %>
-      <div class="row">
-        <span class="label">Last login</span>
-        <span class="value">
-          <%= new Date(profileUser.lastLogin).toLocaleString() %>
+      <div class="up-detail">
+        <span class="up-detail-label">Last Login</span>
+        <span class="up-detail-value">
+          <%= new Date(profileUser.lastLogin).toLocaleDateString('en-ZA', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) %>
         </span>
       </div>
     <% } %>
   </div>
 
-  <div class="card actions">
-    <a href="/users/profile/edit" class="btn xs wfull">✏️ Edit</a>
-    <a href="/users/change-password" class="btn xs wfull">🔑 Password</a>
+  <!-- Profile Actions -->
+  <div class="up-card up-actions">
+    <a href="/users/profile/edit" class="up-btn up-btn-primary">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M11.5 2.5l2 2L5.5 13.5H3.5v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Edit Profile
+    </a>
 
-    <form action="/users/logout" method="get" class="stack">
-      <button type="submit" class="btn xs subtle wfull">🚪 Log out</button>
+    <a href="/users/change-password" class="up-btn up-btn-secondary">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M4 8h8m-4-4V2M8 6v4m6 2a6 6 0 11-12 0 6 6 0 0112 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Change Password
+    </a>
+
+    <form action="/users/logout" method="get" class="up-form">
+      <button type="submit" class="up-btn up-btn-logout">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M11 4l4 4m0 0l-4 4m4-4H3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Log Out
+      </button>
     </form>
 
-    <form
-      action="/users/profile/delete"
-      method="post"
-      class="stack"
-      onsubmit="return confirm('Are you sure? This will permanently delete your account and cannot be undone.');"
-    >
-      <button type="submit" class="btn xs danger wfull">🗑️ Delete account</button>
+    <form action="/users/profile/delete" method="post" class="up-form" id="up-delete-form">
+      <button type="submit" class="up-btn up-btn-danger">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Delete Account
+      </button>
     </form>
 
-    <p class="danger-note">
-      Deleting your account will permanently remove your profile and access.
+    <p class="up-warning">
+      Deleting your account will permanently remove your profile and all data.
     </p>
   </div>
-</section>
+</div>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-  /* ===== Mobile-first, ultra-compact tokens ===== */
-  :root {
-    --pg-gap: .38rem;
-    --pg-pad: .46rem;
-    --pg-radius: 10px;
-    --pg-fs-base: .82rem;      /* base body size for tiny screens */
-    --pg-fs-small: .74rem;
-    --pg-fs-label: .72rem;
-    --pg-fs-title: 1rem;
+  /* ===== COMPANY COLORS & VARIABLES ===== */
+  .up {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 10px;
+    --transition: all 0.2s ease;
   }
 
-  .profile-page.mini {
-    max-width: 380px;               /* slightly narrower for small phones */
-    margin: .55rem auto .9rem;
-    padding: 0 .44rem;
-    font-size: var(--pg-fs-base);
+  /* ===== MAIN CONTAINER ===== */
+  .up {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
   }
 
-  .page-title {
-    font-size: var(--pg-fs-title);
+  /* ===== TITLE ===== */
+  .up-title {
+    font-size: 20px;
+    font-weight: 700;
     text-align: center;
-    font-weight: 800;
-    margin: .1rem 0 .5rem;
-    letter-spacing: .1px;
+    margin: 0 0 16px 0;
+    color: var(--black);
   }
 
-  .card {
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--card-bd, #e5e7eb);
-    border-radius: var(--pg-radius);
-    padding: var(--pg-pad);
-    margin-bottom: .44rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,.05);
-  }
-  .dark-theme .card {
-    --card-bg: #1f2937;
-    --card-bd: #374151;
-    color: #e5e7eb;
+  .dark-theme .up-title {
+    color: #F1F5F9;
   }
 
-  /* Verify banner card */
-  .verify-card {
-    border-color:#fcd34d;
-    background:#fffbeb;
-  }
-  .dark-theme .verify-card {
-    border-color:#facc15;
-    background:#451a03;
-  }
-  .verify-title {
-    font-weight:800;
-    margin-bottom:.2rem;
-    font-size:.86rem;
-  }
-  .verify-text {
-    margin:.08rem 0;
-    color:#4b5563;
-  }
-  .verify-text.small {
-    font-size:.78rem;
-    color:#6b7280;
-  }
-  .dark-theme .verify-text,
-  .dark-theme .verify-text.small {
-    color:#e5e7eb;
+  /* ===== CARDS ===== */
+  .up-card {
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
   }
 
-  /* Info rows: very tight and readable on tiny screens */
-  .info .row {
-    display: grid;
-    grid-template-columns: 80px 1fr;   /* a bit wider for new labels */
-    gap: .28rem;
-    align-items: center;
-    padding: .22rem 0;
-    border-bottom: 1px dashed rgba(0,0,0,.06);
-  }
-  .info .row:last-child { border-bottom: 0; }
-  .dark-theme .info .row { border-color: rgba(255,255,255,.08); }
-
-  .label {
-    font-size: var(--pg-fs-label);
-    font-weight: 800;
-    opacity: .85;
+  .dark-theme .up-card {
+    background: #132813;
+    border-color: #2D5A2D;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
   }
 
-  .value {
-    font-size: var(--pg-fs-base);
-    line-height: 1.25;
-    min-width: 0;                /* allow ellipsis */
+  /* ===== VERIFICATION CARD ===== */
+  .up-verify {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-color: #F59E0B;
+    background: #FFFBEB;
   }
 
-  .ellipsis {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: inline-block;
-    max-width: 100%;
+  .up-verify-icon {
+    color: #F59E0B;
+    align-self: center;
   }
 
-  .actions { padding: .28rem .24rem; }
-
-  .btn {
-    display: inline-block;
-    width: 100%;
-    padding: .34rem .46rem;      /* compact tap area */
-    font-size: var(--pg-fs-small);
-    border-radius: 7px;
-    text-decoration: none;
-    text-align: center;
-    margin: .18rem 0;
-    border: 1px solid #d1d5db;
-    background: #f3f4f6;
-    color: #111827;
-    font-weight: 800;
-  }
-  .btn:hover { opacity: .95; }
-
-  .dark-theme .btn {
-    background: #374151;
-    border-color: #4b5563;
-    color: #e5e7eb;
-  }
-
-  .btn.danger {
-    background: #fee2e2;
-    border-color: #fecaca;
-    color: #991b1b;
-  }
-  .dark-theme .btn.danger {
-    background: #7f1d1d;
-    border-color: #b91c1c;
-    color: #fff;
-  }
-
-  .btn.subtle {
-    background:#e5e7eb;
-    border-color:#d1d5db;
-    color:#111827;
-  }
-  .dark-theme .btn.subtle {
-    background:#111827;
-    border-color:#4b5563;
-    color:#e5e7eb;
-  }
-
-  .btn.warn {
-    background:#f97316;
-    border-color:#ea580c;
-    color:#fff;
-  }
-  .dark-theme .btn.warn {
-    background:#c2410c;
-    border-color:#ea580c;
-    color:#fff;
-  }
-
-  .btn.xs {
-    font-size: var(--pg-fs-small);
-    padding: .32rem .44rem;
-    border-radius: 7px;
-  }
-
-  .wfull { width: 100%; }
-
-  .danger-note {
-    margin-top: .1rem;
-    font-size: .7rem;
-    color: #991b1b;
+  .up-verify-content {
     text-align: center;
   }
-  .dark-theme .danger-note { color: #fecaca; }
 
-  /* ===== Extra-tight layout for ultra-small screens (~320px) ===== */
-  @media (max-width: 360px) {
-    :root {
-      --pg-gap: .34rem;
-      --pg-pad: .42rem;
-      --pg-fs-base: .8rem;
-      --pg-fs-small: .7rem;
-      --pg-fs-label: .68rem;
-      --pg-fs-title: .98rem;
+  .up-verify-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    color: #92400E;
+  }
+
+  .up-verify-text {
+    font-size: 13px;
+    color: #92400E;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .up-verify-text strong {
+    font-weight: 600;
+  }
+
+  .dark-theme .up-verify {
+    border-color: #F59E0B;
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  .dark-theme .up-verify-title,
+  .dark-theme .up-verify-text {
+    color: #FEF3C7;
+  }
+
+  /* ===== DETAIL GRID ===== */
+  .up-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 0;
+    border-bottom: 1px solid #D1FAE5;
+  }
+
+  .up-detail:last-child {
+    border-bottom: none;
+  }
+
+  .up-detail-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .up-detail-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--black);
+    word-break: break-word;
+  }
+
+  .dark-theme .up-detail {
+    border-bottom-color: #2D5A2D;
+  }
+
+  .dark-theme .up-detail-value {
+    color: #F1F5F9;
+  }
+
+  /* ===== EMAIL WITH BADGE ===== */
+  .up-detail-email {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  @media (min-width: 360px) {
+    .up-detail-email {
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
     }
-    .profile-page.mini { padding: 0 .38rem; }
-    .info .row { grid-template-columns: 76px 1fr; }
   }
 
-  /* Slightly scale up for mid phones while staying compact */
-  @media (min-width: 420px) {
-    .profile-page.mini { max-width: 420px; }
-    .info .row { grid-template-columns: 90px 1fr; }
+  /* ===== BADGES ===== */
+  .up-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
   }
 
-  /* Motion safety */
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; animation: none !important; }
+  .up-badge-success {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .up-badge-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: #F59E0B;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+  }
+
+  /* ===== PROVIDER BADGE ===== */
+  .up-provider {
+    display: inline-block;
+    padding: 4px 8px;
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--blue);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* ===== BUTTONS ===== */
+  .up-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .up-btn-primary {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    color: white;
+  }
+
+  .up-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+
+  .up-btn-secondary {
+    background: #FFFFFF;
+    color: var(--blue);
+    border-color: #D1FAE5;
+  }
+
+  .up-btn-secondary:hover {
+    background: #F8FAFC;
+    border-color: var(--blue);
+  }
+
+  .up-btn-warning {
+    background: #F59E0B;
+    color: white;
+    border-color: #F59E0B;
+  }
+
+  .up-btn-warning:hover {
+    background: #D97706;
+    border-color: #D97706;
+    transform: translateY(-1px);
+  }
+
+  .up-btn-logout {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--blue);
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  .up-btn-logout:hover {
+    background: rgba(37, 99, 235, 0.2);
+    border-color: var(--blue);
+  }
+
+  .up-btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .up-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #EF4444;
+  }
+
+  .dark-theme .up-btn-secondary {
+    background: #1A341A;
+    color: #60A5FA;
+    border-color: #2D5A2D;
+  }
+
+  .dark-theme .up-btn-secondary:hover {
+    background: #2D5A2D;
+    border-color: var(--blue);
+  }
+
+  .dark-theme .up-btn-logout {
+    background: rgba(37, 99, 235, 0.15);
+    color: #60A5FA;
+    border-color: rgba(37, 99, 235, 0.3);
+  }
+
+  .dark-theme .up-btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #F87171;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  /* ===== FORMS ===== */
+  .up-form {
+    width: 100%;
+    margin: 0;
+  }
+
+  /* ===== WARNING TEXT ===== */
+  .up-warning {
+    font-size: 11px;
+    color: #EF4444;
+    text-align: center;
+    margin: 8px 0 0 0;
+    line-height: 1.4;
+  }
+
+  .dark-theme .up-warning {
+    color: #FCA5A5;
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .up {
+      padding: 12px;
+    }
+    
+    .up-card {
+      padding: 14px;
+    }
+    
+    .up-title {
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+    
+    .up-btn {
+      padding: 10px;
+      font-size: 12px;
+    }
+    
+    .up-detail-label {
+      font-size: 11px;
+    }
+    
+    .up-detail-value {
+      font-size: 13px;
+    }
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes upSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .up-card {
+    animation: upSlideIn 0.3s ease-out forwards;
+  }
+
+  .up-card:nth-child(1) { animation-delay: 0.1s; }
+  .up-card:nth-child(2) { animation-delay: 0.2s; }
+  .up-card:nth-child(3) { animation-delay: 0.3s; }
+
+  /* ===== ACCESSIBILITY ===== */
+  .up-btn:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
   }
 </style>
 
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+document.addEventListener("DOMContentLoaded", () => {
+  // Delete account confirmation
+  const deleteForm = document.getElementById('up-delete-form');
+  if (deleteForm) {
+    deleteForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const confirmed = confirm(
+        '⚠️ Delete Your Account\n\n' +
+        'This will permanently delete:\n' +
+        '• Your user profile\n' +
+        '• All personal data\n' +
+        '• Order history\n' +
+        '• Account access\n\n' +
+        'This action cannot be undone.\n\n' +
+        'Are you sure you want to proceed?'
+      );
+      
+      if (confirmed) {
+        // Add loading state
+        const submitBtn = this.querySelector('.up-btn-danger');
+        const originalHTML = submitBtn.innerHTML;
+        submitBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20"/>
+          </svg>
+          Deleting...
+        `;
+        submitBtn.disabled = true;
+        
+        // Submit after delay
+        setTimeout(() => {
+          this.submit();
+        }, 500);
+      }
+    });
+  }
+  
+  // Add visual feedback to buttons
+  const buttons = document.querySelectorAll('.up-btn');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      if (!this.classList.contains('disabled')) {
+        // Add click animation
+        this.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+          this.style.transform = '';
+        }, 150);
+      }
+    });
+  });
+  
+  // Add copy functionality to email
+  const emailElement = document.querySelector('.up-detail-email .up-detail-value');
+  if (emailElement) {
+    emailElement.style.cursor = 'pointer';
+    emailElement.title = 'Click to copy email';
+    
+    emailElement.addEventListener('click', function() {
+      const email = this.textContent.trim();
+      if (email !== '—') {
+        navigator.clipboard.writeText(email).then(() => {
+          const originalText = this.textContent;
+          this.textContent = 'Copied!';
+          this.style.color = 'var(--green)';
+          
+          setTimeout(() => {
+            this.textContent = originalText;
+            this.style.color = '';
+          }, 2000);
+        });
+      }
+    });
+  }
+  
+  // Format dates on the client side for better localization
+  const dateElements = document.querySelectorAll('.up-detail-value');
+  dateElements.forEach(el => {
+    const text = el.textContent.trim();
+    
+    // Check if it's a date string (contains date-like patterns)
+    if (text.includes('-') || text.includes('/') || text.includes('T')) {
+      try {
+        const date = new Date(text);
+        if (!isNaN(date.getTime())) {
+          // For join dates, show only date
+          if (el.previousElementSibling && 
+              el.previousElementSibling.textContent.includes('Joined')) {
+            el.textContent = date.toLocaleDateString('en-ZA', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+          }
+          // For last login, show date and time
+          else if (el.previousElementSibling && 
+                   el.previousElementSibling.textContent.includes('Last Login')) {
+            el.textContent = date.toLocaleDateString('en-ZA', {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+          }
+        }
+      } catch (e) {
+        // Keep original if parsing fails
+      }
+    }
+  });
+  
+  // Add animations
+  const cards = document.querySelectorAll('.up-card');
+  cards.forEach((card, index) => {
+    card.style.animationDelay = `${index * 0.1}s`;
+  });
+});
+</script>

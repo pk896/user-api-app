@@ -3,7 +3,7 @@
    Uses your real Delivery Options API for live shipping summary.
    Endpoints used:
      • GET /api/cart  (fallback /cart/items)
-     • GET /api/cart/add?pid=:customId&json=1
+     • GET /api/cart/add?pid=:customId&json=1[&size=][&color=]
      • GET /api/delivery-options[?region=&sort=&order=&limit=]
      • Product details: /products/view/:customId
    Expects locals: products, success, error, nonce, themeCss
@@ -107,12 +107,19 @@
         <!-- Default GRID mode -->
         <ul id="list" class="amz-list grid-mode">
           <% products.forEach(p => {
-               const price   = Number(p.price || 0);
-               const inStock = Number(p.stock || 0) > 0;
-               const name    = String(p.name || '');
-               const cat     = (p.category || '').toLowerCase();
-               const type    = (p.type || '').toLowerCase();
-               const flags   = { isNew: !!p.isNew, sale: !!p.sale, popular: !!p.popular };
+            const price     = Number(p.price || 0);
+            const inStock   = Number(p.stock || 0) > 0;
+            const name      = String(p.name || '');
+            const cat       = (p.category || '').toLowerCase();
+            const type      = (p.type || '').toLowerCase();
+            const role      = (p.role || '').toLowerCase();
+            const isClothes = role === 'clothes' || type === 'clothes';
+
+            const flags     = { isNew: !!p.isNew, sale: !!p.sale, popular: !!p.popular };
+
+            // Try using p.sizes / p.colors from DB; fall back if not present
+            const sizeOptions  = isClothes && Array.isArray(p.sizes)  && p.sizes.length  ? p.sizes  : ['XS','S','M','L','XL'];
+            const colorOptions = isClothes && Array.isArray(p.colors) && p.colors.length ? p.colors : ['Black','White','Blue','Red'];
           %>
           <li class="amz-item"
               data-name="<%- name %>"
@@ -120,6 +127,7 @@
               data-stock="<%= inStock ? '1':'0' %>"
               data-category="<%- cat %>"
               data-type="<%- type %>"
+              data-role="<%- role %>"
               data-flags='<%- JSON.stringify(flags) %>'>
             <a class="imgbox" href="/products/view/<%= p.customId %>" aria-label="Open <%= name %>">
               <img src="<%= p.imageUrl %>" alt="<%= name %>" loading="lazy" decoding="async" />
@@ -131,16 +139,47 @@
             <div class="info">
               <a class="title" href="/products/view/<%= p.customId %>"><%= name %></a>
 
-              <div class="rating"><span class="stars" aria-hidden="true">★★★★★</span><span class="count">(<%= Math.floor(Math.random()*90)+10 %>)</span></div>
+              <div class="rating">
+                <span class="stars" aria-hidden="true">★★★★★</span>
+                <span class="count">(<%= Math.floor(Math.random()*90)+10 %>)</span>
+              </div>
 
               <div class="price-row">
                 <span class="price">R <%= price.toFixed(2) %></span>
-                <span class="<%= inStock ? 'stock in' : 'stock out' %>"><%= inStock ? 'In Stock' : 'Out of Stock' %></span>
+                <span class="<%= inStock ? 'stock in' : 'stock out' %>">
+                  <%= inStock ? 'In Stock' : 'Out of Stock' %>
+                </span>
               </div>
+
+              <% if (isClothes) { %>
+              <div class="variants">
+                <label>
+                  <span class="v-label">Size</span>
+                  <select class="variant-size" data-pid="<%= p.customId %>">
+                    <% sizeOptions.forEach(sz => { %>
+                      <option value="<%= sz %>"><%= sz %></option>
+                    <% }) %>
+                  </select>
+                </label>
+                <label>
+                  <span class="v-label">Color</span>
+                  <select class="variant-color" data-pid="<%= p.customId %>">
+                    <% colorOptions.forEach(c => { %>
+                      <option value="<%= c %>"><%= c %></option>
+                    <% }) %>
+                  </select>
+                </label>
+              </div>
+              <% } %>
 
               <!-- Per-item shipping line intentionally removed -->
               <div class="act">
-                <a class="btn add" href="/api/cart/add?pid=<%= p.customId %>" data-pid="<%= p.customId %>" <%= inStock ? '' : 'aria-disabled="true"' %>>Add to Cart</a>
+                <a class="btn add"
+                   href="/api/cart/add?pid=<%= p.customId %>"
+                   data-pid="<%= p.customId %>"
+                   <%= inStock ? '' : 'aria-disabled="true"' %>>
+                  Add to Cart
+                </a>
                 <a class="btn ghost" href="/products/view/<%= p.customId %>">Details</a>
               </div>
             </div>
@@ -213,29 +252,46 @@
     color: var(--ink);
   }
 
-  
-
-  .amz-top{ display:grid; grid-template-columns: 140px 1fr auto; gap:.6rem; align-items:center; padding:.5rem .6rem; background:var(--brand); color:#fff; position:sticky; top:0; z-index:60; }
+  .amz-top{
+    display:grid;
+    grid-template-columns: 140px 1fr auto;
+    gap:.6rem;
+    align-items:center;
+    padding:.5rem .6rem;
+    background:var(--brand);
+    color:#fff;
+    position:sticky;
+    top:0;
+    z-index:60;
+  }
 
   .brand{
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    font-weight:900;
+    color:#fff;
+    text-decoration:none;
+    white-space:nowrap;
+    font-size:0.85rem;   /* smaller text */
+    max-width:120px;     /* limit how wide it can be */
+    overflow:hidden;
+    text-overflow:ellipsis; /* show “Unicoporate…” if too long */
+  }
 
-  font-weight:900;
-  color:#fff;
-  text-decoration:none;
-
-  white-space:nowrap;
-  font-size:0.85rem;   /* smaller text */
-  max-width:120px;     /* limit how wide it can be */
-  overflow:hidden;     
-  text-overflow:ellipsis; /* show “Unicoporate…” if too long */
-}
-
-  /*.brand{ font-weight:900; color:#fff; text-decoration:none; white-space:nowrap; font-size:1rem }*/
-  .amz-search{ display:grid; grid-template-columns: 96px 1fr 40px; background:#fff; border-radius:999px; overflow:hidden; }
-  .amz-search select, .amz-search input{ border:0; padding:.5rem .55rem; font:inherit; outline:none; }
+  .amz-search{
+    display:grid;
+    grid-template-columns: 96px 1fr 40px;
+    background:#fff;
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .amz-search select, .amz-search input{
+    border:0;
+    padding:.5rem .55rem;
+    font:inherit;
+    outline:none;
+  }
   .amz-search input{ min-width:0; font-size:.95rem }
   .amz-search-btn{ border:0; background:var(--accent); color:#111; font-weight:900; cursor:pointer }
   .amz-quick{ display:flex; gap:.6rem; align-items:center }
@@ -250,21 +306,68 @@
     padding:.45rem .6rem;
   }
   .left{ display:flex; gap:.45rem; align-items:center }
-  .subnav-btn{ border:1px solid var(--line); background:#fff; border-radius:8px; padding:.35rem .5rem; cursor:pointer; font-weight:700; font-size:.9rem }
+  .subnav-btn{
+    border:1px solid var(--line);
+    background:#fff;
+    border-radius:8px;
+    padding:.35rem .5rem;
+    cursor:pointer;
+    font-weight:700;
+    font-size:.9rem;
+  }
   .subnav-meta{ display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; font-size:.92rem }
   .sort-wrap{ display:flex; gap:.3rem; align-items:center }
-  .sort-wrap select{ padding:.3rem .5rem; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink) }
+  .sort-wrap select{
+    padding:.3rem .5rem;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:var(--card);
+    color:var(--ink);
+  }
 
-  .amz-body{ display:grid; grid-template-columns: 220px 1fr; gap:.7rem; padding:.6rem; align-items:start }
-  .amz-side{ background:var(--card); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:.6rem }
+  .amz-body{
+    display:grid;
+    grid-template-columns: 220px 1fr;
+    gap:.7rem;
+    padding:.6rem;
+    align-items:start;
+  }
+  .amz-side{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    box-shadow:var(--shadow);
+    padding:.6rem;
+  }
   .filter-block + .filter-block{ margin-top:.7rem }
   .filter-block h3{ margin:.05rem 0 .35rem; font-size:.95rem }
   .chk{ display:block; margin:.2rem 0; color:var(--ink); font-size:.95rem }
   .region-row{ display:grid; gap:.35rem; margin-top:.35rem }
-  .region-row select{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:.4rem .5rem }
+  .region-row select{
+    border:1px solid var(--line);
+    background:var(--card);
+    color:var(--ink);
+    border-radius:8px;
+    padding:.4rem .5rem;
+  }
   .tiny{ color:var(--muted); font-size:.82rem; margin-top:.25rem }
-  .price-row{ display:grid; grid-template-columns: 1fr auto 1fr; gap:.35rem; align-items:center }
-  .btn{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:.4rem .6rem; cursor:pointer; font-weight:700 }
+
+  .price-row{
+    display:grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap:.35rem;
+    align-items:center;
+  }
+
+  .btn{
+    border:1px solid var(--line);
+    background:var(--card);
+    color:var(--ink);
+    border-radius:8px;
+    padding:.4rem .6rem;
+    cursor:pointer;
+    font-weight:700;
+  }
   .btn.sm{ font-size:.9rem }
 
   .amz-results{ min-height:40vh }
@@ -285,32 +388,73 @@
   .amz-list.grid-mode .amz-item{ grid-template-columns: 1fr; }
 
   .amz-item{
-    display:grid; grid-template-columns: 150px 1fr; gap:.55rem; padding:.55rem; border:1px solid var(--line);
-    border-radius:10px; background:var(--card); box-shadow:0 10px 28px rgba(0,0,0,.12);
+    display:grid;
+    grid-template-columns: 150px 1fr;
+    gap:.55rem;
+    padding:.55rem;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:var(--card);
+    box-shadow:0 10px 28px rgba(0,0,0,.12);
   }
 
   /* Image box: square, keeps full image on small screens */
   .imgbox{
-    position:relative; background:#f3f4f6; border-radius:10px; overflow:hidden;
-    display:flex; align-items:center; justify-content:center;
+    position:relative;
+    background:#f3f4f6;
+    border-radius:10px;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
     aspect-ratio: 1 / 1;
   }
   .imgbox img{
-    width:100%; height:100%;
-    object-fit: cover;              /* desktop/tablet: fill nicely */
+    width:100%;
+    height:100%;
+    object-fit: cover;
     transition: transform .3s ease;
   }
   .imgbox:hover img{ transform: scale(1.04) }
-  .tag{ position:absolute; top:6px; left:6px; padding:.16rem .44rem; border-radius:999px; font-size:.72rem; font-weight:800; color:#111; background:#fde68a }
+  .tag{
+    position:absolute;
+    top:6px;
+    left:6px;
+    padding:.16rem .44rem;
+    border-radius:999px;
+    font-size:.72rem;
+    font-weight:800;
+    color:#111;
+    background:#fde68a;
+  }
   .tag.new{ background:#a7f3d0; }
   .tag.sale{ background:#fda4af; }
   .tag.hot{ background:#93c5fd; }
 
   .info{ display:grid; gap:.28rem }
-  .title{ font-weight:800; color:inherit; text-decoration:none; font-size:.98rem; line-height:1.2; max-height: 2.6em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .title{
+    font-weight:800;
+    color:inherit;
+    text-decoration:none;
+    font-size:.98rem;
+    line-height:1.2;
+    max-height: 2.6em;
+    overflow:hidden;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
   .rating{ display:flex; align-items:center; gap:.28rem; color:#6b7280; font-size:.86rem }
   .stars{ letter-spacing:.12ch }
-  .price-row{ display:flex; align-items:center; justify-content:space-between; gap:.5rem }
+
+  /* Override price-row inside card to flex layout */
+  .info .price-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.5rem;
+  }
+
   .price{ color:#B12704; font-weight:900; font-size:1.02rem }
   .stock.in{ color:#16a34a; font-weight:700 }
   .stock.out{ color:#ef4444; font-weight:700 }
@@ -334,19 +478,85 @@
     border-radius:999px; padding:.5rem .7rem; box-shadow:var(--shadow);
     width:min(740px,94vw);
   }
-  .co-btn{ text-decoration:none; background:#16a34a; color:#fff; font-weight:900; padding:.45rem .8rem; border-radius:999px }
+  .co-btn{
+    text-decoration:none;
+    background:#16a34a;
+    color:#fff;
+    font-weight:900;
+    padding:.45rem .8rem;
+    border-radius:999px;
+  }
 
   /* Drawer */
-  .drawer-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; z-index:70 }
-  .drawer{ position:fixed; right:0; top:0; bottom:0; width:min(420px,92vw); background:var(--card); box-shadow:-10px 0 24px rgba(0,0,0,.25); transform:translateX(100%); transition:transform .28s ease; z-index:80; display:flex; flex-direction:column; border-left:1px solid var(--line) }
+  .drawer-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.5);
+    display:none;
+    z-index:70;
+  }
+  .drawer{
+    position:fixed;
+    right:0;
+    top:0;
+    bottom:0;
+    width:min(420px,92vw);
+    background:var(--card);
+    box-shadow:-10px 0 24px rgba(0,0,0,.25);
+    transform:translateX(100%);
+    transition:transform .28s ease;
+    z-index:80;
+    display:flex;
+    flex-direction:column;
+    border-left:1px solid var(--line);
+  }
   .drawer.open{ transform: translateX(0) }
-  .drawer-head{ padding:.8rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line) }
-  .drawer-body{ padding:.6rem .8rem; overflow:auto; flex:1; display:flex; flex-direction:column; gap:.6rem }
-  .drawer-item{ display:grid; grid-template-columns:64px 1fr auto; gap:.55rem; align-items:center; background:rgba(0,0,0,.02); border-radius:.7rem; padding:.45rem }
-  .drawer-item img{ width:64px; height:64px; object-fit:cover; border-radius:.6rem }
-  .drawer-foot{ padding:.8rem; border-top:1px solid var(--line); display:grid; gap:.5rem }
+  .drawer-head{
+    padding:.8rem;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    border-bottom:1px solid var(--line);
+  }
+  .drawer-body{
+    padding:.6rem .8rem;
+    overflow:auto;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:.6rem;
+  }
+  .drawer-item{
+    display:grid;
+    grid-template-columns:64px 1fr auto;
+    gap:.55rem;
+    align-items:center;
+    background:rgba(0,0,0,.02);
+    border-radius:.7rem;
+    padding:.45rem;
+  }
+  .drawer-item img{
+    width:64px;
+    height:64px;
+    object-fit:cover;
+    border-radius:.6rem;
+  }
+  .drawer-foot{
+    padding:.8rem;
+    border-top:1px solid var(--line);
+    display:grid;
+    gap:.5rem;
+  }
   .total-row{ display:flex; justify-content:space-between; font-weight:900 }
-  .btn-checkout{ border:0; border-radius:.7rem; padding:.6rem .9rem; font-weight:900; background:#16a34a; color:#fff; cursor:pointer }
+  .btn-checkout{
+    border:0;
+    border-radius:.7rem;
+    padding:.6rem .9rem;
+    font-weight:900;
+    background:#16a34a;
+    color:#fff;
+    cursor:pointer;
+  }
 
   .close-x{ background:transparent; border:0; font-size:1.05rem; cursor:pointer }
 
@@ -365,10 +575,10 @@
     /* Mobile image: show full image without cropping */
     .imgbox{ aspect-ratio: 1 / 1; }
     .imgbox img{
-      object-fit: contain;  /* ⟵ key fix: show full image */
+      object-fit: contain;
       padding: 6px;
       background: #fff;
-      transform: none;      /* avoid hover zoom on tiny screens */
+      transform: none;
     }
 
     .amz-item{ grid-template-columns: 1fr; padding:.5rem; gap:.45rem }
@@ -378,54 +588,82 @@
   }
 
   /* Cart count: navy by default, white on hover */
-.cart-count-top{
-  color: #0f1f35 !important;   /* deep navy */
-  font-weight: 900;
-  transition: color .15s ease;
-}
+  .cart-count-top{
+    color: #0f1f35 !important;   /* deep navy */
+    font-weight: 900;
+    transition: color .15s ease;
+  }
 
-.amz-cart-btn:hover .cart-count-top,
-.amz-cart-btn:focus-visible .cart-count-top{
-  color: #ffffff !important;   /* turn white on hover/focus */
-}
+  .amz-cart-btn:hover .cart-count-top,
+  .amz-cart-btn:focus-visible .cart-count-top{
+    color: #ffffff !important;   /* turn white on hover/focus */
+  }
 
-/* (Optional) improve contrast in dark theme if needed */
-.dark-theme .cart-count-top{
-  color: #c7d2fe;              /* soft indigo for dark header */
-}
+  .dark-theme .cart-count-top{
+    color: #c7d2fe;
+  }
 
-/* Make subnav buttons readable on BOTH white and blue states */
-.subnav-btn {
-  background: #ffffff;
-  color: #0f172a;          /* dark navy text on white */
-}
+  /* Make subnav buttons readable */
+  .subnav-btn {
+    background: #ffffff;
+    color: #0f172a;
+  }
 
-/* Blue / active state – keep text white */
-.subnav-btn:hover,
-.subnav-btn:focus-visible,
-.subnav-btn[aria-pressed="true"] {
-  background: #ffffff;
-  border-color: #1d4ed8;
-  color: #0f172a;          /* white text on blue */
-}
+  .subnav-btn:hover,
+  .subnav-btn:focus-visible,
+  .subnav-btn[aria-pressed="true"] {
+    background: #ffffff;
+    border-color: #1d4ed8;
+    color: #0f172a;
+  }
 
-.drawer-head {
-  visibility: hidden; /* keeps height, hides content */
-}
+  .drawer-head {
+    visibility: hidden; /* keeps height, hides content */
+  }
 
-/* Hide drawer header (title + X button) */
-/*.drawer-head {
-  display: none;
-}*/
+  .amz-top .brand {
+    font-size: 0.8rem !important;
+    max-width: 80px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: inline-block !important;
+  }
 
-.amz-top .brand {
-  font-size: 0.8rem !important;
-  max-width: 80px !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  display: inline-block !important;
-}
+  /* Variants (size + color) */
+  .variants{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.35rem;
+    margin-top:.1rem;
+    font-size:.85rem;
+  }
+  .variants label{
+    display:flex;
+    flex-direction:column;
+    gap:.12rem;
+  }
+  .v-label{
+    font-weight:600;
+    color:var(--muted);
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .variants select{
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:.25rem .6rem;
+    font-size:.85rem;
+    background:var(--card);
+    color:var(--ink);
+  }
+
+  @media (max-width:480px){
+    .variants{
+      gap:.25rem;
+    }
+  }
 </style>
 
 <!-- ===== Page Script (CSP-safe) ===== -->
@@ -515,7 +753,15 @@
 
   /* Fetch helpers */
   async function getJSON(url){
-    try{ const r = await fetch(url, { credentials:'same-origin' }); if(!r.ok) return {}; const ct=r.headers.get('content-type')||''; if(!ct.includes('application/json')) return {}; return await r.json(); }catch{ return {}; }
+    try{
+      const r = await fetch(url, { credentials:'same-origin' });
+      if(!r.ok) return {};
+      const ct=r.headers.get('content-type')||'';
+      if(!ct.includes('application/json')) return {};
+      return await r.json();
+    }catch{
+      return {};
+    }
   }
   async function fetchCart(){
     let data = await getJSON('/api/cart');
@@ -523,43 +769,127 @@
     if (Array.isArray(data)) return { items: data };
     return data || { items: [] };
   }
+
   function renderCart(items){
     if (!items || !items.length){
       cartList.innerHTML = '<p class="muted">Your cart is empty.</p>';
       cartSubtotal.textContent = 'R 0.00';
       cartCountTop.textContent = '0';
-      miniBar.hidden = true; return;
+      miniBar.hidden = true;
+      return;
     }
-    let subtotal = 0, count = 0;
+
+    let subtotal = 0;
+    let count    = 0;
+
     cartList.innerHTML = items.map(it=>{
       const qty   = Number(it.quantity || it.qty || 1);
       const price = Number(it.price || it.product?.price || 0);
       const name  = it.name || it.product?.name || 'Item';
       const image = it.imageUrl || it.product?.imageUrl || '';
-      subtotal += price*qty; count += qty;
-      return `<div class="drawer-item"><img src="${image}" alt="${name}"><div><div style="font-weight:800">${name}</div><div class=\"muted\">R ${price.toFixed(2)} × ${qty}</div></div><span></span></div>`;
+
+      const variants = it.variants || {};
+      const size  = variants.size  || it.size  || it.variantSize  || '';
+      const color = variants.color || it.color || it.variantColor || '';
+
+      subtotal += price * qty;
+      count    += qty;
+
+      const metaParts = [];
+      metaParts.push(`R ${price.toFixed(2)} × ${qty}`);
+      if (size)  metaParts.push(`Size: ${size}`);
+      if (color) metaParts.push(`Color: ${color}`);
+      const meta = metaParts.join(' • ');
+
+      return `
+        <div class="drawer-item">
+          <img src="${image}" alt="${name}">
+          <div>
+            <div style="font-weight:800">${name}</div>
+            <div class="muted">${meta}</div>
+          </div>
+          <span></span>
+        </div>
+      `;
     }).join('');
+
     cartSubtotal.textContent = 'R ' + subtotal.toFixed(2);
     cartCountTop.textContent = String(count);
     miniSubtotal.textContent = 'R ' + subtotal.toFixed(2);
     miniCount.textContent = String(count);
     miniBar.hidden = false;
   }
-  async function refreshCart(){ const data = await fetchCart(); renderCart(data.items||[]); }
 
-  /* Add to cart inline */
+  async function refreshCart(){
+    const data = await fetchCart();
+    renderCart(data.items||[]);
+  }
+
+  /* Add to cart inline (handles clothes variants) */
   function wireAddButtons(){
     $$('.btn.add').forEach(btn=>{
       btn.addEventListener('click', async (e)=>{
-        e.preventDefault(); if (btn.hasAttribute('aria-disabled')) return;
-        const pid = btn.getAttribute('data-pid'); const original = btn.textContent;
+        e.preventDefault();
+        if (btn.hasAttribute('aria-disabled')) return;
+
+        const pid      = btn.getAttribute('data-pid');
+        const original = btn.textContent;
+
+        // Find the card
+        const card = btn.closest('.amz-item');
+        let size = '';
+        let color = '';
+
+        if (card) {
+          const type = (card.getAttribute('data-type') || '').toLowerCase();
+          const role = (card.getAttribute('data-role') || '').toLowerCase();
+
+          if (type === 'clothes' || role === 'clothes') {
+            const sizeSel  = card.querySelector('.variant-size');
+            const colorSel = card.querySelector('.variant-color');
+
+            size  = sizeSel  ? sizeSel.value  : '';
+            color = colorSel ? colorSel.value : '';
+
+            if (!size || !color) {
+              alert('Please choose size and color before adding to cart.');
+              return;
+            }
+          }
+        }
+
         try{
-          btn.textContent = '⏳ Adding…'; btn.setAttribute('aria-disabled','true');
-          const r = await fetch(`/api/cart/add?pid=${encodeURIComponent(pid)}&json=1`, { credentials:'same-origin' });
-          if(!r.ok){ let m='Add failed'; try{const j=await r.json(); if(j?.message)m=j.message;}catch{} throw new Error(m); }
-          btn.textContent = '✅ Added'; setTimeout(()=>{ btn.textContent = original; btn.removeAttribute('aria-disabled'); }, 900);
+          btn.textContent = '⏳ Adding…';
+          btn.setAttribute('aria-disabled','true');
+
+          const params = new URLSearchParams();
+          params.set('pid', pid);
+          params.set('json', '1');
+          if (size)  params.set('size', size);
+          if (color) params.set('color', color);
+
+          const r = await fetch(`/api/cart/add?${params.toString()}`, { credentials:'same-origin' });
+          if(!r.ok){
+            let m='Add failed';
+            try{
+              const j=await r.json();
+              if(j?.message) m=j.message;
+            }catch{}
+            throw new Error(m);
+          }
+
+          btn.textContent = '✅ Added';
+          setTimeout(()=>{
+            btn.textContent = original;
+            btn.removeAttribute('aria-disabled');
+          }, 900);
+
           refreshCart();
-        }catch(err){ btn.textContent = original; btn.removeAttribute('aria-disabled'); alert(err.message||'Could not add to cart.'); }
+        }catch(err){
+          btn.textContent = original;
+          btn.removeAttribute('aria-disabled');
+          alert(err.message||'Could not add to cart.');
+        }
       });
     });
   }
@@ -575,7 +905,8 @@
     // Build regions list
     const regions = Array.from(new Set(items.map(it=>it.region).filter(Boolean))).sort();
     const current = regionSelect.value;
-    regionSelect.innerHTML = `<option value="">All regions</option>` + regions.map(r=>`<option ${r===current?'selected':''} value="${r}">${r}</option>`).join('');
+    regionSelect.innerHTML = `<option value="">All regions</option>` +
+      regions.map(r=>`<option ${r===current?'selected':''} value="${r}">${r}</option>`).join('');
 
     // Sidebar summary only (no per-card text)
     if (items.length){
@@ -596,8 +927,11 @@
       if (req.sale && !f.sale) return false;
       if (req.popular && !f.popular) return false;
       return true;
-    }catch{ return true; }
+    }catch{
+      return true;
+    }
   }
+
   function applyFilters(){
     const q     = normalize(searchInput.value);
     const cat   = normalize(catSelect.value);
@@ -679,24 +1013,56 @@
     const btn = e.target.closest('.pg-btn'); if(!btn) return;
     const dir = Number(btn.getAttribute('data-dir')||0);
     const next = PAGE.page + dir;
-    if (next>=1 && next<=PAGE.pages){ PAGE.page = next; renderPage(); window.scrollTo({top:0, behavior:'smooth'}); }
+    if (next>=1 && next<=PAGE.pages){
+      PAGE.page = next;
+      renderPage();
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
   });
 
   // events
-  searchForm.addEventListener('submit', (e)=>{ e.preventDefault(); PAGE.page=1; applyFilters(); });
-  [searchInput, catSelect, sortSelect, inStockOnly, typeFilter].forEach(el=>{
-    el?.addEventListener('input', ()=>{ PAGE.page=1; applyFilters(); });
-    if (el && el.tagName==='SELECT') el.addEventListener('change', ()=>{ PAGE.page=1; applyFilters(); });
+  searchForm.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    PAGE.page=1;
+    applyFilters();
   });
-  applyPriceBtn.addEventListener('click', ()=>{ PAGE.page=1; applyFilters(); });
 
-  $$('input[data-attr]', sidebar).forEach(chk=> chk.addEventListener('change', ()=>{ PAGE.page=1; applyFilters(); }));
+  [searchInput, catSelect, sortSelect, inStockOnly, typeFilter].forEach(el=>{
+    el?.addEventListener('input', ()=>{
+      PAGE.page=1;
+      applyFilters();
+    });
+    if (el && el.tagName==='SELECT') el.addEventListener('change', ()=>{
+      PAGE.page=1;
+      applyFilters();
+    });
+  });
+
+  applyPriceBtn.addEventListener('click', ()=>{
+    PAGE.page=1;
+    applyFilters();
+  });
+
+  $$('input[data-attr]', sidebar).forEach(chk=>
+    chk.addEventListener('change', ()=>{
+      PAGE.page=1;
+      applyFilters();
+    })
+  );
 
   // Region change → refresh summary only
-  regionSelect.addEventListener('change', ()=>{ loadDeliveryOptions(regionSelect.value); });
+  regionSelect.addEventListener('change', ()=>{
+    loadDeliveryOptions(regionSelect.value);
+  });
 
   // Prefill from URL ?q= & ?cat=
-  try{ const usp = new URLSearchParams(location.search); const q0=usp.get('q'); const c0=usp.get('cat'); if (q0) searchInput.value=q0; if (c0) catSelect.value=c0; }catch{}
+  try{
+    const usp = new URLSearchParams(location.search);
+    const q0=usp.get('q');
+    const c0=usp.get('cat');
+    if (q0) searchInput.value=q0;
+    if (c0) catSelect.value=c0;
+  }catch{}
 
   // Wire buttons & init
   wireAddButtons();

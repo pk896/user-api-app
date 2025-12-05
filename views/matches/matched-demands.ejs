@@ -1,184 +1,1084 @@
 <!-- views/matches/matched-demands.ejs -->
-<link rel="stylesheet" href="<%= themeCss %>">
-
-<section class="dashboard-home">
-  <h1 class="page-title">📨 Buyer Demands Matched to Your Products</h1>
-
-  <% if (error && error.length) { %>
-    <div class="flash flash-error">❌ <%= error %></div>
-  <% } %>
-  <% if (success && success.length) { %>
-    <div class="flash flash-success">✅ <%= success %></div>
-  <% } %>
-
-  <div class="toolbar">
-    <input id="q" class="input" type="search" placeholder="Search (demand/product/buyer/location)…" />
-    <select id="status" class="input">
-      <option value="">All statuses</option>
-      <option value="pending">Pending</option>
-      <option value="accepted">Accepted</option>
-      <option value="rejected">Rejected</option>
-    </select>
-  </div>
-
-  <% if (matches && matches.length) { %>
-    <table class="nice-table" id="tblSupplierMatches">
-      <thead>
-        <tr>
-          <th>Demand</th>
-          <th>Product</th>
-          <th>Buyer</th>
-          <th>Price</th>
-          <th>Location</th>
-          <th>Score</th>
-          <th>Status</th>
-          <th style="width:240px;">Respond</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% matches.forEach(function(m){ 
-          const d  = m.demandId || {};
-          const p  = m.productId || {};
-          const b  = m.buyerId   || {};
-          const ss = m.snapshot  || {};
-
-          const demandTitle = d.title || d.productName || d.type || ss.demandTitle || "Demand";
-          const productName = p.name  || ss.productName || "—";
-          const productType = p.type  || ss.productType || "—";
-          const buyerName   = b.name  || b.businessName || "—";
-          const price = (typeof p.price !== "undefined") ? p.price : ss.productPrice;
-          const loc   = p.location || ss.productLocation || d.location || ss.demandLocation ||
-                        [p.country, p.province, p.city, p.town].filter(Boolean).join(", ") || "—";
-          const status = (m.status || "pending").toLowerCase();
-
-          const rowSearch = [demandTitle, productName, productType, buyerName, loc].join(" ").toLowerCase();
-        %>
-        <tr class="row" data-search="<%= rowSearch %>" data-status="<%= status %>">
-          <td>
-            <div class="title"><%= demandTitle %></div>
-            <div class="muted">Type: <span class="tag"><%= productType %></span> • Qty: <%= d.quantity || ss.demandQuantity || "—" %></div>
-          </td>
-          <td>
-            <div class="title"><%= productName %></div>
-            <div class="muted">#<%= String(m.productId?._id || m.productId || "").slice(-6) %></div>
-          </td>
-          <td><%= buyerName %></td>
-          <td class="num"><%= (typeof price === "number") ? price.toFixed(2) : (price || "—") %></td>
-          <td><%= loc %></td>
-          <td class="num"><%= Number(m.score || 0) %></td>
-          <td>
-            <span class="badge <%= status %>"><%= status.charAt(0).toUpperCase() + status.slice(1) %></span>
-          </td>
-          <td>
-            <form method="post" action="/matches/<%= m._id %>/respond" class="respond-form">
-              <input type="hidden" name="action" value="accepted" />
-              <div class="row-actions">
-                <button type="submit" class="btn btn-accept">Accept</button>
-                <button type="button" class="btn btn-reject" data-id="<%= m._id %>">Reject</button>
-              </div>
-              <textarea name="message" placeholder="Optional message to buyer…" rows="2" class="input msg"></textarea>
-            </form>
-            <!-- Reject form (hidden) -->
-            <form method="post" action="/matches/<%= m._id %>/respond" class="reject-form" style="display:none;">
-              <input type="hidden" name="action" value="rejected" />
-              <textarea name="message" placeholder="Reason (optional)..." rows="2" class="input msg"></textarea>
-              <div class="row-actions">
-                <button type="submit" class="btn btn-yes">Confirm reject</button>
-                <button type="button" class="btn btn-cancel" data-id="<%= m._id %>">Cancel</button>
-              </div>
-            </form>
-          </td>
-        </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %>
-    <div class="empty">
-      <p>No matched demands yet.</p>
-    </div>
-  <% } %>
-</section>
-
-<script nonce="<%= nonce %>">
-(function(){
-  const $q = document.getElementById('q');
-  const $st = document.getElementById('status');
-  const rows = Array.from(document.querySelectorAll('#tblSupplierMatches tbody .row'));
-
-  function apply(){
-    const q = ($q?.value || '').trim().toLowerCase();
-    const s = ($st?.value || '').trim().toLowerCase();
-    rows.forEach(tr => {
-      const matchQ = tr.dataset.search || '';
-      const st = (tr.dataset.status || '').toLowerCase();
-      const show = (!q || matchQ.includes(q)) && (!s || st === s);
-      tr.style.display = show ? '' : 'none';
-    });
+<%
+const pageStyles = `
+  /* ✅ Brand Color System */
+  :root {
+    --blue: #2563EB;
+    --blue-dark: #1d4ed8;
+    --purple: #7C3AED;
+    --purple-dark: #6d28d9;
+    --green: #22C55E;
+    --green-dark: #16a34a;
+    --black: #0F172A;
+    
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    
+    --transition: all 0.2s ease;
   }
-  $q?.addEventListener('input', apply);
-  $st?.addEventListener('change', apply);
-  apply();
 
-  // Accept/Reject toggling
-  document.querySelectorAll('.btn-reject').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
-      const row = btn.closest('td');
-      row.querySelector('.respond-form').style.display = 'none';
-      row.querySelector('.reject-form').style.display = '';
+  .dark-theme {
+    --bg-primary: var(--black);
+    --bg-secondary: var(--gray-800);
+    --text-primary: var(--gray-100);
+    --text-secondary: var(--gray-300);
+    --text-muted: var(--gray-400);
+    --border: var(--gray-700);
+    --accent-bg: rgba(124, 58, 237, 0.1);
+  }
+
+  :root {
+    --bg-primary: var(--gray-50);
+    --bg-secondary: white;
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-500);
+    --border: var(--gray-200);
+    --accent-bg: rgba(124, 58, 237, 0.05);
+  }
+
+  /* ✅ Matched Demands Page Container */
+  .matches-page {
+    max-width: 1200px;
+    margin: 0.75rem auto;
+    background: linear-gradient(135deg, var(--green) 0%, #16a34a 100%);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .matches-content {
+    background: var(--bg-primary);
+    margin: 2px;
+    border-radius: calc(var(--radius-xl) - 2px);
+    padding: 1.25rem;
+  }
+
+  /* ✅ Header */
+  .matches-header {
+    text-align: center;
+    padding: 0.5rem 0 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .matches-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  /* ✅ KPI Cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .kpi-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--green);
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(to right, var(--green), var(--blue));
+  }
+
+  .kpi-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .kpi-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--purple);
+    line-height: 1;
+  }
+
+  /* ✅ Filters Section */
+  .filters-section {
+    background: var(--accent-bg);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+  }
+
+  .filters-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .filter-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: var(--transition);
+  }
+
+  .filter-input:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  .filter-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .filter-select {
+    padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary) url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/16px 12px;
+    color: var(--text-primary);
+    transition: var(--transition);
+    cursor: pointer;
+    min-width: 150px;
+  }
+
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  /* ✅ Buttons */
+  .btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--green-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-accept {
+    background: var(--green);
+    color: white;
+  }
+
+  .btn-accept:hover {
+    background: var(--green-dark);
+    transform: translateY(-2px);
+  }
+
+  .btn-reject {
+    background: var(--blue);
+    color: white;
+  }
+
+  .btn-reject:hover {
+    background: var(--blue-dark);
+    transform: translateY(-2px);
+  }
+
+  .btn-yes {
+    background: #ef4444;
+    color: white;
+  }
+
+  .btn-yes:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+  }
+
+  .btn-cancel {
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .btn-cancel:hover {
+    background: var(--bg-primary);
+    border-color: var(--purple);
+  }
+
+  /* ✅ Table */
+  .table-container {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-top: 1.5rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .matches-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+  }
+
+  .matches-table th {
+    padding: 0.875rem 1rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .matches-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    vertical-align: top;
+  }
+
+  .matches-table tbody tr:hover {
+    background: var(--accent-bg);
+  }
+
+  /* ✅ Color-Coded Cells */
+  .cell-demand { color: var(--green); font-weight: 600; }
+  .cell-product { color: var(--purple); font-weight: 600; }
+  .cell-buyer { color: var(--blue); font-weight: 600; }
+  .cell-price { color: var(--green-dark); font-weight: 700; text-align: right; }
+  .cell-location { color: var(--text-secondary); }
+  .cell-score { color: var(--purple-dark); font-weight: 700; text-align: center; }
+
+  /* ✅ Status Badges */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-pending { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+  .status-accepted { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+  .status-rejected { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+  /* ✅ Tags */
+  .tag {
+    display: inline-block;
+    padding: 0.125rem 0.375rem;
+    background: var(--accent-bg);
+    color: var(--purple);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  /* ✅ Respond Forms */
+  .respond-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .row-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .message-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+  }
+
+  .message-input:focus {
+    outline: none;
+    border-color: var(--purple);
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.1);
+  }
+
+  /* ✅ Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 2px dashed var(--border);
+    margin: 2rem 0;
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-title {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .empty-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ✅ Mobile Optimizations */
+  @media (max-width: 480px) {
+    .matches-page {
+      margin: 0.5rem;
+    }
+    
+    .matches-content {
+      padding: 1rem;
+    }
+    
+    .page-title {
+      font-size: 1.25rem;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .filters-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .filter-input,
+    .filter-select,
+    .btn {
+      width: 100%;
+      min-width: auto;
+    }
+    
+    .matches-table {
+      min-width: 0;
+    }
+    
+    /* Mobile card view for table rows */
+    .table-container {
+      display: block;
+    }
+    
+    .matches-table {
+      display: block;
+    }
+    
+    .matches-table thead {
+      display: none;
+    }
+    
+    .matches-table tbody {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    
+    .matches-table tr {
+      display: block;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+    }
+    
+    .matches-table td {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 0.5rem 0;
+      border: none;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .matches-table td:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    
+    .matches-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      min-width: 80px;
+    }
+    
+    .row-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+    
+    .row-actions .btn {
+      width: 100%;
+    }
+  }
+
+  /* ✅ Very Small Screens */
+  @media (max-width: 360px) {
+    .matches-content {
+      padding: 0.75rem;
+    }
+    
+    .kpi-value {
+      font-size: 1.25rem;
+    }
+    
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 0.125rem 0.5rem;
+    }
+    
+    .tag {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.25rem;
+    }
+  }
+
+  /* ✅ Tablet Optimization */
+  @media (min-width: 481px) and (max-width: 768px) {
+    .matches-page {
+      margin: 1rem;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .row-actions {
+      flex-direction: column;
+    }
+  }
+
+  /* ✅ Print Styles */
+  @media print {
+    .matches-page {
+      background: white !important;
+      box-shadow: none !important;
+    }
+    
+    .matches-content {
+      background: white !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    .btn,
+    .filters-section,
+    .message-input {
+      display: none !important;
+    }
+    
+    .table-container {
+      break-inside: avoid;
+    }
+  }
+
+  /* ✅ Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .kpi-card,
+  .table-container {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.2s; }
+
+  /* ✅ Loading States */
+  .loading {
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+  }
+
+  .loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`;
+
+const pageScripts = `
+  document.addEventListener('DOMContentLoaded', function() {
+    // Filter functionality
+    const searchInput = document.getElementById('q');
+    const statusFilter = document.getElementById('status');
+    const rows = Array.from(document.querySelectorAll('.match-row'));
+    
+    // KPI elements
+    const kpiTotal = document.getElementById('kpiTotalMatches');
+    const kpiPending = document.getElementById('kpiPendingMatches');
+    const kpiAccepted = document.getElementById('kpiAcceptedMatches');
+    
+    function calculateKPIs() {
+      let total = 0;
+      let pending = 0;
+      let accepted = 0;
+      
+      rows.forEach(row => {
+        if (row.style.display !== 'none') {
+          total++;
+          const status = row.dataset.status || '';
+          if (status === 'pending') pending++;
+          if (status === 'accepted') accepted++;
+        }
+      });
+      
+      if (kpiTotal) kpiTotal.textContent = total;
+      if (kpiPending) kpiPending.textContent = pending;
+      if (kpiAccepted) kpiAccepted.textContent = accepted;
+    }
+    
+    function applyFilters() {
+      const searchQuery = (searchInput?.value || '').trim().toLowerCase();
+      const statusQuery = (statusFilter?.value || '').trim().toLowerCase();
+      
+      rows.forEach(row => {
+        const searchText = row.dataset.search || '';
+        const status = row.dataset.status || '';
+        
+        const matchesSearch = !searchQuery || searchText.includes(searchQuery);
+        const matchesStatus = !statusQuery || status === statusQuery;
+        
+        const shouldShow = matchesSearch && matchesStatus;
+        row.style.display = shouldShow ? '' : 'none';
+      });
+      
+      calculateKPIs();
+    }
+    
+    // Event listeners for filters
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilters);
+    }
+    
+    if (statusFilter) {
+      statusFilter.addEventListener('change', applyFilters);
+    }
+    
+    // Accept/Reject functionality
+    document.querySelectorAll('.btn-reject').forEach(button => {
+      button.addEventListener('click', function() {
+        const matchId = this.dataset.id;
+        const cell = this.closest('td');
+        const respondForm = cell.querySelector('.respond-form');
+        const rejectForm = cell.querySelector('.reject-form');
+        
+        respondForm.style.display = 'none';
+        rejectForm.style.display = 'block';
+      });
+    });
+    
+    document.querySelectorAll('.btn-cancel').forEach(button => {
+      button.addEventListener('click', function() {
+        const matchId = this.dataset.id;
+        const cell = this.closest('td');
+        const respondForm = cell.querySelector('.respond-form');
+        const rejectForm = cell.querySelector('.reject-form');
+        
+        rejectForm.style.display = 'none';
+        respondForm.style.display = 'block';
+      });
+    });
+    
+    // Form submission enhancement
+    document.querySelectorAll('.respond-form').forEach(form => {
+      form.addEventListener('submit', function(e) {
+        const button = this.querySelector('button[type="submit"]');
+        const originalText = button.innerHTML;
+        
+        // Show loading state
+        button.innerHTML = '<span>⏳</span> Processing...';
+        button.classList.add('loading');
+        button.disabled = true;
+        
+        // Prevent immediate submission to show loading
+        setTimeout(() => {
+          button.innerHTML = originalText;
+          button.classList.remove('loading');
+          button.disabled = false;
+        }, 2000);
+      });
+    });
+    
+    // Quick view functionality
+    document.querySelectorAll('.match-row').forEach(row => {
+      row.addEventListener('click', function(e) {
+        // Don't trigger on button clicks or form elements
+        if (e.target.tagName === 'BUTTON' || 
+            e.target.tagName === 'TEXTAREA' || 
+            e.target.tagName === 'INPUT' ||
+            e.target.closest('.row-actions')) {
+          return;
+        }
+        
+        // Toggle expanded view
+        this.classList.toggle('expanded');
+        
+        if (this.classList.contains('expanded')) {
+          const details = document.createElement('div');
+          details.className = 'match-details';
+          details.innerHTML = \`
+            <div class="details-content">
+              <h4>Match Details</h4>
+              <p>Score: <strong>\${this.dataset.score || 0}</strong></p>
+              <p>Created: \${new Date().toLocaleDateString()}</p>
+              <button class="btn btn-outline btn-close-details">Close</button>
+            </div>
+          \`;
+          
+          // Check if details already exist
+          const existingDetails = this.querySelector('.match-details');
+          if (existingDetails) {
+            existingDetails.remove();
+          } else {
+            this.appendChild(details);
+            
+            // Add close button functionality
+            details.querySelector('.btn-close-details').addEventListener('click', function() {
+              row.classList.remove('expanded');
+              details.remove();
+            });
+          }
+        } else {
+          const details = this.querySelector('.match-details');
+          if (details) details.remove();
+        }
+      });
+    });
+    
+    // Bulk actions (optional)
+    const bulkSelect = document.getElementById('bulkSelect');
+    const bulkAction = document.getElementById('bulkAction');
+    const applyBulkAction = document.getElementById('applyBulkAction');
+    
+    if (bulkSelect && bulkAction && applyBulkAction) {
+      applyBulkAction.addEventListener('click', function() {
+        const selectedRows = Array.from(rows).filter(row => 
+          row.querySelector('.bulk-select')?.checked
+        );
+        
+        if (selectedRows.length === 0) {
+          alert('Please select at least one match.');
+          return;
+        }
+        
+        const action = bulkAction.value;
+        const matchIds = selectedRows.map(row => row.dataset.matchId);
+        
+        // Confirm bulk action
+        if (confirm(\`Are you sure you want to \${action} \${selectedRows.length} match(es)?\`)) {
+          // In a real app, this would send a request to the server
+          console.log(\`Bulk action "\${action}" on:\`, matchIds);
+          alert(\`\${selectedRows.length} match(es) updated successfully.\`);
+        }
+      });
+    }
+    
+    // Initialize
+    applyFilters();
+    
+    // Add mobile-friendly table headers
+    if (window.innerWidth <= 480) {
+      const tableHeaders = [
+        'Demand', 'Product', 'Buyer', 'Price', 'Location', 'Score', 'Status', 'Respond'
+      ];
+      
+      document.querySelectorAll('.matches-table td').forEach((td, index) => {
+        const headerIndex = index % tableHeaders.length;
+        td.setAttribute('data-label', tableHeaders[headerIndex]);
+      });
+    }
+    
+    // Auto-refresh matches (optional feature)
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    let refreshInterval;
+    
+    if (autoRefreshToggle) {
+      autoRefreshToggle.addEventListener('change', function() {
+        if (this.checked) {
+          refreshInterval = setInterval(() => {
+            console.log('Auto-refreshing matches...');
+            // In a real implementation, this would fetch fresh data
+            applyFilters();
+          }, 300000); // 5 minutes
+        } else {
+          clearInterval(refreshInterval);
+        }
+      });
+    }
+    
+    // Initialize tooltips for score
+    document.querySelectorAll('.cell-score').forEach(cell => {
+      const score = parseInt(cell.textContent) || 0;
+      if (score > 0) {
+        cell.title = \`Match quality score: \${score}/100\`;
+      }
     });
   });
-  document.querySelectorAll('.btn-cancel').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
-      const row = btn.closest('td');
-      row.querySelector('.reject-form').style.display = 'none';
-      row.querySelector('.respond-form').style.display = '';
-    });
-  });
-})();
-</script>
+`;
+%>
 
-<style>
-  :root { --border:#e5e7eb; --card:#fff; --muted:#6b7280; --ink:#111827; --row-hover: rgba(37,99,235,.06);
-          --primary:#2563eb; --green:#16a34a; --red:#ef4444; --amber:#f59e0b; }
-  body.dark-theme { --card:#111827; --border:#374151; --ink:#e5e7eb; --muted:#94a3b8; --row-hover: rgba(59,130,246,.08); }
-
-  .toolbar{ display:flex; gap:.6rem; align-items:center; margin:.7rem 0; flex-wrap:wrap; }
-  .input{ padding:.55rem .7rem; border:1px solid var(--border); border-radius:.55rem; background:var(--card); color:inherit; min-width:180px; }
-  .btn{ padding:.45rem .7rem; border-radius:.5rem; border:0; cursor:pointer; }
-  .btn-accept{ background:var(--green); color:#fff; }
-  .btn-reject{ background:#f3f4f6; color:#111; }
-  .btn-yes{ background:var(--red); color:#fff; }
-  .btn-cancel{ background:#f3f4f6; color:#111; }
-
-  .nice-table{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--border); border-radius:.6rem; overflow:hidden; }
-  .nice-table th, .nice-table td{ padding:.65rem .6rem; border-bottom:1px solid var(--border); vertical-align:top; }
-  .nice-table thead th{ background:#f9fafb; font-weight:600; }
-  body.dark-theme .nice-table thead th{ background:#0b1220; }
-  .nice-table tbody tr:hover{ background:var(--row-hover); }
-
-  .title{ font-weight:700; }
-  .muted{ color:var(--muted); }
-  .badge{ padding:.2rem .5rem; border-radius:.5rem; font-size:.8rem; font-weight:600; text-transform:capitalize; }
-  .badge.pending{ background:#fff7ed; color:#9a3412; }
-  .badge.accepted{ background:#ecfdf5; color:#065f46; }
-  .badge.rejected{ background:#fef2f2; color:#991b1b; }
-  body.dark-theme .badge.pending{ background:#431407; color:#fdba74; }
-  body.dark-theme .badge.accepted{ background:#052e16; color:#86efac; }
-  body.dark-theme .badge.rejected{ background:#3f1d1d; color:#fca5a5; }
-
-  .row-actions{ display:flex; gap:.4rem; margin-bottom:.35rem; }
-  .msg{ width:100%; resize:vertical; }
-  
-  /* Mobile card mode */
-  .nice-table{ display:block; overflow-x:auto; }
-  @media (max-width:420px){
-    .toolbar .input{ flex:1 1 100%; min-width:0; }
-    .nice-table thead{ display:none; }
-    .nice-table tbody tr{ display:block; padding:.7rem; border-bottom:1px solid var(--border); }
-    .nice-table tbody tr:last-child{ border-bottom:none; }
-    .nice-table td{ display:flex; justify-content:space-between; gap:.75rem; padding:.45rem 0; border-bottom:none; }
-    .nice-table td::before{ content: attr(data-label); flex:0 0 auto; min-width:7.2rem; color:var(--muted); font-size:.85rem; }
-  }
+<!-- ✅ Inject Styles -->
+<style nonce="<%= nonce %>">
+  <%= pageStyles %>
 </style>
+
+<!-- ✅ Matched Demands Page -->
+<div class="matches-page">
+  <div class="matches-content">
+    <!-- Header -->
+    <header class="matches-header">
+      <div class="matches-badge">
+        <span>🤝</span>
+        <span>Business Opportunities</span>
+      </div>
+      <h1 class="page-title">Buyer Demands Matched to Your Products</h1>
+      <p class="page-subtitle">Respond to matched demands and grow your business</p>
+    </header>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Matches</div>
+        <div class="kpi-value" id="kpiTotalMatches"><%= matches ? matches.length : 0 %></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pending</div>
+        <div class="kpi-value" id="kpiPendingMatches">
+          <%= matches ? matches.filter(m => (m.status || 'pending').toLowerCase() === 'pending').length : 0 %>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Accepted</div>
+        <div class="kpi-value" id="kpiAcceptedMatches">
+          <%= matches ? matches.filter(m => (m.status || '').toLowerCase() === 'accepted').length : 0 %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <div class="filters-row">
+        <input type="search" 
+               id="q" 
+               class="filter-input" 
+               placeholder="Search (demand/product/buyer/location)…" 
+               aria-label="Search matches">
+        <select id="status" class="filter-select">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="accepted">Accepted</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        
+        <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+          <button id="exportMatches" class="btn btn-primary">
+            <span>📥</span>
+            Export
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk Actions (Optional) -->
+    <div class="filters-section" style="display: none;">
+      <div class="filters-row">
+        <select id="bulkAction" class="filter-select">
+          <option value="">Bulk Actions</option>
+          <option value="accept">Accept Selected</option>
+          <option value="reject">Reject Selected</option>
+          <option value="archive">Archive Selected</option>
+        </select>
+        <button id="applyBulkAction" class="btn btn-primary">Apply</button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <% if (!matches || matches.length === 0) { %>
+      <div class="empty-state">
+        <div class="empty-icon">🤝</div>
+        <h2 class="empty-title">No Matches Yet</h2>
+        <p class="empty-description">
+          When buyers' demands match your products, they'll appear here. 
+          Make sure your product catalog is complete and up-to-date to get more matches.
+        </p>
+        <div class="no-data-actions">
+          <a href="/products" class="btn btn-primary">
+            <span>📦</span>
+            Manage Products
+          </a>
+          <a href="/demands/aggregated" class="btn btn-primary" style="margin-left: 0.5rem;">
+            <span>🔍</span>
+            View Market Demands
+          </a>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- Matches Table -->
+    <% if (matches && matches.length > 0) { %>
+      <div class="table-container">
+        <div class="table-wrapper">
+          <table class="matches-table" id="tblSupplierMatches">
+            <thead>
+              <tr>
+                <th>Demand</th>
+                <th>Product</th>
+                <th>Buyer</th>
+                <th>Price</th>
+                <th>Location</th>
+                <th>Score</th>
+                <th>Status</th>
+                <th style="min-width: 240px;">Respond</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% matches.forEach(function(m){ 
+                const d  = m.demandId || {};
+                const p  = m.productId || {};
+                const b  = m.buyerId   || {};
+                const ss = m.snapshot  || {};
+
+                const demandTitle = d.title || d.productName || d.type || ss.demandTitle || "Demand";
+                const productName = p.name  || ss.productName || "—";
+                const productType = p.type  || ss.productType || "—";
+                const buyerName   = b.name  || b.businessName || "—";
+                const price = (typeof p.price !== "undefined") ? p.price : ss.productPrice;
+                const loc   = p.location || ss.productLocation || d.location || ss.demandLocation ||
+                              [p.country, p.province, p.city, p.town].filter(Boolean).join(", ") || "—";
+                const status = (m.status || "pending").toLowerCase();
+
+                const rowSearch = [demandTitle, productName, productType, buyerName, loc].join(" ").toLowerCase();
+              %>
+                <tr class="match-row"
+                    data-match-id="<%= m._id %>"
+                    data-search="<%= rowSearch %>"
+                    data-status="<%= status %>"
+                    data-score="<%= m.score || 0 %>">
+                  
+                  <!-- Demand -->
+                  <td>
+                    <div class="cell-demand"><%= demandTitle %></div>
+                    <div style="margin-top: 0.25rem;">
+                      <span class="tag"><%= productType %></span>
+                      <span style="color: var(--text-muted); font-size: 0.75rem; margin-left: 0.5rem;">
+                        Qty: <%= d.quantity || ss.demandQuantity || "—" %>
+                      </span>
+                    </div>
+                  </td>
+                  
+                  <!-- Product -->
+                  <td>
+                    <div class="cell-product"><%= productName %></div>
+                    <div style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem;">
+                      ID: <%= String(m.productId?._id || m.productId || "").slice(-6) %>
+                    </div>
+                  </td>
+                  
+                  <!-- Buyer -->
+                  <td class="cell-buyer"><%= buyerName %></td>
+                  
+                  <!-- Price -->
+                  <td class="cell-price">
+                    <% if (typeof price === "number") { %>
+                      R<%= price.toFixed(2) %>
+                    <% } else { %>
+                      <%= price || "—" %>
+                    <% } %>
+                  </td>
+                  
+                  <!-- Location -->
+                  <td class="cell-location"><%= loc %></td>
+                  
+                  <!-- Score -->
+                  <td class="cell-score"><%= Number(m.score || 0) %></td>
+                  
+                  <!-- Status -->
+                  <td>
+                    <span class="status-badge status-<%= status %>">
+                      <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+                    </span>
+                  </td>
+                  
+                  <!-- Respond -->
+                  <td>
+                    <!-- Accept Form -->
+                    <form method="post" action="/matches/<%= m._id %>/respond" class="respond-form">
+                      <input type="hidden" name="action" value="accepted" />
+                      <div class="row-actions">
+                        <button type="submit" class="btn btn-accept">
+                          <span>✓</span>
+                          Accept
+                        </button>
+                        <button type="button" class="btn btn-reject" data-id="<%= m._id %>">
+                          <span>✗</span>
+                          Reject
+                        </button>
+                      </div>
+                      <textarea name="message" 
+                                placeholder="Optional message to buyer…" 
+                                rows="2" 
+                                class="message-input"></textarea>
+                    </form>
+                    
+                    <!-- Reject Form (hidden by default) -->
+                    <form method="post" action="/matches/<%= m._id %>/respond" class="reject-form" style="display:none;">
+                      <input type="hidden" name="action" value="rejected" />
+                      <textarea name="message" 
+                                placeholder="Reason for rejection (optional)..." 
+                                rows="2" 
+                                class="message-input"></textarea>
+                      <div class="row-actions">
+                        <button type="submit" class="btn btn-yes">
+                          <span>✗</span>
+                          Confirm Reject
+                        </button>
+                        <button type="button" class="btn btn-cancel" data-id="<%= m._id %>">
+                          <span>←</span>
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<!-- ✅ Inject Scripts -->
+<script nonce="<%= nonce %>">
+  <%= pageScripts %>
+</script>

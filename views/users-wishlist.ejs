@@ -2,98 +2,1724 @@
   const NONCE = (typeof nonce !== 'undefined') ? nonce : '';
   const THEME = (themeCss && themeCss.includes('dark')) ? 'dark-theme' : 'light-theme';
   const list = Array.isArray(items) ? items : [];
+  const wishlistCount = list.length;
+  const totalValue = list.reduce((sum, row) => {
+    const p = row.product || {};
+    return sum + Number(p?.price || 0);
+  }, 0);
+  
   function money(n, cur){
     const C = (cur || 'USD').toUpperCase();
     const sym = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' }[C] || (C + ' ');
     return sym + Number(n || 0).toFixed(2);
   }
+  
+  function formatDate(dateString) {
+    if (!dateString) return 'Recently added';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now - date;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
 %>
 
+<!-- Brand Header -->
+<div class="brand-header">
+  <div class="logo-preview">
+    <div class="logo-color blue"></div>
+    <div class="logo-color purple"></div>
+    <div class="logo-color green"></div>
+    <div class="logo-color black"></div>
+  </div>
+</div>
+
+<!-- Flash Messages -->
 <% (success || []).forEach(msg => { %>
-  <div class="flash flash-success">✅ <%= msg %></div>
+  <div class="flash flash-success">
+    <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+    <div class="flash-content">
+      <strong>Success!</strong> <%= msg %>
+    </div>
+  </div>
 <% }) %>
+
 <% (error || []).forEach(msg => { %>
-  <div class="flash flash-error">❌ <%= msg %></div>
+  <div class="flash flash-error">
+    <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="15" y1="9" x2="9" y2="15"></line>
+      <line x1="9" y1="9" x2="15" y2="15"></line>
+    </svg>
+    <div class="flash-content">
+      <strong>Error:</strong> <%= msg %>
+    </div>
+  </div>
 <% }) %>
 
 <main class="wl-page <%= THEME %>">
-  <header class="wl-head">
-    <h1>💖 My Wishlist</h1>
-    <p class="muted">Save products you love and add them to your cart later.</p>
+  <!-- Page Header -->
+  <header class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <svg class="title-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+          My Wishlist
+        </h1>
+        <p class="page-subtitle">Save products you love and add them to your cart later</p>
+      </div>
+      
+      <!-- Wishlist Stats -->
+      <div class="stats-cards">
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Items</span>
+            <span class="stat-value"><%= wishlistCount %></span>
+          </div>
+        </div>
+        
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M16 8l-8 8"></path>
+              <path d="M8 8l8 8"></path>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Total Value</span>
+            <span class="stat-value"><%= money(totalValue, 'USD') %></span>
+          </div>
+        </div>
+        
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Avg. Price</span>
+            <span class="stat-value"><%= wishlistCount > 0 ? money(totalValue / wishlistCount, 'USD') : '$0.00' %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="header-actions">
+      <div class="action-group">
+        <a href="/sales" class="btn btn-secondary">
+          <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          Browse Products
+        </a>
+        
+        <% if (wishlistCount > 0) { %>
+          <button type="button" class="btn btn-outline" id="shareWishlist">
+            <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            Share Wishlist
+          </button>
+          
+          <button type="button" class="btn btn-outline" id="addAllToCart">
+            <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="21" r="1"></circle>
+              <circle cx="20" cy="21" r="1"></circle>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+            </svg>
+            Add All to Cart
+          </button>
+        <% } %>
+      </div>
+    </div>
   </header>
 
+  <!-- Empty State -->
   <% if (!list.length) { %>
-    <div class="empty card">
-      <p>Your wishlist is empty.</p>
-      <a href="/sales" class="btn btn-primary">Browse products</a>
+    <div class="empty-state card">
+      <div class="empty-icon">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        </svg>
+      </div>
+      <h2>Your wishlist is empty</h2>
+      <p class="empty-description">
+        Start building your collection by adding products you love.
+        Your wishlist helps you save items for later and track prices.
+      </p>
+      <div class="empty-actions">
+        <a href="/sales" class="btn btn-primary">
+          <svg class="btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          Explore Products
+        </a>
+        <a href="/products/featured" class="btn btn-outline">
+          <svg class="btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+          View Featured
+        </a>
+      </div>
     </div>
   <% } else { %>
-    <section class="grid">
-      <% list.forEach(function(row){ 
-           const p = row.product || {};
-           const pid = p?._id;
-           const name = p?.name || p?.title || 'Product';
-           const price = Number(p?.price || 0);
-           const img = p?.imageUrl || p?.image || '/img/placeholder.png';
-      %>
-        <article class="card item">
-          <a href="/products/<%= pid %>" class="pic">
-            <img src="<%= img %>" alt="<%= name %>" />
-          </a>
-          <div class="info">
-            <h3 class="name"><a href="/products/<%= pid %>"><%= name %></a></h3>
-            <div class="meta">
-              <span class="price"><%= money(price, 'USD') %></span>
-            </div>
-            <div class="actions">
-              <form action="/api/cart/add" method="post">
-                <input type="hidden" name="pid" value="<%= pid %>" />
-                <button class="btn btn-primary" type="submit">Add to cart</button>
-              </form>
-              <form action="/users/wishlist/remove/<%= pid %>" method="post">
-                <button class="btn btn-ghost danger" type="submit" aria-label="Remove from wishlist">Remove</button>
-              </form>
-            </div>
+    <!-- Wishlist Content -->
+    <div class="wishlist-content">
+      <!-- Filters & Sort -->
+      <div class="wishlist-toolbar">
+        <div class="toolbar-section">
+          <div class="filter-group">
+            <button type="button" class="filter-btn active" data-filter="all">
+              All Items (<%= wishlistCount %>)
+            </button>
+            <button type="button" class="filter-btn" data-filter="available">
+              Available
+            </button>
+            <button type="button" class="filter-btn" data-filter="sale">
+              On Sale
+            </button>
           </div>
-        </article>
-      <% }) %>
-    </section>
+        </div>
+        
+        <div class="toolbar-section">
+          <div class="sort-group">
+            <label class="sort-label">Sort by:</label>
+            <select class="sort-select" id="sortSelect">
+              <option value="recent">Recently Added</option>
+              <option value="price-low">Price: Low to High</option>
+              <option value="price-high">Price: High to Low</option>
+              <option value="name">Name: A to Z</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wishlist Grid -->
+      <section class="wishlist-grid">
+        <% list.forEach(function(row, index){ 
+             const p = row.product || {};
+             const pid = p?._id;
+             const name = p?.name || p?.title || 'Product';
+             const price = Number(p?.price || 0);
+             const originalPrice = Number(p?.originalPrice || price);
+             const discount = originalPrice > price ? Math.round((1 - price / originalPrice) * 100) : 0;
+             const img = p?.imageUrl || p?.image || '/img/placeholder.png';
+             const stock = p?.stock || 0;
+             const isAvailable = stock > 0;
+             const addedDate = row.createdAt || row.addedAt;
+             const category = p?.category || 'Uncategorized';
+        %>
+          <article class="wishlist-item card" data-id="<%= pid %>" data-price="<%= price %>" data-added="<%= addedDate %>" data-name="<%= name.toLowerCase() %>" data-available="<%= isAvailable %>">
+            <!-- Item Image -->
+            <div class="item-image">
+              <a href="/products/<%= pid %>" class="image-link">
+                <img src="<%= img %>" alt="<%= name %>" loading="lazy" />
+                <% if (discount > 0) { %>
+                  <span class="discount-badge">-<%= discount %>%</span>
+                <% } %>
+                <% if (!isAvailable) { %>
+                  <div class="out-of-stock">
+                    <span>Out of Stock</span>
+                  </div>
+                <% } %>
+              </a>
+              
+              <!-- Quick Actions -->
+              <div class="quick-actions">
+                <button type="button" class="quick-btn remove-btn" data-pid="<%= pid %>" aria-label="Remove from wishlist">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+                
+                <button type="button" class="quick-btn compare-btn" data-pid="<%= pid %>" aria-label="Add to compare">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 18 22 12 16 6"></polyline>
+                    <polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Item Info -->
+            <div class="item-info">
+              <!-- Category & Date -->
+              <div class="item-meta">
+                <span class="item-category"><%= category %></span>
+                <span class="item-date">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <%= formatDate(addedDate) %>
+                </span>
+              </div>
+              
+              <!-- Product Name -->
+              <h3 class="item-name">
+                <a href="/products/<%= pid %>"><%= name %></a>
+              </h3>
+              
+              <!-- Price -->
+              <div class="item-price">
+                <% if (discount > 0) { %>
+                  <span class="original-price"><%= money(originalPrice, 'USD') %></span>
+                <% } %>
+                <span class="current-price"><%= money(price, 'USD') %></span>
+                
+                <% if (discount > 0) { %>
+                  <span class="discount-text">Save <%= money(originalPrice - price, 'USD') %></span>
+                <% } %>
+              </div>
+              
+              <!-- Stock Status -->
+              <div class="item-stock">
+                <% if (isAvailable) { %>
+                  <span class="stock-available">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M8 12l3 3 5-6"></path>
+                    </svg>
+                    In Stock
+                  </span>
+                <% } else { %>
+                  <span class="stock-out">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="8" y1="8" x2="16" y2="16"></line>
+                      <line x1="16" y1="8" x2="8" y2="16"></line>
+                    </svg>
+                    Out of Stock
+                  </span>
+                <% } %>
+              </div>
+              
+              <!-- Primary Actions -->
+              <div class="item-actions">
+                <form action="/api/cart/add" method="post" class="cart-form">
+                  <input type="hidden" name="pid" value="<%= pid %>" />
+                  <input type="hidden" name="quantity" value="1" />
+                  <button class="btn btn-primary add-to-cart" type="submit" <%= !isAvailable ? 'disabled' : '' %>>
+                    <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="9" cy="21" r="1"></circle>
+                      <circle cx="20" cy="21" r="1"></circle>
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    Add to Cart
+                  </button>
+                </form>
+                
+                <button type="button" class="btn btn-ghost remove-item" data-pid="<%= pid %>">
+                  <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  Remove
+                </button>
+              </div>
+            </div>
+          </article>
+        <% }) %>
+      </section>
+    </div>
   <% } %>
 </main>
 
+<!-- Share Modal -->
+<div class="modal" id="shareModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Share Your Wishlist</h3>
+      <button type="button" class="modal-close" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="share-options">
+        <button type="button" class="share-option" data-platform="link">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+          <span>Copy Link</span>
+        </button>
+        
+        <button type="button" class="share-option" data-platform="email">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          <span>Email</span>
+        </button>
+      </div>
+      
+      <div class="share-link">
+        <input type="text" readonly value="<%= `${new URL('/', window.location.origin)}wishlist/${user?._id || 'shared'}` %>" id="shareLink" />
+        <button type="button" class="btn btn-primary" id="copyShareLink">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <style nonce="<%= NONCE %>">
-  :root{
-    --bg:#fff; --text:#111827; --muted:#6b7280; --card:#fff; --border:#e5e7eb;
-    --brand:#111827; --brand-contrast:#fff; --radius:14px; --shadow:0 6px 18px rgba(0,0,0,.06);
+  /* Brand Color Variables */
+  :root {
+    --brand-blue: #2563EB;    /* Trust & Reliability */
+    --brand-purple: #7C3AED;  /* Innovation & Creativity */
+    --brand-green: #22C55E;   /* Growth & Success (Primary) */
+    --brand-black: #0F172A;   /* Sophistication & Premium */
+    
+    --bg-primary: #22C55E;
+    --bg-secondary: #f0fdf4;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --success-light: #dcfce7;
+    --error-light: #fee2e2;
+    --warning-light: #fef3c7;
   }
-  .dark-theme{
-    --bg:#0b0b0b; --text:#f3f4f6; --muted:#9ca3af; --card:#141414; --border:#262626;
-    --brand:#f3f4f6; --brand-contrast:#111;
+
+  .dark-theme {
+    --bg-primary: #16a34a;
+    --bg-secondary: #052e16;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --card-bg: #1e293b;
+    --card-border: #334155;
+    --success-light: #064e3b;
+    --error-light: #7f1d1d;
+    --warning-light: #78350f;
   }
-  html,body{background:var(--bg);color:var(--text);margin:0}
-  .wl-page{max-width:1100px;margin:0 auto;padding:12px}
-  .wl-head h1{margin:0 0 4px;font-size:clamp(18px,6vw,28px)}
-  .muted{color:var(--muted)}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px}
-  .empty{text-align:center;padding:24px}
-  .btn{display:inline-block;border:1px solid var(--brand);border-radius:10px;padding:10px 12px;text-decoration:none;cursor:pointer}
-  .btn-primary{background:var(--brand);color:var(--brand-contrast)}
-  .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
-  .btn.danger{color:#b91c1c;border-color:#fecaca}
-  .grid{display:grid;gap:12px;grid-template-columns:1fr}
-  .item{display:grid;grid-template-columns:100px 1fr;gap:12px;align-items:center}
-  .pic img{width:100px;height:100px;object-fit:cover;border-radius:10px;border:1px solid var(--border)}
-  .name{margin:.2rem 0 .4rem;font-size:clamp(14px,4.5vw,18px)}
-  .meta{font-size:.95rem;color:var(--muted)}
-  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
-  .flash{margin:.6rem 0;padding:.6rem .8rem;border-radius:10px}
-  .flash-success{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
-  .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
-  @media(min-width:560px){ .grid{grid-template-columns:repeat(2,1fr)} }
-  @media(min-width:900px){ .grid{grid-template-columns:repeat(3,1fr)} }
+
+  /* Base Styles */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.5;
+  }
+
+  /* Brand Header */
+  .brand-header {
+    background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
+    padding: 0.75rem 1rem;
+    text-align: center;
+  }
+
+  .logo-preview {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .logo-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  .logo-color.blue { background: white; }
+  .logo-color.purple { background: white; opacity: 0.8; }
+  .logo-color.green { background: white; opacity: 0.6; }
+  .logo-color.black { background: white; opacity: 0.4; }
+
+  /* Page Layout */
+  .wl-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+
+  /* Page Header */
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .title-section {
+    text-align: center;
+  }
+
+  .page-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .title-icon {
+    color: var(--brand-purple);
+  }
+
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+  }
+
+  /* Stats Cards */
+  .stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+
+  .stat-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  /* Action Buttons */
+  .header-actions {
+    margin-bottom: 2rem;
+  }
+
+  .action-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--brand-green), #16a34a);
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: linear-gradient(135deg, var(--brand-purple), #9333ea);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--text-primary);
+    border: 2px solid var(--card-border);
+  }
+
+  .btn-outline:hover {
+    border-color: var(--brand-blue);
+    background: rgba(37, 99, 235, 0.05);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+  }
+
+  .btn-ghost:hover {
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .btn-icon {
+    flex-shrink: 0;
+  }
+
+  /* Card */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    max-width: 600px;
+    margin: 2rem auto;
+  }
+
+  .empty-icon {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(37, 99, 235, 0.1));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+    color: var(--brand-purple);
+  }
+
+  .empty-state h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+
+  .empty-description {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  /* Wishlist Toolbar */
+  .wishlist-toolbar {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .filter-btn {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .filter-btn:hover {
+    border-color: var(--brand-blue);
+    color: var(--brand-blue);
+  }
+
+  .filter-btn.active {
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
+    color: white;
+  }
+
+  .sort-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .sort-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .sort-select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+  }
+
+  .sort-select:focus {
+    outline: none;
+    border-color: var(--brand-green);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.1);
+  }
+
+  /* Wishlist Grid */
+  .wishlist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+
+  /* Wishlist Item */
+  .wishlist-item {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .item-image {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+  }
+
+  .image-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .item-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .wishlist-item:hover .item-image img {
+    transform: scale(1.05);
+  }
+
+  .discount-badge {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: linear-gradient(135deg, var(--brand-green), #16a34a);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .out-of-stock {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  .quick-actions {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .wishlist-item:hover .quick-actions {
+    opacity: 1;
+  }
+
+  .quick-btn {
+    width: 36px;
+    height: 36px;
+    background: white;
+    border: 1px solid var(--card-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .quick-btn:hover {
+    background: var(--brand-purple);
+    color: white;
+    border-color: var(--brand-purple);
+    transform: scale(1.1);
+  }
+
+  .remove-btn:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+  }
+
+  .item-info {
+    padding: 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .item-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+  }
+
+  .item-category {
+    background: rgba(124, 58, 237, 0.1);
+    color: var(--brand-purple);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .item-date {
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .item-name {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .item-name a {
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .item-name a:hover {
+    color: var(--brand-blue);
+    text-decoration: underline;
+  }
+
+  .item-price {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .original-price {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+    font-size: 0.875rem;
+  }
+
+  .current-price {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--brand-green);
+  }
+
+  .discount-text {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--brand-green);
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .item-stock {
+    font-size: 0.875rem;
+  }
+
+  .stock-available {
+    color: var(--brand-green);
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .stock-out {
+    color: #ef4444;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .item-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: auto;
+  }
+
+  .cart-form {
+    flex: 1;
+  }
+
+  .add-to-cart {
+    width: 100%;
+  }
+
+  /* Flash Messages */
+  .flash {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    margin: 1rem auto;
+    max-width: 1200px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    animation: slideIn 0.3s ease;
+  }
+
+  .flash-success {
+    background: var(--success-light);
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .flash-error {
+    background: var(--error-light);
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .flash-icon {
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+  }
+
+  .flash-content {
+    flex: 1;
+  }
+
+  .flash-content strong {
+    font-weight: 600;
+  }
+
+  .dark-theme .flash-success {
+    color: #a7f3d0;
+  }
+
+  .dark-theme .flash-error {
+    color: #fecaca;
+  }
+
+  /* Modal */
+  .modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .modal.active {
+    display: flex;
+  }
+
+  .modal-content {
+    background: var(--card-bg);
+    border-radius: 16px;
+    max-width: 500px;
+    width: 100%;
+    animation: modalSlideIn 0.3s ease;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .modal-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-close:hover {
+    background: var(--card-border);
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+  }
+
+  .share-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .share-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: var(--card-border);
+    border: none;
+    border-radius: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .share-option:hover {
+    background: var(--brand-blue);
+    color: white;
+    transform: translateY(-2px);
+  }
+
+  .share-link {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .share-link input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: var(--card-border);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+  }
+
+  .share-link input:focus {
+    outline: none;
+    border-color: var(--brand-green);
+  }
+
+  /* Animations */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes modalSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Mobile Optimizations for Hisense U50 Lite (360px width) */
+  @media (max-width: 360px) {
+    .wl-page {
+      padding: 1rem 0.75rem;
+    }
+
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .page-subtitle {
+      font-size: 0.875rem;
+    }
+
+    .stats-cards {
+      grid-template-columns: 1fr;
+    }
+
+    .action-group {
+      flex-direction: column;
+    }
+
+    .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .wishlist-toolbar {
+      flex-direction: column;
+      align-items: stretch;
+      padding: 1rem;
+    }
+
+    .toolbar-section {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .filter-group {
+      justify-content: center;
+    }
+
+    .sort-group {
+      justify-content: center;
+    }
+
+    .wishlist-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .item-actions {
+      flex-direction: column;
+    }
+
+    .empty-state {
+      padding: 2rem 1rem;
+    }
+
+    .empty-icon {
+      width: 80px;
+      height: 80px;
+    }
+
+    .empty-state h2 {
+      font-size: 1.25rem;
+    }
+
+    .empty-description {
+      font-size: 0.875rem;
+    }
+
+    .empty-actions {
+      flex-direction: column;
+    }
+  }
+
+  /* Tablet */
+  @media (min-width: 768px) {
+    .wishlist-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* Desktop */
+  @media (min-width: 1024px) {
+    .wishlist-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .header-content {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .title-section {
+      text-align: left;
+    }
+    
+    .page-title {
+      justify-content: flex-start;
+    }
+  }
+
+  /* Large Desktop */
+  @media (min-width: 1280px) {
+    .wishlist-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  /* Accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Focus styles for keyboard navigation */
+  :focus-visible {
+    outline: 2px solid var(--brand-green);
+    outline-offset: 2px;
+  }
 </style>
 
 <script nonce="<%= NONCE %>">
-// (Optional) progressive enhancement hooks could live here later.
-// Kept empty for CSP-safety and to avoid EJS inside JS issues.
+  (function () {
+    'use strict';
+
+    // Navigation Helper
+    const initNavigation = () => {
+      document.querySelectorAll('a[data-nav="true"]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = link.href;
+        });
+      });
+    };
+
+    // Filtering Functionality
+    const initFilters = () => {
+      const filterButtons = document.querySelectorAll('.filter-btn');
+      const wishlistItems = document.querySelectorAll('.wishlist-item');
+      
+      if (!filterButtons.length || !wishlistItems.length) return;
+
+      const filterItems = (filter) => {
+        wishlistItems.forEach(item => {
+          const isAvailable = item.getAttribute('data-available') === 'true';
+          
+          switch (filter) {
+            case 'all':
+              item.style.display = 'flex';
+              break;
+            case 'available':
+              item.style.display = isAvailable ? 'flex' : 'none';
+              break;
+            case 'sale':
+              const hasDiscount = item.querySelector('.discount-badge');
+              item.style.display = hasDiscount ? 'flex' : 'none';
+              break;
+            default:
+              item.style.display = 'flex';
+          }
+        });
+      };
+
+      filterButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          // Update active state
+          filterButtons.forEach(btn => btn.classList.remove('active'));
+          button.classList.add('active');
+          
+          // Apply filter
+          const filter = button.getAttribute('data-filter');
+          filterItems(filter);
+        });
+      });
+    };
+
+    // Sorting Functionality
+    const initSorting = () => {
+      const sortSelect = document.getElementById('sortSelect');
+      const wishlistContainer = document.querySelector('.wishlist-grid');
+      
+      if (!sortSelect || !wishlistContainer) return;
+
+      const sortItems = (sortBy) => {
+        const items = Array.from(document.querySelectorAll('.wishlist-item'));
+        
+        items.sort((a, b) => {
+          switch (sortBy) {
+            case 'price-low':
+              const priceA = parseFloat(a.getAttribute('data-price'));
+              const priceB = parseFloat(b.getAttribute('data-price'));
+              return priceA - priceB;
+              
+            case 'price-high':
+              const priceC = parseFloat(a.getAttribute('data-price'));
+              const priceD = parseFloat(b.getAttribute('data-price'));
+              return priceD - priceC;
+              
+            case 'name':
+              const nameA = a.getAttribute('data-name').toLowerCase();
+              const nameB = b.getAttribute('data-name').toLowerCase();
+              return nameA.localeCompare(nameB);
+              
+            case 'recent':
+            default:
+              const dateA = new Date(a.getAttribute('data-added'));
+              const dateB = new Date(b.getAttribute('data-added'));
+              return dateB - dateA;
+          }
+        });
+        
+        // Reorder items in DOM
+        items.forEach(item => {
+          wishlistContainer.appendChild(item);
+        });
+      };
+
+      sortSelect.addEventListener('change', (e) => {
+        sortItems(e.target.value);
+      });
+    };
+
+    // Quick Actions
+    const initQuickActions = () => {
+      // Remove item buttons
+      document.querySelectorAll('.remove-btn, .remove-item').forEach(button => {
+        button.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const pid = button.getAttribute('data-pid');
+          if (!pid) return;
+          
+          const item = button.closest('.wishlist-item');
+          if (!item) return;
+          
+          // Show confirmation for remove buttons without form
+          if (!button.closest('form')) {
+            if (!confirm('Remove this item from your wishlist?')) {
+              return;
+            }
+          }
+          
+          // Visual feedback
+          item.style.opacity = '0.5';
+          item.style.pointerEvents = 'none';
+          
+          // If it's a form, submit it
+          if (button.closest('form')) {
+            button.closest('form').submit();
+            return;
+          }
+          
+          // Otherwise handle with fetch
+          try {
+            const response = await fetch(`/users/wishlist/remove/${pid}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (response.ok) {
+              // Slide out animation
+              item.style.transition = 'all 0.3s ease';
+              item.style.transform = 'translateX(-100%)';
+              item.style.opacity = '0';
+              
+              setTimeout(() => {
+                item.remove();
+                
+                // Update item count
+                const itemCount = document.querySelectorAll('.wishlist-item').length;
+                const allFilter = document.querySelector('.filter-btn[data-filter="all"]');
+                if (allFilter) {
+                  allFilter.textContent = `All Items (${itemCount})`;
+                }
+                
+                // Show success message
+                showFlashMessage('Item removed from wishlist', 'success');
+              }, 300);
+            } else {
+              throw new Error('Failed to remove item');
+            }
+          } catch (error) {
+            console.error('Error:', error);
+            showFlashMessage('Failed to remove item', 'error');
+            
+            // Reset item state
+            item.style.opacity = '1';
+            item.style.pointerEvents = 'auto';
+          }
+        });
+      });
+      
+      // Compare button
+      document.querySelectorAll('.compare-btn').forEach(button => {
+        button.addEventListener('click', () => {
+          // Add compare functionality here
+          showFlashMessage('Compare feature coming soon!', 'success');
+        });
+      });
+    };
+
+    // Add All to Cart
+    const initAddAllToCart = () => {
+      const addAllBtn = document.getElementById('addAllToCart');
+      if (!addAllBtn) return;
+      
+      addAllBtn.addEventListener('click', async () => {
+        const items = document.querySelectorAll('.wishlist-item[data-available="true"]');
+        if (items.length === 0) {
+          showFlashMessage('No available items to add to cart', 'error');
+          return;
+        }
+        
+        if (!confirm(`Add ${items.length} available items to cart?`)) {
+          return;
+        }
+        
+        // Show loading state
+        addAllBtn.disabled = true;
+        const originalText = addAllBtn.innerHTML;
+        addAllBtn.innerHTML = '<span>Adding items...</span>';
+        
+        try {
+          // Get all available product IDs
+          const productIds = Array.from(items).map(item => 
+            item.getAttribute('data-id')
+          ).filter(id => id);
+          
+          // Add each product to cart
+          for (const pid of productIds) {
+            const formData = new FormData();
+            formData.append('pid', pid);
+            formData.append('quantity', '1');
+            
+            await fetch('/api/cart/add', {
+              method: 'POST',
+              body: formData,
+            });
+          }
+          
+          showFlashMessage(`Successfully added ${productIds.length} items to cart!`, 'success');
+          
+        } catch (error) {
+          console.error('Error:', error);
+          showFlashMessage('Failed to add some items to cart', 'error');
+        } finally {
+          // Reset button
+          addAllBtn.disabled = false;
+          addAllBtn.innerHTML = originalText;
+        }
+      });
+    };
+
+    // Share Wishlist
+    const initShareWishlist = () => {
+      const shareBtn = document.getElementById('shareWishlist');
+      const shareModal = document.getElementById('shareModal');
+      const closeBtn = shareModal?.querySelector('.modal-close');
+      const copyBtn = document.getElementById('copyShareLink');
+      const shareLinkInput = document.getElementById('shareLink');
+      const shareOptions = document.querySelectorAll('.share-option');
+      
+      if (!shareBtn || !shareModal) return;
+      
+      // Open modal
+      shareBtn.addEventListener('click', () => {
+        shareModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      });
+      
+      // Close modal
+      const closeModal = () => {
+        shareModal.classList.remove('active');
+        document.body.style.overflow = 'auto';
+      };
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeModal);
+      }
+      
+      // Close on outside click
+      shareModal.addEventListener('click', (e) => {
+        if (e.target === shareModal) {
+          closeModal();
+        }
+      });
+      
+      // Close on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && shareModal.classList.contains('active')) {
+          closeModal();
+        }
+      });
+      
+      // Copy link
+      if (copyBtn && shareLinkInput) {
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(shareLinkInput.value);
+            
+            // Show success feedback
+            const originalText = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg> Copied!';
+            copyBtn.style.background = '#22C55E';
+            
+            setTimeout(() => {
+              copyBtn.innerHTML = originalText;
+              copyBtn.style.background = '';
+            }, 2000);
+          } catch (err) {
+            console.error('Failed to copy:', err);
+            showFlashMessage('Failed to copy link', 'error');
+          }
+        });
+      }
+      
+      // Share options
+      shareOptions.forEach(option => {
+        option.addEventListener('click', () => {
+          const platform = option.getAttribute('data-platform');
+          const url = window.location.href;
+          const title = 'My Wishlist';
+          
+          if (platform === 'link') {
+            shareLinkInput.select();
+            shareLinkInput.focus();
+          } else if (platform === 'email') {
+            const subject = encodeURIComponent('Check out my wishlist!');
+            const body = encodeURIComponent(`I wanted to share my wishlist with you:\n\n${url}`);
+            window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+          }
+        });
+      });
+    };
+
+    // Flash Message Helper
+    const showFlashMessage = (message, type = 'success') => {
+      const flash = document.createElement('div');
+      flash.className = `flash flash-${type}`;
+      flash.innerHTML = `
+        <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          ${type === 'success' ? 
+            '<polyline points="20 6 9 17 4 12"></polyline>' :
+            '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>'
+          }
+        </svg>
+        <div class="flash-content">
+          <strong>${type === 'success' ? 'Success!' : 'Error:'}</strong> ${message}
+        </div>
+      `;
+      
+      // Insert after brand header
+      const brandHeader = document.querySelector('.brand-header');
+      if (brandHeader) {
+        brandHeader.parentNode.insertBefore(flash, brandHeader.nextSibling);
+      } else {
+        document.body.insertBefore(flash, document.body.firstChild);
+      }
+      
+      // Remove after 5 seconds
+      setTimeout(() => {
+        if (flash.parentNode) {
+          flash.style.opacity = '0';
+          flash.style.transform = 'translateY(-10px)';
+          flash.style.transition = 'all 0.3s ease';
+          
+          setTimeout(() => {
+            if (flash.parentNode) {
+              flash.parentNode.removeChild(flash);
+            }
+          }, 300);
+        }
+      }, 5000);
+    };
+
+    // Form Submission Enhancement
+    const initFormEnhancements = () => {
+      document.querySelectorAll('.cart-form').forEach(form => {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          
+          const button = form.querySelector('.add-to-cart');
+          if (!button) return;
+          
+          // Show loading state
+          const originalText = button.innerHTML;
+          button.innerHTML = '<span>Adding...</span>';
+          button.disabled = true;
+          
+          try {
+            const formData = new FormData(form);
+            const response = await fetch(form.action, {
+              method: 'POST',
+              body: formData,
+            });
+            
+            if (response.ok) {
+              showFlashMessage('Item added to cart!', 'success');
+              
+              // Optional: Update cart count in header
+              const cartCount = document.querySelector('[data-cart-count]');
+              if (cartCount) {
+                const currentCount = parseInt(cartCount.textContent) || 0;
+                cartCount.textContent = currentCount + 1;
+              }
+            } else {
+              throw new Error('Failed to add to cart');
+            }
+          } catch (error) {
+            console.error('Error:', error);
+            showFlashMessage('Failed to add item to cart', 'error');
+          } finally {
+            // Reset button
+            button.innerHTML = originalText;
+            button.disabled = false;
+          }
+        });
+      });
+    };
+
+    // Initialize everything when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      initNavigation();
+      initFilters();
+      initSorting();
+      initQuickActions();
+      initAddAllToCart();
+      initShareWishlist();
+      initFormEnhancements();
+      
+      // Add entrance animation to items
+      const items = document.querySelectorAll('.wishlist-item');
+      items.forEach((item, index) => {
+        item.style.opacity = '0';
+        item.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+          item.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+          item.style.opacity = '1';
+          item.style.transform = 'translateY(0)';
+        }, index * 50);
+      });
+    });
+
+  })();
 </script>

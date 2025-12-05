@@ -1,21 +1,1666 @@
-<h1>Business Products Dashboard</h1>
+<!--views/product.ejs-->
+<!-- Business Products Dashboard -->
+<section class="dashboard-page">
+  <!-- Brand Header -->
+  <div class="brand-header">
+    <div class="logo-preview">
+      <div class="logo-color blue"></div>
+      <div class="logo-color purple"></div>
+      <div class="logo-color green"></div>
+      <div class="logo-color black"></div>
+    </div>
+    <h1 class="dashboard-title">📊 Business Products Dashboard</h1>
+    <p class="dashboard-subtitle">Manage your product inventory and track performance</p>
+  </div>
 
-<% if (success) { %>
-  <div class="flash flash-success"><%= success %></div>
-<% } %>
-<% if (error) { %>
-  <div class="flash flash-error"><%= error %></div>
-<% } %>
+  <!-- Dashboard Stats -->
+  <div class="dashboard-stats">
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Total Products</span>
+        <span class="stat-value" id="totalProducts"><%= products?.length || 0 %></span>
+      </div>
+    </div>
 
-<div class="products-container <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <% if (!products || products.length === 0) { %>
-    <p>No products found. Start by adding a new product!</p>
-  <% } else { %>
-    <% products.forEach(product => { %>
-      <%- include('partials/product-card', { product }) %>
-    <% }) %>
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Active Products</span>
+        <span class="stat-value" id="activeProducts">
+          <% const activeCount = products?.filter(p => p.status === 'active' || p.inStock)?.length || 0; %>
+          <%= activeCount %>
+        </span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 1v22"></path>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Total Value</span>
+        <span class="stat-value">
+          <% 
+            const totalValue = products?.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0) || 0;
+            const formatter = new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 2
+            });
+          %>
+          <%= formatter.format(totalValue) %>
+        </span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">Avg. Price</span>
+        <span class="stat-value">
+          <% 
+            const avgPrice = products?.length > 0 ? totalValue / products.length : 0;
+            const avgFormatter = new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 2
+            });
+          %>
+          <%= avgFormatter.format(avgPrice) %>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flash Messages -->
+  <% if (success) { %>
+    <div class="flash flash-success">
+      <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <div class="flash-content">
+        <strong>Success!</strong> <%= success %>
+      </div>
+    </div>
   <% } %>
-</div>
 
-<a href="/products/add" class="btn-add">➕ Add New Product</a>
-<a href="/products/all" class="btn-all">📄 View All Products</a>
+  <% if (error) { %>
+    <div class="flash flash-error">
+      <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </svg>
+      <div class="flash-content">
+        <strong>Error:</strong> <%= error %>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Dashboard Controls -->
+  <div class="dashboard-controls">
+    <div class="control-section">
+      <div class="search-box">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input 
+          type="search" 
+          id="productSearch" 
+          placeholder="Search products by name, category, or SKU..." 
+          class="search-input"
+        >
+        <button type="button" class="search-clear" id="clearSearch" aria-label="Clear search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="control-section">
+      <div class="filter-group">
+        <button type="button" class="filter-btn active" data-filter="all">All Products</button>
+        <button type="button" class="filter-btn" data-filter="active">Active</button>
+        <button type="button" class="filter-btn" data-filter="out-of-stock">Out of Stock</button>
+        <button type="button" class="filter-btn" data-filter="on-sale">On Sale</button>
+      </div>
+    </div>
+
+    <div class="control-section">
+      <div class="sort-group">
+        <label class="sort-label">Sort by:</label>
+        <select class="sort-select" id="sortSelect">
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="price-low">Price: Low to High</option>
+          <option value="price-high">Price: High to Low</option>
+          <option value="name">Name: A to Z</option>
+          <option value="popular">Most Popular</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="quick-actions">
+    <a href="/products/add" class="action-btn primary">
+      <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      <span class="action-text">Add New Product</span>
+    </a>
+
+    <a href="/products/import" class="action-btn secondary">
+      <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span class="action-text">Import Products</span>
+    </a>
+
+    <a href="/products/export" class="action-btn outline">
+      <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span class="action-text">Export Products</span>
+    </a>
+
+    <a href="/products/all" class="action-btn outline">
+      <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
+      </svg>
+      <span class="action-text">View All Products</span>
+    </a>
+  </div>
+
+  <!-- Products Container -->
+  <div class="products-container <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>" id="productsContainer">
+    <% if (!products || products.length === 0) { %>
+      <!-- Empty State -->
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+        </div>
+        <h2>No Products Found</h2>
+        <p class="empty-description">
+          Your product catalog is empty. Start by adding your first product to begin managing your inventory.
+        </p>
+        <div class="empty-actions">
+          <a href="/products/add" class="btn primary">
+            <svg class="btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add First Product
+          </a>
+          <a href="/products/import" class="btn outline">
+            <svg class="btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Import Products
+          </a>
+        </div>
+      </div>
+    <% } else { %>
+      <!-- Products Grid -->
+      <div class="products-grid" id="productsGrid">
+        <% products.forEach(product => { %>
+          <%- include('partials/product-card', { product }) %>
+        <% }) %>
+      </div>
+
+      <!-- Load More (if applicable) -->
+      <div class="load-more" id="loadMoreSection" hidden>
+        <button type="button" class="btn outline wfull" id="loadMoreBtn">
+          <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19v-6h-6"></path>
+            <path d="M20.49 8A9 9 0 1 1 4.12 3.64"></path>
+          </svg>
+          Load More Products
+        </button>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- Performance Insights -->
+  <div class="performance-insights">
+    <h3 class="insights-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 20V10"></path>
+        <path d="M12 20V4"></path>
+        <path d="M6 20v-6"></path>
+      </svg>
+      Performance Insights
+    </h3>
+    
+    <div class="insights-grid">
+      <div class="insight-card">
+        <div class="insight-header">
+          <span class="insight-label">Top Performing</span>
+          <span class="insight-trend positive">+12%</span>
+        </div>
+        <div class="insight-content">
+          <h4 class="insight-title" id="topProduct">Loading...</h4>
+          <p class="insight-description">Highest sales in the last 30 days</p>
+        </div>
+      </div>
+
+      <div class="insight-card">
+        <div class="insight-header">
+          <span class="insight-label">Low Stock Alert</span>
+          <span class="insight-trend warning">⚠️</span>
+        </div>
+        <div class="insight-content">
+          <h4 class="insight-title" id="lowStockCount">0 products</h4>
+          <p class="insight-description">Need restocking soon</p>
+        </div>
+      </div>
+
+      <div class="insight-card">
+        <div class="insight-header">
+          <span class="insight-label">Recently Added</span>
+          <span class="insight-trend neutral">New</span>
+        </div>
+        <div class="insight-content">
+          <h4 class="insight-title" id="recentProduct">Loading...</h4>
+          <p class="insight-description">Added in the last 7 days</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Actions Panel -->
+  <div class="bulk-actions-panel" id="bulkActionsPanel" hidden>
+    <div class="bulk-header">
+      <span class="bulk-count">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span id="selectedCount">0</span> products selected
+      </span>
+      <button type="button" class="bulk-clear" id="clearSelection">
+        Clear Selection
+      </button>
+    </div>
+    <div class="bulk-actions">
+      <button type="button" class="btn outline bulk-btn" data-action="activate">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        Activate
+      </button>
+      <button type="button" class="btn outline bulk-btn" data-action="deactivate">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+        </svg>
+        Deactivate
+      </button>
+      <button type="button" class="btn outline bulk-btn" data-action="delete">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18"></path>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        Delete
+      </button>
+      <button type="button" class="btn outline bulk-btn" data-action="export-selected">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Export Selected
+      </button>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="recent-activity">
+    <h3 class="activity-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+      Recent Activity
+    </h3>
+    
+    <div class="activity-list" id="activityList">
+      <!-- Activity items will be populated by JavaScript -->
+      <div class="activity-item">
+        <div class="activity-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <div class="activity-content">
+          <p class="activity-text">No recent activity</p>
+          <span class="activity-time">Just now</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Brand Color Variables */
+  :root {
+    --brand-blue: #2563EB;    /* Trust & Reliability */
+    --brand-purple: #7C3AED;  /* Innovation & Creativity */
+    --brand-green: #22C55E;   /* Growth & Success (Primary) */
+    --brand-black: #0F172A;   /* Sophistication & Premium */
+    
+    --bg-primary: #22C55E;
+    --bg-secondary: #f0fdf4;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --input-bg: #f8fafc;
+    --success-light: #dcfce7;
+    --error-light: #fee2e2;
+    --warning-light: #fef3c7;
+  }
+
+  .dark-theme {
+    --bg-primary: #16a34a;
+    --bg-secondary: #052e16;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --card-bg: #1e293b;
+    --card-border: #334155;
+    --input-bg: #0f172a;
+    --success-light: #064e3b;
+    --error-light: #7f1d1d;
+    --warning-light: #78350f;
+  }
+
+  /* Base Styles */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, #ffffff 100%);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.5;
+  }
+
+  .dark-theme body {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, #0f172a 100%);
+  }
+
+  /* Dashboard Page */
+  .dashboard-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+
+  /* Brand Header */
+  .brand-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .logo-preview {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 1rem;
+  }
+
+  .logo-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+  }
+
+  .logo-color.blue { background: var(--brand-blue); }
+  .logo-color.purple { background: var(--brand-purple); }
+  .logo-color.green { background: var(--brand-green); }
+  .logo-color.black { background: var(--brand-black); }
+
+  .dashboard-title {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .dashboard-subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+  }
+
+  /* Dashboard Stats */
+  .dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+
+  .stat-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  /* Flash Messages */
+  .flash {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    margin-bottom: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    animation: slideIn 0.3s ease;
+  }
+
+  .flash-success {
+    background: var(--success-light);
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .flash-error {
+    background: var(--error-light);
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .flash-icon {
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+  }
+
+  .flash-content {
+    flex: 1;
+  }
+
+  .flash-content strong {
+    font-weight: 600;
+  }
+
+  .dark-theme .flash-success {
+    color: #a7f3d0;
+  }
+
+  .dark-theme .flash-error {
+    color: #fecaca;
+  }
+
+  /* Dashboard Controls */
+  .dashboard-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+  }
+
+  .control-section {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 1rem;
+    color: var(--text-secondary);
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 0.75rem 2.5rem 0.75rem 3rem;
+    background: var(--input-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: var(--brand-green);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+  }
+
+  .search-clear {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .search-clear:hover {
+    color: var(--text-primary);
+  }
+
+  .filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .filter-btn {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .filter-btn:hover {
+    border-color: var(--brand-blue);
+    color: var(--brand-blue);
+  }
+
+  .filter-btn.active {
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
+    color: white;
+  }
+
+  .sort-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .sort-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .sort-select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+  }
+
+  .sort-select:focus {
+    outline: none;
+    border-color: var(--brand-green);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.1);
+  }
+
+  /* Quick Actions */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .action-btn.primary {
+    background: linear-gradient(135deg, var(--brand-green), #16a34a);
+    color: white;
+  }
+
+  .action-btn.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+  }
+
+  .action-btn.secondary {
+    background: linear-gradient(135deg, var(--brand-purple), #9333ea);
+    color: white;
+  }
+
+  .action-btn.secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
+  }
+
+  .action-btn.outline {
+    background: transparent;
+    color: var(--text-primary);
+    border: 2px solid var(--card-border);
+  }
+
+  .action-btn.outline:hover {
+    border-color: var(--brand-blue);
+    background: rgba(37, 99, 235, 0.05);
+  }
+
+  .action-icon {
+    flex-shrink: 0;
+  }
+
+  /* Products Container */
+  .products-container {
+    margin-bottom: 2rem;
+  }
+
+  .products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+  }
+
+  .empty-icon {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(37, 99, 235, 0.1));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+    color: var(--brand-purple);
+  }
+
+  .empty-state h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+
+  .empty-description {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+  }
+
+  .btn.primary {
+    background: linear-gradient(135deg, var(--brand-green), #16a34a);
+    color: white;
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+  }
+
+  .btn.outline {
+    background: transparent;
+    color: var(--text-primary);
+    border: 2px solid var(--card-border);
+  }
+
+  .btn.outline:hover {
+    border-color: var(--brand-blue);
+    background: rgba(37, 99, 235, 0.05);
+  }
+
+  .btn.wfull {
+    width: 100%;
+  }
+
+  .btn-icon {
+    flex-shrink: 0;
+  }
+
+  /* Load More */
+  .load-more {
+    margin-top: 2rem;
+  }
+
+  /* Performance Insights */
+  .performance-insights {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .insights-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: var(--text-primary);
+  }
+
+  .insights-title svg {
+    color: var(--brand-purple);
+  }
+
+  .insights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  .insight-card {
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .insight-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .insight-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .insight-trend {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: 12px;
+  }
+
+  .insight-trend.positive {
+    background: var(--success-light);
+    color: #065f46;
+  }
+
+  .insight-trend.warning {
+    background: var(--warning-light);
+    color: #92400e;
+  }
+
+  .insight-trend.neutral {
+    background: var(--card-border);
+    color: var(--text-secondary);
+  }
+
+  .insight-content h4 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+  }
+
+  .insight-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  /* Bulk Actions Panel */
+  .bulk-actions-panel {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 600px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    animation: slideUp 0.3s ease;
+  }
+
+  .bulk-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .bulk-count {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .bulk-count svg {
+    color: var(--brand-green);
+  }
+
+  .bulk-clear {
+    background: none;
+    border: none;
+    color: var(--brand-blue);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .bulk-clear:hover {
+    text-decoration: underline;
+  }
+
+  .bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .bulk-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  /* Recent Activity */
+  .recent-activity {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+  }
+
+  .activity-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: var(--text-primary);
+  }
+
+  .activity-title svg {
+    color: var(--brand-blue);
+  }
+
+  .activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+  }
+
+  .activity-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .activity-content {
+    flex: 1;
+  }
+
+  .activity-text {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+  }
+
+  .activity-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  /* Animations */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 20px);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  }
+
+  /* Mobile Optimizations for Hisense U50 Lite (360px width) */
+  @media (max-width: 360px) {
+    .dashboard-page {
+      padding: 1rem 0.75rem;
+    }
+
+    .dashboard-title {
+      font-size: 1.5rem;
+    }
+
+    .dashboard-subtitle {
+      font-size: 0.875rem;
+    }
+
+    .dashboard-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .dashboard-controls {
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1rem;
+    }
+
+    .control-section {
+      min-width: 100%;
+    }
+
+    .quick-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .products-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .insights-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .bulk-actions {
+      flex-direction: column;
+    }
+
+    .bulk-btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .empty-actions {
+      flex-direction: column;
+    }
+  }
+
+  /* Tablet */
+  @media (min-width: 768px) {
+    .products-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* Desktop */
+  @media (min-width: 1024px) {
+    .products-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  /* Large Desktop */
+  @media (min-width: 1280px) {
+    .products-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  /* Accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Focus styles for keyboard navigation */
+  :focus-visible {
+    outline: 2px solid var(--brand-green);
+    outline-offset: 2px;
+  }
+</style>
+
+<script>
+  (function () {
+    'use strict';
+
+    // Initialize Dashboard
+    const initDashboard = () => {
+      initProductSearch();
+      initProductFilters();
+      initProductSorting();
+      initBulkActions();
+      initPerformanceInsights();
+      initRecentActivity();
+    };
+
+    // Product Search
+    const initProductSearch = () => {
+      const searchInput = document.getElementById('productSearch');
+      const clearButton = document.getElementById('clearSearch');
+      const productCards = document.querySelectorAll('.product-card');
+      
+      if (!searchInput || !productCards.length) return;
+
+      const searchProducts = (searchTerm) => {
+        const term = searchTerm.toLowerCase().trim();
+        
+        productCards.forEach(card => {
+          const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
+          const productCategory = card.querySelector('.product-category')?.textContent.toLowerCase() || '';
+          const productSku = card.querySelector('.product-sku')?.textContent.toLowerCase() || '';
+          
+          const matches = productName.includes(term) || 
+                         productCategory.includes(term) || 
+                         productSku.includes(term);
+          
+          card.style.display = matches ? 'block' : 'none';
+        });
+
+        // Update product count
+        const visibleCount = Array.from(productCards).filter(card => 
+          card.style.display !== 'none'
+        ).length;
+        
+        updateProductCounts(visibleCount);
+      };
+
+      // Search input event
+      searchInput.addEventListener('input', (e) => {
+        searchProducts(e.target.value);
+      });
+
+      // Clear search button
+      if (clearButton) {
+        clearButton.addEventListener('click', () => {
+          searchInput.value = '';
+          searchProducts('');
+          searchInput.focus();
+        });
+      }
+    };
+
+    // Product Filters
+    const initProductFilters = () => {
+      const filterButtons = document.querySelectorAll('.filter-btn');
+      const productCards = document.querySelectorAll('.product-card');
+      
+      if (!filterButtons.length || !productCards.length) return;
+
+      const filterProducts = (filter) => {
+        filterButtons.forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        productCards.forEach(card => {
+          const status = card.getAttribute('data-status') || 'active';
+          const stock = card.getAttribute('data-stock') || '0';
+          const sale = card.querySelector('.sale-badge') !== null;
+          
+          let show = false;
+          
+          switch (filter) {
+            case 'all':
+              show = true;
+              break;
+            case 'active':
+              show = status === 'active';
+              break;
+            case 'out-of-stock':
+              show = parseInt(stock) === 0;
+              break;
+            case 'on-sale':
+              show = sale;
+              break;
+            default:
+              show = true;
+          }
+          
+          card.style.display = show ? 'block' : 'none';
+        });
+
+        // Update counts
+        updateProductCounts();
+      };
+
+      filterButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          const filter = e.target.getAttribute('data-filter');
+          filterProducts(filter);
+        });
+      });
+    };
+
+    // Product Sorting
+    const initProductSorting = () => {
+      const sortSelect = document.getElementById('sortSelect');
+      const productsGrid = document.getElementById('productsGrid');
+      
+      if (!sortSelect || !productsGrid) return;
+
+      const sortProducts = (sortBy) => {
+        const productCards = Array.from(productsGrid.querySelectorAll('.product-card'));
+        
+        productCards.sort((a, b) => {
+          switch (sortBy) {
+            case 'newest':
+              const dateA = new Date(a.getAttribute('data-created') || 0);
+              const dateB = new Date(b.getAttribute('data-created') || 0);
+              return dateB - dateA;
+              
+            case 'oldest':
+              const dateC = new Date(a.getAttribute('data-created') || 0);
+              const dateD = new Date(b.getAttribute('data-created') || 0);
+              return dateC - dateD;
+              
+            case 'price-low':
+              const priceA = parseFloat(a.getAttribute('data-price') || 0);
+              const priceB = parseFloat(b.getAttribute('data-price') || 0);
+              return priceA - priceB;
+              
+            case 'price-high':
+              const priceC = parseFloat(a.getAttribute('data-price') || 0);
+              const priceD = parseFloat(b.getAttribute('data-price') || 0);
+              return priceD - priceC;
+              
+            case 'name':
+              const nameA = a.querySelector('.product-name')?.textContent.toLowerCase() || '';
+              const nameB = b.querySelector('.product-name')?.textContent.toLowerCase() || '';
+              return nameA.localeCompare(nameB);
+              
+            case 'popular':
+              const viewsA = parseInt(a.getAttribute('data-views') || 0);
+              const viewsB = parseInt(b.getAttribute('data-views') || 0);
+              return viewsB - viewsA;
+              
+            default:
+              return 0;
+          }
+        });
+        
+        // Reorder products in grid
+        productCards.forEach(card => {
+          productsGrid.appendChild(card);
+        });
+      };
+
+      sortSelect.addEventListener('change', (e) => {
+        sortProducts(e.target.value);
+      });
+    };
+
+    // Bulk Actions
+    const initBulkActions = () => {
+      const bulkPanel = document.getElementById('bulkActionsPanel');
+      const selectedCount = document.getElementById('selectedCount');
+      const clearSelection = document.getElementById('clearSelection');
+      const bulkButtons = document.querySelectorAll('.bulk-btn');
+      const productCards = document.querySelectorAll('.product-card');
+      
+      if (!bulkPanel || !productCards.length) return;
+
+      let selectedProducts = new Set();
+
+      // Add selection checkbox to each product card
+      productCards.forEach(card => {
+        const checkbox = document.createElement('div');
+        checkbox.className = 'product-select';
+        checkbox.innerHTML = `
+          <input type="checkbox" class="product-checkbox" data-id="${card.getAttribute('data-id')}">
+        `;
+        
+        const cardHeader = card.querySelector('.product-header');
+        if (cardHeader) {
+          cardHeader.insertBefore(checkbox, cardHeader.firstChild);
+        }
+      });
+
+      // Update bulk panel
+      const updateBulkPanel = () => {
+        const count = selectedProducts.size;
+        
+        if (count > 0) {
+          bulkPanel.hidden = false;
+          selectedCount.textContent = count;
+        } else {
+          bulkPanel.hidden = true;
+        }
+      };
+
+      // Handle checkbox changes
+      document.addEventListener('change', (e) => {
+        if (e.target.classList.contains('product-checkbox')) {
+          const productId = e.target.getAttribute('data-id');
+          const card = e.target.closest('.product-card');
+          
+          if (e.target.checked) {
+            selectedProducts.add(productId);
+            card.classList.add('selected');
+          } else {
+            selectedProducts.delete(productId);
+            card.classList.remove('selected');
+          }
+          
+          updateBulkPanel();
+        }
+      });
+
+      // Clear selection
+      if (clearSelection) {
+        clearSelection.addEventListener('click', () => {
+          document.querySelectorAll('.product-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+          });
+          selectedProducts.clear();
+          productCards.forEach(card => card.classList.remove('selected'));
+          updateBulkPanel();
+        });
+      }
+
+      // Bulk actions
+      bulkButtons.forEach(button => {
+        button.addEventListener('click', async () => {
+          const action = button.getAttribute('data-action');
+          const productIds = Array.from(selectedProducts);
+          
+          if (productIds.length === 0) {
+            showFlashMessage('Please select products first', 'error');
+            return;
+          }
+          
+          let confirmMessage = '';
+          let endpoint = '';
+          
+          switch (action) {
+            case 'activate':
+              confirmMessage = `Activate ${productIds.length} selected products?`;
+              endpoint = '/products/bulk-activate';
+              break;
+            case 'deactivate':
+              confirmMessage = `Deactivate ${productIds.length} selected products?`;
+              endpoint = '/products/bulk-deactivate';
+              break;
+            case 'delete':
+              confirmMessage = `Delete ${productIds.length} selected products? This action cannot be undone.`;
+              endpoint = '/products/bulk-delete';
+              break;
+            case 'export-selected':
+              confirmMessage = `Export ${productIds.length} selected products?`;
+              endpoint = '/products/export-selected';
+              break;
+          }
+          
+          if (!confirm(confirmMessage)) return;
+          
+          try {
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ productIds })
+            });
+            
+            if (response.ok) {
+              showFlashMessage(`Successfully ${action}d ${productIds.length} products`, 'success');
+              
+              // Clear selection
+              selectedProducts.clear();
+              updateBulkPanel();
+              
+              // Refresh page for delete action
+              if (action === 'delete') {
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1500);
+              }
+            } else {
+              throw new Error(`Failed to ${action} products`);
+            }
+          } catch (error) {
+            console.error('Error:', error);
+            showFlashMessage(`Failed to ${action} products`, 'error');
+          }
+        });
+      });
+    };
+
+    // Performance Insights
+    const initPerformanceInsights = () => {
+      const productCards = document.querySelectorAll('.product-card');
+      
+      if (!productCards.length) return;
+
+      // Calculate low stock count
+      const lowStockProducts = Array.from(productCards).filter(card => {
+        const stock = parseInt(card.getAttribute('data-stock') || 0);
+        return stock > 0 && stock <= 10; // Assuming low stock threshold
+      });
+
+      // Get most recent product
+      const recentProduct = Array.from(productCards)
+        .sort((a, b) => {
+          const dateA = new Date(a.getAttribute('data-created') || 0);
+          const dateB = new Date(b.getAttribute('data-created') || 0);
+          return dateB - dateA;
+        })[0];
+
+      // Update insight elements
+      const lowStockCount = document.getElementById('lowStockCount');
+      const topProduct = document.getElementById('topProduct');
+      const recentProductElement = document.getElementById('recentProduct');
+      
+      if (lowStockCount) {
+        lowStockCount.textContent = `${lowStockProducts.length} products`;
+      }
+      
+      if (topProduct) {
+        // For now, just show first product as top performing
+        // In a real app, this would come from analytics
+        const firstProduct = productCards[0];
+        if (firstProduct) {
+          topProduct.textContent = firstProduct.querySelector('.product-name')?.textContent || 'N/A';
+        }
+      }
+      
+      if (recentProductElement && recentProduct) {
+        recentProductElement.textContent = recentProduct.querySelector('.product-name')?.textContent || 'N/A';
+      }
+    };
+
+    // Recent Activity
+    const initRecentActivity = () => {
+      const activityList = document.getElementById('activityList');
+      if (!activityList) return;
+
+      // Mock activity data - in a real app, this would come from an API
+      const mockActivities = [
+        {
+          icon: 'add',
+          text: 'Added new product "Premium Headphones"',
+          time: '2 hours ago'
+        },
+        {
+          icon: 'edit',
+          text: 'Updated pricing for "Wireless Mouse"',
+          time: '1 day ago'
+        },
+        {
+          icon: 'stock',
+          text: 'Restocked "USB-C Cable" - 50 units added',
+          time: '2 days ago'
+        },
+        {
+          icon: 'sale',
+          text: 'Added sale price for "Bluetooth Speaker"',
+          time: '3 days ago'
+        }
+      ];
+
+      // Clear loading message
+      activityList.innerHTML = '';
+
+      // Add activities
+      mockActivities.forEach(activity => {
+        const activityItem = document.createElement('div');
+        activityItem.className = 'activity-item';
+        
+        let iconSVG = '';
+        switch (activity.icon) {
+          case 'add':
+            iconSVG = '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>';
+            break;
+          case 'edit':
+            iconSVG = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>';
+            break;
+          case 'stock':
+            iconSVG = '<path d="M3 3h18v18H3zM21 9H3M21 15H3M12 3v18"></path>';
+            break;
+          case 'sale':
+            iconSVG = '<circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="7" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>';
+            break;
+        }
+        
+        activityItem.innerHTML = `
+          <div class="activity-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              ${iconSVG}
+            </svg>
+          </div>
+          <div class="activity-content">
+            <p class="activity-text">${activity.text}</p>
+            <span class="activity-time">${activity.time}</span>
+          </div>
+        `;
+        
+        activityList.appendChild(activityItem);
+      });
+    };
+
+    // Update Product Counts
+    const updateProductCounts = (visibleCount = null) => {
+      const totalProducts = document.getElementById('totalProducts');
+      const activeProducts = document.getElementById('activeProducts');
+      
+      if (visibleCount !== null) {
+        // Update based on filtered results
+        totalProducts.textContent = visibleCount;
+      }
+      
+      // In a real app, you would update active products count based on filtered results
+    };
+
+    // Flash Message Helper
+    const showFlashMessage = (message, type = 'success') => {
+      const flash = document.createElement('div');
+      flash.className = `flash flash-${type}`;
+      flash.innerHTML = `
+        <svg class="flash-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          ${type === 'success' ? 
+            '<polyline points="20 6 9 17 4 12"></polyline>' :
+            '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>'
+          }
+        </svg>
+        <div class="flash-content">
+          <strong>${type === 'success' ? 'Success!' : 'Error:'}</strong> ${message}
+        </div>
+      `;
+      
+      // Insert after dashboard controls
+      const dashboardControls = document.querySelector('.dashboard-controls');
+      if (dashboardControls) {
+        dashboardControls.parentNode.insertBefore(flash, dashboardControls.nextSibling);
+      }
+      
+      // Remove after 5 seconds
+      setTimeout(() => {
+        if (flash.parentNode) {
+          flash.style.opacity = '0';
+          flash.style.transform = 'translateY(-10px)';
+          flash.style.transition = 'all 0.3s ease';
+          
+          setTimeout(() => {
+            if (flash.parentNode) {
+              flash.parentNode.removeChild(flash);
+            }
+          }, 300);
+        }
+      }, 5000);
+    };
+
+    // Initialize everything when DOM is loaded
+    document.addEventListener('DOMContentLoaded', initDashboard);
+
+  })();
+</script>

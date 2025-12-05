@@ -1,5 +1,6 @@
 // models/Rating.js
-const { mongoose } = require('../db');
+//const { mongoose } = require('../db');
+const mongoose = require('mongoose');
 
 const ratingSchema = new mongoose.Schema(
   {

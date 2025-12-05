@@ -4,7 +4,7 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Product = require('../models/Product');
-const Shipment = require('../models/Shipment');
+
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 
@@ -60,6 +60,13 @@ function randomKey(ext) {
   return `products/${uuidv4()}.${ext}`;
 }
 
+/*  router.get('/low-stock', requireBusiness, async (req, res) => {
+  console.log('[DEBUG] /low-stock route hit');
+  console.log('[DEBUG] req.session.business:', req.session.business);
+  console.log('[DEBUG] req.business:', req.business);
+  // ... rest of code
+});*/
+
 /* ---------------------------------------------
  * 🧾 GET /products/add — show Add Product form
  * ------------------------------------------- */
@@ -93,6 +100,74 @@ router.get('/sales', async (req, res) => {
     console.error('❌ Failed to load sales page:', err);
     req.flash('error', 'Could not load products.');
     res.redirect('/');
+  }
+});
+
+router.get('/out-of-stock', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business;
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const products = await Product.find({
+      business: business._id,
+      stock: { $lte: 0 },
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.render('products-out-of-stock', {
+      title: 'Out of Stock',
+      products,
+      business,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Out-of-stock page error:', err);
+    req.flash('error', 'Could not load out-of-stock products.');
+    res.redirect('/products/all');
+  }
+});
+
+// LOW STOCK (<= 15, > 0)
+router.get('/low-stock', requireBusiness, async (req, res) => {
+  try {
+    const business = req.session.business; // ✅ same as /out-of-stock
+
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const lowStockThreshold = 15;
+
+    const products = await Product.find({
+      business: business._id,
+      stock: { $gt: 0, $lte: lowStockThreshold }, // 1–15 units
+    })
+      .sort({ stock: 1, name: 1 })
+      .lean();
+
+    return res.render('products-low-stock', {
+      title: 'Low Stock Products',
+      business,
+      products,
+      lowStockThreshold,          // ✅ used in EJS
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss, // ✅ match your other pages
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Low-stock page error:', err);
+    req.flash('error', 'Could not load low-stock products.');
+    // ✅ redirect to a real route, not /products
+    return res.redirect('/products/mine');
   }
 });
 
@@ -238,22 +313,10 @@ router.get('/view/:id', async (req, res) => {
       return res.redirect('/products/sales');
     }
 
-    // Shipment counters (defensive)
-    const [inTransitRes, deliveredRes] = await Promise.allSettled([
-      Shipment.countDocuments({ product: product._id, status: 'In Transit' }),
-      Shipment.countDocuments({ product: product._id, status: 'Delivered' }),
-    ]);
-
-    const shipmentStats = {
-      inTransit: inTransitRes.status === 'fulfilled' ? Number(inTransitRes.value || 0) : 0,
-      delivered: deliveredRes.status === 'fulfilled' ? Number(deliveredRes.value || 0) : 0,
-    };
-
     // ✅ IMPORTANT: render without a leading slash
     return res.render('product-details', {
       title: product.name,
       product,
-      shipmentStats,
       business: req.session.business || null,
       success: req.flash('success'),
       error: req.flash('error'),

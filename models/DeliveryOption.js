@@ -1,5 +1,6 @@
 // models/DeliveryOption.js
-const { mongoose } = require('../db'); // <-- use the shared instance
+//const { mongoose } = require('../db'); // <-- use the shared instance
+const mongoose = require('mongoose');
 
 /**
  * DeliveryOption

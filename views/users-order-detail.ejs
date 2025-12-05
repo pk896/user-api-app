@@ -1,39 +1,1497 @@
-<section>
-  <h1 class="page-title">🧾 Order #<%= order._id.toString().slice(-6) %></h1>
+<!-- views/users-order-detail.ejs -->
+<%
+  const o = order || {};
+  const itemsArr = Array.isArray(o.items) ? o.items : [];
+  const shippingTracking = o.shippingTracking || {};
+  const hasShipment = !!(shippingTracking && shippingTracking.trackingNumber);
 
-  <div class="card">
-    <div><strong>Status:</strong> <span class="status <%= (order.status || 'pending').toLowerCase() %>"><%= order.status || 'pending' %></span></div>
-    <div><strong>Total:</strong> <%= (order.amount?.total || order.total || 0).toFixed(2) %> <%= order.currency || 'USD' %></div>
-    <div><strong>Placed:</strong> <%= new Date(order.createdAt).toLocaleString() %></div>
-    <% if (order.items && order.items.length) { %>
-      <div class="section-title" style="margin-top:.6rem;">Items</div>
-      <ul>
-      <% order.items.forEach(it => { %>
-        <li>
-          <%= it.name || it.productName || 'Item' %> — qty <%= it.quantity || 1 %> — <%= (it.price || it.unit_amount?.value || 0).toFixed?.(2) || it.price %>
-        </li>
-      <% }) %>
-      </ul>
-    <% } %>
+  // Helper functions
+  function money(am) {
+    if (!am) {
+      if (o.breakdown?.grandTotal) {
+        return `${o.breakdown.currency || 'USD'} ${Number(o.breakdown.grandTotal).toFixed(2)}`;
+      }
+      return '—';
+    }
+    
+    let value = '';
+    let currency = 'USD';
+    
+    if (typeof am === 'object') {
+      value = am.value !== undefined ? am.value : am.total;
+      currency = am.currency || am.currency_code || 'USD';
+    } else if (typeof am === 'number') {
+      value = am.toFixed(2);
+    } else if (typeof am === 'string') {
+      value = am;
+    }
+    
+    if (!value && o.breakdown?.grandTotal) {
+      value = o.breakdown.grandTotal;
+      currency = o.breakdown.currency || 'USD';
+    }
+    
+    if (!value) return '—';
+    return `${currency} ${Number(value).toFixed(2)}`;
+  }
+
+  function when(d) {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d);
+      return dt.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '—';
+    }
+  }
+
+  function shortDate(d) {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d);
+      return dt.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return '—';
+    }
+  }
+
+  function shortId(o) {
+    const raw = o?.orderId || o?._id?.toString() || '';
+    if (!raw) return '—';
+    return `#${raw.slice(-8)}`;
+  }
+
+  function statusClass(status) {
+    if (!status) return 'status-pending';
+    const s = String(status).toLowerCase().trim();
+    if (['completed', 'paid', 'captured', 'delivered'].includes(s)) return 'status-delivered';
+    if (['shipped', 'in transit', 'in-transit'].includes(s)) return 'status-intransit';
+    if (['cancelled', 'canceled', 'refunded'].includes(s)) return 'status-cancelled';
+    return 'status-pending';
+  }
+
+  function breakdownMoney(part) {
+    if (!o.breakdown || !o.breakdown[part]) return '—';
+    const b = o.breakdown[part];
+    const v = (typeof b.value === 'string' || typeof b.value === 'number') ? b.value : '';
+    const c = b.currency || b.currency_code || 'USD';
+    return `${c} ${v}`;
+  }
+
+  function shippingName() {
+    if (!o.delivery) return 'Standard shipping';
+    return o.delivery.name || 'Standard shipping';
+  }
+
+  function shippingDays() {
+    if (!o.delivery || !o.delivery.deliveryDays) return '';
+    return `${o.delivery.deliveryDays} day${o.delivery.deliveryDays === 1 ? '' : 's'}`;
+  }
+
+  function shippingPrice() {
+    if (!o.delivery || !o.delivery.amount) return breakdownMoney('shipping');
+    const c = o.amount?.currency || o.amount?.currency_code || 'USD';
+    return `${c} ${o.delivery.amount}`;
+  }
+
+  function payerEmail() {
+    if (o.payer && o.payer.email) return o.payer.email;
+    return user && user.email ? user.email : '—';
+  }
+
+  function getTrackingStatusClass(status) {
+    if (!status) return 'pending';
+    const s = String(status).toLowerCase();
+    if (s.includes('delivered')) return 'delivered';
+    if (s.includes('transit') || s.includes('shipped')) return 'intransit';
+    return 'pending';
+  }
+%>
+
+<section class="order-detail">
+  <!-- Header with brand gradient -->
+  <header class="order-header">
+    <div class="header-content">
+      <div class="order-badge">
+        <span class="badge-icon">📋</span>
+        <span class="badge-text">Order Details</span>
+      </div>
+      <div class="order-title-section">
+        <h1 class="order-title">
+          <span class="title-gradient">Order <%= shortId(o) %></span>
+        </h1>
+        <p class="order-subtitle">
+          Placed on <strong><%= when(o.createdAt || o.created_at) %></strong>
+        </p>
+      </div>
+      <div class="order-status-display">
+        <span class="status-badge <%= statusClass(o.status) %>">
+          <span class="status-dot <%= statusClass(o.status).replace('status-', '') %>"></span>
+          <%= o.status || 'Processing' %>
+        </span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="/users/orders" class="btn btn-trust">
+        <span class="btn-icon">←</span>
+        Back to Orders
+      </a>
+      <a href="/sales" class="btn btn-growth">
+        <span class="btn-icon">🛒</span>
+        Shop Again
+      </a>
+    </div>
+    <div class="header-accent"></div>
+  </header>
+
+  <!-- Order Summary Cards -->
+  <div class="order-summary">
+    <div class="summary-card trust-card">
+      <div class="summary-icon">💰</div>
+      <div class="summary-content">
+        <div class="summary-label">Total Amount</div>
+        <div class="summary-value"><%= money(o.amount) %></div>
+      </div>
+    </div>
+    <div class="summary-card growth-card">
+      <div class="summary-icon">📦</div>
+      <div class="summary-content">
+        <div class="summary-label">Items</div>
+        <div class="summary-value"><%= itemsArr.length %></div>
+      </div>
+    </div>
+    <div class="summary-card innovation-card">
+      <div class="summary-icon">💳</div>
+      <div class="summary-content">
+        <div class="summary-label">Payment Method</div>
+        <div class="summary-value">PayPal</div>
+      </div>
+    </div>
   </div>
 
-  <h2 class="section-title" style="margin-top:1rem;">Shipment</h2>
-  <% if (!shipment) { %>
-    <p class="muted">No shipment info yet.</p>
-  <% } else { %>
-    <div class="card">
-      <div><strong>Status:</strong> <%= shipment.status || 'in transit' %></div>
-      <% if (shipment.carrier) { %><div><strong>Carrier:</strong> <%= shipment.carrier %></div><% } %>
-      <% if (shipment.trackingNumber) { %><div><strong>Tracking:</strong> <%= shipment.trackingNumber %></div><% } %>
-      <% if (shipment.eta) { %><div><strong>ETA:</strong> <%= new Date(shipment.eta).toLocaleDateString() %></div><% } %>
-      <% if (shipment.events && shipment.events.length) { %>
-        <div class="section-title">Events</div>
-        <ul>
-          <% shipment.events.forEach(ev => { %>
-            <li><%= ev.status %> — <%= ev.location || '' %> — <%= new Date(ev.at).toLocaleString() %></li>
-          <% }) %>
-        </ul>
+  <!-- Order Items Section -->
+  <section class="detail-section">
+    <div class="section-header">
+      <h2 class="section-title">
+        <span class="section-icon trust-icon">🧺</span>
+        Order Items
+      </h2>
+      <span class="section-badge"><%= itemsArr.length %> item<%= itemsArr.length === 1 ? '' : 's' %></span>
+    </div>
+    
+    <% if (!itemsArr.length) { %>
+      <div class="empty-state compact">
+        <div class="empty-icon">📭</div>
+        <p>No items found in this order</p>
+      </div>
+    <% } else { %>
+      <div class="items-container">
+        <% itemsArr.forEach(function(it) { 
+          const totalValue = (it.quantity || 1) * (Number(it.price?.value) || 0);
+          const totalCurrency = it.price?.currency || 'USD';
+        %>
+          <div class="item-card">
+            <div class="item-image">
+              <% if (it.imageUrl) { %>
+                <img src="<%= it.imageUrl %>" alt="<%= it.name %>" class="item-img">
+              <% } else { %>
+                <div class="item-placeholder">📦</div>
+              <% } %>
+            </div>
+            <div class="item-details">
+              <h3 class="item-name"><%= it.name || 'Unnamed product' %></h3>
+              <div class="item-meta">
+                <span class="meta-item">
+                  <span class="meta-label">Quantity:</span>
+                  <span class="meta-value"><%= it.quantity || 1 %></span>
+                </span>
+                <span class="meta-item">
+                  <span class="meta-label">Unit Price:</span>
+                  <span class="meta-value"><%= money(it.price) %></span>
+                </span>
+              </div>
+            </div>
+            <div class="item-total">
+              <div class="total-label">Total</div>
+              <div class="total-value"><%= totalCurrency %> <%= totalValue.toFixed(2) %></div>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  </section>
+
+  <!-- Payment Breakdown -->
+  <section class="detail-section">
+    <div class="section-header">
+      <h2 class="section-title">
+        <span class="section-icon growth-icon">💳</span>
+        Payment Summary
+      </h2>
+    </div>
+    
+    <div class="breakdown-card">
+      <div class="breakdown-row">
+        <span class="row-label">Items Subtotal</span>
+        <span class="row-value"><%= breakdownMoney('itemTotal') %></span>
+      </div>
+      <div class="breakdown-row">
+        <span class="row-label">Tax / VAT</span>
+        <span class="row-value"><%= breakdownMoney('taxTotal') %></span>
+      </div>
+      <div class="breakdown-row">
+        <span class="row-label">Shipping</span>
+        <span class="row-value"><%= shippingPrice() %></span>
+      </div>
+      <div class="breakdown-row total">
+        <span class="row-label">Total Paid</span>
+        <span class="row-value"><%= money(o.amount) %></span>
+      </div>
+    </div>
+
+    <% if (o.refundedTotal && o.refundedTotal !== '0.00') { %>
+      <div class="refund-notice">
+        <div class="notice-icon">⚠️</div>
+        <div class="notice-content">
+          <h4>Partial Refund Applied</h4>
+          <p>Amount refunded: <strong><%= o.refundedTotal %></strong></p>
+        </div>
+      </div>
+    <% } %>
+  </section>
+
+  <!-- Delivery & Shipping -->
+  <section class="detail-section">
+    <div class="section-header">
+      <h2 class="section-title">
+        <span class="section-icon innovation-icon">🚚</span>
+        Delivery & Shipping
+      </h2>
+    </div>
+    
+    <div class="delivery-grid">
+      <!-- Shipping Method -->
+      <div class="delivery-card">
+        <div class="card-header">
+          <div class="card-icon">📦</div>
+          <h3 class="card-title">Shipping Method</h3>
+        </div>
+        <div class="card-content">
+          <div class="method-name"><%= shippingName() %></div>
+          <% if (shippingDays()) { %>
+            <div class="method-details">
+              <span class="detail-label">Est. Delivery:</span>
+              <span class="detail-value"><%= shippingDays() %></span>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Shipping Address -->
+      <div class="delivery-card">
+        <div class="card-header">
+          <div class="card-icon">🏠</div>
+          <h3 class="card-title">Shipping Address</h3>
+        </div>
+        <div class="card-content">
+          <% if (o.shipping) { %>
+            <div class="address-lines">
+              <% if (o.shipping.name) { %>
+                <div class="address-line strong"><%= o.shipping.name %></div>
+              <% } %>
+              <% if (o.shipping.address_line_1) { %>
+                <div class="address-line"><%= o.shipping.address_line_1 %></div>
+              <% } %>
+              <% if (o.shipping.admin_area_2 || o.shipping.admin_area_1) { %>
+                <div class="address-line">
+                  <%= o.shipping.admin_area_2 || '' %><%= o.shipping.admin_area_2 && o.shipping.admin_area_1 ? ', ' : '' %><%= o.shipping.admin_area_1 || '' %>
+                </div>
+              <% } %>
+              <% if (o.shipping.postal_code || o.shipping.country_code) { %>
+                <div class="address-line">
+                  <%= o.shipping.postal_code || '' %><%= o.shipping.postal_code && o.shipping.country_code ? ' ' : '' %><%= o.shipping.country_code || '' %>
+                </div>
+              <% } %>
+            </div>
+          <% } else { %>
+            <p class="no-data">No shipping address recorded</p>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Payer Information -->
+      <div class="delivery-card">
+        <div class="card-header">
+          <div class="card-icon">👤</div>
+          <h3 class="card-title">Payer Information</h3>
+        </div>
+        <div class="card-content">
+          <% if (o.payer) { %>
+            <% if (o.payer.name) { %>
+              <div class="payer-name">
+                <%= [o.payer.name.given, o.payer.name.surname].filter(Boolean).join(' ') %>
+              </div>
+            <% } %>
+            <div class="payer-email"><%= payerEmail() %></div>
+            <% if (o.payer.countryCode) { %>
+              <div class="payer-country">
+                <span class="detail-label">Country:</span>
+                <span class="detail-value"><%= o.payer.countryCode %></span>
+              </div>
+            <% } %>
+          <% } else { %>
+            <p class="no-data">No payer information available</p>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Shipment Tracking -->
+      <% if (hasShipment) { 
+        const trackingStatusClass = getTrackingStatusClass(shippingTracking.status);
+      %>
+        <div class="delivery-card tracking-card tracking-<%= trackingStatusClass %>">
+          <div class="card-header">
+            <div class="card-icon">📍</div>
+            <h3 class="card-title">Shipment Tracking</h3>
+            <span class="tracking-badge <%= trackingStatusClass %>">
+              <%= shippingTracking.status || 'PENDING' %>
+            </span>
+          </div>
+          <div class="card-content">
+            <% if (shippingTracking.carrier) { %>
+              <div class="tracking-info">
+                <span class="info-label">Carrier:</span>
+                <span class="info-value"><%= shippingTracking.carrierLabel || shippingTracking.carrier %></span>
+              </div>
+            <% } %>
+            
+            <% if (shippingTracking.trackingNumber) { %>
+              <div class="tracking-info">
+                <span class="info-label">Tracking Number:</span>
+                <span class="info-value tracking-number">
+                  <% if (shippingTracking.trackingUrl) { %>
+                    <a href="<%= shippingTracking.trackingUrl %>" target="_blank" class="tracking-link">
+                      <%= shippingTracking.trackingNumber %>
+                      <span class="external-icon">↗</span>
+                    </a>
+                  <% } else { %>
+                    <%= shippingTracking.trackingNumber %>
+                  <% } %>
+                </span>
+              </div>
+            <% } %>
+            
+            <div class="tracking-timeline">
+              <% if (shippingTracking.shippedAt) { %>
+                <div class="timeline-item">
+                  <span class="timeline-label">Shipped:</span>
+                  <span class="timeline-value"><%= shortDate(shippingTracking.shippedAt) %></span>
+                </div>
+              <% } %>
+              <% if (shippingTracking.deliveredAt) { %>
+                <div class="timeline-item">
+                  <span class="timeline-label">Delivered:</span>
+                  <span class="timeline-value"><%= shortDate(shippingTracking.deliveredAt) %></span>
+                </div>
+              <% } %>
+              <% if (shippingTracking.lastTrackingUpdate) { %>
+                <div class="timeline-item">
+                  <span class="timeline-label">Last Update:</span>
+                  <span class="timeline-value"><%= shortDate(shippingTracking.lastTrackingUpdate) %></span>
+                </div>
+              <% } %>
+            </div>
+            
+            <a href="/orders/<%= o._id %>/track" class="btn btn-track btn-<%= trackingStatusClass %>">
+              <span class="btn-icon">📍</span>
+              View Detailed Tracking
+            </a>
+          </div>
+        </div>
       <% } %>
     </div>
-  <% } %>
+  </section>
+
+  <!-- Order Actions & Footer -->
+  <footer class="order-footer">
+    <div class="footer-actions">
+      <a href="/users/orders" class="btn btn-outline">
+        <span class="btn-icon">←</span>
+        All Orders
+      </a>
+      <a href="/sales" class="btn btn-growth">
+        <span class="btn-icon">🛒</span>
+        Continue Shopping
+      </a>
+      <button type="button" class="btn btn-trust" data-print-receipt>
+        <span class="btn-icon">🖨️</span>
+        Print Receipt
+      </button>
+
+    </div>
+    
+    <div class="footer-note">
+      <div class="note-icon">ℹ️</div>
+      <div class="note-content">
+        <p>
+          This is your official online receipt. Keep it for your records or 
+          <strong>export as PDF</strong> using your browser's print function.
+        </p>
+      </div>
+    </div>
+  </footer>
 </section>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  /* ===== BRAND COLOR SYSTEM ===== */
+  :root {
+    /* Core Brand Colors */
+    --trust-blue: #2563EB;      /* Trust & Reliability */
+    --innovation-purple: #7C3AED; /* Innovation & Creativity */
+    --growth-green: #22C55E;    /* Growth & Success */
+    
+    /* Color Variants */
+    --blue-dark: #1D4ED8;
+    --blue-light: #60A5FA;
+    --blue-bg: rgba(37, 99, 235, 0.08);
+    
+    --purple-dark: #6D28D9;
+    --purple-light: #A78BFA;
+    --purple-bg: rgba(124, 58, 237, 0.08);
+    
+    --green-dark: #16A34A;
+    --green-light: #4ADE80;
+    --green-bg: rgba(34, 197, 94, 0.08);
+    
+    /* Neutrals */
+    --black: #0F172A;
+    --gray-900: #1E293B;
+    --gray-800: #334155;
+    --gray-700: #475569;
+    --gray-600: #64748B;
+    --gray-500: #94A3B8;
+    --gray-400: #CBD5E1;
+    --gray-300: #E2E8F0;
+    --gray-200: #F1F5F9;
+    --gray-100: #F8FAFC;
+    --white: #FFFFFF;
+    
+    /* UI */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+  }
+
+  .dark-theme {
+    --trust-blue: #60A5FA;
+    --innovation-purple: #A78BFA;
+    --growth-green: #4ADE80;
+    --blue-bg: rgba(96, 165, 250, 0.1);
+    --purple-bg: rgba(167, 139, 250, 0.1);
+    --green-bg: rgba(74, 222, 128, 0.1);
+    --black: #F1F5F9;
+    --white: #0F172A;
+    --gray-100: #1E293B;
+    --gray-200: #334155;
+  }
+
+  /* ===== BASE LAYOUT ===== */
+  .order-detail {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  /* ===== HEADER ===== */
+  .order-header {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .dark-theme .order-header {
+    background: var(--white);
+    border-color: var(--gray-400);
+  }
+
+  .header-accent {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 150px;
+    height: 100%;
+    background: linear-gradient(45deg, var(--growth-green) 0%, var(--innovation-purple) 50%, var(--trust-blue) 100%);
+    opacity: 0.1;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+
+  .header-content {
+    position: relative;
+    z-index: 2;
+    margin-bottom: 1rem;
+  }
+
+  .order-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    background: linear-gradient(90deg, var(--blue-bg), var(--green-bg));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    border-radius: 999px;
+    margin-bottom: 0.75rem;
+  }
+
+  .badge-icon {
+    font-size: 0.875rem;
+  }
+
+  .badge-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--trust-blue);
+  }
+
+  .order-title-section {
+    margin-bottom: 0.75rem;
+  }
+
+  .order-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem;
+  }
+
+  .title-gradient {
+    background: linear-gradient(90deg, var(--trust-blue), var(--innovation-purple), var(--growth-green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .order-subtitle {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin: 0;
+  }
+
+  .order-subtitle strong {
+    color: var(--black);
+  }
+
+  .order-status-display {
+    margin-top: 0.75rem;
+  }
+
+  .header-actions {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    gap: 0.5rem;
+  }
+
+  .btn-trust {
+    background: var(--trust-blue);
+    color: white;
+  }
+
+  .btn-trust:hover {
+    background: var(--blue-dark);
+  }
+
+  .btn-growth {
+    background: var(--growth-green);
+    color: white;
+  }
+
+  .btn-growth:hover {
+    background: var(--green-dark);
+  }
+
+  .btn-innovation {
+    background: var(--innovation-purple);
+    color: white;
+  }
+
+  .btn-innovation:hover {
+    background: var(--purple-dark);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--black);
+    border: 1px solid var(--gray-400);
+  }
+
+  .btn-outline:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-500);
+  }
+
+  .btn-icon {
+    font-size: 1rem;
+  }
+
+  /* Status-based track buttons */
+  .btn-track {
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: opacity 0.2s ease;
+  }
+
+  .btn-track:hover {
+    opacity: 0.9;
+  }
+
+  .btn-delivered {
+    background: linear-gradient(90deg, var(--growth-green), var(--green-dark));
+  }
+
+  .btn-intransit {
+    background: linear-gradient(90deg, var(--trust-blue), var(--blue-dark));
+  }
+
+  .btn-pending {
+    background: linear-gradient(90deg, var(--innovation-purple), var(--purple-dark));
+  }
+
+  /* ===== STATUS BADGES ===== */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .status-delivered {
+    background: var(--green-bg);
+    color: var(--growth-green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .status-intransit {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .status-pending {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .status-cancelled {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .status-dot.delivered {
+    background: var(--growth-green);
+  }
+
+  .status-dot.intransit {
+    background: var(--trust-blue);
+  }
+
+  .status-dot.pending {
+    background: var(--innovation-purple);
+  }
+
+  .status-dot.cancelled {
+    background: #EF4444;
+  }
+
+  /* ===== ORDER SUMMARY ===== */
+  .order-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .summary-card {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: transform 0.2s ease;
+  }
+
+  .summary-card:hover {
+    transform: translateY(-2px);
+  }
+
+  .trust-card {
+    background: linear-gradient(135deg, var(--blue-bg), rgba(37, 99, 235, 0.05));
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .growth-card {
+    background: linear-gradient(135deg, var(--green-bg), rgba(34, 197, 94, 0.05));
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .innovation-card {
+    background: linear-gradient(135deg, var(--purple-bg), rgba(124, 58, 237, 0.05));
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .summary-icon {
+    font-size: 1.5rem;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--white);
+  }
+
+  .dark-theme .summary-icon {
+    background: var(--gray-200);
+  }
+
+  .trust-card .summary-icon {
+    color: var(--trust-blue);
+  }
+
+  .growth-card .summary-icon {
+    color: var(--growth-green);
+  }
+
+  .innovation-card .summary-icon {
+    color: var(--innovation-purple);
+  }
+
+  .summary-content {
+    flex: 1;
+  }
+
+  .summary-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-600);
+    margin-bottom: 0.25rem;
+  }
+
+  .summary-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  /* ===== DETAIL SECTIONS ===== */
+  .detail-section {
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+  }
+
+  .dark-theme .detail-section {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--gray-200);
+  }
+
+  .dark-theme .section-header {
+    border-bottom-color: var(--gray-300);
+  }
+
+  .section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 1rem;
+  }
+
+  .trust-icon {
+    background: linear-gradient(135deg, var(--trust-blue), var(--blue-light));
+  }
+
+  .growth-icon {
+    background: linear-gradient(135deg, var(--growth-green), var(--green-light));
+  }
+
+  .innovation-icon {
+    background: linear-gradient(135deg, var(--innovation-purple), var(--purple-light));
+  }
+
+  .section-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-weight: 600;
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  /* ===== ITEMS CONTAINER ===== */
+  .items-container {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .item-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+  }
+
+  .dark-theme .item-card {
+    background: var(--gray-200);
+    border-color: var(--gray-400);
+  }
+
+  .item-card:hover {
+    border-color: var(--trust-blue);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .item-image {
+    flex: 0 0 64px;
+    height: 64px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--gray-200);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .item-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .item-placeholder {
+    font-size: 1.5rem;
+    color: var(--gray-500);
+  }
+
+  .item-details {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .item-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0 0 0.5rem;
+    line-height: 1.4;
+  }
+
+  .item-meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+  }
+
+  .meta-label {
+    color: var(--gray-600);
+  }
+
+  .meta-value {
+    font-weight: 500;
+    color: var(--black);
+  }
+
+  .item-total {
+    text-align: right;
+    min-width: 100px;
+  }
+
+  .total-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-600);
+    margin-bottom: 0.25rem;
+  }
+
+  .total-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--trust-blue);
+  }
+
+  /* ===== PAYMENT BREAKDOWN ===== */
+  .breakdown-card {
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--gray-300);
+    padding: 1rem;
+  }
+
+  .dark-theme .breakdown-card {
+    background: var(--gray-200);
+    border-color: var(--gray-400);
+  }
+
+  .breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--gray-300);
+  }
+
+  .dark-theme .breakdown-row {
+    border-bottom-color: var(--gray-400);
+  }
+
+  .breakdown-row:last-child {
+    border-bottom: none;
+  }
+
+  .breakdown-row.total {
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+    border-top: 2px solid var(--gray-300);
+    font-weight: 600;
+  }
+
+  .dark-theme .breakdown-row.total {
+    border-top-color: var(--gray-400);
+  }
+
+  .row-label {
+    font-size: 0.875rem;
+    color: var(--gray-700);
+  }
+
+  .row-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--black);
+  }
+
+  .breakdown-row.total .row-value {
+    color: var(--trust-blue);
+    font-size: 1rem;
+  }
+
+  /* Refund Notice */
+  .refund-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: var(--radius-sm);
+  }
+
+  .notice-icon {
+    font-size: 1.25rem;
+    color: #F59E0B;
+  }
+
+  .notice-content h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0 0 0.25rem;
+  }
+
+  .notice-content p {
+    font-size: 0.75rem;
+    color: var(--gray-700);
+    margin: 0;
+  }
+
+  /* ===== DELIVERY GRID ===== */
+  .delivery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  .delivery-card {
+    padding: 1rem;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+  }
+
+  .dark-theme .delivery-card {
+    background: var(--gray-200);
+    border-color: var(--gray-400);
+  }
+
+  .delivery-card:hover {
+    border-color: var(--trust-blue);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Tracking card with status border */
+  .tracking-card {
+    border-left-width: 4px;
+    border-left-style: solid;
+  }
+
+  .tracking-delivered {
+    border-left-color: var(--growth-green);
+  }
+
+  .tracking-intransit {
+    border-left-color: var(--trust-blue);
+  }
+
+  .tracking-pending {
+    border-left-color: var(--innovation-purple);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--gray-300);
+  }
+
+  .dark-theme .card-header {
+    border-bottom-color: var(--gray-400);
+  }
+
+  .card-icon {
+    font-size: 1.25rem;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gray-200);
+    border-radius: var(--radius-sm);
+  }
+
+  .card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--black);
+    margin: 0;
+    flex: 1;
+  }
+
+  .tracking-badge {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .tracking-badge.delivered {
+    background: var(--green-bg);
+    color: var(--growth-green);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .tracking-badge.intransit {
+    background: var(--blue-bg);
+    color: var(--trust-blue);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .tracking-badge.pending {
+    background: var(--purple-bg);
+    color: var(--innovation-purple);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+  }
+
+  .card-content {
+    font-size: 0.875rem;
+  }
+
+  .method-name {
+    font-weight: 600;
+    color: var(--black);
+    margin-bottom: 0.25rem;
+  }
+
+  .method-details,
+  .tracking-info,
+  .payer-country,
+  .timeline-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+    color: var(--gray-700);
+  }
+
+  .detail-label,
+  .info-label,
+  .timeline-label {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    min-width: 80px;
+  }
+
+  .detail-value,
+  .info-value,
+  .timeline-value {
+    font-weight: 500;
+    color: var(--black);
+  }
+
+  .address-lines {
+    line-height: 1.5;
+  }
+
+  .address-line {
+    margin-bottom: 0.125rem;
+  }
+
+  .address-line.strong {
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .payer-name {
+    font-weight: 600;
+    color: var(--black);
+    margin-bottom: 0.25rem;
+  }
+
+  .payer-email {
+    color: var(--trust-blue);
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+  }
+
+  .no-data {
+    color: var(--gray-600);
+    font-style: italic;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .tracking-number {
+    font-family: 'SF Mono', monospace;
+    font-weight: 500;
+  }
+
+  .tracking-link {
+    color: var(--innovation-purple);
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .tracking-link:hover {
+    text-decoration: underline;
+  }
+
+  .external-icon {
+    font-size: 0.75rem;
+  }
+
+  .timeline-item {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* ===== ORDER FOOTER ===== */
+  .order-footer {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid var(--gray-300);
+  }
+
+  .dark-theme .order-footer {
+    border-top-color: var(--gray-400);
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .footer-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--blue-bg);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    border-radius: var(--radius-md);
+  }
+
+  .note-icon {
+    font-size: 1.25rem;
+    color: var(--trust-blue);
+  }
+
+  .note-content p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+
+  .note-content strong {
+    color: var(--black);
+  }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--gray-300);
+  }
+
+  .empty-state.compact {
+    padding: 1.5rem 1rem;
+  }
+
+  .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin: 0;
+  }
+
+  /* ===== RESPONSIVE DESIGN ===== */
+  @media (max-width: 768px) {
+    .order-detail {
+      padding: 0.75rem;
+    }
+
+    .order-header {
+      padding: 1rem;
+    }
+
+    .order-title {
+      font-size: 1.5rem;
+    }
+
+    .order-summary {
+      grid-template-columns: 1fr;
+    }
+
+    .detail-section {
+      padding: 1rem;
+    }
+
+    .section-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .item-card {
+      flex-direction: column;
+      align-items: stretch;
+      text-align: center;
+    }
+
+    .item-image {
+      width: 100%;
+      height: 120px;
+      flex: none;
+    }
+
+    .item-meta {
+      justify-content: center;
+    }
+
+    .item-total {
+      text-align: center;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--gray-300);
+    }
+
+    .delivery-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .footer-actions {
+      flex-direction: column;
+    }
+
+    .footer-actions .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  /* Small phones */
+  @media (max-width: 380px) {
+    .order-detail {
+      padding: 0.5rem;
+    }
+
+    .header-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .header-actions .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .breakdown-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
+
+    .row-value {
+      align-self: flex-end;
+    }
+
+    .card-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .tracking-badge {
+      align-self: flex-start;
+    }
+
+    .method-details,
+    .tracking-info,
+    .payer-country,
+    .timeline-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
+
+    .detail-label,
+    .info-label,
+    .timeline-label {
+      min-width: auto;
+    }
+  }
+</style>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  document.addEventListener('DOMContentLoaded', function () {
+    const printBtn = document.querySelector('[data-print-receipt]');
+    if (!printBtn) return;
+
+    printBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      window.print();
+    });
+  });
+</script>

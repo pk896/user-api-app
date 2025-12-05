@@ -1,167 +1,804 @@
-<h1 class="page-title">✏️ Edit Business Profile</h1>
+<div class="edit-profile-page">
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="page-title">Edit Business Profile</h1>
+        <p class="page-subtitle">Update your business information and settings</p>
+      </div>
+    </div>
+    <a href="/business/profile" class="back-button">
+      <svg viewBox="0 0 24 24" width="20" height="20">
+        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+      </svg>
+      Back to Profile
+    </a>
+  </div>
 
-<!-- ✅ Toast Container -->
-<div id="toast-container"></div>
+  <!-- Flash Messages -->
+  <div class="flash-container">
+    <% if (success && success.length > 0) { %>
+      <div class="flash flash-success">
+        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
+          <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+        </svg>
+        <div class="flash-content">
+          <strong>Success!</strong>
+          <p><%= success %></p>
+        </div>
+      </div>
+    <% } %>
+    <% if (error && error.length > 0) { %>
+      <div class="flash flash-error">
+        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
+          <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+        <div class="flash-content">
+          <strong>Error!</strong>
+          <p><%= error %></p>
+        </div>
+      </div>
+    <% } %>
+  </div>
 
-<!-- ✅ Flash Messages -->
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
-
-<div class="profile-container <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <div class="profile-card">
-    <form 
-      action="/business/profile/edit" 
-      method="POST"
-      class="edit-profile-form"
-    >
-      <div class="form-group">
-        <label for="name">Business Name</label>
-        <input type="text" id="name" name="name" value="<%= business.name %>" required />
+  <!-- Profile Edit Form -->
+  <div class="profile-edit-container <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
+    <div class="profile-card">
+      <div class="card-header">
+        <h2>Business Information</h2>
+        <div class="status-badge">
+          <span class="status-dot"></span>
+          <%= business.role.charAt(0).toUpperCase() + business.role.slice(1) %>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label for="phone">Phone</label>
-        <input type="text" id="phone" name="phone" value="<%= business.phone %>" required />
-      </div>
+      <form 
+        action="/business/profile/edit" 
+        method="POST"
+        class="edit-profile-form"
+        id="profileForm"
+      >
+        <!-- Business Details Section -->
+        <div class="form-section">
+          <div class="section-header">
+            <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+            </svg>
+            <h3>Business Details</h3>
+          </div>
+          
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="name" class="form-label">
+                Business Name
+                <span class="required">*</span>
+              </label>
+              <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                value="<%= business.name %>" 
+                required
+                class="form-input"
+                placeholder="Enter your business name"
+              />
+              <div class="form-hint">Your official business name as registered</div>
+            </div>
 
-      <div class="form-group">
-        <label for="country">Country</label>
-        <input type="text" id="country" name="country" value="<%= business.country %>" required />
-      </div>
+            <div class="form-group">
+              <label for="phone" class="form-label">
+                Phone Number
+                <span class="required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+                </svg>
+                <input 
+                  type="tel" 
+                  id="phone" 
+                  name="phone" 
+                  value="<%= business.phone %>" 
+                  required
+                  class="form-input"
+                  placeholder="+1 (555) 123-4567"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <div class="form-group">
-        <label for="city">City</label>
-        <input type="text" id="city" name="city" value="<%= business.city %>" required />
-      </div>
+        <!-- Location Section -->
+        <div class="form-section">
+          <div class="section-header">
+            <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            <h3>Location Information</h3>
+          </div>
+          
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="country" class="form-label">
+                Country
+                <span class="required">*</span>
+              </label>
+              <input 
+                type="text" 
+                id="country" 
+                name="country" 
+                value="<%= business.country %>" 
+                required
+                class="form-input"
+                placeholder="Enter country"
+              />
+            </div>
 
-      <div class="form-group">
-        <label for="address">Address</label>
-        <input type="text" id="address" name="address" value="<%= business.address %>" required />
-      </div>
+            <div class="form-group">
+              <label for="city" class="form-label">
+                City
+                <span class="required">*</span>
+              </label>
+              <input 
+                type="text" 
+                id="city" 
+                name="city" 
+                value="<%= business.city %>" 
+                required
+                class="form-input"
+                placeholder="Enter city"
+              />
+            </div>
 
-      <div class="form-group">
-        <label for="password">New Password (optional)</label>
-        <input 
-          type="password" 
-          id="password" 
-          name="password" 
-          placeholder="Leave blank to keep your current password" 
-        />
-      </div>
+            <div class="form-group full-width">
+              <label for="address" class="form-label">
+                Full Address
+                <span class="required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18">
+                  <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                <input 
+                  type="text" 
+                  id="address" 
+                  name="address" 
+                  value="<%= business.address %>" 
+                  required
+                  class="form-input"
+                  placeholder="Street address, building, suite, etc."
+                />
+              </div>
+              <div class="form-hint">This address will be used for shipping and billing</div>
+            </div>
+          </div>
+        </div>
 
-      <div class="actions">
-        <button type="submit" class="btn primary">💾 Save Changes</button>
-        <a href="/business/profile" class="btn secondary">⬅ Back to Profile</a>
+        <!-- Security Section -->
+        <div class="form-section">
+          <div class="section-header">
+            <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+            </svg>
+            <h3>Security Settings</h3>
+          </div>
+          
+          <div class="form-group">
+            <label for="password" class="form-label">
+              New Password
+            </label>
+            <div class="input-with-icon">
+              <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18">
+                <path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+              </svg>
+              <input 
+                type="password" 
+                id="password" 
+                name="password" 
+                class="form-input"
+                placeholder="Enter new password (optional)"
+              />
+            </div>
+            <div class="form-hint">
+              Leave blank to keep your current password. Minimum 8 characters with letters and numbers.
+            </div>
+            <div class="password-strength">
+              <div class="strength-bar"></div>
+              <div class="strength-label">Password strength: <span>Weak</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="window.location.href='/business/profile'">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+            </svg>
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Sidebar Help -->
+    <div class="sidebar-help">
+      <div class="help-card">
+        <div class="help-header">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+          </svg>
+          <h3>Profile Tips</h3>
+        </div>
+        <ul class="help-list">
+          <li>
+            <strong>Business Name:</strong> Use your registered legal name
+          </li>
+          <li>
+            <strong>Phone Number:</strong> Include country code for international calls
+          </li>
+          <li>
+            <strong>Address:</strong> Ensure accuracy for shipping and billing
+          </li>
+          <li>
+            <strong>Password:</strong> Update regularly for security
+          </li>
+          <li>
+            <strong>Verification:</strong> Some changes may require re-verification
+          </li>
+        </ul>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 
-<!-- ✅ Styles -->
 <style>
+  /* Page Container */
+  .edit-profile-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+  }
+
+  /* Page Header */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #22C55E; /* Green accent */
+  }
+
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .header-icon {
+    background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header-icon svg {
+    color: white;
+  }
+
   .page-title {
-    text-align: center;
-    margin-top: 1rem;
+    margin: 0;
     font-size: 1.8rem;
     font-weight: 700;
+    color: #0F172A;
   }
 
-  .profile-container {
+  .dark-theme .page-title {
+    color: #F1F5F9;
+  }
+
+  .page-subtitle {
+    margin: 0.25rem 0 0;
+    color: #64748B;
+    font-size: 0.95rem;
+  }
+
+  .back-button {
     display: flex;
-    justify-content: center;
-    padding: 1.5rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563EB;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
   }
 
-  .profile-card {
-    background: #fff;
-    padding: 1.5rem;
+  .back-button:hover {
+    background: rgba(37, 99, 235, 0.2);
+    transform: translateX(-2px);
+  }
+
+  .back-button svg {
+    color: #2563EB;
+  }
+
+  /* Flash Messages */
+  .flash-container {
+    margin-bottom: 2rem;
+  }
+
+  .flash {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem;
     border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    max-width: 480px;
-    width: 100%;
+    margin-bottom: 1rem;
+    animation: slideIn 0.3s ease;
+  }
+
+  .flash-success {
+    background: linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%);
+    border-left: 4px solid #22C55E;
+    color: #166534;
+  }
+
+  .flash-error {
+    background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+    border-left: 4px solid #EF4444;
+    color: #991B1B;
+  }
+
+  .flash-icon {
+    flex-shrink: 0;
+  }
+
+  .flash-content strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  .flash-content p {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  /* Main Layout */
+  .profile-edit-container {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .profile-edit-container {
+      grid-template-columns: 1fr;
+    }
+    .page-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+  }
+
+  /* Profile Card */
+  .profile-card {
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    padding: 2rem;
   }
 
   .dark-theme .profile-card {
-    background: #1f2937;
-    color: #f9fafb;
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   }
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 1rem;
-  }
-
-  label {
-    font-weight: 600;
-    margin-bottom: .3rem;
-  }
-
-  input {
-    padding: .6rem;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 1rem;
-  }
-
-  input:focus {
-    outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 1px #2563eb;
-  }
-
-  .dark-theme input {
-    background: #1f2937;
-    color: #f9fafb;
-    border-color: #374151;
-  }
-
-  .actions {
+  .card-header {
     display: flex;
     justify-content: space-between;
-    margin-top: 1.5rem;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #E2E8F0;
+  }
+
+  .dark-theme .card-header {
+    border-bottom-color: #334155;
+  }
+
+  .card-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .card-header h2 {
+    color: #F1F5F9;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(124, 58, 237, 0.1);
+    color: #7C3AED;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    background: #7C3AED;
+    border-radius: 50%;
+  }
+
+  /* Form Sections */
+  .form-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-icon {
+    color: #2563EB;
+  }
+
+  .section-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .section-header h3 {
+    color: #F1F5F9;
+  }
+
+  /* Form Grid */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .full-width {
+    grid-column: 1 / -1;
+  }
+
+  /* Form Elements */
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #0F172A;
+    font-size: 0.95rem;
+  }
+
+  .dark-theme .form-label {
+    color: #E2E8F0;
+  }
+
+  .required {
+    color: #EF4444;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    font-size: 1rem;
+    border: 2px solid #E2E8F0;
+    border-radius: 8px;
+    background: white;
+    color: #0F172A;
+    transition: all 0.3s ease;
+  }
+
+  .dark-theme .form-input {
+    background: rgba(15, 23, 42, 0.5);
+    border-color: #334155;
+    color: #F1F5F9;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: #2563EB;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  .input-with-icon {
+    position: relative;
+  }
+
+  .input-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748B;
+  }
+
+  .input-with-icon .form-input {
+    padding-left: 3rem;
+  }
+
+  .form-hint {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  .dark-theme .form-hint {
+    color: #94A3B8;
+  }
+
+  /* Password Strength */
+  .password-strength {
+    margin-top: 1rem;
+  }
+
+  .strength-bar {
+    height: 4px;
+    background: #E2E8F0;
+    border-radius: 2px;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+  }
+
+  .strength-bar::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 30%;
+    background: #EF4444;
+    border-radius: 2px;
+  }
+
+  .strength-label {
+    font-size: 0.875rem;
+    color: #64748B;
+  }
+
+  .strength-label span {
+    font-weight: 600;
+  }
+
+  /* Form Actions */
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
     gap: 1rem;
-    flex-wrap: wrap;
+    padding-top: 2rem;
+    border-top: 1px solid #E2E8F0;
+  }
+
+  .dark-theme .form-actions {
+    border-top-color: #334155;
   }
 
   .btn {
-    text-decoration: none;
-    padding: 0.7rem 1.2rem;
-    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 2rem;
+    font-size: 1rem;
     font-weight: 600;
+    border-radius: 8px;
     border: none;
     cursor: pointer;
-    transition: background 0.2s ease;
+    transition: all 0.3s ease;
+    text-decoration: none;
   }
 
-  .btn.primary {
-    background: #2563eb;
-    color: #fff;
+  .btn-primary {
+    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
+    color: white;
+    box-shadow: 0 2px 10px rgba(34, 197, 94, 0.2);
   }
-  .btn.primary:hover { background: #1d4ed8; }
 
-  .btn.secondary {
-    background: #f3f4f6;
-    color: #111;
-    border: 1px solid #d1d5db;
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
   }
-  .btn.secondary:hover { background: #e5e7eb; }
 
-  /* ✅ Responsive */
-  @media (max-width: 600px) {
-    .profile-card { padding: 1rem; font-size: 0.9rem; }
-    .btn { width: 100%; text-align: center; }
+  .btn-secondary {
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563EB;
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(37, 99, 235, 0.2);
+  }
+
+  /* Sidebar Help */
+  .sidebar-help {
+    position: sticky;
+    top: 2rem;
+    height: fit-content;
+  }
+
+  .help-card {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+    border-radius: 16px;
+    padding: 1.5rem;
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  .dark-theme .help-card {
+    background: rgba(37, 99, 235, 0.15);
+    border-color: rgba(37, 99, 235, 0.3);
+  }
+
+  .help-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .help-header svg {
+    color: #2563EB;
+  }
+
+  .help-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #0F172A;
+  }
+
+  .dark-theme .help-header h3 {
+    color: #F1F5F9;
+  }
+
+  .help-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .help-list li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(37, 99, 235, 0.1);
+    font-size: 0.9rem;
+    color: #475569;
+  }
+
+  .dark-theme .help-list li {
+    color: #94A3B8;
+    border-bottom-color: rgba(37, 99, 235, 0.2);
+  }
+
+  .help-list li:last-child {
+    border-bottom: none;
+  }
+
+  .help-list strong {
+    color: #2563EB;
+    font-weight: 600;
+  }
+
+  /* Animations */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>
 
-<!-- ✅ Secure Inline Script -->
+<!-- Secure Inline Script -->
 <script nonce="<%= nonce %>">
   document.addEventListener("DOMContentLoaded", () => {
-    console.log("✏️ Edit Profile loaded securely with CSP nonce ✅");
+    console.log("✏️ Edit Business Profile loaded securely with CSP nonce ✅");
+    
+    // Real-time password strength indicator
+    const passwordInput = document.getElementById('password');
+    const strengthBar = document.querySelector('.strength-bar');
+    const strengthLabel = document.querySelector('.strength-label span');
+    
+    if (passwordInput) {
+      passwordInput.addEventListener('input', function() {
+        const password = this.value;
+        let strength = 0;
+        
+        // Length check
+        if (password.length >= 8) strength++;
+        // Lowercase check
+        if (/[a-z]/.test(password)) strength++;
+        // Uppercase check
+        if (/[A-Z]/.test(password)) strength++;
+        // Number check
+        if (/[0-9]/.test(password)) strength++;
+        // Special character check
+        if (/[^A-Za-z0-9]/.test(password)) strength++;
+        
+        // Update strength bar
+        const width = (strength / 5) * 100;
+        strengthBar.style.setProperty('--strength-width', `${width}%`);
+        
+        // Update strength label
+        let label = 'Weak';
+        let color = '#EF4444';
+        
+        if (strength >= 4) {
+          label = 'Strong';
+          color = '#22C55E';
+        } else if (strength >= 3) {
+          label = 'Good';
+          color = '#F59E0B';
+        } else if (strength >= 2) {
+          label = 'Fair';
+          color = '#F59E0B';
+        }
+        
+        strengthLabel.textContent = label;
+        strengthBar.style.backgroundColor = color;
+      });
+    }
+    
+    // Form validation
+    const form = document.getElementById('profileForm');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        const requiredFields = this.querySelectorAll('[required]');
+        let isValid = true;
+        
+        requiredFields.forEach(field => {
+          if (!field.value.trim()) {
+            isValid = false;
+            field.style.borderColor = '#EF4444';
+          } else {
+            field.style.borderColor = '';
+          }
+        });
+        
+        if (!isValid) {
+          e.preventDefault();
+          alert('Please fill in all required fields marked with *');
+        }
+      });
+    }
   });
 </script>
-
