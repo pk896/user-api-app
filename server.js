@@ -679,7 +679,7 @@ async function startServer() {
   }
   
   // Start the server
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Database status: ${dbConnectionEstablished ? '✅ Connected' : '❌ Not connected'}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

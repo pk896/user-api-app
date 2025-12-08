@@ -75,6 +75,13 @@
 
     <% } else if (["seller", "supplier"].includes(business.role)) { %>
       <!-- SELLER / SUPPLIER: Full edit form -->
+      <%
+        const prodRole  = (product.role  || '').toLowerCase();
+        const prodType  = (product.type  || '').toLowerCase();
+        const isShoes   = prodType === 'shoes' || prodRole === 'shoes';
+        const isClothes = prodRole === 'clothes' || prodType === 'clothes';
+      %>
+
       <div class="edit-form-container">
         <div class="form-tabs">
           <button type="button" class="tab active" data-tab="basic">Basic Info</button>
@@ -198,7 +205,7 @@
             </div>
           </div>
 
-          <!-- Details Tab -->
+                   <!-- Details Tab -->
           <div class="tab-content" id="details-tab">
             <div class="form-section">
               <div class="section-header">
@@ -209,6 +216,26 @@
               </div>
 
               <div class="form-grid">
+                <!-- ROLE (enum) -->
+                <div class="form-group">
+                  <label for="role" class="form-label">
+                    Product Role
+                  </label>
+                  <select id="role" name="role" class="form-select">
+                    <option value="">Select role...</option>
+                    <option value="general"     <%= product.role === 'general' ? 'selected' : '' %>>General</option>
+                    <option value="clothes"     <%= product.role === 'clothes' ? 'selected' : '' %>>Clothes</option>
+                    <option value="electronics" <%= product.role === 'electronics' ? 'selected' : '' %>>Electronics</option>
+                    <option value="home"        <%= product.role === 'home' ? 'selected' : '' %>>Home</option>
+                    <option value="beauty"      <%= product.role === 'beauty' ? 'selected' : '' %>>Beauty</option>
+                    <option value="groceries"   <%= product.role === 'groceries' ? 'selected' : '' %>>Groceries</option>
+                  </select>
+                  <div class="form-hint">
+                    Controls variants (sizes/colors) and product behaviour.
+                  </div>
+                </div>
+
+                <!-- MATCHING TYPE (string, used in demands etc.) -->
                 <div class="form-group">
                   <label for="type" class="form-label">
                     Product Type
@@ -219,10 +246,14 @@
                     name="type" 
                     value="<%= product.type || '' %>"
                     class="form-input"
-                    placeholder="e.g., Digital, Physical, Service"
+                    placeholder="e.g., shoes, t-shirt, laptop"
                   />
+                  <div class="form-hint">
+                    Used to match demands (e.g. type = "shoes").
+                  </div>
                 </div>
 
+                <!-- MANUFACTURER -->
                 <div class="form-group">
                   <label for="manufacturer" class="form-label">
                     Manufacturer
@@ -237,6 +268,7 @@
                   />
                 </div>
 
+                <!-- COUNTRY OF ORIGIN -->
                 <div class="form-group">
                   <label for="made" class="form-label">
                     Country of Origin
@@ -247,13 +279,14 @@
                     name="made" 
                     value="<%= product.made || '' %>"
                     class="form-input"
-                    placeholder="e.g., USA, China, Germany"
+                    placeholder="e.g., South Africa, China, Germany"
                   />
                 </div>
 
+                <!-- SINGLE COLOR (backwards compatible) -->
                 <div class="form-group">
                   <label for="color" class="form-label">
-                    Color
+                    Default Color
                   </label>
                   <input 
                     id="color" 
@@ -261,13 +294,17 @@
                     name="color" 
                     value="<%= product.color || '' %>"
                     class="form-input"
-                    placeholder="Product color(s)"
+                    placeholder="e.g., Black"
                   />
+                  <div class="form-hint">
+                    Used for non-clothing or default variant.
+                  </div>
                 </div>
 
+                <!-- SINGLE SIZE (backwards compatible) -->
                 <div class="form-group">
                   <label for="size" class="form-label">
-                    Size/Dimensions
+                    Default Size
                   </label>
                   <input 
                     id="size" 
@@ -275,21 +312,104 @@
                     name="size" 
                     value="<%= product.size || '' %>"
                     class="form-input"
-                    placeholder="e.g., Medium, 10x5x2 inches"
+                    placeholder="e.g., M, 42, 10x5x2 cm"
                   />
+                  <div class="form-hint">
+                    Used for non-clothing or default variant.
+                  </div>
                 </div>
 
+                <!-- QUALITY -->
                 <div class="form-group">
                   <label for="quality" class="form-label">
                     Quality Grade
                   </label>
                   <select id="quality" name="quality" class="form-select">
                     <option value="">Select quality...</option>
-                    <option value="Premium" <%= product.quality === 'Premium' ? 'selected' : '' %>>Premium</option>
+                    <option value="Premium"  <%= product.quality === 'Premium'  ? 'selected' : '' %>>Premium</option>
                     <option value="Standard" <%= product.quality === 'Standard' ? 'selected' : '' %>>Standard</option>
-                    <option value="Economy" <%= product.quality === 'Economy' ? 'selected' : '' %>>Economy</option>
-                    <option value="Wholesale" <%= product.quality === 'Wholesale' ? 'selected' : '' %>>Wholesale</option>
+                    <option value="Economy"  <%= product.quality === 'Economy'  ? 'selected' : '' %>>Economy</option>
+                    <option value="Wholesale"<%= product.quality === 'Wholesale'? 'selected' : '' %>>Wholesale</option>
                   </select>
+                </div>
+
+                <!-- VARIANT SIZES ARRAY -->
+                <div class="form-group">
+                  <label for="sizes" class="form-label">
+                    <%= isShoes ? 'Shoe sizes' : (isClothes ? 'Clothing sizes' : 'Sizes (array)') %>
+                  </label>
+                  <input 
+                    id="sizes" 
+                    type="text" 
+                    name="sizes" 
+                    value="<%= (product.sizes && product.sizes.length ? product.sizes.join(', ') : '') %>"
+                    class="form-input"
+                    placeholder="<%= isShoes 
+                      ? 'e.g., 3, 4, 5, 6, 7, 8, 9' 
+                      : (isClothes ? 'e.g., XS, S, M, L, XL' : 'Comma-separated sizes') %>"
+                  />
+                  <div class="form-hint">
+                    <%= isShoes 
+                      ? 'Comma-separated shoe sizes. These are used in the shop size dropdown.' 
+                      : (isClothes 
+                        ? 'Comma-separated clothing sizes. For clothes this should not be empty.' 
+                        : 'Comma-separated list of sizes or dimensions.') %>
+                  </div>
+                </div>
+
+
+                <!-- VARIANT COLORS ARRAY -->
+                <div class="form-group">
+                  <label for="colors" class="form-label">
+                    Colors (array)
+                  </label>
+                  <input 
+                    id="colors" 
+                    type="text" 
+                    name="colors" 
+                    value="<%= (product.colors && product.colors.length ? product.colors.join(', ') : '') %>"
+                    class="form-input"
+                    placeholder="e.g., Red, Blue, Black"
+                  />
+                  <div class="form-hint">
+                    Comma-separated list. For clothes this must not be empty.
+                  </div>
+                </div>
+
+                <!-- STATUS FLAGS -->
+                <div class="form-group">
+                  <label class="form-label">
+                    Status Flags
+                  </label>
+                  <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center;">
+                    <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.9rem;">
+                      <input 
+                        type="checkbox" 
+                        name="isNew" 
+                        <%= product.isNew ? 'checked' : '' %>
+                      />
+                      New
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.9rem;">
+                      <input 
+                        type="checkbox" 
+                        name="isOnSale" 
+                        <%= product.isOnSale ? 'checked' : '' %>
+                      />
+                      On sale
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.9rem;">
+                      <input 
+                        type="checkbox" 
+                        name="isPopular" 
+                        <%= product.isPopular ? 'checked' : '' %>
+                      />
+                      Popular
+                    </label>
+                  </div>
+                  <div class="form-hint">
+                    Used for badges, filters and sorting in the shop.
+                  </div>
                 </div>
               </div>
             </div>

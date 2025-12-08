@@ -114,12 +114,39 @@
             const type      = (p.type || '').toLowerCase();
             const role      = (p.role || '').toLowerCase();
             const isClothes = role === 'clothes' || type === 'clothes';
+            const isShoes   = role === 'shoes'   || type === 'shoes';
 
             const flags     = { isNew: !!p.isNew, sale: !!p.sale, popular: !!p.popular };
 
-            // Try using p.sizes / p.colors from DB; fall back if not present
-            const sizeOptions  = isClothes && Array.isArray(p.sizes)  && p.sizes.length  ? p.sizes  : ['XS','S','M','L','XL'];
-            const colorOptions = isClothes && Array.isArray(p.colors) && p.colors.length ? p.colors : ['Black','White','Blue','Red'];
+            // Size options
+            let sizeOptions = [];
+            if (isClothes || isShoes) {
+              if (Array.isArray(p.sizes) && p.sizes.length) {
+                // Use sizes from DB if present
+                sizeOptions = p.sizes;
+              } else if (isClothes) {
+                // Default clothes sizes
+                sizeOptions = ['XS', 'S', 'M', 'L', 'XL'];
+              } else if (isShoes) {
+                // Default shoe sizes (you can tweak for SA sizes)
+                sizeOptions = ['3', '4', '5', '6', '7', '8', '9', '10'];
+              }
+            }
+
+            // ✅ Color options – for BOTH clothes and shoes
+            let colorOptions = [];
+            if (isClothes || isShoes) {
+              if (Array.isArray(p.colors) && p.colors.length) {
+                // Use colors from DB if present
+                colorOptions = p.colors;
+              } else if (isClothes) {
+                // Default clothes colors
+                colorOptions = ['Black', 'White', 'Blue', 'Red'];
+              } else if (isShoes) {
+                // Default shoe colors
+                colorOptions = ['Black', 'White', 'Brown', 'Navy'];
+              }
+            }
           %>
           <li class="amz-item"
               data-name="<%- name %>"
@@ -151,33 +178,40 @@
                 </span>
               </div>
 
-              <% if (isClothes) { %>
-              <div class="variants">
-                <label>
-                  <span class="v-label">Size</span>
-                  <select class="variant-size" data-pid="<%= p.customId %>">
-                    <% sizeOptions.forEach(sz => { %>
-                      <option value="<%= sz %>"><%= sz %></option>
-                    <% }) %>
-                  </select>
-                </label>
-                <label>
-                  <span class="v-label">Color</span>
-                  <select class="variant-color" data-pid="<%= p.customId %>">
-                    <% colorOptions.forEach(c => { %>
-                      <option value="<%= c %>"><%= c %></option>
-                    <% }) %>
-                  </select>
-                </label>
-              </div>
+              <% if (isClothes || isShoes) { %>
+                <div class="variants">
+                  <!-- Size (clothes + shoes) -->
+                  <label>
+                    <span class="v-label"><%= isShoes ? 'Shoe size' : 'Size' %></span>
+                    <select class="variant-size" data-pid="<%= p.customId %>">
+                      <option value="">Choose size</option>
+                      <% sizeOptions.forEach(sz => { %>
+                        <option value="<%= sz %>"><%= sz %></option>
+                      <% }) %>
+                    </select>
+                  </label>
+
+                  <!-- ✅ Color (clothes + shoes) -->
+                  <% if (colorOptions.length) { %>
+                  <label>
+                    <span class="v-label">Color</span>
+                    <select class="variant-color" data-pid="<%= p.customId %>">
+                      <option value="">Choose color</option>
+                      <% colorOptions.forEach(c => { %>
+                        <option value="<%= c %>"><%= c %></option>
+                      <% }) %>
+                    </select>
+                  </label>
+                  <% } %>
+                </div>
               <% } %>
 
-              <!-- Per-item shipping line intentionally removed -->
+              <!-- Add to cart -->
               <div class="act">
                 <a class="btn add"
-                   href="/api/cart/add?pid=<%= p.customId %>"
-                   data-pid="<%= p.customId %>"
-                   <%= inStock ? '' : 'aria-disabled="true"' %>>
+                  href="/api/cart/add?pid=<%= p.customId %>"
+                  data-pid="<%= p.customId %>"
+                  <%= inStock ? '' : 'aria-disabled="true"' %>>
                   Add to Cart
                 </a>
                 <a class="btn ghost" href="/products/view/<%= p.customId %>">Details</a>
@@ -210,6 +244,19 @@
       <span class="muted"> · <span id="miniCount">0</span> item(s)</span>
     </div>
     <a href="/payment/checkout" class="co-btn">purchase in Checkout</a>
+  </div>
+
+   <!-- ===== Variant warning toast ===== -->
+  <div id="variantToast" class="variant-toast" aria-live="polite" hidden>
+    <div class="variant-toast-inner">
+      <span class="variant-toast-icon">⚠️</span>
+      <span class="variant-toast-text" id="variantToastText">
+        Please choose size and color before adding to cart.
+      </span>
+      <button type="button" class="variant-toast-close" id="variantToastClose" aria-label="Dismiss">
+        ✕
+      </button>
+    </div>
   </div>
 </main>
 
@@ -462,9 +509,36 @@
   .btn.add{ background:#ffd814; border-color:#facc15 }
   .btn.ghost{ background:transparent }
 
-  .pager{ display:flex; gap:.6rem; align-items:center; justify-content:center; padding:.6rem 0 }
-  .pg-btn{ border:1px solid var(--line); background:var(--card); border-radius:8px; padding:.35rem .7rem; cursor:pointer }
-  .pg-meta{ color:var(--muted) }
+  .pager{
+    display:flex;
+    gap:.6rem;
+    align-items:center;
+    justify-content:center;
+    padding:.6rem 0;
+  }
+
+  /* Default state: white button, dark text (always visible) */
+  .pg-btn{
+    border:1px solid var(--line);
+    background:#ffffff;
+    border-radius:8px;
+    padding:.35rem .7rem;
+    cursor:pointer;
+    font-weight:700;
+    color:#0f172a;          /* text always visible on white */
+  }
+
+  /* Hover / focus: blue button with white text (still visible) */
+  .pg-btn:hover,
+  .pg-btn:focus-visible{
+    background:#1d4ed8;     /* blue */
+    border-color:#1d4ed8;
+    color:#ffffff;          /* white text on blue */
+  }
+
+  .pg-meta{
+    color:var(--muted);
+  }
 
   .empty{ text-align:center; padding:1.6rem 1rem; }
   .muted{ color:var(--muted) }
@@ -630,14 +704,28 @@
     display: inline-block !important;
   }
 
-  /* Variants (size + color) */
+  /* Variants (size + color) – hidden by default */
   .variants{
-    display:flex;
+    display:none;
     flex-wrap:wrap;
     gap:.35rem;
     margin-top:.1rem;
     font-size:.85rem;
   }
+
+  /* Show variants when card is in "choose mode" */
+  .amz-item.show-variants .variants{
+    display:flex;
+  }
+
+  /* Variants (size + color) */
+  /*.variants{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.35rem;
+    margin-top:.1rem;
+    font-size:.85rem;
+  }*/
   .variants label{
     display:flex;
     flex-direction:column;
@@ -663,6 +751,50 @@
     .variants{
       gap:.25rem;
     }
+  }
+
+    /* ===== Variant warning toast ===== */
+  .variant-toast{
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%) translateY(16px);
+    z-index: 95;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
+    pointer-events: none;
+  }
+  .variant-toast.show{
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+  }
+  .variant-toast-inner{
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem .8rem;
+    border-radius: 999px;
+    background: #111827;
+    color: #f9fafb;
+    box-shadow: var(--shadow);
+    font-size: .86rem;
+  }
+  .variant-toast-icon{
+    font-size: 1rem;
+  }
+  .variant-toast-close{
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: .9rem;
+    padding: 0 .1rem;
+  }
+  .dark-theme .variant-toast-inner{
+    background: #0b1120;
   }
 </style>
 
@@ -707,6 +839,41 @@
   const miniBar       = $('#miniCheckout');
   const miniSubtotal  = $('#miniSubtotal');
   const miniCount     = $('#miniCount');
+
+    const variantToast      = $('#variantToast');
+  const variantToastText  = $('#variantToastText');
+  const variantToastClose = $('#variantToastClose');
+  let   variantToastTimer = null;
+
+  function hideVariantToast(){
+    if (!variantToast) return;
+    variantToast.classList.remove('show');
+    // after transition, hide completely
+    setTimeout(()=>{
+      variantToast.setAttribute('hidden', 'true');
+    }, 220);
+  }
+
+  function showVariantToast(message){
+    if (!variantToast || !variantToastText){
+      // fallback (should rarely happen)
+      alert(message);
+      return;
+    }
+    variantToastText.textContent = message || 'Please choose size and color before adding to cart.';
+    variantToast.removeAttribute('hidden');
+    variantToast.classList.add('show');
+
+    if (variantToastTimer) clearTimeout(variantToastTimer);
+    variantToastTimer = setTimeout(hideVariantToast, 2500);
+  }
+
+  if (variantToastClose){
+    variantToastClose.addEventListener('click',()=>{
+      if (variantToastTimer) clearTimeout(variantToastTimer);
+      hideVariantToast();
+    });
+  }
 
   const PAGE = { size: 12, page: 1, pages: 1 };
   const CARD = () => list ? Array.from(list.children) : [];
@@ -825,7 +992,7 @@
     renderCart(data.items||[]);
   }
 
-  /* Add to cart inline (handles clothes variants) */
+  /* Add to cart inline (handles clothes + shoes variants) */
   function wireAddButtons(){
     $$('.btn.add').forEach(btn=>{
       btn.addEventListener('click', async (e)=>{
@@ -843,16 +1010,31 @@
         if (card) {
           const type = (card.getAttribute('data-type') || '').toLowerCase();
           const role = (card.getAttribute('data-role') || '').toLowerCase();
+          const isClothes = type === 'clothes' || role === 'clothes';
+          const isShoes   = type === 'shoes'   || role === 'shoes';
 
-          if (type === 'clothes' || role === 'clothes') {
+          if (isClothes || isShoes) {
+            // 👉 FIRST click: just reveal the selectors and focus, do NOT add yet
+            if (!card.classList.contains('show-variants')) {
+              card.classList.add('show-variants');
+
+              const sizeSelFirst = card.querySelector('.variant-size');
+              if (sizeSelFirst) sizeSelFirst.focus();
+
+              // stop here – user must choose options, then click Add again
+              return;
+            }
+
+            // 👉 After variants are visible, now we validate
             const sizeSel  = card.querySelector('.variant-size');
             const colorSel = card.querySelector('.variant-color');
 
-            size  = sizeSel  ? sizeSel.value  : '';
-            color = colorSel ? colorSel.value : '';
+            size  = sizeSel  ? sizeSel.value.trim()  : '';
+            color = colorSel ? colorSel.value.trim() : '';
 
+            // Require BOTH size and color for clothes + shoes
             if (!size || !color) {
-              alert('Please choose size and color before adding to cart.');
+              showVariantToast('Please choose size and color before adding to cart.');
               return;
             }
           }
@@ -878,7 +1060,29 @@
             throw new Error(m);
           }
 
+          // ✅ Added successfully
           btn.textContent = '✅ Added';
+
+          // 🔁 Reset and hide variants back to default
+          const cardAfter = btn.closest('.amz-item');
+          if (cardAfter) {
+            const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
+            const roleA = (cardAfter.getAttribute('data-role') || '').toLowerCase();
+            const isClothesA = typeA === 'clothes' || roleA === 'clothes';
+            const isShoesA   = typeA === 'shoes'   || roleA === 'shoes';
+
+            if (isClothesA || isShoesA) {
+              const sizeSelA  = cardAfter.querySelector('.variant-size');
+              const colorSelA = cardAfter.querySelector('.variant-color');
+
+              if (sizeSelA)  sizeSelA.value  = '';
+              if (colorSelA) colorSelA.value = '';
+
+              // hide the block again
+              cardAfter.classList.remove('show-variants');
+            }
+          }
+
           setTimeout(()=>{
             btn.textContent = original;
             btn.removeAttribute('aria-disabled');
@@ -1010,15 +1214,19 @@
   }
 
   pager && pager.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.pg-btn'); if(!btn) return;
-    const dir = Number(btn.getAttribute('data-dir')||0);
+    const btn = e.target.closest('.pg-btn'); 
+    if (!btn) return;
+
+    const dir  = Number(btn.getAttribute('data-dir') || 0);
     const next = PAGE.page + dir;
-    if (next>=1 && next<=PAGE.pages){
+
+    if (next >= 1 && next <= PAGE.pages){
       PAGE.page = next;
       renderPage();
-      window.scrollTo({top:0, behavior:'smooth'});
+      // ❌ no more window.scrollTo here – stay where the user is
     }
   });
+
 
   // events
   searchForm.addEventListener('submit', (e)=>{
@@ -1071,3 +1279,5 @@
   loadDeliveryOptions('');
 })();
 </script>
+
+

@@ -405,74 +405,129 @@ router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, async (req, re
 /* ===========================================================
  * 💾 POST: Save Product Edits (only own)
  * =========================================================== */
-router.post('/edit/:id', requireBusiness, requireVerifiedBusiness, upload.single('imageFile'), async (req, res) => {
-  try {
-    const business = req.session.business;
-    const product = await Product.findOne({
-      customId: req.params.id,
-      business: business._id,
-    });
+router.post(
+  '/edit/:id',
+  requireBusiness,
+  requireVerifiedBusiness,
+  upload.single('imageFile'),
+  async (req, res) => {
+    try {
+      const business = req.session.business;
+      const product = await Product.findOne({
+        customId: req.params.id,
+        business: business._id,
+      });
 
-    if (!product) {
-      req.flash('error', '❌ Product not found or unauthorized.');
-      return res.redirect('/products/all');
-    }
-
-    // Update fields
-    const fields = [
-      'name',
-      'price',
-      'stock',
-      'category',
-      'color',
-      'size',
-      'quality',
-      'made',
-      'manufacturer',
-      'type',
-      'description',
-    ];
-    fields.forEach((f) => {
-      if (req.body[f] !== undefined) {product[f] = req.body[f].trim();}
-    });
-
-    if (req.body.price) {product.price = Number(req.body.price);}
-    if (req.body.stock) {product.stock = Number(req.body.stock);}
-
-    // Optional new image
-    if (req.file) {
-      const { originalname, buffer, mimetype } = req.file;
-      const ext = extFromFilename(originalname);
-      const key = randomKey(ext);
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: mimetype,
-        }),
-      );
-
-      // Delete old image
-      try {
-        const oldKey = product.imageUrl.split('.com/')[1];
-        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: oldKey }));
-      } catch (err) {
-        console.warn('⚠️ Failed to delete old image:', err.message);
+      if (!product) {
+        req.flash('error', '❌ Product not found or unauthorized.');
+        return res.redirect('/products/all');
       }
 
-      product.imageUrl = buildImageUrl(key);
-    }
+      // ---------- BASIC FIELDS ----------
+      const baseFields = ['name', 'category', 'color', 'size', 'quality', 'made', 'manufacturer', 'type'];
 
-    await product.save();
-    req.flash('success', '✅ Product updated successfully!');
-    res.redirect('/products/all');
-  } catch (err) {
-    console.error('❌ Error updating product:', err);
-    req.flash('error', `❌ Failed to update: ${err.message}`);
-    res.redirect(`/products/edit/${req.params.id}`);
-  }
-});
+      baseFields.forEach((f) => {
+        if (typeof req.body[f] === 'string') {
+          product[f] = req.body[f].trim();
+        }
+      });
+
+      // price & stock as numbers
+      if (req.body.price !== undefined && req.body.price !== '') {
+        const numPrice = Number(req.body.price);
+        if (!Number.isNaN(numPrice)) {
+          product.price = numPrice;
+        }
+      }
+
+      if (req.body.stock !== undefined && req.body.stock !== '') {
+        const numStock = Number(req.body.stock);
+        if (!Number.isNaN(numStock)) {
+          product.stock = numStock;
+        }
+      }
+
+      // description (can be empty)
+      if (typeof req.body.description === 'string') {
+        product.description = req.body.description.trim();
+      }
+
+      // ---------- ROLE (ENUM) ----------
+      if (typeof req.body.role === 'string' && req.body.role.trim()) {
+        product.role = req.body.role.trim();
+      } else {
+        // if empty, leave existing role as-is
+      }
+
+      // ---------- VARIANT ARRAYS ----------
+      function parseListField(value) {
+        if (!value || typeof value !== 'string') return [];
+        return value
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean);
+      }
+
+      if (req.body.sizes !== undefined) {
+        product.sizes = parseListField(req.body.sizes);
+      }
+
+      if (req.body.colors !== undefined) {
+        product.colors = parseListField(req.body.colors);
+      }
+
+      // keep single color/size in sync (optional, but nice)
+      if (!product.color && product.colors && product.colors.length > 0) {
+        product.color = product.colors[0];
+      }
+      if (!product.size && product.sizes && product.sizes.length > 0) {
+        product.size = product.sizes[0];
+      }
+
+      // ---------- STATUS FLAGS ----------
+      // Checkbox => value "on", or undefined if unchecked
+      product.isNew = !!req.body.isNew;
+      product.isOnSale = !!req.body.isOnSale;
+      product.isPopular = !!req.body.isPopular;
+
+      // ---------- OPTIONAL NEW IMAGE ----------
+      if (req.file) {
+        const { originalname, buffer, mimetype } = req.file;
+        const ext = extFromFilename(originalname);
+        const key = randomKey(ext);
+
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: key,
+            Body: buffer,
+            ContentType: mimetype,
+          }),
+        );
+
+        // Delete old image (best-effort)
+        try {
+          if (product.imageUrl && product.imageUrl.includes('.com/')) {
+            const oldKey = product.imageUrl.split('.com/')[1];
+            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: oldKey }));
+          }
+        } catch (err) {
+          console.warn('⚠️ Failed to delete old image:', err.message);
+        }
+
+        product.imageUrl = buildImageUrl(key);
+      }
+
+      await product.save();
+      req.flash('success', '✅ Product updated successfully!');
+      return res.redirect('/products/all');
+    } catch (err) {
+      console.error('❌ Error updating product:', err);
+      req.flash('error', `❌ Failed to update: ${err.message}`);
+      return res.redirect(`/products/edit/${req.params.id}`);
+    }
+  },
+);
 
 /* ===========================================================
  * 🗑️ GET: Delete Product (only own)

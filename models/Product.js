@@ -1,5 +1,5 @@
 // models/Product.js
-//const { mongoose } = require('../db');
+// const { mongoose } = require('../db');
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema(
@@ -50,79 +50,79 @@ const productSchema = new mongoose.Schema(
     // Product role/type - determines if it has variants like size/color
     role: {
       type: String,
-      enum: ['general', 'clothes', 'electronics', 'home', 'beauty', 'groceries'],
+      enum: ['general', 'clothes', 'shoes', 'electronics', 'home', 'beauty', 'groceries'],
       default: 'general',
       index: true,
     },
 
     // For clothing products: array of available sizes
-    sizes: { 
+    sizes: {
       type: [String], // Array of strings like ["S", "M", "L", "XL"]
       default: [],
       validate: {
-        validator: function(v) {
+        validator: function (v) {
           // Only require sizes if product is clothing
           if (this.role === 'clothes') {
             return v && v.length > 0;
           }
           return true;
         },
-        message: 'Clothing products must have at least one size option'
-      }
+        message: 'Clothing products must have at least one size option',
+      },
     },
 
     // For clothing products: array of available colors
-    colors: { 
+    colors: {
       type: [String], // Array of strings like ["Red", "Blue", "Black"]
       default: [],
       validate: {
-        validator: function(v) {
+        validator: function (v) {
           // Only require colors if product is clothing
           if (this.role === 'clothes') {
             return v && v.length > 0;
           }
           return true;
         },
-        message: 'Clothing products must have at least one color option'
-      }
+        message: 'Clothing products must have at least one color option',
+      },
     },
 
     // Original single color/size fields (for backward compatibility)
-    color: { 
-      type: String, 
+    color: {
+      type: String,
       trim: true,
       // Only used for non-clothing products or as default
     },
-    size: { 
-      type: String, 
+    size: {
+      type: String,
       trim: true,
       // Only used for non-clothing products or as default
     },
 
     // Classification / attributes
-    category: { 
-      type: String, 
-      trim: true, 
-      index: true 
+    category: {
+      type: String,
+      trim: true,
+      index: true,
     },
-    quality: { 
-      type: String, 
-      trim: true 
+    quality: {
+      type: String,
+      trim: true,
     },
-    made: { 
-      type: String, 
-      trim: true 
+    made: {
+      type: String,
+      trim: true,
     },
-    manufacturer: { 
-      type: String, 
-      trim: true 
+    manufacturer: {
+      type: String,
+      trim: true,
     },
 
     // Matching type
-    type: { 
-      type: String, 
-      trim: true, 
-      index: true 
+    type: {
+      type: String,
+      trim: true,
+      index: true,
     },
 
     // Product status flags (for filtering/sorting)
@@ -143,13 +143,13 @@ const productSchema = new mongoose.Schema(
     },
 
     // Sales counters
-    soldCount: { 
-      type: Number, 
-      default: 0 
-    },  // total quantity sold
-    soldOrders: { 
-      type: Number, 
-      default: 0 
+    soldCount: {
+      type: Number,
+      default: 0,
+    }, // total quantity sold
+    soldOrders: {
+      type: Number,
+      default: 0,
     }, // distinct orders count
 
     // Owner business
@@ -160,85 +160,118 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
   },
-  { 
+  {
     timestamps: true,
     // Add toJSON transformation to include virtuals if needed
     toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   },
 );
 
+/* ========= VIRTUALS ========= */
+
 // Virtual for checking if product is in stock
-productSchema.virtual('inStock').get(function() {
+productSchema.virtual('inStock').get(function () {
   return this.stock > 0;
 });
 
 // Virtual for product type based on role
-productSchema.virtual('productType').get(function() {
-  return this.role.charAt(0).toUpperCase() + this.role.slice(1);
+productSchema.virtual('productType').get(function () {
+  return this.role
+    ? this.role.charAt(0).toUpperCase() + this.role.slice(1)
+    : 'General';
 });
 
-// Middleware to ensure size/color arrays are valid
-productSchema.pre('save', function(next) {
-  // If role is clothes and arrays are empty but single fields exist, convert
-  if (this.role === 'clothes') {
-    if (this.color && this.colors.length === 0) {
-      this.colors = [this.color];
-    }
-    if (this.size && this.sizes.length === 0) {
-      this.sizes = [this.size];
-    }
-    
-    // Ensure arrays are unique
-    if (this.colors && this.colors.length > 0) {
-      this.colors = [...new Set(this.colors.map(c => c.trim()))];
-    }
-    if (this.sizes && this.sizes.length > 0) {
-      this.sizes = [...new Set(this.sizes.map(s => s.trim()))];
-    }
+// Virtuals for sale / popular (backwards compatibility with EJS that uses p.sale / p.popular)
+productSchema.virtual('sale')
+  .get(function () {
+    return this.isOnSale;
+  })
+  .set(function (v) {
+    this.isOnSale = !!v;
+  });
+
+productSchema.virtual('popular')
+  .get(function () {
+    return this.isPopular;
+  })
+  .set(function (v) {
+    this.isPopular = !!v;
+  });
+
+/* ========= MIDDLEWARE ========= */
+// Middleware to ensure size/color arrays are valid and in sync
+productSchema.pre('save', function (next) {
+  const role = (this.role || '').toLowerCase();
+  const type = (this.type || '').toLowerCase();
+
+  // We want variants for clothes + shoes (because your shop uses type to control size/color)
+  const wantsVariants =
+    role === 'clothes' ||
+    type === 'clothes' ||
+    type === 'shoes';
+
+  if (!wantsVariants) {
+    return next();
   }
+
+  // Make sure these fields are proper arrays
+  if (!Array.isArray(this.colors)) {
+    this.colors = this.colors ? [this.colors] : [];
+  }
+  if (!Array.isArray(this.sizes)) {
+    this.sizes = this.sizes ? [this.sizes] : [];
+  }
+
+  // If arrays are still empty but single fields exist, seed them
+  if (this.color && this.colors.length === 0) {
+    this.colors.push(this.color);
+  }
+  if (this.size && this.sizes.length === 0) {
+    this.sizes.push(this.size);
+  }
+
+  // Clean & dedupe
+  if (this.colors && this.colors.length > 0) {
+    this.colors = [...new Set(
+      this.colors
+        .map(c => (c || '').toString().trim())
+        .filter(Boolean)
+    )];
+  }
+
+  if (this.sizes && this.sizes.length > 0) {
+    this.sizes = [...new Set(
+      this.sizes
+        .map(s => (s || '').toString().trim())
+        .filter(Boolean)
+    )];
+  }
+
   next();
 });
 
+/* ========= INSTANCE METHODS ========= */
+
 // Helper method to check if a specific variant is available
-productSchema.methods.isVariantAvailable = function(size, color) {
-  if (this.role !== 'clothes') return true;
-  
+productSchema.methods.isVariantAvailable = function (size, color) {
+  // Only enforce for clothes / shoes; for others, just return stock > 0
+  if (this.role !== 'clothes' && this.role !== 'shoes') {
+    return this.stock > 0;
+  }
+
   let available = true;
-  
-  if (size && this.sizes && this.sizes.length > 0) {
+
+  if (size && Array.isArray(this.sizes) && this.sizes.length > 0) {
     available = available && this.sizes.includes(size);
   }
-  
-  if (color && this.colors && this.colors.length > 0) {
+
+  if (color && Array.isArray(this.colors) && this.colors.length > 0) {
     available = available && this.colors.includes(color);
   }
-  
+
   return available && this.stock > 0;
 };
-
-// Static method to find clothing products
-productSchema.statics.findClothing = function() {
-  return this.find({ role: 'clothes' });
-};
-
-// Static method to find products with variants
-productSchema.statics.findWithVariants = function() {
-  return this.find({
-    $or: [
-      { role: 'clothes' },
-      { $and: [
-        { sizes: { $exists: true, $ne: [] } },
-        { colors: { $exists: true, $ne: [] } }
-      ]}
-    ]
-  });
-};
-
-// Helpful compound indexes for common queries
-productSchema.index({ business: 1, role: 1 });
-productSchema.index({ category: 1, role: 1 });
-productSchema.index({ isNew: 1, isOnSale: 1, isPopular: 1 });
 
 productSchema.methods.toSafeJSON = function () {
   const obj = this.toObject();
@@ -266,14 +299,46 @@ productSchema.methods.toFrontendJSON = function () {
     isNew: this.isNew,
     isOnSale: this.isOnSale,
     isPopular: this.isPopular,
+    sale: this.isOnSale,       // short flags for templates if needed
+    popular: this.isPopular,
     soldCount: this.soldCount,
     // Include single fields for backward compatibility
     color: this.color,
     size: this.size,
     // Timestamps if needed
     createdAt: this.createdAt,
-    updatedAt: this.updatedAt
+    updatedAt: this.updatedAt,
   };
 };
+
+/* ========= STATICS ========= */
+
+// Static method to find clothing-like products (clothes + shoes)
+productSchema.statics.findClothing = function () {
+  return this.find({ role: { $in: ['clothes', 'shoes'] } });
+};
+
+// Static method to find products with variants
+productSchema.statics.findWithVariants = function () {
+  return this.find({
+    $or: [
+      { role: 'clothes' },
+      { role: 'shoes' },
+      {
+        $and: [
+          { sizes: { $exists: true, $ne: [] } },
+          { colors: { $exists: true, $ne: [] } },
+        ],
+      },
+    ],
+  });
+};
+
+/* ========= INDEXES ========= */
+
+// Helpful compound indexes for common queries
+productSchema.index({ business: 1, role: 1 });
+productSchema.index({ category: 1, role: 1 });
+productSchema.index({ isNew: 1, isOnSale: 1, isPopular: 1 });
 
 module.exports = mongoose.models.Product || mongoose.model('Product', productSchema);
