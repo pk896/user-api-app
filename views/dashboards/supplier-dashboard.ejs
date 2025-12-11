@@ -129,98 +129,6 @@
     const outOfStockProducts = supplierProducts
       .filter(p => (Number(p.stock) || 0) <= 0)
       .slice(0, 5);
-    
-    // ===== CHART DATA PROCESSING =====
-    let dailyChartData = [];
-    let monthlyChartData = [];
-    let yearlyChartData = [];
-    
-    // Create daily data (last 24 hours) - ALWAYS create this even if we have backend data
-    const now = new Date();
-    
-    // Create sample data for last 24 hours (hourly)
-    for (let i = 23; i >= 0; i--) {
-      const hour = new Date(now);
-      hour.setHours(now.getHours() - i);
-      const displayHour = hour.toLocaleTimeString('en-ZA', { 
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false 
-      }).slice(0, 5); // Format: "14:30"
-      
-      // Create realistic hourly sales pattern
-      let sales = 0;
-      const currentHour = hour.getHours();
-      
-      // Business hours (9 AM - 5 PM) have more sales
-      if (currentHour >= 9 && currentHour <= 17) {
-        // Peak hours around lunch (12-2 PM)
-        if (currentHour >= 12 && currentHour <= 14) {
-          sales = Math.floor(Math.random() * 1000) + 800;
-        } else {
-          sales = Math.floor(Math.random() * 800) + 300;
-        }
-      } else if (currentHour >= 18 && currentHour <= 21) {
-        // Evening hours have some sales
-        sales = Math.floor(Math.random() * 600) + 200;
-      } else {
-        // Late night/early morning have minimal sales
-        sales = Math.floor(Math.random() * 200);
-      }
-      
-      dailyChartData.push({
-        time: displayHour,
-        sales: sales
-      });
-    }
-    
-    // Create monthly data (30 days)
-    const totalRevenue = supplierKpis.revenueLast30 || 3000;
-    const avgSaleValue = 1500;
-    
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      const displayDate = date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-      
-      // Create realistic sales pattern
-      let sales = 0;
-      if (i % 7 === 0 || i % 5 === 0 || i % 3 === 0) {
-        sales = Math.floor(Math.random() * avgSaleValue * 2) + 500;
-      }
-      
-      monthlyChartData.push({
-        date: displayDate,
-        sales: sales
-      });
-    }
-    
-    // Create yearly data (12 months)
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const yearlyRevenue = supplierKpis.revenueLast30 * 12 || 36000;
-    const monthlyRevenue = yearlyRevenue / 12;
-    
-    months.forEach((month, index) => {
-      let sales = monthlyRevenue;
-      // Create seasonal pattern
-      if (index === 11) sales *= 1.5;
-      if (index >= 5 && index <= 8) sales *= 0.8;
-      
-      // Add some randomness
-      sales = sales * (0.7 + Math.random() * 0.6);
-      
-      yearlyChartData.push({
-        month: month,
-        sales: Math.max(0, Math.floor(sales))
-      });
-    });
-    
-    // For backward compatibility
-    let salesTrendData = { 
-      daily: dailyChartData, 
-      monthly: monthlyChartData, 
-      yearly: yearlyChartData 
-    };
   %>
 
   <!-- Quick Stats Section -->
@@ -231,7 +139,7 @@
         <div class="icon">📦</div>
         <div class="details">
           <h3>Total Products</h3>
-          <p class="value"><%= totalProducts %></p>
+          <p class="value" data-kpi="totalProducts"><%= totalProducts %></p>
           <small><%= inStockCount %> in stock</small>
         </div>
       </div>
@@ -240,9 +148,10 @@
         <div class="icon">🔢</div>
         <div class="details">
           <h3>Total Stock</h3>
-          <p class="value"><%= totalStock %></p>
+          <p class="value" data-kpi="totalStock"><%= totalStock %></p>
           <small>Units available</small>
-        </div></a>
+        </div>
+      </a>
       
       <div class="stat-card green">
         <div class="icon">💰</div>
@@ -253,10 +162,11 @@
         </div>
       </div>
       
-      <a href="/products/low-stock" class="stat-card orange"><div class="icon">⚠️</div>
+      <a href="/products/low-stock" class="stat-card orange">
+        <div class="icon">⚠️</div>
         <div class="details">
           <h3>Low Stock</h3>
-          <p class="value"><%= lowStockCount %></p>
+          <p class="value" data-kpi="lowStock"><%= lowStockCount %></p>
           <small>Stock &lt; 20 units</small>
         </div>
       </a>
@@ -265,18 +175,10 @@
         <div class="icon">🚨</div>
         <div class="details">
           <h3>Out of Stock</h3>
-          <p class="value"><%= outOfStockCount %></p>
+          <p class="value" data-kpi="outOfStock"><%= outOfStockCount %></p>
           <small>Products to restock</small>
         </div>
-
-      <!--<div class="stat-card black">
-        <div class="icon">📊</div>
-        <div class="details">
-          <h3>Out of Stock</h3>
-          <p class="value"><%= outOfStockCount %></p>
-          <small>Need restocking</small>
-        </div>
-      </div>-->
+      </a>
     </div>
   </section>
 
@@ -350,20 +252,20 @@
         <span class="action-text">All Products</span>
       </a>
       
-      <a href="/demands/aggregate" class="action">
+      <a href="/business/analytics/chart" class="action">
         <span class="action-icon">📈</span>
         <span class="action-text">Analytics</span>
       </a>
     </div>
   </section>
 
-  <!-- Sales Trend Chart - WITH DAILY VIEW -->
+  <!-- Sales Trend Chart -->
   <section class="sales-trend">
     <div class="section-header">
       <div>
         <h2>Sales Trend</h2>
         <div class="trend-period-toggle">
-          <button class="period-btn active" id="daily-btn">Last 24 Hours</button>
+          <button class="period-btn active" id="daily-btn">Last 7 Days</button>
           <button class="period-btn" id="monthly-btn">Last 30 Days</button>
           <button class="period-btn" id="yearly-btn">Last 12 Months</button>
         </div>
@@ -390,7 +292,7 @@
       <div class="chart-legend">
         <div class="legend-item">
           <span class="legend-color" style="background: #22C55E;"></span>
-          <span id="legend-text">Hourly Sales</span>
+          <span id="legend-text">Daily Revenue</span>
         </div>
       </div>
       
@@ -689,6 +591,7 @@
         </a>
         <a href="/orders">📦 Orders</a>
         <a href="/business/profile">👤 Profile</a>
+        <a href="/business/analytics/chart">📈 Analytics</a>
         <form action="/business/logout" method="post" class="logout-form">
           <button type="submit">🚪 Logout</button>
         </form>
@@ -2300,217 +2203,236 @@
     return 'R ' + Number(amount || 0).toFixed(2);
   }
 
-  // WORKING SIMPLE CHART FUNCTION WITH DAILY VIEW
+  // SIMPLE CHART USING REAL DB DATA
   function createSimpleChart() {
-    console.log('📊 Creating simple chart with daily view...');
-    
-    // Get data directly from EJS variables
-    const dailyData = <%- JSON.stringify(dailyChartData) %>;
-    const monthlyData = <%- JSON.stringify(monthlyChartData) %>;
-    const yearlyData = <%- JSON.stringify(yearlyChartData) %>;
-    
-    console.log('Daily data (24h):', dailyData);
-    console.log('Monthly data (30d):', monthlyData);
-    console.log('Yearly data (12m):', yearlyData);
-    
-    let currentPeriod = 'daily';
-    let currentData = dailyData;
-    
-    // Update statistics
-    function updateStats(data, period) {
-      const values = data.map(item => item.sales || 0);
-      const total = values.reduce((sum, val) => sum + val, 0);
-      const avg = values.length > 0 ? total / values.length : 0;
-      const peak = Math.max(...values);
-      const lowest = Math.min(...values.filter(v => v > 0));
-      const current = values[values.length - 1] || 0;
-      
-      // Calculate growth (different calculation for daily vs monthly/yearly)
-      let growth = 0;
-      
-      if (period === 'daily') {
-        // For daily (24h), compare first vs last 8 hours
-        if (values.length >= 8) {
-          const firstHalfAvg = values.slice(0, 8).reduce((sum, val) => sum + val, 0) / 8;
-          const lastHalfAvg = values.slice(-8).reduce((sum, val) => sum + val, 0) / 8;
-          growth = firstHalfAvg > 0 ? ((lastHalfAvg - firstHalfAvg) / firstHalfAvg * 100) : 0;
-        }
-      } else {
-        // For monthly/yearly, compare first vs last data point
-        const first = values[0] || 0;
-        const last = values[values.length - 1] || 0;
-        growth = first > 0 ? ((last - first) / first * 100) : 0;
-      }
-      
-      // Update DOM
-      document.getElementById('current-sales').textContent = fmtCurrency(current);
-      document.getElementById('avg-sales').textContent = fmtCurrency(avg);
-      document.getElementById('total-sales').textContent = fmtCurrency(total);
-      document.getElementById('peak-sales').textContent = fmtCurrency(peak);
-      document.getElementById('lowest-sales').textContent = fmtCurrency(lowest || 0);
-      
-      const growthEl = document.getElementById('growth-trend');
-      growthEl.textContent = growth.toFixed(1) + '%';
-      growthEl.className = growth >= 0 ? 'positive' : 'negative';
-      
-      const projectionEl = document.getElementById('projection');
-      projectionEl.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
-      projectionEl.className = growth >= 0 ? 'positive' : 'negative';
-      
-      // Update legend text based on period
-      const legendText = document.getElementById('legend-text');
-      if (period === 'daily') {
-        legendText.textContent = 'Hourly Sales';
-      } else if (period === 'monthly') {
-        legendText.textContent = 'Daily Sales';
-      } else {
-        legendText.textContent = 'Monthly Sales';
-      }
-      
-      console.log(`Stats updated for ${period}:`, { 
-        total: fmtCurrency(total), 
-        avg: fmtCurrency(avg), 
-        peak: fmtCurrency(peak),
-        growth: growth + '%' 
-      });
+    console.log('📊 Creating supplier chart with real DB data...');
+
+    const chartContainer  = document.getElementById('simple-chart');
+    const labelsContainer = document.getElementById('chart-labels');
+    const dailyBtn        = document.getElementById('daily-btn');
+    const monthlyBtn      = document.getElementById('monthly-btn');
+    const yearlyBtn       = document.getElementById('yearly-btn');
+
+    if (!chartContainer || !labelsContainer) {
+      console.warn('Chart containers not found for supplier dashboard');
+      return;
     }
-    
-    // Draw the chart using DIVs
+
+    let dailyData   = [];
+    let monthlyData = [];
+    let yearlyData  = [];
+    let currentPeriod = 'daily';
+
+    // ---------- STATS ----------
+    function updateStats(data, period) {
+      const values = data.map(item => Number(item.sales || 0));
+      const total  = values.reduce((sum, v) => sum + v, 0);
+      const avg    = values.length ? total / values.length : 0;
+      const maxVal = values.length ? Math.max(...values) : 0;
+      const positive = values.filter(v => v > 0);
+      const minVal = positive.length ? Math.min(...positive) : 0;
+      const current = values.length ? values[values.length - 1] : 0;
+
+      // Growth: compare first half vs second half if we have enough points
+      let growth = 0;
+      if (values.length >= 4) {
+        const mid = Math.floor(values.length / 2);
+        const firstAvg = values.slice(0, mid)
+          .reduce((s, v) => s + v, 0) / mid;
+        const lastAvg = values.slice(mid)
+          .reduce((s, v) => s + v, 0) / (values.length - mid);
+        growth = firstAvg > 0 ? ((lastAvg - firstAvg) / firstAvg) * 100 : 0;
+      }
+
+      const $ = (id) => document.getElementById(id);
+
+      if ($('current-sales')) $('current-sales').textContent = fmtCurrency(current);
+      if ($('avg-sales'))     $('avg-sales').textContent     = fmtCurrency(avg);
+      if ($('total-sales'))   $('total-sales').textContent   = fmtCurrency(total);
+      if ($('peak-sales'))    $('peak-sales').textContent    = fmtCurrency(maxVal);
+      if ($('lowest-sales'))  $('lowest-sales').textContent  = fmtCurrency(minVal);
+
+      const growthEl = $('growth-trend');
+      if (growthEl) {
+        growthEl.textContent = growth.toFixed(1) + '%';
+        growthEl.className = growth >= 0 ? 'positive' : 'negative';
+      }
+
+      const projEl = $('projection');
+      if (projEl) {
+        projEl.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+        projEl.className = growth >= 0 ? 'positive' : 'negative';
+      }
+
+      const legendText = document.getElementById('legend-text');
+      if (legendText) {
+        if (period === 'daily')   legendText.textContent = 'Daily Revenue';
+        if (period === 'monthly') legendText.textContent = 'Last 30 Days Revenue';
+        if (period === 'yearly')  legendText.textContent = 'Monthly Revenue';
+      }
+
+      console.log(`Stats updated for ${period}`, { total, avg, maxVal, minVal, growth });
+    }
+
+    // ---------- DRAW CHART ----------
     function drawChart(data, period) {
       console.log(`Drawing ${period} chart with ${data.length} points`);
-      
-      const chartContainer = document.getElementById('simple-chart');
-      const labelsContainer = document.getElementById('chart-labels');
-      
-      // Clear previous chart
-      chartContainer.innerHTML = '';
+
+      chartContainer.innerHTML  = '';
       labelsContainer.innerHTML = '';
-      
-      // Find max value for scaling
-      const values = data.map(item => item.sales || 0);
-      const maxValue = Math.max(...values, 1);
-      const chartHeight = 200; // px
-      
-      console.log('Max value for scaling:', maxValue);
-      
-      // Determine how many labels to show based on period
-      let labelFrequency = 1;
-      if (period === 'daily') {
-        // For 24 hours, show every 3rd hour
-        labelFrequency = 3;
-      } else if (period === 'monthly') {
-        // For 30 days, show every 5th day
-        labelFrequency = 5;
-      } else {
-        // For yearly, show all months
-        labelFrequency = 1;
+
+      if (!data.length) {
+        return;
       }
-      
-      // Create bars
+
+      const values = data.map(item => Number(item.sales || 0));
+      const maxValue = Math.max(...values, 1);
+      const chartHeight = 200;
+
+      let labelFrequency = 1;
+      if (period === 'daily')   labelFrequency = 1;  // 7 points
+      if (period === 'monthly') labelFrequency = 5;  // every 5 days
+      if (period === 'yearly')  labelFrequency = 1;
+
       data.forEach((item, index) => {
-        const value = item.sales || 0;
+        const value = Number(item.sales || 0);
         const barHeight = (value / maxValue) * chartHeight;
-        
-        // Get label based on period
+
         let label = '';
-        if (period === 'daily') {
-          label = item.time;
-        } else if (period === 'monthly') {
-          label = item.date;
-        } else {
-          label = item.month;
-        }
-        
-        // Create bar div
+        if (period === 'daily')   label = item.date || item.time || item.label || '';
+        if (period === 'monthly') label = item.date || item.label || '';
+        if (period === 'yearly')  label = item.month || item.label || '';
+
         const bar = document.createElement('div');
         bar.className = 'chart-bar';
-        bar.style.height = barHeight + 'px';
-        bar.style.minWidth = period === 'daily' ? '8px' : '10px';
+        bar.style.height   = barHeight + 'px';
+        bar.style.minWidth = '10px';
         bar.title = `${label}: ${fmtCurrency(value)}`;
-        
-        // Add tooltip
+
         const tooltip = document.createElement('div');
         tooltip.className = 'chart-tooltip';
         tooltip.textContent = `${label}: ${fmtCurrency(value)}`;
         bar.appendChild(tooltip);
-        
+
         chartContainer.appendChild(bar);
-        
-        // Add label (show based on frequency)
+
+        // Labels on X-axis
         if (period === 'yearly' || index % labelFrequency === 0 || index === data.length - 1) {
           const labelEl = document.createElement('div');
-          
-          // Format label differently based on period
-          if (period === 'daily') {
-            // For hours, just show the hour
-            labelEl.textContent = label.slice(0, 5);
-          } else if (period === 'monthly') {
-            // For dates, show day number only
-            labelEl.textContent = label.split(' ')[0];
-          } else {
-            // For months, show month abbreviation
-            labelEl.textContent = label;
-          }
-          
-          labelEl.style.fontSize = period === 'daily' ? '9px' : '10px';
-          labelEl.style.textAlign = 'center';
           labelEl.style.flex = '1';
+          labelEl.style.textAlign = 'center';
+          labelEl.style.fontSize = '10px';
+
+          if (period === 'daily') {
+            labelEl.textContent = label;          // "Mon 10"
+          } else if (period === 'monthly') {
+            labelEl.textContent = label.split(' ')[0]; // "10 Dec" -> "10"
+          } else {
+            labelEl.textContent = label;          // "Dec 2025"
+          }
+
           labelsContainer.appendChild(labelEl);
         } else {
-          // Empty placeholder for spacing
           const spacer = document.createElement('div');
           spacer.style.flex = '1';
           labelsContainer.appendChild(spacer);
         }
       });
-      
-      console.log('Chart drawn with max value:', maxValue);
     }
-    
-    // Setup period toggle
-    document.getElementById('daily-btn').addEventListener('click', function() {
-      // Update active button
-      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Switch data
-      currentPeriod = 'daily';
-      currentData = dailyData;
-      updateStats(currentData, currentPeriod);
-      drawChart(currentData, currentPeriod);
-    });
-    
-    document.getElementById('monthly-btn').addEventListener('click', function() {
-      // Update active button
-      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Switch data
-      currentPeriod = 'monthly';
-      currentData = monthlyData;
-      updateStats(currentData, currentPeriod);
-      drawChart(currentData, currentPeriod);
-    });
-    
-    document.getElementById('yearly-btn').addEventListener('click', function() {
-      // Update active button
-      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Switch data
-      currentPeriod = 'yearly';
-      currentData = yearlyData;
-      updateStats(currentData, currentPeriod);
-      drawChart(currentData, currentPeriod);
-    });
-    
-    // Initial draw (default to daily view)
-    updateStats(currentData, currentPeriod);
-    drawChart(currentData, currentPeriod);
-    
-    console.log('✅ Simple chart with daily view initialized');
+
+    // ---------- LOAD DATA FROM /business/analytics/chart-data ----------
+    async function loadChartData() {
+      try {
+        const res = await fetch('/business/analytics/chart-data', {
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+        });
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const payload = await res.json();
+
+        if (!payload || payload.success === false) {
+          throw new Error(payload && payload.message ? payload.message : 'Chart data not successful');
+        }
+
+        const chartData = payload.chartData || {};
+
+        dailyData = Array.isArray(chartData.daily)
+          ? chartData.daily.map(row => ({
+              date:  row.date  || row.label || '',
+              sales: Number(row.sales || 0),
+            }))
+          : [];
+
+        monthlyData = Array.isArray(chartData.monthly)
+          ? chartData.monthly.map(row => ({
+              date:  row.date  || row.label || '',
+              sales: Number(row.sales || 0),
+            }))
+          : [];
+
+        yearlyData = Array.isArray(chartData.yearly)
+          ? chartData.yearly.map(row => ({
+              month: row.month || row.label || '',
+              sales: Number(row.sales || 0),
+            }))
+          : [];
+
+        console.log('✅ Supplier chart data loaded from API:', chartData);
+
+        currentPeriod = 'daily';
+        if (dailyBtn) {
+          document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+          dailyBtn.classList.add('active');
+        }
+
+        updateStats(dailyData, currentPeriod);
+        drawChart(dailyData, currentPeriod);
+      } catch (err) {
+        console.error('❌ Failed to load supplier chart data:', err);
+        updateStats([], currentPeriod);
+        drawChart([], currentPeriod);
+      }
+    }
+
+    // ---------- PERIOD BUTTONS ----------
+    if (dailyBtn) {
+      dailyBtn.addEventListener('click', () => {
+        currentPeriod = 'daily';
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        dailyBtn.classList.add('active');
+        updateStats(dailyData, currentPeriod);
+        drawChart(dailyData, currentPeriod);
+      });
+    }
+
+    if (monthlyBtn) {
+      monthlyBtn.addEventListener('click', () => {
+        currentPeriod = 'monthly';
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        monthlyBtn.classList.add('active');
+        updateStats(monthlyData, currentPeriod);
+        drawChart(monthlyData, currentPeriod);
+      });
+    }
+
+    if (yearlyBtn) {
+      yearlyBtn.addEventListener('click', () => {
+        currentPeriod = 'yearly';
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        yearlyBtn.classList.add('active');
+        updateStats(yearlyData, currentPeriod);
+        drawChart(yearlyData, currentPeriod);
+      });
+    }
+
+    // Kick off initial load
+    loadChartData();
   }
-  
+
   // Auto-refresh KPIs
   async function refreshKPIs() {
     try {
@@ -2524,7 +2446,6 @@
       const data = await res.json().catch(() => ({}));
       if (!data || data.ok === false) return;
 
-      // Update KPI values
       const updateValue = (selector, value, formatter) => {
         const elements = document.querySelectorAll(`[data-kpi="${selector}"]`);
         elements.forEach(el => {
@@ -2537,7 +2458,6 @@
         });
       };
 
-      // Update values from API response
       updateValue('totalProducts', data.totalProducts);
       updateValue('totalStock', data.totalStock);
       updateValue('inStock', data.inStock);

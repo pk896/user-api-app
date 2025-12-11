@@ -37,7 +37,7 @@ async function main() {
   } catch (e) {
     // Fallback for older Mongo: do it in two passes
     console.warn("⚠️ Pipeline update failed; attempting two-step fallback:", e.message);
-    const setRes = await collection.updateMany(
+    const _setRes = await collection.updateMany(
       { businessId: { $exists: true } },
       { $set: { business: "$businessId" } } // Note: this form won't copy field value pre-4.2
     );

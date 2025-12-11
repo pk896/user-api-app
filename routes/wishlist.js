@@ -86,7 +86,7 @@ router.get('/wishlist/api/count', requireAnyAccount, async (req, res) => {
       ownerId: req.principal.id,
     });
     res.json({ ok: true, count });
-  } catch (err) {
+  } catch {
     res.status(500).json({ ok: false, message: 'Server error' });
   }
 });

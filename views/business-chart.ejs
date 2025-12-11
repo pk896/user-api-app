@@ -1,0 +1,992 @@
+<!-- views/business-chart.ejs -->
+<div class="analytics-container">
+  <!-- Analytics Header -->
+  <div class="analytics-header">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h1 class="analytics-title mb-2">
+          <i class="fas fa-chart-line me-2"></i>
+          <%= business.name %> Analytics Dashboard
+        </h1>
+        <p class="analytics-subtitle mb-0">
+          Real-time performance metrics and business insights
+        </p>
+      </div>
+      <button id="refreshBtn" class="refresh-btn">
+        <i class="fas fa-sync-alt me-2"></i>
+        Refresh Data
+      </button>
+    </div>
+  </div>
+
+  <!-- Period Selector -->
+  <div class="period-selector mb-4">
+    <button class="period-btn active" data-period="daily">
+      7 Days
+    </button>
+    <button class="period-btn" data-period="monthly">
+      30 Days
+    </button>
+    <button class="period-btn" data-period="yearly">
+      12 Months
+    </button>
+  </div>
+
+  <!-- Metrics Grid -->
+  <div class="metrics-grid mb-4">
+    <div class="metric-item">
+      <div class="metric-label">Total Revenue</div>
+      <div class="metric-value text-primary" id="totalRevenue">R 0.00</div>
+      <div class="metric-change positive" id="revenueChange">
+        <i class="fas fa-arrow-up me-1"></i> 0%
+      </div>
+    </div>
+    
+    <div class="metric-item">
+      <div class="metric-label">Total Orders</div>
+      <div class="metric-value text-primary" id="totalOrders">0</div>
+      <div class="metric-change positive" id="ordersChange">
+        <i class="fas fa-arrow-up me-1"></i> 0%
+      </div>
+    </div>
+    
+    <div class="metric-item">
+      <div class="metric-label">Avg. Order Value</div>
+      <div class="metric-value text-primary" id="avgOrderValue">R 0.00</div>
+      <div class="metric-change positive" id="avgOrderChange">
+        <i class="fas fa-arrow-up me-1"></i> 0%
+      </div>
+    </div>
+    
+    <div class="metric-item">
+      <div class="metric-label">Active Products</div>
+      <div class="metric-value text-primary" id="activeProducts">0</div>
+      <div class="metric-change positive">
+        <i class="fas fa-box me-1"></i> In Stock
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart Grid -->
+  <div class="chart-grid mb-4">
+    <!-- Main Sales Chart -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3 class="chart-card-title">
+          <i class="fas fa-chart-line me-2"></i>
+          Sales Trend
+        </h3>
+        <div class="chart-type-toggle">
+          <button class="btn btn-sm btn-outline-primary active" data-type="line">
+            <i class="fas fa-chart-line"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-primary" data-type="bar">
+            <i class="fas fa-chart-bar"></i>
+          </button>
+        </div>
+      </div>
+      <div class="chart-card-body">
+        <div class="chart-canvas-container">
+          <canvas id="mainChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Revenue Breakdown Chart -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3 class="chart-card-title">
+          <i class="fas fa-money-bill-wave me-2"></i>
+          Revenue Breakdown
+        </h3>
+      </div>
+      <div class="chart-card-body">
+        <div class="chart-canvas-container">
+          <canvas id="revenueChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Chart -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3 class="chart-card-title">
+          <i class="fas fa-shopping-cart me-2"></i>
+          Order Volume
+        </h3>
+      </div>
+      <div class="chart-card-body">
+        <div class="chart-canvas-container">
+          <canvas id="ordersChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products Chart -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3 class="chart-card-title">
+          <i class="fas fa-boxes me-2"></i>
+          Product Performance
+        </h3>
+      </div>
+      <div class="chart-card-body">
+        <div class="chart-canvas-container">
+          <canvas id="productsChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Last Updated -->
+  <div class="last-updated">
+    <i class="fas fa-clock me-1"></i>
+    Last updated: <span id="lastUpdatedTime">Just now</span>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="loading-spinner"></div>
+    <p class="mt-3">Loading chart data...</p>
+  </div>
+</div>
+
+</script>
+
+<!-- Inline Styles -->
+<style nonce="<%= nonce %>">
+/* Business Chart Styles */
+:root {
+  --primary-blue: #2563EB;
+  --accent-purple: #7C3AED;
+  --success-green: #22C55E;
+  --sophisticated-black: #0F172A;
+  --light-gray: #F8FAFC;
+  --medium-gray: #E2E8F0;
+  --dark-gray: #64748B;
+}
+
+.analytics-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.analytics-header {
+  background: linear-gradient(135deg, var(--primary-blue), var(--accent-purple));
+  border-radius: 16px;
+  padding: 2rem;
+  color: white;
+  margin-bottom: 2rem;
+  box-shadow: 0 8px 32px rgba(37, 99, 235, 0.2);
+}
+
+.analytics-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.analytics-subtitle {
+  opacity: 0.9;
+  font-size: 1.1rem;
+  margin-bottom: 0;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.chart-card {
+  background: var(--bg, white);
+  border: 1px solid var(--border, var(--medium-gray));
+  border-radius: 16px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dark-theme .chart-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.chart-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.1);
+}
+
+.chart-card-header {
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--border, var(--medium-gray));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chart-card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--sophisticated-black);
+  margin: 0;
+}
+
+.dark-theme .chart-card-title {
+  color: #f1f5f9;
+}
+
+.chart-card-body {
+  padding: 1.25rem;
+}
+
+.chart-canvas-container {
+  height: 300px;
+  position: relative;
+}
+
+.period-selector {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.period-btn {
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--medium-gray);
+  background: transparent;
+  border-radius: 8px;
+  font-weight: 600;
+  color: var(--dark-gray);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.period-btn:hover {
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
+}
+
+.period-btn.active {
+  background: var(--primary-blue);
+  border-color: var(--primary-blue);
+  color: white;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.metric-item {
+  background: var(--bg, white);
+  border: 1px solid var(--border, var(--medium-gray));
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.dark-theme .metric-item {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.metric-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--sophisticated-black);
+  margin: 0.5rem 0;
+}
+
+.dark-theme .metric-value {
+  color: #f1f5f9;
+}
+
+.metric-label {
+  font-size: 0.9rem;
+  color: var(--dark-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.metric-change {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.metric-change.positive {
+  color: var(--success-green);
+}
+
+.metric-change.negative {
+  color: #EF4444;
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.dark-theme .loading-overlay {
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid var(--medium-gray);
+  border-top-color: var(--primary-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.refresh-btn {
+  background: var(--primary-blue);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.refresh-btn:hover {
+  background: #1D4ED8;
+  transform: translateY(-2px);
+}
+
+.last-updated {
+  font-size: 0.85rem;
+  color: var(--dark-gray);
+  text-align: center;
+  margin-top: 2rem;
+  padding: 1rem;
+  border-top: 1px solid var(--border, var(--medium-gray));
+}
+
+.chart-type-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.text-primary {
+  color: var(--primary-blue) !important;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 640px) {
+  .analytics-container {
+    padding: 0.5rem;
+  }
+  
+  .analytics-header {
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .analytics-title {
+    font-size: 1.5rem;
+  }
+  
+  .chart-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .chart-canvas-container {
+    height: 250px;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .metric-value {
+    font-size: 1.5rem;
+  }
+  
+  .refresh-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
+/* Tablet Optimizations */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .chart-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>
+
+<script nonce="<%= nonce %>">
+// ==========================================
+// GLOBAL STATE & CONFIGURATION
+// ==========================================
+let charts = {
+  mainChart: null,
+  revenueChart: null,
+  ordersChart: null,
+  productsChart: null
+};
+
+let chartData = {
+  daily: [],
+  monthly: [],
+  yearly: []
+};
+
+let currentPeriod = 'monthly'; // Default to 30 days view
+let currentChartType = 'line';
+let isLoadingChartData = false;
+
+window.productPerformanceData = [];
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
+function showLoading() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function hideLoading() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function showError(message) {
+  console.error('❌', message);
+  alert(message);
+}
+
+function updateMetrics(metrics) {
+  if (!metrics) return;
+
+  // Total Revenue
+  const totalRevenue = Number(metrics.totalRevenue || 0);
+  document.getElementById('totalRevenue').textContent = 
+    `R ${totalRevenue.toFixed(2)}`;
+  
+  const revenueChange = Number(metrics.revenueChange || 0);
+  const revenueChangeEl = document.getElementById('revenueChange');
+  revenueChangeEl.className = revenueChange >= 0 ? 'metric-change positive' : 'metric-change negative';
+  revenueChangeEl.innerHTML = `<i class="fas fa-arrow-${revenueChange >= 0 ? 'up' : 'down'} me-1"></i> ${Math.abs(revenueChange).toFixed(1)}%`;
+
+  // Total Orders
+  document.getElementById('totalOrders').textContent = metrics.totalOrders || 0;
+  
+  const ordersChange = Number(metrics.ordersChange || 0);
+  const ordersChangeEl = document.getElementById('ordersChange');
+  ordersChangeEl.className = ordersChange >= 0 ? 'metric-change positive' : 'metric-change negative';
+  ordersChangeEl.innerHTML = `<i class="fas fa-arrow-${ordersChange >= 0 ? 'up' : 'down'} me-1"></i> ${Math.abs(ordersChange).toFixed(1)}%`;
+
+  // Average Order Value
+  const avgOrderValue = Number(metrics.avgOrderValue || 0);
+  document.getElementById('avgOrderValue').textContent = 
+    `R ${avgOrderValue.toFixed(2)}`;
+  
+  const avgOrderChange = Number(metrics.avgOrderChange || 0);
+  const avgOrderChangeEl = document.getElementById('avgOrderChange');
+  avgOrderChangeEl.className = avgOrderChange >= 0 ? 'metric-change positive' : 'metric-change negative';
+  avgOrderChangeEl.innerHTML = `<i class="fas fa-arrow-${avgOrderChange >= 0 ? 'up' : 'down'} me-1"></i> ${Math.abs(avgOrderChange).toFixed(1)}%`;
+
+  // Active Products
+  document.getElementById('activeProducts').textContent = metrics.activeProducts || 0;
+}
+
+// ==========================================
+// CHART OPTIONS CONFIGURATION
+// ==========================================
+function getChartOptions(title, prefix = '') {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false
+      },
+      title: {
+        display: false
+      },
+      tooltip: {
+        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: '#2563EB',
+        borderWidth: 1,
+        padding: 12,
+        displayColors: false,
+        callbacks: {
+          label: function(context) {
+            let label = context.dataset.label || '';
+            if (label) label += ': ';
+            if (context.parsed.y !== null) {
+              label += prefix + context.parsed.y.toFixed(2);
+            }
+            return label;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: function(value) {
+            return prefix + value.toFixed(0);
+          },
+          color: '#64748B'
+        },
+        grid: {
+          color: 'rgba(226, 232, 240, 0.5)'
+        }
+      },
+      x: {
+        ticks: {
+          color: '#64748B',
+          maxRotation: 45,
+          minRotation: 0
+        },
+        grid: {
+          display: false
+        }
+      }
+    }
+  };
+}
+
+// ==========================================
+// CHART CREATION FUNCTIONS
+// ==========================================
+function createMainChart() {
+  const canvas = document.getElementById('mainChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const data = chartData[currentPeriod] || [];
+
+  const labels = data.map(item => item.date || item.time || item.month || 'N/A');
+  const values = data.map(item => Number(item.sales) || 0);
+
+  console.log('📊 Creating main chart with:', { period: currentPeriod, points: labels.length, sample: values.slice(0, 3) });
+
+  charts.mainChart = new Chart(ctx, {
+    type: currentChartType,
+    data: {
+      labels,
+      datasets: [{
+        label: currentPeriod === 'yearly' ? 'Monthly Revenue' : 
+               currentPeriod === 'daily' ? 'Hourly Revenue' : 'Daily Revenue',
+        data: values,
+        borderColor: '#2563EB',
+        backgroundColor: currentChartType === 'line' ? 'rgba(37, 99, 235, 0.1)' : '#2563EB',
+        borderWidth: 3,
+        fill: currentChartType === 'line',
+        tension: 0.4,
+        pointBackgroundColor: '#7C3AED',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 7
+      }]
+    },
+    options: getChartOptions('Sales Trend', 'R ')
+  });
+}
+
+function createRevenueChart() {
+  const canvas = document.getElementById('revenueChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const data = chartData[currentPeriod] || [];
+  
+  // Show last 7 data points for breakdown
+  const last7 = data.slice(-7);
+  const labels = last7.map(item => item.date || item.time || item.month || '');
+  const values = last7.map(item => Number(item.sales) || 0);
+
+  charts.revenueChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Revenue',
+        data: values,
+        backgroundColor: '#7C3AED',
+        borderColor: '#7C3AED',
+        borderWidth: 1,
+        borderRadius: 8
+      }]
+    },
+    options: getChartOptions('Revenue Breakdown', 'R ')
+  });
+}
+
+function createOrdersChart() {
+  const canvas = document.getElementById('ordersChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const data = chartData[currentPeriod] || [];
+  
+  const labels = data.map(item => item.date || item.time || item.month || '');
+  const values = data.map(item => Number(item.orders) || 0);
+
+  charts.ordersChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Orders',
+        data: values,
+        borderColor: '#22C55E',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#22C55E',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 7
+      }]
+    },
+    options: getChartOptions('Order Volume', '')
+  });
+}
+
+function createProductsChart() {
+  const canvas = document.getElementById('productsChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  
+  let productData = window.productPerformanceData || [];
+  
+  // Ensure we have valid data
+  if (productData.length === 0) {
+    productData = [
+      { name: 'No sales data', sales: 1 },
+      { name: 'Add products', sales: 1 }
+    ];
+  } else {
+    // Format product data
+    productData = productData.map(p => ({
+      name: (p.name || 'Unknown').substring(0, 20),
+      sales: Number(p.sales) || 1
+    })).slice(0, 5); // Top 5
+  }
+
+  const labels = productData.map(p => p.name);
+  const values = productData.map(p => p.sales);
+
+  console.log('🍩 Product chart:', { products: labels, sales: values });
+
+  charts.productsChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: [
+          '#2563EB',
+          '#7C3AED',
+          '#22C55E',
+          '#F59E0B',
+          '#EF4444'
+        ],
+        borderWidth: 2,
+        borderColor: '#ffffff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            padding: 15,
+            font: {
+              size: 12
+            },
+            color: '#64748B'
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(15, 23, 42, 0.9)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#2563EB',
+          borderWidth: 1,
+          padding: 12
+        }
+      }
+    }
+  });
+}
+
+function createCharts() {
+  console.log('🎨 Creating all charts...');
+  
+  // Destroy existing charts
+  Object.keys(charts).forEach(key => {
+    if (charts[key]) {
+      charts[key].destroy();
+      charts[key] = null;
+    }
+  });
+
+  createMainChart();
+  createRevenueChart();
+  createOrdersChart();
+  createProductsChart();
+}
+
+// ==========================================
+// UPDATE CHARTS IN PLACE
+// ==========================================
+function updateChartsInPlace() {
+  const data = chartData[currentPeriod] || [];
+  console.log(`🔄 Updating charts for ${currentPeriod}: ${data.length} data points`);
+
+  // Main chart
+  if (charts.mainChart) {
+    const labels = data.map(item => item.date || item.time || item.month || 'N/A');
+    const values = data.map(item => Number(item.sales) || 0);
+    
+    charts.mainChart.data.labels = labels;
+    charts.mainChart.data.datasets[0].data = values;
+    charts.mainChart.data.datasets[0].label = 
+      currentPeriod === 'yearly' ? 'Monthly Revenue' : 
+      currentPeriod === 'daily' ? 'Hourly Revenue' : 'Daily Revenue';
+    charts.mainChart.update('none');
+  }
+
+  // Revenue breakdown (last 7)
+  if (charts.revenueChart) {
+    const last7 = data.slice(-7);
+    const labels = last7.map(item => item.date || item.time || item.month || '');
+    const values = last7.map(item => Number(item.sales) || 0);
+    
+    charts.revenueChart.data.labels = labels;
+    charts.revenueChart.data.datasets[0].data = values;
+    charts.revenueChart.update('none');
+  }
+
+  // Orders chart
+  if (charts.ordersChart) {
+    const labels = data.map(item => item.date || item.time || item.month || '');
+    const orders = data.map(item => Number(item.orders) || 0);
+    
+    charts.ordersChart.data.labels = labels;
+    charts.ordersChart.data.datasets[0].data = orders;
+    charts.ordersChart.update('none');
+  }
+
+  // Products chart (doesn't change with period)
+  if (charts.productsChart) {
+    let productData = window.productPerformanceData || [];
+    
+    if (productData.length === 0) {
+      productData = [
+        { name: 'No sales data', sales: 1 },
+        { name: 'Add products', sales: 1 }
+      ];
+    } else {
+      productData = productData.map(p => ({
+        name: (p.name || 'Unknown').substring(0, 20),
+        sales: Number(p.sales) || 1
+      })).slice(0, 5);
+    }
+
+    charts.productsChart.data.labels = productData.map(p => p.name);
+    charts.productsChart.data.datasets[0].data = productData.map(p => p.sales);
+    charts.productsChart.update('none');
+  }
+}
+
+// ==========================================
+// LOAD CHART DATA FROM API
+// ==========================================
+async function loadChartData(showSpinner = true) {
+  if (isLoadingChartData) return;
+  
+  console.log('🔄 Loading chart data from API...');
+  isLoadingChartData = true;
+  if (showSpinner) showLoading();
+
+  try {
+    const response = await fetch('/business/analytics/chart-data', {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('📊 API Response (full):', JSON.stringify(data, null, 2));
+
+    if (!data.success) {
+      throw new Error(data.message || 'API returned success: false');
+    }
+
+    // Validate and normalize chartData
+    chartData = {
+      daily: Array.isArray(data.chartData?.daily) ? data.chartData.daily : [],
+      monthly: Array.isArray(data.chartData?.monthly) ? data.chartData.monthly : [],
+      yearly: Array.isArray(data.chartData?.yearly) ? data.chartData.yearly : []
+    };
+
+    console.log('📈 Chart data loaded:', {
+      daily: chartData.daily.length,
+      monthly: chartData.monthly.length,
+      yearly: chartData.yearly.length
+    });
+
+    console.log('📈 Sample data:', {
+      dailySample: chartData.daily.slice(0, 3),
+      monthlySample: chartData.monthly.slice(0, 3),
+      yearlySample: chartData.yearly.slice(0, 3)
+    });
+
+    // Store product performance
+    window.productPerformanceData = Array.isArray(data.productPerformance) 
+      ? data.productPerformance 
+      : [];
+
+    console.log('📦 Product performance:', window.productPerformanceData.length, 'items');
+
+    // Update metrics
+    updateMetrics(data.metrics);
+    
+    // Create or update charts
+    if (!charts.mainChart) {
+      createCharts();
+    } else {
+      updateChartsInPlace();
+    }
+
+    // Update timestamp
+    const lastUpdatedEl = document.getElementById('lastUpdatedTime');
+    if (lastUpdatedEl) {
+      lastUpdatedEl.textContent = new Date().toLocaleTimeString('en-ZA', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Failed to load chart data:', error);
+    showError(`Failed to load chart data: ${error.message}`);
+  } finally {
+    if (showSpinner) hideLoading();
+    isLoadingChartData = false;
+  }
+}
+
+// ==========================================
+// EVENT LISTENERS
+// ==========================================
+function initEventListeners() {
+  // Period selector buttons
+  document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      
+      currentPeriod = this.dataset.period;
+      console.log('📅 Period changed to:', currentPeriod);
+      updateChartsInPlace();
+    });
+  });
+
+  // Chart type toggle buttons
+  document.querySelectorAll('.chart-type-toggle button').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const newType = this.dataset.type;
+      if (newType === currentChartType) return;
+      
+      document.querySelectorAll('.chart-type-toggle button').forEach(b => 
+        b.classList.remove('active')
+      );
+      this.classList.add('active');
+      
+      currentChartType = newType;
+      console.log('📊 Chart type changed to:', currentChartType);
+      
+      if (charts.mainChart) {
+        charts.mainChart.destroy();
+        charts.mainChart = null;
+        createMainChart();
+      }
+    });
+  });
+
+  // Refresh button
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      console.log('🔄 Manual refresh triggered');
+      loadChartData(true);
+    });
+  }
+}
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('🚀 Analytics Dashboard initializing...');
+  
+  initEventListeners();
+  loadChartData(true);
+  
+  // Auto-refresh every 5 minutes
+  setInterval(() => {
+    console.log('🔄 Auto-refresh triggered');
+    loadChartData(false);
+  }, 5 * 60 * 1000);
+  
+  console.log('✅ Analytics Dashboard ready');
+});
+</script>

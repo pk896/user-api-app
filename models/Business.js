@@ -13,7 +13,7 @@ const businessSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true, // ✅ unique index
+      //unique: true, // ✅ unique index
       lowercase: true,
       trim: true,
     },

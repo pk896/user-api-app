@@ -126,7 +126,7 @@ const productSchema = new mongoose.Schema(
     },
 
     // Product status flags (for filtering/sorting)
-    isNew: {
+    isNewItem: {
       type: Boolean,
       default: false,
       index: true,
@@ -339,6 +339,20 @@ productSchema.statics.findWithVariants = function () {
 // Helpful compound indexes for common queries
 productSchema.index({ business: 1, role: 1 });
 productSchema.index({ category: 1, role: 1 });
-productSchema.index({ isNew: 1, isOnSale: 1, isPopular: 1 });
+//productSchema.index({ isNew: 1, isOnSale: 1, isPopular: 1 });
+// NEW
+productSchema.index({ isNewItem: 1, isOnSale: 1, isPopular: 1 });
+
+// Virtual for backwards compatibility with code/templates that use product.isNew
+productSchema.virtual('isNew')
+  .get(function () {
+    return this.isNewItem;
+  })
+  .set(function (v) {
+    this.isNewItem = !!v;
+  });
 
 module.exports = mongoose.models.Product || mongoose.model('Product', productSchema);
+
+
+

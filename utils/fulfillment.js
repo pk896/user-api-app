@@ -1,6 +1,6 @@
 // utils/fulfillment.js
 
-const { mongoose } = require('../db');
+const mongoose = require('mongoose');
 
 let Order = null;
 try {

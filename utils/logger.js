@@ -19,11 +19,10 @@ function safe(obj) {
       },
       2,
     );
-  } catch (e) {
+  } catch {
     return String(obj);
-  }
+  } 
 }
-
 function stamp() {
   const now = new Date();
   return `${now.toISOString()} [${now.toLocaleString('en-ZA', { timeZone: TZ })}]`;

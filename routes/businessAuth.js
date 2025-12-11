@@ -10,6 +10,7 @@ const DeliveryOption = require('../models/DeliveryOption');
 const requireBusiness = require('../middleware/requireBusiness');
 const redirectIfLoggedIn = require('../middleware/redirectIfLoggedIn');
 const BusinessResetToken = require('../models/BusinessResetToken');
+const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 
 let Order = null;
 try {
@@ -155,6 +156,15 @@ async function sendBusinessResetEmail(business, token, req) {
   } else {
     console.log('📧 [DEV] Business reset URL:', resetUrl);
   }
+}
+
+// 🆕 Add this helper function near the top
+function _moneyToNumber(m) {
+  if (!m) return 0;
+  if (typeof m === 'number') return m;
+  if (typeof m === 'string') return Number(m) || 0;
+  if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
+  return 0;
 }
 
 // -------------------------------------------------------
@@ -348,37 +358,6 @@ router.get('/verify-pending', requireBusiness, async (req, res) => {
     res.redirect('/business/login');
   }
 });
-
-/*router.get('/out-of-stock', requireBusiness, async (req, res) => {
-  try {
-    const business = req.session.business;
-    if (!business || !business._id) {
-      req.flash('error', 'Session expired. Please log in again.');
-      return res.redirect('/business/login');
-    }
-
-    const products = await Product.find({
-      business: business._id,
-      stock: { $lte: 0 },
-    })
-      .sort({ updatedAt: -1 })
-      .lean();
-
-    res.render('products-out-of-stock', {
-      title: 'Out of Stock',
-      products,
-      business,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      themeCss: res.locals.themeCss,
-      nonce: res.locals.nonce,
-    });
-  } catch (err) {
-    console.error('❌ Out-of-stock page error:', err);
-    req.flash('error', 'Could not load out-of-stock products.');
-    res.redirect('/products/all');
-  }
-});*/
 
 /* ----------------------------------------------------------
  * 🔁 Resend verification email (POST)
@@ -906,6 +885,11 @@ router.get(
 
       const OrderModel = require('../models/Order');
 
+      // ----- Shared PAID_STATES + ID MATCH for this seller -----
+      const PAID_STATES = Array.isArray(OrderModel.PAID_STATES)
+        ? OrderModel.PAID_STATES
+        : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
+
       // 1) Products for this seller
       const products = await Product.find({ business: sessionBusiness._id })
         .select('customId name price stock category imageUrl createdAt updatedAt')
@@ -926,7 +910,7 @@ router.get(
         (p) => (Number(p.stock) || 0) <= 0,
       ).length;
 
-      // Map by customId / _id
+      // Map by customId / _id (for KPIs)
       const productsByKey = new Map();
       const sellerCustomIds = [];
       for (const p of products) {
@@ -935,22 +919,29 @@ router.get(
           sellerCustomIds.push(key);
           productsByKey.set(key, p);
         }
+        // Compatibility (if you ever use _id somewhere)
         productsByKey.set(String(p._id), p);
       }
+
+      // If seller has no products, we can shortcut some queries
+      const hasSellerProducts = sellerCustomIds.length > 0;
+
+      // Shared match for this seller's orders
+      const idMatchOr = hasSellerProducts
+        ? [
+            { 'items.productId': { $in: sellerCustomIds } },
+            { 'items.customId': { $in: sellerCustomIds } }, // old data fallback
+            { 'items.pid': { $in: sellerCustomIds } },
+            { 'items.sku': { $in: sellerCustomIds } },
+          ]
+        : [];
 
       // 2) Orders (Recent Orders)
       let ordersTotal = 0;
       let ordersByStatus = {};
       let recentOrders = [];
 
-      if (OrderModel && sellerCustomIds.length) {
-        const idMatchOr = [
-          { 'items.productId': { $in: sellerCustomIds } },
-          { 'items.customId': { $in: sellerCustomIds } },
-          { 'items.pid': { $in: sellerCustomIds } },
-          { 'items.sku': { $in: sellerCustomIds } },
-        ];
-
+      if (OrderModel && hasSellerProducts) {
         const baseOrderMatch = { $or: idMatchOr };
 
         const ordersAgg = await OrderModel.aggregate([
@@ -965,7 +956,7 @@ router.get(
         ordersTotal = await OrderModel.countDocuments(baseOrderMatch);
 
         recentOrders = await OrderModel.find(baseOrderMatch)
-          .select('orderId status amount createdAt shippingTracking')
+          .select('orderId status amount total createdAt shippingTracking')
           .sort({ createdAt: -1 })
           .limit(5)
           .lean();
@@ -977,28 +968,34 @@ router.get(
         processing: 0,
         shipped: 0,
         inTransit: 0,
-        delivered: 0
+        delivered: 0,
       };
 
-      if (OrderModel && sellerCustomIds.length) {
+      if (OrderModel && hasSellerProducts) {
         const trackingAgg = await OrderModel.aggregate([
-          { $match: { $or: [
-            { 'items.productId': { $in: sellerCustomIds } },
-            { 'items.customId': { $in: sellerCustomIds } },
-          ] } },
-          { $group: { 
-            _id: '$shippingTracking.status', 
-            count: { $sum: 1 } 
-          } }
+          {
+            $match: {
+              $or: [
+                { 'items.productId': { $in: sellerCustomIds } },
+                { 'items.customId': { $in: sellerCustomIds } },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: '$shippingTracking.status',
+              count: { $sum: 1 },
+            },
+          },
         ]);
 
-        trackingAgg.forEach(stat => {
-          const status = stat._id?.toLowerCase() || 'pending';
-          if (status === 'pending') trackingStats.pending = stat.count;
-          else if (status === 'processing') trackingStats.processing = stat.count;
-          else if (status === 'shipped') trackingStats.shipped = stat.count;
-          else if (status === 'in_transit') trackingStats.inTransit = stat.count;
-          else if (status === 'delivered') trackingStats.delivered = stat.count;
+        trackingAgg.forEach((stat) => {
+          const status = (stat._id || 'PENDING').toString().toUpperCase();
+          if (status === 'PENDING') trackingStats.pending = stat.count;
+          else if (status === 'PROCESSING') trackingStats.processing = stat.count;
+          else if (status === 'SHIPPED') trackingStats.shipped = stat.count;
+          else if (status === 'IN_TRANSIT') trackingStats.inTransit = stat.count;
+          else if (status === 'DELIVERED') trackingStats.delivered = stat.count;
         });
       }
 
@@ -1013,20 +1010,10 @@ router.get(
       let last30Revenue = 0;
       let last30Items = 0;
 
-      const dailySales = {}; // YYYY-MM-DD -> revenue for this seller
+      // YYYY-MM-DD -> revenue for this seller (last 30 days)
+      const dailySales = {};
 
-      if (OrderModel && sellerCustomIds.length) {
-        const PAID_STATES = Array.isArray(OrderModel.PAID_STATES)
-          ? OrderModel.PAID_STATES
-          : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
-
-        const idMatchOr = [
-          { 'items.productId': { $in: sellerCustomIds } },
-          { 'items.customId': { $in: sellerCustomIds } },
-          { 'items.pid': { $in: sellerCustomIds } },
-          { 'items.sku': { $in: sellerCustomIds } },
-        ];
-
+      if (OrderModel && hasSellerProducts) {
         const baseMatch = {
           createdAt: { $gte: since },
           status: { $in: PAID_STATES },
@@ -1034,14 +1021,14 @@ router.get(
         };
 
         const recentOrders30 = await OrderModel.find(baseMatch)
-          .select('items amount createdAt status shippingTracking')
+          .select('items amount total createdAt status')
           .lean();
 
         const productSalesMap = new Map();
 
         for (const order of recentOrders30) {
           const items = Array.isArray(order.items) ? order.items : [];
-          let orderSellerRevenue = 0; // revenue for THIS seller in this order
+          let orderSellerRevenue = 0;
 
           for (const item of items) {
             const productId = String(
@@ -1080,7 +1067,7 @@ router.get(
             existing.estRevenue += revenue;
           }
 
-          // Drop this order's seller revenue into the correct day
+          // Drop seller revenue of this order into dailySales for monthly chart
           if (orderSellerRevenue > 0 && order.createdAt) {
             const dateKey = order.createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
             dailySales[dateKey] = (dailySales[dateKey] || 0) + orderSellerRevenue;
@@ -1095,8 +1082,12 @@ router.get(
         soldEstRevenue = last30Revenue;
       }
 
-      // Fallback using computeSupplierKpis
-      if (soldPerProduct.length === 0) {
+      // Fallback using computeSupplierKpis, if you have it defined
+      if (
+        typeof computeSupplierKpis === 'function' &&
+        soldPerProduct.length === 0 &&
+        hasSellerProducts
+      ) {
         try {
           const kpisRaw = await computeSupplierKpis(sessionBusiness._id);
           if (
@@ -1115,96 +1106,204 @@ router.get(
         }
       }
 
-      // 5) SALES TREND WITH MULTIPLE PERIODS
+      // ===== Helpers for MoneySchema / seller revenue =====
+      function moneyToNumber(m) {
+        if (!m) return 0;
+        if (typeof m === 'number') return m;
+        if (typeof m === 'string') return Number(m) || 0;
+        if (typeof m === 'object') {
+          if (m.value !== undefined) return Number(m.value) || 0;
+        }
+        return 0;
+      }
+
+      // Uses Order.items[].price (MoneySchema) + quantity
+      function computeSellerRevenueForOrder(order, sellerIds) {
+        let sellerAmount = 0;
+        let foundItems = false;
+
+        if (Array.isArray(order.items)) {
+          order.items.forEach((item) => {
+            const productId = String(
+              item.productId || item.customId || item.pid || item.sku || '',
+            ).trim();
+
+            if (!sellerIds.includes(productId)) return;
+
+            const quantity = Number(item.quantity || 1);
+            const unitPrice = moneyToNumber(item.price); // MoneySchema
+            const lineAmt = quantity * unitPrice;
+
+            if (lineAmt > 0) {
+              sellerAmount += lineAmt;
+              foundItems = true;
+            }
+          });
+        }
+
+        // Fallback: if line prices are missing, use total order amount
+        if (!foundItems) {
+          sellerAmount =
+            moneyToNumber(order.amount) || Number(order.total || 0) || 0;
+        }
+
+        return sellerAmount;
+      }
+
+      // 5) SALES TREND WITH MULTIPLE PERIODS (REAL DATA)
       const salesTrend = {
-        monthly: [],  // Last 30 days
-        yearly: []    // Last 12 months
+        daily: [],   // Last 24 hours (hourly)
+        monthly: [], // Last 30 days (daily) — uses dailySales
+        yearly: [],  // Last 12 months (monthly)
       };
 
-      if (OrderModel && sellerCustomIds.length) {
-        const PAID_STATES = Array.isArray(OrderModel.PAID_STATES)
-          ? OrderModel.PAID_STATES
-          : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
-
-        const idMatchOr = [
-          { 'items.productId': { $in: sellerCustomIds } },
-          { 'items.customId': { $in: sellerCustomIds } },
-          { 'items.pid': { $in: sellerCustomIds } },
-          { 'items.sku': { $in: sellerCustomIds } },
-        ];
-
+      if (OrderModel && hasSellerProducts) {
         const baseMatch = {
           status: { $in: PAID_STATES },
-          $or: idMatchOr
+          $or: idMatchOr,
         };
 
-        // ----- Last 30 days (daily data) – use SOLD PRODUCTS (dailySales) -----
         const now = new Date();
-        for (let i = 29; i >= 0; i--) {
-          const date = new Date(now);
-          date.setDate(date.getDate() - i);
 
-          const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
-          const displayDate = date.toLocaleDateString('en-ZA', {
+        // ----- DAILY: last 24 hours (hourly buckets) -----
+        const last24hStart = new Date();
+        last24hStart.setHours(last24hStart.getHours() - 24, 0, 0, 0);
+
+        const hourlyOrders = await OrderModel.find({
+          ...baseMatch,
+          createdAt: { $gte: last24hStart },
+        })
+          .select('items amount total createdAt')
+          .lean();
+
+        const hourlyBuckets = {}; // 'YYYY-MM-DDTHH' -> revenue
+
+        hourlyOrders.forEach((order) => {
+          if (!order.createdAt) return;
+          const revenue = computeSellerRevenueForOrder(order, sellerCustomIds);
+          if (revenue <= 0) return;
+
+          const d = new Date(order.createdAt);
+          const key = d.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+          hourlyBuckets[key] = (hourlyBuckets[key] || 0) + revenue;
+        });
+
+        for (let i = 23; i >= 0; i--) {
+          const h = new Date(now);
+          h.setHours(now.getHours() - i, 0, 0, 0);
+          const key = h.toISOString().slice(0, 13);
+
+          const label = h
+            .toLocaleTimeString('en-ZA', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })
+            .slice(0, 5);
+
+          salesTrend.daily.push({
+            time: label,
+            sales: hourlyBuckets[key] || 0,
+          });
+        }
+
+        // ----- MONTHLY: last 30 days – use dailySales from KPIs -----
+        for (let i = 29; i >= 0; i--) {
+          const d = new Date(now);
+          d.setDate(d.getDate() - i);
+
+          const dateKey = d.toISOString().split('T')[0]; // YYYY-MM-DD
+          const displayDate = d.toLocaleDateString('en-ZA', {
             day: 'numeric',
             month: 'short',
           });
 
           salesTrend.monthly.push({
             date: displayDate,
-            sales: dailySales[dateStr] || 0, // revenue from sold products
+            sales: dailySales[dateKey] || 0,
           });
         }
 
-        // ----- Last 12 months (monthly data – still revenue per seller) -----
+        // ----- YEARLY: last 12 months (monthly buckets) -----
+        const yearlyStart = new Date(now);
+        yearlyStart.setDate(1);
+        yearlyStart.setMonth(yearlyStart.getMonth() - 11);
+
+        const yearlyOrders = await OrderModel.find({
+          ...baseMatch,
+          createdAt: { $gte: yearlyStart },
+        })
+          .select('items amount total createdAt')
+          .lean();
+
+        const monthlyBuckets = {}; // 'YYYY-MM' -> revenue
+
+        yearlyOrders.forEach((order) => {
+          if (!order.createdAt) return;
+          const d = new Date(order.createdAt);
+          const ymKey = `${d.getFullYear()}-${String(
+            d.getMonth() + 1,
+          ).padStart(2, '0')}`;
+
+          const revenue = computeSellerRevenueForOrder(order, sellerCustomIds);
+          if (revenue <= 0) return;
+
+          monthlyBuckets[ymKey] = (monthlyBuckets[ymKey] || 0) + revenue;
+        });
+
         for (let i = 11; i >= 0; i--) {
-          const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const monthEnd   = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+          const m = new Date(now);
+          m.setMonth(m.getMonth() - i, 1);
 
-          const monthlyOrders = await OrderModel.find({
-            ...baseMatch,
-            createdAt: { $gte: monthStart, $lte: monthEnd }
-          }).lean();
+          const ymKey = `${m.getFullYear()}-${String(
+            m.getMonth() + 1,
+          ).padStart(2, '0')}`;
 
-          let monthlyRevenue = 0;
-
-          monthlyOrders.forEach(order => {
-            let sellerAmount = 0;
-
-            if (Array.isArray(order.items)) {
-              order.items.forEach(item => {
-                const productId = String(
-                  item.productId || item.customId || item.pid || item.sku || ''
-                );
-                if (sellerCustomIds.includes(productId)) {
-                  const quantity = Number(item.quantity || 1);
-                  const price    = Number(item.price || 0);
-                  sellerAmount  += quantity * price;
-                }
-              });
-            }
-
-            if (sellerAmount === 0) {
-              sellerAmount = Number(order.amount?.value || order.total || 0);
-            }
-
-            monthlyRevenue += sellerAmount;
+          const label = m.toLocaleDateString('en-ZA', {
+            month: 'short',
+            year: '2-digit',
           });
 
-          const monthName = monthStart.toLocaleDateString('en-ZA', { month: 'short' });
           salesTrend.yearly.push({
-            month: monthName,
-            sales: monthlyRevenue
+            month: label,
+            sales: monthlyBuckets[ymKey] || 0,
           });
         }
       } else {
-        // Optional: mock data if NO orders at all
+        // Skeleton if no orders at all (keeps chart layout)
         const now = new Date();
+
+        for (let i = 23; i >= 0; i--) {
+          const h = new Date(now);
+          h.setHours(now.getHours() - i, 0, 0, 0);
+          const label = h
+            .toLocaleTimeString('en-ZA', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })
+            .slice(0, 5);
+          salesTrend.daily.push({ time: label, sales: 0 });
+        }
+
         for (let i = 29; i >= 0; i--) {
-          const date = new Date(now);
-          date.setDate(date.getDate() - i);
-          const displayDate = date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-          salesTrend.monthly.push({ date: displayDate, sales: 0 });
+          const d = new Date(now);
+          d.setDate(d.getDate() - i);
+          const label = d.toLocaleDateString('en-ZA', {
+            day: 'numeric',
+            month: 'short',
+          });
+          salesTrend.monthly.push({ date: label, sales: 0 });
+        }
+
+        for (let i = 11; i >= 0; i--) {
+          const m = new Date(now);
+          m.setMonth(m.getMonth() - i, 1);
+          const label = m.toLocaleDateString('en-ZA', {
+            month: 'short',
+            year: '2-digit',
+          });
+          salesTrend.yearly.push({ month: label, sales: 0 });
         }
       }
 
@@ -1238,6 +1337,16 @@ router.get(
         .sort({ deliveryDays: 1, priceCents: 1 })
         .lean();
 
+      // 🔍 Optional: log shape of salesTrend once
+      console.log('📈 Seller salesTrend sample:', {
+        dailyPoints: salesTrend.daily.length,
+        monthlyPoints: salesTrend.monthly.length,
+        yearlyPoints: salesTrend.yearly.length,
+        firstDaily: salesTrend.daily[0],
+        firstMonthly: salesTrend.monthly[0],
+        firstYearly: salesTrend.yearly[0],
+      });
+
       return res.render('dashboards/seller-dashboard', {
         title: 'Seller Dashboard',
         business: sellerDoc,
@@ -1256,7 +1365,7 @@ router.get(
           recent: recentOrders,
         },
         kpis,
-        salesTrend, // now based on SOLD PRODUCTS for monthly
+        salesTrend, // ✅ chart data now filled with real revenue
         deliveryOptions,
         isOrdersAdmin: Boolean(req.session.ordersAdmin),
         themeCss: res.locals.themeCss,
@@ -1267,7 +1376,7 @@ router.get(
       req.flash('error', 'Failed to load seller dashboard.');
       res.redirect('/business/login');
     }
-  },
+  }
 );
 
 /* ----------------------------------------------------------
@@ -2056,80 +2165,581 @@ router.post('/profile/delete', requireBusiness, async (req, res) => {
   }
 });
 
-/* ==========================================================
- * ⚙️ DEV MAINTENANCE ROUTES (list + delete accounts)
- *   👉 Only use in development / debugging
- *   👉 Remove or protect before production
- * ========================================================== */
+/* ----------------------------------------------------------
+ * 📊 ANALYTICS CHART DASHBOARD (per business)
+ * -------------------------------------------------------- */
 
-// Simple guard so we don't accidentally expose these in production
-function requireDevMode(req, res, next) {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).send('Dev maintenance routes are disabled in production.');
+router.get(
+  '/analytics/chart',
+  requireBusiness,
+  requireVerifiedBusiness,
+  async (req, res) => {
+    try {
+      const sessionBusiness = req.session.business;
+
+      if (!sessionBusiness || !sessionBusiness._id) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      const business = await Business.findById(sessionBusiness._id).lean();
+      if (!business) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      const activeProducts = await Product.countDocuments({
+        business: business._id,
+        stock: { $gt: 0 },
+      });
+
+      res.render('business-chart', {
+        title: `${business.name} - Analytics Dashboard`,
+        business: {
+          ...business,
+          activeProducts,
+        },
+        active: 'analytics',
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+      });
+    } catch (err) {
+      console.error('❌ Analytics chart dashboard error:', err);
+      req.flash('error', 'Failed to load analytics dashboard.');
+      res.redirect('/business/dashboard');
+    }
   }
-  next();
-}
+);
 
-/**
- * GET /business/debug/accounts
- * List all business accounts (email, role, verified, createdAt)
- */
-router.get('/debug/accounts', requireDevMode, async (req, res) => {
-  try {
-    const accounts = await Business.find({})
-      .select('email name role isVerified createdAt')
-      .sort({ createdAt: -1 })
-      .lean();
+// ----------------------------------------------------------
+// 📊 ANALYTICS CHART DATA API (per business only)
+// ----------------------------------------------------------
+router.get(
+  '/analytics/chart-data',
+  requireBusiness,
+  requireVerifiedBusiness,
+  async (req, res) => {
+    try {
+      const sessionBusiness = req.session.business;
+      if (!sessionBusiness || !sessionBusiness._id) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized',
+        });
+      }
 
-    return res.json({
-      ok: true,
-      count: accounts.length,
-      accounts,
-    });
-  } catch (err) {
-    console.error('❌ Debug list accounts error:', err);
-    return res.status(500).json({
-      ok: false,
-      message: 'Failed to load accounts',
-    });
-  }
-});
+      // Use the Order model defined at the top of the file
+      if (!Order) {
+        return res.status(500).json({
+          success: false,
+          message: 'Order model not available',
+        });
+      }
 
-/**
- * POST /business/debug/accounts/delete-email
- * Delete all business accounts matching a given email
- *
- * Body (or query): { email: "someone@example.com" }
- */
-router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => {
-  try {
-    const rawEmail = (req.body && req.body.email) || req.query.email || '';
-    const email = normalizeEmail(rawEmail);
+      const businessId = sessionBusiness._id;
+      const now = new Date();
 
-    if (!email) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Email is required',
+      // ✅ FIX: Case-insensitive status matching
+      const statusRegex = new RegExp('^(completed|paid|shipped|delivered)$', 'i');
+
+      // ----------------------------------------------------
+      // 1. Only THIS business's products
+      // ----------------------------------------------------
+      const products = await Product.find({ business: businessId })
+        .select('customId name price stock soldCount')
+        .lean();
+
+      const productIds = products
+        .map((p) => {
+          const id = p.customId ? String(p.customId).trim() : null;
+          return id;
+        })
+        .filter(Boolean);
+
+      console.log(`🚀 Found ${productIds.length} product IDs for ${sessionBusiness.name}`);
+
+      const productIdSet = new Set(productIds);
+      const productsByKey = new Map();
+      products.forEach(p => {
+        if (p.customId) productsByKey.set(String(p.customId), p);
+      });
+
+      const activeProducts = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+
+      // If this business has no products -> return zeroed chart
+      if (productIds.length === 0) {
+        const dailyData = [];
+        const monthlyData = [];
+        const yearlyData = [];
+
+        // Last 7 days
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date(now);
+          date.setDate(date.getDate() - i);
+          dailyData.push({
+            date: date.toLocaleDateString('en-ZA', {
+              weekday: 'short',
+              day: 'numeric',
+            }),
+            sales: 0,
+            orders: 0,
+          });
+        }
+
+        // Last 30 days
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(now);
+          date.setDate(date.getDate() - i);
+          monthlyData.push({
+            date: date.toLocaleDateString('en-ZA', {
+              day: 'numeric',
+              month: 'short',
+            }),
+            sales: 0,
+            orders: 0,
+          });
+        }
+
+        // Last 12 months
+        for (let i = 11; i >= 0; i--) {
+          const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          yearlyData.push({
+            month: monthStart.toLocaleDateString('en-ZA', {
+              month: 'short',
+              year: 'numeric',
+            }),
+            sales: 0,
+            orders: 0,
+          });
+        }
+
+        return res.json({
+          success: true,
+          chartData: {
+            daily: dailyData,
+            monthly: monthlyData,
+            yearly: yearlyData,
+            custom: [],
+          },
+          metrics: {
+            totalRevenue: 0,
+            totalOrders: 0,
+            avgOrderValue: 0,
+            activeProducts,
+            revenueChange: 0,
+            ordersChange: 0,
+            avgOrderChange: 0,
+          },
+          productPerformance: [],
+          lastUpdated: new Date().toISOString(),
+        });
+      }
+
+      // ----------------------------------------------------
+      // 2. Base match for orders
+      // ----------------------------------------------------
+      const idMatchOr = [
+        { 'items.productId': { $in: productIds } },
+        { 'items.customId': { $in: productIds } },
+        { 'items.pid': { $in: productIds } },
+        { 'items.sku': { $in: productIds } },
+      ];
+
+      // ✅ Helper: Convert MoneySchema to number
+      function moneyToNumber(m) {
+        if (!m) return 0;
+        if (typeof m === 'number') return m;
+        if (typeof m === 'string') return Number(m) || 0;
+        if (typeof m === 'object' && m.value !== undefined) {
+          return Number(m.value) || 0;
+        }
+        return 0;
+      }
+
+      // ✅ Helper: Compute revenue for THIS business from an order
+      function computeSellerAmount(order) {
+        let sellerAmount = 0;
+
+        if (!Array.isArray(order.items)) {
+          return 0;
+        }
+
+        order.items.forEach((item) => {
+          const pid = String(item.productId || item.customId || item.pid || item.sku || '').trim();
+          
+          if (!pid || !productIdSet.has(pid)) return;
+
+          const quantity = Number(item.quantity || 1);
+          const unitPrice = moneyToNumber(item.price);
+          const lineAmount = quantity * unitPrice;
+          
+          if (lineAmount > 0) {
+            sellerAmount += lineAmount;
+          }
+        });
+
+        return sellerAmount;
+      }
+
+      // ----------------------------------------------------
+      // 3. Daily data (last 7 days)
+      // ----------------------------------------------------
+      const dailyData = [];
+      console.log('📊 Generating daily data (last 7 days)...');
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+
+        const startOfDay = new Date(dateStr);
+        const endOfDay = new Date(startOfDay);
+        endOfDay.setDate(endOfDay.getDate() + 1);
+
+        const dailyOrders = await Order.find({
+          createdAt: { $gte: startOfDay, $lt: endOfDay },
+          status: statusRegex,
+          $or: idMatchOr,
+        }).lean();
+
+        let dailyRevenue = 0;
+        let dailyOrdersCount = 0;
+
+        dailyOrders.forEach((order) => {
+          const sellerAmount = computeSellerAmount(order);
+          if (sellerAmount > 0) {
+            dailyRevenue += sellerAmount;
+            dailyOrdersCount++;
+          }
+        });
+
+        dailyData.push({
+          date: date.toLocaleDateString('en-ZA', {
+            weekday: 'short',
+            day: 'numeric',
+          }),
+          sales: Math.round(dailyRevenue * 100) / 100,
+          orders: dailyOrdersCount,
+        });
+      }
+
+      console.log(`✅ Daily data: ${dailyData.length} points, total: R${dailyData.reduce((s, d) => s + d.sales, 0).toFixed(2)}`);
+
+      // ----------------------------------------------------
+      // 4. Monthly data (last 30 days, by day)
+      // ----------------------------------------------------
+      const monthlyData = [];
+      console.log('📊 Generating monthly data (last 30 days)...');
+      
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+
+        const startOfDay = new Date(dateStr);
+        const endOfDay = new Date(startOfDay);
+        endOfDay.setDate(endOfDay.getDate() + 1);
+
+        const dailyOrders = await Order.find({
+          createdAt: { $gte: startOfDay, $lt: endOfDay },
+          status: statusRegex,
+          $or: idMatchOr,
+        }).lean();
+
+        let dailyRevenue = 0;
+        let dailyOrdersCount = 0;
+
+        dailyOrders.forEach((order) => {
+          const sellerAmount = computeSellerAmount(order);
+          if (sellerAmount > 0) {
+            dailyRevenue += sellerAmount;
+            dailyOrdersCount++;
+          }
+        });
+
+        monthlyData.push({
+          date: date.toLocaleDateString('en-ZA', {
+            day: 'numeric',
+            month: 'short',
+          }),
+          sales: Math.round(dailyRevenue * 100) / 100,
+          orders: dailyOrdersCount,
+        });
+      }
+
+      console.log(`✅ Monthly data: ${monthlyData.length} points, total: R${monthlyData.reduce((s, d) => s + d.sales, 0).toFixed(2)}`);
+
+      // ----------------------------------------------------
+      // 5. Yearly data (last 12 months, by month)
+      // ----------------------------------------------------
+      const yearlyData = [];
+      console.log('📊 Generating yearly data (last 12 months)...');
+      
+      for (let i = 11; i >= 0; i--) {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+        monthEnd.setHours(23, 59, 59, 999);
+
+        const monthlyOrders = await Order.find({
+          createdAt: { $gte: monthStart, $lte: monthEnd },
+          status: statusRegex,
+          $or: idMatchOr,
+        }).lean();
+
+        let monthlyRevenue = 0;
+        let monthlyOrdersCount = 0;
+
+        monthlyOrders.forEach((order) => {
+          const sellerAmount = computeSellerAmount(order);
+          if (sellerAmount > 0) {
+            monthlyRevenue += sellerAmount;
+            monthlyOrdersCount++;
+          }
+        });
+
+        yearlyData.push({
+          month: monthStart.toLocaleDateString('en-ZA', {
+            month: 'short',
+            year: 'numeric',
+          }),
+          sales: Math.round(monthlyRevenue * 100) / 100,
+          orders: monthlyOrdersCount,
+        });
+      }
+
+      console.log(`✅ Yearly data: ${yearlyData.length} points, total: R${yearlyData.reduce((s, d) => s + d.sales, 0).toFixed(2)}`);
+
+      // ----------------------------------------------------
+      // 6. Metrics (all based only on THIS business revenue)
+      // ----------------------------------------------------
+      const totalRevenue = yearlyData.reduce((sum, m) => sum + m.sales, 0);
+      const totalOrders = yearlyData.reduce((sum, m) => sum + m.orders, 0);
+      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      const lastIdx = yearlyData.length - 1;
+      const prevIdx = lastIdx - 1;
+
+      const currentMonthRevenue = lastIdx >= 0 ? yearlyData[lastIdx].sales : 0;
+      const previousMonthRevenue = prevIdx >= 0 ? yearlyData[prevIdx].sales : 0;
+
+      const revenueChange =
+        previousMonthRevenue > 0
+          ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100
+          : 0;
+
+      const currentMonthOrders = lastIdx >= 0 ? yearlyData[lastIdx].orders : 0;
+      const previousMonthOrders = prevIdx >= 0 ? yearlyData[prevIdx].orders : 0;
+
+      const ordersChange =
+        previousMonthOrders > 0
+          ? ((currentMonthOrders - previousMonthOrders) / previousMonthOrders) * 100
+          : 0;
+
+      const currentAvg =
+        currentMonthOrders > 0 ? currentMonthRevenue / currentMonthOrders : 0;
+      const previousAvg =
+        previousMonthOrders > 0 ? previousMonthRevenue / previousMonthOrders : 0;
+
+      const avgOrderChange =
+        previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
+
+      console.log('💰 Metrics calculated:', {
+        totalRevenue: totalRevenue.toFixed(2),
+        totalOrders,
+        avgOrderValue: avgOrderValue.toFixed(2)
+      });
+
+      // ----------------------------------------------------
+      // 7. Product performance (top 5)
+      // ----------------------------------------------------
+      const productPerformance = [];
+
+      if (products.length > 0) {
+        const topProducts = products
+          .filter((p) => (p.soldCount || 0) > 0)
+          .sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0))
+          .slice(0, 5);
+
+        if (topProducts.length > 0) {
+          topProducts.forEach((product) => {
+            const name =
+              product.name.length > 15
+                ? product.name.substring(0, 15) + '...'
+                : product.name;
+
+            productPerformance.push({
+              name,
+              sales: product.soldCount || 0,
+            });
+          });
+        } else {
+          const inStockProducts = products
+            .filter((p) => (Number(p.stock) || 0) > 0)
+            .sort((a, b) => (Number(b.stock) || 0) - (Number(a.stock) || 0))
+            .slice(0, 5);
+
+          if (inStockProducts.length > 0) {
+            inStockProducts.forEach((product) => {
+              const name =
+                product.name.length > 15
+                  ? product.name.substring(0, 15) + '...'
+                  : product.name;
+
+              productPerformance.push({
+                name,
+                sales: Number(product.stock) || 0,
+              });
+            });
+          } else {
+            productPerformance.push(
+              { name: 'No products yet', sales: 1 },
+              { name: 'Add products', sales: 1 }
+            );
+          }
+        }
+      }
+
+      console.log('📦 Product performance:', productPerformance.length, 'items');
+
+      // Final response
+      const response = {
+        success: true,
+        chartData: {
+          daily: dailyData,
+          monthly: monthlyData,
+          yearly: yearlyData,
+          custom: [],
+        },
+        metrics: {
+          totalRevenue: Math.round(totalRevenue * 100) / 100,
+          totalOrders,
+          avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+          activeProducts,
+          revenueChange: Math.round(revenueChange * 10) / 10,
+          ordersChange: Math.round(ordersChange * 10) / 10,
+          avgOrderChange: Math.round(avgOrderChange * 10) / 10,
+        },
+        productPerformance,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      console.log('✅ Sending response with:', {
+        dailyPoints: response.chartData.daily.length,
+        monthlyPoints: response.chartData.monthly.length,
+        yearlyPoints: response.chartData.yearly.length,
+        totalRevenue: response.metrics.totalRevenue,
+        totalOrders: response.metrics.totalOrders
+      });
+
+      return res.json(response);
+      
+    } catch (error) {
+      console.error('❌ Chart data API error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch chart data',
+        error: error.message,
       });
     }
+  }
+);
 
-    // Delete all businesses with this email (usually 1)
-    const result = await Business.deleteMany({ email });
-
-    return res.json({
-      ok: true,
-      deletedCount: result.deletedCount || 0,
-      email,
-      message: `Deleted ${result.deletedCount || 0} business account(s) for ${email}`,
+// ----------------------------------------------------------
+// 🔍 DIAGNOSTIC ROUTE (keep this for debugging)
+// ----------------------------------------------------------
+router.get('/diagnostic', requireBusiness, async (req, res) => {
+  try {
+    const businessId = req.session.business._id;
+    const business = await Business.findById(businessId).lean();
+    
+    // Get products
+    const products = await Product.find({ business: businessId })
+      .select('customId name price stock soldCount')
+      .lean();
+    
+    const productIds = products.map(p => p.customId).filter(Boolean);
+    
+    // Get ALL orders (not just paid)
+    const allOrders = await Order.find({
+      $or: [
+        { 'items.productId': { $in: productIds } },
+        { 'items.customId': { $in: productIds } }
+      ]
+    })
+    .select('orderId status items amount createdAt')
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+    
+    // Get paid orders with case-insensitive matching
+    const statusRegex = new RegExp('^(completed|paid|shipped|delivered)$', 'i');
+    const paidOrders = await Order.find({
+      status: statusRegex,
+      $or: [
+        { 'items.productId': { $in: productIds } },
+        { 'items.customId': { $in: productIds } }
+      ]
+    })
+    .select('orderId status items amount createdAt')
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+    
+    res.json({
+      business: {
+        name: business.name,
+        role: business.role,
+        id: businessId
+      },
+      products: {
+        count: products.length,
+        list: products.map(p => ({
+          name: p.name,
+          customId: p.customId,
+          price: p.price,
+          stock: p.stock,
+          soldCount: p.soldCount
+        }))
+      },
+      productIds,
+      orders: {
+        allCount: allOrders.length,
+        paidCount: paidOrders.length,
+        allOrders: allOrders.map(o => ({
+          orderId: o.orderId,
+          status: o.status,
+          createdAt: o.createdAt,
+          amount: o.amount,
+          items: o.items.map(item => ({
+            productId: item.productId || item.customId,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price
+          }))
+        })),
+        paidOrders: paidOrders.map(o => ({
+          orderId: o.orderId,
+          status: o.status,
+          createdAt: o.createdAt,
+          amount: o.amount,
+          items: o.items.map(item => ({
+            productId: item.productId || item.customId,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price
+          }))
+        }))
+      }
     });
   } catch (err) {
-    console.error('❌ Debug delete by email error:', err);
-    return res.status(500).json({
-      ok: false,
-      message: 'Failed to delete account(s)',
-    });
+    console.error('Diagnostic error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
 module.exports = router;
+
+
+
+
 

@@ -134,126 +134,55 @@
       .filter(p => (Number(p.stock) || 0) <= 0)
       .slice(0, 5);
     
-    // ===== CHART DATA PROCESSING =====
+    // ===== CHART DATA PROCESSING (REAL DATA, NO RANDOM) =====
     let dailyChartData = [];
     let monthlyChartData = [];
     let yearlyChartData = [];
-    
-    // Use real sales trend data from backend
-    if (salesTrend) {
-      if (Array.isArray(salesTrend)) {
-        // Old format - use as yearly
-        yearlyChartData = salesTrend.map(item => ({
-          month: item.month || 'Jan',
-          sales: Number(item.sales) || 0
-        }));
-      } else if (salesTrend.monthly && salesTrend.yearly) {
-        // New format
-        monthlyChartData = salesTrend.monthly.map(item => ({
-          date: item.date || '1 Jan',
-          sales: Number(item.sales) || 0
-        }));
-        yearlyChartData = salesTrend.yearly.map(item => ({
-          month: item.month || 'Jan',
-          sales: Number(item.sales) || 0
-        }));
+
+    // 🔐 Safely read salesTrend so EJS doesn't crash if it's missing
+    let trend = {};
+    if (typeof salesTrend !== 'undefined' && salesTrend) {
+      trend = salesTrend;
+    }
+
+    // DAILY – expect array like: [{ time: "13:00", sales: 1200 }, ...]
+    if (Array.isArray(trend.daily)) {
+      dailyChartData = trend.daily.map(p => ({
+        time: p.time || p.label || p.hour || '',
+        sales: Number(p.sales ?? p.total ?? p.amount ?? 0)
+      }));
+    }
+
+    // MONTHLY (last 30 days) – expect: [{ date: "1 Dec", sales: 3200 }, ...]
+    if (Array.isArray(trend.monthly)) {
+      monthlyChartData = trend.monthly.map(p => ({
+        date: p.date || p.label || '',
+        sales: Number(p.sales ?? p.total ?? p.amount ?? 0)
+      }));
+    }
+
+    // YEARLY (last 12 months) – expect: [{ month: "Jan", sales: 15000 }, ...]
+    if (Array.isArray(trend.yearly)) {
+      yearlyChartData = trend.yearly.map(p => ({
+        month: p.month || p.label || '',
+        sales: Number(p.sales ?? p.total ?? p.amount ?? 0)
+      }));
+    }
+
+    // Keep chart layout even if there is no data
+    if (!dailyChartData.length) {
+      const now = new Date();
+      for (let i = 23; i >= 0; i--) {
+        const hour = new Date(now);
+        hour.setHours(now.getHours() - i);
+        const displayHour = hour.toLocaleTimeString('en-ZA', { 
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false 
+        }).slice(0, 5);
+        dailyChartData.push({ time: displayHour, sales: 0 });
       }
     }
-    
-    // Create daily data (last 24 hours) - ALWAYS create this even if we have backend data
-    const now = new Date();
-    
-    // Create sample data for last 24 hours (hourly)
-    for (let i = 23; i >= 0; i--) {
-      const hour = new Date(now);
-      hour.setHours(now.getHours() - i);
-      const displayHour = hour.toLocaleTimeString('en-ZA', { 
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false 
-      }).slice(0, 5); // Format: "14:30"
-      
-      // Create realistic hourly sales pattern
-      let sales = 0;
-      const currentHour = hour.getHours();
-      
-      // Business hours (9 AM - 5 PM) have more sales
-      if (currentHour >= 9 && currentHour <= 17) {
-        // Peak hours around lunch (12-2 PM)
-        if (currentHour >= 12 && currentHour <= 14) {
-          sales = Math.floor(Math.random() * 1000) + 800;
-        } else {
-          sales = Math.floor(Math.random() * 800) + 300;
-        }
-      } else if (currentHour >= 18 && currentHour <= 21) {
-        // Evening hours have some sales
-        sales = Math.floor(Math.random() * 600) + 200;
-      } else {
-        // Late night/early morning have minimal sales
-        sales = Math.floor(Math.random() * 200);
-      }
-      
-      dailyChartData.push({
-        time: displayHour,
-        sales: sales
-      });
-    }
-    
-    // If no monthly data or zero data, create sample data
-    const hasMonthlyData = monthlyChartData.some(item => item.sales > 0);
-    const hasYearlyData = yearlyChartData.some(item => item.sales > 0);
-    
-    if (!hasMonthlyData) {
-      // Create monthly data (30 days)
-      const totalRevenue = sellerKpis.revenueLast30 || 3000;
-      const avgSaleValue = 1500;
-      
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const displayDate = date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-        
-        // Create realistic sales pattern
-        let sales = 0;
-        if (i % 7 === 0 || i % 5 === 0 || i % 3 === 0) {
-          sales = Math.floor(Math.random() * avgSaleValue * 2) + 500;
-        }
-        
-        monthlyChartData.push({
-          date: displayDate,
-          sales: sales
-        });
-      }
-    }
-    
-    if (!hasYearlyData) {
-      // Create yearly data (12 months)
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const totalRevenue = sellerKpis.revenueLast30 * 12 || 36000;
-      const monthlyRevenue = totalRevenue / 12;
-      
-      months.forEach((month, index) => {
-        let sales = monthlyRevenue;
-        // Create seasonal pattern
-        if (index === 11) sales *= 1.5;
-        if (index >= 5 && index <= 8) sales *= 0.8;
-        
-        // Add some randomness
-        sales = sales * (0.7 + Math.random() * 0.6);
-        
-        yearlyChartData.push({
-          month: month,
-          sales: Math.max(0, Math.floor(sales))
-        });
-      });
-    }
-    
-    // For backward compatibility
-    let salesTrendData = { 
-      daily: dailyChartData, 
-      monthly: monthlyChartData, 
-      yearly: yearlyChartData 
-    };
   %>
 
   <!-- Quick Stats Section -->
@@ -377,7 +306,7 @@
         <span class="action-text">All Products</span>
       </a>
       
-      <a href="/demands/aggregate" class="action">
+      <a href="/business/analytics/chart" class="action">
         <span class="action-icon">📈</span>
         <span class="action-text">Analytics</span>
       </a>
@@ -1950,67 +1879,67 @@
 
   /* ===== RESTOCK ALL ALERT STYLES ===== */
 
-.restock-link .restock-all {
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
+  .restock-link .restock-all {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
 
-/* When there ARE out-of-stock products */
-.restock-link.has-out-of-stock .restock-all {
-  /* Color flashing + visibility blinking */
-  animation: restockColorBlink 0.5s infinite alternate,
-             restockVisibilityBlink 1s infinite;
-}
+  /* When there ARE out-of-stock products */
+  .restock-link.has-out-of-stock .restock-all {
+    /* Color flashing + visibility blinking */
+    animation: restockColorBlink 0.5s infinite alternate,
+              restockVisibilityBlink 1s infinite;
+  }
 
-/* When everything is in stock (no out-of-stock products) */
-.restock-link.all-good .restock-all {
-  color: var(--green);
-  animation: restockOkPulse 1.5s infinite;
-}
-
-/* Color toggling: yellow <-> red */
-@keyframes restockColorBlink {
-  0% {
-    color: #facc15; /* yellow */
-  }
-  50% {
-    color: #ef4444; /* red */
-  }
-  100% {
-    color: #facc15; /* yellow */
-  }
-}
-
-/* Blink (appear / disappear) */
-@keyframes restockVisibilityBlink {
-  0%,
-  40% {
-    opacity: 1;
-  }
-  50%,
-  90% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-/* Calm green pulse when all good */
-@keyframes restockOkPulse {
-  0% {
+  /* When everything is in stock (no out-of-stock products) */
+  .restock-link.all-good .restock-all {
     color: var(--green);
-    text-shadow: none;
+    animation: restockOkPulse 1.5s infinite;
   }
-  50% {
-    color: #16a34a;
-    text-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+
+  /* Color toggling: yellow <-> red */
+  @keyframes restockColorBlink {
+    0% {
+      color: #facc15; /* yellow */
+    }
+    50% {
+      color: #ef4444; /* red */
+    }
+    100% {
+      color: #facc15; /* yellow */
+    }
   }
-  100% {
-    color: var(--green);
-    text-shadow: none;
+
+  /* Blink (appear / disappear) */
+  @keyframes restockVisibilityBlink {
+    0%,
+    40% {
+      opacity: 1;
+    }
+    50%,
+    90% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
   }
-}
+
+  /* Calm green pulse when all good */
+  @keyframes restockOkPulse {
+    0% {
+      color: var(--green);
+      text-shadow: none;
+    }
+    50% {
+      color: #16a34a;
+      text-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+    }
+    100% {
+      color: var(--green);
+      text-shadow: none;
+    }
+  }
 
   /* ===== RESPONSIVE ===== */
   @media (min-width: 375px) {
@@ -2275,33 +2204,33 @@
   }
 
   .pg-count-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  background: #0f172a;
-  color: #f9fafb;
-}
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #0f172a;
+    color: #f9fafb;
+  }
 
-/* Existing alert style for Out of Stock (example) */
-.pg-link-alert {
-  background: rgba(239, 68, 68, 0.08);
-  border-left: 3px solid #ef4444;
-  color: #b91c1c;
-}
+  /* Existing alert style for Out of Stock (example) */
+  .pg-link-alert {
+    background: rgba(239, 68, 68, 0.08);
+    border-left: 3px solid #ef4444;
+    color: #b91c1c;
+  }
 
-/* New style for Low Stock */
-.pg-link-warning {
-  background: rgba(249, 115, 22, 0.08);
-  border-left: 3px solid #f97316;
-  color: #92400e;
-}
+  /* New style for Low Stock */
+  .pg-link-warning {
+    background: rgba(249, 115, 22, 0.08);
+    border-left: 3px solid #f97316;
+    color: #92400e;
+  }
 </style>
 
 <script nonce="<%= nonce %>">
@@ -2331,224 +2260,328 @@
     return 'R ' + Number(amount || 0).toFixed(2);
   }
 
-  // WORKING SIMPLE CHART FUNCTION WITH DAILY VIEW
-  function createSimpleChart() {
-    console.log('📊 Creating simple chart with daily view...');
-    
-    // Get data directly from EJS variables
-    const dailyData = <%- JSON.stringify(dailyChartData) %>;
-    const monthlyData = <%- JSON.stringify(monthlyChartData) %>;
-    const yearlyData = <%- JSON.stringify(yearlyChartData) %>;
-    
-    console.log('Daily data (24h):', dailyData);
-    console.log('Monthly data (30d):', monthlyData);
-    console.log('Yearly data (12m):', yearlyData);
-    
+  // SIMPLE BAR CHART USING ANALYTICS API DATA
+  async function createSimpleChart() {
+    console.log('📊 Creating simple chart using /business/analytics/chart-data ...');
+
+    // Fallback (uses whatever EJS prepared, probably zeros)
+    let dailyData   = <%- JSON.stringify(dailyChartData || []) %>;
+    let monthlyData = <%- JSON.stringify(monthlyChartData || []) %>;
+    let yearlyData  = <%- JSON.stringify(yearlyChartData || []) %>;
+
+    try {
+      // ⚠️ Adjust path if your router is mounted differently.
+      // In your app it's usually app.use('/business', router)
+      // so this becomes /business/analytics/chart-data
+      const res = await fetch('/business/analytics/chart-data');
+
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+
+      const json = await res.json();
+      if (json && json.success && json.chartData) {
+        const chart = json.chartData;
+
+        // 🔄 Map analytics format → seller-dashboard format
+        // analytics.daily:  [{ date: "Mon 10", sales, orders }]
+        // analytics.monthly:[{ date: "10 Dec", sales, orders }]
+        // analytics.yearly: [{ month: "Dec 2025", sales, orders }]
+        dailyData = Array.isArray(chart.daily)
+          ? chart.daily.map(p => ({
+              time: p.date,                   // label for X-axis
+              sales: Number(p.sales || 0),
+            }))
+          : [];
+
+        monthlyData = Array.isArray(chart.monthly)
+          ? chart.monthly.map(p => ({
+              date: p.date,
+              sales: Number(p.sales || 0),
+            }))
+          : [];
+
+        yearlyData = Array.isArray(chart.yearly)
+          ? chart.yearly.map(p => ({
+              month: p.month,
+              sales: Number(p.sales || 0),
+            }))
+          : [];
+
+        console.log('✅ Loaded analytics data for seller dashboard', {
+          dailyPoints: dailyData.length,
+          monthlyPoints: monthlyData.length,
+          yearlyPoints: yearlyData.length,
+        });
+      } else {
+        console.warn('⚠️ analytics/chart-data returned no chartData, using fallback EJS data');
+      }
+    } catch (err) {
+      console.error('⚠️ Failed to fetch /business/analytics/chart-data, using EJS fallback', err);
+    }
+
+    // If STILL no data, keep layout with dummy zeros
+    if (!dailyData.length) {
+      console.log('ℹ️ No daily data, generating dummy zeros');
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const label = d.toLocaleDateString('en-ZA', {
+          weekday: 'short',
+          day: 'numeric',
+        });
+        dailyData.push({ time: label, sales: 0 });
+      }
+    }
+
+    if (!monthlyData.length) {
+      const now = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const label = d.toLocaleDateString('en-ZA', {
+          day: 'numeric',
+          month: 'short',
+        });
+        monthlyData.push({ date: label, sales: 0 });
+      }
+    }
+
+    if (!yearlyData.length) {
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const m = new Date(now);
+        m.setMonth(m.getMonth() - i, 1);
+        const label = m.toLocaleDateString('en-ZA', {
+          month: 'short',
+          year: '2-digit',
+        });
+        yearlyData.push({ month: label, sales: 0 });
+      }
+    }
+
     let currentPeriod = 'daily';
-    let currentData = dailyData;
-    
+    let currentData   = dailyData;
+
+    function safeValues(data) {
+      return data.map(item => Number(item.sales || 0));
+    }
+
     // Update statistics
     function updateStats(data, period) {
-      const values = data.map(item => item.sales || 0);
-      const total = values.reduce((sum, val) => sum + val, 0);
-      const avg = values.length > 0 ? total / values.length : 0;
-      const peak = Math.max(...values);
-      const lowest = Math.min(...values.filter(v => v > 0));
-      const current = values[values.length - 1] || 0;
-      
-      // Calculate growth (different calculation for daily vs monthly/yearly)
+      const values = safeValues(data);
+
+      if (!values.length) {
+        document.getElementById('current-sales').textContent = fmtCurrency(0);
+        document.getElementById('avg-sales').textContent     = fmtCurrency(0);
+        document.getElementById('total-sales').textContent   = fmtCurrency(0);
+        document.getElementById('peak-sales').textContent    = fmtCurrency(0);
+        document.getElementById('lowest-sales').textContent  = fmtCurrency(0);
+
+        const growthEl     = document.getElementById('growth-trend');
+        const projectionEl = document.getElementById('projection');
+
+        if (growthEl) {
+          growthEl.textContent = '0.0%';
+          growthEl.className   = 'positive';
+        }
+        if (projectionEl) {
+          projectionEl.textContent = '+0.0%';
+          projectionEl.className   = 'positive';
+        }
+
+        const legendText = document.getElementById('legend-text');
+        if (legendText) {
+          legendText.textContent =
+            period === 'daily'   ? 'Daily Sales'   :
+            period === 'monthly' ? 'Daily Sales'   :
+                                    'Monthly Sales';
+        }
+        return;
+      }
+
+      const total   = values.reduce((sum, val) => sum + val, 0);
+      const avg     = total / values.length;
+      const peak    = Math.max(...values);
+      const positives = values.filter(v => v > 0);
+      const lowest = positives.length ? Math.min(...positives) : 0;
+
+      // current = last non-zero value if possible, else last
+      let current = 0;
+      for (let i = values.length - 1; i >= 0; i--) {
+        if (values[i] > 0) { current = values[i]; break; }
+      }
+      if (!current && values.length) current = values[values.length - 1];
+
+      // Calculate growth (very simple)
       let growth = 0;
-      
       if (period === 'daily') {
-        // For daily (24h), compare first vs last 8 hours
-        if (values.length >= 8) {
-          const firstHalfAvg = values.slice(0, 8).reduce((sum, val) => sum + val, 0) / 8;
-          const lastHalfAvg = values.slice(-8).reduce((sum, val) => sum + val, 0) / 8;
-          growth = firstHalfAvg > 0 ? ((lastHalfAvg - firstHalfAvg) / firstHalfAvg * 100) : 0;
+        if (values.length >= 2) {
+          const first = values[0] || 0;
+          const last  = values[values.length - 1] || 0;
+          growth = first > 0 ? ((last - first) / first) * 100 : 0;
         }
       } else {
-        // For monthly/yearly, compare first vs last data point
         const first = values[0] || 0;
-        const last = values[values.length - 1] || 0;
-        growth = first > 0 ? ((last - first) / first * 100) : 0;
+        const last  = values[values.length - 1] || 0;
+        growth = first > 0 ? ((last - first) / first) * 100 : 0;
       }
-      
+
       // Update DOM
       document.getElementById('current-sales').textContent = fmtCurrency(current);
-      document.getElementById('avg-sales').textContent = fmtCurrency(avg);
-      document.getElementById('total-sales').textContent = fmtCurrency(total);
-      document.getElementById('peak-sales').textContent = fmtCurrency(peak);
-      document.getElementById('lowest-sales').textContent = fmtCurrency(lowest || 0);
-      
-      const growthEl = document.getElementById('growth-trend');
-      growthEl.textContent = growth.toFixed(1) + '%';
-      growthEl.className = growth >= 0 ? 'positive' : 'negative';
-      
+      document.getElementById('avg-sales').textContent     = fmtCurrency(avg);
+      document.getElementById('total-sales').textContent   = fmtCurrency(total);
+      document.getElementById('peak-sales').textContent    = fmtCurrency(peak);
+      document.getElementById('lowest-sales').textContent  = fmtCurrency(lowest);
+
+      const growthEl     = document.getElementById('growth-trend');
       const projectionEl = document.getElementById('projection');
-      projectionEl.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
-      projectionEl.className = growth >= 0 ? 'positive' : 'negative';
-      
-      // Update legend text based on period
-      const legendText = document.getElementById('legend-text');
-      if (period === 'daily') {
-        legendText.textContent = 'Hourly Sales';
-      } else if (period === 'monthly') {
-        legendText.textContent = 'Daily Sales';
-      } else {
-        legendText.textContent = 'Monthly Sales';
+
+      if (growthEl) {
+        growthEl.textContent = growth.toFixed(1) + '%';
+        growthEl.className   = growth >= 0 ? 'positive' : 'negative';
       }
-      
-      console.log(`Stats updated for ${period}:`, { 
-        total: fmtCurrency(total), 
-        avg: fmtCurrency(avg), 
+
+      if (projectionEl) {
+        projectionEl.textContent =
+          (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+        projectionEl.className = growth >= 0 ? 'positive' : 'negative';
+      }
+
+      const legendText = document.getElementById('legend-text');
+      if (legendText) {
+        legendText.textContent =
+          period === 'daily'   ? 'Daily Sales (7 days)' :
+          period === 'monthly' ? 'Daily Sales (30 days)' :
+                                  'Monthly Sales (12 months)';
+      }
+
+      console.log(`Stats updated for ${period}`, {
+        total: fmtCurrency(total),
+        avg: fmtCurrency(avg),
         peak: fmtCurrency(peak),
-        growth: growth + '%' 
+        growth: growth.toFixed(1) + '%'
       });
     }
-    
+
     // Draw the chart using DIVs
     function drawChart(data, period) {
       console.log(`Drawing ${period} chart with ${data.length} points`);
-      
-      const chartContainer = document.getElementById('simple-chart');
+
+      const chartContainer  = document.getElementById('simple-chart');
       const labelsContainer = document.getElementById('chart-labels');
-      
-      // Clear previous chart
-      chartContainer.innerHTML = '';
+
+      if (!chartContainer || !labelsContainer) return;
+
+      chartContainer.innerHTML  = '';
       labelsContainer.innerHTML = '';
-      
-      // Find max value for scaling
-      const values = data.map(item => item.sales || 0);
-      const maxValue = Math.max(...values, 1);
+
+      const values    = safeValues(data);
+      const maxValue  = values.length ? Math.max(...values, 1) : 1;
       const chartHeight = 200; // px
-      
-      console.log('Max value for scaling:', maxValue);
-      
-      // Determine how many labels to show based on period
+
       let labelFrequency = 1;
-      if (period === 'daily') {
-        // For 24 hours, show every 3rd hour
-        labelFrequency = 3;
-      } else if (period === 'monthly') {
-        // For 30 days, show every 5th day
-        labelFrequency = 5;
-      } else {
-        // For yearly, show all months
-        labelFrequency = 1;
-      }
-      
-      // Create bars
+      if (period === 'daily')   labelFrequency = 1;  // 7 points, show all
+      if (period === 'monthly') labelFrequency = 4;  // every ~4th day
+
       data.forEach((item, index) => {
-        const value = item.sales || 0;
+        const value = Number(item.sales || 0);
         const barHeight = (value / maxValue) * chartHeight;
-        
-        // Get label based on period
+
         let label = '';
-        if (period === 'daily') {
-          label = item.time;
-        } else if (period === 'monthly') {
-          label = item.date;
-        } else {
-          label = item.month;
-        }
-        
-        // Create bar div
+        if (period === 'daily')   label = item.time;   // from analytics.daily.date
+        if (period === 'monthly') label = item.date;
+        if (period === 'yearly')  label = item.month;
+
         const bar = document.createElement('div');
         bar.className = 'chart-bar';
-        bar.style.height = barHeight + 'px';
-        bar.style.minWidth = period === 'daily' ? '8px' : '10px';
+        bar.style.height   = barHeight + 'px';
+        bar.style.minWidth = period === 'daily' ? '18px' : '10px';
         bar.title = `${label}: ${fmtCurrency(value)}`;
-        
-        // Add tooltip
+
         const tooltip = document.createElement('div');
         tooltip.className = 'chart-tooltip';
         tooltip.textContent = `${label}: ${fmtCurrency(value)}`;
         bar.appendChild(tooltip);
-        
+
         chartContainer.appendChild(bar);
-        
-        // Add label (show based on frequency)
-        if (period === 'yearly' || index % labelFrequency === 0 || index === data.length - 1) {
-          const labelEl = document.createElement('div');
-          
-          // Format label differently based on period
-          if (period === 'daily') {
-            // For hours, just show the hour
-            labelEl.textContent = label.slice(0, 5);
-          } else if (period === 'monthly') {
-            // For dates, show day number only
-            labelEl.textContent = label.split(' ')[0];
-          } else {
-            // For months, show month abbreviation
-            labelEl.textContent = label;
-          }
-          
-          labelEl.style.fontSize = period === 'daily' ? '9px' : '10px';
-          labelEl.style.textAlign = 'center';
-          labelEl.style.flex = '1';
-          labelsContainer.appendChild(labelEl);
+
+        // labels
+        const labelEl = document.createElement('div');
+        labelEl.textContent = label || '';
+        labelEl.style.textAlign = 'center';
+        labelEl.style.flex      = '1';
+
+        if (
+          period === 'yearly' ||
+          index % labelFrequency === 0 ||
+          index === data.length - 1
+        ) {
+          labelEl.style.fontSize = period === 'daily' ? '10px' : '10px';
         } else {
-          // Empty placeholder for spacing
-          const spacer = document.createElement('div');
-          spacer.style.flex = '1';
-          labelsContainer.appendChild(spacer);
+          labelEl.textContent = '';
         }
+
+        labelsContainer.appendChild(labelEl);
       });
-      
+
       console.log('Chart drawn with max value:', maxValue);
     }
-    
-    // Setup period toggle
-    document.getElementById('daily-btn').addEventListener('click', function() {
-      // Update active button
-      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Switch data
-      currentPeriod = 'daily';
-      currentData = dailyData;
-      updateStats(currentData, currentPeriod);
-      drawChart(currentData, currentPeriod);
-    });
-    
-    document.getElementById('monthly-btn').addEventListener('click', function() {
-      // Update active button
-      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Switch data
-      currentPeriod = 'monthly';
-      currentData = monthlyData;
-      updateStats(currentData, currentPeriod);
-      drawChart(currentData, currentPeriod);
-    });
-    
-    document.getElementById('yearly-btn').addEventListener('click', function() {
-      // Update active button
-      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Switch data
-      currentPeriod = 'yearly';
-      currentData = yearlyData;
-      updateStats(currentData, currentPeriod);
-      drawChart(currentData, currentPeriod);
-    });
-    
-    // Initial draw (default to daily view)
+
+    // Period buttons (with null checks)
+    const dailyBtn   = document.getElementById('daily-btn');
+    const monthlyBtn = document.getElementById('monthly-btn');
+    const yearlyBtn  = document.getElementById('yearly-btn');
+
+    if (dailyBtn) {
+      dailyBtn.addEventListener('click', function () {
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+
+        currentPeriod = 'daily';
+        currentData   = dailyData;
+        updateStats(currentData, currentPeriod);
+        drawChart(currentData, currentPeriod);
+      });
+    }
+
+    if (monthlyBtn) {
+      monthlyBtn.addEventListener('click', function () {
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+
+        currentPeriod = 'monthly';
+        currentData   = monthlyData;
+        updateStats(currentData, currentPeriod);
+        drawChart(currentData, currentPeriod);
+      });
+    }
+
+    if (yearlyBtn) {
+      yearlyBtn.addEventListener('click', function () {
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+
+        currentPeriod = 'yearly';
+        currentData   = yearlyData;
+        updateStats(currentData, currentPeriod);
+        drawChart(currentData, currentPeriod);
+      });
+    }
+
+    // Initial draw
     updateStats(currentData, currentPeriod);
     drawChart(currentData, currentPeriod);
-    
-    console.log('✅ Simple chart with daily view initialized');
+
+    console.log('✅ Simple chart with analytics data initialized');
   }
-  
+
   // Initialize dashboard
-  document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Dashboard loaded, initializing...');
-    
+  document.addEventListener('DOMContentLoaded', function () {
+    console.log('🚀 Seller dashboard loaded, initializing...');
     setupNotifications();
-    
-    // Initialize chart with small delay
+
     setTimeout(() => {
       if (document.getElementById('simple-chart')) {
         createSimpleChart();
@@ -2556,11 +2589,11 @@
         console.error('Chart container not found!');
       }
     }, 100);
-    
-    // Add click effects to buttons
+
+    // Click ripple for buttons
     document.querySelectorAll('.action, .btn, .btn-small, .btn-restock, .btn-view, .btn-view-all')
       .forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function () {
           this.style.transform = 'scale(0.98)';
           setTimeout(() => {
             this.style.transform = '';

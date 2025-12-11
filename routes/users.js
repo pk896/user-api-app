@@ -730,7 +730,7 @@ router.get('/orders', ensureUser, async (req, res) => {
   const uid = req.session.user._id;
 
   const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).lean();
-  const orderIds = orders.map((o) => o._id);
+  const _orderIds = orders.map((o) => o._id);
 
   res.render('users-orders', {
     title: 'My Orders',
@@ -1314,7 +1314,7 @@ router.get('/about', (req, res) => {
 
 // ADD THIS TEST ROUTE - TEMPORARY
 router.get('/dashboard-test', ensureVerifiedUser, async (req, res) => {
-  const { nonce = '' } = res.locals;
+  const { _nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
   try {

@@ -539,7 +539,7 @@ app.get('/cart/count', (req, res) => {
 
 // Checkout page
 app.get('/payment/checkout', (req, res) => {
-  const cart = req.session.cart || { items: [] };
+  const _cart = req.session.cart || { items: [] };
   res.render('checkout', {
     title: 'Checkout',
     vatRate: Number(process.env.VAT_RATE || 0.15),
@@ -649,7 +649,7 @@ app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
   res.type('application/json').send('{}');
 });
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error('❌ Template render error:', err);
   res.status(500).send(`<pre>${err.stack}</pre>`);
 });
