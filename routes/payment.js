@@ -704,63 +704,74 @@ router.post('/capture-order', express.json(), async (req, res) => {
     }
 
     const token = await getAccessToken();
-    const capRes = await fetch(`${PP_API}/v2/checkout/orders/${orderID}/capture`, {
+    const capRes = await fetch(`${PP_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
-    const capture = await capRes.json();
+
+    const capture = await capRes.json().catch(() => ({}));
 
     if (!capRes.ok) {
       console.error('PayPal capture error:', capture);
-      return res
-        .status(capRes.status)
-        .json({
-          ok: false,
-          code: 'PAYPAL_CAPTURE_FAILED',
-          message: 'PayPal capture failed',
-          details: capture,
-        });
+      return res.status(capRes.status).json({
+        ok: false,
+        code: 'PAYPAL_CAPTURE_FAILED',
+        message: 'PayPal capture failed',
+        details: capture,
+      });
     }
 
     const pending = req.session.pendingOrder || null;
     const cart = req.session.cart || { items: [] };
 
-    // 🔹 IMPROVED: Extract shipping info from PayPal response with better fallbacks
+    // ---- Extract PU / payer / shipping safely ----
     const pu = capture?.purchase_units?.[0] || {};
+    const puPayments = pu?.payments || {};
+    const cap0 = Array.isArray(puPayments?.captures) ? puPayments.captures[0] : null;
+
     const puShipping = pu.shipping || {};
     const puAddr = puShipping.address || {};
     const payer = capture?.payer || {};
-    
-    // Get payer name from multiple possible locations
+
     const payerName = payer?.name || {};
     const payerGivenName = payerName.given_name || payerName.given || '';
-    const payerSurname = payerName.surname || payerName.surname || '';
+    const payerSurname = payerName.surname || payerName.family_name || '';
+    const payerFullName = [payerGivenName, payerSurname].filter(Boolean).join(' ');
 
-    // Build comprehensive shipping address object
     const shippingAddress = {
-      // Shipping name from PayPal or fallback to payer name
-      name: puShipping.name?.full_name || 
-            puShipping.name?.name || 
-            [payerGivenName, payerSurname].filter(Boolean).join(' ') || 
-            'No name provided',
-      
-      // Address components with proper fallbacks
+      name:
+        puShipping.name?.full_name ||
+        puShipping.name?.name ||
+        payerFullName ||
+        'No name provided',
       address_line_1: puAddr.address_line_1 || puAddr.line1 || '',
       address_line_2: puAddr.address_line_2 || puAddr.line2 || '',
       admin_area_2: puAddr.admin_area_2 || puAddr.city || '',
       admin_area_1: puAddr.admin_area_1 || puAddr.state || '',
-      postal_code: puAddr.postal_code || puAddr.postal_code || '',
-      country_code: puAddr.country_code || puAddr.country_code || '',
+      postal_code: puAddr.postal_code || '',
+      country_code: puAddr.country_code || '',
     };
 
-    // Debug logging to see what we're getting from PayPal
-    console.log('=== PAYPAL CAPTURE DATA ===');
-    console.log('Capture status:', capture.status);
-    console.log('Purchase unit amount:', pu.amount);
-    console.log('Captures:', pu.payments?.captures);
-    console.log('Shipping object:', JSON.stringify(puShipping, null, 2));
+    // ---- Amount: capture amount > order amount > pending ----
+    const captureAmount = cap0?.amount || null;  // { currency_code, value }
+    const orderAmount = pu?.amount || null;      // { currency_code, value }
 
-    // Build items to persist (with productId)
+    const finalAmount =
+      captureAmount ||
+      orderAmount || {
+        value: String(pending?.grandTotal || '0'),
+        currency_code: upperCcy,
+      };
+
+    // ---- CaptureId + Fee/Net (for admin) ----
+    const captureId = cap0?.id || null;
+
+    const srb = cap0?.seller_receivable_breakdown || null;
+    const paypalFeeVal = srb?.paypal_fee?.value ?? null;
+    const netVal = srb?.net_amount?.value ?? null;
+    const grossVal = srb?.gross_amount?.value ?? null;
+
+    // ---- Items to persist (with productId) ----
     const itemsFromPending = Array.isArray(pending?.itemsBrief)
       ? pending.itemsBrief.map((it) => ({
           productId: String(it.productId || '').trim(),
@@ -771,55 +782,71 @@ router.post('/capture-order', express.json(), async (req, res) => {
         }))
       : [];
 
-    // 🔹 CRITICAL FIX: Extract amount from PayPal capture response
-    const captureAmount = pu.payments?.captures?.[0]?.amount;
-    const orderAmount = pu.amount;
-    
-    // Use capture amount first, then order amount, then fallback to pending total
-    const finalAmount = captureAmount || orderAmount || {
-      value: String(pending?.grandTotal || '0'),
-      currency_code: upperCcy
-    };
-
-    console.log('=== FINAL AMOUNT DATA ===');
-    console.log('Capture amount:', captureAmount);
-    console.log('Order amount:', orderAmount);
-    console.log('Pending grandTotal:', pending?.grandTotal);
-    console.log('Final amount to save:', finalAmount);
-
     // Persist order (if model available)
     let doc = null;
     try {
       if (Order) {
-        // Pull business buyer if available
         const businessBuyer =
           req.session?.business && req.session.business.role === 'buyer'
             ? req.session.business._id
             : null;
 
-        // Build the order data with proper amount and shipping address
         const orderData = {
           orderId: orderID,
           paypalOrderId: orderID,
           status: capture.status,
+
+          // ✅ store captureId directly for admin
+          captureId,
+
+          // ✅ optional structured capture (helps fee/net, future refunds)
+          capture: cap0
+            ? {
+                captureId: cap0.id || undefined,
+                status: cap0.status || undefined,
+                amount: cap0.amount
+                  ? {
+                      value: String(cap0.amount.value || '0'),
+                      currency: cap0.amount.currency_code || upperCcy,
+                    }
+                  : undefined,
+                sellerReceivable: srb
+                  ? {
+                      gross:
+                        grossVal != null
+                          ? { value: String(grossVal), currency: cap0.amount?.currency_code || upperCcy }
+                          : undefined,
+                      paypalFee:
+                        paypalFeeVal != null
+                          ? { value: String(paypalFeeVal), currency: cap0.amount?.currency_code || upperCcy }
+                          : undefined,
+                      net:
+                        netVal != null
+                          ? { value: String(netVal), currency: cap0.amount?.currency_code || upperCcy }
+                          : undefined,
+                    }
+                  : undefined,
+              }
+            : undefined,
+
           payer: {
             payerId: payer.payer_id || null,
             email: payer.email_address || null,
             name: {
               given: payerGivenName,
-              surname: payerSurname
+              surname: payerSurname,
+              fullName: payerFullName || null,
             },
-            countryCode: payer.address?.country_code || shippingAddress.country_code
-          },
-          purchase_units: capture?.purchase_units || [],
-          
-          // 🔹 FIXED: Proper amount object that matches your Order model schema
-          amount: {
-            value: String(finalAmount.value || '0'),
-            currency: finalAmount.currency_code || upperCcy
+            countryCode: payer.address?.country_code || shippingAddress.country_code,
           },
 
-          // 🔹 FIXED: Proper shipping address that matches your Order model schema
+          purchase_units: capture?.purchase_units || [],
+
+          amount: {
+            value: String(finalAmount.value || '0'),
+            currency: finalAmount.currency_code || upperCcy,
+          },
+
           shipping: shippingAddress,
 
           delivery: pending
@@ -833,6 +860,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
                     : null,
               }
             : null,
+
           breakdown: pending
             ? {
                 subTotal: pending.subTotal != null ? Number(pending.subTotal) : undefined,
@@ -841,25 +869,17 @@ router.post('/capture-order', express.json(), async (req, res) => {
                 grandTotal: pending.grandTotal != null ? Number(pending.grandTotal) : undefined,
                 currency: upperCcy,
                 itemTotal: pending.subTotal != null
-                  ? {
-                      value: String(Number(pending.subTotal).toFixed(2)),
-                      currency: upperCcy,
-                    }
+                  ? { value: String(Number(pending.subTotal).toFixed(2)), currency: upperCcy }
                   : undefined,
                 taxTotal: pending.vatTotal != null
-                  ? {
-                      value: String(Number(pending.vatTotal).toFixed(2)),
-                      currency: upperCcy,
-                    }
+                  ? { value: String(Number(pending.vatTotal).toFixed(2)), currency: upperCcy }
                   : undefined,
                 shipping: pending.deliveryPrice != null
-                  ? {
-                      value: String(Number(pending.deliveryPrice).toFixed(2)),
-                      currency: upperCcy,
-                    }
+                  ? { value: String(Number(pending.deliveryPrice).toFixed(2)), currency: upperCcy }
                   : undefined,
               }
             : undefined,
+
           items: itemsFromPending,
           raw: capture,
           userId: req.session?.user?._id || null,
@@ -867,35 +887,23 @@ router.post('/capture-order', express.json(), async (req, res) => {
           $setOnInsert: { createdAt: new Date() },
         };
 
+        // ✅ safer upsert filter (orderId is your canonical key)
         doc = await Order.findOneAndUpdate(
           { orderId: orderID },
           orderData,
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
-
-        console.log('✅ Order saved successfully:', {
-          orderId: doc.orderId,
-          amount: doc.amount,
-          hasShipping: !!doc.shipping,
-          shippingName: doc.shipping?.name
-        });
       }
     } catch (e) {
       console.error('❌ Failed to persist Order:', e.message);
-      console.error('Order data that failed:', JSON.stringify({
-        amount: finalAmount,
-        shipping: shippingAddress,
-        itemsCount: itemsFromPending.length
-      }, null, 2));
     }
 
-    // ---- Idempotent inventory adjustment ----
+    // ---- Idempotent inventory adjustment (unchanged) ----
     try {
       if (Order && doc) {
         if (!doc.inventoryAdjusted) {
           const Product = require('../models/Product');
 
-          // Build per-product totals from pending snapshot (fallback to cart)
           const srcItems =
             Array.isArray(pending?.itemsBrief) && pending.itemsBrief.length
               ? pending.itemsBrief
@@ -918,9 +926,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
             ).trim();
             if (!pid) continue;
 
-            const qty = Number(
-              it.quantity != null ? it.quantity : it.qty != null ? it.qty : 1
-            );
+            const qty = Number(it.quantity != null ? it.quantity : it.qty != null ? it.qty : 1);
             const prev = perProduct.get(pid) || { qty: 0, orderBump: 0 };
             prev.qty += qty;
             prev.orderBump = 1;
@@ -933,23 +939,14 @@ router.post('/capture-order', express.json(), async (req, res) => {
               ops.push({
                 updateOne: {
                   filter: { customId: pid },
-                  update: {
-                    $inc: {
-                      stock: -t.qty,
-                      soldCount: t.qty,
-                      soldOrders: t.orderBump,
-                    },
-                  },
+                  update: { $inc: { stock: -t.qty, soldCount: t.qty, soldOrders: t.orderBump } },
                 },
               });
             }
 
             if (ops.length) {
               await Product.bulkWrite(ops);
-              await Product.updateMany(
-                { stock: { $lt: 0 } },
-                { $set: { stock: 0 } }
-              );
+              await Product.updateMany({ stock: { $lt: 0 } }, { $set: { stock: 0 } });
             }
           }
 
@@ -961,29 +958,31 @@ router.post('/capture-order', express.json(), async (req, res) => {
       console.warn('⚠️ Inventory adjust failed:', e.message);
     }
 
-    // ---- Build thank-you snapshot & clear session ----
-    // Also include shipping in session snapshot for immediate display
+    // ---- Snapshot & clear session (unchanged behavior) ----
     req.session.lastOrderSnapshot = {
       ...buildSessionSnapshot(orderID, pending),
-      shipping: shippingAddress, // Add shipping to session snapshot
-      amount: finalAmount // Add amount to session snapshot
+      shipping: shippingAddress,
+      amount: finalAmount,
     };
     req.session.cart = { items: [] };
     req.session.pendingOrder = null;
     await saveSession(req);
 
-    return res.json({ 
-      ok: true, 
-      orderId: orderID, 
+    // ✅ SAME response shape checkout.ejs expects
+    return res.json({
+      ok: true,
+      orderId: orderID,
       capture,
       hasShipping: !!shippingAddress.address_line_1,
-      amount: finalAmount
+      amount: finalAmount,
     });
   } catch (err) {
     console.error('capture-order error:', err);
-    return res
-      .status(500)
-      .json({ ok: false, code: 'SERVER_ERROR', message: 'Server error capturing order' });
+    return res.status(500).json({
+      ok: false,
+      code: 'SERVER_ERROR',
+      message: 'Server error capturing order',
+    });
   }
 });
 
@@ -1075,6 +1074,238 @@ router.get('/my-orders', async (req, res) => {
     return res.status(500).json({ ok: false, message: 'Server error fetching orders' });
   }
 });
+
+/* -----------------------------------------------------------
+ * 💸 Admin Refunds (Full + Partial)
+ *  POST /payment/refund
+ *  body: { captureId: string, amount?: number|string, currency?: string, orderId?: string, note?: string }
+ *  - If amount omitted -> full refund
+ *  - Protected: ordersAdmin OR admin
+ * --------------------------------------------------------- */
+
+// If you already have this middleware, use it (recommended)
+let requireOrdersAdmin = null;
+try {
+  requireOrdersAdmin = require('../middleware/requireOrdersAdmin');
+} catch {
+  // fallback gate (if middleware file not present)
+  requireOrdersAdmin = (req, res, next) => {
+    if (req.session?.ordersAdmin || req.session?.admin) return next();
+    return res.status(401).json({ success: false, message: 'Unauthorized (orders admin only).' });
+  };
+}
+
+function normalizeMoneyNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return v;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function safeStr(v, max = 2000) {
+  return String(v || '').trim().slice(0, max);
+}
+
+// Try to locate an order that contains this captureId (best-effort).
+async function findOrderByCaptureId(captureId) {
+  if (!Order) return null;
+  const cid = String(captureId || '').trim();
+  if (!cid) return null;
+
+  // Common places we’ve seen capture IDs stored in your codebase:
+  // - raw.purchase_units[0].payments.captures[0].id
+  // - purchase_units array
+  // - capture.captureId (if you ever store it)
+  // - captureId flat (if you ever store it)
+  return Order.findOne({
+    $or: [
+      { captureId: cid },
+      { 'capture.captureId': cid },
+      { 'raw.purchase_units.payments.captures.id': cid },
+      { 'purchase_units.payments.captures.id': cid },
+      { 'purchase_units.payments.captures.capture_id': cid },
+    ],
+  });
+}
+
+function getCapturedAmountFromOrder(doc) {
+  // best-effort: read captured amount from raw paypal payload (if saved)
+  try {
+    const pu = Array.isArray(doc?.raw?.purchase_units) ? doc.raw.purchase_units[0] : null;
+    const cap = pu?.payments?.captures?.[0] || null;
+    const val = cap?.amount?.value;
+    const ccy = cap?.amount?.currency_code || doc?.amount?.currency || upperCcy;
+    const n = normalizeMoneyNumber(val);
+    return { value: n, currency: ccy };
+  } catch {
+    return { value: null, currency: doc?.amount?.currency || upperCcy };
+  }
+}
+
+function sumRefundedFromOrder(doc) {
+  // If you store refunds in doc.refunds[] we can sum them.
+  // If not present, this returns 0.
+  try {
+    const arr = Array.isArray(doc?.refunds) ? doc.refunds : [];
+    let sum = 0;
+    for (const r of arr) {
+      const n = normalizeMoneyNumber(r?.amount?.value ?? r?.amount ?? r?.value);
+      if (n != null) sum += n;
+    }
+    return +sum.toFixed(2);
+  } catch {
+    return 0;
+  }
+}
+
+router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
+  try {
+    const captureId = safeStr(req.body?.captureId, 128);
+    if (!captureId) {
+      return res.status(400).json({ success: false, message: 'captureId is required.' });
+    }
+
+    // amount optional => full refund
+    const amountNum = normalizeMoneyNumber(req.body?.amount);
+    if (amountNum !== null) {
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Amount must be a positive number, or omit for full refund.',
+        });
+      }
+    }
+
+    // currency: default to your BASE_CURRENCY unless explicitly provided
+    const currency = safeStr(req.body?.currency || upperCcy, 8).toUpperCase();
+
+    // Optional: attempt to bind refund to your DB order for audit + safety
+    let orderDoc = null;
+    if (Order) {
+      orderDoc = await findOrderByCaptureId(captureId);
+
+      // If client also sent orderId, validate match (extra safety)
+      const bodyOrderId = safeStr(req.body?.orderId, 64);
+      if (bodyOrderId && orderDoc) {
+        const dbOrderId = String(orderDoc.orderId || orderDoc.paypalOrderId || orderDoc._id);
+        if (dbOrderId !== bodyOrderId) {
+          return res.status(400).json({
+            success: false,
+            message: 'captureId does not match the provided orderId.',
+          });
+        }
+      }
+    }
+
+    // If we found an order, prevent obvious over-refund (professional guardrail)
+    if (orderDoc) {
+      const captured = getCapturedAmountFromOrder(orderDoc);
+      const refundedSoFar = sumRefundedFromOrder(orderDoc);
+
+      // If we know captured value, block going over it
+      if (captured.value != null) {
+        const want = amountNum === null ? (captured.value - refundedSoFar) : amountNum;
+        if (want <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Nothing left to refund for this capture.',
+          });
+        }
+        if (refundSoFarWouldExceed(captured.value, refundedSoFar, want)) {
+          return res.status(400).json({
+            success: false,
+            message: `Refund exceeds remaining refundable amount (${(captured.value - refundedSoFar).toFixed(2)}).`,
+          });
+        }
+      }
+    }
+
+    // Build PayPal refund payload
+    const payload = {};
+    if (amountNum !== null) {
+      payload.amount = { value: amountNum.toFixed(2), currency_code: currency };
+    }
+
+    const note = safeStr(req.body?.note, 255);
+    if (note) payload.note_to_payer = note;
+
+    const token = await getAccessToken();
+
+    const ppRes = await fetch(
+      `${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const refundJson = await ppRes.json().catch(() => ({}));
+    if (!ppRes.ok) {
+      console.error('PayPal refund error:', ppRes.status, refundJson);
+      return res.status(502).json({
+        success: false,
+        message: refundJson?.message || `PayPal refund failed (${ppRes.status}).`,
+        details: refundJson,
+      });
+    }
+
+    // Persist audit trail to Order (best-effort)
+    try {
+      if (orderDoc) {
+        const refundedAmount = refundJson?.amount?.value ?? (amountNum !== null ? amountNum.toFixed(2) : null);
+        const refundedCurrency = refundJson?.amount?.currency_code ?? currency;
+
+        // create refunds array if not in schema — mongoose will still store it unless strict mode blocks it.
+        orderDoc.refunds = Array.isArray(orderDoc.refunds) ? orderDoc.refunds : [];
+        orderDoc.refunds.push({
+          refundId: refundJson.id || null,
+          captureId,
+          status: refundJson.status || null,
+          amount: {
+            value: refundedAmount,
+            currency: refundedCurrency,
+          },
+          createdAt: new Date(),
+          raw: refundJson,
+        });
+
+        // Update status field in a sensible way
+        const captured = getCapturedAmountFromOrder(orderDoc);
+        const refundedSoFar = sumRefundedFromOrder(orderDoc);
+        if (captured.value != null) {
+          if (refundedSoFar >= captured.value - 0.00001) {
+            orderDoc.status = 'REFUNDED';
+          } else if (refundedSoFar > 0) {
+            orderDoc.status = 'PARTIALLY_REFUNDED';
+          }
+        } else {
+          // if we don't know captured amount, still mark that a refund occurred
+          orderDoc.status = 'REFUND_SUBMITTED';
+        }
+
+        await orderDoc.save();
+      }
+    } catch (e) {
+      console.warn('Refund saved to PayPal but failed to persist to DB:', e?.message || e);
+    }
+
+    return res.json({
+      success: true,
+      refund: refundJson,
+    });
+  } catch (err) {
+    console.error('refund error:', err?.stack || err);
+    return res.status(500).json({ success: false, message: 'Server error refunding payment.' });
+  }
+});
+
+// helper for over-refund check
+function refundSoFarWouldExceed(captured, refundedSoFar, want) {
+  const remaining = captured - refundedSoFar;
+  return want > remaining + 0.00001;
+}
+
 
 module.exports = {
   router,

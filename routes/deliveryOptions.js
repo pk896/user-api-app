@@ -1,4 +1,4 @@
-// routes/deliveryOptionsAdmin.js
+// routes/deliveryOptions.js
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const DeliveryOption = require('../models/DeliveryOption');
@@ -6,12 +6,17 @@ const DeliveryOption = require('../models/DeliveryOption');
 const router = express.Router();
 
 /* -----------------------------------------------------------
- * 🔐 Admin gate (keep it aligned with your project)
+ * 🔐 Admin gate (supports both admin + ordersAdmin)
  * --------------------------------------------------------- */
-function requireOrdersAdmin(req, res, next) {
-  if (req.session && req.session.ordersAdmin) {return next();}
-  req.flash('error', 'You must be logged in as Orders Admin.');
-  return res.redirect('/admin/orders/login');
+function requireAdminDelivery(req, res, next) {
+  // ✅ main admin session (your admin dashboard login)
+  if (req.session?.admin) return next();
+
+  // ✅ optional: allow orders admin too (if you still use it)
+  if (req.session?.ordersAdmin) return next();
+
+  req.flash('error', 'You must be logged in as Admin to manage delivery options.');
+  return res.redirect('/admin/login');
 }
 
 /* -----------------------------------------------------------
@@ -27,21 +32,28 @@ function themeCssFrom(req) {
 }
 
 function parsePriceToCents(input) {
-  if (input === null || input === undefined) {return 0;}
-  const str = String(input)
-    .trim()
-    .replace(/[$,R\s]/gi, '');
-  if (!str) {return 0;}
+  if (input === null || input === undefined) return 0;
+
+  const str = String(input).trim().replace(/[$,R\s]/gi, '');
+  if (!str) return 0;
+
   const n = Number(str);
-  if (!Number.isFinite(n)) {return 0;}
-  return Math.round(n * 100);
+  if (!Number.isFinite(n)) return 0;
+
+  // protect from negative
+  return Math.max(0, Math.round(n * 100));
 }
 
 /* -----------------------------------------------------------
- * 📃 LIST: GET /admin/delivery-options
- *   - query params: q, status (active|inactive|''), page, limit
+ * NOTE: This router is mounted like:
+ *   app.use('/admin', deliveryOptionRouter)
+ * So paths below are "/delivery-options", not "/admin/delivery-options".
  * --------------------------------------------------------- */
-router.get('/admin/delivery-options', requireOrdersAdmin, async (req, res) => {
+
+/* -----------------------------------------------------------
+ * 📃 LIST: GET /admin/delivery-options
+ * --------------------------------------------------------- */
+router.get('/delivery-options', requireAdminDelivery, async (req, res) => {
   try {
     const nonce = resNonce(req);
     const themeCss = themeCssFrom(req);
@@ -54,9 +66,9 @@ router.get('/admin/delivery-options', requireOrdersAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const where = {};
-    if (q) {where.name = new RegExp(q, 'i');}
-    if (status === 'active') {where.active = true;}
-    if (status === 'inactive') {where.active = false;}
+    if (q) where.name = new RegExp(q, 'i');
+    if (status === 'active') where.active = true;
+    if (status === 'inactive') where.active = false;
 
     const [options, total] = await Promise.all([
       DeliveryOption.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -71,7 +83,8 @@ router.get('/admin/delivery-options', requireOrdersAdmin, async (req, res) => {
       initialFilters: { q, status },
       success: req.flash('success'),
       error: req.flash('error'),
-      // (Pagination vars ready if you later add UI)
+      info: req.flash('info'),
+      warning: req.flash('warning'),
       page,
       total,
       limit,
@@ -80,14 +93,14 @@ router.get('/admin/delivery-options', requireOrdersAdmin, async (req, res) => {
   } catch (err) {
     console.error('[deliveryOptions:list] error:', err);
     req.flash('error', 'Failed to load delivery options.');
-    return res.redirect('/admin/orders');
+    return res.redirect('/admin/dashboard');
   }
 });
 
 /* -----------------------------------------------------------
  * ➕ NEW FORM: GET /admin/delivery-options/new
  * --------------------------------------------------------- */
-router.get('/admin/delivery-options/new', requireOrdersAdmin, (req, res) => {
+router.get('/delivery-options/new', requireAdminDelivery, (req, res) => {
   const nonce = resNonce(req);
   const themeCss = themeCssFrom(req);
 
@@ -106,16 +119,17 @@ router.get('/admin/delivery-options/new', requireOrdersAdmin, (req, res) => {
     },
     success: req.flash('success'),
     error: req.flash('error'),
+    info: req.flash('info'),
+    warning: req.flash('warning'),
   });
 });
 
 /* -----------------------------------------------------------
  * 💾 CREATE: POST /admin/delivery-options
- * body: name (req), deliveryDays (int>=0), price (decimal), active (checkbox)
  * --------------------------------------------------------- */
 router.post(
-  '/admin/delivery-options',
-  requireOrdersAdmin,
+  '/delivery-options',
+  requireAdminDelivery,
   express.urlencoded({ extended: true }),
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
@@ -130,6 +144,7 @@ router.post(
     const themeCss = themeCssFrom(req);
 
     const errors = validationResult(req);
+
     const doc = {
       name: req.body.name || '',
       deliveryDays: Number(req.body.deliveryDays || 0),
@@ -147,7 +162,9 @@ router.post(
         mode: 'create',
         doc,
         success: [],
-        error: ['Please fix the errors and try again.'],
+        error: errors.array().map((e) => e.msg),
+        info: [],
+        warning: [],
       });
     }
 
@@ -165,6 +182,8 @@ router.post(
         doc,
         success: [],
         error: ['Failed to create delivery option.'],
+        info: [],
+        warning: [],
       });
     }
   },
@@ -173,7 +192,7 @@ router.post(
 /* -----------------------------------------------------------
  * ✏️ EDIT FORM: GET /admin/delivery-options/:id/edit
  * --------------------------------------------------------- */
-router.get('/admin/delivery-options/:id/edit', requireOrdersAdmin, async (req, res) => {
+router.get('/delivery-options/:id/edit', requireAdminDelivery, async (req, res) => {
   try {
     const nonce = resNonce(req);
     const themeCss = themeCssFrom(req);
@@ -192,6 +211,8 @@ router.get('/admin/delivery-options/:id/edit', requireOrdersAdmin, async (req, r
       doc,
       success: req.flash('success'),
       error: req.flash('error'),
+      info: req.flash('info'),
+      warning: req.flash('warning'),
     });
   } catch (err) {
     console.error('[deliveryOptions:editForm] error:', err);
@@ -204,8 +225,8 @@ router.get('/admin/delivery-options/:id/edit', requireOrdersAdmin, async (req, r
  * 🔄 UPDATE: POST /admin/delivery-options/:id
  * --------------------------------------------------------- */
 router.post(
-  '/admin/delivery-options/:id',
-  requireOrdersAdmin,
+  '/delivery-options/:id',
+  requireAdminDelivery,
   express.urlencoded({ extended: true }),
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
@@ -232,7 +253,6 @@ router.post(
     };
 
     if (!errors.isEmpty()) {
-      // Re-render edit form with current input
       return res.status(400).render('delivery-options/form', {
         title: 'Edit Delivery Option',
         themeCss,
@@ -240,12 +260,18 @@ router.post(
         mode: 'edit',
         doc: { _id: id, ...doc },
         success: [],
-        error: ['Please fix the errors and try again.'],
+        error: errors.array().map((e) => e.msg),
+        info: [],
+        warning: [],
       });
     }
 
     try {
-      await DeliveryOption.findByIdAndUpdate(id, doc, { new: true });
+      const updated = await DeliveryOption.findByIdAndUpdate(id, doc, { new: true });
+      if (!updated) {
+        req.flash('error', 'Delivery option not found.');
+        return res.redirect('/admin/delivery-options');
+      }
       req.flash('success', 'Delivery option updated.');
       return res.redirect('/admin/delivery-options');
     } catch (err) {
@@ -258,6 +284,8 @@ router.post(
         doc: { _id: id, ...doc },
         success: [],
         error: ['Failed to update delivery option.'],
+        info: [],
+        warning: [],
       });
     }
   },
@@ -267,8 +295,8 @@ router.post(
  * ✅ TOGGLE ACTIVE: POST /admin/delivery-options/:id/toggle
  * --------------------------------------------------------- */
 router.post(
-  '/admin/delivery-options/:id/toggle',
-  requireOrdersAdmin,
+  '/delivery-options/:id/toggle',
+  requireAdminDelivery,
   express.urlencoded({ extended: true }),
   async (req, res) => {
     try {
@@ -294,12 +322,16 @@ router.post(
  * 🗑️ DELETE: POST /admin/delivery-options/:id/delete
  * --------------------------------------------------------- */
 router.post(
-  '/admin/delivery-options/:id/delete',
-  requireOrdersAdmin,
+  '/delivery-options/:id/delete',
+  requireAdminDelivery,
   express.urlencoded({ extended: true }),
   async (req, res) => {
     try {
-      await DeliveryOption.findByIdAndDelete(req.params.id);
+      const deleted = await DeliveryOption.findByIdAndDelete(req.params.id);
+      if (!deleted) {
+        req.flash('error', 'Delivery option not found.');
+        return res.redirect('/admin/delivery-options');
+      }
       req.flash('success', 'Delivery option deleted.');
       return res.redirect('/admin/delivery-options');
     } catch (err) {

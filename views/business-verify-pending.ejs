@@ -1,1273 +1,570 @@
-<!--view/businessverify-pending.ejs-->
-<div class="verification-pending-page">
-  <!-- Background Decoration -->
-  <div class="background-decoration">
-    <div class="decoration-circle circle-1"></div>
-    <div class="decoration-circle circle-2"></div>
-    <div class="decoration-circle circle-3"></div>
+<!-- views/business-verify-pending.ejs -->
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<% const b = business || {} %>
+<% const role = (b.role || 'buyer') %>
+
+<div class="vp-page <%= themeCss && themeCss.includes('dark') ? 'vp-dark' : 'vp-light' %>">
+  <!-- Background decor -->
+  <div class="vp-bg" aria-hidden="true">
+    <span class="vp-blob vp-blob-1"></span>
+    <span class="vp-blob vp-blob-2"></span>
+    <span class="vp-blob vp-blob-3"></span>
+    <span class="vp-grid"></span>
   </div>
 
-  <!-- Main Content -->
-  <div class="verification-container">
-    <!-- Left Side - Information & Features -->
-    <div class="verification-info">
-      <div class="info-content">
-        <div class="brand-header">
-          <div class="brand-logo">
-            <svg viewBox="0 0 24 24" width="32" height="32">
-              <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-            </svg>
-          </div>
-          <h1 class="brand-name">Unicoporate</h1>
-        </div>
-        
-        <div class="info-welcome">
-          <h2>Almost There!</h2>
-          <p>Complete your email verification to unlock your business dashboard.</p>
-        </div>
-
-        <div class="verification-steps">
-          <div class="step active">
-            <div class="step-number">1</div>
-            <div class="step-content">
-              <h4>Account Created</h4>
-              <p>Your business account is ready</p>
-            </div>
-          </div>
-          
-          <div class="step active">
-            <div class="step-number">2</div>
-            <div class="step-content">
-              <h4>Verification Sent</h4>
-              <p>Check your email inbox</p>
-            </div>
-          </div>
-          
-          <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-              <h4>Access Dashboard</h4>
-              <p>Start managing your business</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="account-details">
-          <h3>Account Details</h3>
-          <div class="detail-item">
-            <div class="detail-label">Business Name</div>
-            <div class="detail-value"><%= business.name %></div>
-          </div>
-          <div class="detail-item">
-            <div class="detail-label">Account Type</div>
-            <div class="detail-value badge badge-<%= business.role %>">
-              <%= business.role.charAt(0).toUpperCase() + business.role.slice(1) %>
-            </div>
-          </div>
-        </div>
-
-        <div class="verification-benefits">
-          <h3>Benefits of Verification</h3>
-          <div class="benefits-grid">
-            <div class="benefit">
-              <div class="benefit-icon">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
-              </div>
-              <div class="benefit-content">
-                <h4>Full Dashboard Access</h4>
-                <p>Manage products, orders, and analytics</p>
-              </div>
-            </div>
-            
-            <div class="benefit">
-              <div class="benefit-icon">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-                </svg>
-              </div>
-              <div class="benefit-content">
-                <h4>Enhanced Security</h4>
-                <p>Protect your business account</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right Side - Verification Content -->
-    <div class="verification-content <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-      <div class="content-header">
-        <div class="header-icon">
-          <svg viewBox="0 0 24 24" width="48" height="48">
-            <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"/>
+  <main class="vp-wrap">
+    <!-- Left: Brand / Steps (collapses on mobile) -->
+    <aside class="vp-left">
+      <div class="vp-brand">
+        <div class="vp-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22">
+            <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
           </svg>
         </div>
-        <h2>Verify Your Email</h2>
-        <p class="subtitle">One last step to access your business dashboard</p>
-      </div>
-
-      <!-- Welcome Message -->
-      <div class="welcome-card">
-        <div class="welcome-header">
-          <svg viewBox="0 0 24 24" width="24" height="24">
-            <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-          </svg>
-          <div>
-            <h3>Welcome, <strong><%= business.name %></strong>!</h3>
-            <p>Your <span class="role-highlight"><%= business.role.toUpperCase() %></span> account is awaiting verification</p>
-          </div>
-        </div>
-        <div class="welcome-message">
-          <p>We've created your business account successfully. To ensure the security of your account and provide you with full access to our platform, please verify your email address.</p>
+        <div>
+          <div class="vp-brandname">Unicoporate</div>
+          <div class="vp-tagline">Business verification</div>
         </div>
       </div>
 
-      <!-- Email Verification Details -->
-      <div class="verification-details">
-        <div class="details-header">
-          <h3>Verification Email Sent</h3>
-          <div class="status-badge pending">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-            </svg>
-            <span>Pending Verification</span>
+      <div class="vp-left-card">
+        <h2 class="vp-left-title">Almost there ✨</h2>
+        <p class="vp-left-sub">
+          We sent a verification link to your email. Verify to unlock your dashboard.
+        </p>
+
+        <div class="vp-steps">
+          <div class="vp-step vp-step-done">
+            <span class="vp-step-dot">1</span>
+            <div>
+              <div class="vp-step-title">Account created</div>
+              <div class="vp-step-desc">Your business account is ready</div>
+            </div>
+          </div>
+
+          <div class="vp-step vp-step-done">
+            <span class="vp-step-dot">2</span>
+            <div>
+              <div class="vp-step-title">Verification sent</div>
+              <div class="vp-step-desc">Check your inbox (and spam)</div>
+            </div>
+          </div>
+
+          <div class="vp-step">
+            <span class="vp-step-dot">3</span>
+            <div>
+              <div class="vp-step-title">Access dashboard</div>
+              <div class="vp-step-desc">Start managing products & orders</div>
+            </div>
           </div>
         </div>
 
-        <div class="email-display">
-          <div class="email-label">Email Address</div>
-          <div class="email-address">
-            <svg class="email-icon" viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
-            </svg>
-            <span><%= business.email %></span>
+        <div class="vp-mini">
+          <div class="vp-mini-row">
+            <span class="vp-mini-label">Business</span>
+            <span class="vp-mini-value"><%= b.name || '—' %></span>
+          </div>
+          <div class="vp-mini-row">
+            <span class="vp-mini-label">Role</span>
+            <span class="vp-pill vp-pill-<%= role %>"><%= role.toUpperCase() %></span>
           </div>
         </div>
 
-        <div class="verification-instructions">
-          <h4>What to do next:</h4>
-          <ol class="instructions-list">
-            <li>
-              <div class="instruction-step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                  <strong>Check your inbox</strong>
-                  <p>Look for an email from <strong>verify@unicoporate.com</strong> with the subject "Verify your business email"</p>
-                </div>
-              </div>
-            </li>
-            <li>
-              <div class="instruction-step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                  <strong>Click the verification link</strong>
-                  <p>Open the email and click the "Verify Email" button or link</p>
-                </div>
-              </div>
-            </li>
-            <li>
-              <div class="instruction-step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                  <strong>Access your dashboard</strong>
-                  <p>You'll be automatically redirected to your business dashboard</p>
-                </div>
-              </div>
-            </li>
-          </ol>
-        </div>
+        <div class="vp-benefits">
+          <div class="vp-benefit">
+            <span class="vp-ic vp-ic-green" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+            </span>
+            <div>
+              <div class="vp-benefit-title">Full access</div>
+              <div class="vp-benefit-desc">Dashboard, products, orders & analytics</div>
+            </div>
+          </div>
 
-        <div class="search-tips">
-          <div class="tip">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            <span>Search for "Unicoporate" or "Verify your business email" in your inbox</span>
-          </div>
-          <div class="tip">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            <span>Check spam, junk, or promotions folders if you don't see it</span>
-          </div>
-          <div class="tip">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            <span>Verification link expires in 24 hours for security</span>
+          <div class="vp-benefit">
+            <span class="vp-ic vp-ic-blue" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+            </span>
+            <div>
+              <div class="vp-benefit-title">Safer account</div>
+              <div class="vp-benefit-desc">Email verification protects your business</div>
+            </div>
           </div>
         </div>
       </div>
+    </aside>
 
-      <!-- Action Buttons -->
-      <form action="/business/verify/resend" method="post" class="action-buttons" id="resendForm">
-        <button type="submit" class="btn btn-primary" id="resendBtn">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-          </svg>
-          Resend Verification Email
-        </button>
-        
-        <div class="secondary-actions">
-          <a href="https://mail.google.com" target="_blank" class="btn btn-secondary">
-            <svg viewBox="0 0 24 24" width="20" height="20">
+    <!-- Right: Main card -->
+    <section class="vp-right">
+      <!-- Flash (works even without global flash partial) -->
+      <div class="vp-flash">
+        <% if (success && success.length) { %>
+          <div class="vp-alert vp-alert-success"><%= success[0] %></div>
+        <% } %>
+        <% if (error && error.length) { %>
+          <div class="vp-alert vp-alert-error"><%= error[0] %></div>
+        <% } %>
+        <% if (warning && warning.length) { %>
+          <div class="vp-alert vp-alert-warn"><%= warning[0] %></div>
+        <% } %>
+        <% if (info && info.length) { %>
+          <div class="vp-alert vp-alert-info"><%= info[0] %></div>
+        <% } %>
+      </div>
+
+      <div class="vp-card">
+        <header class="vp-head">
+          <div class="vp-head-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26">
               <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"/>
             </svg>
-            Open Email App
-          </a>
-          
-          <a href="/business/logout" class="btn btn-outline">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-            </svg>
-            Logout
-          </a>
-        </div>
-      </form>
+          </div>
+          <div>
+            <h1 class="vp-title">Verify your email</h1>
+            <p class="vp-sub">One last step to unlock your business dashboard.</p>
+          </div>
+        </header>
 
-      <!-- Support Section -->
-      <div class="support-section">
-        <div class="support-header">
-          <svg viewBox="0 0 24 24" width="24" height="24">
-            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
-          </svg>
-          <h4>Need Help?</h4>
+        <div class="vp-section vp-section-purple">
+          <div class="vp-section-top">
+            <div class="vp-section-title">Your email</div>
+            <span class="vp-status">
+              <span class="vp-status-dot"></span> Pending verification
+            </span>
+          </div>
+
+          <div class="vp-emailbox">
+            <span class="vp-email-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+            </span>
+            <div class="vp-email">
+              <div class="vp-email-label">Email address</div>
+              <div class="vp-email-value"><%= b.email || '—' %></div>
+            </div>
+          </div>
+
+          <div class="vp-instructions">
+            <div class="vp-instr">
+              <span class="vp-num">1</span>
+              <div><b>Open your inbox</b><div class="vp-muted">Look for “Verify your business email”.</div></div>
+            </div>
+            <div class="vp-instr">
+              <span class="vp-num">2</span>
+              <div><b>Click the verification link</b><div class="vp-muted">The link expires for security.</div></div>
+            </div>
+            <div class="vp-instr">
+              <span class="vp-num">3</span>
+              <div><b>Return to dashboard</b><div class="vp-muted">You’ll be redirected automatically.</div></div>
+            </div>
+          </div>
         </div>
-        <p>If you're having trouble finding the verification email or need assistance, our support team is here to help.</p>
-        <div class="support-links">
-          <a href="/business/support" class="support-link">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M4.01 6.03l7.51 3.22-7.52-1 .01-2.22m7.5 8.72L4 17.97v-2.22l7.51-1M2.01 3L2 10l15 2-15 2 .01 7L23 12 2.01 3z"/>
-            </svg>
-            Contact Support
-          </a>
-          <a href="/business/faq" class="support-link">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
-            </svg>
-            Visit FAQ
-          </a>
+
+        <!-- Actions -->
+        <form action="/business/verify/resend" method="post" class="vp-actions" id="resendForm">
+          <button type="submit" class="vp-btn vp-btn-primary" id="resendBtn">
+            <span class="vp-btn-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+            </span>
+            Resend verification email
+          </button>
+
+          <!-- ✅ Gmail + Outlook nearby -->
+          <div class="secondary-actions">
+            <a href="https://mail.google.com" target="_blank" rel="noreferrer" class="btn btn-secondary">
+              Gmail
+            </a>
+
+            <a href="https://outlook.live.com/mail/" target="_blank" rel="noreferrer" class="btn btn-secondary">
+              Outlook
+            </a>
+
+            <a href="/business/change-email" class="btn btn-outline">
+              Change email
+            </a>
+
+            <a href="/business/logout" class="btn btn-outline">
+              Logout
+            </a>
+          </div>
+        </form>
+
+        <div class="vp-section vp-section-blue">
+          <div class="vp-support">
+            <div>
+              <div class="vp-section-title">Need help?</div>
+              <div class="vp-muted">If you can’t find the email, check spam/junk, then resend.</div>
+            </div>
+            <div class="vp-support-links">
+              <a href="/business/support" class="vp-link">Contact support</a>
+              <a href="/business/faq" class="vp-link">FAQ</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="vp-footnote">
+          Tip: search your inbox for <b>Unicoporate</b> or <b>Verify</b>.
         </div>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </div>
 
-<style>
-  /* Page Container */
-  .verification-pending-page {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
-    position: relative;
-    overflow: hidden;
+<style nonce="<%= NONCE %>">
+  :root{
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --black:#0F172A;
+    --slate:#475569;
+    --line:rgba(148,163,184,.35);
+    --card:rgba(255,255,255,.92);
+    --card2:rgba(255,255,255,.72);
+    --shadow: 0 18px 50px rgba(2,6,23,.18);
+    --r:18px;
   }
 
-  .dark-theme .verification-pending-page {
-    background: linear-gradient(135deg, #0F172A 0%, #020617 100%);
+  .vp-page{ position:relative; min-height:100vh; overflow:hidden; }
+  .vp-light{ background: radial-gradient(800px 400px at 20% 10%, rgba(124,58,237,.20), transparent 60%),
+                      radial-gradient(900px 500px at 90% 20%, rgba(37,99,235,.18), transparent 60%),
+                      radial-gradient(700px 450px at 40% 95%, rgba(34,197,94,.14), transparent 60%),
+                      linear-gradient(180deg, #F8FAFF, #EEF2FF 65%, #F1F5F9); }
+  .vp-dark{ background: radial-gradient(800px 400px at 20% 10%, rgba(124,58,237,.22), transparent 60%),
+                    radial-gradient(900px 500px at 90% 20%, rgba(37,99,235,.18), transparent 60%),
+                    radial-gradient(700px 450px at 40% 95%, rgba(34,197,94,.10), transparent 60%),
+                    linear-gradient(180deg, #0B1220, #050A14); }
+
+  .vp-bg{ position:absolute; inset:0; pointer-events:none; }
+  .vp-blob{ position:absolute; filter: blur(60px); opacity:.45; border-radius:999px; }
+  .vp-blob-1{ width:360px;height:360px; background:rgba(124,58,237,.65); top:-120px; left:-120px; }
+  .vp-blob-2{ width:320px;height:320px; background:rgba(37,99,235,.55); top:-90px; right:-120px; }
+  .vp-blob-3{ width:280px;height:280px; background:rgba(34,197,94,.45); bottom:-120px; left:18%; }
+  .vp-grid{
+    position:absolute; inset:-2px;
+    background-image: linear-gradient(to right, rgba(148,163,184,.10) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(148,163,184,.10) 1px, transparent 1px);
+    background-size: 44px 44px;
+    opacity:.35;
+    mask-image: radial-gradient(circle at 50% 20%, black 0, transparent 72%);
   }
 
-  /* Background Decoration */
-  .background-decoration {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-  }
-
-  .decoration-circle {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(60px);
-    opacity: 0.4;
-  }
-
-  .circle-1 {
-    width: 300px;
-    height: 300px;
-    background: #2563EB;
-    top: -100px;
-    right: -100px;
-  }
-
-  .circle-2 {
-    width: 200px;
-    height: 200px;
-    background: #7C3AED;
-    bottom: -50px;
-    left: -50px;
-  }
-
-  .circle-3 {
-    width: 150px;
-    height: 150px;
-    background: #22C55E;
-    top: 50%;
-    left: 10%;
-  }
-
-  /* Main Container */
-  .verification-container {
-    position: relative;
-    z-index: 2;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    min-height: 100vh;
-    max-width: 1400px;
+  .vp-wrap{
+    position:relative;
+    z-index:2;
+    max-width: 1100px;
     margin: 0 auto;
+    padding: 18px 14px 28px;
+    display:grid;
+    grid-template-columns: 1.02fr .98fr;
+    gap: 16px;
   }
 
-  @media (max-width: 1024px) {
-    .verification-container {
-      grid-template-columns: 1fr;
-    }
+  /* Mobile first: stack */
+  @media (max-width: 980px){
+    .vp-wrap{ grid-template-columns: 1fr; gap: 14px; padding: 14px 12px 22px; }
   }
 
-  /* Info Section */
-  .verification-info {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.95) 0%, rgba(124, 58, 237, 0.95) 100%);
-    color: white;
-    padding: 3rem 2rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .info-content {
-    max-width: 500px;
-    margin: 0 auto;
-  }
-
-  .brand-header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 3rem;
-  }
-
-  .brand-logo {
-    width: 60px;
-    height: 60px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .vp-left{ display:flex; flex-direction:column; gap:12px; }
+  .vp-brand{
+    display:flex; align-items:center; gap:10px;
+    padding: 10px 10px;
+    border-radius: 16px;
+    background: rgba(255,255,255,.35);
+    border: 1px solid var(--line);
     backdrop-filter: blur(10px);
   }
-
-  .brand-name {
-    margin: 0;
-    font-size: 2rem;
-    font-weight: 700;
+  .vp-dark .vp-brand{ background: rgba(15,23,42,.45); }
+  .vp-logo{
+    width:40px;height:40px;border-radius:14px;
+    display:grid;place-items:center;
+    background: linear-gradient(135deg, rgba(124,58,237,.22), rgba(37,99,235,.18));
+    color: var(--purple);
+    border: 1px solid rgba(124,58,237,.25);
   }
+  .vp-dark .vp-logo{ color:#E9D5FF; border-color: rgba(124,58,237,.25); }
+  .vp-brandname{ font-weight: 900; letter-spacing:.2px; color: var(--black); }
+  .vp-dark .vp-brandname{ color:#F8FAFC; }
+  .vp-tagline{ font-size: 12px; color: var(--slate); font-weight:700; }
+  .vp-dark .vp-tagline{ color: rgba(226,232,240,.72); }
 
-  .info-welcome {
-    margin-bottom: 3rem;
+  .vp-left-card{
+    border-radius: var(--r);
+    background: linear-gradient(135deg, rgba(124,58,237,.92), rgba(37,99,235,.78));
+    color: #fff;
+    padding: 14px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255,255,255,.22);
   }
+  .vp-left-title{ margin:0 0 6px; font-size: 18px; font-weight: 950; }
+  .vp-left-sub{ margin:0 0 12px; font-size: 13px; opacity:.92; line-height:1.5; }
 
-  .info-welcome h2 {
-    margin: 0 0 1rem;
-    font-size: 2rem;
-    font-weight: 700;
+  .vp-steps{ display:grid; gap:10px; margin: 10px 0 12px; }
+  .vp-step{
+    display:flex; gap:10px; align-items:flex-start;
+    padding:10px;
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 14px;
   }
-
-  .info-welcome p {
-    margin: 0;
-    font-size: 1.1rem;
-    opacity: 0.9;
-    line-height: 1.6;
+  .vp-step-dot{
+    width:30px;height:30px;border-radius:999px;
+    display:grid;place-items:center;
+    font-weight: 900;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.18);
+    flex: 0 0 30px;
   }
+  .vp-step-done .vp-step-dot{ background: rgba(34,197,94,.92); border-color: rgba(34,197,94,.35); }
+  .vp-step-title{ font-weight: 900; font-size: 13px; }
+  .vp-step-desc{ font-size: 12px; opacity:.88; margin-top:2px; }
 
-  /* Verification Steps */
-  .verification-steps {
-    margin-bottom: 3rem;
+  .vp-mini{
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(15,23,42,.18);
+    border: 1px solid rgba(255,255,255,.16);
   }
-
-  .step {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    opacity: 0.5;
+  .vp-mini-row{
+    display:flex; justify-content:space-between; gap:10px;
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed rgba(255,255,255,.22);
   }
-
-  .step.active {
-    opacity: 1;
+  .vp-mini-row:last-child{ border-bottom: none; }
+  .vp-mini-label{ opacity:.85; font-weight:800; }
+  .vp-mini-value{ font-weight:900; }
+  .vp-pill{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 950;
+    letter-spacing:.3px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.10);
   }
+  .vp-pill-seller{ box-shadow: 0 0 0 3px rgba(34,197,94,.15) inset; }
+  .vp-pill-supplier{ box-shadow: 0 0 0 3px rgba(124,58,237,.18) inset; }
+  .vp-pill-buyer{ box-shadow: 0 0 0 3px rgba(37,99,235,.18) inset; }
 
-  .step-number {
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 1.2rem;
-    flex-shrink: 0;
+  .vp-benefits{ margin-top: 10px; display:grid; gap:10px; }
+  .vp-benefit{ display:flex; gap:10px; align-items:flex-start; }
+  .vp-ic{
+    width:34px;height:34px;border-radius:12px;
+    display:grid;place-items:center;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.16);
+    flex: 0 0 34px;
   }
+  .vp-ic-blue{ color:#BFDBFE; }
+  .vp-ic-green{ color:#BBF7D0; }
+  .vp-benefit-title{ font-weight: 900; font-size: 13px; }
+  .vp-benefit-desc{ font-size: 12px; opacity:.88; margin-top:2px; }
 
-  .step.active .step-number {
-    background: #22C55E;
-    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
-  }
-
-  .step-content h4 {
-    margin: 0 0 0.25rem;
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-
-  .step-content p {
-    margin: 0;
-    font-size: 0.9rem;
-    opacity: 0.8;
-  }
-
-  /* Account Details */
-  .account-details {
-    margin-bottom: 3rem;
-  }
-
-  .account-details h3 {
-    margin: 0 0 1.5rem;
-    font-size: 1.3rem;
-    font-weight: 600;
-  }
-
-  .detail-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    margin-bottom: 0.75rem;
-  }
-
-  .detail-label {
-    font-size: 0.875rem;
-    opacity: 0.8;
-  }
-
-  .detail-value {
-    font-weight: 600;
-  }
-
-  .badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  .badge-seller {
-    background: rgba(34, 197, 94, 0.2);
-    color: #86EFAC;
-  }
-
-  .badge-supplier {
-    background: rgba(124, 58, 237, 0.2);
-    color: #C4B5FD;
-  }
-
-  .badge-buyer {
-    background: rgba(37, 99, 235, 0.2);
-    color: #93C5FD;
-  }
-
-  /* Verification Benefits */
-  .verification-benefits {
-    margin-bottom: 3rem;
-  }
-
-  .verification-benefits h3 {
-    margin: 0 0 1.5rem;
-    font-size: 1.3rem;
-    font-weight: 600;
-  }
-
-  .benefits-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-
-  .benefit {
-    display: flex;
-    gap: 0.75rem;
-    align-items: flex-start;
-  }
-
-  .benefit-icon {
-    width: 36px;
-    height: 36px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .benefit-content h4 {
-    margin: 0 0 0.25rem;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
-
-  .benefit-content p {
-    margin: 0;
-    font-size: 0.85rem;
-    opacity: 0.8;
-  }
-
-  /* Content Section */
-  .verification-content {
-    background: white;
-    padding: 3rem 2rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    overflow-y: auto;
-  }
-
-  .dark-theme .verification-content {
-    background: rgba(15, 23, 42, 0.8);
+  /* Right */
+  .vp-right{ display:flex; flex-direction:column; gap:10px; }
+  .vp-flash{ display:grid; gap:8px; }
+  .vp-alert{
+    padding: 10px 12px;
+    border-radius: 14px;
+    font-weight: 900;
+    font-size: 12.5px;
+    border: 1px solid rgba(148,163,184,.25);
+    background: rgba(255,255,255,.65);
     backdrop-filter: blur(10px);
   }
+  .vp-dark .vp-alert{ background: rgba(15,23,42,.55); color:#E2E8F0; border-color: rgba(148,163,184,.18); }
+  .vp-alert-success{ border-color: rgba(34,197,94,.35); }
+  .vp-alert-error{ border-color: rgba(239,68,68,.35); }
+  .vp-alert-warn{ border-color: rgba(245,158,11,.35); }
+  .vp-alert-info{ border-color: rgba(37,99,235,.35); }
 
-  /* Content Header */
-  .content-header {
-    text-align: center;
-    margin-bottom: 2rem;
+  .vp-card{
+    border-radius: var(--r);
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    backdrop-filter: blur(10px);
+  }
+  .vp-dark .vp-card{
+    background: rgba(15,23,42,.62);
+    border-color: rgba(148,163,184,.18);
   }
 
-  .header-icon {
-    width: 100px;
-    height: 100px;
-    background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 1.5rem;
+  .vp-head{ display:flex; gap:12px; align-items:flex-start; margin-bottom: 10px; }
+  .vp-head-ic{
+    width:44px;height:44px;border-radius: 16px;
+    display:grid; place-items:center;
+    color: #fff;
+    background: linear-gradient(135deg, var(--purple), var(--blue));
+    box-shadow: 0 10px 20px rgba(124,58,237,.22);
+    flex: 0 0 44px;
   }
+  .vp-title{ margin:0; font-size: 18px; font-weight: 950; color: var(--black); }
+  .vp-dark .vp-title{ color:#F8FAFC; }
+  .vp-sub{ margin:4px 0 0; font-size: 12.5px; color: var(--slate); font-weight: 700; }
+  .vp-dark .vp-sub{ color: rgba(226,232,240,.72); }
 
-  .dark-theme .header-icon {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
+  .vp-section{
+    border-radius: 16px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    background: var(--card2);
+    margin: 10px 0;
   }
-
-  .header-icon svg {
-    color: #2563EB;
+  .vp-dark .vp-section{
+    background: rgba(2,6,23,.35);
+    border-color: rgba(148,163,184,.18);
   }
+  .vp-section-purple{ border-color: rgba(124,58,237,.28); }
+  .vp-section-blue{ border-color: rgba(37,99,235,.26); }
 
-  .content-header h2 {
-    margin: 0 0 0.5rem;
-    font-size: 2rem;
-    color: #0F172A;
+  .vp-section-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 10px; }
+  .vp-section-title{ font-weight: 950; color: var(--black); }
+  .vp-dark .vp-section-title{ color:#F8FAFC; }
+
+  .vp-status{
+    display:inline-flex; align-items:center; gap:8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+    color: rgba(124,58,237,.95);
+    background: rgba(124,58,237,.10);
+    border: 1px solid rgba(124,58,237,.20);
+    white-space: nowrap;
   }
+  .vp-dark .vp-status{ color:#E9D5FF; background: rgba(124,58,237,.14); border-color: rgba(124,58,237,.22); }
+  .vp-status-dot{ width:8px; height:8px; border-radius:99px; background: var(--purple); box-shadow: 0 0 0 4px rgba(124,58,237,.12); }
 
-  .dark-theme .content-header h2 {
-    color: #F1F5F9;
+  .vp-emailbox{
+    display:flex; gap:10px; align-items:center;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.72);
+    border: 1px solid rgba(148,163,184,.25);
   }
+  .vp-dark .vp-emailbox{ background: rgba(15,23,42,.55); border-color: rgba(148,163,184,.18); }
+  .vp-email-ic{ color: var(--blue); }
+  .vp-email-label{ font-size: 11px; font-weight: 900; color: var(--slate); }
+  .vp-dark .vp-email-label{ color: rgba(226,232,240,.70); }
+  .vp-email-value{ font-size: 13px; font-weight: 950; color: var(--black); word-break: break-word; }
+  .vp-dark .vp-email-value{ color:#F8FAFC; }
 
-  .subtitle {
-    margin: 0;
-    color: #64748B;
-    font-size: 1rem;
+  .vp-instructions{ margin-top: 10px; display:grid; gap:10px; }
+  .vp-instr{ display:flex; gap:10px; align-items:flex-start; }
+  .vp-num{
+    width:28px;height:28px;border-radius: 999px;
+    display:grid; place-items:center;
+    background: rgba(37,99,235,.12);
+    border: 1px solid rgba(37,99,235,.22);
+    color: rgba(37,99,235,.95);
+    font-weight: 950;
+    flex: 0 0 28px;
   }
+  .vp-dark .vp-num{ color:#BFDBFE; background: rgba(37,99,235,.16); border-color: rgba(37,99,235,.22); }
+  .vp-muted{ font-size: 12px; color: var(--slate); font-weight: 700; margin-top:2px; }
+  .vp-dark .vp-muted{ color: rgba(226,232,240,.72); }
 
-  /* Welcome Card */
-  .welcome-card {
-    background: #F8FAFC;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    border: 1px solid #E2E8F0;
+  .vp-actions{ margin-top: 8px; }
+  .vp-btn{
+    width:100%;
+    display:inline-flex; align-items:center; justify-content:center;
+    gap:10px;
+    padding: 11px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(148,163,184,.25);
+    background: rgba(255,255,255,.70);
+    color: var(--black);
+    font-weight: 950;
+    text-decoration:none;
+    cursor:pointer;
+    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
   }
+  .vp-dark .vp-btn{ background: rgba(15,23,42,.55); border-color: rgba(148,163,184,.18); color:#F8FAFC; }
+  .vp-btn:active{ transform: translateY(1px); }
 
-  .dark-theme .welcome-card {
-    background: rgba(15, 23, 42, 0.5);
-    border-color: #334155;
+  .vp-btn-primary{
+    background: linear-gradient(135deg, var(--purple), var(--blue));
+    color:#fff;
+    border-color: rgba(124,58,237,.35);
+    box-shadow: 0 12px 26px rgba(124,58,237,.22);
   }
+  .vp-btn-primary:hover{ box-shadow: 0 14px 30px rgba(124,58,237,.26); }
 
-  .welcome-header {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
+  .vp-btn-soft{
+    background: rgba(124,58,237,.10);
+    border-color: rgba(124,58,237,.22);
+    color: rgba(124,58,237,.95);
   }
+  .vp-dark .vp-btn-soft{ background: rgba(124,58,237,.14); color:#E9D5FF; }
 
-  .welcome-header svg {
-    color: #2563EB;
-    flex-shrink: 0;
-  }
-
-  .welcome-header h3 {
-    margin: 0 0 0.25rem;
-    font-size: 1.2rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .welcome-header h3 {
-    color: #F1F5F9;
-  }
-
-  .role-highlight {
-    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
-    color: white;
-    padding: 0.125rem 0.5rem;
-    border-radius: 4px;
-    font-weight: 700;
-  }
-
-  .welcome-message p {
-    margin: 0;
-    color: #64748B;
-    font-size: 0.95rem;
-    line-height: 1.6;
-  }
-
-  .dark-theme .welcome-message p {
-    color: #94A3B8;
-  }
-
-  /* Verification Details */
-  .verification-details {
-    background: #F8FAFC;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    border: 1px solid #E2E8F0;
-  }
-
-  .dark-theme .verification-details {
-    background: rgba(15, 23, 42, 0.5);
-    border-color: #334155;
-  }
-
-  .details-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-  }
-
-  .details-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .details-header h3 {
-    color: #F1F5F9;
-  }
-
-  .status-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .status-badge.pending {
-    background: #FEF3C7;
-    color: #92400E;
-  }
-
-  .dark-theme .status-badge.pending {
-    background: rgba(245, 158, 11, 0.2);
-    color: #FCD34D;
-  }
-
-  /* Email Display */
-  .email-display {
-    background: white;
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid #E2E8F0;
-  }
-
-  .dark-theme .email-display {
-    background: rgba(15, 23, 42, 0.5);
-    border-color: #334155;
-  }
-
-  .email-label {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #64748B;
-    margin-bottom: 0.5rem;
-  }
-
-  .email-address {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .email-icon {
-    color: #64748B;
-  }
-
-  .email-address span {
-    font-weight: 600;
-    color: #0F172A;
-    font-size: 1rem;
-  }
-
-  .dark-theme .email-address span {
-    color: #F1F5F9;
-  }
-
-  /* Verification Instructions */
-  .verification-instructions {
-    margin-bottom: 1.5rem;
-  }
-
-  .verification-instructions h4 {
-    margin: 0 0 1rem;
-    font-size: 1.1rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .verification-instructions h4 {
-    color: #F1F5F9;
-  }
-
-  .instructions-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .instructions-list li {
-    margin-bottom: 1rem;
-  }
-
-  .instruction-step {
-    display: flex;
-    gap: 1rem;
-  }
-
-  .step-number {
-    width: 32px;
-    height: 32px;
-    background: #2563EB;
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 0.9rem;
-    flex-shrink: 0;
-  }
-
-  .step-content strong {
-    display: block;
-    margin-bottom: 0.25rem;
-    color: #0F172A;
-    font-size: 0.95rem;
-  }
-
-  .dark-theme .step-content strong {
-    color: #F1F5F9;
-  }
-
-  .step-content p {
-    margin: 0;
-    font-size: 0.875rem;
-    color: #64748B;
-    line-height: 1.5;
-  }
-
-  .step-content strong {
-    color: #2563EB;
-  }
-
-  /* Search Tips */
-  .search-tips {
-    background: #F1F5F9;
-    border-radius: 8px;
-    padding: 1rem;
-  }
-
-  .dark-theme .search-tips {
-    background: rgba(15, 23, 42, 0.5);
-  }
-
-  .tip {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .tip:last-child {
-    margin-bottom: 0;
-  }
-
-  .tip svg {
-    color: #22C55E;
-    flex-shrink: 0;
-    margin-top: 0.125rem;
-  }
-
-  .tip span {
-    font-size: 0.875rem;
-    color: #475569;
-    line-height: 1.4;
-  }
-
-  .dark-theme .tip span {
-    color: #94A3B8;
-  }
-
-  /* Action Buttons */
-  .action-buttons {
-    margin-bottom: 2rem;
-  }
-
-  .btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 1rem 2rem;
-    font-size: 1rem;
-    font-weight: 600;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-decoration: none;
-    width: 100%;
-    margin-bottom: 1rem;
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
-    color: white;
-    box-shadow: 0 2px 10px rgba(34, 197, 94, 0.2);
-  }
-
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
-  }
-
-  .secondary-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-
-  .btn-secondary {
-    background: rgba(37, 99, 235, 0.1);
-    color: #2563EB;
-    border: 1px solid rgba(37, 99, 235, 0.2);
-  }
-
-  .btn-secondary:hover {
-    background: rgba(37, 99, 235, 0.2);
-  }
-
-  .btn-outline {
+  .vp-btn-ghost{
     background: transparent;
-    color: #64748B;
-    border: 1px solid #E2E8F0;
+    border-color: rgba(148,163,184,.25);
+    color: var(--slate);
+  }
+  .vp-dark .vp-btn-ghost{ color: rgba(226,232,240,.72); border-color: rgba(148,163,184,.18); }
+
+  .vp-btn[disabled]{ opacity:.7; cursor:not-allowed; }
+
+  .vp-btn-ic{ display:grid; place-items:center; }
+
+  .vp-mail-links{
+    margin-top: 10px;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .vp-mail-links .vp-btn-ghost{ grid-column: 1 / -1; }
+
+  @media (max-width: 420px){
+    .vp-mail-links{ grid-template-columns: 1fr; }
   }
 
-  .dark-theme .btn-outline {
-    border-color: #334155;
-    color: #94A3B8;
-  }
+  .vp-dot{ width:10px;height:10px;border-radius:99px; display:inline-block; }
+  .vp-dot-gmail{ background: #EA4335; box-shadow: 0 0 0 4px rgba(234,67,53,.14); }
+  .vp-dot-outlook{ background: #0A66C2; box-shadow: 0 0 0 4px rgba(10,102,194,.14); }
 
-  .btn-outline:hover {
-    background: #F8FAFC;
+  .vp-support{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
   }
-
-  .dark-theme .btn-outline:hover {
-    background: rgba(15, 23, 42, 0.5);
-  }
-
-  /* Support Section */
-  .support-section {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);
+  .vp-support-links{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+  .vp-link{
+    font-weight: 950;
+    color: rgba(37,99,235,.95);
+    text-decoration:none;
+    padding: 8px 10px;
     border-radius: 12px;
-    padding: 1.5rem;
-    border: 1px solid rgba(37, 99, 235, 0.1);
+    border: 1px solid rgba(37,99,235,.22);
+    background: rgba(37,99,235,.08);
   }
+  .vp-dark .vp-link{ color:#BFDBFE; background: rgba(37,99,235,.14); border-color: rgba(37,99,235,.22); }
+  .vp-link:hover{ text-decoration: underline; }
 
-  .dark-theme .support-section {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
-    border-color: rgba(37, 99, 235, 0.2);
+  .vp-footnote{
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--slate);
+    font-weight: 700;
+    text-align:center;
   }
-
-  .support-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-
-  .support-header svg {
-    color: #2563EB;
-  }
-
-  .support-header h4 {
-    margin: 0;
-    font-size: 1.1rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .support-header h4 {
-    color: #F1F5F9;
-  }
-
-  .support-section p {
-    margin: 0 0 1rem;
-    font-size: 0.875rem;
-    color: #64748B;
-    line-height: 1.5;
-  }
-
-  .support-links {
-    display: flex;
-    gap: 1rem;
-  }
-
-  .support-link {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #2563EB;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 0.875rem;
-  }
-
-  .support-link:hover {
-    text-decoration: underline;
-  }
-
-  .support-link svg {
-    transition: transform 0.3s ease;
-  }
-
-  .support-link:hover svg {
-    transform: translateX(4px);
-  }
-
-  /* Animations */
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .verification-content {
-    animation: slideIn 0.6s ease;
-  }
+  .vp-dark .vp-footnote{ color: rgba(226,232,240,.70); }
 </style>
 
-<script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    console.log("✅ Verification pending page loaded with CSP nonce");
+<script nonce="<%= NONCE %>">
+  // Disable resend button during submit (prevents double-click)
+  (function () {
+    const form = document.getElementById('resendForm');
+    const btn = document.getElementById('resendBtn');
+    if (!form || !btn) return;
 
-    const resendForm = document.getElementById('resendForm');
-    const resendBtn = document.getElementById('resendBtn');
-
-    if (resendForm && resendBtn) {
-      let canResend = true;
-      let cooldownTimer = null;
-
-      resendForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        if (!canResend) {
-          showError('Please wait before resending another email');
-          return;
-        }
-        
-        // Show loading state
-        const originalText = resendBtn.innerHTML;
-        resendBtn.innerHTML = `
-          <svg class="animate-spin" viewBox="0 0 24 24" width="20" height="20" style="animation: spin 1s linear infinite;">
-            <path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
-          </svg>
-          Sending...
-        `;
-        resendBtn.disabled = true;
-        
-        // Simulate API call
-        setTimeout(() => {
-          // Restore button with cooldown
-          resendBtn.disabled = false;
-          startCooldown(60); // 60 seconds cooldown
-          
-          // Show success message
-          showSuccess('Verification email sent successfully! Check your inbox.');
-          
-          // Update the button text
-          updateResendButton(60);
-        }, 1500);
-      });
-      
-      function startCooldown(seconds) {
-        canResend = false;
-        let remaining = seconds;
-        
-        cooldownTimer = setInterval(() => {
-          remaining--;
-          updateResendButton(remaining);
-          
-          if (remaining <= 0) {
-            clearInterval(cooldownTimer);
-            canResend = true;
-            resendBtn.innerHTML = originalText;
-          }
-        }, 1000);
-      }
-      
-      function updateResendButton(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        
-        resendBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
-          </svg>
-          Resend available in ${minutes}:${secs.toString().padStart(2, '0')}
-        `;
-      }
-      
-      // Store original button text
-      const originalText = resendBtn.innerHTML;
-    }
-    
-    // Check if user is on mobile to update email app button
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const emailAppBtn = document.querySelector('.btn-secondary[href*="mail.google.com"]');
-    
-    if (emailAppBtn && isMobile) {
-      emailAppBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="20" height="20">
-          <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"/>
-        </svg>
-        Open Mail App
-      `;
-      emailAppBtn.href = 'mailto:';
-    }
-    
-    // Auto-check for email client
-    function detectEmailClient() {
-      const userAgent = navigator.userAgent.toLowerCase();
-      let emailClient = 'gmail';
-      
-      if (userAgent.includes('outlook') || userAgent.includes('office')) {
-        emailClient = 'outlook';
-      } else if (userAgent.includes('yahoo')) {
-        emailClient = 'yahoo';
-      } else if (userAgent.includes('apple mail')) {
-        emailClient = 'apple';
-      }
-      
-      return emailClient;
-    }
-    
-    // Update email app button based on detection
-    if (emailAppBtn && !isMobile) {
-      const emailClient = detectEmailClient();
-      let emailUrl = 'https://mail.google.com';
-      let buttonText = 'Open Gmail';
-      
-      switch(emailClient) {
-        case 'outlook':
-          emailUrl = 'https://outlook.live.com';
-          buttonText = 'Open Outlook';
-          break;
-        case 'yahoo':
-          emailUrl = 'https://mail.yahoo.com';
-          buttonText = 'Open Yahoo Mail';
-          break;
-        case 'apple':
-          emailUrl = 'message://';
-          buttonText = 'Open Mail';
-          break;
-      }
-      
-      emailAppBtn.href = emailUrl;
-      emailAppBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="20" height="20">
-          <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"/>
-        </svg>
-        ${buttonText}
-      `;
-    }
-    
-    // Show success message
-    function showSuccess(message) {
-      const successDiv = document.createElement('div');
-      successDiv.className = 'flash flash-success';
-      successDiv.innerHTML = `
-        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
-          <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-        </svg>
-        <div class="flash-content">
-          <strong>Success!</strong>
-          <p>${message}</p>
-        </div>
-      `;
-      
-      // Create flash container if it doesn't exist
-      let flashContainer = document.querySelector('.flash-container');
-      if (!flashContainer) {
-        flashContainer = document.createElement('div');
-        flashContainer.className = 'flash-container';
-        document.querySelector('.verification-content').insertBefore(flashContainer, document.querySelector('.verification-content').firstChild);
-      }
-      
-      flashContainer.appendChild(successDiv);
-      
-      // Remove after 5 seconds
-      setTimeout(() => {
-        successDiv.remove();
-      }, 5000);
-    }
-    
-    // Show error message
-    function showError(message) {
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'flash flash-error';
-      errorDiv.innerHTML = `
-        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
-          <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-        </svg>
-        <div class="flash-content">
-          <strong>Error</strong>
-          <p>${message}</p>
-        </div>
-      `;
-      
-      // Create flash container if it doesn't exist
-      let flashContainer = document.querySelector('.flash-container');
-      if (!flashContainer) {
-        flashContainer = document.createElement('div');
-        flashContainer.className = 'flash-container';
-        document.querySelector('.verification-content').insertBefore(flashContainer, document.querySelector('.verification-content').firstChild);
-      }
-      
-      flashContainer.appendChild(errorDiv);
-      
-      // Remove after 5 seconds
-      setTimeout(() => {
-        errorDiv.remove();
-      }, 5000);
-    }
-    
-    // Add flash styles
-    const style = document.createElement('style');
-    style.textContent = `
-      .flash-container {
-        margin-bottom: 2rem;
-      }
-      
-      .flash {
-        display: flex;
-        gap: 1rem;
-        padding: 1.25rem;
-        border-radius: 12px;
-        margin-bottom: 1rem;
-        animation: slideIn 0.3s ease;
-      }
-      
-      .flash-success {
-        background: linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%);
-        border-left: 4px solid #22C55E;
-        color: #166534;
-      }
-      
-      .flash-error {
-        background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
-        border-left: 4px solid #EF4444;
-        color: #991B1B;
-      }
-      
-      .flash-icon {
-        flex-shrink: 0;
-      }
-      
-      .flash-content strong {
-        display: block;
-        margin-bottom: 0.25rem;
-        font-size: 0.875rem;
-      }
-      
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-      
-      .animate-spin {
-        animation: spin 1s linear infinite;
-      }
-    `;
-    document.head.appendChild(style);
-    
-    // Add auto-refresh suggestion after 5 minutes
-    setTimeout(() => {
-      const refreshNotice = document.createElement('div');
-      refreshNotice.className = 'flash flash-info';
-      refreshNotice.innerHTML = `
-        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
-          <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-        </svg>
-        <div class="flash-content">
-          <strong>Still waiting?</strong>
-          <p>Check your spam folder or try resending the verification email</p>
-        </div>
-      `;
-      
-      // Add info flash style
-      const infoStyle = document.createElement('style');
-      infoStyle.textContent = `
-        .flash-info {
-          background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
-          border-left: 4px solid #2563EB;
-          color: #1E40AF;
-        }
-        .dark-theme .flash-info {
-          background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
-          color: #60A5FA;
-        }
-      `;
-      document.head.appendChild(infoStyle);
-      
-      const flashContainer = document.querySelector('.flash-container');
-      if (flashContainer) {
-        flashContainer.appendChild(refreshNotice);
-        
-        // Auto-remove after 10 seconds
-        setTimeout(() => {
-          refreshNotice.remove();
-        }, 10000);
-      }
-    }, 300000); // 5 minutes
-  });
+    form.addEventListener('submit', function () {
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+    });
+  })();
 </script>

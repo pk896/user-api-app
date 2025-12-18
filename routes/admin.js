@@ -1,13 +1,23 @@
 // routes/admin.js
 const express = require('express');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const router = express.Router();
+
 const requireAdmin = require('../middleware/requireAdmin');
+
+/* -------------------------------------------
+   Optional Models (safe requires)
+------------------------------------------- */
+let Business = null;
+let Order = null;
+try { Business = require('../models/Business'); } catch { /* optional */ }
+try { Order = require('../models/Order'); } catch { /* optional */ }
 
 /* -------------------------------------------
    Helpers
 ------------------------------------------- */
 function checkMailerConfig() {
-  // Lightweight “is mailer configured?” check — no send, just env presence
   const host = (process.env.SMTP_HOST || '').trim();
   const user = (process.env.SMTP_USER || '').trim();
   const pass = (process.env.SMTP_PASS || '').trim();
@@ -15,112 +25,220 @@ function checkMailerConfig() {
   return Boolean(host && user && pass && from);
 }
 
+function themeCssFromSession(req) {
+  const theme = req.session?.theme || 'light';
+  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
+}
+
+/**
+ * Constant-time string compare to reduce timing leaks.
+ * (Still rely on bcrypt hash in production for best safety.)
+ */
+function safeEqual(a, b) {
+  const aa = Buffer.from(String(a || ''), 'utf8');
+  const bb = Buffer.from(String(b || ''), 'utf8');
+  if (aa.length !== bb.length) {
+    // Compare against itself to keep timing similar
+    return crypto.timingSafeEqual(aa, aa) && false;
+  }
+  return crypto.timingSafeEqual(aa, bb);
+}
+
 /* -------------------------------------------
-   Login page (reuses admin-login.ejs)
+   Admin-only login attempt limiter (in-memory)
+   (Good basic protection. For multi-instance, use Redis.)
+------------------------------------------- */
+const ATTEMPT_WINDOW_MS = 10 * 60 * 1000; // 10 min
+const MAX_ATTEMPTS = 8;
+
+const attemptsByKey = new Map();
+function adminLoginThrottle(req, res, next) {
+  try {
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    const user = String(req.body?.username || '').trim().toLowerCase();
+    const key = `${ip}:${user}`;
+
+    const now = Date.now();
+    const rec = attemptsByKey.get(key) || { count: 0, firstAt: now };
+
+    // reset window
+    if (now - rec.firstAt > ATTEMPT_WINDOW_MS) {
+      attemptsByKey.set(key, { count: 0, firstAt: now });
+      return next();
+    }
+
+    if (rec.count >= MAX_ATTEMPTS) {
+      req.flash('error', 'Too many login attempts. Please try again later.');
+      return res.redirect('/admin/login');
+    }
+
+    req._adminAttemptKey = key;
+    req._adminAttemptRec = rec;
+    return next();
+  } catch (e) {
+    return next(); // fail open (don’t block login if limiter breaks)
+  }
+}
+
+function bumpAttempt(req) {
+  const key = req._adminAttemptKey;
+  const rec = req._adminAttemptRec;
+  if (!key || !rec) return;
+  rec.count += 1;
+  attemptsByKey.set(key, rec);
+}
+
+function clearAttempt(req) {
+  const key = req._adminAttemptKey;
+  if (!key) return;
+  attemptsByKey.delete(key);
+}
+
+/* -------------------------------------------
+   ✅ /admin -> /admin/dashboard (protected)
+------------------------------------------- */
+router.get('/', requireAdmin, (req, res) => res.redirect('/admin/dashboard'));
+
+/* -------------------------------------------
+   ✅ GET /admin/login
 ------------------------------------------- */
 router.get('/login', (req, res) => {
-  const theme = req.session.theme || 'light';
-  const themeCss = theme === 'dark' ? '/css/dark.css' : '/css/light.css';
-  if (req.session.admin) {return res.redirect('/admin/dashboard');}
-  res.render('admin-login', {
+  const themeCss = themeCssFromSession(req);
+
+  if (req.session?.admin) return res.redirect('/admin/dashboard');
+
+  return res.render('admin-login', {
     title: '🔐 Admin Login',
     formAction: '/admin/login',
     themeCss,
     nonce: res.locals.nonce,
     success: req.flash('success'),
     error: req.flash('error'),
+    info: req.flash('info'),
+    warning: req.flash('warning'),
   });
 });
 
 /* -------------------------------------------
-   POST login (env-based)
+   ✅ POST /admin/login (production-ready)
+   - supports bcrypt hash (ADMIN_PASS_HASH)
+   - constant-time compare for fallback (ADMIN_PASS)
+   - session regeneration to prevent fixation
+   - simple brute-force throttling
 ------------------------------------------- */
-router.post('/login', (req, res) => {
-  const usernameInput = (req.body.username || '').trim().toLowerCase();
-  const passwordInput = (req.body.password || '').trim();
-  const ADMIN_USER = (process.env.ADMIN_USER || 'admin').trim().toLowerCase();
-  const ADMIN_PASS = (process.env.ADMIN_PASS || '12345').trim();
+router.post('/login', adminLoginThrottle, async (req, res) => {
+  const usernameInput = String(req.body?.username || '').trim().toLowerCase();
+  const passwordInput = String(req.body?.password || '').trim();
 
-  if (usernameInput === ADMIN_USER && passwordInput === ADMIN_PASS) {
-    req.session.admin = { name: process.env.ADMIN_USER || 'Admin' };
-    req.flash('success', `Welcome back, ${req.session.admin.name}!`);
-    return res.redirect('/admin/dashboard');
+  const ADMIN_USER = String(process.env.ADMIN_USER || 'admin').trim().toLowerCase();
+  const ADMIN_PASS = String(process.env.ADMIN_PASS || '').trim(); // fallback dev only
+  const ADMIN_PASS_HASH = String(process.env.ADMIN_PASS_HASH || '').trim(); // recommended
+
+  try {
+    const userOk = usernameInput === ADMIN_USER;
+
+    let passOk = false;
+    if (ADMIN_PASS_HASH) {
+      // bcrypt hash match
+      passOk = await bcrypt.compare(passwordInput, ADMIN_PASS_HASH);
+    } else {
+      // fallback constant-time compare
+      passOk = safeEqual(passwordInput, ADMIN_PASS || ''); // if empty, always fails
+    }
+
+    if (!userOk || !passOk) {
+      bumpAttempt(req);
+      req.flash('error', '❌ Invalid credentials. Please try again.');
+      return res.redirect('/admin/login');
+    }
+
+    clearAttempt(req);
+
+    // Regenerate session to prevent fixation
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Session regenerate error:', err);
+        req.flash('error', 'Session error. Please try again.');
+        return res.redirect('/admin/login');
+      }
+
+      req.session.admin = {
+        name: process.env.ADMIN_USER || 'Admin',
+        at: Date.now(),
+      };
+
+      req.flash('success', `Welcome back, ${req.session.admin.name}!`);
+
+      req.session.save((err2) => {
+        if (err2) console.error('Session save error:', err2);
+        return res.redirect('/admin/dashboard');
+      });
+    });
+  } catch (e) {
+    console.error('Admin login error:', e);
+    bumpAttempt(req);
+    req.flash('error', 'Login failed. Please try again.');
+    return res.redirect('/admin/login');
   }
-  req.flash('error', '❌ Invalid credentials. Please try again.');
-  res.redirect('/admin/login');
 });
 
 /* -------------------------------------------
-   Dashboard (protected)
-   - All message logic removed.
-   - Exposes mailerOk for your pill.
+   ✅ GET /admin/dashboard (protected)
 ------------------------------------------- */
 router.get('/dashboard', requireAdmin, async (req, res) => {
   try {
-    const theme = req.session.theme || 'light';
-    const themeCss = theme === 'dark' ? '/css/dark.css' : '/css/light.css';
-
-    // Minimal, message-free model:
+    const themeCss = themeCssFromSession(req);
     const mailerOk = checkMailerConfig();
 
-    // Optional: keep a neutral stats object so views don’t break
-    const stats = {
-      // add other non-message stats later if you want
-    };
+    let pendingBusinessVerifications = undefined;
+    let pendingOrders = undefined;
 
-    res.render('dashboards/admin-dashboard', {
+    if (Business) {
+      pendingBusinessVerifications = await Business.countDocuments({
+        'verification.status': 'pending',
+      });
+    }
+
+    if (Order) {
+      pendingOrders = await Order.countDocuments({
+        status: { $in: ['Pending', 'Paid', 'Completed'] },
+      }).catch(() => undefined);
+    }
+
+    return res.render('admin-dashboard', {
       title: 'Admin Dashboard',
       nonce: res.locals.nonce,
       themeCss,
       admin: req.session.admin,
-      stats,
-      mailerOk, // <-- for your “Mail: OK/OFF” pill
-      recentMessages: [], // <-- explicitly empty; no messages logic anymore
+      mailerOk,
+      pendingBusinessVerifications,
+      pendingOrders,
       success: req.flash('success'),
       error: req.flash('error'),
+      info: req.flash('info'),
+      warning: req.flash('warning'),
     });
   } catch (err) {
     console.error('❌ Error loading admin dashboard:', err);
     req.flash('error', '❌ Could not load dashboard data.');
-    res.redirect('/admin/login');
+    return res.redirect('/admin/login');
   }
 });
 
 /* -------------------------------------------
-   Orders page (protected)
+   ✅ Logout (ONLY one GET + one POST)
 ------------------------------------------- */
-router.get('/orders', requireAdmin, (req, res) => {
-  const theme = req.session.theme || 'light';
-  const themeCss = theme === 'dark' ? '/css/dark.css' : '/css/light.css';
-  const mode = (process.env.PAYPAL_MODE || 'sandbox').toLowerCase();
-  const ppActivityBase =
-    mode === 'live'
-      ? 'https://www.paypal.com/activity/payment/'
-      : 'https://www.sandbox.paypal.com/activity/payment/';
-
-  res.render('orders-admin', {
-    title: 'Orders (Admin)',
-    nonce: res.locals.nonce,
-    themeCss,
-    ppActivityBase,
-  });
+router.post('/logout', requireAdmin, (req, res) => {
+  req.flash('info', '👋 You have been logged out successfully.');
+  delete req.session.admin;
+  req.session.save(() => res.redirect('/admin/login'));
 });
 
-/* -------------------------------------------
-   Logout
-------------------------------------------- */
-router.get('/logout', (req, res) => {
-  try {
-    req.session.destroy(() => {
-      res.clearCookie('connect.sid');
-      req.flash('info', '👋 You have been logged out successfully.');
-      res.redirect('/admin/login');
-    });
-  } catch (err) {
-    console.error('❌ Error logging out admin:', err);
-    req.flash('error', '⚠️ Logout failed. Please try again.');
-    res.redirect('/admin/dashboard');
-  }
+// Backwards compatible GET
+router.get('/logout', requireAdmin, (req, res) => {
+  req.flash('info', '👋 You have been logged out successfully.');
+  delete req.session.admin;
+  req.session.save(() => res.redirect('/admin/login'));
 });
 
 module.exports = router;

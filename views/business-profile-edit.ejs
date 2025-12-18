@@ -1,1108 +1,1144 @@
-<div class="profile-edit-page">
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+
+<div class="bp-edit-page">
   <!-- Header Section -->
-  <div class="page-header">
-    <div class="header-content">
-      <div class="header-icon">
+  <div class="bp-page-header">
+    <div class="bp-header-content">
+      <div class="bp-header-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="28" height="28">
           <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
         </svg>
       </div>
-      <div>
-        <h1 class="page-title">Edit Business Profile</h1>
-        <p class="page-subtitle">
-          Update your business information and settings. Your login email is protected for security.
+      <div class="bp-header-text">
+        <h1 class="bp-title">Edit Business Profile</h1>
+        <p class="bp-subtitle">
+          Update your business information and settings. If you change your email, you’ll need to verify it again.
         </p>
+
+        <!-- Brand chips -->
+        <div class="bp-brand-chips" aria-label="Brand colors">
+          <span class="chip c-purple">Purple</span>
+          <span class="chip c-blue">Blue</span>
+          <span class="chip c-green">Green</span>
+          <span class="chip c-black">Black</span>
+        </div>
       </div>
     </div>
-    <a href="/business/profile" class="back-button">
-      <svg viewBox="0 0 24 24" width="20" height="20">
+
+    <a href="/business/profile" class="bp-back">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
         <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
       </svg>
       Back to Profile
     </a>
   </div>
 
-  <!-- Flash Messages -->
-  <div class="flash-container">
+  <!-- Flash Messages (kept – but fully scoped so it won't affect layout) -->
+  <div class="bp-flash">
     <% (success || []).forEach(msg => { %>
       <div class="flash flash-success">
-        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
+        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
         </svg>
         <div class="flash-content">
-          <strong>Success!</strong>
+          <strong>Success</strong>
           <p><%= msg %></p>
         </div>
       </div>
     <% }) %>
+
     <% (error || []).forEach(msg => { %>
       <div class="flash flash-error">
-        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
+        <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
         </svg>
         <div class="flash-content">
-          <strong>Error!</strong>
+          <strong>Error</strong>
           <p><%= msg %></p>
         </div>
       </div>
     <% }) %>
   </div>
 
-  <!-- Profile Edit Container -->
-  <div class="profile-edit-container">
-    <div class="profile-sidebar">
-      <!-- Business Status Card -->
-      <div class="status-card">
-        <div class="status-header">
-          <h3>Business Status</h3>
-          <span class="status-indicator <%= business.isVerified ? 'active' : 'inactive' %>"></span>
-        </div>
-        
-        <div class="status-content">
-          <div class="status-item">
-            <div class="status-label">Account Type</div>
-            <div class="status-value"><%= business.role.charAt(0).toUpperCase() + business.role.slice(1) %></div>
+  <!-- Main Layout -->
+  <div class="bp-grid">
+
+    <!-- Sidebar -->
+    <aside class="bp-sidebar">
+      <!-- Status Card -->
+      <div class="card card-blue">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="card-ic ic-blue" aria-hidden="true">🛡️</div>
+            <div>
+              <h2>Business Status</h2>
+              <p class="muted">Account + verification snapshot</p>
+            </div>
           </div>
-          
-          <div class="status-item">
-            <div class="status-label">Verification</div>
-            <div class="status-value">
+          <span class="status-dot <%= business.isVerified ? 'ok' : 'warn' %>" title="Email verified indicator"></span>
+        </div>
+
+        <div class="card-body">
+          <div class="row">
+            <span class="k">Account Type</span>
+            <span class="v"><%= business.role ? (business.role.charAt(0).toUpperCase() + business.role.slice(1)) : 'Business' %></span>
+          </div>
+
+          <!-- Email verification -->
+          <div class="row">
+            <span class="k">Email</span>
+            <span class="v">
               <% if (business.isVerified) { %>
-                <span class="verified-badge">
-                  <svg viewBox="0 0 24 24" width="16" height="16">
-                    <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                  </svg>
-                  Verified
-                </span>
+                <span class="pill pill-green">Verified</span>
               <% } else { %>
-                <span class="unverified-badge">
-                  <svg viewBox="0 0 24 24" width="16" height="16">
-                    <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                  </svg>
-                  Unverified
-                </span>
+                <span class="pill pill-amber">Unverified</span>
               <% } %>
-            </div>
+            </span>
           </div>
-          
-          <div class="status-item">
-            <div class="status-label">Member Since</div>
-            <div class="status-value">
+
+          <!-- Business number verification -->
+          <div class="row row-top">
+            <span class="k">Business Number</span>
+            <span class="v v-stack">
+              <% const v = (business.verification && business.verification.status) ? business.verification.status : 'unverified'; %>
+
+              <% if (v === 'verified') { %>
+                <span class="pill pill-green">Verified</span>
+              <% } else if (v === 'pending') { %>
+                <span class="pill pill-amber">Pending</span>
+              <% } else if (v === 'rejected') { %>
+                <span class="pill pill-red">Rejected</span>
+                <% if (business.verification && business.verification.reason) { %>
+                  <span class="mini-note">
+                    <strong>Reason:</strong> <%= business.verification.reason %>
+                  </span>
+                <% } %>
+              <% } else { %>
+                <span class="pill pill-amber">Not Verified</span>
+              <% } %>
+            </span>
+          </div>
+
+          <div class="row">
+            <span class="k">Member Since</span>
+            <span class="v">
               <%= business.createdAt ? new Date(business.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently' %>
-            </div>
+            </span>
           </div>
         </div>
-        
-        <% if (!business.isVerified) { %>
-          <div class="verification-cta">
-            <p>Verify your account to unlock full features</p>
-            <a href="/business/verify" class="btn-verify">
-              <svg viewBox="0 0 24 24" width="16" height="16">
+
+        <% const bnStatus = business.verification?.status || 'unverified'; %>
+        <% if (!business.isVerified || bnStatus !== 'verified') { %>
+          <div class="card-foot">
+            <p class="note">⚠️this page handles sensetive business infomation</p>
+            <a href="/privacy" class="btn btn-primary btn-full">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                 <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
               </svg>
-              Verify Now
+              Unicoporate regularly monitors accounts to ensure compliance with our terms.<br><br>TO REGULARLY UPGRADE YOUR BUSINESS SECURITY IS OUR PRIORITY.
             </a>
           </div>
         <% } %>
       </div>
 
       <!-- Quick Actions -->
-      <div class="actions-card">
-        <h3>Quick Actions</h3>
-        <div class="action-list">
+      <div class="card card-purple">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="card-ic ic-purple" aria-hidden="true">⚡</div>
+            <div>
+              <h2>Quick Actions</h2>
+              <p class="muted">Fast navigation</p>
+            </div>
+          </div>
+          <span class="tag tag-purple">Links</span>
+        </div>
+
+        <div class="card-body action-list">
           <a href="/business/profile" class="action-item">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-            </svg>
-            View Profile
+            <span class="a-ic" aria-hidden="true">👤</span>
+            <span class="a-txt">View Profile</span>
+            <span class="a-go" aria-hidden="true">›</span>
           </a>
+
           <a href="/business/verify" class="action-item">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-            </svg>
-            Account Verification
+            <span class="a-ic" aria-hidden="true">✅</span>
+            <span class="a-txt">Account Verification</span>
+            <span class="a-go" aria-hidden="true">›</span>
           </a>
+
           <a href="/business/settings" class="action-item">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
-            </svg>
-            Settings
+            <span class="a-ic" aria-hidden="true">⚙️</span>
+            <span class="a-txt">Settings</span>
+            <span class="a-go" aria-hidden="true">›</span>
           </a>
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- Main Form -->
-    <div class="profile-form-container">
+    <main class="bp-main">
       <form
         action="/business/profile/edit"
         method="POST"
-        class="business-edit-form"
+        class="form card card-black"
         id="profileEditForm"
+        autocomplete="on"
       >
-        <!-- Email Field (Read-only) -->
-        <div class="form-section">
-          <div class="section-header">
-            <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"/>
-            </svg>
-            <h3>Account Information</h3>
-          </div>
-          
-          <div class="readonly-field">
-            <label class="form-label">Email Address</label>
-            <div class="readonly-input">
-              <div class="email-display">
-                <svg class="email-icon" viewBox="0 0 24 24" width="20" height="20">
-                  <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
-                </svg>
-                <span class="email-value"><%= business.email %></span>
-                <% if (business.isVerified) { %>
-                  <span class="verified-tag">
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                      <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                    </svg>
-                    Verified
-                  </span>
-                <% } else { %>
-                  <span class="unverified-tag">
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                      <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                    </svg>
-                    Unverified
-                  </span>
-                <% } %>
+        <!-- Account Information -->
+        <section class="section section-purple">
+          <header class="section-head">
+            <div class="section-left">
+              <span class="s-ic s-purple" aria-hidden="true">📧</span>
+              <div>
+                <h3>Account Information</h3>
+                <p>Email updates may require verification again</p>
               </div>
-              <p class="field-hint">
-                For security reasons, email changes require verification. 
-                Contact support or visit the verification page to update.
-              </p>
+            </div>
+            <span class="tag tag-purple">Important</span>
+          </header>
+
+          <div class="grid">
+            <div class="field full">
+              <label for="email">Email Address <span class="req">*</span></label>
+              <div class="input-ic">
+                <span class="ii" aria-hidden="true">✉️</span>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value="<%= business.email || '' %>"
+                  required
+                  placeholder="admin@company.com"
+                  autocomplete="email"
+                  inputmode="email"
+                />
+              </div>
+
+              <div class="hintline">
+                <% if (business.isVerified) { %>
+                  <span class="pill pill-green">Verified</span>
+                <% } else { %>
+                  <span class="pill pill-amber">Unverified</span>
+                <% } %>
+                <span class="hint">
+                  Changing your email will require verification again. We’ll send a new link to the new email.
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
         <!-- Business Details -->
-        <div class="form-section">
-          <div class="section-header">
-            <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-            </svg>
-            <h3>Business Details</h3>
-          </div>
+        <section class="section section-blue">
+          <header class="section-head">
+            <div class="section-left">
+              <span class="s-ic s-blue" aria-hidden="true">🏢</span>
+              <div>
+                <h3>Business Details</h3>
+                <p>Keep details accurate for payouts and verification</p>
+              </div>
+            </div>
+            <span class="tag tag-blue">Profile</span>
+          </header>
 
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="name" class="form-label">
-                Business Name
-                <span class="required">*</span>
-              </label>
+          <div class="grid">
+            <div class="field">
+              <label for="name">Business Name <span class="req">*</span></label>
               <input
                 type="text"
                 id="name"
                 name="name"
-                value="<%= business.name %>"
+                value="<%= business.name || '' %>"
                 required
-                class="form-input"
                 placeholder="Enter business name"
+                autocomplete="organization"
               />
             </div>
 
-            <div class="form-group">
-              <label for="phone" class="form-label">
-                Phone Number
-                <span class="required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18">
-                  <path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
-                </svg>
+            <div class="field">
+              <label for="phone">Phone Number <span class="req">*</span></label>
+              <div class="input-ic">
+                <span class="ii" aria-hidden="true">📞</span>
                 <input
-                  type="text"
+                  type="tel"
                   id="phone"
                   name="phone"
-                  value="<%= business.phone %>"
+                  value="<%= business.phone || '' %>"
                   required
-                  class="form-input"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="+27..."
+                  autocomplete="tel"
                 />
               </div>
             </div>
 
-            <div class="form-group">
-              <label for="country" class="form-label">
-                Country
-                <span class="required">*</span>
-              </label>
+            <div class="field">
+              <label for="country">Country <span class="req">*</span></label>
               <input
                 type="text"
                 id="country"
                 name="country"
-                value="<%= business.country %>"
+                value="<%= business.country || '' %>"
                 required
-                class="form-input"
-                placeholder="Enter country"
+                placeholder="South Africa"
+                autocomplete="country-name"
               />
             </div>
 
-            <div class="form-group">
-              <label for="city" class="form-label">
-                City
-                <span class="required">*</span>
-              </label>
+            <div class="field">
+              <label for="city">City <span class="req">*</span></label>
               <input
                 type="text"
                 id="city"
                 name="city"
-                value="<%= business.city %>"
+                value="<%= business.city || '' %>"
                 required
-                class="form-input"
-                placeholder="Enter city"
+                placeholder="Johannesburg"
+                autocomplete="address-level2"
               />
             </div>
 
-            <div class="form-group full-width">
-              <label for="address" class="form-label">
-                Business Address
-                <span class="required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18">
-                  <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                </svg>
+            <div class="field full">
+              <label for="address">Business Address <span class="req">*</span></label>
+              <div class="input-ic">
+                <span class="ii" aria-hidden="true">📍</span>
                 <input
                   type="text"
                   id="address"
                   name="address"
-                  value="<%= business.address %>"
+                  value="<%= business.address || '' %>"
                   required
-                  class="form-input"
-                  placeholder="Enter full business address"
+                  placeholder="Full business address"
+                  autocomplete="street-address"
                 />
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Password Update -->
-        <div class="form-section">
-          <div class="section-header">
-            <svg class="section-icon" viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-            </svg>
-            <h3>Security Settings</h3>
-          </div>
+        <!-- Representative (required by schema) -->
+        <section class="section section-purple">
+          <header class="section-head">
+            <div class="section-left">
+              <span class="s-ic s-purple" aria-hidden="true">🧑‍💼</span>
+              <div>
+                <h3>Authorized Representative</h3>
+                <p>Required: person responsible for this business account</p>
+              </div>
+            </div>
+            <span class="tag tag-purple">Required</span>
+          </header>
 
-          <div class="form-group">
-            <label for="password" class="form-label">
-              New Password
-            </label>
-            <div class="password-container">
+          <div class="grid">
+            <div class="field">
+              <label for="repFullName">Full Name <span class="req">*</span></label>
               <input
-                type="password"
-                id="password"
-                name="password"
-                placeholder="Enter new password (optional)"
-                autocomplete="new-password"
-                class="form-input"
+                id="repFullName"
+                name="representative[fullName]"
+                type="text"
+                value="<%= (business.representative && business.representative.fullName) ? business.representative.fullName : '' %>"
+                required
+                placeholder="Representative full name"
+                autocomplete="name"
               />
-              <button
-                type="button"
-                class="toggle-password"
-                data-target="password"
-                aria-label="Toggle password visibility"
-              >
-                <svg class="eye-icon" viewBox="0 0 24 24" width="20" height="20">
-                  <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                </svg>
-              </button>
             </div>
-            <div class="password-strength" id="passwordStrength" style="display: none;">
-              <div class="strength-bar">
-                <div class="strength-fill" id="strengthFill"></div>
-              </div>
-              <div class="strength-label">
-                Strength: <span id="strengthText">Weak</span>
-              </div>
-            </div>
-            <p class="field-hint">
-              Leave blank to keep your current password. Minimum 8 characters recommended.
-            </p>
-          </div>
-        </div>
 
-        <!-- Form Actions -->
-        <div class="form-actions">
-          <button type="button" class="btn btn-secondary" onclick="window.location.href='/business/profile'">
-            <svg viewBox="0 0 24 24" width="18" height="18">
-              <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-            </svg>
+            <div class="field">
+              <label for="repPhone">Phone <span class="req">*</span></label>
+              <input
+                id="repPhone"
+                name="representative[phone]"
+                type="tel"
+                value="<%= (business.representative && business.representative.phone) ? business.representative.phone : '' %>"
+                required
+                placeholder="+27..."
+                autocomplete="tel"
+              />
+            </div>
+
+            <div class="field full">
+              <label for="repIdNumber">ID Number <span class="req">*</span></label>
+              <input
+                id="repIdNumber"
+                name="representative[idNumber]"
+                type="text"
+                value="<%= (business.representative && business.representative.idNumber) ? business.representative.idNumber : '' %>"
+                required
+                placeholder="Representative ID number"
+                autocomplete="off"
+              />
+              <p class="help">Used for security and account ownership verification.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Business Number (required by schema) -->
+        <section class="section section-purple">
+          <header class="section-head">
+            <div class="section-left">
+              <span class="s-ic s-purple" aria-hidden="true">🧾</span>
+              <div>
+                <h3>Business Number</h3>
+                <p>Required: official number used for verification</p>
+              </div>
+            </div>
+            <span class="tag tag-purple">Required</span>
+          </header>
+
+          <div class="grid">
+            <div class="field">
+              <label for="officialNumber">Business Number <span class="req">*</span></label>
+              <input
+                type="text"
+                id="officialNumber"
+                name="officialNumber"
+                value="<%= business.officialNumber || '' %>"
+                required
+                placeholder="Registration / VAT / Tax number"
+                autocomplete="off"
+              />
+              <p class="help">Changing this may trigger re-verification of your business details.</p>
+            </div>
+
+            <div class="field">
+              <label for="officialNumberType">Business Number Type <span class="req">*</span></label>
+              <select id="officialNumberType" name="officialNumberType" required>
+                <option value="CIPC_REG" <%= business.officialNumberType === 'CIPC_REG' ? 'selected' : '' %>>Company Registration</option>
+                <option value="VAT" <%= business.officialNumberType === 'VAT' ? 'selected' : '' %>>VAT Number</option>
+                <option value="TIN" <%= business.officialNumberType === 'TIN' ? 'selected' : '' %>>Tax Identification Number</option>
+                <option value="OTHER" <%= (!business.officialNumberType || business.officialNumberType === 'OTHER') ? 'selected' : '' %>>Other</option>
+              </select>
+              <p class="help">Must match your official number type.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bank Details -->
+        <section class="section section-green">
+          <header class="section-head">
+            <div class="section-left">
+              <span class="s-ic s-green" aria-hidden="true">🏦</span>
+              <div>
+                <h3>Bank Details</h3>
+                <p>Optional, but recommended for payouts</p>
+              </div>
+            </div>
+            <span class="tag tag-green">Payouts</span>
+          </header>
+
+          <div class="grid">
+            <div class="field">
+              <label for="bankAccountHolderName">Account Holder Name</label>
+              <input
+                id="bankAccountHolderName"
+                name="bankDetails[accountHolderName]"
+                type="text"
+                value="<%= (business.bankDetails && business.bankDetails.accountHolderName) ? business.bankDetails.accountHolderName : '' %>"
+                placeholder="Full name / business name"
+                autocomplete="name"
+              />
+            </div>
+
+            <div class="field">
+              <label for="bankName">Bank Name</label>
+              <input
+                id="bankName"
+                name="bankDetails[bankName]"
+                type="text"
+                value="<%= (business.bankDetails && business.bankDetails.bankName) ? business.bankDetails.bankName : '' %>"
+                placeholder="e.g., Standard Bank"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="field">
+              <label for="bankAccountNumber">Account Number</label>
+              <input
+                id="bankAccountNumber"
+                name="bankDetails[accountNumber]"
+                type="text"
+                value="<%= (business.bankDetails && business.bankDetails.accountNumber) ? business.bankDetails.accountNumber : '' %>"
+                placeholder="Account number"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <p class="help">For security, this might not be prefilled if you mask bank details in views.</p>
+            </div>
+
+            <div class="field">
+              <label for="bankAccountType">Account Type</label>
+              <select id="bankAccountType" name="bankDetails[accountType]">
+                <option value="" <%= !(business.bankDetails && business.bankDetails.accountType) ? 'selected' : '' %>>Select account type</option>
+                <option value="Savings" <%= (business.bankDetails && business.bankDetails.accountType === 'Savings') ? 'selected' : '' %>>Savings</option>
+                <option value="Current" <%= (business.bankDetails && business.bankDetails.accountType === 'Current') ? 'selected' : '' %>>Current</option>
+                <option value="Cheque" <%= (business.bankDetails && business.bankDetails.accountType === 'Cheque') ? 'selected' : '' %>>Cheque</option>
+                <option value="Business" <%= (business.bankDetails && business.bankDetails.accountType === 'Business') ? 'selected' : '' %>>Business</option>
+                <option value="Other" <%= (business.bankDetails && business.bankDetails.accountType === 'Other') ? 'selected' : '' %>>Other</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="bankBranchCode">Branch Code</label>
+              <input
+                id="bankBranchCode"
+                name="bankDetails[branchCode]"
+                type="text"
+                value="<%= (business.bankDetails && business.bankDetails.branchCode) ? business.bankDetails.branchCode : '' %>"
+                placeholder="Branch code"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="field">
+              <label for="bankSwiftCode">SWIFT Code</label>
+              <input
+                id="bankSwiftCode"
+                name="bankDetails[swiftCode]"
+                type="text"
+                value="<%= (business.bankDetails && business.bankDetails.swiftCode) ? business.bankDetails.swiftCode : '' %>"
+                placeholder="SWIFT / BIC"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="field">
+              <label for="bankIban">IBAN</label>
+              <input
+                id="bankIban"
+                name="bankDetails[iban]"
+                type="text"
+                value="<%= (business.bankDetails && business.bankDetails.iban) ? business.bankDetails.iban : '' %>"
+                placeholder="IBAN (if applicable)"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="field">
+              <label for="bankCurrency">Payout Currency</label>
+              <select id="bankCurrency" name="bankDetails[currency]">
+                <option value="" <%= !(business.bankDetails && business.bankDetails.currency) ? 'selected' : '' %>>Select currency</option>
+                <option value="ZAR" <%= (business.bankDetails && business.bankDetails.currency === 'ZAR') ? 'selected' : '' %>>ZAR (South African Rand)</option>
+                <option value="USD" <%= (business.bankDetails && business.bankDetails.currency === 'USD') ? 'selected' : '' %>>USD (US Dollar)</option>
+                <option value="EUR" <%= (business.bankDetails && business.bankDetails.currency === 'EUR') ? 'selected' : '' %>>EUR (Euro)</option>
+                <option value="GBP" <%= (business.bankDetails && business.bankDetails.currency === 'GBP') ? 'selected' : '' %>>GBP (British Pound)</option>
+                <option value="Other" <%= (business.bankDetails && business.bankDetails.currency === 'Other') ? 'selected' : '' %>>Other</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <label for="bankPayoutMethod">Preferred Payout Method</label>
+              <select id="bankPayoutMethod" name="bankDetails[payoutMethod]">
+                <option value="bank" <%= (business.bankDetails && business.bankDetails.payoutMethod === 'bank') ? 'selected' : '' %>>Bank Transfer</option>
+                <option value="paypal" <%= (business.bankDetails && business.bankDetails.payoutMethod === 'paypal') ? 'selected' : '' %>>PayPal</option>
+                <option value="other" <%= (business.bankDetails && business.bankDetails.payoutMethod === 'other') ? 'selected' : '' %>>Other</option>
+              </select>
+              <p class="help">You can set/replace these later in payout settings too.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Security Settings -->
+        <section class="section section-black">
+          <header class="section-head">
+            <div class="section-left">
+              <span class="s-ic s-black" aria-hidden="true">🔒</span>
+              <div>
+                <h3>Security Settings</h3>
+                <p>Optional: leave blank if you don’t want to change password</p>
+              </div>
+            </div>
+
+            <!-- keep links exactly as your system uses -->
+            <a class="mini-link" href="/business/change-password">Use Separate Change Password Page</a>
+          </header>
+
+          <div class="grid">
+            <div class="field">
+              <label for="currentPassword">Current Password</label>
+              <div class="pw">
+                <input
+                  type="password"
+                  id="currentPassword"
+                  name="currentPassword"
+                  placeholder="Your current password"
+                  autocomplete="current-password"
+                />
+                <button type="button" class="pw-btn toggle-password" data-target="currentPassword" aria-label="Toggle password visibility">👁</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="newPassword">New Password</label>
+              <div class="pw">
+                <input
+                  type="password"
+                  id="newPassword"
+                  name="newPassword"
+                  placeholder="Enter new password"
+                  autocomplete="new-password"
+                />
+                <button type="button" class="pw-btn toggle-password" data-target="newPassword" aria-label="Toggle password visibility">👁</button>
+              </div>
+
+              <div class="pw-strength" id="passwordStrength" hidden>
+                <div class="bar"><div class="fill" id="strengthFill"></div></div>
+                <div class="t">Strength: <span id="strengthText">Weak</span></div>
+              </div>
+            </div>
+
+            <div class="field full">
+              <label for="confirmPassword">Confirm New Password</label>
+              <div class="pw">
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  placeholder="Re-enter new password"
+                  autocomplete="new-password"
+                />
+                <button type="button" class="pw-btn toggle-password" data-target="confirmPassword" aria-label="Toggle password visibility">👁</button>
+              </div>
+              <p class="help">Must match the new password.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Actions -->
+        <div class="actions">
+          <button type="button" class="btn btn-ghost" onclick="window.location.href='/business/profile'">
             Cancel
           </button>
           <button type="submit" class="btn btn-primary">
-            <svg viewBox="0 0 24 24" width="18" height="18">
-              <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-            </svg>
             Save Changes
           </button>
         </div>
       </form>
-    </div>
+
+      <!-- Danger Zone -->
+      <div class="danger card card-red">
+        <div class="danger-head">
+          <div class="danger-left">
+            <span class="danger-ic" aria-hidden="true">⚠️</span>
+            <div>
+              <h3>Danger Zone</h3>
+              <p>Deleting your account is permanent</p>
+            </div>
+          </div>
+        </div>
+
+        <p class="note">
+          To confirm, type <strong>DELETE</strong> and enter your password.
+        </p>
+
+        <form action="/business/profile/delete" method="POST" class="danger-form" autocomplete="off">
+          <div class="grid">
+            <div class="field">
+              <label for="confirmText">Type DELETE</label>
+              <input
+                id="confirmText"
+                name="confirmText"
+                type="text"
+                placeholder="DELETE"
+                autocapitalize="characters"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="field">
+              <label for="deletePassword">Password</label>
+              <div class="pw">
+                <input
+                  id="deletePassword"
+                  name="password"
+                  type="password"
+                  placeholder="Your password"
+                  autocomplete="current-password"
+                />
+                <button type="button" class="pw-btn toggle-password" data-target="deletePassword" aria-label="Toggle password visibility">👁</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn btn-danger">
+              Delete Business Account
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </main>
   </div>
 </div>
 
-<style nonce="<%= nonce %>">
-  /* Page Container */
-  .profile-edit-page {
+<style nonce="<%= NONCE %>">
+  /* Scoped only to this page */
+  .bp-edit-page{
+    --purple:#7C3AED;
+    --purple2:#6D28D9;
+    --blue:#2563EB;
+    --green:#22C55E;
+    --black:#0F172A;
+
+    --bg:#F8FAFC;
+    --card:#FFFFFF;
+    --border:#E2E8F0;
+    --muted:#64748B;
+    --text:#0F172A;
+
+    --shadow:0 10px 22px rgba(15,23,42,.08);
+    --r:16px;
+    --r2:12px;
+
+    background: var(--bg);
+    padding: 14px 12px 22px;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 1rem;
   }
 
-  /* Page Header */
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #22C55E; /* Green accent */
+  /* Header */
+  .bp-page-header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding: 14px;
+    border-radius: var(--r);
+    border: 1px solid rgba(124,58,237,.22);
+    background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(37,99,235,.10));
+    box-shadow: var(--shadow);
   }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+  .bp-header-content{ display:flex; gap:12px; align-items:flex-start; min-width:0; }
+  .bp-header-icon{
+    width:56px; height:56px;
+    border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(135deg, var(--purple), var(--blue));
+    color:#fff;
+    flex-shrink:0;
   }
+  .bp-header-text{ min-width:0; }
+  .bp-title{ margin:0; font-size: 18px; font-weight: 900; color: var(--text); }
+  .bp-subtitle{ margin:6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.35; }
 
-  .header-icon {
-    background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
-    width: 56px;
-    height: 56px;
+  .bp-brand-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .chip{
+    font-size: 11px; font-weight: 900;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background:#fff;
+  }
+  .c-purple{ color: var(--purple); border-color: rgba(124,58,237,.25); background: rgba(124,58,237,.10); }
+  .c-blue{ color: var(--blue); border-color: rgba(37,99,235,.25); background: rgba(37,99,235,.10); }
+  .c-green{ color: #15803D; border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.10); }
+  .c-black{ color: var(--black); border-color: rgba(15,23,42,.18); background: rgba(15,23,42,.06); }
+
+  .bp-back{
+    display:inline-flex;
+    gap:8px;
+    align-items:center;
+    padding: 10px 12px;
     border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    text-decoration:none;
+    font-weight: 900;
+    color: var(--purple);
+    border: 1px solid rgba(124,58,237,.25);
+    background: rgba(255,255,255,.8);
+    white-space: nowrap;
+  }
+  .bp-back:hover{ background: rgba(124,58,237,.08); }
+
+  /* Flash */
+  .bp-flash{ margin: 12px 0 0; }
+  .flash{
+    display:flex; gap:10px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    margin-top: 10px;
+    box-shadow: 0 6px 14px rgba(15,23,42,.06);
+  }
+  .flash-success{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#166534; }
+  .flash-error{ background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.22); color:#991B1B; }
+  .flash-content strong{ display:block; font-weight: 1000; font-size: 13px; }
+  .flash-content p{ margin:4px 0 0; font-size: 12.5px; line-height: 1.35; }
+
+  /* Main grid */
+  .bp-grid{
+    display:grid;
+    grid-template-columns: 360px 1fr;
+    gap: 12px;
+    margin-top: 12px;
+    align-items:start;
+  }
+  @media (max-width: 1024px){
+    .bp-grid{ grid-template-columns: 1fr; }
   }
 
-  .header-icon svg {
-    color: white;
+  /* Cards */
+  .card{
+    background: rgba(255,255,255,.95);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .card-head{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(226,232,240,.9);
+  }
+  .card-head-left{ display:flex; gap:10px; min-width:0; }
+  .card-ic{
+    width:44px; height:44px;
+    border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 18px;
+    border: 1px solid transparent;
+    flex-shrink:0;
+  }
+  .ic-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); }
+  .ic-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); }
+
+  .card h2{ margin:0; font-size: 14px; font-weight: 1000; color: var(--text); }
+  .muted{ margin:4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+
+  .tag{
+    font-size: 11px;
+    font-weight: 1000;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .tag-purple{ color: var(--purple); background: rgba(124,58,237,.10); border-color: rgba(124,58,237,.22); }
+  .tag-blue{ color: var(--blue); background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.22); }
+  .tag-green{ color:#15803D; background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.22); }
+
+  .card-body{ padding: 12px; }
+
+  .row{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed rgba(203,213,225,.7);
+  }
+  .row:last-child{ border-bottom:none; }
+  .row-top{ align-items:flex-start; }
+
+  .k{ font-size: 12px; font-weight: 900; color: var(--muted); min-width: 110px; }
+  .v{ font-size: 12.5px; font-weight: 1000; color: var(--text); text-align:right; max-width: 65%; }
+  .v-stack{ display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+  .mini-note{ font-size: 11.5px; color: var(--muted); line-height: 1.3; max-width: 220px; text-align:right; }
+  .mini-note strong{ color:#991B1B; }
+
+  .status-dot{ width: 12px; height: 12px; border-radius: 999px; margin-top: 6px; }
+  .status-dot.ok{ background: var(--green); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+  .status-dot.warn{ background: #F59E0B; box-shadow: 0 0 0 4px rgba(245,158,11,.18); }
+
+  .card-foot{
+    padding: 12px;
+    border-top: 1px solid rgba(226,232,240,.9);
+    background: rgba(248,250,252,.85);
   }
 
-  .page-title {
-    margin: 0;
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #0F172A;
+  /* Sidebar actions */
+  .action-list{ display:flex; flex-direction:column; gap:10px; }
+  .action-item{
+    display:flex; align-items:center; gap:10px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(124,58,237,.18);
+    text-decoration:none;
+    background: rgba(124,58,237,.06);
+    color: var(--text);
   }
+  .action-item:hover{ border-color: rgba(124,58,237,.35); background: rgba(124,58,237,.10); }
+  .a-ic{ width: 38px; height: 38px; border-radius: 14px; display:flex; align-items:center; justify-content:center; background:#fff; border: 1px solid rgba(124,58,237,.18); }
+  .a-txt{ font-weight: 1000; font-size: 13px; }
+  .a-go{ margin-left:auto; font-size: 20px; font-weight: 1000; color: rgba(124,58,237,.55); }
 
-  .dark-theme .page-title {
-    color: #F1F5F9;
+  /* Pills */
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 1000;
+    border: 1px solid transparent;
+    white-space: nowrap;
   }
+  .pill-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#15803D; }
+  .pill-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.26); color:#B45309; }
+  .pill-red{ background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.24); color:#991B1B; }
 
-  .page-subtitle {
-    margin: 0.25rem 0 0;
-    color: #64748B;
-    font-size: 0.95rem;
+  /* Form */
+  .bp-main .form{ padding-bottom: 6px; }
+  .section{ margin: 0; padding: 12px; border-bottom: 1px solid rgba(226,232,240,.9); }
+  .section:last-of-type{ border-bottom: none; }
+
+  .section-head{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    justify-content:space-between;
+    margin-bottom: 12px;
   }
-
-  .back-button {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    background: rgba(37, 99, 235, 0.1);
-    color: #2563EB;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 500;
-    transition: all 0.3s ease;
+  .section-left{ display:flex; gap:10px; min-width:0; }
+  .s-ic{
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    border: 1px solid transparent;
+    background:#fff;
+    flex-shrink:0;
   }
+  .s-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); }
+  .s-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); }
+  .s-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); }
+  .s-black{ background: rgba(15,23,42,.08); border-color: rgba(15,23,42,.18); }
 
-  .back-button:hover {
-    background: rgba(37, 99, 235, 0.2);
-    transform: translateX(-2px);
-  }
+  .section h3{ margin:0; font-size: 14px; font-weight: 1100; color: var(--text); }
+  .section-head p{ margin:4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.35; }
 
-  /* Flash Messages */
-  .flash-container {
-    margin-bottom: 2rem;
-  }
+  /* Visible section accents */
+  .section-purple{ border-left: 5px solid rgba(124,58,237,.85); }
+  .section-blue{ border-left: 5px solid rgba(37,99,235,.85); }
+  .section-green{ border-left: 5px solid rgba(34,197,94,.85); }
+  .section-black{ border-left: 5px solid rgba(15,23,42,.85); }
 
-  .flash {
-    display: flex;
-    gap: 1rem;
-    padding: 1.25rem;
+  .mini-link{
+    font-size: 12px;
+    font-weight: 1000;
+    text-decoration:none;
+    color: var(--purple);
+    white-space: nowrap;
+    padding: 8px 10px;
     border-radius: 12px;
-    margin-bottom: 1rem;
-    animation: slideIn 0.3s ease;
-  }
-
-  .flash-success {
-    background: linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%);
-    border-left: 4px solid #22C55E;
-    color: #166534;
-  }
-
-  .flash-error {
-    background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
-    border-left: 4px solid #EF4444;
-    color: #991B1B;
-  }
-
-  .flash-icon {
-    flex-shrink: 0;
-  }
-
-  .flash-content strong {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: 0.875rem;
-  }
-
-  /* Main Layout */
-  .profile-edit-container {
-    display: grid;
-    grid-template-columns: 300px 1fr;
-    gap: 2rem;
-  }
-
-  @media (max-width: 1024px) {
-    .profile-edit-container {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* Sidebar */
-  .profile-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  /* Status Card */
-  .status-card {
-    background: white;
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border: 1px solid #E2E8F0;
-  }
-
-  .dark-theme .status-card {
-    background: rgba(15, 23, 42, 0.8);
-    border-color: #334155;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  }
-
-  .status-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-  }
-
-  .status-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .status-header h3 {
-    color: #F1F5F9;
-  }
-
-  .status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-  }
-
-  .status-indicator.active {
-    background: #22C55E;
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
-  }
-
-  .status-indicator.inactive {
-    background: #EF4444;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
-  }
-
-  .status-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .status-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .status-label {
-    font-size: 0.875rem;
-    color: #64748B;
-  }
-
-  .status-value {
-    font-weight: 600;
-    color: #0F172A;
-  }
-
-  .dark-theme .status-value {
-    color: #F1F5F9;
-  }
-
-  .verified-badge,
-  .unverified-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .verified-badge {
-    background: #DCFCE7;
-    color: #166534;
-  }
-
-  .unverified-badge {
-    background: #FEF3C7;
-    color: #92400E;
-  }
-
-  .verification-cta {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid #E2E8F0;
-    text-align: center;
-  }
-
-  .dark-theme .verification-cta {
-    border-top-color: #334155;
-  }
-
-  .verification-cta p {
-    margin: 0 0 1rem;
-    font-size: 0.875rem;
-    color: #64748B;
-  }
-
-  .btn-verify {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: #2563EB;
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 0.875rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
-  }
-
-  .btn-verify:hover {
-    background: #1D4ED8;
-    transform: translateY(-2px);
-  }
-
-  /* Actions Card */
-  .actions-card {
-    background: white;
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border: 1px solid #E2E8F0;
-  }
-
-  .dark-theme .actions-card {
-    background: rgba(15, 23, 42, 0.8);
-    border-color: #334155;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  }
-
-  .actions-card h3 {
-    margin: 0 0 1rem;
-    font-size: 1.2rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .actions-card h3 {
-    color: #F1F5F9;
-  }
-
-  .action-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .action-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    border-radius: 8px;
-    text-decoration: none;
-    color: #0F172A;
-    font-weight: 500;
-    transition: all 0.3s ease;
-  }
-
-  .dark-theme .action-item {
-    color: #F1F5F9;
-  }
-
-  .action-item:hover {
-    background: rgba(37, 99, 235, 0.1);
-    transform: translateX(4px);
-  }
-
-  .action-item svg {
-    color: #64748B;
-  }
-
-  /* Form Container */
-  .profile-form-container {
-    background: white;
-    border-radius: 16px;
-    padding: 2rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  }
-
-  .dark-theme .profile-form-container {
-    background: rgba(15, 23, 42, 0.8);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  }
-
-  /* Form Sections */
-  .form-section {
-    margin-bottom: 2.5rem;
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .section-icon {
-    color: #2563EB;
-  }
-
-  .section-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: #0F172A;
-  }
-
-  .dark-theme .section-header h3 {
-    color: #F1F5F9;
-  }
-
-  /* Readonly Field */
-  .readonly-field {
-    margin-bottom: 1.5rem;
-  }
-
-  .form-label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #0F172A;
-    font-size: 0.95rem;
-  }
-
-  .dark-theme .form-label {
-    color: #E2E8F0;
-  }
-
-  .required {
-    color: #EF4444;
-  }
-
-  .readonly-input {
-    background: #F8FAFC;
-    border: 2px solid #E2E8F0;
-    border-radius: 8px;
-    padding: 1rem;
-  }
-
-  .dark-theme .readonly-input {
-    background: rgba(15, 23, 42, 0.5);
-    border-color: #334155;
-  }
-
-  .email-display {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .email-icon {
-    color: #64748B;
-    flex-shrink: 0;
-  }
-
-  .email-value {
-    font-weight: 600;
-    color: #0F172A;
-    flex: 1;
-  }
-
-  .dark-theme .email-value {
-    color: #F1F5F9;
-  }
-
-  .verified-tag,
-  .unverified-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .verified-tag {
-    background: #DCFCE7;
-    color: #166534;
-  }
-
-  .unverified-tag {
-    background: #FEF3C7;
-    color: #92400E;
-  }
-
-  .field-hint {
-    margin: 0;
-    font-size: 0.875rem;
-    color: #64748B;
-    line-height: 1.4;
-  }
-
-  /* Form Grid */
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-  }
-
-  @media (max-width: 768px) {
-    .form-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .full-width {
-    grid-column: 1 / -1;
-  }
-
-  /* Form Elements */
-  .form-group {
-    margin-bottom: 1.5rem;
-  }
-
-  .form-input {
-    width: 100%;
-    padding: 0.875rem 1rem;
-    font-size: 1rem;
-    border: 2px solid #E2E8F0;
-    border-radius: 8px;
-    background: white;
-    color: #0F172A;
-    transition: all 0.3s ease;
-  }
-
-  .dark-theme .form-input {
-    background: rgba(15, 23, 42, 0.5);
-    border-color: #334155;
-    color: #F1F5F9;
-  }
-
-  .form-input:focus {
+    border: 1px solid rgba(124,58,237,.22);
+    background: rgba(124,58,237,.06);
+  }
+  .mini-link:hover{ background: rgba(124,58,237,.10); }
+
+  .grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 760px){
+    .grid{ grid-template-columns: 1fr; }
+    .bp-page-header{ flex-direction:column; }
+    .bp-back{ width: 100%; justify-content:center; }
+  }
+
+  .field{ display:flex; flex-direction:column; gap:7px; }
+  .full{ grid-column: 1 / -1; }
+  label{ font-size: 12.5px; font-weight: 1000; color: var(--text); }
+  .req{ color:#EF4444; }
+
+  input, select{
+    width:100%;
+    padding: 12px 12px;
+    border-radius: 14px;
+    border: 2px solid rgba(226,232,240,.95);
+    background: #fff;
+    color: var(--text);
+    font-weight: 800;
+    font-size: 13px;
     outline: none;
-    border-color: #2563EB;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+  input:focus, select:focus{
+    border-color: rgba(124,58,237,.55);
+    box-shadow: 0 0 0 4px rgba(124,58,237,.14);
   }
 
-  .input-with-icon {
-    position: relative;
+  .help{
+    margin:0;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.35;
   }
 
-  .input-icon {
-    position: absolute;
-    left: 1rem;
+  .input-ic{ position:relative; }
+  .ii{
+    position:absolute;
+    left: 12px;
     top: 50%;
     transform: translateY(-50%);
-    color: #64748B;
+    opacity:.75;
+    pointer-events:none;
+  }
+  .input-ic input{ padding-left: 40px; }
+
+  .hintline{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .hint{
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.35;
   }
 
-  .input-with-icon .form-input {
-    padding-left: 3rem;
-  }
-
-  /* Password Container */
-  .password-container {
-    position: relative;
-  }
-
-  .toggle-password {
-    position: absolute;
-    right: 1rem;
+  /* Password */
+  .pw{ position:relative; }
+  .pw input{ padding-right: 44px; }
+  .pw-btn{
+    position:absolute;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    color: #64748B;
+    border: 1px solid rgba(124,58,237,.22);
+    background: rgba(124,58,237,.06);
+    color: var(--purple);
+    border-radius: 12px;
+    width: 34px; height: 34px;
+    cursor:pointer;
+    font-weight: 1000;
+  }
+  .pw-btn:hover{ background: rgba(124,58,237,.10); }
+
+  .pw-strength{ margin-top: 8px; }
+  .bar{ height: 6px; border-radius: 999px; background: rgba(226,232,240,.95); overflow:hidden; }
+  .fill{ height: 100%; width: 30%; background: #EF4444; transition: width .2s ease; }
+  .pw-strength .t{ margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+  .pw-strength .t span{ font-weight: 1000; }
+
+  /* Buttons */
+  .actions{
+    display:flex;
+    gap:10px;
+    justify-content:flex-end;
+    padding: 12px;
+    border-top: 1px solid rgba(226,232,240,.9);
+    background: rgba(248,250,252,.85);
+  }
+  @media (max-width: 520px){
+    .actions{ flex-direction:column; }
   }
 
-  .eye-icon {
-    display: block;
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    font-weight: 1000;
+    font-size: 13px;
+    cursor:pointer;
+    text-decoration:none;
+    min-height: 44px;
   }
+  .btn-full{ width: 100%; }
 
-  /* Password Strength */
-  .password-strength {
-    margin-top: 0.75rem;
+  .btn-primary{
+    background: var(--purple);
+    border-color: rgba(124,58,237,.55);
+    color:#fff;
   }
+  .btn-primary:hover{ background: var(--purple2); }
 
-  .strength-bar {
-    height: 4px;
-    background: #E2E8F0;
-    border-radius: 2px;
-    margin-bottom: 0.5rem;
-    overflow: hidden;
+  .btn-ghost{
+    background: rgba(255,255,255,.9);
+    border-color: rgba(124,58,237,.22);
+    color: var(--purple);
   }
+  .btn-ghost:hover{ background: rgba(124,58,237,.08); }
 
-  .strength-fill {
-    height: 100%;
-    width: 30%;
+  .btn-danger{
     background: #EF4444;
-    border-radius: 2px;
-    transition: all 0.3s ease;
+    border-color: rgba(239,68,68,.55);
+    color:#fff;
   }
+  .btn-danger:hover{ background: #DC2626; }
 
-  .strength-label {
-    font-size: 0.875rem;
-    color: #64748B;
+  /* Danger */
+  .card-red{
+    border-color: rgba(239,68,68,.22);
+    background: rgba(255,255,255,.95);
   }
-
-  .strength-label span {
-    font-weight: 600;
+  .danger{ margin-top: 12px; }
+  .danger-head{ padding: 12px; border-bottom: 1px solid rgba(239,68,68,.18); background: rgba(239,68,68,.06); }
+  .danger-left{ display:flex; gap:10px; align-items:center; }
+  .danger-ic{
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(239,68,68,.12);
+    border: 1px solid rgba(239,68,68,.22);
+    font-size: 18px;
   }
+  .danger h3{ margin:0; font-size: 14px; font-weight: 1100; color:#991B1B; }
+  .danger-head p{ margin:4px 0 0; font-size: 12px; color:#7f1d1d; }
+  .danger .note{ padding: 12px; margin:0; color:#7f1d1d; font-size: 12px; line-height: 1.35; }
+  .danger-form{ padding: 0 12px 12px; }
 
-  /* Form Actions */
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    padding-top: 2rem;
-    border-top: 1px solid #E2E8F0;
-  }
-
-  .dark-theme .form-actions {
-    border-top-color: #334155;
-  }
-
-  .btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 0.875rem 2rem;
-    font-size: 1rem;
-    font-weight: 600;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-decoration: none;
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
-    color: white;
-    box-shadow: 0 2px 10px rgba(34, 197, 94, 0.2);
-  }
-
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
-  }
-
-  .btn-secondary {
-    background: rgba(37, 99, 235, 0.1);
-    color: #2563EB;
-    border: 1px solid rgba(37, 99, 235, 0.2);
-  }
-
-  .btn-secondary:hover {
-    background: rgba(37, 99, 235, 0.2);
-  }
-
-  /* Animations */
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  /* Small phones */
+  @media (max-width: 360px){
+    .bp-edit-page{ padding-left: 10px; padding-right: 10px; }
+    .bp-title{ font-size: 16px; }
   }
 </style>
 
-<script nonce="<%= nonce %>">
+<script nonce="<%= NONCE %>">
   document.addEventListener("DOMContentLoaded", () => {
-    console.log("✅ Business profile edit loaded with CSP nonce");
-
-    // Password strength indicator
-    const passwordInput = document.getElementById('password');
+    // Strength (new password only)
+    const newPasswordInput = document.getElementById('newPassword');
     const passwordStrength = document.getElementById('passwordStrength');
     const strengthFill = document.getElementById('strengthFill');
     const strengthText = document.getElementById('strengthText');
 
-    if (passwordInput && passwordStrength) {
-      passwordInput.addEventListener('input', function() {
-        const password = this.value;
-        
-        if (password.length === 0) {
-          passwordStrength.style.display = 'none';
+    if (newPasswordInput && passwordStrength) {
+      newPasswordInput.addEventListener('input', function() {
+        const password = String(this.value || '');
+
+        if (!password.length) {
+          passwordStrength.hidden = true;
           return;
         }
-        
-        passwordStrength.style.display = 'block';
-        
+
+        passwordStrength.hidden = false;
+
         let strength = 0;
-        
-        // Length check
         if (password.length >= 8) strength++;
         if (password.length >= 12) strength++;
-        
-        // Character type checks
         if (/[a-z]/.test(password)) strength++;
         if (/[A-Z]/.test(password)) strength++;
         if (/[0-9]/.test(password)) strength++;
         if (/[^A-Za-z0-9]/.test(password)) strength++;
-        
-        // Calculate percentage (max 6 checks)
+
         const percentage = Math.min((strength / 6) * 100, 100);
-        if (strengthFill) {
-          strengthFill.style.width = percentage + '%';
-        }
-        
-        // Update text and color
+        if (strengthFill) strengthFill.style.width = percentage + '%';
+
         let label = 'Weak';
         let color = '#EF4444';
-        
-        if (strength >= 5) {
-          label = 'Strong';
-          color = '#22C55E';
-        } else if (strength >= 3) {
-          label = 'Good';
-          color = '#F59E0B';
-        } else if (strength >= 2) {
-          label = 'Fair';
-          color = '#F59E0B';
-        }
-        
-        if (strengthText) {
-          strengthText.textContent = label;
-        }
-        if (strengthFill) {
-          strengthFill.style.backgroundColor = color;
-        }
+        if (strength >= 5) { label = 'Strong'; color = '#22C55E'; }
+        else if (strength >= 3) { label = 'Good'; color = '#F59E0B'; }
+        else if (strength >= 2) { label = 'Fair'; color = '#F59E0B'; }
+
+        if (strengthText) strengthText.textContent = label;
+        if (strengthFill) strengthFill.style.backgroundColor = color;
       });
     }
 
     // Toggle password visibility
-    const togglePassword = document.querySelector('.toggle-password');
-    if (togglePassword) {
-      togglePassword.addEventListener('click', () => {
-        const isPassword = passwordInput.type === 'password';
-        passwordInput.type = isPassword ? 'text' : 'password';
-        
-        // Update eye icon
-        const eyeIcon = togglePassword.querySelector('.eye-icon');
-        if (eyeIcon) {
-          eyeIcon.innerHTML = isPassword ? 
-            '<path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>' :
-            '<path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>';
-        }
+    document.querySelectorAll('.toggle-password').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const input = targetId ? document.getElementById(targetId) : null;
+        if (!input) return;
+        input.type = (input.type === 'password') ? 'text' : 'password';
       });
-    }
-
-    // Form validation
-    const form = document.getElementById('profileEditForm');
-    if (form) {
-      form.addEventListener('submit', function(e) {
-        const requiredFields = this.querySelectorAll('[required]');
-        let isValid = true;
-        
-        requiredFields.forEach(field => {
-          if (!field.value.trim()) {
-            isValid = false;
-            field.style.borderColor = '#EF4444';
-            field.style.animation = 'shake 0.5s ease';
-            
-            // Scroll to first error
-            if (isValid === false) {
-              field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          } else {
-            field.style.borderColor = '';
-            field.style.animation = '';
-          }
-        });
-        
-        if (!isValid) {
-          e.preventDefault();
-          
-          // Show error message
-          const errorDiv = document.createElement('div');
-          errorDiv.className = 'flash flash-error';
-          errorDiv.innerHTML = `
-            <svg class="flash-icon" viewBox="0 0 24 24" width="20" height="20">
-              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-            </svg>
-            <div class="flash-content">
-              <strong>Please fill in all required fields</strong>
-              <p>All fields marked with * are required</p>
-            </div>
-          `;
-          
-          const flashContainer = document.querySelector('.flash-container');
-          if (flashContainer) {
-            flashContainer.insertBefore(errorDiv, flashContainer.firstChild);
-            
-            // Remove after 5 seconds
-            setTimeout(() => {
-              errorDiv.remove();
-            }, 5000);
-          }
-        }
-      });
-    }
-
-    // Add shake animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-        20%, 40%, 60%, 80% { transform: translateX(5px); }
-      }
-    `;
-    document.head.appendChild(style);
+    });
   });
 </script>

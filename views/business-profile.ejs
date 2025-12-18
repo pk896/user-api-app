@@ -1,708 +1,792 @@
-<!-- views/business-profile.ejs -->
-<div class="bp <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <h1 class="bp-title">Business Profile</h1>
-  <p class="bp-subtitle">
-    Manage your business details and email verification
-  </p>
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<% const b = business || {} %>
+<% const ver = (b.verification || {}) %>
+<% const bank = (b.bankDetails || {}) %>
 
-  <!-- Flash messages -->
-  <% (success || []).forEach(msg => { %>
-    <div class="fm fm-success">✅ <%= msg %></div>
-  <% }) %>
-  <% (error || []).forEach(msg => { %>
-    <div class="fm fm-error">❌ <%= msg %></div>
-  <% }) %>
+<% const emailVerified = !!b.isVerified %>
+<% const numStatus = ((ver.status || 'pending') + '').toLowerCase() %>
 
-  <% const isVerified = business && business.isVerified; %>
+<section class="biz-profile-page">
+  <div class="bp-wrap">
 
-  <!-- Profile Content -->
-  <div class="bp-content">
-    <!-- Left Column: Business Details -->
-    <div class="bp-card bp-details">
-      <div class="bp-card-header">
-        <h2 class="bp-card-title">Business Details</h2>
-        <span class="bp-role bp-role-<%= business.role %>">
-          <%= business.role && business.role.toUpperCase() %>
+    <!-- Header -->
+    <header class="bp-header">
+      <div class="bp-header-top">
+
+        <div class="bp-brand">
+          <div class="bp-swatches" aria-label="Company colors">
+            <span class="sw blue" title="Blue"></span>
+            <span class="sw purple" title="Purple"></span>
+            <span class="sw green" title="Green"></span>
+            <span class="sw black" title="Black"></span>
+          </div>
+
+          <div class="bp-title">
+            <h1>Business Profile</h1>
+            <p>Manage your business settings and verification status</p>
+          </div>
+        </div>
+
+        <div class="bp-actions">
+          <a href="/business/dashboard" class="btn btn-ghost">
+            <span aria-hidden="true">←</span>
+            <span>Dashboard</span>
+          </a>
+
+          <% if (!emailVerified) { %>
+            <a href="/business/verify-pending" class="btn btn-primary">Verify Email</a>
+          <% } else { %>
+            <span class="badge ok">
+              <span class="dot"></span>
+              Email Verified
+            </span>
+          <% } %>
+        </div>
+
+      </div>
+
+      <!-- Status pills -->
+      <div class="bp-pills" role="list" aria-label="Status">
+        <span class="pill pill-blue" role="listitem"><%= (b.role || 'business').toUpperCase() %></span>
+
+        <span class="pill pill-purple" role="listitem">
+          ID: <%= b.internalBusinessId || String(b._id || '—') %>
         </span>
-      </div>
 
-      <div class="bp-details-grid">
-        <div class="bp-detail">
-          <span class="bp-detail-label">Business Name</span>
-          <strong class="bp-detail-value"><%= business.name %></strong>
+        <% if (emailVerified) { %>
+          <span class="pill pill-green" role="listitem">Email Status: Verified</span>
+        <% } else { %>
+          <span class="pill pill-amber" role="listitem">Email Status: Unverified</span>
+        <% } %>
+
+        <% if (numStatus === 'verified') { %>
+          <span class="pill pill-green" role="listitem">Official Number Status: Verified</span>
+        <% } else if (numStatus === 'rejected') { %>
+          <span class="pill pill-red" role="listitem">Official Number Status: Rejected</span>
+        <% } else { %>
+          <span class="pill pill-amber" role="listitem">Official Number Status: Pending</span>
+        <% } %>
+      </div>
+    </header>
+
+    <!-- Grid -->
+    <div class="bp-grid">
+
+      <!-- Overview -->
+      <article class="card card-purple">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="ic ic-purple" aria-hidden="true">🏢</div>
+            <div>
+              <h2>Business Overview</h2>
+              <p class="muted">Your public and contact details</p>
+            </div>
+          </div>
+          <span class="tag tag-purple">Details</span>
         </div>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">Email</span>
-          <div class="bp-detail-email">
-            <span class="bp-detail-value"><%= business.email %></span>
-            <% if (isVerified) { %>
-              <span class="bp-badge bp-badge-success">Verified</span>
-            <% } else { %>
-              <span class="bp-badge bp-badge-warning">Not Verified</span>
-            <% } %>
+        <div class="card-body">
+          <div class="row">
+            <span class="k">Name</span>
+            <span class="v"><%= b.name || '—' %></span>
+          </div>
+          <div class="row">
+            <span class="k">Email</span>
+            <span class="v wrap"><%= b.email || '—' %></span>
+          </div>
+          <div class="row">
+            <span class="k">Phone</span>
+            <span class="v wrap"><%= b.phone || '—' %></span>
+          </div>
+          <div class="row">
+            <span class="k">Location</span>
+            <span class="v wrap"><%= [b.city, b.country].filter(Boolean).join(', ') || '—' %></span>
+          </div>
+          <div class="row">
+            <span class="k">Address</span>
+            <span class="v wrap"><%= b.address || '—' %></span>
+          </div>
+          <div class="row">
+            <span class="k">Member Since</span>
+            <span class="v">
+              <%= b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-ZA', { year:'numeric', month:'short', day:'numeric' }) : '—' %>
+            </span>
           </div>
         </div>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">Business Number</span>
-          <span class="bp-detail-value"><%= business.businessNumber %></span>
+        <div class="card-foot">
+          <a href="/business/profile/edit-details" class="btn btn-outline">Edit Business Details</a>
+        </div>
+      </article>
+
+      <!-- Verification -->
+      <article class="card card-blue">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="ic ic-blue" aria-hidden="true">✅</div>
+            <div>
+              <h2>Verification Status</h2>
+              <p class="muted">Email + official number checks</p>
+            </div>
+          </div>
+
+          <% if (emailVerified && numStatus === 'verified') { %>
+            <span class="tag tag-green">Complete</span>
+          <% } else { %>
+            <span class="tag tag-amber">Action</span>
+          <% } %>
         </div>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">Phone</span>
-          <span class="bp-detail-value"><%= business.phone %></span>
+        <div class="card-body">
+          <div class="row">
+            <span class="k">Email Status</span>
+            <span class="v">
+              <% if (emailVerified) { %>
+                <span class="chip chip-green">Verified</span>
+              <% } else { %>
+                <span class="chip chip-amber">Pending</span>
+              <% } %>
+            </span>
+          </div>
+
+          <div class="row">
+            <span class="k">Official Number</span>
+            <span class="v wrap"><%= b.officialNumber || '—' %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Number Type</span>
+            <span class="v"><%= b.officialNumberType || 'OTHER' %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Verification</span>
+            <span class="v">
+              <% if (numStatus === 'verified') { %>
+                <span class="chip chip-green">Verified</span>
+              <% } else if (numStatus === 'rejected') { %>
+                <span class="chip chip-red">Rejected</span>
+              <% } else { %>
+                <span class="chip chip-amber">Pending Review</span>
+              <% } %>
+            </span>
+          </div>
         </div>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">Country</span>
-          <span class="bp-detail-value"><%= business.country %></span>
+        <div class="card-foot">
+          <% if (!emailVerified) { %>
+            <a href="/business/verify-pending" class="btn btn-primary">Verify Email Address</a>
+            <p class="note">Tip: Check your spam/junk folder too.</p>
+          <% } else if (numStatus === 'rejected') { %>
+            <div class="msg msg-red">
+              Your official number was rejected. Update details and wait for admin review.
+            </div>
+          <% } else if (numStatus !== 'verified') { %>
+            <div class="msg msg-amber">
+              Official number is pending admin review. This usually takes 1–2 business days.
+            </div>
+          <% } else { %>
+            <div class="msg msg-green">
+              All verifications are complete ✅
+            </div>
+          <% } %>
+        </div>
+      </article>
+
+      <!-- Bank -->
+      <article class="card card-green">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="ic ic-green" aria-hidden="true">🏦</div>
+            <div>
+              <h2>Bank Details</h2>
+              <p class="muted">Masked preview for security</p>
+            </div>
+          </div>
+          <span class="tag tag-green">Preview</span>
         </div>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">City</span>
-          <span class="bp-detail-value"><%= business.city %></span>
+        <!--card body-->
+        <div class="card-body">
+          <div class="row">
+            <span class="k">Payout Method</span>
+            <span class="v"><%= String(bank.payoutMethod || 'bank').toUpperCase() %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Bank Name</span>
+            <span class="v wrap"><%= bank.bankName || '—' %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Account Holder</span>
+            <span class="v wrap"><%= bank.accountHolderName || '—' %></span>
+          </div>
+
+          <!--row-->
+          <div class="row">
+            <span class="k">Account</span>
+            <span class="v"><%= bank.accountNumberMasked || '—' %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Branch Code</span>
+            <span class="v wrap"><%= bank.branchCode || '—' %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Account Type</span>
+            <span class="v wrap"><%= bank.accountType || '—' %></span>
+          </div>
+
+          <div class="row">
+            <span class="k">Currency</span>
+            <span class="v"><%= bank.currency || '—' %></span>
+          </div>
+
+          <div class="snapshot">
+            <div class="snap-title">Latest Bank Snapshot</div>
+            <div class="snap-grid">
+              <div class="snap-item">
+                <span class="k">SWIFT</span>
+                <span class="v wrap"><%= bank.swiftCode || '—' %></span>
+              </div>
+              <div class="snap-item">
+                <span class="k">IBAN</span>
+                <span class="v wrap">
+                  <% const iban = String(bank.iban || ''); %>
+                  <%= iban ? ('•••• ' + iban.slice(-6)) : '—' %>
+                </span>
+              </div>
+              <div class="snap-item">
+                <span class="k">Last Updated</span>
+                <span class="v wrap">
+                  <%= bank.updatedAt ? new Date(bank.updatedAt).toLocaleString('en-ZA') : '—' %>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">Address</span>
-          <span class="bp-detail-value"><%= business.address %></span>
+        <div class="card-foot">
+          <a href="/business/profile/edit-bank" class="btn btn-outline">Edit Bank Details</a>
+          <p class="note">Only masked values are displayed on this page.</p>
         </div>
+      </article>
 
-        <div class="bp-detail">
-          <span class="bp-detail-label">ID / Passport</span>
-          <span class="bp-detail-value"><%= business.idOrPassport %></span>
-        </div>
-      </div>
     </div>
 
-    <!-- Right Column: Verification & Actions -->
-    <div class="bp-card bp-verification">
-      <div class="bp-card-header">
-        <h2 class="bp-card-title">Email Verification</h2>
+    <!-- Privacy & Security -->
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Privacy &amp; Security</h2>
+        <p>Use the links below to manage your account safely.</p>
       </div>
 
-      <% if (isVerified) { %>
-        <div class="bp-verified">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <div>
-            <p class="bp-verified-title">Email Verified</p>
-            <p class="bp-verified-text">
-              All business dashboards are fully available to you.
-            </p>
+      <div class="sec-grid">
+        <a href="/business/profile/edit-details" class="sec-item sec-blue">
+          <div class="sec-ic">✏️</div>
+          <div class="sec-txt">
+            <h3>Edit Business Details</h3>
+            <p>Update name, email, address, and official number</p>
           </div>
-        </div>
-      <% } else { %>
-        <div class="bp-unverified">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.268-.833-3.036 0L4.33 16.5c-.77.833.192 2.5 1.732 2.5z" 
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <div>
-            <p class="bp-unverified-title">Verification Required</p>
-            <p class="bp-unverified-text">
-              Full dashboard access requires email verification.
-            </p>
+          <div class="sec-go">›</div>
+        </a>
+
+        <a href="/business/profile/edit-bank" class="sec-item sec-green">
+          <div class="sec-ic">💳</div>
+          <div class="sec-txt">
+            <h3>Bank Details</h3>
+            <p>Update bank, holder, and payout method</p>
           </div>
-        </div>
-
-        <div class="bp-verify-actions">
-          <a href="/business/verify/start" class="bp-btn bp-btn-primary">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M2 2h2l.8 4m1 6h8l2-8H4.8M5 10l-.6 1.8c-.2.6.1 1.2.7 1.2h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <circle cx="6.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-              <circle cx="12.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            Send Verification Email
-          </a>
-          <a href="/business/verify/pending" class="bp-btn bp-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Check Status / Resend
-          </a>
-        </div>
-
-        <p class="bp-hint">
-          Check your spam folder if you don't see the email. Use "Check Status" to request a new link.
-        </p>
-      <% } %>
-
-      <hr class="bp-divider">
-
-      <!-- Profile Actions -->
-      <div class="bp-actions">
-        <a href="/business/profile/edit" class="bp-btn bp-btn-action">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M11.5 2.5l2 2L5.5 13.5H3.5v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Edit Profile
+          <div class="sec-go">›</div>
         </a>
-        <a href="/business/change-password" class="bp-btn bp-btn-action">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M4 8h8m-4-4V2M8 6v4m6 2a6 6 0 11-12 0 6 6 0 0112 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Change Password
+
+        <a href="/business/change-password" class="sec-item sec-purple">
+          <div class="sec-ic">🔒</div>
+          <div class="sec-txt">
+            <h3>Change Password</h3>
+            <p>Update your password securely</p>
+          </div>
+          <div class="sec-go">›</div>
         </a>
-        <form id="bp-delete-form" action="/business/profile/delete" method="POST" class="bp-delete-form">
-          <button type="submit" class="bp-btn bp-btn-danger">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            Delete Account
-          </button>
-        </form>
+
+        <a href="/business/profile/edit" class="sec-item sec-black">
+          <div class="sec-ic">⚙️</div>
+          <div class="sec-txt">
+            <h3>Full Profile Editor</h3>
+            <p>Advanced editor for all profile fields</p>
+          </div>
+          <div class="sec-go">›</div>
+        </a>
       </div>
-    </div>
+
+      <!-- Danger zone -->
+      <div class="danger">
+        <div class="danger-head">
+          <h3>Danger Zone</h3>
+          <p>Permanent actions that cannot be undone.</p>
+        </div>
+
+        <div class="danger-actions">
+          <a href="/business/profile/edit" class="btn btn-danger">Manage Account Settings</a>
+          <p class="note">Deleting your business account is permanent and cannot be recovered.</p>
+        </div>
+      </div>
+    </section>
   </div>
-</div>
+</section>
 
-<style nonce="<%= nonce %>">
-  /* ===== COMPANY COLORS & VARIABLES ===== */
-  .bp {
-    --blue: #2563EB;
-    --purple: #7C3AED;
-    --green: #22C55E;
-    --black: #0F172A;
-    --radius: 10px;
-    --transition: all 0.2s ease;
+<style nonce="<%= NONCE %>">
+  .biz-profile-page{
+    --p:#7C3AED; --p2:#6D28D9;
+    --b:#2563EB; --g:#22C55E; --k:#0F172A;
+    --bg:#F8FAFC; --w:#ffffff;
+    --t:#0F172A; --mut:#64748B;
+    --br:#E2E8F0; --br2:#CBD5E1;
+    --rad:14px; --rad2:12px;
+    --sh:0 8px 18px rgba(15,23,42,.08);
+    background: var(--bg);
+    padding: 14px 0 24px;
   }
 
-  /* ===== MAIN CONTAINER ===== */
-  .bp {
-    max-width: 1000px;
+  .bp-wrap{
+    width: min(1100px, 100%);
     margin: 0 auto;
-    padding: 16px;
-    min-height: 100vh;
+    padding: 0 12px;
   }
 
-  /* ===== HEADER ===== */
-  .bp-title {
-    font-size: 20px;
-    font-weight: 700;
-    text-align: center;
-    margin: 0 0 8px 0;
-    color: var(--black);
+  /* Header */
+  .bp-header{
+    background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(37,99,235,.10));
+    border: 1px solid rgba(124,58,237,.22);
+    border-radius: var(--rad);
+    padding: 14px;
+    box-shadow: var(--sh);
+    overflow: hidden;
   }
 
-  .bp-subtitle {
-    text-align: center;
-    margin: 0 0 24px 0;
-    color: #64748B;
-    font-size: 14px;
+  .bp-header-top{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
   }
 
-  .dark-theme .bp-title {
-    color: #F1F5F9;
+  .bp-brand{
+    display:flex;
+    gap:12px;
+    align-items:center;
+    min-width:0;
   }
 
-  .dark-theme .bp-subtitle {
-    color: #94A3B8;
-  }
-
-  /* ===== CONTENT LAYOUT ===== */
-  .bp-content {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px;
-    margin-top: 20px;
-  }
-
-  @media (min-width: 768px) {
-    .bp-content {
-      grid-template-columns: 1.5fr 1fr;
-    }
-  }
-
-  /* ===== CARDS ===== */
-  .bp-card {
-    background: #FFFFFF;
-    border: 1px solid #D1FAE5;
-    border-radius: var(--radius);
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08);
-  }
-
-  .dark-theme .bp-card {
-    background: #132813;
-    border-color: #2D5A2D;
-    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
-  }
-
-  .bp-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid #D1FAE5;
-  }
-
-  .bp-card-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--black);
-    margin: 0;
-  }
-
-  .dark-theme .bp-card-title {
-    color: #F1F5F9;
-  }
-
-  /* ===== ROLE BADGE ===== */
-  .bp-role {
-    padding: 4px 10px;
+  .bp-swatches{
+    display:flex;
+    gap:6px;
+    padding:8px;
     border-radius: 12px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    background: rgba(255,255,255,.75);
+    border: 1px solid rgba(124,58,237,.18);
+    flex-shrink:0;
+  }
+  .sw{ width:10px; height:34px; border-radius:10px; display:block; }
+  .sw.blue{ background: var(--b); }
+  .sw.purple{ background: var(--p); }
+  .sw.green{ background: var(--g); }
+  .sw.black{ background: var(--k); }
+
+  .bp-title{ min-width:0; }
+  .bp-title h1{
+    margin:0;
+    font-size: 18px;
+    line-height:1.2;
+    color: var(--t);
+    letter-spacing:.2px;
+  }
+  .bp-title p{
+    margin:4px 0 0;
+    font-size: 12.5px;
+    color: var(--mut);
+    line-height:1.35;
   }
 
-  .bp-role-seller {
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--blue);
+  .bp-actions{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
   }
 
-  .bp-role-supplier {
-    background: rgba(34, 197, 94, 0.1);
-    color: var(--green);
+  .bp-pills{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top: 12px;
   }
 
-  .bp-role-buyer {
-    background: rgba(124, 58, 237, 0.1);
-    color: var(--purple);
-  }
-
-  /* ===== DETAILS GRID ===== */
-  .bp-details-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 16px;
-  }
-
-  @media (max-width: 480px) {
-    .bp-details-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .bp-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .bp-detail-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: #64748B;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .bp-detail-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--black);
-    word-break: break-word;
-  }
-
-  .dark-theme .bp-detail-value {
-    color: #F1F5F9;
-  }
-
-  .bp-detail-email {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  @media (min-width: 480px) {
-    .bp-detail-email {
-      flex-direction: row;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-  }
-
-  /* ===== BADGES ===== */
-  .bp-badge {
-    padding: 4px 10px;
+  /* Buttons + badges */
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding: 10px 12px;
     border-radius: 12px;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
+    text-decoration:none;
+    border:1px solid transparent;
+    cursor:pointer;
+    user-select:none;
+    min-height: 42px; /* touch */
   }
 
-  .bp-badge-success {
-    background: rgba(34, 197, 94, 0.1);
-    color: var(--green);
-    border: 1px solid rgba(34, 197, 94, 0.2);
+  .btn-primary{
+    background: var(--p);
+    color:#fff;
+    border-color: rgba(124,58,237,.55);
   }
+  .btn-primary:hover{ background: var(--p2); }
 
-  .bp-badge-warning {
-    background: rgba(245, 158, 11, 0.1);
-    color: #F59E0B;
-    border: 1px solid rgba(245, 158, 11, 0.2);
+  .btn-ghost{
+    background: rgba(255,255,255,.85);
+    border-color: rgba(124,58,237,.22);
+    color: var(--k);
   }
+  .btn-ghost:hover{ border-color: rgba(124,58,237,.45); }
 
-  /* ===== VERIFICATION STATES ===== */
-  .bp-verified,
-  .bp-unverified {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 20px;
+  .btn-outline{
+    background: rgba(255,255,255,.9);
+    border-color: rgba(124,58,237,.45);
+    color: var(--p);
   }
+  .btn-outline:hover{ background: rgba(124,58,237,.08); }
 
-  .bp-verified svg {
-    color: var(--green);
-    flex-shrink: 0;
+  .btn-danger{
+    background: rgba(220,38,38,.08);
+    border-color: rgba(220,38,38,.4);
+    color:#B91C1C;
   }
+  .btn-danger:hover{ background: rgba(220,38,38,.12); }
 
-  .bp-unverified svg {
-    color: #F59E0B;
-    flex-shrink: 0;
-  }
-
-  .bp-verified-title,
-  .bp-unverified-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: var(--black);
-  }
-
-  .bp-verified-text,
-  .bp-unverified-text {
-    font-size: 13px;
-    color: #64748B;
-    margin: 0;
-    line-height: 1.4;
-  }
-
-  .dark-theme .bp-verified-title,
-  .dark-theme .bp-unverified-title {
-    color: #F1F5F9;
-  }
-
-  .dark-theme .bp-verified-text,
-  .dark-theme .bp-unverified-text {
-    color: #94A3B8;
-  }
-
-  /* ===== VERIFICATION ACTIONS ===== */
-  .bp-verify-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  @media (min-width: 480px) {
-    .bp-verify-actions {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-
-  /* ===== HINT TEXT ===== */
-  .bp-hint {
-    font-size: 12px;
-    color: #64748B;
-    line-height: 1.4;
-    margin: 0;
-    font-style: italic;
-  }
-
-  .dark-theme .bp-hint {
-    color: #94A3B8;
-  }
-
-  /* ===== DIVIDER ===== */
-  .bp-divider {
-    border: none;
-    border-top: 1px dashed #D1FAE5;
-    margin: 20px 0;
-  }
-
-  .dark-theme .bp-divider {
-    border-color: #2D5A2D;
-  }
-
-  /* ===== ACTIONS ===== */
-  .bp-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  @media (min-width: 480px) {
-    .bp-actions {
-      flex-direction: row;
-      flex-wrap: wrap;
-    }
-  }
-
-  /* ===== BUTTONS ===== */
-  .bp-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding: 10px 12px;
+    border-radius: 999px;
     border: 1px solid transparent;
-    cursor: pointer;
-    transition: var(--transition);
-    white-space: nowrap;
-    flex: 1;
-  }
-
-  @media (min-width: 480px) {
-    .bp-btn {
-      flex: 0 1 auto;
-    }
-  }
-
-  .bp-btn-primary {
-    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
-    color: white;
-  }
-
-  .bp-btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-  }
-
-  .bp-btn-secondary {
-    background: #FFFFFF;
-    color: var(--blue);
-    border-color: #D1FAE5;
-  }
-
-  .bp-btn-secondary:hover {
-    background: #F8FAFC;
-    border-color: var(--blue);
-  }
-
-  .bp-btn-action {
-    background: rgba(34, 197, 94, 0.1);
-    color: var(--green);
-    border-color: rgba(34, 197, 94, 0.2);
-  }
-
-  .bp-btn-action:hover {
-    background: rgba(34, 197, 94, 0.2);
-    border-color: var(--green);
-  }
-
-  .bp-btn-danger {
-    background: rgba(239, 68, 68, 0.1);
-    color: #EF4444;
-    border-color: rgba(239, 68, 68, 0.2);
-  }
-
-  .bp-btn-danger:hover {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: #EF4444;
-  }
-
-  .dark-theme .bp-btn-secondary {
-    background: #1A341A;
-    color: #60A5FA;
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .bp-btn-secondary:hover {
-    background: #2D5A2D;
-    border-color: var(--blue);
-  }
-
-  .dark-theme .bp-btn-action {
-    background: rgba(34, 197, 94, 0.15);
-    color: #22C55E;
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .bp-btn-action:hover {
-    background: rgba(34, 197, 94, 0.25);
-    border-color: #22C55E;
-  }
-
-  /* ===== FLASH MESSAGES ===== */
-  .fm {
-    position: relative;
-    padding: 12px 16px;
-    border-radius: var(--radius);
     font-size: 13px;
-    font-weight: 500;
-    margin-bottom: 12px;
-    animation: slideIn 0.3s ease-out;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
+    font-weight: 800;
+    min-height: 42px;
+    white-space: nowrap;
+  }
+  .badge.ok{
+    background: rgba(34,197,94,.12);
+    border-color: rgba(34,197,94,.25);
+    color:#15803D;
+  }
+  .badge .dot{
+    width:10px;height:10px;border-radius:50%;
+    background:#22C55E;
+    box-shadow: 0 0 0 3px rgba(34,197,94,.18);
   }
 
-  .fm-success {
-    background: rgba(34, 197, 94, 0.1);
-    color: #065F46;
-    border: 1px solid rgba(34, 197, 94, 0.2);
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    padding: 7px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid transparent;
+    max-width: 100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .pill-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); color: var(--b); }
+  .pill-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); color: var(--p); }
+  .pill-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#15803D; }
+  .pill-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.28); color:#B45309; }
+  .pill-red{ background: rgba(220,38,38,.12); border-color: rgba(220,38,38,.24); color:#B91C1C; }
+
+  /* Grid */
+  .bp-grid{
+    display:grid;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  @media (min-width: 860px){
+    .bp-grid{ grid-template-columns: 1.05fr .95fr .95fr; }
   }
 
-  .fm-error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #991B1B;
-    border: 1px solid rgba(239, 68, 68, 0.2);
+  /* Cards */
+  .card{
+    background: rgba(255,255,255,.95);
+    border: 1px solid var(--br);
+    border-radius: var(--rad);
+    box-shadow: var(--sh);
+    overflow:hidden;
   }
 
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .card-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap: 10px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(226,232,240,.9);
+  }
+  .card-head-left{ display:flex; gap:10px; align-items:center; min-width:0; }
+
+  .card h2{
+    margin:0;
+    font-size: 14.5px;
+    line-height: 1.2;
+    color: var(--t);
+  }
+  .muted{ margin:4px 0 0; color: var(--mut); font-size: 12px; line-height:1.35; }
+
+  .ic{
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 18px;
+    flex-shrink:0;
+    border: 1px solid transparent;
+  }
+  .ic-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.25); }
+  .ic-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.25); }
+  .ic-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.25); }
+
+  .tag{
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+    white-space:nowrap;
+    border: 1px solid transparent;
+  }
+  .tag-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); color: var(--p); }
+  .tag-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#15803D; }
+  .tag-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.28); color:#B45309; }
+
+  .card-body{ padding: 12px; }
+  .row{
+    display:flex;
+    justify-content:space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed rgba(203,213,225,.7);
+  }
+  .row:last-child{ border-bottom:none; }
+
+  .k{
+    font-size: 12px;
+    color: var(--mut);
+    font-weight: 800;
+    min-width: 96px;
+  }
+  .v{
+    font-size: 12.5px;
+    color: var(--t);
+    font-weight: 900;
+    text-align:right;
+    max-width: 65%;
+  }
+  .wrap{
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
-  /* ===== COMPACT MOBILE DESIGN ===== */
-  @media (max-width: 360px) {
-    .bp {
-      padding: 12px;
-    }
-    
-    .bp-card {
-      padding: 16px;
-    }
-    
-    .bp-title {
-      font-size: 18px;
-    }
-    
-    .bp-btn {
-      padding: 10px;
-      font-size: 12px;
-    }
+  .card-foot{
+    padding: 12px;
+    border-top: 1px solid rgba(226,232,240,.9);
+    background: rgba(248,250,252,.85);
+    display:flex;
+    flex-direction:column;
+    gap: 8px;
   }
 
-  /* ===== DELETE FORM CONFIRMATION ===== */
-  .bp-delete-form {
-    width: 100%;
+  .note{
+    margin:0;
+    font-size: 12px;
+    color: var(--mut);
+    line-height:1.4;
   }
 
-  @media (min-width: 480px) {
-    .bp-delete-form {
-      width: auto;
-    }
+  .msg{
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    font-weight: 800;
+    border: 1px solid transparent;
+    line-height:1.35;
   }
+  .msg-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#15803D; }
+  .msg-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.28); color:#B45309; }
+  .msg-red{ background: rgba(220,38,38,.12); border-color: rgba(220,38,38,.24); color:#B91C1C; }
+
+  .chip{
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+    border: 1px solid transparent;
+    white-space:nowrap;
+  }
+  .chip-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#15803D; }
+  .chip-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.28); color:#B45309; }
+  .chip-red{ background: rgba(220,38,38,.12); border-color: rgba(220,38,38,.24); color:#B91C1C; }
+
+  /* Bank snapshot box */
+  .snapshot{
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(34,197,94,.08);
+    border: 1px solid rgba(34,197,94,.18);
+  }
+  .snap-title{
+    font-size: 12px;
+    font-weight: 1000;
+    color: #166534;
+    margin-bottom: 8px;
+    letter-spacing: .2px;
+  }
+  .snap-grid{
+    display:grid;
+    gap: 8px;
+  }
+  @media (min-width: 520px){
+    .snap-grid{ grid-template-columns: 1fr 1fr; }
+  }
+  .snap-item{
+    background: rgba(255,255,255,.75);
+    border: 1px solid rgba(34,197,94,.14);
+    border-radius: 12px;
+    padding: 8px;
+  }
+  .snap-item .k{ min-width: auto; display:block; margin-bottom: 4px; }
+  .snap-item .v{ max-width:100%; text-align:left; display:block; }
+
+  /* Privacy & Security */
+  .sec{
+    margin-top: 14px;
+    background: rgba(255,255,255,.9);
+    border: 1px solid rgba(124,58,237,.18);
+    border-radius: var(--rad);
+    padding: 12px;
+    box-shadow: var(--sh);
+  }
+  .sec-head h2{
+    margin:0;
+    font-size: 15px;
+    color: var(--t);
+  }
+  .sec-head p{
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    color: var(--mut);
+    line-height:1.35;
+  }
+
+  .sec-grid{
+    display:grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  @media (min-width: 700px){
+    .sec-grid{ grid-template-columns: 1fr 1fr; }
+  }
+
+  .sec-item{
+    display:flex;
+    gap: 10px;
+    align-items:center;
+    text-decoration:none;
+    border-radius: 14px;
+    padding: 12px;
+    border: 1px solid transparent;
+    background: #fff;
+  }
+  .sec-item:hover{ border-color: rgba(124,58,237,.35); }
+
+  .sec-ic{
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 18px;
+    flex-shrink:0;
+    border: 1px solid transparent;
+  }
+  .sec-txt{ min-width:0; flex:1; }
+  .sec-txt h3{
+    margin:0;
+    font-size: 13.5px;
+    color: var(--t);
+  }
+  .sec-txt p{
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--mut);
+    line-height: 1.35;
+  }
+  .sec-go{
+    font-size: 22px;
+    font-weight: 900;
+    color: rgba(124,58,237,.55);
+    flex-shrink:0;
+  }
+
+  .sec-blue{ border-color: rgba(37,99,235,.18); }
+  .sec-blue .sec-ic{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.18); }
+  .sec-green{ border-color: rgba(34,197,94,.18); }
+  .sec-green .sec-ic{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.18); }
+  .sec-purple{ border-color: rgba(124,58,237,.18); }
+  .sec-purple .sec-ic{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.18); }
+  .sec-black{ border-color: rgba(15,23,42,.18); }
+  .sec-black .sec-ic{ background: rgba(15,23,42,.10); border-color: rgba(15,23,42,.18); }
+
+  /* Danger */
+  .danger{
+    margin-top: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(220,38,38,.22);
+    background: rgba(220,38,38,.06);
+    padding: 12px;
+  }
+  .danger-head h3{
+    margin:0;
+    color:#B91C1C;
+    font-size: 14px;
+  }
+  .danger-head p{
+    margin: 6px 0 0;
+    color: #7f1d1d;
+    font-size: 12px;
+    line-height:1.35;
+  }
+  .danger-actions{
+    margin-top: 10px;
+    display:flex;
+    flex-direction:column;
+    gap: 10px;
+  }
+
+  /* Small phones (Hisense U50 Lite friendly) */
+  @media (max-width: 360px){
+    .bp-wrap{ padding: 0 10px; }
+    .bp-actions{ flex-direction:column; align-items:stretch; }
+    .btn, .badge{ width:100%; }
+    .v{ max-width: 100%; }
+    .row{ flex-direction:column; align-items:flex-start; }
+    .v{ text-align:left; }
+  }
+
+  /* Optional: If user has dark theme CSS already, we avoid forcing dark here */
 </style>
-
-<script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  // Delete account confirmation
-  const deleteForm = document.getElementById('bp-delete-form');
-  if (deleteForm) {
-    deleteForm.addEventListener('submit', function(e) {
-      e.preventDefault();
-      
-      // Custom confirmation modal
-      const confirmed = confirm(
-        '⚠️ Are you sure you want to delete your business account?\n\n' +
-        'This will permanently delete:\n' +
-        '• Your business profile\n' +
-        '• All products and listings\n' +
-        '• Business dashboard access\n\n' +
-        'This action cannot be undone.'
-      );
-      
-      if (confirmed) {
-        // Add loading state
-        const submitBtn = this.querySelector('.bp-btn-danger');
-        const originalHTML = submitBtn.innerHTML;
-        submitBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20"/>
-          </svg>
-          Deleting...
-        `;
-        submitBtn.disabled = true;
-        
-        // Submit after delay
-        setTimeout(() => {
-          this.submit();
-        }, 500);
-      }
-    });
-  }
-  
-  // Add visual feedback to buttons
-  const buttons = document.querySelectorAll('.bp-btn');
-  buttons.forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      if (!this.classList.contains('disabled')) {
-        // Add click animation
-        this.style.transform = 'scale(0.98)';
-        setTimeout(() => {
-          this.style.transform = '';
-        }, 150);
-      }
-    });
-  });
-  
-  // Add copy functionality to email
-  const emailElement = document.querySelector('.bp-detail-email .bp-detail-value');
-  if (emailElement) {
-    emailElement.style.cursor = 'pointer';
-    emailElement.title = 'Click to copy email';
-    
-    emailElement.addEventListener('click', function() {
-      const email = this.textContent.trim();
-      navigator.clipboard.writeText(email).then(() => {
-        const originalText = this.textContent;
-        this.textContent = 'Copied!';
-        this.style.color = 'var(--green)';
-        
-        setTimeout(() => {
-          this.textContent = originalText;
-          this.style.color = '';
-        }, 2000);
-      });
-    });
-  }
-  
-  // Add animations
-  const cards = document.querySelectorAll('.bp-card');
-  cards.forEach((card, index) => {
-    card.style.animationDelay = `${index * 0.1}s`;
-    card.style.opacity = '0';
-    card.style.transform = 'translateY(20px)';
-    card.style.animation = 'cardSlideIn 0.4s ease-out forwards';
-  });
-  
-  // Add animation CSS
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes cardSlideIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-  `;
-  document.head.appendChild(style);
-});
-</script>

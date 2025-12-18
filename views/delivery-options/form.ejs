@@ -1,78 +1,701 @@
-<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
-<main class="page <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : '' %>">
-  <header class="head">
-    <h1><%= mode === 'edit' ? '✏️ Edit Delivery Option' : '➕ New Delivery Option' %></h1>
-    <nav class="nav">
-      <a class="btn" href="/admin/delivery-options">↩ Back</a>
-    </nav>
-  </header>
-
-  <% if (success && success.length) { %>
-    <div class="flash ok"><%= success %></div>
-  <% } %>
-  <% if (error && error.length) { %>
-    <div class="flash err"><%= error %></div>
-  <% } %>
-
-  <form class="form" method="POST" action="<%= mode==='edit' ? '/admin/delivery-options/'+doc._id : '/admin/delivery-options' %>" novalidate>
-    <div class="group">
-      <label for="name">Name</label>
-      <input id="name" name="name" type="text" required placeholder="e.g. Standard, Express, Next-Day" value="<%= doc.name || '' %>">
+<!-- views/delivery-options/form.ejs -->
+<div class="delivery-options-form">
+  <!-- Header with Brand Colors -->
+  <div class="form-header">
+    <div class="breadcrumb-nav">
+      <a href="/admin/delivery-options" class="breadcrumb-link" style="color: #2563EB;">
+        <svg width="16" height="16" fill="none" stroke="#2563EB" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Back to Delivery Options
+      </a>
     </div>
-
-    <div class="grid">
-      <div class="group">
-        <label for="deliveryDays">Delivery Days</label>
-        <input id="deliveryDays" name="deliveryDays" type="number" min="0" inputmode="numeric" pattern="[0-9]*" value="<%= doc.deliveryDays || 0 %>">
-        <small class="muted">0 = same day, 1 = next day, etc.</small>
-      </div>
-
-      <div class="group">
-        <label for="price">Price</label>
-        <input id="price" name="price" type="text" inputmode="decimal" placeholder="e.g. 4.99" value="<%= (typeof doc.priceCents==='number') ? (doc.priceCents/100).toFixed(2) : '' %>">
-        <small class="muted">Currency in dollars (will be stored as cents).</small>
+    <div class="header-content">
+      <h1 class="form-title" style="color: #0F172A;">
+        <% if (mode === 'edit') { %>
+          <span class="form-icon" style="background: linear-gradient(135deg, #2563EB, #7C3AED);">✏️</span> Edit Delivery Option
+        <% } else { %>
+          <span class="form-icon" style="background: linear-gradient(135deg, #22C55E, #2563EB);">➕</span> Create New Delivery Option
+        <% } %>
+      </h1>
+      <div class="form-subtitle" style="color: #64748b;">
+        <% if (mode === 'edit') { %>
+          Update shipping details for <strong style="color: #0F172A;"><%= doc.name %></strong>
+        <% } else { %>
+          Add a new shipping method to your store
+        <% } %>
       </div>
     </div>
+  </div>
 
-    <div class="group check">
-      <input id="active" name="active" type="checkbox" <%= doc.active ? 'checked' : '' %>>
-      <label for="active">Active</label>
+  <!-- Form Card -->
+  <div class="form-card" style="border-color: #e2e8f0; border-left: 4px solid #2563EB;">
+    <form class="delivery-form" method="POST" action="<%= mode === 'edit' ? '/admin/delivery-options/'+doc._id : '/admin/delivery-options' %>" novalidate>
+      <!-- Name Field -->
+      <div class="form-field">
+        <label for="name" class="field-label" style="color: #0F172A;">
+          <svg width="16" height="16" fill="none" stroke="#2563EB" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          Option Name
+        </label>
+        <input 
+          id="name" 
+          name="name" 
+          type="text" 
+          required 
+          placeholder="e.g. Standard Shipping, Express Delivery, Next-Day" 
+          value="<%= doc.name || '' %>"
+          class="form-input"
+          style="border-color: #e2e8f0;"
+        >
+        <div class="field-hint" style="color: #64748b;">A clear, descriptive name for this shipping method</div>
+      </div>
+
+      <!-- Delivery Details Grid -->
+      <div class="form-grid">
+        <!-- Delivery Days -->
+        <div class="form-field">
+          <label for="deliveryDays" class="field-label" style="color: #0F172A;">
+            <svg width="16" height="16" fill="none" stroke="#7C3AED" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Delivery Days
+          </label>
+          <div class="input-with-badge">
+            <input 
+              id="deliveryDays" 
+              name="deliveryDays" 
+              type="number" 
+              min="0" 
+              step="1" 
+              inputmode="numeric" 
+              pattern="[0-9]*" 
+              value="<%= doc.deliveryDays || 0 %>"
+              class="form-input"
+              style="border-color: #e2e8f0;"
+            >
+            <span class="input-badge" style="background: rgba(124, 58, 237, 0.1); color: #7C3AED;">
+              <% const days = doc.deliveryDays || 0; %>
+              <% if (days === 0) { %>
+                Same Day
+              <% } else if (days === 1) { %>
+                Next Day
+              <% } else { %>
+                <%= days %> days
+              <% } %>
+            </span>
+          </div>
+          <div class="field-hint" style="color: #64748b;">Number of business days for delivery</div>
+        </div>
+
+        <!-- Price -->
+        <div class="form-field">
+          <label for="price" class="field-label" style="color: #0F172A;">
+            <svg width="16" height="16" fill="none" stroke="#22C55E" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Price
+          </label>
+          <div class="input-with-prefix">
+            <span class="input-prefix" style="color: #64748b;">$</span>
+            <input 
+              id="price" 
+              name="price" 
+              type="number" 
+              step="0.01" 
+              min="0" 
+              inputmode="decimal" 
+              placeholder="0.00" 
+              value="<%= (typeof doc.priceCents === 'number') ? (doc.priceCents/100).toFixed(2) : '' %>"
+              class="form-input"
+              style="border-color: #e2e8f0;"
+            >
+          </div>
+          <div class="field-hint" style="color: #64748b;">Price in USD (stored as cents internally)</div>
+        </div>
+      </div>
+
+      <!-- Active Status -->
+      <div class="form-field switch-field" style="background: rgba(34, 197, 94, 0.05); border-color: rgba(34, 197, 94, 0.2);">
+        <div class="switch-container">
+          <label class="switch">
+            <input 
+              id="active" 
+              name="active" 
+              type="checkbox" 
+              <%= doc.active ? 'checked' : '' %>
+              class="switch-input"
+            >
+            <span class="switch-slider"></span>
+          </label>
+          <div class="switch-label">
+            <div class="switch-title" style="color: #0F172A;">Active Status</div>
+            <div class="switch-description" style="color: #64748b;">
+              <%= doc.active ? 'This option is currently available to customers' : 'This option is hidden from customers' %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions" style="border-top-color: #e2e8f0;">
+        <button type="submit" class="btn btn-primary" style="background: #2563EB; border-color: #2563EB; color: white;">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <%= mode === 'edit' ? 'Save Changes' : 'Create Delivery Option' %>
+        </button>
+        <a href="/admin/delivery-options" class="btn btn-outline" style="border-color: #e2e8f0; color: #0F172A;">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Help Card -->
+  <div class="help-card" style="border-color: #e2e8f0; border-left: 4px solid #7C3AED;">
+    <div class="help-header">
+      <svg width="20" height="20" fill="none" stroke="#7C3AED" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <h3 style="color: #0F172A;">Quick Tips</h3>
     </div>
-
-    <div class="actions">
-      <button class="btn btn-primary" type="submit"><%= mode==='edit' ? 'Save Changes' : 'Create Option' %></button>
-      <a class="btn" href="/admin/delivery-options">Cancel</a>
+    <div class="help-content">
+      <ul class="help-list">
+        <li style="color: #475569;">
+          <strong style="color: #0F172A;">Delivery Days:</strong> Enter 0 for same-day delivery, 1 for next-day, etc.
+        </li>
+        <li style="color: #475569;">
+          <strong style="color: #0F172A;">Pricing:</strong> Consider your shipping costs and competitor pricing.
+        </li>
+        <li style="color: #475569;">
+          <strong style="color: #0F172A;">Active Status:</strong> Only active options will appear at checkout.
+        </li>
+        <li style="color: #475569;">
+          <strong style="color: #0F172A;">Name Clearly:</strong> Use names customers will understand easily.
+        </li>
+      </ul>
     </div>
-  </form>
-</main>
+  </div>
+</div>
 
-<style nonce="<%= NONCE %>">
-  .page{max-width:760px;margin:0 auto;padding:1rem}
-  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.75rem}
-  .btn{border:1px solid #d1d5db;border-radius:10px;padding:.5rem .8rem;background:#fff;cursor:pointer;text-decoration:none;color:#111827}
-  .btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
-  .flash{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px}
-  .flash.ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
-  .flash.err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
-  .form{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem;box-shadow:0 2px 6px rgba(0,0,0,.06)}
-  .group{margin-bottom:.8rem}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
-  label{display:block;font-weight:700;margin-bottom:.25rem}
-  input[type="text"],input[type="number"]{width:100%;padding:.6rem .65rem;border:1px solid #d1d5db;border-radius:10px}
-  .muted{color:#6b7280}
-  .check{display:flex;align-items:center;gap:.45rem}
-  .actions{display:flex;gap:.5rem;margin-top:.6rem}
+<style>
+  /* Main Container */
+  .delivery-options-form {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
 
-  .dark-theme .form{background:#1f2937;border-color:#374151;color:#f3f4f6}
-  .dark-theme .btn{background:#111827;color:#e5e7eb;border-color:#374151}
+  /* Header */
+  .form-header {
+    margin-bottom: 1.5rem;
+  }
 
-  @media (max-width:480px){
-    .grid{grid-template-columns:1fr}
-    .actions{flex-direction:column}
-    .btn{width:100%}
+  .breadcrumb-nav {
+    margin-bottom: 1rem;
+  }
+
+  .breadcrumb-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .breadcrumb-link:hover {
+    color: #1d4ed8 !important;
+  }
+
+  .breadcrumb-link svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .form-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .form-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    font-size: 1.25rem;
+    color: white;
+  }
+
+  /* Form Card */
+  .form-card {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  }
+
+  .delivery-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* Form Fields */
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .field-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .field-label svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    transition: all 0.2s;
+    background: white;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  .field-hint {
+    font-size: 0.75rem;
+  }
+
+  /* Form Grid */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+  }
+
+  /* Input with Badge */
+  .input-with-badge {
+    position: relative;
+  }
+
+  .input-badge {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  /* Input with Prefix */
+  .input-with-prefix {
+    position: relative;
+  }
+
+  .input-prefix {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  .input-with-prefix .form-input {
+    padding-left: 2.5rem;
+  }
+
+  /* Switch Field */
+  .switch-field {
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .switch-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .switch-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e1;
+    border-radius: 34px;
+    transition: .4s;
+  }
+
+  .switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    border-radius: 50%;
+    transition: .4s;
+  }
+
+  .switch-input:checked + .switch-slider {
+    background-color: #22C55E !important;
+  }
+
+  .switch-input:checked + .switch-slider:before {
+    transform: translateX(24px);
+  }
+
+  .switch-label {
+    flex: 1;
+  }
+
+  .switch-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .switch-description {
+    font-size: 0.75rem;
+  }
+
+  /* Form Actions */
+  .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1.5rem;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    min-height: 44px;
+    border: 1.5px solid transparent;
+  }
+
+  .btn-primary:hover {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  }
+
+  .btn-outline:hover {
+    border-color: #cbd5e1 !important;
+    background: rgba(15, 23, 42, 0.05) !important;
+    transform: translateY(-1px);
+  }
+
+  /* Help Card */
+  .help-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  }
+
+  .help-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .help-header svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .help-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .help-content {
+    font-size: 0.875rem;
+  }
+
+  .help-list {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .help-list li {
+    line-height: 1.5;
+  }
+
+  /* Mobile Responsive */
+  @media (max-width: 768px) {
+    .delivery-options-form {
+      padding: 0.75rem;
+    }
+    
+    .form-card {
+      padding: 1.5rem;
+    }
+    
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+      flex-direction: column;
+    }
+    
+    .btn {
+      width: 100%;
+    }
+    
+    .form-title {
+      font-size: 1.5rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .form-card {
+      padding: 1.25rem;
+    }
+    
+    .switch-container {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    
+    .form-actions {
+      gap: 0.5rem;
+    }
+    
+    .help-card {
+      padding: 1.25rem;
+    }
+    
+    .breadcrumb-link {
+      font-size: 0.8125rem;
+    }
+  }
+
+  /* Dark Theme Support */
+  .dark-theme .form-card,
+  .dark-theme .help-card {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .dark-theme .form-input {
+    background: #111827;
+    border-color: #374151 !important;
+    color: #e5e7eb;
+  }
+
+  .dark-theme .form-input:focus {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+
+  .dark-theme .field-label {
+    color: #e5e7eb !important;
+  }
+
+  .dark-theme .field-hint {
+    color: #9ca3af !important;
+  }
+
+  .dark-theme .switch-field {
+    background: rgba(34, 197, 94, 0.1) !important;
+    border-color: rgba(34, 197, 94, 0.2) !important;
+  }
+
+  .dark-theme .btn-outline {
+    background: transparent !important;
+    color: #e5e7eb !important;
+    border-color: #4b5563 !important;
+  }
+
+  .dark-theme .btn-outline:hover {
+    background: #374151 !important;
+    border-color: #4b5563 !important;
+  }
+
+  .dark-theme .input-badge {
+    background: rgba(124, 58, 237, 0.2) !important;
+    color: #a78bfa !important;
+  }
+
+  .dark-theme .input-prefix {
+    color: #9ca3af !important;
+  }
+
+  .dark-theme .form-title {
+    color: #f3f4f6 !important;
+  }
+
+  .dark-theme .form-subtitle {
+    color: #d1d5db !important;
+  }
+
+  .dark-theme .form-subtitle strong {
+    color: #f3f4f6 !important;
+  }
+
+  .dark-theme .help-list li {
+    color: #d1d5db !important;
+  }
+
+  .dark-theme .help-list strong {
+    color: #f3f4f6 !important;
   }
 </style>
 
-<script nonce="<%= NONCE %>">
-  // (Optional) light client validation or helpers could go here
+<script>
+  // Auto-calculate delivery day description
+  document.getElementById('deliveryDays')?.addEventListener('input', function(e) {
+    const days = parseInt(e.target.value) || 0;
+    const badge = document.querySelector('.input-badge');
+    
+    if (badge) {
+      if (days === 0) {
+        badge.textContent = 'Same Day';
+      } else if (days === 1) {
+        badge.textContent = 'Next Day';
+      } else {
+        badge.textContent = days + ' days';
+      }
+    }
+  });
+
+  // Format price input
+  document.getElementById('price')?.addEventListener('blur', function(e) {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value >= 0) {
+      e.target.value = value.toFixed(2);
+    }
+  });
+
+  // Update switch description
+  document.getElementById('active')?.addEventListener('change', function(e) {
+    const description = document.querySelector('.switch-description');
+    if (description) {
+      description.textContent = e.target.checked 
+        ? 'This option is currently available to customers'
+        : 'This option is hidden from customers';
+    }
+  });
+
+  // Form validation
+  document.querySelector('.delivery-form')?.addEventListener('submit', function(e) {
+    const nameInput = document.getElementById('name');
+    const priceInput = document.getElementById('price');
+    let isValid = true;
+
+    // Reset styles
+    [nameInput, priceInput].forEach(input => {
+      input.style.borderColor = '#e2e8f0';
+    });
+
+    // Validate name
+    if (!nameInput.value.trim()) {
+      nameInput.style.borderColor = '#ef4444';
+      isValid = false;
+    }
+
+    // Validate price (optional but if provided, must be valid)
+    if (priceInput.value && isNaN(parseFloat(priceInput.value))) {
+      priceInput.style.borderColor = '#ef4444';
+      isValid = false;
+    }
+
+    if (!isValid) {
+      e.preventDefault();
+      alert('Please check the form for errors.');
+    }
+  });
+
+  // Add brand color theme to all buttons on hover
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('mouseenter', function() {
+      if (this.classList.contains('btn-outline')) {
+        this.style.borderColor = '#2563EB';
+        this.style.color = '#2563EB';
+      }
+    });
+    
+    btn.addEventListener('mouseleave', function() {
+      if (this.classList.contains('btn-outline')) {
+        this.style.borderColor = '#e2e8f0';
+        this.style.color = '#0F172A';
+      }
+    });
+  });
 </script>

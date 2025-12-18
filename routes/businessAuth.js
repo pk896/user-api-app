@@ -11,6 +11,9 @@ const requireBusiness = require('../middleware/requireBusiness');
 const redirectIfLoggedIn = require('../middleware/redirectIfLoggedIn');
 const BusinessResetToken = require('../models/BusinessResetToken');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
+const { sendMail } = require('../utils/mailer');
+const mongoose = require('mongoose');
+
 
 let Order = null;
 try {
@@ -21,69 +24,124 @@ try {
 
 const router = express.Router();
 
-// -----------------------------
-// ✅ Optional: SendGrid setup
-// -----------------------------
-let sgMail = null;
-if (process.env.SENDGRID_API_KEY) {
-  sgMail = require('@sendgrid/mail');
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
-
 // Normalize emails
 const normalizeEmail = (email) => (email || '').trim().toLowerCase();
+
 
 const LOW_STOCK_THRESHOLD = 10;
 
 // -------------------------------------------------------
-// Helper: send business verification email
+// Helper: resolve base URL (Render-safe)
+// -------------------------------------------------------
+function resolveBaseUrl(req) {
+  const env = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (env) return env;
+
+  // fallback to current request host
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+  return `${proto}://${req.get('host')}`;
+}
+
+// -------------------------------------------------------
+// Helper: send business verification email (USES sendMail)
 // -------------------------------------------------------
 async function sendBusinessVerificationEmail(business, token, req) {
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  const verifyUrl = `${baseUrl}/business/verify-email/${token}`;
+  const baseUrl = resolveBaseUrl(req);
+  const verifyUrl = `${baseUrl}/business/verify-email/${encodeURIComponent(token)}`;
 
   const to = business.email;
-  const subject = 'Verify your business email';
-  const plainText = [
+  const subject = '✅ Verify your business email - Phakisi Global';
+
+  const text = [
     `Hi ${business.name || 'there'},`,
     '',
-    'Thanks for registering your business account.',
-    'Please verify your email by clicking the link below:',
+    'Please verify your business email to activate your dashboard:',
     verifyUrl,
     '',
+    'This link expires in 24 hours.',
     'If you did not create this account, you can ignore this email.',
   ].join('\n');
 
   const html = `
-    <p>Hi <strong>${business.name || 'there'}</strong>,</p>
-    <p>Thanks for registering your business account.</p>
-    <p>Please verify your email by clicking the button below:</p>
-    <p>
-      <a href="${verifyUrl}" 
-         style="display:inline-block;padding:10px 18px;border-radius:6px;
-                background:#2563eb;color:#ffffff;text-decoration:none;font-weight:bold;">
-        Verify my email
-      </a>
-    </p>
-    <p>Or use this link:</p>
-    <p><a href="${verifyUrl}">${verifyUrl}</a></p>
-    <p>If you did not create this account, you can safely ignore this email.</p>
+    <div style="font-family:Arial,sans-serif;color:#0F172A;line-height:1.55">
+      <h2 style="margin:0 0 8px;color:#7C3AED">Verify your email</h2>
+      <p>Hi <strong>${business.name || 'there'}</strong>,</p>
+      <p>Please verify your business email to activate your dashboard.</p>
+      <p style="margin:16px 0;">
+        <a href="${verifyUrl}"
+           style="display:inline-block;padding:12px 16px;background:#2563EB;color:#ffffff;
+                  text-decoration:none;border-radius:10px;font-weight:800;font-size:14px;">
+          Verify my email →
+        </a>
+      </p>
+      <p style="font-size:12px;color:#64748B">
+        Or copy and paste this link:<br/>
+        <span style="word-break:break-all">${verifyUrl}</span>
+      </p>
+      <p style="font-size:12px;color:#64748B">This link expires in 24 hours.</p>
+    </div>
   `;
 
-  if (sgMail) {
-    await sgMail.send({
-      to,
-      from:
-        process.env.SUPPORT_INBOX ||
-        process.env.SENDGRID_FROM ||
-        'no-reply@phakisi-global.test',
-      subject,
-      text: plainText,
-      html,
-    });
-  } else {
-    console.log('📧 [DEV] Business verification URL:', verifyUrl);
-  }
+  return sendMail({
+    to,
+    subject,
+    text,
+    html,
+    replyTo: process.env.SUPPORT_INBOX || undefined,
+  });
+}
+
+// -------------------------------------------------------
+// Helper: send business reset password email (WORKING)
+// -------------------------------------------------------
+async function sendBusinessResetEmail(business, token, req) {
+  const baseUrl = resolveBaseUrl(req);
+  const resetUrl = `${baseUrl}/business/password/reset/${encodeURIComponent(token)}`;
+
+  const to = business.email;
+  const subject = 'Reset your business password';
+
+  const text = [
+    `Hi ${business.name || 'there'},`,
+    '',
+    'We received a request to reset the password for your business account.',
+    'If you made this request, open the link below to set a new password:',
+    resetUrl,
+    '',
+    'This link will expire in 1 hour.',
+    'If you did not request a password reset, you can safely ignore this email.',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#0F172A;line-height:1.55">
+      <h2 style="margin:0 0 8px;color:#7C3AED">Reset your business password</h2>
+      <p>Hi <strong>${business.name || 'there'}</strong>,</p>
+      <p>We received a request to reset the password for your business account.</p>
+      <p style="margin:16px 0;">
+        <a href="${resetUrl}"
+           style="display:inline-block;padding:12px 16px;background:#2563EB;color:#ffffff;
+                  text-decoration:none;border-radius:10px;font-weight:800;font-size:14px;">
+          Reset my password →
+        </a>
+      </p>
+      <p style="font-size:12px;color:#64748B">
+        Or copy and paste this link into your browser:<br/>
+        <span style="word-break:break-all">${resetUrl}</span>
+      </p>
+      <p style="font-size:12px;color:#64748B">
+        This link will expire in 1 hour. If you did not request this, you can ignore this email.
+      </p>
+    </div>
+  `;
+
+  // ✅ ALWAYS send via your central mailer
+  return sendMail({
+    to,
+    subject,
+    text,
+    html,
+    replyTo: process.env.SUPPORT_INBOX || undefined,
+  });
 }
 
 // Mask email like p*****i@o*****.com
@@ -100,71 +158,6 @@ function maskEmail(email = '') {
     '*'.repeat(Math.max(1, domName.length - 2)) +
     domName[domName.length - 1];
   return `${maskedName}@${maskedDomain}.${domExt || ''}`;
-}
-
-// -------------------------------------------------------
-// Helper: send business reset password email
-// -------------------------------------------------------
-async function sendBusinessResetEmail(business, token, req) {
-  const baseUrl = `${req.protocol}://${req.get('host')}`; // uses current host
-  const resetUrl = `${baseUrl}/business/password/reset/${encodeURIComponent(token)}`;
-
-  const to = business.email;
-  const subject = 'Reset your business password';
-  const plainText = [
-    `Hi ${business.name || 'there'},`,
-    '',
-    'We received a request to reset the password for your business account.',
-    'If you made this request, open the link below to set a new password:',
-    resetUrl,
-    '',
-    'This link will expire in 1 hour.',
-    'If you did not request a password reset, you can safely ignore this email.',
-  ].join('\n');
-
-  const html = `
-    <p>Hi <strong>${business.name || 'there'}</strong>,</p>
-    <p>We received a request to reset the password for your business account.</p>
-    <p>If you made this request, click the button below to set a new password:</p>
-    <p style="margin:16px 0;">
-      <a href="${resetUrl}"
-         style="display:inline-block;padding:10px 16px;background:#2563eb;color:#ffffff;
-                text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
-        Reset my password
-      </a>
-    </p>
-    <p style="font-size:12px;color:#6b7280;">
-      Or copy and paste this link into your browser:<br>
-      <span style="word-break:break-all;">${resetUrl}</span>
-    </p>
-    <p style="font-size:12px;color:#6b7280;">
-      This link will expire in 1 hour. If you did not request this, you can ignore this email.
-    </p>
-  `;
-
-  if (sgMail) {
-    await sgMail.send({
-      to,
-      from:
-        process.env.SUPPORT_INBOX ||
-        process.env.SENDGRID_FROM ||
-        'no-reply@phakisi-global.test',
-      subject,
-      text: plainText,
-      html,
-    });
-  } else {
-    console.log('📧 [DEV] Business reset URL:', resetUrl);
-  }
-}
-
-// 🆕 Add this helper function near the top
-function _moneyToNumber(m) {
-  if (!m) return 0;
-  if (typeof m === 'number') return m;
-  if (typeof m === 'string') return Number(m) || 0;
-  if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
-  return 0;
 }
 
 // -------------------------------------------------------
@@ -364,7 +357,13 @@ router.get('/verify-pending', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.post('/verify/resend', requireBusiness, async (req, res) => {
   try {
-    const business = await Business.findById(req.session.business._id);
+    const bizId = req.session?.business?._id;
+    if (!bizId) {
+      req.flash('error', 'Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const business = await Business.findById(bizId);
     if (!business) {
       req.flash('error', 'Business not found. Please log in again.');
       return res.redirect('/business/login');
@@ -375,33 +374,36 @@ router.post('/verify/resend', requireBusiness, async (req, res) => {
       return res.redirect('/business/dashboard');
     }
 
+    // ✅ 60s cooldown (prevents spam + “refuse” confusion)
+    const lastSent = business.verificationEmailSentAt ? new Date(business.verificationEmailSentAt).getTime() : 0;
+    const now = Date.now();
+    const cooldownMs = 60 * 1000;
+
+    if (lastSent && now - lastSent < cooldownMs) {
+      const secs = Math.ceil((cooldownMs - (now - lastSent)) / 1000);
+      req.flash('warning', `Please wait ${secs}s before resending another verification email.`);
+      return res.redirect('/business/verify-pending');
+    }
+
     const token = crypto.randomBytes(32).toString('hex');
     business.emailVerificationToken = token;
-    business.emailVerificationExpires = new Date(
-      Date.now() + 24 * 60 * 60 * 1000,
-    );
+    business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     business.verificationEmailSentAt = new Date();
     await business.save();
 
     try {
       await sendBusinessVerificationEmail(business, token, req);
-      req.flash(
-        'success',
-        `A new verification link was sent to ${business.email}.`,
-      );
+      req.flash('success', `A new verification link was sent to ${business.email}.`);
     } catch (mailErr) {
-      console.error('❌ Resend verification email failed:', mailErr);
-      req.flash(
-        'error',
-        'Could not send verification email. Please try again later.',
-      );
+      console.error('❌ Resend verification email failed:', mailErr?.response?.body || mailErr?.message || mailErr);
+      req.flash('error', 'Could not send verification email. Please try again later.');
     }
 
-    res.redirect('/business/verify-pending');
+    return res.redirect('/business/verify-pending');
   } catch (err) {
     console.error('❌ verify/resend error:', err);
     req.flash('error', 'Failed to resend verification email.');
-    res.redirect('/business/verify-pending');
+    return res.redirect('/business/verify-pending');
   }
 });
 
@@ -460,6 +462,118 @@ router.get('/verify-email/:token', async (req, res) => {
 });
 
 /* ----------------------------------------------------------
+ * ✉️ GET: Change email page
+ * -------------------------------------------------------- */
+router.get('/change-email', requireBusiness, async (req, res) => {
+  try {
+    const business = await Business.findById(req.session.business._id).lean();
+    if (!business) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    // If already verified, you can decide what you want.
+    // For now: still allow change email (useful if they want to switch).
+    return res.render('business-change-email', {
+      title: 'Change Email',
+      active: 'business-change-email',
+      business,
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      info: req.flash('info'),
+      warning: req.flash('warning'),
+    });
+  } catch (err) {
+    console.error('❌ change-email GET error:', err);
+    req.flash('error', 'Could not open change email page.');
+    return res.redirect('/business/verify-pending');
+  }
+});
+
+/* ----------------------------------------------------------
+ * ✉️ POST: Change email + resend verification
+ * -------------------------------------------------------- */
+router.post(
+  '/change-email',
+  requireBusiness,
+  [
+    body('newEmail').isEmail().withMessage('Please enter a valid email address.'),
+    body('password').notEmpty().withMessage('Password is required.'),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      req.flash('error', errors.array()[0].msg);
+      return res.redirect('/business/change-email');
+    }
+
+    try {
+      const bizId = req.session.business?._id;
+      const newEmail = String(req.body.newEmail || '').trim().toLowerCase();
+      const password = String(req.body.password || '');
+
+      const business = await Business.findById(bizId);
+      if (!business) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      // ✅ Check password
+      const ok = await bcrypt.compare(password, business.password);
+      if (!ok) {
+        req.flash('error', 'Incorrect password.');
+        return res.redirect('/business/change-email');
+      }
+
+      // ✅ No change?
+      const currentEmail = String(business.email || '').trim().toLowerCase();
+      if (newEmail === currentEmail) {
+        req.flash('info', 'That is already your current email.');
+        return res.redirect('/business/change-email');
+      }
+
+      // ✅ Make sure email isn't taken by another business
+      const exists = await Business.findOne({ email: newEmail, _id: { $ne: business._id } }).lean();
+      if (exists) {
+        req.flash('error', 'That email is already used by another business account.');
+        return res.redirect('/business/change-email');
+      }
+
+      // ✅ Update email + force re-verify
+      const token = crypto.randomBytes(32).toString('hex');
+      business.email = newEmail;
+      business.isVerified = false;
+      business.emailVerificationToken = token;
+      business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      business.verificationEmailSentAt = new Date();
+      await business.save();
+
+      // ✅ keep session in sync
+      if (!req.session.business) req.session.business = {};
+      req.session.business.email = business.email;
+      req.session.business.isVerified = false;
+
+      // ✅ send verification to the NEW email
+      try {
+        await sendBusinessVerificationEmail(business, token, req);
+        req.flash('success', `Verification email sent to ${business.email}. Please check your inbox.`);
+      } catch (mailErr) {
+        console.error('❌ Change-email send failed:', mailErr);
+        req.flash('error', 'Email updated, but we could not send the verification email. Try Resend.');
+      }
+
+      return res.redirect('/business/verify-pending');
+    } catch (err) {
+      console.error('❌ change-email POST error:', err);
+      req.flash('error', 'Failed to change email. Please try again.');
+      return res.redirect('/business/change-email');
+    }
+  },
+);
+
+/* ----------------------------------------------------------
  * 📨 POST: Business Signup  (with email verification)
  * -------------------------------------------------------- */
 router.post(
@@ -474,16 +588,33 @@ router.post(
     body('role')
       .isIn(['seller', 'supplier', 'buyer'])
       .withMessage('Role must be seller, supplier, or buyer'),
-    body('businessNumber')
-      .notEmpty()
-      .withMessage('Business number is required'),
+
+    // ✅ Business registration details
+    body('officialNumber').notEmpty().withMessage('Business number is required'),
+    body('officialNumberType')
+      .optional({ checkFalsy: true })
+      .isIn(['CIPC_REG', 'VAT', 'TIN', 'OTHER'])
+      .withMessage('Business number type is invalid'),
+
+    // Business contact/location
     body('phone').notEmpty().withMessage('Phone number is required'),
     body('country').notEmpty().withMessage('Country is required'),
     body('city').notEmpty().withMessage('City is required'),
     body('address').notEmpty().withMessage('Address is required'),
-    body('idOrPassport')
+
+    // ✅ Authorized Representative (from EJS and schema)
+    body('representative.fullName')
       .notEmpty()
-      .withMessage('ID or Passport is required'),
+      .withMessage('Authorized representative full name is required'),
+    body('representative.phone')
+      .notEmpty()
+      .withMessage('Authorized representative cellphone number is required'),
+    body('representative.idNumber')
+      .notEmpty()
+      .withMessage('Authorized representative ID number is required'),
+
+    // Terms agreement
+    body('terms').equals('on').withMessage('You must accept the terms and conditions'),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -495,6 +626,9 @@ router.post(
         errors: errors.array(),
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        // Pass form data back to maintain form state
+        ...req.body,
+        representative: req.body.representative || {},
       });
     }
 
@@ -504,13 +638,18 @@ router.post(
         email,
         password,
         role,
-        businessNumber,
+        officialNumber,
+        officialNumberType,
         phone,
         country,
         city,
         address,
-        idOrPassport,
+        representative = {},
       } = req.body;
+
+      const repFullName = representative.fullName;
+      const repPhone = representative.phone;
+      const repIdNumber = representative.idNumber;
 
       const emailNorm = normalizeEmail(email);
       const existing = await Business.findOne({ email: emailNorm });
@@ -522,65 +661,101 @@ router.post(
           errors: [{ msg: 'Email already in use', param: 'email' }],
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
+          ...req.body,
+          representative: req.body.representative || {},
         });
+      }
+
+      const hashed = await bcrypt.hash(password, 12);
+
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Generate internal business ID - IMPORTANT: This matches schema requirement
+      const internalBusinessId = `BIZ${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+      const business = await Business.create({
+        name,
+        email: emailNorm,
+        password: hashed,
+        role,
+        
+        // ✅ Schema fields - internal ID and official number
+        internalBusinessId,
+        officialNumber,
+        officialNumberType: officialNumberType || 'OTHER',
+        
+        // ✅ Schema fields - contact and location
+        phone,
+        country,
+        city,
+        address,
+        
+        // ✅ Schema fields - Authorized representative (now includes idNumber)
+        representative: {
+          fullName: repFullName,
+          phone: repPhone,
+          idNumber: repIdNumber,
+        },
+        
+        // ✅ Email verification (your existing flow) - PRESERVED
+        isVerified: false,
+        emailVerificationToken: token,
+        emailVerificationExpires: expiry,
+        verificationEmailSentAt: new Date(),
+        
+        // ✅ Verification status (from schema) - PRESERVED with default values
+        verification: {
+          status: 'pending',
+          method: 'manual',
+          provider: 'manual',
+        },
+
+        // ✅ Optional fields with defaults - PRESERVED
+        welcomeEmailSentAt: null,
+        officialNumberVerifiedEmailSentAt: null,
+        officialNumberRejectedEmailSentAt: null,
+      });
+
+      // ✅ Session setup - PRESERVED
+      req.session.business = {
+        _id: business._id,
+        name: business.name,
+        email: business.email,
+        role: business.role,
+        isVerified: business.isVerified,
+      };
+
+      // ✅ Email sending - PRESERVED
+      try {
+        await sendBusinessVerificationEmail(business, token, req);
+        req.flash(
+          'success',
+          `🎉 Welcome ${business.name}! Check your inbox at ${business.email} to verify your email.`,
+        );
+      } catch (mailErr) {
+        console.error('❌ Failed to send business verification email:', mailErr);
+        req.flash(
+          'error',
+          'Your account was created but we could not send a verification email. Please try resending from the verification page.',
+        );
+      }
+
+      return res.redirect('/business/verify-pending');
+    } catch (err) {
+      console.error('❌ Signup error:', err);
+      req.flash('error', 'Server error during signup. Please try again.');
+      return res.status(500).render('business-signup', {
+        title: 'Business Sign Up',
+        errors: [{ msg: 'Server error' }],
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+        ...req.body,
+        representative: req.body.representative || {},
+      });
     }
-
-    const hashed = await bcrypt.hash(password, 12);
-
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-    const business = await Business.create({
-      name,
-      email: emailNorm,
-      password: hashed,
-      role,
-      businessNumber,
-      phone,
-      country,
-      city,
-      address,
-      idOrPassport,
-      isVerified: false,
-      emailVerificationToken: token,
-      emailVerificationExpires: expiry,
-      verificationEmailSentAt: new Date(),
-    });
-
-    req.session.business = {
-      _id: business._id,
-      name: business.name,
-      email: business.email,
-      role: business.role,
-      isVerified: business.isVerified,
-    };
-
-    try {
-      await sendBusinessVerificationEmail(business, token, req);
-      req.flash(
-        'success',
-        `🎉 Welcome ${business.name}! Check your inbox at ${business.email} to verify your email.`,
-      );
-    } catch (mailErr) {
-      console.error('❌ Failed to send business verification email:', mailErr);
-      req.flash(
-        'error',
-        'Your account was created but we could not send a verification email. Please try resending from the verification page.',
-      );
-    }
-
-    return res.redirect('/business/verify-pending');
-  } catch (err) {
-    console.error('❌ Signup error:', err);
-    req.flash('error', 'Server error during signup. Please try again.');
-    return res.status(500).render('business-signup', {
-      title: 'Business Sign Up',
-      errors: [{ msg: 'Server error' }],
-      themeCss: res.locals.themeCss,
-      nonce: res.locals.nonce,
-    });
-  }
-});
+  },
+);
 
 /* ----------------------------------------------------------
  * 🔐 GET: Business Login
@@ -704,6 +879,90 @@ router.post(
     }
   },
 );
+
+/* ----------------------------------------------------------
+ * 🏦 Bank Details (GET)
+ * -------------------------------------------------------- */
+router.get('/profile/edit-bank', requireBusiness, async (req, res) => {
+  try {
+    const businessId = req.session?.business?._id;
+
+    const business = await Business.findById(businessId)
+      .select('name email role bankDetails') // only what this page needs
+      .lean();
+
+    if (!business) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    return res.render('business-profile-edit-bank', {
+      title: 'Update Bank Details',
+      business,
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ GET /profile/edit-bank error:', err);
+    req.flash('error', 'Failed to load bank details page.');
+    return res.redirect('/business/profile');
+  }
+});
+
+/* ----------------------------------------------------------
+ * 🏦 Bank Details (POST)  action="/business/profile/update-bank"
+ * -------------------------------------------------------- */
+// POST /business/profile/update-bank
+router.post('/profile/update-bank', requireBusiness, async (req, res, next) => {
+  try {
+    const bizId = req.session?.business?._id || req.session?.business?.id;
+    if (!bizId || !mongoose.isValidObjectId(bizId)) {
+      req.flash('error', 'Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    // Accept BOTH: nested (bankDetails[...]) AND dotted (bankDetails.xxx)
+    const bd = req.body.bankDetails || {};
+    const pick = (key) =>
+      String(
+        bd?.[key] ??
+        req.body?.[`bankDetails.${key}`] ??
+        ''
+      ).trim();
+
+    const update = {
+      'bankDetails.accountHolderName': pick('accountHolderName'),
+      'bankDetails.bankName': pick('bankName'),
+      'bankDetails.accountNumber': pick('accountNumber').replace(/\s+/g, ''),
+      'bankDetails.branchCode': pick('branchCode'),
+      'bankDetails.accountType': pick('accountType'),
+      'bankDetails.currency': pick('currency'),
+      'bankDetails.swiftCode': pick('swiftCode'),
+      'bankDetails.iban': pick('iban'),
+      'bankDetails.payoutMethod': pick('payoutMethod') || 'bank',
+      'bankDetails.updatedAt': new Date(),
+    };
+
+    // Optional: require bank payout fields when payoutMethod=bank
+    if (update['bankDetails.payoutMethod'] === 'bank') {
+      if (!update['bankDetails.accountHolderName'] || !update['bankDetails.accountNumber']) {
+        req.flash('error', 'Please enter Account Holder Name and Account Number.');
+        return res.redirect('/business/profile/edit-bank');
+      }
+    }
+
+    await Business.findByIdAndUpdate(
+      bizId,
+      { $set: update },
+      { new: true }
+    );
+
+    req.flash('success', '✅ Bank details updated.');
+    return res.redirect('/business/profile');
+  } catch (err) {
+    return next(err);
+  }
+});
 
 /* =======================================================
  * BUSINESS PASSWORD – FORGOT / RESET
@@ -2028,13 +2287,43 @@ router.post('/change-password', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.get('/profile', requireBusiness, async (req, res) => {
   try {
-    const business = await Business.findById(req.session.business._id).lean();
+    const bizId = req.session?.business?._id || req.session?.business?.id;
+
+    if (!bizId) {
+      req.flash('error', 'Please log in to continue.');
+      return res.redirect('/business/login');
+    }
+
+    // ✅ OWNER VIEW: fetch full doc fields needed for the profile page
+    // ❌ do NOT use toSafeJSON() here (it hides bank details by design)
+    const business = await Business.findById(bizId)
+      .select([
+        'name email role phone country city address createdAt',
+        'officialNumber officialNumberType',
+        'verification isVerified',
+        'bankDetails', // ✅ include all bank details for owner view
+      ].join(' '))
+      .lean();
+
     if (!business) {
       req.flash('error', 'Business not found.');
       return res.redirect('/business/login');
     }
 
-    res.render('business-profile', {
+    // ✅ Mask account number for display (profile page should not show full number)
+    const bd = business.bankDetails || {};
+    const rawAcc = bd.accountNumber ? String(bd.accountNumber).replace(/\s+/g, '') : '';
+    const last4 = rawAcc.length >= 4 ? rawAcc.slice(-4) : '';
+    business.bankDetails = {
+      ...bd,
+      accountNumberLast4: last4,
+      accountNumberMasked: last4 ? `****${last4}` : '****',
+    };
+
+    // Optional hard safety: never send full accountNumber to the profile view
+    delete business.bankDetails.accountNumber;
+
+    return res.render('business-profile', {
       title: 'Business Profile',
       business,
       themeCss: res.locals.themeCss,
@@ -2043,7 +2332,7 @@ router.get('/profile', requireBusiness, async (req, res) => {
   } catch (err) {
     console.error('❌ Business profile error:', err);
     req.flash('error', 'Failed to load profile.');
-    res.redirect('/business/dashboard');
+    return res.redirect('/business/dashboard');
   }
 });
 
@@ -2058,7 +2347,7 @@ router.get('/profile/edit', requireBusiness, async (req, res) => {
       return res.redirect('/business/login');
     }
 
-    res.render('business-profile-edit', {
+    return res.render('business-profile-edit', {
       title: 'Edit Business Profile',
       business,
       themeCss: res.locals.themeCss,
@@ -2067,13 +2356,10 @@ router.get('/profile/edit', requireBusiness, async (req, res) => {
   } catch (err) {
     console.error('❌ Edit profile page error:', err);
     req.flash('error', 'Failed to load edit profile page.');
-    res.redirect('/business/profile');
+    return res.redirect('/business/profile');
   }
 });
 
-/* ----------------------------------------------------------
- * ✏️ Edit Profile (POST)
- * -------------------------------------------------------- */
 router.post('/profile/edit', requireBusiness, async (req, res) => {
   try {
     const business = await Business.findById(req.session.business._id);
@@ -2082,28 +2368,229 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
       return res.redirect('/business/login');
     }
 
-    const { name, phone, country, city, address, password } = req.body;
-    business.name = name || business.name;
-    business.phone = phone || business.phone;
-    business.country = country || business.country;
-    business.city = city || business.city;
-    business.address = address || business.address;
+    const {
+      // Account
+      email,
 
-    if (password && password.trim().length >= 6) {
-      business.password = await bcrypt.hash(password, 12);
+      // Basic profile
+      name,
+      phone,
+      country,
+      city,
+      address,
+
+      // Official number
+      officialNumber,
+      officialNumberType,
+
+      // Authorized representative (nested)
+      representative = {},
+
+      // Bank details (nested)
+      bankDetails = {},
+
+      // Password change
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    } = req.body;
+
+    // Helper
+    const isNonEmptyStr = (v) => typeof v === 'string' && v.trim().length > 0;
+
+    // -------------------------
+    // Email update (optional)
+    // -------------------------
+    if (email !== undefined) {
+      const emailNorm = normalizeEmail(email);
+      if (!emailNorm) {
+        req.flash('error', 'Valid email is required.');
+        return res.redirect('/business/profile/edit');
+      }
+
+      if (emailNorm !== business.email) {
+        const exists = await Business.findOne({
+          email: emailNorm,
+          _id: { $ne: business._id },
+        }).lean();
+
+        if (exists) {
+          req.flash('error', 'That email is already in use by another account.');
+          return res.redirect('/business/profile/edit');
+        }
+
+        business.email = emailNorm;
+
+        // ✅ keep your flow consistent: require re-verify on email change
+        business.isVerified = false;
+        business.emailVerifiedAt = null;
+
+        // ✅ generate new token + expiry (same as signup)
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        business.emailVerificationToken = token;
+        business.emailVerificationExpires = expiry;
+        business.verificationEmailSentAt = new Date();
+
+        // Try sending verification (don’t block profile save if mail fails)
+        try {
+          await sendBusinessVerificationEmail(business, token, req);
+          req.flash('success', 'Email updated. Please verify your new email address.');
+        } catch (mailErr) {
+          console.error('❌ Failed to send verification email after email change:', mailErr);
+          req.flash(
+            'error',
+            'Email updated, but verification email could not be sent. Please use resend on the verification page.',
+          );
+        }
+      }
+    }
+
+    // -------------------------
+    // Basic profile
+    // -------------------------
+    if (name !== undefined && isNonEmptyStr(name)) business.name = name.trim();
+    if (phone !== undefined && isNonEmptyStr(phone)) business.phone = phone.trim();
+    if (country !== undefined && isNonEmptyStr(country)) business.country = country.trim();
+    if (city !== undefined && isNonEmptyStr(city)) business.city = city.trim();
+    if (address !== undefined && isNonEmptyStr(address)) business.address = address.trim();
+
+    // -------------------------
+    // Official number fields
+    // -------------------------
+    if (officialNumber !== undefined && isNonEmptyStr(officialNumber)) {
+      business.officialNumber = officialNumber.trim();
+    }
+
+    if (officialNumberType !== undefined) {
+      const v = String(officialNumberType || '').trim();
+      const allowed = ['CIPC_REG', 'VAT', 'TIN', 'OTHER'];
+      if (v && !allowed.includes(v)) {
+        req.flash('error', 'Business number type is invalid.');
+        return res.redirect('/business/profile/edit');
+      }
+      if (v) business.officialNumberType = v;
+    }
+
+    // -------------------------
+    // Authorized representative (✅ INCLUDE idNumber)
+    // -------------------------
+    business.representative = business.representative || {};
+
+    if (representative.fullName !== undefined && isNonEmptyStr(representative.fullName)) {
+      business.representative.fullName = representative.fullName.trim();
+    }
+
+    if (representative.phone !== undefined && isNonEmptyStr(representative.phone)) {
+      business.representative.phone = representative.phone.trim();
+    }
+
+    // ✅ this was missing — must match schema + signup
+    if (representative.idNumber !== undefined && isNonEmptyStr(representative.idNumber)) {
+      business.representative.idNumber = representative.idNumber.trim();
+    }
+
+    // -------------------------
+    // Bank details (matches schema)
+    // -------------------------
+    business.bankDetails = business.bankDetails || {};
+
+    let bankTouched = false;
+    const setBank = (key, val) => {
+      if (val !== undefined) {
+        const s = typeof val === 'string' ? val.trim() : val;
+        if (s !== '' && s !== null) {
+          business.bankDetails[key] = s;
+          bankTouched = true;
+        }
+      }
+    };
+
+    setBank('accountHolderName', bankDetails.accountHolderName);
+    setBank('bankName', bankDetails.bankName);
+    setBank('accountNumber', bankDetails.accountNumber);
+    setBank('branchCode', bankDetails.branchCode);
+    setBank('swiftCode', bankDetails.swiftCode);
+    setBank('iban', bankDetails.iban);
+    setBank('accountType', bankDetails.accountType);
+    setBank('currency', bankDetails.currency);
+
+    if (bankDetails.payoutMethod !== undefined) {
+      const pm = String(bankDetails.payoutMethod || '').trim();
+      const allowedPm = ['bank', 'paypal', 'payoneer', 'wise', 'other'];
+
+      if (pm && !allowedPm.includes(pm)) {
+        req.flash('error', 'Payout method is invalid.');
+        return res.redirect('/business/profile/edit');
+      }
+      if (pm) {
+        business.bankDetails.payoutMethod = pm;
+        bankTouched = true;
+      }
+    }
+
+    if (bankTouched) business.bankDetails.updatedAt = new Date();
+
+    // -------------------------
+    // Optional password change (safe)
+    // -------------------------
+    const wantsPwChange =
+      (newPassword && String(newPassword).trim().length) ||
+      (confirmPassword && String(confirmPassword).trim().length) ||
+      (currentPassword && String(currentPassword).trim().length);
+
+    if (wantsPwChange) {
+      if (!currentPassword || String(currentPassword).trim().length < 1) {
+        req.flash('error', 'Current password is required to change password.');
+        return res.redirect('/business/profile/edit');
+      }
+
+      const ok = await bcrypt.compare(String(currentPassword), business.password);
+      if (!ok) {
+        req.flash('error', 'Current password is incorrect.');
+        return res.redirect('/business/profile/edit');
+      }
+
+      if (!newPassword || String(newPassword).trim().length < 6) {
+        req.flash('error', 'New password must be at least 6 characters.');
+        return res.redirect('/business/profile/edit');
+      }
+
+      if (String(newPassword) !== String(confirmPassword || '')) {
+        req.flash('error', 'New password and confirm password do not match.');
+        return res.redirect('/business/profile/edit');
+      }
+
+      business.password = await bcrypt.hash(String(newPassword), 12);
+    }
+
+    // If bankDetails is present in the request, stamp updatedAt
+    if (bankDetails && typeof bankDetails === 'object') {
+      business.bankDetails = business.bankDetails || {};
+      business.bankDetails.updatedAt = new Date();
     }
 
     await business.save();
+
+    // Keep session in sync
     if (req.session.business) {
       req.session.business.name = business.name;
+      req.session.business.email = business.email;
+      req.session.business.isVerified = business.isVerified;
+    }
+
+    // If email changed and now needs verification, push them to the right screen
+    if (email !== undefined && normalizeEmail(email) !== req.session.business.email && business.isVerified === false) {
+      return res.redirect('/business/verify-pending');
     }
 
     req.flash('success', '✅ Profile updated successfully.');
-    res.redirect('/business/profile');
+    return res.redirect('/business/profile');
   } catch (err) {
     console.error('❌ Profile update error:', err);
     req.flash('error', '❌ Failed to update profile.');
-    res.redirect('/business/profile');
+    return res.redirect('/business/profile');
   }
 });
 

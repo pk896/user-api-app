@@ -24,16 +24,20 @@ async function initializeDatabase() {
     return true;
   } catch (err) {
     console.error('❌ Failed to initialize database:', err.message);
-    
+
     if (retryCount < MAX_RETRIES) {
       retryCount++;
-      console.log(`🔄 Retry attempt ${retryCount}/${MAX_RETRIES} in ${RETRY_DELAY/1000} seconds...`);
-      
+      console.log(
+        `🔄 Retry attempt ${retryCount}/${MAX_RETRIES} in ${RETRY_DELAY / 1000} seconds...`,
+      );
+
       // Wait and retry
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       return await initializeDatabase();
     } else {
-      console.error('⚠️ Max retries reached. Starting server without database connection.');
+      console.error(
+        '⚠️ Max retries reached. Starting server without database connection.',
+      );
       console.error('⚠️ Database-dependent features will be unavailable.');
       return false;
     }
@@ -41,13 +45,18 @@ async function initializeDatabase() {
 }
 
 // Now validate environment (after DB connection attempt)
-const validateEnv = require("./config/validateEnv");
+const validateEnv = require('./config/validateEnv');
 try {
   validateEnv();
   console.log('✅ Environment validation passed');
 } catch (err) {
-  console.error("⚠️ Environment validation failed:", err && err.message);
-  console.error("⚠️ Continuing with invalid environment - some features may not work correctly");
+  console.error(
+    '⚠️ Environment validation failed:',
+    err && err.message,
+  );
+  console.error(
+    "⚠️ Continuing with invalid environment - some features may not work correctly",
+  );
   // Don't throw, just log and continue
 }
 
@@ -71,7 +80,7 @@ const MongoStore = require('connect-mongo');
 const app = express();
 
 // AWS S3 configuration
-const { S3Client } = require("@aws-sdk/client-s3");
+const { S3Client } = require('@aws-sdk/client-s3');
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -120,7 +129,9 @@ app.get('/debug-one-order', async (req, res) => {
     if (!order) {
       return res
         .status(404)
-        .send('<h1>No orders found</h1><p>Your Order collection is empty.</p>');
+        .send(
+          '<h1>No orders found</h1><p>Your Order collection is empty.</p>',
+        );
     }
     res.type('html').send(`
       <h1>Sample Order (from MongoDB)</h1>
@@ -177,8 +188,8 @@ const allowedOrigins = Array.from(
 
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || origin === 'null') {return callback(null, true);}
-    if (allowedOrigins.includes(origin)) {return callback(null, true);}
+    if (!origin || origin === 'null') return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
     console.warn(`⚠️ CORS blocked for origin: ${origin}`);
     return callback(null, false);
   },
@@ -243,7 +254,11 @@ app.use((req, res, next) => {
           'https://www.sandbox.paypal.com',
           'https://www.paypalobjects.com',
         ],
-        frameSrc: ["'self'", 'https://www.paypal.com', 'https://www.sandbox.paypal.com'],
+        frameSrc: [
+          "'self'",
+          'https://www.paypal.com',
+          'https://www.sandbox.paypal.com',
+        ],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
       },
@@ -270,7 +285,9 @@ const limiter = rateLimit({
   legacyHeaders: false,
   handler: (req, res) => {
     console.warn(`⚠️ Rate limit exceeded for IP: ${req.ip}`);
-    res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
+    res
+      .status(429)
+      .json({ success: false, message: 'Too many requests. Please try again later.' });
   },
 });
 app.use('/business/login', limiter);
@@ -280,43 +297,33 @@ app.use('/users/signup', limiter);
 app.use('/users/rendersignup', limiter);
 
 /* ---------------------------------------
-   Session Configuration
-   CRITICAL: Use the same mongoose connection for MongoStore
+   Session Configuration (STABLE)
+   ✅ MUST be mounted BEFORE passport.session() and before req.flash usage
+   ✅ No fallback store / no switching
 --------------------------------------- */
 app.set('trust proxy', 1);
 
-// Import mongoose after DB connection is established
-const mongoose = require('mongoose');
-
-// Session configuration with fallback for no database
-let sessionStore;
-if (dbConnectionEstablished) {
-  sessionStore = MongoStore.create({
-    client: mongoose.connection.getClient(), // This is the key fix!
-    collectionName: 'sessions',
-    ttl: 14 * 24 * 60 * 60, // 14 days
-    autoRemove: 'native',
-    crypto: {
-      secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-production',
-    },
-  });
-} else {
-  console.warn('⚠️ Database not available - using memory session store (sessions will not persist)');
-  sessionStore = new session.MemoryStore();
-}
+const SESSION_SECRET =
+  (process.env.SESSION_SECRET && String(process.env.SESSION_SECRET).trim()) ||
+  'dev_secret_change_me';
 
 app.use(
   session({
     name: 'sid',
-    secret: process.env.SESSION_SECRET,
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    store: sessionStore,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+      collectionName: 'sessions',
+      ttl: 14 * 24 * 60 * 60, // 14 days
+      autoRemove: 'native',
+    }),
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      maxAge: 1000 * 60 * 60,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 1000 * 60 * 60, // 1 hour
     },
   }),
 );
@@ -345,11 +352,12 @@ app.use((req, res, next) => {
   res.locals.business = req.session.business || null;
 
   res.locals.theme = req.session.theme || 'light';
-  res.locals.themeCss = res.locals.theme === 'dark' ? '/css/dark.css' : '/css/main.css';
-  
+  res.locals.themeCss =
+    res.locals.theme === 'dark' ? '/css/dark.css' : '/css/main.css';
+
   // Add database status to locals for templates
   res.locals.dbAvailable = dbConnectionEstablished;
-  
+
   next();
 });
 
@@ -432,7 +440,7 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    Import and Register Routers
 --------------------------------------- */
-const deliveryOptionRouter = require('./routes/deliveryOption');
+const deliveryOptionRouter = require('./routes/deliveryOptions');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
@@ -445,8 +453,6 @@ const staticPagesRoutes = require('./routes/staticPages');
 const salesRoutes = require('./routes/sales');
 const someLinksRoutes = require('./routes/someRoute');
 const requireOrdersAdmin = require('./middleware/requireOrdersAdmin');
-const deliveryOptionsAdmin = require('./routes/deliveryOptionsAdmin');
-const requireAdmin = require('./middleware/requireAdmin');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const demandsRoutes = require('./routes/demands');
 const matchesRoutes = require('./routes/matches');
@@ -455,17 +461,20 @@ const wishlistRoutes = require('./routes/wishlist');
 const passwordResetRoutes = require('./routes/passwordReset');
 const productRatingsRoutes = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
+const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
+const adminOrdersApi = require('./routes/adminOrdersApi');
+
+app.use('/dev', require('./routes/dev-mail-test'));
+
 
 const paymentRouter = paymentModule.router;
 
 // API first
-app.use('/api/deliveryOption', deliveryOptionRouter);
 app.use('/api/cart', cartRoutes);
 
 // Admin API
-app.use('/api/admin', requireAdmin);
-app.use('/api/admin', paymentRouter);
 app.use('/api/admin', requireOrdersAdmin);
+app.use('/api/admin', adminOrdersApi);
 
 // Auth & identity
 app.use('/users', usersRouter);
@@ -474,7 +483,8 @@ app.use('/business', businessAuthRoutes);
 // Business/admin pages
 app.use('/admin', adminRoutes);
 app.use('/admin', adminOrdersRoutes);
-app.use(deliveryOptionsAdmin);
+app.use('/admin', adminBizVerifyRoutes);
+app.use('/admin', deliveryOptionRouter);
 app.use(deliveryOptionsApi);
 
 // Commerce / catalog
@@ -581,7 +591,7 @@ app.get('/orders', (req, res) => {
 app.post('/theme-toggle', (req, res) => {
   req.session.theme = req.session.theme === 'dark' ? 'light' : 'dark';
   const referer = req.get('Referer');
-  if (referer) {return res.redirect(referer);}
+  if (referer) return res.redirect(referer);
   res.redirect('/');
 });
 
@@ -589,9 +599,9 @@ app.post('/theme-toggle', (req, res) => {
    Home + Debug + Health
 --------------------------------------- */
 app.get('/home', (req, res) => {
-  res.render('home', { 
-    layout: 'layout', 
-    title: 'Home', 
+  res.render('home', {
+    layout: 'layout',
+    title: 'Home',
     active: 'home',
     dbAvailable: dbConnectionEstablished,
   });
@@ -619,12 +629,13 @@ app.get('/healthz', (req, res) => {
     database: dbConnectionEstablished ? 'connected' : 'disconnected',
     memory: process.memoryUsage(),
   };
-  
+
   res.status(200).json(health);
 });
 
 // Database status endpoint
 app.get('/_status/database', (req, res) => {
+  const mongoose = require('mongoose');
   res.json({
     connected: dbConnectionEstablished,
     mongooseState: mongoose.connection.readyState,
@@ -656,38 +667,45 @@ app.use((err, req, res, _next) => {
 
 /* ---------------------------------------
    Server Startup
-   NOTE: We'll initialize DB first, then start server
 --------------------------------------- */
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   // Try to initialize database first
   await initializeDatabase();
-  
-  // Check database connection state
+
+  // If DB not available, keep your original warning behavior
   if (!dbConnectionEstablished) {
     console.warn('⚠️  WARNING: Starting server without database connection');
     console.warn('⚠️  Database-dependent features will be unavailable');
-    
+
     // Add middleware to warn users on pages that need database
     app.use((req, res, next) => {
-      if (req.path.includes('/admin') || req.path.includes('/orders') || req.path.includes('/users/dashboard')) {
-        req.flash('warning', 'Database is currently unavailable. Some features may not work.');
+      if (
+        req.path.includes('/admin') ||
+        req.path.includes('/orders') ||
+        req.path.includes('/users/dashboard')
+      ) {
+        req.flash(
+          'warning',
+          'Database is currently unavailable. Some features may not work.',
+        );
       }
       next();
     });
   }
-  
+
   // Start the server
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Database status: ${dbConnectionEstablished ? '✅ Connected' : '❌ Not connected'}`);
+    console.log(
+      `📊 Database status: ${dbConnectionEstablished ? '✅ Connected' : '❌ Not connected'}`,
+    );
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 }
 
-// Start the server
-startServer().catch(err => {
+startServer().catch((err) => {
   console.error('💀 Failed to start server:', err);
   console.error('💀 Server cannot start due to critical error');
   // Still don't use process.exit - just log and let the process naturally end

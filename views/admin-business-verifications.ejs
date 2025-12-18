@@ -1,0 +1,390 @@
+<!-- views/admin-business-verifications.ejs -->
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+
+<%
+  const f = filters || { status: 'pending', q: '', country: '', page: 1, totalPages: 1, total: 0 };
+  const safe = (v, d='') => (typeof v === 'string' ? v : (v == null ? d : String(v)));
+  const buildHref = (p) =>
+    `/admin/business-verifications?status=${encodeURIComponent(f.status)}&q=${encodeURIComponent(safe(f.q))}&country=${encodeURIComponent(safe(f.country))}&page=${p}`;
+%>
+
+<section class="admin-wrap">
+
+  <!-- Header -->
+  <header class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-badge">ADMIN</div>
+      <h1 class="hdr-title"><%= title %></h1>
+      <p class="hdr-sub">Verify official numbers, review details, approve/reject.</p>
+    </div>
+    <div class="hdr-right">
+      <button id="exportBtn" class="btn btn-purple" type="button">Export CSV</button>
+    </div>
+  </header>
+
+  <!-- Filters -->
+  <section class="panel panel-filters">
+    <div class="panel-head">
+      <h2 class="panel-title">Filters</h2>
+      <span class="panel-chip">Purple is dominant</span>
+    </div>
+
+    <form method="GET" action="/admin/business-verifications" id="filterForm" class="filter-grid">
+      <div class="field">
+        <label for="q">Search</label>
+        <input id="q" name="q" value="<%= safe(f.q) %>" placeholder="Business name, email, official #, ID…" />
+        <div class="hint">Tip: try “@gmail” or part of official number</div>
+      </div>
+
+      <div class="field">
+        <label for="country">Country</label>
+        <input id="country" name="country" value="<%= safe(f.country) %>" placeholder="e.g. South Africa" />
+        <div class="hint">Exact or partial country works</div>
+      </div>
+
+      <div class="field">
+        <label for="status">Status</label>
+        <select name="status" id="status">
+          <option value="all" <%= f.status==='all'?'selected':'' %>>All</option>
+          <option value="pending" <%= f.status==='pending'?'selected':'' %>>Pending</option>
+          <option value="verified" <%= f.status==='verified'?'selected':'' %>>Verified</option>
+          <option value="rejected" <%= f.status==='rejected'?'selected':'' %>>Rejected</option>
+        </select>
+        <div class="hint">Auto-applies when changed</div>
+      </div>
+
+      <button class="btn btn-blue" type="submit">Apply</button>
+      <a href="/admin/business-verifications" class="btn btn-outline">Clear</a>
+    </form>
+  </section>
+
+  <!-- Results meta -->
+  <section class="panel panel-meta">
+    <div class="meta-row">
+      <div class="meta-box meta-purple">
+        <div class="meta-label">Showing</div>
+        <div class="meta-value"><%= (items||[]).length %> <span class="meta-muted">/ <%= f.total %></span></div>
+      </div>
+
+      <div class="meta-box meta-blue">
+        <div class="meta-label">Page</div>
+        <div class="meta-value"><%= f.page %> <span class="meta-muted">/ <%= f.totalPages %></span></div>
+      </div>
+
+      <div class="meta-box meta-green">
+        <div class="meta-label">Status Filter</div>
+        <div class="meta-value"><%= (safe(f.status)||'pending').toUpperCase() %></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cards -->
+  <section class="cards-grid">
+    <% if (!items || items.length === 0) { %>
+      <div class="empty">
+        <div class="empty-icon">😕</div>
+        <h3>No verification requests</h3>
+        <p>Try changing filters. This panel is purple-themed and always visible.</p>
+      </div>
+    <% } %>
+
+    <% (items || []).forEach(b => { 
+      const status = (b.verification?.status || 'pending').toLowerCase();
+      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+      const cardTone = status === 'verified' ? 'tone-green' : (status === 'rejected' ? 'tone-red' : 'tone-amber');
+    %>
+
+      <article class="card <%= cardTone %>">
+        <div class="card-top">
+          <div class="card-title">
+            <div class="avatar"><%= (b.name || 'B').trim().charAt(0).toUpperCase() %></div>
+            <div class="t">
+              <h3 class="name"><%= b.name %></h3>
+              <div class="sub">
+                <span class="pill pill-black"><%= b.role || '—' %></span>
+                <% if (b.internalBusinessId) { %>
+                  <span class="pill pill-purple">ID: <%= b.internalBusinessId %></span>
+                <% } %>
+              </div>
+              <div class="email"><%= b.email %></div>
+            </div>
+          </div>
+
+          <div class="card-status">
+            <span class="status status-<%= status %>"><%= statusLabel %></span>
+            <span class="date"><%= new Date(b.createdAt).toLocaleDateString() %></span>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <div class="kv">
+            <div class="k">Country</div>
+            <div class="v"><%= b.country || '—' %></div>
+          </div>
+          <div class="kv">
+            <div class="k">Official #</div>
+            <div class="v mono"><%= b.officialNumber || '—' %></div>
+          </div>
+          <div class="kv">
+            <div class="k">Type</div>
+            <div class="v"><%= b.officialNumberType || '—' %></div>
+          </div>
+          <div class="kv">
+            <div class="k">Action</div>
+            <div class="v">
+              <a href="/admin/business-verifications/<%= b._id %>" class="btn btn-mini btn-purple">Review →</a>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    <% }) %>
+  </section>
+
+  <!-- Pagination -->
+  <% if (f.totalPages > 1) { %>
+    <nav class="panel panel-pager">
+      <div class="pager">
+        <% if (f.page > 1) { %>
+          <a class="btn btn-outline" href="<%= buildHref(f.page-1) %>">← Prev</a>
+        <% } else { %>
+          <span class="btn btn-outline btn-disabled">← Prev</span>
+        <% } %>
+
+        <div class="pager-center">
+          <span class="pager-pill">Page <b><%= f.page %></b> of <b><%= f.totalPages %></b></span>
+        </div>
+
+        <% if (f.page < f.totalPages) { %>
+          <a class="btn btn-blue" href="<%= buildHref(f.page+1) %>">Next →</a>
+        <% } else { %>
+          <span class="btn btn-blue btn-disabled">Next →</span>
+        <% } %>
+      </div>
+    </nav>
+  <% } %>
+
+</section>
+
+<style nonce="<%= NONCE %>">
+  :root{
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --black:#0F172A;
+    --slate:#64748b;
+    --border:#e2e8f0;
+  }
+
+  /* ✅ hard stop: no horizontal scroll anywhere in this page */
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .admin-wrap * { box-sizing: border-box; }
+  .admin-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+
+  /* Header (Purple dominant) */
+  .hdr{
+    border-radius: 18px;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(37,99,235,.12));
+    border: 1px solid rgba(124,58,237,.35);
+    display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;
+  }
+  .hdr-badge{
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding:.25rem .6rem; border-radius:999px;
+    font-weight:900; font-size:.7rem; letter-spacing:.08em;
+    background: rgba(124,58,237,.18); color: var(--purple); border: 1px solid rgba(124,58,237,.35);
+    width: fit-content;
+  }
+  .hdr-title{ margin:.25rem 0 0; color: var(--black); font-weight: 950; font-size: 1.35rem; }
+  .hdr-sub{ margin:.25rem 0 0; color: var(--slate); font-size:.85rem; max-width: 48ch; }
+  .hdr-right{ display:flex; gap:.5rem; }
+
+  /* Panels = visibly different colors */
+  .panel{ border-radius: 18px; padding: 1rem; border: 1px solid var(--border); }
+  .panel-filters{
+    background: linear-gradient(180deg, rgba(124,58,237,.10), rgba(255,255,255,1));
+    border-color: rgba(124,58,237,.35);
+  }
+  .panel-meta{
+    background: linear-gradient(180deg, rgba(37,99,235,.10), rgba(255,255,255,1));
+    border-color: rgba(37,99,235,.30);
+  }
+  .panel-pager{
+    background: linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,1));
+    border-color: rgba(34,197,94,.30);
+  }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem; }
+  .panel-title{ margin:0; font-size: 1rem; font-weight: 950; color: var(--black); }
+  .panel-chip{
+    font-size:.75rem; font-weight:800;
+    background: rgba(124,58,237,.16); color: var(--purple);
+    border: 1px solid rgba(124,58,237,.30);
+    padding: .25rem .6rem; border-radius: 999px;
+  }
+
+  /* Buttons */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:.7rem 1rem; border-radius: 14px; font-weight: 900; text-decoration:none;
+    border: 1px solid transparent; cursor:pointer;
+    white-space: nowrap;
+    min-height: 44px;
+  }
+  .btn-purple{ background: var(--purple); color:#fff; box-shadow: 0 10px 25px rgba(124,58,237,.18); }
+  .btn-blue{ background: var(--blue); color:#fff; box-shadow: 0 10px 25px rgba(37,99,235,.16); }
+  .btn-outline{ background: rgba(255,255,255,.85); color: var(--black); border-color: rgba(15,23,42,.14); }
+  .btn-mini{ padding:.55rem .9rem; border-radius: 12px; min-height: 40px; }
+  .btn-disabled{ opacity:.55; pointer-events:none; }
+
+  /* Filter grid */
+  .filter-grid{ display:grid; grid-template-columns: 1fr; gap:.75rem; }
+  .field{ background: rgba(255,255,255,.9); border:1px solid rgba(124,58,237,.15); border-radius: 16px; padding:.75rem; }
+  .field label{ display:block; font-size:.75rem; font-weight:900; color: var(--purple); margin-bottom:.4rem; }
+  .field input,.field select{
+    width:100%;
+    padding:.75rem .8rem;
+    border-radius: 14px;
+    border: 1.5px solid rgba(15,23,42,.12);
+    font-size:.9rem;
+    background: #fff;
+    outline: none;
+  }
+  .field input:focus,.field select:focus{
+    border-color: rgba(124,58,237,.7);
+    box-shadow: 0 0 0 3px rgba(124,58,237,.14);
+  }
+  .hint{ margin-top:.45rem; font-size:.72rem; color: var(--slate); }
+
+  /* Meta blocks (colored) */
+  .meta-row{ display:grid; grid-template-columns: 1fr; gap:.75rem; }
+  .meta-box{
+    border-radius: 16px; padding:.85rem;
+    border: 1px solid rgba(15,23,42,.10);
+    display:flex; justify-content:space-between; align-items:flex-end; gap:.75rem;
+  }
+  .meta-label{ font-size:.75rem; color: var(--slate); font-weight: 800; }
+  .meta-value{ font-size:1.1rem; font-weight: 950; color: var(--black); line-height:1; }
+  .meta-muted{ color: var(--slate); font-weight: 800; font-size:.85rem; }
+  .meta-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.25); }
+  .meta-blue{ background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.22); }
+  .meta-green{ background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.22); }
+
+  /* Cards (no table, no overflow-x) */
+  .cards-grid{ display:grid; grid-template-columns: 1fr; gap: .9rem; }
+  .card{
+    border-radius: 18px;
+    border: 1px solid rgba(15,23,42,.10);
+    overflow: hidden;
+    background: #fff;
+  }
+  .card.tone-amber{ border-top: 5px solid #f59e0b; background: linear-gradient(180deg, rgba(245,158,11,.08), #fff 55%); }
+  .card.tone-green{ border-top: 5px solid var(--green); background: linear-gradient(180deg, rgba(34,197,94,.10), #fff 55%); }
+  .card.tone-red{ border-top: 5px solid #ef4444; background: linear-gradient(180deg, rgba(239,68,68,.10), #fff 55%); }
+
+  .card-top{ padding: .9rem; display:flex; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
+  .card-title{ display:flex; gap:.75rem; min-width: 220px; flex: 1 1 240px; }
+  .avatar{
+    width:44px; height:44px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color:#fff; display:flex; align-items:center; justify-content:center;
+    font-weight: 950;
+    flex: 0 0 44px;
+  }
+  .name{ margin:0; color: var(--black); font-weight: 950; font-size: 1.02rem; }
+  .email{ margin-top:.2rem; font-size:.78rem; color: var(--slate); word-break: break-word; }
+  .sub{ display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.35rem; }
+
+  .pill{
+    display:inline-flex; align-items:center;
+    padding:.22rem .55rem; border-radius: 999px;
+    font-size:.72rem; font-weight: 900;
+    border: 1px solid rgba(15,23,42,.10);
+    max-width: 100%;
+  }
+  .pill-black{ background: rgba(15,23,42,.08); color: var(--black); }
+  .pill-purple{ background: rgba(124,58,237,.14); color: var(--purple); border-color: rgba(124,58,237,.25); }
+
+  .card-status{ display:flex; flex-direction:column; align-items:flex-end; gap:.35rem; flex: 0 0 auto; }
+  .date{ font-size:.72rem; color: var(--slate); font-weight: 800; }
+
+  .status{
+    display:inline-flex;
+    padding:.32rem .7rem;
+    border-radius: 999px;
+    font-size:.7rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .status-pending{ background:#fef3c7; color:#92400e; }
+  .status-verified{ background:#dcfce7; color:#166534; }
+  .status-rejected{ background:#fee2e2; color:#991b1b; }
+
+  .card-body{
+    padding: .9rem;
+    display:grid;
+    grid-template-columns: 1fr;
+    gap: .65rem;
+    border-top: 1px solid rgba(15,23,42,.08);
+    background: rgba(255,255,255,.85);
+  }
+  .kv{ display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
+  .k{ font-size:.75rem; font-weight: 950; color: var(--purple); }
+  .v{ font-size:.85rem; font-weight: 800; color: var(--black); text-align:right; word-break: break-word; }
+  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+
+  /* Empty */
+  .empty{
+    border-radius: 18px;
+    padding: 1.2rem;
+    background: rgba(124,58,237,.10);
+    border: 1px dashed rgba(124,58,237,.35);
+    text-align:center;
+    color: var(--black);
+  }
+  .empty-icon{ font-size: 1.8rem; }
+  .empty h3{ margin:.5rem 0 0; font-weight: 950; }
+  .empty p{ margin:.35rem 0 0; color: var(--slate); font-weight: 700; font-size:.85rem; }
+
+  /* Pager */
+  .pager{ display:flex; gap:.75rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .pager-center{ flex: 1 1 auto; display:flex; justify-content:center; }
+  .pager-pill{
+    padding:.35rem .75rem;
+    border-radius: 999px;
+    background: rgba(34,197,94,.12);
+    border: 1px solid rgba(34,197,94,.25);
+    color: var(--black);
+    font-weight: 900;
+    font-size:.8rem;
+  }
+
+  /* ✅ Responsive grids */
+  @media (min-width: 640px){
+    .filter-grid{ grid-template-columns: 1fr 1fr; }
+    .meta-row{ grid-template-columns: 1fr 1fr 1fr; }
+    .card-body{ grid-template-columns: 1fr 1fr; }
+  }
+  @media (min-width: 1024px){
+    .filter-grid{ grid-template-columns: 2fr 1fr 1fr auto auto; align-items:end; }
+    .cards-grid{ grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<script nonce="<%= NONCE %>">
+  // Status auto-submit
+  document.getElementById('status')?.addEventListener('change', function () {
+    document.getElementById('filterForm')?.submit();
+  });
+
+  // Export CSV
+  document.getElementById('exportBtn')?.addEventListener('click', function () {
+    const params = new URLSearchParams(window.location.search);
+    params.set('export', 'csv');
+    window.location.href = '/admin/business-verifications?' + params.toString();
+  });
+</script>
+
+
+

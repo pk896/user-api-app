@@ -7,6 +7,7 @@ const Product = require('../models/Product');
 
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
+const requireOfficialNumberVerified = require('../middleware/requireOfficialNumberVerified');
 
 const router = express.Router();
 
@@ -70,7 +71,7 @@ function randomKey(ext) {
 /* ---------------------------------------------
  * 🧾 GET /products/add — show Add Product form
  * ------------------------------------------- */
-router.get('/add', requireBusiness, requireVerifiedBusiness, (req, res) => {
+router.get('/add', requireBusiness, requireVerifiedBusiness, requireOfficialNumberVerified, (req, res) => {
   const business = req.session.business; // ✅ Get from session
   res.render('add-product', {
     title: 'Add Product',
@@ -174,7 +175,7 @@ router.get('/low-stock', requireBusiness, async (req, res) => {
 /* ---------------------------------------------
  * ➕ POST /products/add — create product
  * ------------------------------------------- */
-router.post('/add', requireBusiness, requireVerifiedBusiness, upload.single('imageFile'), async (req, res) => {
+router.post('/add', requireBusiness, requireVerifiedBusiness, requireOfficialNumberVerified, upload.single('imageFile'), async (req, res) => {
   console.log('🟢 POST /products/add reached');
   try {
     const business = req.session.business;

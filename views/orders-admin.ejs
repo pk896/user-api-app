@@ -1,217 +1,1093 @@
 <!-- views/orders-admin.ejs -->
 <% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
-<main class="page">
-  <header class="head">
-    <h1>Orders (Admin)</h1>
-    <a href="/payment/checkout" class="back">← Checkout</a>
+
+<main class="admin-page">
+  <!-- Header -->
+  <header class="page-header">
+    <div>
+      <h1><i class="icon-orders"></i> Orders <span class="badge admin">Admin</span></h1>
+      <p class="subtitle">Manage customer orders and process refunds</p>
+    </div>
+    <a href="/admin/dashboard" class="btn-back">← Back to Dashboard</a>
   </header>
 
-  <section class="card">
-    <div class="bar">
-      <input id="q" class="input" placeholder="Filter by orderId, captureId, email…" />
-      <button id="reload" class="btn">Reload</button>
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Total</span>
+      <span class="stat-value" id="totalOrders">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Completed</span>
+      <span class="stat-value success" id="completedOrders">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Pending</span>
+      <span class="stat-value warning" id="pendingOrders">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Refunded</span>
+      <span class="stat-value danger" id="refundedOrders">--</span>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="content-card">
+    <!-- Filters -->
+    <div class="filter-section">
+      <div class="search-box">
+        <input type="search" id="searchInput" placeholder="Search orders..." class="search-input">
+        <button id="clearSearch" class="btn-clear">×</button>
+      </div>
+      <div class="filter-actions">
+        <select id="statusFilter" class="select-filter">
+          <option value="">All Status</option>
+          <option value="completed">Completed</option>
+          <option value="pending">Pending</option>
+        </select>
+        <button id="refreshBtn" class="btn-primary">
+          <span class="btn-icon">↻</span> Refresh
+        </button>
+      </div>
     </div>
 
-    <div class="table-wrap">
-      <table class="table" id="tbl">
+    <!-- Desktop Table -->
+    <div class="table-responsive">
+      <table class="orders-table" id="desktopTable">
         <thead>
           <tr>
-            <th>Created</th>
+            <th>Date</th>
             <th>Order ID</th>
             <th>Status</th>
-            <th>Payer</th>
+            <th>Customer</th>
             <th>Amount</th>
-            <th>Fee / Net</th>
-            <th>Capture</th>
-            <th>PayPal</th>
-            <th>Shipment</th> <!-- NEW -->
-            <th>Refund</th>
+            <th>Actions</th>
           </tr>
         </thead>
-        <tbody id="rows">
-          <tr><td colspan="10" class="muted">Loading…</td></tr>
+        <tbody id="tableBody">
+          <tr><td colspan="6" class="text-muted">Loading orders...</td></tr>
         </tbody>
       </table>
     </div>
 
-    <div id="flash" role="alert" aria-live="polite"></div>
-  </section>
+    <!-- Mobile Cards -->
+    <div class="mobile-cards" id="mobileCards">
+      <div class="text-muted">Loading orders...</div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState" hidden>
+      <div class="empty-icon">📋</div>
+      <h3>No orders found</h3>
+      <p>Try adjusting your search or filter</p>
+    </div>
+
+    <!-- Messages -->
+    <div class="alert" id="alert" role="alert" hidden></div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modal" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modalTitle">Confirm</h3>
+        <button class="modal-close" id="modalClose">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="modalMessage">Are you sure?</p>
+        <div id="modalContent"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="modalCancel">Cancel</button>
+        <button class="btn-danger" id="modalConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
 </main>
 
 <style nonce="<%= NONCE %>">
-  .page{max-width:1200px;margin:0 auto;padding:1rem}
-  .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:.75rem}
-  .card{background:var(--card-bg,#fff);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);padding:1rem}
-  .bar{display:flex;gap:.5rem;margin-bottom:.75rem}
-  .input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:.55rem .7rem}
-  .btn{border:1px solid #111827;border-radius:10px;padding:.5rem .8rem;background:#111827;color:#fff;cursor:pointer}
-  .table-wrap{overflow:auto}
-  .table{width:100%;border-collapse:collapse}
-  th,td{border-bottom:1px solid #e5e7eb;padding:.5rem .6rem;text-align:left;vertical-align:top}
-  .muted{color:#6b7280}
-  .pill{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.78rem}
-  .pill-ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399}
-  .pill-pend{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
-  .link{color:#2563eb;text-decoration:none}
-  .refund-wrap{display:flex;gap:.3rem;align-items:center}
-  .refund-amount{width:6.5ch;border:1px solid #d1d5db;border-radius:8px;padding:.25rem .35rem}
-  #flash .ok{background:#ecfdf5;color:#065f46;border:1px solid #34d399;padding:.5rem;border-radius:10px;margin-top:.6rem}
-  #flash .err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;padding:.5rem;border-radius:10px;margin-top:.6rem}
-  .back{border:1px solid #d1d5db;border-radius:8px;padding:.4rem .6rem;text-decoration:none}
+/* ===== BRAND COLOR VARIABLES ===== */
+:root {
+  /* Your Company Colors */
+  --blue: #2563EB;          /* Trust & Reliability */
+  --purple: #7C3AED;        /* Innovation & Creativity */
+  --green: #22C55E;         /* Growth & Success */
+  --black: #0F172A;         /* Sophistication & Premium */
+  
+  /* Derived Colors */
+  --blue-light: rgba(37, 99, 235, 0.1);
+  --blue-hover: #1D4ED8;
+  --purple-light: rgba(124, 58, 237, 0.1);
+  --purple-hover: #6D28D9;
+  --green-light: rgba(34, 197, 94, 0.1);
+  --green-hover: #16A34A;
+  --black-light: rgba(15, 23, 42, 0.08);
+  --black-hover: #1E293B;
+  
+  /* System Colors */
+  --light: #F8FAFC;
+  --border: #E2E8F0;
+  --text: #475569;
+  --text-light: #64748B;
+  
+  /* Status Colors */
+  --warning: #F59E0B;
+  --danger: #EF4444;
+}
 
-  /* shipment badge colors */
-  .ship-badge{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.78rem;border:1px solid #d1d5db;background:#fff;color:#111827}
-  .ship-processing{background:#ede9fe;border-color:#c4b5fd}
-  .ship-in-transit{background:#dbeafe;border-color:#93c5fd}
-  .ship-delivered{background:#ecfdf5;border-color:#34d399;color:#065f46}
-  .ship-canceled,.ship-cancelled{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
-  .ship-muted{color:#6b7280}
+/* Base Styles */
+.admin-page {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: var(--light);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.page-header h1 {
+  font-size: 24px;
+  color: var(--black);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-orders {
+  color: var(--blue);
+  font-size: 24px;
+}
+
+.badge.admin {
+  background: var(--purple);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--purple);
+}
+
+.subtitle {
+  color: var(--text-light);
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.btn-back {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-back:hover {
+  background: var(--light);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  transition: transform 0.2s;
+  border-top: 3px solid var(--black);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.stat-label {
+  display: block;
+  color: var(--text-light);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.stat-value.success { 
+  color: var(--green); 
+}
+
+.stat-value.warning { 
+  color: var(--warning); 
+}
+
+.stat-value.danger { 
+  color: var(--danger); 
+}
+
+/* Content Card */
+.content-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  border-top: 4px solid var(--blue);
+}
+
+/* Filters */
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 40px 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  transition: all 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-light);
+}
+
+.btn-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+}
+
+.btn-clear:hover {
+  color: var(--black);
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.select-filter {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  color: var(--black);
+}
+
+.select-filter:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+.btn-primary {
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background: var(--blue-hover);
+}
+
+/* Table */
+.table-responsive {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+.orders-table th {
+  background: var(--light);
+  padding: 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.orders-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--light);
+  font-size: 14px;
+  color: var(--black);
+}
+
+.orders-table tr:hover {
+  background: var(--blue-light);
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.status-completed {
+  background: var(--green-light);
+  color: var(--green);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.status-pending {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-refund {
+  background: var(--purple-light);
+  color: var(--purple);
+  border: 1px solid var(--purple-light);
+}
+
+.btn-refund:hover {
+  background: var(--purple);
+  color: white;
+  border-color: var(--purple);
+}
+
+.btn-cancel {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.1);
+}
+
+.btn-cancel:hover {
+  background: var(--warning);
+  color: white;
+  border-color: var(--warning);
+}
+
+.btn-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.1);
+}
+
+.btn-delete:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+/* Mobile Cards */
+.mobile-cards {
+  display: none;
+}
+
+.mobile-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+  border-left: 3px solid var(--blue);
+}
+
+.mobile-card:hover {
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+  border-color: var(--blue-light);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-light);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+  color: var(--black);
+}
+
+.empty-state h3 {
+  margin: 0 0 8px;
+  color: var(--black);
+  font-size: 18px;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-light);
+}
+
+/* Alert */
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  display: none;
+  border: 1px solid;
+}
+
+.alert-success {
+  background: var(--green-light);
+  color: var(--green);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.alert-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-dialog {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  animation: modalSlideIn 0.3s ease;
+  border-top: 4px solid var(--purple);
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--black);
+  font-size: 18px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-light);
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: var(--light);
+  color: var(--black);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-body p {
+  margin: 0 0 16px;
+  color: var(--black);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.btn-secondary {
+  background: white;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 8px;
+  flex: 1;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: var(--light);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  flex: 1;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.btn-danger:hover {
+  background: #DC2626;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-page {
+    padding: 12px;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .table-responsive {
+    display: none;
+  }
+  
+  .mobile-cards {
+    display: block;
+  }
+  
+  .filter-actions {
+    flex-direction: column;
+  }
+  
+  .modal-dialog {
+    margin: 0 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .page-header {
+    flex-direction: column;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stat-card {
+    padding: 12px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .btn-action {
+    width: 100%;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+  }
+}
+
+/* Utility Classes */
+.text-muted {
+  color: var(--text-light) !important;
+  opacity: 0.7;
+  font-style: italic;
+}
 </style>
 
 <script nonce="<%= NONCE %>">
-(() => {
-  const qs = (s,c=document)=>c.querySelector(s);
-  const rowsEl = qs('#rows');
-  const flash = qs('#flash');
-  const q = qs('#q');
-
+document.addEventListener('DOMContentLoaded', function() {
   const PP_ACTIVITY_BASE = "<%= ppActivityBase %>";
-
-  function fmtMoney(v, ccy){ return (ccy ? ccy + " " : "") + (Number(v||0).toFixed(2)); }
-  function pill(status){
-    const s = String(status||'').toUpperCase();
-    const ok = (s === 'COMPLETED' || s === 'APPROVED' || s === 'CAPTURED');
-    return `<span class="pill ${ok?'pill-ok':'pill-pend'}">${s||'—'}</span>`;
+  
+  // DOM Elements
+  const elements = {
+    tableBody: document.getElementById('tableBody'),
+    mobileCards: document.getElementById('mobileCards'),
+    searchInput: document.getElementById('searchInput'),
+    clearSearch: document.getElementById('clearSearch'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    statusFilter: document.getElementById('statusFilter'),
+    alert: document.getElementById('alert'),
+    emptyState: document.getElementById('emptyState'),
+    modal: document.getElementById('modal'),
+    modalTitle: document.getElementById('modalTitle'),
+    modalMessage: document.getElementById('modalMessage'),
+    modalContent: document.getElementById('modalContent'),
+    modalConfirm: document.getElementById('modalConfirm'),
+    modalCancel: document.getElementById('modalCancel'),
+    modalClose: document.getElementById('modalClose')
+  };
+  
+  let orders = [];
+  let currentOrder = null;
+  let modalCallback = null;
+  
+  // Initialize
+  loadOrders();
+  setupEventListeners();
+  
+  // Functions
+  function showAlert(type, message) {
+    elements.alert.className = `alert alert-${type}`;
+    elements.alert.textContent = message;
+    elements.alert.style.display = 'block';
+    setTimeout(() => {
+      elements.alert.style.display = 'none';
+    }, 5000);
   }
-  function shipPill(s){
-    if(!s) return `<span class="ship-badge ship-muted">—</span>`;
-    const n = String(s||'').toLowerCase().replace(' ', '-');
-    const cls =
-      n === 'processing'   ? 'ship-processing' :
-      n === 'in-transit'   ? 'ship-in-transit' :
-      n === 'delivered'    ? 'ship-delivered' :
-      (n === 'canceled' || n === 'cancelled') ? 'ship-canceled' :
-      'ship-muted';
-    return `<span class="ship-badge ${cls}">${s}</span>`;
+  
+  function showModal(title, message, content, callback) {
+    elements.modalTitle.textContent = title;
+    elements.modalMessage.textContent = message;
+    elements.modalContent.innerHTML = content;
+    modalCallback = callback;
+    elements.modal.style.display = 'flex';
   }
-  function setFlash(ok,msg){
-    flash.innerHTML = `<div class="${ok?'ok':'err'}">${msg}</div>`;
+  
+  function hideModal() {
+    elements.modal.style.display = 'none';
+    modalCallback = null;
   }
-
-  async function load(){
-    rowsEl.innerHTML = `<tr><td colspan="10" class="muted">Loading…</td></tr>`;
-    try{
-      const r = await fetch('/api/admin/orders?limit=100', { credentials:'same-origin' });
-      const data = await r.json();
-      if(!data?.ok) throw new Error(data?.message || 'Failed to load');
-      window.__ORDERS = data.orders || [];
-      render();
-    }catch(e){
-      rowsEl.innerHTML = `<tr><td colspan="10" class="muted">Failed to load.</td></tr>`;
-      setFlash(false, 'Could not load orders.');
+  
+  async function loadOrders() {
+    try {
+      elements.tableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Loading orders...</td></tr>';
+      elements.mobileCards.innerHTML = '<div class="text-muted">Loading orders...</div>';
+      
+      const response = await fetch('/api/admin/orders?limit=50');
+      const data = await response.json();
+      
+      if (data.ok) {
+        orders = data.orders || [];
+        renderOrders();
+        updateStats();
+      } else {
+        throw new Error(data.message || 'Failed to load orders');
+      }
+    } catch (error) {
+      showAlert('error', error.message);
+      elements.tableBody.innerHTML = `<tr><td colspan="6" class="text-muted">Error loading orders: ${error.message}</td></tr>`;
+      elements.mobileCards.innerHTML = `<div class="text-muted">Error loading orders: ${error.message}</div>`;
     }
   }
-
-  function render(){
-    const needle = (q.value||'').toLowerCase().trim();
-    const list = (window.__ORDERS||[]).filter(o=>{
-      if(!needle) return true;
-      return [
-        o.orderId, o.captureId, o.payerEmail, o.payerName
-      ].filter(Boolean).some(v=> String(v).toLowerCase().includes(needle));
+  
+  function updateStats() {
+    const total = orders.length;
+    const completed = orders.filter(o => 
+      ['completed', 'captured', 'approved'].includes(o.status?.toLowerCase())
+    ).length;
+    const pending = orders.filter(o => 
+      o.status?.toLowerCase() === 'pending'
+    ).length;
+    const refunded = orders.filter(o => 
+      o.status?.toLowerCase() === 'refunded'
+    ).length;
+    
+    document.getElementById('totalOrders').textContent = total;
+    document.getElementById('completedOrders').textContent = completed;
+    document.getElementById('pendingOrders').textContent = pending;
+    document.getElementById('refundedOrders').textContent = refunded;
+  }
+  
+  function renderOrders() {
+    const searchTerm = elements.searchInput.value.toLowerCase();
+    const statusFilter = elements.statusFilter.value;
+    
+    const filteredOrders = orders.filter(order => {
+      // Search filter
+      if (searchTerm) {
+        const searchFields = [
+          order.orderId,
+          order.captureId,
+          order.payerEmail,
+          order.payerName?.given_name,
+          order.payerName?.surname
+        ].filter(Boolean).map(f => f.toLowerCase());
+        
+        if (!searchFields.some(f => f.includes(searchTerm))) {
+          return false;
+        }
+      }
+      
+      // Status filter
+      if (statusFilter && order.status?.toLowerCase() !== statusFilter) {
+        return false;
+      }
+      
+      return true;
     });
-
-    if(!list.length){
-      rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No orders.</td></tr>`;
+    
+    // Show/hide empty state
+    if (filteredOrders.length === 0) {
+      elements.emptyState.hidden = false;
+      if (orders.length === 0) {
+        elements.emptyState.innerHTML = `
+          <div class="empty-icon">📋</div>
+          <h3>No orders yet</h3>
+          <p>Orders will appear here once they are placed</p>
+        `;
+      } else {
+        elements.emptyState.innerHTML = `
+          <div class="empty-icon">🔍</div>
+          <h3>No orders found</h3>
+          <p>Try adjusting your search or filter</p>
+        `;
+      }
+    } else {
+      elements.emptyState.hidden = true;
+    }
+    
+    // Render desktop table
+    renderDesktopTable(filteredOrders);
+    
+    // Render mobile cards
+    renderMobileCards(filteredOrders);
+  }
+  
+  function renderDesktopTable(filteredOrders) {
+    if (filteredOrders.length === 0) {
+      elements.tableBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-muted" style="text-align: center; padding: 40px;">
+            No orders found
+          </td>
+        </tr>
+      `;
       return;
     }
-
-    rowsEl.innerHTML = list.map(o=>{
-      const payPalLink = o.captureId ? (PP_ACTIVITY_BASE + encodeURIComponent(o.captureId)) : '';
-      const trackHref  = o.orderId ? (`/shipments/track?prefill=${encodeURIComponent(o.orderId)}`) : '';
-      const ship       = o.shipment || null;
-      const shipStatus = ship?.status || null;
-      const shipTrk    = ship?.trackingNumber || null;
-
-      return `<tr data-order="${o.orderId}" data-capture="${o.captureId||''}">
-        <td><span class="muted">${new Date(o.createdAt).toLocaleString()}</span></td>
-        <td>
-          ${o.orderId ? `<a class="link" href="${trackHref}" title="Track shipment">${o.orderId}</a>` : `<code>${o.orderId||''}</code>`}
-        </td>
-        <td>${pill(o.status)}</td>
-        <td>
-          ${o.payerName ? o.payerName+'<br/>' : '' }
-          <span class="muted">${o.payerEmail||'—'}</span>
-        </td>
-        <td>${fmtMoney(o.amount, o.currency)}</td>
-        <td>
-          <div class="muted">fee: ${o.fee?fmtMoney(o.fee,o.currency):'—'}</div>
-          <div class="muted">net: ${o.net?fmtMoney(o.net,o.currency):'—'}</div>
-        </td>
-        <td>${o.captureId ? `<code>${o.captureId}</code>` : '—'}</td>
-        <td>${payPalLink ? `<a class="link" target="_blank" rel="noopener" href="${payPalLink}">Open</a>` : '<span class="muted">—</span>'}</td>
-        <td>
-          ${shipStatus ? `${shipPill(shipStatus)}${shipTrk?`<div class="muted"># ${shipTrk}</div>`:''}
-          <div><a class="link" href="${trackHref}">Track</a></div>` :
-          `${o.orderId?`<a class="link" href="${trackHref}">Create / Track</a>`:'<span class="muted">—</span>'}`}
-        </td>
-        <td>
-          ${o.captureId ? `
-            <div class="refund-wrap">
-              <input class="refund-amount" type="number" step="0.01" min="0" placeholder="full" />
-              <button class="btn btn-refund">Refund</button>
-            </div>` : '<span class="muted">—</span>'}
-        </td>
-      </tr>`;
+    
+    elements.tableBody.innerHTML = filteredOrders.map(order => {
+      const status = order.status?.toLowerCase() || 'pending';
+      const statusClass = status === 'completed' || status === 'captured' || status === 'approved' 
+        ? 'status-completed' 
+        : 'status-pending';
+      
+      return `
+        <tr>
+          <td><small>${new Date(order.createdAt).toLocaleDateString()}</small></td>
+          <td><code>${order.orderId}</code></td>
+          <td><span class="status-badge ${statusClass}">${order.status}</span></td>
+          <td>
+            ${order.payerName ? `${order.payerName.given_name || ''} ${order.payerName.surname || ''}`.trim() : 'N/A'}<br>
+            <small class="text-muted">${order.payerEmail || ''}</small>
+          </td>
+          <td><strong>${order.currency} ${parseFloat(order.amount).toFixed(2)}</strong></td>
+          <td>
+            <div class="action-buttons">
+              ${order.captureId ? `
+                <button class="btn-action btn-refund" data-id="${order.orderId}" data-capture="${order.captureId}">
+                  Refund
+                </button>
+              ` : ''}
+              <button class="btn-action btn-cancel" data-id="${order.orderId}">Cancel</button>
+              <button class="btn-action btn-delete" data-id="${order.orderId}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
     }).join('');
   }
-
-  // search & reload
-  qs('#reload').addEventListener('click', load);
-  q.addEventListener('input', render);
-
-  // refund handler (delegated)
-  rowsEl.addEventListener('click', async (ev)=>{
-    const btn = ev.target.closest('.btn-refund');
-    if(!btn) return;
-    const tr = ev.target.closest('tr');
-    const captureId = tr?.getAttribute('data-capture');
-    if(!captureId) { setFlash(false,'No capture id on this order.'); return; }
-
-    const amountEl = tr.querySelector('.refund-amount');
-    const val = amountEl?.value ? Number(amountEl.value) : null;
-    if (val !== null && (!Number.isFinite(val) || val <= 0)) {
-      setFlash(false, 'Enter a positive amount or leave blank for full refund.');
+  
+  function renderMobileCards(filteredOrders) {
+    if (filteredOrders.length === 0) {
+      elements.mobileCards.innerHTML = '<div class="text-muted" style="text-align: center; padding: 40px 20px;">No orders found</div>';
       return;
     }
-
-    btn.disabled = true;
-    btn.textContent = 'Working…';
-    try{
-      const body = val ? { captureId, amount: val } : { captureId };
-      const r = await fetch('/payment/refund', {
-        method:'POST',
-        headers:{ 'Content-Type': 'application/json' },
-        credentials:'same-origin',
-        body: JSON.stringify(body)
-      });
-      const data = await r.json().catch(()=> ({}));
-      if(!r.ok || !data?.success){
-        throw new Error(data?.message || 'Refund failed');
+    
+    elements.mobileCards.innerHTML = filteredOrders.map(order => {
+      const status = order.status?.toLowerCase() || 'pending';
+      const statusClass = status === 'completed' || status === 'captured' || status === 'approved' 
+        ? 'status-completed' 
+        : 'status-pending';
+      
+      return `
+        <div class="mobile-card">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+            <div>
+              <div style="font-weight: 600; color: #2563EB;">${order.orderId}</div>
+              <div class="text-muted" style="font-size: 12px;">
+                ${new Date(order.createdAt).toLocaleString()}
+              </div>
+            </div>
+            <span class="status-badge ${statusClass}">${order.status}</span>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <div style="font-weight: 600; margin-bottom: 4px;">
+              ${order.payerName ? `${order.payerName.given_name || ''} ${order.payerName.surname || ''}`.trim() : 'Customer'}
+            </div>
+            <div class="text-muted" style="font-size: 12px;">${order.payerEmail || ''}</div>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+            <div>
+              <div style="font-size: 12px; color: #475569;">Amount</div>
+              <div style="font-weight: 700; font-size: 18px;">${order.currency} ${parseFloat(order.amount).toFixed(2)}</div>
+            </div>
+            ${order.captureId ? `
+              <div>
+                <div style="font-size: 12px; color: #475569;">Capture ID</div>
+                <div style="font-size: 12px;"><code>${order.captureId.substring(0, 8)}...</code></div>
+              </div>
+            ` : ''}
+          </div>
+          
+          <div class="action-buttons">
+            ${order.captureId ? `
+              <button class="btn-action btn-refund" data-id="${order.orderId}" data-capture="${order.captureId}">
+                Refund
+              </button>
+            ` : ''}
+            <button class="btn-action btn-cancel" data-id="${order.orderId}">Cancel</button>
+            <button class="btn-action btn-delete" data-id="${order.orderId}">Delete</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  // Event Handlers
+  function setupEventListeners() {
+    // Search
+    elements.searchInput.addEventListener('input', renderOrders);
+    elements.clearSearch.addEventListener('click', () => {
+      elements.searchInput.value = '';
+      renderOrders();
+    });
+    
+    // Filter
+    elements.statusFilter.addEventListener('change', renderOrders);
+    
+    // Refresh
+    elements.refreshBtn.addEventListener('click', loadOrders);
+    
+    // Modal
+    elements.modalConfirm.addEventListener('click', () => {
+      if (modalCallback) modalCallback(true);
+      hideModal();
+    });
+    
+    elements.modalCancel.addEventListener('click', () => {
+      if (modalCallback) modalCallback(false);
+      hideModal();
+    });
+    
+    elements.modalClose.addEventListener('click', hideModal);
+    
+    // Close modal when clicking outside
+    elements.modal.addEventListener('click', (e) => {
+      if (e.target === elements.modal) {
+        hideModal();
       }
-      setFlash(true, `Refund ${data.refund?.id || ''} submitted (${data.refund?.status || 'OK'}).`);
-      amountEl.value = '';
-      await load(); // refresh to reflect changes
-    }catch(e){
-      console.error(e);
-      setFlash(false, e.message || 'Refund failed.');
-    }finally{
-      btn.disabled = false;
-      btn.textContent = 'Refund';
-    }
-  });
-
-  // boot
-  load();
-})();
+    });
+    
+    // Click events for actions
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-id]');
+      if (!btn) return;
+      
+      const orderId = btn.dataset.id;
+      const action = btn.classList[1]; // btn-refund, btn-cancel, or btn-delete
+      
+      if (action === 'btn-refund') {
+        const captureId = btn.dataset.capture;
+        showModal(
+          'Refund Order',
+          'Enter refund amount (leave empty for full refund):',
+          `<input type="number" id="refundAmount" placeholder="Full amount" step="0.01" min="0" style="width: 100%; padding: 10px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 14px; margin-bottom: 8px;">
+           <small class="text-muted">Order ID: ${orderId}</small>`,
+          async (confirmed) => {
+            if (confirmed) {
+              const amount = document.getElementById('refundAmount').value;
+              try {
+                const response = await fetch(`/api/admin/orders/${orderId}/refund`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(amount ? { amount: parseFloat(amount) } : {})
+                });
+                const data = await response.json();
+                if (data.ok) {
+                  showAlert('success', 'Refund processed successfully');
+                  loadOrders();
+                } else {
+                  throw new Error(data.message);
+                }
+              } catch (error) {
+                showAlert('error', error.message);
+              }
+            }
+          }
+        );
+      }
+      
+      if (action === 'btn-cancel') {
+        showModal(
+          'Cancel Order',
+          'Are you sure you want to cancel this order?',
+          `<div class="text-muted">Order ID: ${orderId}</div>`,
+          async (confirmed) => {
+            if (confirmed) {
+              try {
+                const response = await fetch(`/api/admin/orders/${orderId}/cancel`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ reason: 'Admin cancelled' })
+                });
+                const data = await response.json();
+                if (data.ok) {
+                  showAlert('success', 'Order cancelled successfully');
+                  loadOrders();
+                } else {
+                  throw new Error(data.message);
+                }
+              } catch (error) {
+                showAlert('error', error.message);
+              }
+            }
+          }
+        );
+      }
+      
+      if (action === 'btn-delete') {
+        showModal(
+          'Delete Order',
+          'This will permanently delete the order. This action cannot be undone.',
+          `<div class="text-muted">Order ID: ${orderId}</div>
+           <div style="color: #EF4444; font-size: 12px; margin-top: 8px;">⚠️ This action is irreversible</div>`,
+          async (confirmed) => {
+            if (confirmed) {
+              try {
+                const response = await fetch(`/api/admin/orders/${orderId}`, {
+                  method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.ok) {
+                  showAlert('success', 'Order deleted successfully');
+                  loadOrders();
+                } else {
+                  throw new Error(data.message);
+                }
+              } catch (error) {
+                showAlert('error', error.message);
+              }
+            }
+          }
+        );
+      }
+    });
+  }
+});
 </script>
