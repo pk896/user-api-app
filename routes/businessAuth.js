@@ -3134,7 +3134,7 @@ router.get(
 // ----------------------------------------------------------
 // 🔍 DIAGNOSTIC ROUTE (keep this for debugging)
 // ----------------------------------------------------------
-router.get('/diagnostic', requireBusiness, async (req, res) => {
+/*router.get('/diagnostic', requireBusiness, async (req, res) => {
   try {
     const businessId = req.session.business._id;
     const business = await Business.findById(businessId).lean();
@@ -3222,7 +3222,7 @@ router.get('/diagnostic', requireBusiness, async (req, res) => {
     console.error('Diagnostic error:', err);
     res.status(500).json({ error: err.message });
   }
-});
+});*/
 
 module.exports = router;
 

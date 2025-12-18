@@ -1313,7 +1313,7 @@ router.get('/about', (req, res) => {
 });
 
 // ADD THIS TEST ROUTE - TEMPORARY
-router.get('/dashboard-test', ensureVerifiedUser, async (req, res) => {
+/*router.get('/dashboard-test', ensureVerifiedUser, async (req, res) => {
   const { _nonce = '' } = res.locals;
   const uid = req.session.user._id;
 
@@ -1349,7 +1349,7 @@ router.get('/dashboard-test', ensureVerifiedUser, async (req, res) => {
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
-});
+});*/
 
 /* =======================================================
    DEV MAINTENANCE ROUTES – LIST + DELETE USERS BY EMAIL
@@ -1367,7 +1367,7 @@ function requireDevMode(req, res, next) {
  * GET /users/debug/accounts
  * List all user accounts (email, username, provider, verified, createdAt)
  */
-router.get('/debug/accounts', requireDevMode, async (req, res) => {
+/*router.get('/debug/accounts', requireDevMode, async (req, res) => {
   try {
     const users = await User.find({})
       .select('email username name provider isEmailVerified createdAt lastLogin')
@@ -1386,7 +1386,7 @@ router.get('/debug/accounts', requireDevMode, async (req, res) => {
       message: 'Failed to load users',
     });
   }
-});
+});*/
 
 
 /**
@@ -1395,7 +1395,7 @@ router.get('/debug/accounts', requireDevMode, async (req, res) => {
  *
  * Body or query: { email: "someone@example.com" }
  */
-router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => {
+/*router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => {
   try {
     const rawEmail = (req.body && req.body.email) || req.query.email || '';
     const email = String(rawEmail).trim().toLowerCase();
@@ -1422,6 +1422,6 @@ router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => 
       message: 'Failed to delete user account(s)',
     });
   }
-});
+});*/
 
 module.exports = router;

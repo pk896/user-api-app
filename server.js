@@ -113,7 +113,7 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    TEMP DEBUG ROUTE – remove later
 --------------------------------------- */
-const Order = require('./models/Order');
+/*const Order = require('./models/Order');
 
 app.get('/debug-one-order', async (req, res) => {
   try {
@@ -144,7 +144,7 @@ ${JSON.stringify(order, null, 2)}
     console.error('debug-one-order error:', err);
     res.status(500).send('Error in debug-one-order');
   }
-});
+});*/
 
 /* ---------------------------------------
    Global Error Handlers
@@ -612,13 +612,13 @@ app.get('/session-test', (req, res) => {
   res.send(`Session views: ${req.session.views}`);
 });
 
-app.get('/_debug/session', (req, res) => {
+/*app.get('/_debug/session', (req, res) => {
   res.json({
     hasUser: !!req.session.user,
     hasBusiness: !!req.session.business,
     session: req.session,
   });
-});
+});*/
 
 // Enhanced health check
 app.get('/healthz', (req, res) => {
