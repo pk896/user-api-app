@@ -64,7 +64,13 @@ const businessSchema = new mongoose.Schema(
       updatedAt: { type: Date },
     },
 
-    // ✅ removed: idOrPassport
+    //sellerEarningsCredited: { type: Boolean, default: false },
+
+    // models/Business.js (add inside schema)
+    payouts: {
+      paypalEmail: { type: String, trim: true, lowercase: true },
+      enabled: { type: Boolean, default: false }, // only pay when true
+    },
 
     verification: {
       status: {

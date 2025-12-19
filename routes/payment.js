@@ -3,6 +3,14 @@ const express = require('express');
 const router = express.Router();
 //const fetch = require('node-fetch');
 const { fetch } = require('undici');
+const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOrder');
+
+let debitSellersFromRefund = null;
+try {
+  ({ debitSellersFromRefund } = require('../utils/payouts/debitSellersFromRefund'));
+} catch {
+  // optional: if file not present, refunds still work
+}
 
 const DeliveryOption = require('../models/DeliveryOption');
 let Order = null;
@@ -27,6 +35,9 @@ const PP_API =
 
 const upperCcy = String(BASE_CURRENCY || 'USD').toUpperCase();
 const vatRate = Number(VAT_RATE || 0);
+
+// ✅ Seller payout settings (basis points: 1000 = 10%)
+const PLATFORM_FEE_BPS = Number(process.env.PLATFORM_FEE_BPS || 1000);
 
 // ---------- helpers ----------
 function resNonce(req) {
@@ -893,6 +904,31 @@ router.post('/capture-order', express.json(), async (req, res) => {
           orderData,
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
+
+        // ----------------------------------------------------
+        // ✅ CREDIT SELLER EARNINGS (non-breaking payout hook)
+        // ----------------------------------------------------
+        try {
+          if (doc && typeof creditSellersFromOrder === 'function') {
+            const paidStatus = String(capture?.status || doc.status || '').toUpperCase();
+
+            // Only credit on successful capture
+            if (paidStatus === 'COMPLETED' || paidStatus === 'PAID') {
+              const feeBps = Number.isFinite(PLATFORM_FEE_BPS) ? PLATFORM_FEE_BPS : 1000;
+
+              const r = await creditSellersFromOrder(doc, {
+                platformFeeBps: feeBps,
+                onlyIfPaidLike: false, // we gate by status here
+              });
+
+              console.log('✅ Seller earnings credited (ledger):', r);
+            }
+          }
+        } catch (e) {
+          // IMPORTANT: never break customer checkout because payout crediting failed
+          console.error('⚠️ Seller crediting failed (checkout continues):', e?.message || e);
+        }
+
       }
     } catch (e) {
       console.error('❌ Failed to persist Order:', e.message);
@@ -1285,6 +1321,25 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
         }
 
         await orderDoc.save();
+
+        // ----------------------------------------------------
+        // ✅ DEBIT SELLER EARNINGS (non-breaking payout hook)
+        // ----------------------------------------------------
+        try {
+          if (typeof debitSellersFromRefund === 'function') {
+            const r = await debitSellersFromRefund(orderDoc, {
+              refundId: refundJson?.id || null,
+              amount:
+                refundJson?.amount?.value ??
+                (amountNum !== null ? amountNum.toFixed(2) : null),
+              currency: (refundJson?.amount?.currency_code ?? currency),
+            });
+
+            console.log('✅ Seller earnings debited (ledger):', r);
+          }
+        } catch (e2) {
+          console.error('⚠️ Seller debit failed (refund continues):', e2?.message || e2);
+        }
       }
     } catch (e) {
       console.warn('Refund saved to PayPal but failed to persist to DB:', e?.message || e);
@@ -1311,4 +1366,5 @@ module.exports = {
   router,
   computeTotalsFromSession,
 };
+
 

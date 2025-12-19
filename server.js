@@ -463,6 +463,8 @@ const productRatingsRoutes = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminOrdersApi = require('./routes/adminOrdersApi');
+const paypalWebhooksRoutes = require('./routes/paypalWebhooks');
+const adminPayoutsRoutes = require('./routes/adminPayouts');
 
 app.use('/dev', require('./routes/dev-mail-test'));
 
@@ -485,6 +487,12 @@ app.use('/admin', adminRoutes);
 app.use('/admin', adminOrdersRoutes);
 app.use('/admin', adminBizVerifyRoutes);
 app.use('/admin', deliveryOptionRouter);
+app.use('/admin', adminPayoutsRoutes);
+
+// PayPal Webhooks (payout status updates + verification)
+app.use('/', paypalWebhooksRoutes); // POST /webhooks/paypal
+
+// Delivery options API
 app.use(deliveryOptionsApi);
 
 // Commerce / catalog

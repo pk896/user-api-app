@@ -2595,6 +2595,164 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
 });
 
 /* ----------------------------------------------------------
+ * ✏️ Edit Business Details ONLY (GET)
+ * Renders: views/business-profile-edit-details.ejs
+ * URL: /business/profile/edit-details
+ * -------------------------------------------------------- */
+router.get('/profile/edit-details', requireBusiness, async (req, res) => {
+  try {
+    const bizId = req.session?.business?._id || req.session?.business?.id;
+    if (!bizId || !mongoose.isValidObjectId(bizId)) {
+      req.flash('error', 'Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const business = await Business.findById(bizId)
+      .select([
+        'name email role phone country city address',
+        'officialNumber officialNumberType',
+        'verification isVerified',
+      ].join(' '))
+      .lean();
+
+    if (!business) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    return res.render('business-profile-edit-details', {
+      title: 'Edit Business Details',
+      business,
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      info: req.flash('info'),
+      warning: req.flash('warning'),
+    });
+  } catch (err) {
+    console.error('❌ GET /business/profile/edit-details error:', err);
+    req.flash('error', 'Failed to load business details page.');
+    return res.redirect('/business/profile');
+  }
+});
+
+/* ----------------------------------------------------------
+ * 📝 Update Business Details ONLY (POST)
+ * action="/business/profile/update-details"
+ * -------------------------------------------------------- */
+router.post('/profile/update-details', requireBusiness, async (req, res) => {
+  try {
+    const bizId = req.session?.business?._id || req.session?.business?.id;
+    if (!bizId || !mongoose.isValidObjectId(bizId)) {
+      req.flash('error', 'Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const business = await Business.findById(bizId);
+    if (!business) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    // ---- Pick + sanitize (matches your EJS names) ----
+    const name = String(req.body?.name || '').trim();
+    const emailRaw = String(req.body?.email || '').trim();
+    const email = normalizeEmail(emailRaw);
+    const phone = String(req.body?.phone || '').trim();
+    const country = String(req.body?.country || '').trim();
+    const city = String(req.body?.city || '').trim();
+    const address = String(req.body?.address || '').trim();
+
+    const officialNumber = String(req.body?.officialNumber || '').trim();
+    const officialNumberType = String(req.body?.officialNumberType || 'OTHER').trim();
+
+    // ---- Required field checks ----
+    if (!name || !email || !phone || !country || !city || !address || !officialNumber) {
+      req.flash('error', 'Please fill in all required fields.');
+      return res.redirect('/business/profile/edit-details');
+    }
+
+    // ---- Validate officialNumberType ----
+    const allowedTypes = ['CIPC_REG', 'VAT', 'TIN', 'OTHER'];
+    if (!allowedTypes.includes(officialNumberType)) {
+      req.flash('error', 'Invalid official number type.');
+      return res.redirect('/business/profile/edit-details');
+    }
+
+    // ---- Email uniqueness if changed ----
+    const currentEmail = normalizeEmail(business.email);
+    const emailChanged = email !== currentEmail;
+
+    if (emailChanged) {
+      const exists = await Business.findOne({ email, _id: { $ne: business._id } }).lean();
+      if (exists) {
+        req.flash('error', 'That email is already used by another business account.');
+        return res.redirect('/business/profile/edit-details');
+      }
+    }
+
+    // ---- Official number change => reset verification status to pending ----
+    const currentOfficial = String(business.officialNumber || '').trim();
+    const officialChanged = officialNumber !== currentOfficial;
+
+    // ---- Apply updates ----
+    business.name = name;
+    business.email = email;
+    business.phone = phone;
+    business.country = country;
+    business.city = city;
+    business.address = address;
+
+    business.officialNumber = officialNumber;
+    business.officialNumberType = officialNumberType;
+
+    if (officialChanged) {
+      business.verification = business.verification || {};
+      business.verification.status = 'pending';
+      business.verification.reason = undefined;
+      business.verification.updatedAt = new Date();
+    }
+
+    // ---- If email changed: require re-verify + send verification email ----
+    if (emailChanged) {
+      const token = crypto.randomBytes(32).toString('hex');
+      business.isVerified = false;
+      business.emailVerificationToken = token;
+      business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      business.verificationEmailSentAt = new Date();
+
+      try {
+        await sendBusinessVerificationEmail(business, token, req);
+        req.flash('success', '✅ Details saved. Please verify your new email address.');
+      } catch (mailErr) {
+        console.error('❌ send verification after email change failed:', mailErr?.response?.body || mailErr?.message || mailErr);
+        req.flash('warning', 'Details saved, but we could not send the verification email. Use “Resend verification” on the pending page.');
+      }
+    } else {
+      req.flash('success', '✅ Business details updated.');
+    }
+
+    await business.save();
+
+    // ---- Keep session in sync ----
+    if (!req.session.business) req.session.business = {};
+    req.session.business.name = business.name;
+    req.session.business.email = business.email;
+    req.session.business.isVerified = business.isVerified;
+
+    // If email changed -> user must verify
+    if (emailChanged) return res.redirect('/business/verify-pending');
+
+    return res.redirect('/business/profile');
+  } catch (err) {
+    console.error('❌ POST /business/profile/update-details error:', err);
+    req.flash('error', 'Failed to update business details.');
+    return res.redirect('/business/profile/edit-details');
+  }
+});
+
+/* ----------------------------------------------------------
  * 🗑️ Delete Profile
  * -------------------------------------------------------- */
 router.get('/profile/delete', requireBusiness, async (req, res) => {
