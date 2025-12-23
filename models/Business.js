@@ -1,11 +1,67 @@
 // models/Business.js
 const mongoose = require('mongoose');
 
+function isValidEmail(v) {
+  const s = String(v || '').trim();
+  if (!s) return true; // allow empty (optional)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function maskEmail(email = '') {
+  const [name, domain] = String(email).split('@');
+  if (!name || !domain) return email;
+
+  const maskedName =
+    name.length <= 2
+      ? name[0] + '*'
+      : name[0] + '*'.repeat(Math.max(1, name.length - 2)) + name[name.length - 1];
+
+  const parts = domain.split('.');
+  const domName = parts[0] || '';
+  const domExt = parts.slice(1).join('.') || '';
+
+  const maskedDomain =
+    domName.length <= 2
+      ? (domName[0] || '*') + '*'
+      : domName[0] + '*'.repeat(Math.max(1, domName.length - 2)) + domName[domName.length - 1];
+
+  return `${maskedName}@${maskedDomain}${domExt ? '.' + domExt : ''}`;
+}
+
+/**
+ * Optional: sub-schema for payouts (no _id for cleaner docs)
+ * - default ensures payouts always exists (prevents undefined checks)
+ */
+const payoutsSchema = new mongoose.Schema(
+  {
+    paypalEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
+      validate: {
+        validator: isValidEmail,
+        message: 'PayPal email must be a valid email address',
+      },
+    },
+    enabled: { type: Boolean, default: false, index: true },
+    updatedAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
 const businessSchema = new mongoose.Schema(
   {
     name: { type: String, required: [true, 'Business name is required'], trim: true },
 
-    email: { type: String, required: [true, 'Email is required'], lowercase: true, trim: true, index: true },
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
+      lowercase: true,
+      trim: true,
+      index: true,
+      unique: true, // ✅ prevent duplicates at DB level
+    },
 
     password: {
       type: String,
@@ -21,11 +77,13 @@ const businessSchema = new mongoose.Schema(
       index: true,
     },
 
-    // ✅ internal stable id (global)
     internalBusinessId: { type: String, unique: true, index: true },
 
-    // This is your official number (global)
-    officialNumber: { type: String, required: [true, 'Business number is required'], trim: true },
+    officialNumber: {
+      type: String,
+      required: [true, 'Business number is required'],
+      trim: true,
+    },
 
     officialNumberType: {
       type: String,
@@ -39,14 +97,12 @@ const businessSchema = new mongoose.Schema(
     city: { type: String, required: [true, 'City is required'], trim: true },
     address: { type: String, required: [true, 'Business address is required'], trim: true },
 
-    // ✅ Authorized Representative (person creating the account)
     representative: {
       fullName: { type: String, required: [true, 'Representative full name is required'], trim: true },
       phone: { type: String, required: [true, 'Representative phone is required'], trim: true },
       idNumber: { type: String, required: [true, 'Representative ID number is required'], trim: true },
     },
 
-    // 💳 Bank details (for payouts)
     bankDetails: {
       accountHolderName: { type: String, trim: true },
       bankName: { type: String, trim: true },
@@ -58,18 +114,20 @@ const businessSchema = new mongoose.Schema(
       currency: { type: String, trim: true },
       payoutMethod: {
         type: String,
-        enum: ['bank', 'paypal', 'other'],
+        enum: ['bank', 'paypal', 'payoneer', 'wise', 'other'], // ✅ matches your routes
         default: 'bank',
       },
-      updatedAt: { type: Date },
+      updatedAt: { type: Date, default: null },
     },
 
-    //sellerEarningsCredited: { type: Boolean, default: false },
-
-    // models/Business.js (add inside schema)
+    /**
+     * ✅ Payouts (PayPal email used by payouts flow)
+     * - payouts always exists due to default
+     * - paypalEmail is optional, validated when present
+     */
     payouts: {
-      paypalEmail: { type: String, trim: true, lowercase: true },
-      enabled: { type: Boolean, default: false }, // only pay when true
+      type: payoutsSchema,
+      default: () => ({ enabled: false, updatedAt: null }),
     },
 
     verification: {
@@ -81,41 +139,37 @@ const businessSchema = new mongoose.Schema(
       },
       method: { type: String, enum: ['manual', 'documents', 'registry', 'vat'], default: 'manual' },
       provider: { type: String, default: 'manual' },
-      checkedAt: Date,
-      verifiedAt: Date,
-      reason: String,
+      checkedAt: { type: Date, default: null },
+      verifiedAt: { type: Date, default: null },
+      reason: { type: String, default: '' },
+      updatedAt: { type: Date, default: null },
     },
 
-    // Email verification (your existing flow)
     isVerified: { type: Boolean, default: false, index: true },
-    emailVerifiedAt: { type: Date },
+    emailVerifiedAt: { type: Date, default: null },
     emailVerificationToken: { type: String, index: true },
-    emailVerificationExpires: { type: Date },
-    verificationEmailSentAt: { type: Date },
+    emailVerificationExpires: { type: Date, default: null },
+    verificationEmailSentAt: { type: Date, default: null },
 
-    // ✅ prevents sending the “welcome after verify-email” twice
     welcomeEmailSentAt: { type: Date, default: null, index: true },
-
-    // ✅ prevent sending verification-status emails twice
     officialNumberVerifiedEmailSentAt: { type: Date, default: null, index: true },
     officialNumberRejectedEmailSentAt: { type: Date, default: null, index: true },
   },
   { timestamps: true },
 );
 
-/**
- * ✅ Safe JSON for sending to views/APIs
- * - Keep password/id/token hidden
- * - Prevent bank data leaks: only keep holder name + masked/last4
- */
-businessSchema.methods.toSafeJSON = function () {
-  const obj = this.toObject();
+// ✅ optional helper index for admin payouts lists
+businessSchema.index({ 'payouts.enabled': 1, 'payouts.updatedAt': -1 });
 
-  // Sensitive
+businessSchema.methods.toSafeJSON = function () {
+  const obj = this.toObject({ virtuals: false });
+
+  // Never leak secrets
   delete obj.password;
   delete obj.emailVerificationToken;
+  delete obj.emailVerificationExpires;
 
-  // ✅ Bank details: prevent leaks in views/APIs
+  // Bank details: keep safe subset + mask account number
   if (obj.bankDetails) {
     const bd = obj.bankDetails || {};
 
@@ -128,10 +182,9 @@ businessSchema.methods.toSafeJSON = function () {
       branchCode: bd.branchCode || '',
       swiftCode: bd.swiftCode || '',
       iban: bd.iban || '',
-      updatedAt: bd.updatedAt,
+      updatedAt: bd.updatedAt || null,
     };
 
-    // Mask account number -> last4 only
     if (bd.accountNumber) {
       const s = String(bd.accountNumber).replace(/\s+/g, '');
       safeBankDetails.accountNumberLast4 = s.length >= 4 ? s.slice(-4) : '';
@@ -144,7 +197,17 @@ businessSchema.methods.toSafeJSON = function () {
     obj.bankDetails = safeBankDetails;
   }
 
+  // Payouts: do NOT leak real PayPal email in views/APIs (use DB doc/select for payouts logic)
+  if (obj.payouts && obj.payouts.paypalEmail) {
+    obj.payouts = {
+      ...obj.payouts,
+      paypalEmailMasked: maskEmail(obj.payouts.paypalEmail),
+      paypalEmail: undefined,
+    };
+  }
+
   return obj;
 };
 
 module.exports = mongoose.model('Business', businessSchema);
+

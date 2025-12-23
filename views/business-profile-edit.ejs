@@ -1,4 +1,8 @@
+<!-- views/business-profile-edit.ejs -->
 <% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<% const payouts = (business && business.payouts) ? business.payouts : {}; %>
+<% const payoutsEnabled = typeof payouts.enabled === 'boolean' ? payouts.enabled : false %>
+<% const paypalEmail = payouts.paypalEmail || '' %>
 
 <div class="bp-edit-page">
   <!-- Header Section -->
@@ -115,6 +119,24 @@
                 <% } %>
               <% } else { %>
                 <span class="pill pill-amber">Not Verified</span>
+              <% } %>
+            </span>
+          </div>
+
+          <!-- Payouts snapshot -->
+          <div class="row row-top">
+            <span class="k">PayPal Payouts</span>
+            <span class="v v-stack">
+              <% if (payoutsEnabled) { %>
+                <span class="pill pill-green">Enabled</span>
+              <% } else { %>
+                <span class="pill pill-amber">Disabled</span>
+              <% } %>
+
+              <% if (paypalEmail) { %>
+                <span class="mini-note"><strong>To:</strong> <%= paypalEmail %></span>
+              <% } else { %>
+                <span class="mini-note">No PayPal email set</span>
               <% } %>
             </span>
           </div>
@@ -427,6 +449,48 @@
           </header>
 
           <div class="grid">
+            <!-- ✅ PayPal Email (for payouts) -->
+            <div class="field full">
+              <label for="paypalEmail">PayPal Email (for payouts)</label>
+              <div class="input-ic">
+                <span class="ii" aria-hidden="true">🅿️</span>
+                <input
+                  type="email"
+                  id="paypalEmail"
+                  name="paypalEmail"
+                  value="<%= paypalEmail %>"
+                  placeholder="paypal@email.com"
+                  autocomplete="email"
+                  inputmode="email"
+                />
+              </div>
+              <p class="help">Leave empty to disable PayPal payouts (or toggle payouts off).</p>
+            </div>
+
+            <!-- ✅ Enable PayPal Payouts -->
+            <div class="field full">
+              <label>Enable PayPal Payouts</label>
+
+              <!-- Hidden so backend ALWAYS receives a value (0) even when unchecked -->
+              <input type="hidden" name="payoutsEnabled" value="0" />
+
+              <label class="toggle">
+                <input
+                  type="checkbox"
+                  name="payoutsEnabled"
+                  value="1"
+                  <%= payoutsEnabled ? 'checked' : '' %>
+                />
+                <span class="toggle-ui" aria-hidden="true"></span>
+                <span class="toggle-text" data-on="Enabled" data-off="Disabled">
+                  <%= payoutsEnabled ? 'Enabled' : 'Disabled' %>
+                </span>
+              </label>
+
+              <p class="help">To be eligible: payouts enabled + PayPal email set + available balance.</p>
+            </div>
+
+            <!-- ✅ Bank Details -->
             <div class="field">
               <label for="bankAccountHolderName">Account Holder Name</label>
               <input
@@ -605,9 +669,9 @@
 
         <!-- Actions -->
         <div class="actions">
-          <button type="button" class="btn btn-ghost" onclick="window.location.href='/business/profile'">
-            Cancel
-          </button>
+          <!-- ✅ CSP-safe: no onclick -->
+          <a class="btn btn-ghost" href="/business/profile">Cancel</a>
+
           <button type="submit" class="btn btn-primary">
             Save Changes
           </button>
@@ -988,6 +1052,35 @@
     line-height: 1.35;
   }
 
+  /* Toggle (same behavior as your details page) */
+  .toggle { display:flex; align-items:center; gap:10px; user-select:none; }
+  .toggle input { position:absolute; opacity:0; pointer-events:none; }
+  .toggle-ui {
+    width:52px; height:30px;
+    border-radius:999px;
+    background: rgba(124,58,237,.25);
+    border: 2px solid rgba(124,58,237,.35);
+    position:relative;
+    transition: all .2s ease;
+    flex-shrink:0;
+  }
+  .toggle-ui::after{
+    content:'';
+    position:absolute;
+    top:50%;
+    left:3px;
+    width:24px;
+    height:24px;
+    border-radius:999px;
+    background:#fff;
+    transform: translateY(-50%);
+    transition: all .2s ease;
+    box-shadow: 0 6px 14px rgba(15,23,42,.18);
+  }
+  .toggle input:checked + .toggle-ui { background: rgba(34,197,94,.25); border-color: rgba(34,197,94,.45); }
+  .toggle input:checked + .toggle-ui::after { left:23px; }
+  .toggle-text { font-size:.875rem; font-weight:1000; color: var(--text); }
+
   /* Password */
   .pw{ position:relative; }
   .pw input{ padding-right: 44px; }
@@ -1092,6 +1185,27 @@
 
 <script nonce="<%= NONCE %>">
   document.addEventListener("DOMContentLoaded", () => {
+    // ✅ Make PayPal email required only when payouts enabled
+    (function () {
+      const paypal = document.getElementById('paypalEmail');
+      const checkbox = document.querySelector('input[type="checkbox"][name="payoutsEnabled"]');
+      const text = document.querySelector('.toggle-text');
+
+      if (!checkbox) return;
+
+      const render = () => {
+        const on = checkbox.checked;
+        if (text) text.textContent = on ? (text.dataset.on || 'Enabled') : (text.dataset.off || 'Disabled');
+        if (paypal) {
+          if (on) paypal.setAttribute('required', 'required');
+          else paypal.removeAttribute('required');
+        }
+      };
+
+      checkbox.addEventListener('change', render);
+      render();
+    })();
+
     // Strength (new password only)
     const newPasswordInput = document.getElementById('newPassword');
     const passwordStrength = document.getElementById('passwordStrength');
@@ -1142,3 +1256,5 @@
     });
   });
 </script>
+
+

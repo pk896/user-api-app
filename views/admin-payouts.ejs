@@ -1,0 +1,572 @@
+<%
+  const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '');
+  const payoutList = Array.isArray(payouts) ? payouts : [];
+  const KPIS = (typeof kpis === 'object' && kpis) ? kpis : {};
+  const preview = Array.isArray(previewSellers) ? previewSellers : [];
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function money(cents) {
+    const n = Math.round(Number(cents || 0));
+    return (n / 100).toFixed(2);
+  }
+
+  function badgeClass(status) {
+    const v = String(status || '').trim().toUpperCase();
+    if (v === 'COMPLETED' || v === 'SUCCESS') return 'b b-green';
+    if (v === 'FAILED' || v === 'DENIED') return 'b b-red';
+    return 'b b-purple';
+  }
+
+  function yesNoPill(ok, yesText, noText) {
+    return ok
+      ? ('<span class="pill ok">' + esc(yesText || 'YES') + '</span>')
+      : ('<span class="pill bad">' + esc(noText || 'NO') + '</span>');
+  }
+
+  // ✅ local mask helper (so we never leak raw PayPal emails in UI)
+  function maskEmailLocal(email = '') {
+    const [name, domain] = String(email || '').split('@');
+    if (!name || !domain) return String(email || '');
+    const maskedName =
+      name.length <= 2
+        ? name[0] + '*'
+        : name[0] + '*'.repeat(Math.max(1, name.length - 2)) + name[name.length - 1];
+
+    const parts = domain.split('.');
+    const domName = parts[0] || '';
+    const domExt = parts.slice(1).join('.') || '';
+
+    const maskedDomain =
+      domName.length <= 2
+        ? (domName[0] || '*') + '*'
+        : domName[0] + '*'.repeat(Math.max(1, domName.length - 2)) + domName[domName.length - 1];
+
+    return `${maskedName}@${maskedDomain}${domExt ? '.' + domExt : ''}`;
+  }
+
+  const previewCurrency = String(KPIS.previewCurrency || 'USD').toUpperCase();
+%>
+
+<section class="payouts-page">
+  <div class="container">
+
+    <!-- Header -->
+    <div class="page-hero">
+      <div class="hero-left">
+        <div class="hero-icon" aria-hidden="true">💸</div>
+        <div>
+          <h1 class="hero-title">Seller Payouts</h1>
+          <p class="hero-sub">
+            Preview seller balances, create PayPal payout batches, then sync to update statuses. Failed items auto-credit back (idempotent).
+          </p>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <span class="chip">Blue <b>#2563EB</b></span>
+        <span class="chip">Purple <b>#7C3AED</b></span>
+        <span class="chip">Green <b>#22C55E</b></span>
+        <span class="chip">Black <b>#0F172A</b></span>
+      </div>
+    </div>
+
+    <!-- Flash Messages -->
+    <% if (success && success.length) { %>
+      <div class="flash ok"><%= Array.isArray(success) ? success.join(' ') : String(success) %></div>
+    <% } %>
+    <% if (info && info.length) { %>
+      <div class="flash info"><%= Array.isArray(info) ? info.join(' ') : String(info) %></div>
+    <% } %>
+    <% if (error && error.length) { %>
+      <div class="flash err"><%= Array.isArray(error) ? error.join(' ') : String(error) %></div>
+    <% } %>
+    <% if (warning && warning.length) { %>
+      <div class="flash warn"><%= Array.isArray(warning) ? warning.join(' ') : String(warning) %></div>
+    <% } %>
+
+    <!-- KPI Row -->
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Total Batches</div>
+        <div class="kpi-value"><%= (typeof KPIS.totalBatches !== 'undefined') ? KPIS.totalBatches : payoutList.length %></div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi-label">Total Paid Out</div>
+        <div class="kpi-value"><%= esc(KPIS.totalPaidOut ? KPIS.totalPaidOut : '—') %></div>
+        <div class="kpi-hint">All-time (best-effort)</div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi-label">Last Batch Status</div>
+        <div class="kpi-value"><%= esc(KPIS.lastStatus ? KPIS.lastStatus : (payoutList[0] && payoutList[0].status ? payoutList[0].status : '—')) %></div>
+      </div>
+    </div>
+
+    <!-- Preview Sellers -->
+    <div class="card">
+      <div class="card-head row">
+        <div>
+          <h2 class="card-title">Seller payout preview</h2>
+          <p class="card-desc">
+            Currency: <b><%= esc(previewCurrency) %></b>. Shows each seller’s available balance (only computed for enabled + PayPal-ready sellers).
+          </p>
+        </div>
+
+        <div class="preview-kpis">
+          <div class="pk">
+            <div class="pk-l">Eligible sellers</div>
+            <div class="pk-v"><%= esc(String(KPIS.eligibleSellers ?? 0)) %></div>
+          </div>
+          <div class="pk">
+            <div class="pk-l">Eligible total</div>
+            <div class="pk-v"><%= esc(String(KPIS.eligibleTotal ?? '0.00')) %> <span class="pk-cur"><%= esc(previewCurrency) %></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Seller</th>
+              <th>Payouts enabled</th>
+              <th>PayPal email</th>
+              <th>Available</th>
+              <th>Eligible now</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!preview.length) { %>
+              <tr><td colspan="5" class="muted">No sellers found.</td></tr>
+            <% } else { %>
+              <% preview.forEach(function(s){ %>
+                <tr>
+                  <td>
+                    <div class="cell-strong"><%= esc(s.name || '—') %></div>
+                    <div class="cell-sub">businessId: <%= esc(s.businessId) %></div>
+                  </td>
+
+                  <td>
+                    <%- yesNoPill(!!s.enabled, 'ENABLED', 'DISABLED') %>
+                  </td>
+
+                  <td>
+                    <% if (s.hasPaypal) { %>
+                      <span class="pill"><%= esc(s.paypalEmailMasked || maskEmailLocal(s.paypalEmail || '')) %></span>
+                    <% } else { %>
+                      <span class="pill bad">NOT SET</span>
+                    <% } %>
+                  </td>
+
+                  <td>
+                    <div class="cell-strong"><%= money(s.availableCents) %> <span class="cell-sub-inline"><%= esc(previewCurrency) %></span></div>
+                    <div class="cell-sub">cents: <%= Number(s.availableCents||0) %></div>
+                  </td>
+
+                  <td>
+                    <% if (s.eligible) { %>
+                      <span class="b b-green">YES</span>
+                    <% } else { %>
+                      <span class="b b-slate">NO</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tiny muted" style="margin-top:10px">
+        Note: “Eligible now” means payouts enabled + PayPal email set + available balance &gt; 0 in <b><%= esc(previewCurrency) %></b>.
+        The “Minimum payout” in the Create form below filters further.
+      </div>
+    </div>
+
+    <!-- Create payout + Sync recent (✅ NOT NESTED FORMS) -->
+    <div class="card">
+      <div class="card-head">
+        <h2 class="card-title">Auto pay sellers now</h2>
+        <p class="card-desc">
+          Pays all eligible sellers (role=seller, payouts enabled, PayPal email set). Creates PayPal batch + local <code>Payout</code> doc + debits ledger (idempotent).
+        </p>
+      </div>
+
+      <div class="actions-split">
+        <!-- ✅ Create payout form -->
+        <form class="form-grid" method="POST" action="/admin/payouts/create">
+          <div class="field">
+            <label for="currency">Currency</label>
+            <input id="currency" name="currency" placeholder="USD" value="<%= esc(previewCurrency) %>" autocomplete="off" />
+            <div class="hint">Keep it consistent with your ledger currency.</div>
+          </div>
+
+          <div class="field">
+            <label for="minCents">Minimum payout (cents)</label>
+            <input id="minCents" name="minCents" placeholder="0" inputmode="numeric" value="0" />
+            <div class="hint">Only sellers with available ≥ minCents will be paid.</div>
+          </div>
+
+          <div class="field full">
+            <label for="note">Note</label>
+            <input id="note" name="note" placeholder="Seller payout" value="Seller payout" />
+          </div>
+
+          <div class="field full">
+            <label class="check">
+              <input type="checkbox" name="autoSync" value="1" checked />
+              <span>Auto-sync immediately after create (best-effort)</span>
+            </label>
+            <div class="hint">This updates item statuses quickly. You can still sync later from history.</div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" type="submit">Auto Pay Now</button>
+
+            <div class="tiny">
+              Creates PayPal payout batch and debits each seller with <code>PAYOUT_DEBIT</code>. Failed payout items are auto-credited on sync.
+            </div>
+          </div>
+        </form>
+
+        <!-- ✅ Sync recent form (separate, not nested) -->
+        <form method="POST" action="/admin/payouts/sync-recent" class="sync-recent">
+          <input type="hidden" name="limit" value="10" />
+          <button class="btn ghost" type="submit">Sync Recent Batches</button>
+          <div class="hint">Syncs the most recent batches (best-effort). You can also sync per batch below.</div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Payout history -->
+    <div class="card">
+      <div class="card-head row">
+        <div>
+          <h2 class="card-title">Payout history</h2>
+          <p class="card-desc">Sync any batch to refresh item statuses (SENT / FAILED / PENDING). Failed items auto-credit back (idempotent).</p>
+        </div>
+
+        <div class="mini-legend">
+          <span class="b b-green">COMPLETED</span>
+          <span class="b b-purple">PROCESSING</span>
+          <span class="b b-red">FAILED</span>
+        </div>
+      </div>
+
+      <% if (!payoutList.length) { %>
+        <div class="empty">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">No payout batches yet</div>
+          <div class="empty-sub">Use “Auto Pay Now” above.</div>
+        </div>
+      <% } else { %>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Mode</th>
+                <th>Status</th>
+                <th>Currency</th>
+                <th>Total</th>
+                <th>Batch IDs</th>
+                <th>Items</th>
+                <th class="right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <% payoutList.forEach(function(p){
+                const items = Array.isArray(p.items) ? p.items : [];
+                const sent = items.filter(i => String(i.status||'').toUpperCase()==='SENT').length;
+                const failed = items.filter(i => String(i.status||'').toUpperCase()==='FAILED').length;
+                const pending = items.filter(i => String(i.status||'').toUpperCase()==='PENDING').length;
+              %>
+                <tr>
+                  <td>
+                    <div class="cell-strong"><%= p.createdAt ? new Date(p.createdAt).toLocaleString() : '—' %></div>
+                    <div class="cell-sub">Admin payouts</div>
+                  </td>
+
+                  <td><span class="pill"><%= esc(p.mode || 'SANDBOX') %></span></td>
+
+                  <td><span class="<%= badgeClass(p.status) %>"><%= esc(p.status || '—') %></span></td>
+
+                  <td><%= esc(p.currency || 'USD') %></td>
+
+                  <td>
+                    <div class="cell-strong"><%= money(p.totalCents) %></div>
+                    <div class="cell-sub">cents: <%= Number(p.totalCents||0) %></div>
+                  </td>
+
+                  <td>
+                    <div class="cell-sub">
+                      <div><b>batchId:</b> <%= esc(p.batchId || '—') %></div>
+                      <div><b>senderBatchId:</b> <%= esc(p.senderBatchId || '—') %></div>
+                    </div>
+                  </td>
+
+                  <td>
+                    <div class="stack">
+                      <span class="mini ok">SENT: <b><%= sent %></b></span>
+                      <span class="mini warn">PENDING: <b><%= pending %></b></span>
+                      <span class="mini err">FAILED: <b><%= failed %></b></span>
+                    </div>
+                  </td>
+
+                  <td class="right">
+                    <form method="POST" action="/admin/payouts/<%= esc(p._id) %>/sync" class="inline">
+                      <button class="btn ghost" type="submit">Sync</button>
+                    </form>
+                  </td>
+                </tr>
+
+                <!-- items -->
+                <tr class="subrow">
+                  <td colspan="8">
+                    <div class="items">
+                      <div class="items-head">
+                        <div class="items-title">Items (<%= items.length %>)</div>
+                        <div class="items-sub">Each seller receiver and status after sync (emails masked).</div>
+                      </div>
+
+                      <% if (!items.length) { %>
+                        <div class="items-empty">No items for this payout batch.</div>
+                      <% } else { %>
+                        <div class="items-grid">
+                          <% items.forEach(function(it){
+                            const st = String(it.status||'PENDING').toUpperCase();
+                            const receiverRaw = String(it.receiver || '').trim();
+                            const receiverMasked = receiverRaw ? maskEmailLocal(receiverRaw) : '—';
+                          %>
+                            <div class="item">
+                              <div class="item-top">
+                                <span class="pill"><%= esc(it.currency || p.currency || 'USD') %></span>
+                                <span class="b <%= st==='SENT' ? 'b-green' : (st==='FAILED' ? 'b-red' : 'b-slate') %>"><%= esc(st) %></span>
+                              </div>
+
+                              <div class="item-main">
+                                <div class="item-amt"><%= money(it.amountCents) %></div>
+                                <div class="item-rec"><%= esc(receiverMasked) %></div>
+                                <div class="item-sub">businessId: <%= esc(it.businessId) %></div>
+                              </div>
+
+                              <% if (it.error) { %>
+                                <div class="item-err">Error: <%= esc(it.error) %></div>
+                              <% } %>
+
+                              <div class="item-sub tiny">
+                                paypalItemId: <%= esc(it.paypalItemId || '—') %>
+                              </div>
+                            </div>
+                          <% }) %>
+                        </div>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+
+      <% } %>
+    </div>
+
+  </div>
+</section>
+
+<style nonce="<%= NONCE %>">
+  .payouts-page{padding:18px 0}
+  .container{max-width:1100px;margin:0 auto;padding:0 14px}
+
+  .page-hero{
+    background:linear-gradient(135deg,#0F172A,#111827);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:18px;
+    padding:16px;
+    display:flex;
+    gap:14px;
+    align-items:flex-start;
+    justify-content:space-between;
+    color:#fff;
+    box-shadow:0 10px 24px rgba(2,6,23,.18);
+    margin-bottom:14px;
+  }
+  .hero-left{display:flex;gap:12px;align-items:flex-start}
+  .hero-icon{
+    width:44px;height:44px;border-radius:14px;
+    display:grid;place-items:center;
+    background:linear-gradient(135deg,#7C3AED,#2563EB);
+    box-shadow:0 10px 18px rgba(124,58,237,.25);
+    font-size:20px;
+  }
+  .hero-title{margin:0;font-size:18px;font-weight:900;letter-spacing:.2px}
+  .hero-sub{margin:6px 0 0;color:rgba(255,255,255,.78);font-size:12.5px;max-width:560px}
+  .hero-right{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+  .chip{
+    font-size:11px;line-height:1;
+    padding:8px 10px;border-radius:999px;
+    background:rgba(255,255,255,.09);
+    border:1px solid rgba(255,255,255,.12);
+  }
+
+  .flash{border-radius:14px;padding:10px 12px;margin:10px 0;font-size:13px;border:1px solid transparent}
+  .flash.ok{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#0F172A}
+  .flash.err{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.25);color:#0F172A}
+  .flash.info{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.22);color:#0F172A}
+  .flash.warn{background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.22);color:#0F172A}
+
+  .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 14px}
+  .kpi{
+    background:#fff;border:1px solid rgba(15,23,42,.08);
+    border-radius:16px;padding:12px;
+    box-shadow:0 8px 18px rgba(2,6,23,.05);
+  }
+  .kpi-label{font-size:12px;color:#475569}
+  .kpi-value{font-size:18px;font-weight:900;color:#0F172A;margin-top:6px}
+  .kpi-hint{font-size:11px;color:#64748B;margin-top:2px}
+
+  .card{
+    background:#fff;border:1px solid rgba(15,23,42,.08);
+    border-radius:18px;padding:14px;
+    box-shadow:0 10px 24px rgba(2,6,23,.06);
+    margin-bottom:14px;
+  }
+  .card-head{margin-bottom:10px}
+  .card-head.row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .card-title{margin:0;font-size:15px;font-weight:900;color:#0F172A}
+  .card-desc{margin:6px 0 0;color:#475569;font-size:12.5px}
+
+  .preview-kpis{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .pk{
+    border:1px solid rgba(15,23,42,.10);
+    background:rgba(2,6,23,.02);
+    border-radius:14px;
+    padding:10px 12px;
+    min-width:160px;
+  }
+  .pk-l{font-size:11px;color:#64748B}
+  .pk-v{margin-top:6px;font-size:16px;font-weight:950;color:#0F172A}
+  .pk-cur{font-size:11px;color:#64748B;font-weight:800;margin-left:6px}
+
+  .actions-split{display:grid;grid-template-columns:1fr;gap:12px}
+  .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;align-items:end}
+  .field.full{grid-column:1/-1}
+  label{display:block;font-size:12px;font-weight:800;color:#0F172A;margin:0 0 6px}
+  input{
+    width:100%;padding:11px 12px;border-radius:14px;
+    border:1px solid rgba(15,23,42,.12);
+    outline:none;font-size:13px;
+  }
+  input:focus{border-color:rgba(124,58,237,.55);box-shadow:0 0 0 4px rgba(124,58,237,.14)}
+  .hint{margin-top:6px;font-size:11px;color:#64748B}
+
+  .check{display:flex;gap:10px;align-items:center}
+  .check input{width:auto}
+
+  .actions{grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .btn{
+    border-radius:14px;padding:10px 12px;font-weight:900;
+    border:1px solid rgba(15,23,42,.12);
+    background:#fff;color:#0F172A;cursor:pointer;
+  }
+  .btn.primary{
+    background:linear-gradient(135deg,#7C3AED,#2563EB);
+    border-color:transparent;color:#fff;
+    box-shadow:0 10px 18px rgba(124,58,237,.18);
+  }
+  .btn.ghost{background:#fff}
+  .btn:hover{transform:translateY(-1px)}
+  .tiny{font-size:11px;color:#64748B}
+  .muted{color:#64748B}
+
+  .sync-recent{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    padding-top:2px;
+  }
+
+  .table-wrap{overflow:auto;border-radius:14px;border:1px solid rgba(15,23,42,.08)}
+  .table{width:100%;border-collapse:separate;border-spacing:0;background:#fff;min-width:980px}
+  th,td{padding:10px 10px;border-bottom:1px solid rgba(15,23,42,.06);vertical-align:top;text-align:left;font-size:12.5px}
+  th{background:rgba(124,58,237,.06);color:#0F172A;font-weight:900}
+  .right{text-align:right}
+  .cell-strong{font-weight:900;color:#0F172A}
+  .cell-sub{font-size:11px;color:#64748B;margin-top:3px}
+  .cell-sub-inline{font-size:11px;color:#64748B;font-weight:900;margin-left:6px}
+
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 10px;border-radius:999px;
+    border:1px solid rgba(15,23,42,.10);
+    background:#fff;font-size:11px;font-weight:800;color:#0F172A;
+  }
+  .pill.ok{border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.07)}
+  .pill.bad{border-color:rgba(239,68,68,.20);background:rgba(239,68,68,.06);color:#7f1d1d}
+
+  .b{
+    display:inline-flex;align-items:center;
+    padding:5px 10px;border-radius:999px;
+    font-size:11px;font-weight:900;border:1px solid transparent;
+  }
+  .b-green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#0F172A}
+  .b-purple{background:rgba(124,58,237,.12);border-color:rgba(124,58,237,.25);color:#0F172A}
+  .b-red{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.25);color:#0F172A}
+  .b-slate{background:rgba(71,85,105,.10);border-color:rgba(71,85,105,.18);color:#0F172A}
+
+  .subrow td{background:rgba(2,6,23,.02)}
+  .items{padding:10px}
+  .items-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .items-title{font-weight:900;color:#0F172A}
+  .items-sub{font-size:11px;color:#64748B}
+  .items-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .item{
+    background:#fff;border:1px solid rgba(15,23,42,.08);
+    border-radius:16px;padding:10px;
+    box-shadow:0 10px 20px rgba(2,6,23,.05);
+  }
+  .item-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+  .item-amt{font-size:16px;font-weight:950;color:#0F172A}
+  .item-rec{font-size:12px;color:#0F172A;font-weight:800;margin-top:2px}
+  .item-sub{font-size:11px;color:#64748B;margin-top:2px}
+  .item-err{margin-top:8px;font-size:11px;color:#b91c1c;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.18);padding:8px;border-radius:12px}
+
+  .mini-legend{display:flex;gap:8px;flex-wrap:wrap}
+  .stack{display:flex;flex-direction:column;gap:6px}
+  .mini{font-size:11px;color:#0F172A;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:6px 8px}
+  .mini.ok{border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.07)}
+  .mini.warn{border-color:rgba(124,58,237,.25);background:rgba(124,58,237,.07)}
+  .mini.err{border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)}
+
+  .empty{padding:18px;text-align:center;color:#475569}
+  .empty-icon{font-size:24px}
+  .empty-title{margin-top:6px;font-weight:900;color:#0F172A}
+  .empty-sub{margin-top:4px;font-size:12px}
+
+  .inline{display:inline}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:11px}
+
+  @media (max-width: 820px){
+    .page-hero{flex-direction:column}
+    .kpi-row{grid-template-columns:1fr}
+    .form-grid{grid-template-columns:1fr}
+    .items-grid{grid-template-columns:1fr}
+    .table{min-width:780px}
+    .sync-recent{justify-content:flex-start}
+  }
+</style>

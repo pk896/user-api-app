@@ -4,7 +4,11 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 // --- Reusable helpers ---
-const PAID_STATES = ['Completed', 'Paid', 'Shipped', 'Delivered']; // used in dashboards/KPIs
+// ✅ include both your app states + PayPal states (case-insensitive check)
+const PAID_STATES = [
+  'COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED',
+  'Completed', 'Paid', 'Shipped', 'Delivered',
+];
 
 const MoneySchema = new Schema(
   {
@@ -56,10 +60,7 @@ const OrderItemSchema = new Schema(
   { _id: false },
 );
 
-const PayerNameSchema = new Schema(
-  { given: String, surname: String },
-  { _id: false },
-);
+const PayerNameSchema = new Schema({ given: String, surname: String }, { _id: false });
 
 const PayerSchema = new Schema(
   {
@@ -95,20 +96,17 @@ const BreakdownSchema = new Schema(
 // ✅ delivery snapshot you wanted to display on thank-you/receipt
 const DeliverySnapshotSchema = new Schema(
   {
-    id: String,          // DeliveryOption _id
-    name: String,        // e.g., "Express"
+    id: String, // DeliveryOption _id
+    name: String, // e.g., "Express"
     deliveryDays: Number,
-    amount: String,      // "15.00"
+    amount: String, // "15.00"
   },
   { _id: false },
 );
 
 // --- Tracking (NEW) ---
-// This does NOT replace shipping address – it lives next to it.
-// Optional fields only, so no existing orders/flows break.
 const ShippingTrackingSchema = new Schema(
   {
-    // internal code you can use in dashboards/switches
     carrier: {
       type: String,
       enum: [
@@ -123,23 +121,14 @@ const ShippingTrackingSchema = new Schema(
       ],
       default: 'OTHER',
     },
-
-    // nice display label, e.g. "Courier Guy", "Fastway Couriers"
     carrierLabel: String,
-
-    // e.g. "CG123456789ZA"
     trackingNumber: String,
-
-    // direct link to courier tracking page if you have it
     trackingUrl: String,
-
-    // shipping progress (independent from PayPal status)
     status: {
       type: String,
       enum: ['PENDING', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
       default: 'PENDING',
     },
-
     shippedAt: Date,
     deliveredAt: Date,
   },
@@ -166,7 +155,7 @@ const OrderSchema = new Schema(
     businessBuyer: { type: Schema.Types.ObjectId, ref: 'Business', index: true },
 
     orderId: { type: String, index: true, unique: true, sparse: true },
-    status: { type: String, index: true }, // consider restricting with enum if you want
+    status: { type: String, index: true },
     purchaseUnitRef: String,
 
     payer: PayerSchema,
@@ -174,18 +163,15 @@ const OrderSchema = new Schema(
     // PayPal shipping address snapshot
     shipping: ShippingAddressSchema,
 
-    // --- Tracking (NEW) ---
-    // Courier + tracking info (Courier Guy, Fastway, etc.)
-    // Completely separate from PayPal address and status.
+    // Courier + tracking info
     shippingTracking: ShippingTrackingSchema,
 
-    amount: MoneySchema,      // captured total
+    amount: MoneySchema, // captured total
     breakdown: BreakdownSchema,
 
-    fee: { type: String },    // convenience fields (string)
+    fee: { type: String },
     net: { type: String },
 
-    // chosen delivery method snapshot
     delivery: DeliverySnapshotSchema,
 
     captures: [CaptureSchema],
@@ -194,10 +180,13 @@ const OrderSchema = new Schema(
     refunds: [RefundSchema],
     refundedTotal: { type: String, default: '0.00' },
 
-    raw: { type: Schema.Types.Mixed }, // full PayPal snapshot
+    raw: { type: Schema.Types.Mixed },
 
     // ✅ idempotency guard for inventory adjustment after capture
     inventoryAdjusted: { type: Boolean, default: false },
+
+    // (Optional but useful for payout idempotency)
+    // sellerEarningsCredited: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
@@ -206,28 +195,16 @@ const OrderSchema = new Schema(
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ 'payer.email': 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
-OrderSchema.index({ 'items.productId': 1, createdAt: -1 });  // fast seller/per-product lookups
-OrderSchema.index({ businessBuyer: 1, createdAt: -1 });      // fast buyer dashboard
-
-// (optional later) you can add e.g.
-// OrderSchema.index({ 'shippingTracking.status': 1, createdAt: -1 });
+OrderSchema.index({ 'items.productId': 1, createdAt: -1 });
+OrderSchema.index({ businessBuyer: 1, createdAt: -1 });
 
 // ---------- Statics / helpers ----------
 OrderSchema.statics.PAID_STATES = PAID_STATES;
+
 OrderSchema.methods.isPaidLike = function isPaidLike() {
-  return PAID_STATES.includes(this.status);
+  const up = String(this.status || '').trim().toUpperCase();
+  return ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'].includes(up);
 };
 
 // ✅ Guard against OverwriteModelError in dev
 module.exports = mongoose.models.Order || mongoose.model('Order', OrderSchema);
-
-
-
-
-
-
-
-
-
-
-

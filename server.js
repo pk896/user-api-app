@@ -199,6 +199,11 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+const paypalWebhooks = require('./routes/paypalWebhooks');
+
+// IMPORTANT: mount webhook route BEFORE express.json()
+app.use('/webhooks', express.raw({ type: 'application/json' }), paypalWebhooks);
+
 /* ---------------------------------------
    ORDER OF MIDDLEWARE (CRITICAL)
 --------------------------------------- */
@@ -223,16 +228,20 @@ app.use((req, res, next) => {
       useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
+
+        // ✅ Only allow scripts from self + nonce + explicit providers
         scriptSrc: [
           "'self'",
-          "'unsafe-inline'",
-          "'strict-dynamic'",
           `'nonce-${res.locals.nonce}'`,
           'https://apis.google.com',
           'https://www.paypal.com',
           'https://www.sandbox.paypal.com',
           'https://www.paypalobjects.com',
         ],
+
+        // ✅ Needed for PayPal button if it injects inline styles (you already allow unsafe-inline for style)
+        styleSrc: ["'self'", "'unsafe-inline'"],
+
         imgSrc: [
           "'self'",
           'data:',
@@ -243,7 +252,8 @@ app.use((req, res, next) => {
           'https://www.paypal.com',
           'https://www.sandbox.paypal.com',
         ],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+
+        // ✅ XHR/fetch/websocket
         connectSrc: [
           "'self'",
           'https://api-m.paypal.com',
@@ -254,12 +264,20 @@ app.use((req, res, next) => {
           'https://www.sandbox.paypal.com',
           'https://www.paypalobjects.com',
         ],
+
+        // ✅ PayPal renders in iframes
         frameSrc: [
           "'self'",
           'https://www.paypal.com',
           'https://www.sandbox.paypal.com',
         ],
+
+        // ✅ Good security hardening (won’t break your app)
         objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+
+        // Keep as you had it (empty array disables auto-upgrade)
         upgradeInsecureRequests: [],
       },
     },
@@ -463,7 +481,7 @@ const productRatingsRoutes = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminOrdersApi = require('./routes/adminOrdersApi');
-const paypalWebhooksRoutes = require('./routes/paypalWebhooks');
+//const paypalWebhooksRoutes = require('./routes/paypalWebhooks');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
 
 app.use('/dev', require('./routes/dev-mail-test'));
@@ -490,7 +508,7 @@ app.use('/admin', deliveryOptionRouter);
 app.use('/admin', adminPayoutsRoutes);
 
 // PayPal Webhooks (payout status updates + verification)
-app.use('/', paypalWebhooksRoutes); // POST /webhooks/paypal
+//app.use('/webhooks', paypalWebhooksRoutes); // POST /webhooks/paypal
 
 // Delivery options API
 app.use(deliveryOptionsApi);
@@ -718,3 +736,5 @@ startServer().catch((err) => {
   console.error('💀 Server cannot start due to critical error');
   // Still don't use process.exit - just log and let the process naturally end
 });
+
+

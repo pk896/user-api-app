@@ -1,7 +1,12 @@
-<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<% const NONCE = (typeof nonce !== 'undefined' ? nonce : '') %>
+
 <% const b = business || {} %>
 <% const ver = (b.verification || {}) %>
 <% const bank = (b.bankDetails || {}) %>
+
+<% const payouts = (b.payouts || {}) %>
+<% const ppEnabled = payouts.enabled === true %>
+<% const ppEmail = String(payouts.paypalEmailMasked || payouts.paypalEmail || '').trim() %>
 
 <% const emailVerified = !!b.isVerified %>
 <% const numStatus = ((ver.status || 'pending') + '').toLowerCase() %>
@@ -212,6 +217,46 @@
             <span class="k">Payout Method</span>
             <span class="v"><%= String(bank.payoutMethod || 'bank').toUpperCase() %></span>
           </div>
+
+          <div class="row">
+            <span class="k">PayPal Payouts</span>
+            <span class="v">
+              <% if (ppEnabled && ppEmail) { %>
+                <span class="chip chip-green">Enabled</span>
+              <% } else if (!ppEnabled && ppEmail) { %>
+                <span class="chip chip-amber">Saved (Disabled)</span>
+              <% } else { %>
+                <span class="chip chip-red">Not Set</span>
+              <% } %>
+            </span>
+          </div>
+
+          <div class="row">
+            <span class="k">PayPal Email</span>
+            <span class="v wrap">
+              <%= ppEmail ? ppEmail : '—' %>
+            </span>
+          </div>
+
+          <% if (!ppEmail) { %>
+            <p class="note" style="margin-top:8px;">
+              Use <a href="/business/profile/edit-details" style="color: var(--p); font-weight:900; text-decoration:none;">
+                Edit Business Details
+              </a>
+              to set your PayPal email for payouts.
+            </p>
+          <% } else if (!ppEnabled) { %>
+            <p class="note" style="margin-top:8px;">
+              Your PayPal email is saved but payouts are disabled. Enable payouts in
+              <a href="/business/profile/edit-details" style="color: var(--p); font-weight:900; text-decoration:none;">
+                Edit Business Details
+              </a>.
+            </p>
+          <% } else { %>
+            <p class="note" style="margin-top:8px;">
+              Payouts are enabled — we’ll use this PayPal email for seller payouts.
+            </p>
+          <% } %>
 
           <div class="row">
             <span class="k">Bank Name</span>

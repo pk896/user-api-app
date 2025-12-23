@@ -1,11 +1,16 @@
+<!-- views/business-profile-edit-details.ejs -->
 <% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
 <% const b = business || {} %>
 <% const ver = (b.verification || {}) %>
 <% const st = String(ver.status || 'pending').toLowerCase() %>
+<% const payouts = (b && b.payouts) ? b.payouts : {} %>
+<% const payoutsEnabled = typeof payouts.enabled === 'boolean' ? payouts.enabled : false %>
+<% const paypalEmail = payouts.paypalEmail || '' %>
+
 
 <section class="business-edit-page">
   <div class="container">
-    
+
     <!-- Page Header -->
     <div class="page-header" style="background: linear-gradient(135deg, #7C3AED, #8B5CF6);">
       <div class="header-content">
@@ -44,6 +49,7 @@
           </svg>
         <% } %>
       </div>
+
       <div class="status-content">
         <h3>Official Number Verification</h3>
         <div class="status-info">
@@ -64,7 +70,7 @@
 
     <!-- Main Form -->
     <form class="business-form" action="/business/profile/update-details" method="POST" autocomplete="on">
-      
+
       <!-- Business Identity Section (Blue) -->
       <div class="form-section" style="border-color: #2563EB;">
         <div class="section-header" style="color: #2563EB;">
@@ -73,20 +79,20 @@
           </svg>
           <h2>Business Identity</h2>
         </div>
-        
+
         <div class="form-grid">
           <div class="form-group">
             <label for="name" style="color: #2563EB;">
               <span class="label-icon">🏢</span>
               Business Name *
             </label>
-            <input 
-              type="text" 
-              id="name" 
-              name="name" 
-              value="<%= b.name || '' %>" 
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value="<%= b.name || '' %>"
               required
-              placeholder="Enter your company name (e.g., Phakisi Global Trading)"
+              placeholder="Enter your company name (e.g., Unicoporate Trading)"
               autocomplete="organization"
               style="border-color: rgba(37, 99, 235, 0.3);"
             >
@@ -98,10 +104,10 @@
               <span class="label-icon">👤</span>
               Account Role
             </label>
-            <input 
-              type="text" 
-              id="role" 
-              value="<%= b.role || '' %>" 
+            <input
+              type="text"
+              id="role"
+              value="<%= b.role || '' %>"
               disabled
               placeholder="Managed by system administrator"
               style="border-color: rgba(37, 99, 235, 0.3); background: rgba(37, 99, 235, 0.05);"
@@ -119,18 +125,18 @@
           </svg>
           <h2>Contact Information</h2>
         </div>
-        
+
         <div class="form-grid">
           <div class="form-group">
             <label for="email" style="color: #7C3AED;">
               <span class="label-icon">📧</span>
               Email Address *
             </label>
-            <input 
-              type="email" 
-              id="email" 
-              name="email" 
-              value="<%= b.email || '' %>" 
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value="<%= b.email || '' %>"
               required
               placeholder="Enter primary business email (e.g., admin@company.com)"
               autocomplete="email"
@@ -145,11 +151,11 @@
               <span class="label-icon">📱</span>
               Phone Number *
             </label>
-            <input 
-              type="tel" 
-              id="phone" 
-              name="phone" 
-              value="<%= b.phone || '' %>" 
+            <input
+              type="tel"
+              id="phone"
+              name="phone"
+              value="<%= b.phone || '' %>"
               required
               placeholder="Enter business phone (e.g., +27 81 234 5678)"
               autocomplete="tel"
@@ -157,6 +163,57 @@
               style="border-color: rgba(124, 58, 237, 0.3);"
             >
             <div class="field-hint" style="color: #7C3AED;">Include country code</div>
+          </div>
+
+          <!-- ✅ PayPal Payouts -->
+          <div class="form-group full-width">
+            <label for="paypalEmail" style="color: #7C3AED;">
+              <span class="label-icon">🅿️</span>
+              PayPal Email (for payouts)
+            </label>
+            <input
+              type="email"
+              id="paypalEmail"
+              name="paypalEmail"
+              value="<%= paypalEmail %>"
+              placeholder="paypal@email.com"
+              autocomplete="email"
+              inputmode="email"
+              <%= payoutsEnabled ? 'required' : '' %>
+              <%= payoutsEnabled ? '' : 'disabled' %>
+              style="border-color: rgba(124, 58, 237, 0.3);"
+            >
+
+            <div class="field-hint" style="color: #7C3AED;">
+              This is where Unicoporate sends your <strong>seller payouts</strong>. Leave empty to disable PayPal payouts.
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <label style="color: #7C3AED;">
+              <span class="label-icon">✅</span>
+              Enable PayPal Payouts
+            </label>
+
+            <!-- Hidden so backend ALWAYS receives a value (0) even when unchecked -->
+            <input type="hidden" name="payoutsEnabled" value="0" />
+
+            <label class="toggle">
+              <input
+                type="checkbox"
+                name="payoutsEnabled"
+                value="1"
+                <%= payoutsEnabled ? 'checked' : '' %>
+              />
+              <span class="toggle-ui" aria-hidden="true"></span>
+              <span class="toggle-text" data-on="Enabled" data-off="Disabled">
+                <%= payoutsEnabled ? 'Enabled' : 'Disabled' %>
+              </span>
+            </label>
+
+            <div class="field-hint" style="color: #7C3AED;">
+              To be eligible: payouts must be enabled + PayPal email must be set + you must have available balance.
+            </div>
           </div>
         </div>
       </div>
@@ -170,16 +227,16 @@
           </svg>
           <h2>Location Details</h2>
         </div>
-        
+
         <div class="form-grid">
           <div class="form-group">
             <label for="country" style="color: #22C55E;">
               <span class="label-icon">🌍</span>
               Country *
             </label>
-            <select 
-              id="country" 
-              name="country" 
+            <select
+              id="country"
+              name="country"
               required
               style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);"
             >
@@ -201,11 +258,11 @@
               <span class="label-icon">🏙️</span>
               City *
             </label>
-            <input 
-              type="text" 
-              id="city" 
-              name="city" 
-              value="<%= b.city || '' %>" 
+            <input
+              type="text"
+              id="city"
+              name="city"
+              value="<%= b.city || '' %>"
               required
               placeholder="Enter city (e.g., Johannesburg)"
               autocomplete="address-level2"
@@ -219,11 +276,11 @@
               <span class="label-icon">📍</span>
               Full Address *
             </label>
-            <input 
-              type="text" 
-              id="address" 
-              name="address" 
-              value="<%= b.address || '' %>" 
+            <input
+              type="text"
+              id="address"
+              name="address"
+              value="<%= b.address || '' %>"
               required
               placeholder="Enter street address, suburb, and postal code"
               autocomplete="street-address"
@@ -242,7 +299,7 @@
           </svg>
           <h2>Official Registration</h2>
         </div>
-        
+
         <div class="verification-notice" style="background: rgba(124, 58, 237, 0.1); border-color: rgba(124, 58, 237, 0.2);">
           <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" style="color: #7C3AED;">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
@@ -251,18 +308,18 @@
             <strong>Important:</strong> Changing official number resets verification to <strong>Pending</strong> until admin review.
           </div>
         </div>
-        
+
         <div class="form-grid">
           <div class="form-group">
             <label for="officialNumber" style="color: #0F172A;">
               <span class="label-icon">🆔</span>
               Official Number *
             </label>
-            <input 
-              type="text" 
-              id="officialNumber" 
-              name="officialNumber" 
-              value="<%= b.officialNumber || '' %>" 
+            <input
+              type="text"
+              id="officialNumber"
+              name="officialNumber"
+              value="<%= b.officialNumber || '' %>"
               required
               placeholder="Enter company registration/VAT/tax number"
               autocomplete="off"
@@ -277,8 +334,8 @@
               <span class="label-icon">📋</span>
               Number Type
             </label>
-            <select 
-              id="officialNumberType" 
+            <select
+              id="officialNumberType"
               name="officialNumberType"
               style="border-color: rgba(15, 23, 42, 0.3); background: rgba(15, 23, 42, 0.05);"
             >
@@ -318,7 +375,7 @@
           </div>
           <div class="link-arrow">→</div>
         </a>
-        
+
         <a href="/business/change-password" class="link-card" style="background: linear-gradient(135deg, #0F172A, #334155);">
           <div class="link-icon">🔒</div>
           <div class="link-content">
@@ -327,7 +384,7 @@
           </div>
           <div class="link-arrow">→</div>
         </a>
-        
+
         <a href="/business/profile/edit-bank" class="link-card" style="background: linear-gradient(135deg, #22C55E, #10B981);">
           <div class="link-icon">🏦</div>
           <div class="link-content">
@@ -363,13 +420,8 @@
     min-height: 100vh;
   }
 
-  .container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 0 1rem;
-  }
+  .container { max-width: 1000px; margin: 0 auto; padding: 0 1rem; }
 
-  /* Page Header */
   .page-header {
     background: linear-gradient(135deg, var(--purple), #8B5CF6);
     border-radius: 16px;
@@ -383,15 +435,9 @@
     color: white;
   }
 
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
+  .header-content { display: flex; align-items: center; gap: 1rem; }
   .header-icon {
-    width: 56px;
-    height: 56px;
+    width: 56px; height: 56px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.2);
     backdrop-filter: blur(10px);
@@ -400,19 +446,8 @@
     justify-content: center;
   }
 
-  .page-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin: 0 0 0.25rem 0;
-    color: white;
-  }
-
-  .page-subtitle {
-    margin: 0;
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.9);
-    max-width: 500px;
-  }
+  .page-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 0.25rem 0; color: white; }
+  .page-subtitle { margin: 0; font-size: 0.875rem; color: rgba(255, 255, 255, 0.9); max-width: 500px; }
 
   .back-btn {
     display: inline-flex;
@@ -427,13 +462,8 @@
     border: 2px solid;
     background: rgba(255, 255, 255, 0.1);
   }
+  .back-btn:hover { background: rgba(255, 255, 255, 0.2); transform: translateX(-2px); }
 
-  .back-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(-2px);
-  }
-
-  /* Status Banner */
   .status-banner {
     padding: 1rem;
     border-radius: 12px;
@@ -442,66 +472,25 @@
     gap: 1rem;
     align-items: flex-start;
   }
-
-  .status-banner.verified {
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-  }
-
-  .status-banner.pending {
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.2);
-  }
-
-  .status-banner.rejected {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-  }
+  .status-banner.verified { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); }
+  .status-banner.pending  { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); }
+  .status-banner.rejected { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); }
 
   .status-icon {
-    width: 40px;
-    height: 40px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
   }
+  .status-banner.verified .status-icon { background: #22C55E; color: white; }
+  .status-banner.pending  .status-icon { background: #F59E0B; color: white; }
+  .status-banner.rejected .status-icon { background: #EF4444; color: white; }
 
-  .status-banner.verified .status-icon {
-    background: #22C55E;
-    color: white;
-  }
-
-  .status-banner.pending .status-icon {
-    background: #F59E0B;
-    color: white;
-  }
-
-  .status-banner.rejected .status-icon {
-    background: #EF4444;
-    color: white;
-  }
-
-  .status-content h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--gray-900);
-  }
-
-  .status-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  @media (min-width: 640px) {
-    .status-info {
-      flex-direction: row;
-      align-items: center;
-    }
-  }
+  .status-content h3 { margin: 0 0 0.5rem 0; font-size: 1rem; font-weight: 600; color: var(--gray-900); }
+  .status-info { display: flex; flex-direction: column; gap: 0.5rem; }
+  @media (min-width: 640px) { .status-info { flex-direction: row; align-items: center; } }
 
   .status-tag {
     display: inline-block;
@@ -511,35 +500,13 @@
     font-weight: 600;
     white-space: nowrap;
   }
+  .status-tag.verified { background: rgba(34, 197, 94, 0.2); color: #166534; }
+  .status-tag.pending  { background: rgba(245, 158, 11, 0.2); color: #92400E; }
+  .status-tag.rejected { background: rgba(239, 68, 68, 0.2); color: #991B1B; }
 
-  .status-tag.verified {
-    background: rgba(34, 197, 94, 0.2);
-    color: #166534;
-  }
+  .status-info p { margin: 0; font-size: 0.875rem; color: var(--gray-600); }
+  .rejection-reason { color: #DC2626; font-weight: 600; margin-left: 0.5rem; }
 
-  .status-tag.pending {
-    background: rgba(245, 158, 11, 0.2);
-    color: #92400E;
-  }
-
-  .status-tag.rejected {
-    background: rgba(239, 68, 68, 0.2);
-    color: #991B1B;
-  }
-
-  .status-info p {
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--gray-600);
-  }
-
-  .rejection-reason {
-    color: #DC2626;
-    font-weight: 600;
-    margin-left: 0.5rem;
-  }
-
-  /* Form Sections */
   .business-form {
     background: white;
     border-radius: 16px;
@@ -549,47 +516,17 @@
     border: 1px solid var(--gray-200);
   }
 
-  .form-section {
-    padding: 1.5rem;
-    border-bottom: 3px solid;
-  }
+  .form-section { padding: 1.5rem; border-bottom: 3px solid; }
+  .form-section:last-child { border-bottom: none; }
 
-  .form-section:last-child {
-    border-bottom: none;
-  }
+  .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; font-weight: 600; }
+  .section-header h2 { margin: 0; font-size: 1.125rem; }
 
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-    font-weight: 600;
-  }
+  .form-grid { display: grid; gap: 1.25rem; }
+  @media (min-width: 768px) { .form-grid { grid-template-columns: repeat(2, 1fr); } }
 
-  .section-header h2 {
-    margin: 0;
-    font-size: 1.125rem;
-  }
-
-  .form-grid {
-    display: grid;
-    gap: 1.25rem;
-  }
-
-  @media (min-width: 768px) {
-    .form-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-group.full-width {
-    grid-column: 1 / -1;
-  }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group.full-width { grid-column: 1 / -1; }
 
   label {
     display: flex;
@@ -599,10 +536,7 @@
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
-
-  .label-icon {
-    font-size: 1rem;
-  }
+  .label-icon { font-size: 1rem; }
 
   input, select {
     width: 100%;
@@ -614,29 +548,41 @@
     outline: none;
     background: white;
   }
+  input:focus, select:focus { box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1); transform: translateY(-1px); }
+  input::placeholder { color: var(--gray-400); }
+  input:disabled { background: rgba(15, 23, 42, 0.05); color: var(--gray-500); cursor: not-allowed; }
 
-  input:focus, select:focus {
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-    transform: translateY(-1px);
+  .field-hint { font-size: 0.75rem; margin-top: 0.375rem; font-weight: 500; }
+
+  /* Toggle */
+  .toggle { display:flex; align-items:center; gap:10px; user-select:none; }
+  .toggle input { position:absolute; opacity:0; pointer-events:none; }
+  .toggle-ui {
+    width:52px; height:30px;
+    border-radius:999px;
+    background: rgba(124,58,237,.25);
+    border: 2px solid rgba(124,58,237,.35);
+    position:relative;
+    transition: all .2s ease;
+    flex-shrink:0;
   }
-
-  input::placeholder {
-    color: var(--gray-400);
+  .toggle-ui::after{
+    content:'';
+    position:absolute;
+    top:50%;
+    left:3px;
+    width:24px;
+    height:24px;
+    border-radius:999px;
+    background:#fff;
+    transform: translateY(-50%);
+    transition: all .2s ease;
+    box-shadow: 0 6px 14px rgba(15,23,42,.18);
   }
+  .toggle input:checked + .toggle-ui { background: rgba(34,197,94,.25); border-color: rgba(34,197,94,.45); }
+  .toggle input:checked + .toggle-ui::after { left:23px; }
+  .toggle-text { font-size:.875rem; font-weight:700; color: var(--gray-700); }
 
-  input:disabled {
-    background: rgba(15, 23, 42, 0.05);
-    color: var(--gray-500);
-    cursor: not-allowed;
-  }
-
-  .field-hint {
-    font-size: 0.75rem;
-    margin-top: 0.375rem;
-    font-weight: 500;
-  }
-
-  /* Verification Notice */
   .verification-notice {
     padding: 0.875rem 1rem;
     border-radius: 10px;
@@ -644,13 +590,10 @@
     display: flex;
     gap: 0.75rem;
     align-items: flex-start;
+    border: 1px solid rgba(124, 58, 237, 0.2);
   }
+  .verification-notice strong { color: var(--purple); }
 
-  .verification-notice strong {
-    color: var(--purple);
-  }
-
-  /* Form Actions */
   .form-actions {
     padding: 1.5rem;
     display: flex;
@@ -673,48 +616,17 @@
     transition: all 0.2s;
     border: 2px solid transparent;
   }
+  .btn-primary { color: white; border: none; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3); }
 
-  .btn-primary {
-    color: white;
-    border: none;
-  }
+  .btn-outline { background: white; }
+  .btn-outline:hover { background: var(--gray-50); transform: translateY(-2px); }
 
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
-  }
+  .quick-links { margin-top: 2rem; }
+  .links-title { font-size: 1.125rem; font-weight: 600; color: var(--gray-900); margin: 0 0 1rem 0; }
 
-  .btn-outline {
-    background: white;
-  }
-
-  .btn-outline:hover {
-    background: var(--gray-50);
-    transform: translateY(-2px);
-  }
-
-  /* Quick Links */
-  .quick-links {
-    margin-top: 2rem;
-  }
-
-  .links-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--gray-900);
-    margin: 0 0 1rem 0;
-  }
-
-  .links-grid {
-    display: grid;
-    gap: 1rem;
-  }
-
-  @media (min-width: 640px) {
-    .links-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
-  }
+  .links-grid { display: grid; gap: 1rem; }
+  @media (min-width: 640px) { .links-grid { grid-template-columns: repeat(3, 1fr); } }
 
   .link-card {
     display: flex;
@@ -727,7 +639,6 @@
     transition: all 0.2s;
     border: 1px solid transparent;
   }
-
   .link-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
@@ -746,130 +657,68 @@
     flex-shrink: 0;
   }
 
-  .link-content {
-    flex: 1;
-  }
+  .link-content { flex: 1; }
+  .link-content h4 { margin: 0 0 0.25rem 0; font-size: 1rem; font-weight: 600; }
+  .link-content p { margin: 0; font-size: 0.75rem; opacity: 0.9; }
+  .link-arrow { font-size: 1.25rem; font-weight: 700; opacity: 0.8; }
 
-  .link-content h4 {
-    margin: 0 0 0.25rem 0;
-    font-size: 1rem;
-    font-weight: 600;
-  }
-
-  .link-content p {
-    margin: 0;
-    font-size: 0.75rem;
-    opacity: 0.9;
-  }
-
-  .link-arrow {
-    font-size: 1.25rem;
-    font-weight: 700;
-    opacity: 0.8;
-  }
-
-  /* Mobile Optimizations */
   @media (max-width: 360px) {
-    .container {
-      padding: 0 0.75rem;
-    }
-    
-    .page-header {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 1rem;
-    }
-    
-    .header-content {
-      flex-direction: column;
-      text-align: center;
-    }
-    
-    .back-btn {
-      width: 100%;
-      justify-content: center;
-    }
-    
-    .status-banner {
-      flex-direction: column;
-      text-align: center;
-    }
-    
-    .form-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .form-actions {
-      flex-direction: column;
-    }
-    
-    .btn {
-      width: 100%;
-      justify-content: center;
-    }
-    
-    .links-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .link-card {
-      flex-direction: column;
-      text-align: center;
-    }
-    
-    .link-content {
-      text-align: center;
-    }
+    .container { padding: 0 0.75rem; }
+    .page-header { flex-direction: column; align-items: stretch; gap: 1rem; }
+    .header-content { flex-direction: column; text-align: center; }
+    .back-btn { width: 100%; justify-content: center; }
+    .status-banner { flex-direction: column; text-align: center; }
+    .form-grid { grid-template-columns: 1fr; }
+    .form-actions { flex-direction: column; }
+    .btn { width: 100%; justify-content: center; }
+    .links-grid { grid-template-columns: 1fr; }
+    .link-card { flex-direction: column; text-align: center; }
+    .link-content { text-align: center; }
   }
 
-  /* Dark Theme Support */
   @media (prefers-color-scheme: dark) {
-    .business-edit-page {
-      background: var(--gray-900);
-    }
-    
-    .business-form {
-      background: var(--gray-800);
-      border-color: var(--gray-700);
-    }
-    
-    .links-title {
-      color: var(--gray-100);
-    }
-    
-    .status-content h3 {
-      color: var(--gray-100);
-    }
-    
-    input, select {
-      background: var(--gray-800);
-      border-color: var(--gray-700);
-      color: var(--gray-100);
-    }
-    
-    input::placeholder {
-      color: var(--gray-500);
-    }
-    
-    input:disabled {
-      background: rgba(15, 23, 42, 0.2);
-      color: var(--gray-500);
-    }
-    
-    .verification-notice {
-      background: rgba(124, 58, 237, 0.15);
-      border-color: rgba(124, 58, 237, 0.3);
-    }
-    
-    .btn-outline {
-      background: var(--gray-800);
-      color: var(--gray-100);
-      border-color: var(--gray-600);
-    }
-    
-    .btn-outline:hover {
-      background: var(--gray-700);
-    }
+    .business-edit-page { background: var(--gray-900); }
+    .business-form { background: var(--gray-800); border-color: var(--gray-700); }
+    .links-title { color: var(--gray-100); }
+    .status-content h3 { color: var(--gray-100); }
+    input, select { background: var(--gray-800); border-color: var(--gray-700); color: var(--gray-100); }
+    input::placeholder { color: var(--gray-500); }
+    input:disabled { background: rgba(15, 23, 42, 0.2); color: var(--gray-500); }
+    .verification-notice { background: rgba(124, 58, 237, 0.15); border-color: rgba(124, 58, 237, 0.3); }
+    .btn-outline { background: var(--gray-800); color: var(--gray-100); border-color: var(--gray-600); }
+    .btn-outline:hover { background: var(--gray-700); }
+    .toggle-text { color: var(--gray-200); }
   }
 </style>
+
+<script nonce="<%= NONCE %>">
+  // Toggle label update + make PayPal email required only when payouts enabled
+  (function () {
+    const toggles = document.querySelectorAll('.toggle');
+    toggles.forEach(t => {
+      const checkbox = t.querySelector('input[type="checkbox"][name="payoutsEnabled"]');
+      const text = t.querySelector('.toggle-text');
+      const paypal = document.getElementById('paypalEmail');
+      if (!checkbox || !text) return;
+
+      const render = () => {
+        const on = checkbox.checked;
+        text.textContent = on ? (text.dataset.on || 'Enabled') : (text.dataset.off || 'Disabled');
+        if (paypal) {
+          if (on) {
+            paypal.removeAttribute('disabled');
+            paypal.setAttribute('required', 'required');
+          } else {
+            paypal.setAttribute('disabled', 'disabled');
+            paypal.removeAttribute('required');
+          }
+        }
+      };
+
+      checkbox.addEventListener('change', render);
+      render();
+    });
+  })();
+</script>
+
 

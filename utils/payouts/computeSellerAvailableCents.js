@@ -39,12 +39,13 @@ async function fallbackCompute(businessId, currency = null) {
 }
 
 async function computeSellerAvailableCents(businessId, opts = {}) {
-  const currency = normCcy(opts?.currency);
+  // ✅ Always default to USD so we NEVER sum different currencies together
+  const currency = normCcy(opts?.currency) || 'USD';
 
   // Prefer the dedicated function if present
   try {
     if (typeof getSellerAvailableCents === 'function') {
-      const v = await getSellerAvailableCents(businessId, currency || 'USD');
+      const v = await getSellerAvailableCents(businessId, currency);
       const n = Number(v || 0);
       return Number.isFinite(n) ? n : 0;
     }
@@ -52,6 +53,7 @@ async function computeSellerAvailableCents(businessId, opts = {}) {
     // fall back
   }
 
+  // ✅ fallback uses the same currency default (USD)
   return fallbackCompute(businessId, currency);
 }
 

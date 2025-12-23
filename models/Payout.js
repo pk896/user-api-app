@@ -3,13 +3,40 @@ const mongoose = require('mongoose');
 
 const payoutItemSchema = new mongoose.Schema(
   {
-    businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true },
-    receiver: { type: String, required: true }, // PayPal email
-    amountCents: { type: Number, required: true },
-    currency: { type: String, default: 'USD' },
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business',
+      required: true,
+      index: true,
+    },
 
-    status: { type: String, enum: ['PENDING', 'SENT', 'FAILED'], default: 'PENDING' },
-    paypalItemId: { type: String, trim: true },   // payout_item_id if returned
+    // PayPal email (normalized)
+    receiver: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      index: true,
+    },
+
+    amountCents: { type: Number, required: true },
+
+    // keep currency consistent (USD not usd)
+    currency: {
+      type: String,
+      default: 'USD',
+      trim: true,
+      uppercase: true,
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: ['PENDING', 'SENT', 'FAILED'],
+      default: 'PENDING',
+    },
+
+    paypalItemId: { type: String, trim: true }, // payout_item_id if returned
     error: { type: String, trim: true },
   },
   { _id: false }
@@ -17,14 +44,45 @@ const payoutItemSchema = new mongoose.Schema(
 
 const payoutSchema = new mongoose.Schema(
   {
-    createdByAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
-    mode: { type: String, enum: ['SANDBOX', 'LIVE'], default: 'SANDBOX' },
+    createdByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      index: true,
+    },
 
-    batchId: { type: String, trim: true },        // PayPal payout_batch_id
-    senderBatchId: { type: String, trim: true },  // your unique id
-    status: { type: String, enum: ['CREATED', 'PROCESSING', 'COMPLETED', 'FAILED'], default: 'CREATED' },
+    mode: {
+      type: String,
+      enum: ['SANDBOX', 'LIVE'],
+      default: 'SANDBOX',
+      index: true,
+    },
 
-    currency: { type: String, default: 'USD' },
+    batchId: { type: String, trim: true }, // PayPal payout_batch_id
+
+    // ✅ must be unique so retries don't create duplicate batches
+    senderBatchId: {
+      type: String,
+      trim: true,
+      index: true,
+      unique: true,
+      sparse: true,
+    },
+
+    status: {
+      type: String,
+      enum: ['CREATED', 'PROCESSING', 'COMPLETED', 'FAILED'],
+      default: 'CREATED',
+      index: true,
+    },
+
+    currency: {
+      type: String,
+      default: 'USD',
+      trim: true,
+      uppercase: true,
+      index: true,
+    },
+
     totalCents: { type: Number, default: 0 },
 
     items: { type: [payoutItemSchema], default: [] },
@@ -33,5 +91,10 @@ const payoutSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// ✅ Useful indexes for admin pages + lookups
+payoutSchema.index({ createdAt: -1 });
+payoutSchema.index({ batchId: 1 }, { sparse: true });
+payoutSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Payout', payoutSchema);

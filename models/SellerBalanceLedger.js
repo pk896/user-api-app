@@ -6,7 +6,7 @@ const sellerBalanceLedgerSchema = new mongoose.Schema(
     businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
     type: { type: String, enum: ['EARNING', 'REFUND_DEBIT', 'ADJUSTMENT', 'PAYOUT_DEBIT'], required: true },
     amountCents: { type: Number, required: true }, // + for earning, - for debits
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: 'USD', trim: true, uppercase: true, index: true },
 
     // References
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },

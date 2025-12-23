@@ -9,22 +9,28 @@ function toObjectId(v) {
   return mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
-function normCcy(v) {
-  return String(v || 'USD').trim().toUpperCase();
+function normCcy(v, fallback = 'USD') {
+  const s = String(v ?? '').trim().toUpperCase();
+  return s || fallback; // always return a currency
 }
 
 async function getSellerAvailableCents(businessId, currency = 'USD') {
   const bid = toObjectId(businessId);
   if (!bid) return 0;
 
-  const ccy = normCcy(currency);
+  const ccy = normCcy(currency, 'USD');
+
+const match = { businessId: bid, currency: ccy };
 
   const agg = await SellerBalanceLedger.aggregate([
-    { $match: { businessId: bid, currency: ccy } },
+    { $match: match },
     { $group: { _id: null, sum: { $sum: '$amountCents' } } },
   ]);
 
-  return Number(agg?.[0]?.sum || 0);
+  const sum = Number(agg?.[0]?.sum || 0);
+
+  // ✅ never return negative available for payouts
+  return Math.max(0, Math.trunc(sum));
 }
 
 module.exports = { getSellerAvailableCents };
