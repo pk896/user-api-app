@@ -111,42 +111,6 @@ app.use((req, res, next) => {
 });
 
 /* ---------------------------------------
-   TEMP DEBUG ROUTE – remove later
---------------------------------------- */
-/*const Order = require('./models/Order');
-
-app.get('/debug-one-order', async (req, res) => {
-  try {
-    if (!dbConnectionEstablished) {
-      return res.status(503).type('html').send(`
-        <h1>Database Unavailable</h1>
-        <p>The database connection could not be established.</p>
-        <p>Please check your database configuration and try again.</p>
-        <p><a href="/">Return to home</a></p>
-      `);
-    }
-    const order = await Order.findOne().lean();
-    if (!order) {
-      return res
-        .status(404)
-        .send(
-          '<h1>No orders found</h1><p>Your Order collection is empty.</p>',
-        );
-    }
-    res.type('html').send(`
-      <h1>Sample Order (from MongoDB)</h1>
-      <p>Copy everything inside the box below and paste it into ChatGPT.</p>
-      <pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px;">
-${JSON.stringify(order, null, 2)}
-      </pre>
-    `);
-  } catch (err) {
-    console.error('debug-one-order error:', err);
-    res.status(500).send('Error in debug-one-order');
-  }
-});*/
-
-/* ---------------------------------------
    Global Error Handlers
 --------------------------------------- */
 process.on('unhandledRejection', (reason, promise) => {
@@ -464,7 +428,7 @@ const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
 const adminOrdersRoutes = require('./routes/ordersAdmin');
 const cartRoutes = require('./routes/cart');
-const paymentModule = require('./routes/payment');
+const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
 const businessAuthRoutes = require('./routes/businessAuth');
 const staticPagesRoutes = require('./routes/staticPages');
@@ -483,11 +447,6 @@ const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminOrdersApi = require('./routes/adminOrdersApi');
 //const paypalWebhooksRoutes = require('./routes/paypalWebhooks');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
-
-app.use('/dev', require('./routes/dev-mail-test'));
-
-
-const paymentRouter = paymentModule.router;
 
 // API first
 app.use('/api/cart', cartRoutes);
@@ -571,44 +530,6 @@ app.get('/cart/count', (req, res) => {
     console.error('❌ Failed to fetch cart count:', err);
     res.status(500).json({ count: 0 });
   }
-});
-
-// Checkout page
-app.get('/payment/checkout', (req, res) => {
-  const _cart = req.session.cart || { items: [] };
-  res.render('checkout', {
-    title: 'Checkout',
-    vatRate: Number(process.env.VAT_RATE || 0.15),
-    shippingFlat: Number(process.env.SHIPPING_FLAT || 0),
-    themeCss: res.locals.themeCss,
-    nonce: res.locals.nonce,
-    dbAvailable: dbConnectionEstablished,
-  });
-});
-
-// Thank you page
-app.get('/thank-you', (req, res) => {
-  res.render('thank-you', {
-    title: 'Thank you',
-    orderID: req.query.orderID || '',
-    themeCss: res.locals.themeCss,
-    nonce: res.locals.nonce,
-    dbAvailable: dbConnectionEstablished,
-  });
-});
-
-// Orders page
-app.get('/orders', (req, res) => {
-  if (!(req.session?.user || req.session?.business)) {
-    req.flash('error', 'Please log in to view your orders.');
-    return res.redirect('/users/login');
-  }
-  res.render('orders', {
-    title: 'My Orders',
-    themeCss: res.locals.themeCss,
-    nonce: res.locals.nonce,
-    dbAvailable: dbConnectionEstablished,
-  });
 });
 
 /* ---------------------------------------

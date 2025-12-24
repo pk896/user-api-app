@@ -1,4 +1,6 @@
 <!-- views/dashboards/seller-dashboard.ejs -->
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '') %>
+
 <section class="dashboard-simple seller">
   <!-- Top Header -->
   <header class="dashboard-header">
@@ -11,13 +13,16 @@
         <% } %>
       </div>
       <div class="user-details">
-        <h1>Welcome, <span class="highlight">
-          <% if (business && business.name) { %>
-            <%= business.name %>
-          <% } else { %>
-            Seller
-          <% } %>
-        </span></h1>
+        <h1>
+          Welcome,
+          <span class="highlight">
+            <% if (business && business.name) { %>
+              <%= business.name %>
+            <% } else { %>
+              Seller
+            <% } %>
+          </span>
+        </h1>
         <div class="status">
           <span class="badge seller">SELLER ACCOUNT</span>
           <span class="active-indicator">
@@ -27,7 +32,7 @@
         </div>
       </div>
     </div>
-    
+
     <div class="header-stats">
       <div class="stat">
         <small>Today</small>
@@ -35,11 +40,13 @@
       </div>
       <div class="stat">
         <small>Store ID</small>
-        <strong><% if (business && business._id) { %>
-          <%= business._id.toString().slice(-6).toUpperCase() %>
-        <% } else { %>
-          N/A
-        <% } %></strong>
+        <strong>
+          <% if (business && business._id) { %>
+            <%= business._id.toString().slice(-6).toUpperCase() %>
+          <% } else { %>
+            N/A
+          <% } %>
+        </strong>
       </div>
     </div>
   </header>
@@ -51,19 +58,19 @@
         <div class="notification success">
           <span>✓</span>
           <%= msg %>
-          <button class="close">&times;</button>
+          <button class="close" type="button" aria-label="Close">&times;</button>
         </div>
       <% }) %>
     </div>
   <% } %>
-  
+
   <% if (error && error.length > 0) { %>
     <div class="notifications">
       <% error.forEach(msg => { %>
         <div class="notification error">
           <span>!</span>
           <%= msg %>
-          <button class="close">&times;</button>
+          <button class="close" type="button" aria-label="Close">&times;</button>
         </div>
       <% }) %>
     </div>
@@ -87,65 +94,57 @@
       return 'R ' + Number(amount || 0).toFixed(2);
     }
 
-    // Use the actual data from your router
+    // Use actual router data safely
     const sellerProducts = Array.isArray(products) ? products : [];
     const sellerTotals = totals || {};
     const sellerKpis = kpis || {};
     const sellerOrders = (orders && orders.recent) ? orders.recent : [];
-    
-    // Calculate stats from real data
+
     const totalProducts = sellerTotals.totalProducts || 0;
     const totalStock = sellerTotals.totalStock || 0;
     const inStockCount = sellerTotals.inStock || 0;
     const outOfStockCount = sellerTotals.outOfStock || 0;
-    
-    // Calculate inventory value from products
+
     const inventoryValue = sellerProducts.reduce((sum, p) => {
       const price = Number(p.price) || 0;
       const stock = Number(p.stock) || 0;
       return sum + (price * stock);
     }, 0);
-    
-    // Calculate low stock count (stock < 20)
+
     const lowStockCount = sellerProducts.filter(p => {
       const stock = Number(p.stock) || 0;
       return stock > 0 && stock < 20;
     }).length;
-    
-    // Get low stock products for display
+
     const lowStockProducts = sellerProducts
       .filter(p => {
         const stock = Number(p.stock) || 0;
         return stock > 0 && stock < 20;
       })
       .slice(0, 5);
-    
-    // Get top performing products from kpis
-    const topProducts = Array.isArray(sellerKpis.perProduct) ? 
-      sellerKpis.perProduct.slice(0, 10) : [];
-      
-    // Get products with stock
+
+    const topProducts = Array.isArray(sellerKpis.perProduct)
+      ? sellerKpis.perProduct.slice(0, 10)
+      : [];
+
     const availableProducts = sellerProducts
       .filter(p => (Number(p.stock) || 0) > 0)
       .slice(0, 3);
-      
-    // Get out of stock products
+
     const outOfStockProducts = sellerProducts
       .filter(p => (Number(p.stock) || 0) <= 0)
       .slice(0, 5);
-    
+
     // ===== CHART DATA PROCESSING (REAL DATA, NO RANDOM) =====
     let dailyChartData = [];
     let monthlyChartData = [];
     let yearlyChartData = [];
 
-    // 🔐 Safely read salesTrend so EJS doesn't crash if it's missing
+    // safe salesTrend
     let trend = {};
-    if (typeof salesTrend !== 'undefined' && salesTrend) {
-      trend = salesTrend;
-    }
+    if (typeof salesTrend !== 'undefined' && salesTrend) trend = salesTrend;
 
-    // DAILY – expect array like: [{ time: "13:00", sales: 1200 }, ...]
+    // DAILY – expected: [{ time: "13:00", sales: 1200 }, ...] or [{ label, sales }, ...]
     if (Array.isArray(trend.daily)) {
       dailyChartData = trend.daily.map(p => ({
         time: p.time || p.label || p.hour || '',
@@ -153,7 +152,7 @@
       }));
     }
 
-    // MONTHLY (last 30 days) – expect: [{ date: "1 Dec", sales: 3200 }, ...]
+    // MONTHLY – expected: [{ date: "1 Dec", sales: 3200 }, ...]
     if (Array.isArray(trend.monthly)) {
       monthlyChartData = trend.monthly.map(p => ({
         date: p.date || p.label || '',
@@ -161,7 +160,7 @@
       }));
     }
 
-    // YEARLY (last 12 months) – expect: [{ month: "Jan", sales: 15000 }, ...]
+    // YEARLY – expected: [{ month: "Jan", sales: 15000 }, ...]
     if (Array.isArray(trend.yearly)) {
       yearlyChartData = trend.yearly.map(p => ({
         month: p.month || p.label || '',
@@ -169,44 +168,66 @@
       }));
     }
 
-    // Keep chart layout even if there is no data
+    // Keep chart layout: daily should be 24 points (24 hours)
     if (!dailyChartData.length) {
       const now = new Date();
       for (let i = 23; i >= 0; i--) {
         const hour = new Date(now);
         hour.setHours(now.getHours() - i);
-        const displayHour = hour.toLocaleTimeString('en-ZA', { 
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false 
-        }).slice(0, 5);
-        dailyChartData.push({ time: displayHour, sales: 0 });
+        const label = hour.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false }).slice(0, 5);
+        dailyChartData.push({ time: label, sales: 0 });
+      }
+    }
+
+    // monthly: 30 points
+    if (!monthlyChartData.length) {
+      const now = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const label = d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+        monthlyChartData.push({ date: label, sales: 0 });
+      }
+    }
+
+    // yearly: 12 points
+    if (!yearlyChartData.length) {
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const m = new Date(now);
+        m.setMonth(m.getMonth() - i, 1);
+        const label = m.toLocaleDateString('en-ZA', { month: 'short', year: '2-digit' });
+        yearlyChartData.push({ month: label, sales: 0 });
       }
     }
   %>
 
-  <!-- Quick Stats Section -->
-  <section class="quick-stats-section">
+  <!-- Quick Stats -->
+  <section class="card-section quick-stats-section">
     <h2>Business Overview</h2>
     <div class="stats-grid">
       <div class="stat-card blue">
-        <a href="/products/mine"><div class="icon">📦</div>
-        <div class="details">
-          <h3>Total Products</h3>
-          <p class="value"><%= totalProducts %></p>
-          <small><%= inStockCount %> in stock</small></a>
-        </div>
+        <a href="/products/mine">
+          <div class="icon">📦</div>
+          <div class="details">
+            <h3>Total Products</h3>
+            <p class="value"><%= totalProducts %></p>
+            <small><%= inStockCount %> in stock</small>
+          </div>
+        </a>
       </div>
-      
+
       <div class="stat-card purple">
-        <a href="/products/edit"><div class="icon">🔢</div>
-        <div class="details">
-          <h3>Total Stock</h3>
-          <p class="value"><%= totalStock %></p>
-          <small>Units available</small></a>
-        </div>
+        <a href="/products/edit">
+          <div class="icon">🔢</div>
+          <div class="details">
+            <h3>Total Stock</h3>
+            <p class="value"><%= totalStock %></p>
+            <small>Units available</small>
+          </div>
+        </a>
       </div>
-      
+
       <div class="stat-card green">
         <div class="icon">💰</div>
         <div class="details">
@@ -215,16 +236,16 @@
           <small>Current stock value</small>
         </div>
       </div>
-      
+
       <a href="/products/low-stock" class="stat-card orange">
         <div class="icon">⚠️</div>
         <div class="details">
           <h3>Low Stock</h3>
           <p class="value"><%= lowStockCount %></p>
           <small>Stock &lt; 20 units</small>
-          </div>
+        </div>
       </a>
-      
+
       <a href="/products/out-of-stock" class="stat-card red">
         <div class="icon">🚨</div>
         <div class="details">
@@ -236,14 +257,14 @@
     </div>
   </section>
 
-  <!-- Low Stock Products -->
+  <!-- Low Stock -->
   <% if (lowStockCount > 0) { %>
-    <section class="low-stock">
+    <section class="card-section low-stock">
       <div class="section-header">
         <h2>Low Stock Products (<%= lowStockCount %>)</h2>
         <a href="/products/low-stock" class="view-all">View All</a>
       </div>
-      
+
       <div class="low-stock-list">
         <% lowStockProducts.forEach(p => { 
           const stock = Number(p.stock) || 0;
@@ -269,14 +290,14 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="low-actions">
               <a href="/products/low-stock" class="btn-restock">Restock</a>
               <a href="/products/edit" class="btn-view">View</a>
             </div>
           </div>
         <% }) %>
-        
+
         <% if (lowStockCount > 5) { %>
           <div class="more-products">
             <span>+<%= lowStockCount - 5 %> more low stock products</span>
@@ -288,24 +309,24 @@
   <% } %>
 
   <!-- Quick Actions -->
-  <section class="quick-actions">
+  <section class="card-section quick-actions">
     <h2>Quick Actions</h2>
     <div class="actions-grid">
       <a href="/products/add" class="action primary">
         <span class="action-icon">➕</span>
         <span class="action-text">Add Product</span>
       </a>
-      
+
       <a href="/orders" class="action">
         <span class="action-icon">📦</span>
         <span class="action-text">View Orders</span>
       </a>
-      
+
       <a href="/products/mine" class="action">
         <span class="action-icon">📋</span>
         <span class="action-text">All Products</span>
       </a>
-      
+
       <a href="/business/analytics/chart" class="action">
         <span class="action-icon">📈</span>
         <span class="action-text">Analytics</span>
@@ -313,15 +334,15 @@
     </div>
   </section>
 
-  <!-- Sales Trend Chart - WITH DAILY VIEW -->
-  <section class="sales-trend">
+  <!-- Sales Trend Chart -->
+  <section class="card-section sales-trend">
     <div class="section-header">
       <div>
         <h2>Sales Trend</h2>
         <div class="trend-period-toggle">
-          <button class="period-btn active" id="daily-btn">Last 24 Hours</button>
-          <button class="period-btn" id="monthly-btn">Last 30 Days</button>
-          <button class="period-btn" id="yearly-btn">Last 12 Months</button>
+          <button class="period-btn active" id="daily-btn" type="button">Last 24 Hours</button>
+          <button class="period-btn" id="monthly-btn" type="button">Last 30 Days</button>
+          <button class="period-btn" id="yearly-btn" type="button">Last 12 Months</button>
         </div>
       </div>
       <span class="trend-summary">
@@ -330,27 +351,18 @@
         <small>Total: <span id="total-sales">R 0.00</span></small>
       </span>
     </div>
-    
+
     <div class="trend-chart-container">
-      <!-- Simple div-based chart -->
-      <div id="simple-chart" style="width: 100%; height: 250px; display: flex; align-items: flex-end; gap: 2px; padding: 20px 40px; border-bottom: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0;">
-        <!-- Bars will be inserted here by JavaScript -->
-      </div>
-      
-      <!-- X-axis labels container -->
-      <div id="chart-labels" style="display: flex; justify-content: space-between; padding: 5px 40px; font-size: 10px; color: #64748b;">
-        <!-- Labels will be inserted here -->
-      </div>
-      
-      <!-- Chart Legend -->
+      <div id="simple-chart"></div>
+      <div id="chart-labels"></div>
+
       <div class="chart-legend">
         <div class="legend-item">
-          <span class="legend-color" style="background: #22C55E;"></span>
+          <span class="legend-color"></span>
           <span id="legend-text">Hourly Sales</span>
         </div>
       </div>
-      
-      <!-- Trend Stats -->
+
       <div class="trend-stats">
         <div class="trend-stat">
           <small>Peak</small>
@@ -373,12 +385,12 @@
   </section>
 
   <!-- Top 10 Best Sellers -->
-  <section class="best-sellers">
+  <section class="card-section best-sellers">
     <div class="section-header">
       <h2>Top 10 Best Sellers</h2>
       <a href="/products/performance" class="view-all">View All</a>
     </div>
-    
+
     <% if (topProducts.length > 0) { %>
       <div class="sellers-list">
         <% topProducts.forEach((p, index) => { %>
@@ -387,11 +399,11 @@
               <span class="rank-number"><%= index + 1 %></span>
               <% if (index < 3) { %>
                 <span class="rank-badge <%= index === 0 ? 'gold' : (index === 1 ? 'silver' : 'bronze') %>">
-                  <%= index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : '')) %>
+                  <%= index === 0 ? '🥇' : (index === 1 ? '🥈' : '🥉') %>
                 </span>
               <% } %>
             </div>
-            
+
             <div class="seller-product">
               <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
                 <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="product-thumb" loading="lazy">
@@ -403,7 +415,7 @@
                 <small><%= p.category || 'General' %></small>
               </div>
             </div>
-            
+
             <div class="seller-stats">
               <div class="stat">
                 <small>Sold</small>
@@ -414,7 +426,7 @@
                 <strong class="revenue"><%= fmtCurrency(p.estRevenue || 0) %></strong>
               </div>
             </div>
-            
+
             <div class="seller-action">
               <a href="/products/view/<%= p.productId || '#' %>" class="btn-small">View</a>
             </div>
@@ -430,20 +442,20 @@
     <% } %>
   </section>
 
-  <!-- Out of Stock Products -->
-  <section class="out-of-stock">
+  <!-- Out of Stock -->
+  <section class="card-section out-of-stock">
     <div class="section-header">
       <h2>Out of Stock Products (<%= outOfStockCount %>)</h2>
-      <a href="/products/out-of-stock" 
+      <a href="/products/out-of-stock"
         class="pg-link restock-link <%= outOfStockCount > 0 ? 'has-out-of-stock' : 'all-good' %>">
         <span class="pg-ico">🚨</span>
         <span class="restock-all">Restock All</span>
       </a>
     </div>
-      
+
     <% if (outOfStockProducts.length > 0) { %>
       <div class="out-of-stock-list">
-        <% outOfStockProducts.forEach(p => { 
+        <% outOfStockProducts.forEach(p => {
           const price = Number(p.price) || 0;
           const lastUpdated = p.updatedAt || p.createdAt;
         %>
@@ -465,14 +477,14 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="out-actions">
               <a href="/products/edit/<%= p._id || p.customId %>" class="btn-restock">Restock</a>
               <a href="/products/view/<%= p._id || p.customId %>" class="btn-view">View</a>
             </div>
           </div>
         <% }) %>
-        
+
         <% if (outOfStockCount > 5) { %>
           <div class="more-products">
             <span>+<%= outOfStockCount - 5 %> more products out of stock</span>
@@ -490,15 +502,15 @@
   </section>
 
   <!-- Available Products -->
-  <section class="top-products">
+  <section class="card-section top-products">
     <div class="section-header">
       <h2>Available Products</h2>
       <a href="/products/mine" class="view-all">View All</a>
     </div>
-    
+
     <div class="products-list">
       <% if (availableProducts.length > 0) { %>
-        <% availableProducts.forEach(p => { 
+        <% availableProducts.forEach(p => {
           const stock = Number(p.stock) || 0;
           const price = Number(p.price) || 0;
         %>
@@ -515,9 +527,7 @@
               <small>Price: <%= fmtCurrency(price) %></small>
               <div class="product-meta">
                 <span class="category"><%= p.category || 'General' %></span>
-                <span class="stock <%= stock < 20 ? 'low' : 'good' %>">
-                  <%= stock %> in stock
-                </span>
+                <span class="stock <%= stock < 20 ? 'low' : 'good' %>"><%= stock %> in stock</span>
               </div>
               <% if (stock <= 0) { %>
                 <span class="status out">Out of Stock</span>
@@ -540,15 +550,15 @@
   </section>
 
   <!-- Recent Orders -->
-  <section class="recent-orders">
+  <section class="card-section recent-orders">
     <div class="section-header">
       <h2>Recent Orders</h2>
       <a href="/orders" class="view-all">View All</a>
     </div>
-    
+
     <div class="orders-list">
       <% if (sellerOrders.length > 0) { %>
-        <% sellerOrders.forEach(o => { 
+        <% sellerOrders.forEach(o => {
           const status = o.status || 'pending';
           const statusClass = status.toLowerCase().replace(/\s+/g, '-');
         %>
@@ -574,9 +584,7 @@
               </span>
             </div>
             <div class="order-details">
-              <span class="status <%= statusClass %>">
-                <%= status.charAt(0).toUpperCase() + status.slice(1) %>
-              </span>
+              <span class="status <%= statusClass %>"><%= status.charAt(0).toUpperCase() + status.slice(1) %></span>
               <span class="date"><%= fmtDate(o.createdAt) %></span>
             </div>
           </div>
@@ -591,15 +599,14 @@
     </div>
   </section>
 
-  <!-- Dashboard Footer -->
+  <!-- Footer -->
   <footer class="dashboard-footer">
     <div class="footer-section">
       <h4>Quick Links</h4>
       <div class="footer-links">
         <a href="/products/add">➕ Add Product</a>
         <a href="/products/mine">📋 View Products</a>
-        <a href="/products/low-stock"
-          class="pg-link <%= lowStockCount > 0 ? 'pg-link-warning' : '' %>">
+        <a href="/products/low-stock" class="pg-link <%= lowStockCount > 0 ? 'pg-link-warning' : '' %>">
           <span class="pg-ico">⚠️</span><span>Low Stock</span>
           <% if (lowStockCount > 0) { %>
             <span class="pg-count-badge"><%= lowStockCount %></span>
@@ -618,21 +625,23 @@
   </footer>
 </section>
 
-<style>
-  /* ===== COMPANY COLORS ===== */
+<style nonce="<%= NONCE %>">
+  /* NOTE: I changed the risky selector "section { ... }" to ".card-section { ... }"
+     so it won’t accidentally mess up your main wrapper section or other layout sections. */
+
   .dashboard-simple {
-    --blue: #2563EB;
-    --purple: #7C3AED;
-    --green: #22C55E;
-    --black: #0F172A;
-    --orange: #f97316;
-    
-    --light-bg: #f0fdf4;
-    --card-bg: #ffffff;
-    --border: #e2e8f0;
-    --text: #475569;
-    --text-light: #94a3b8;
-    
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --black:#0F172A;
+    --orange:#f97316;
+
+    --light-bg:#f0fdf4;
+    --card-bg:#ffffff;
+    --border:#e2e8f0;
+    --text:#475569;
+    --text-light:#94a3b8;
+
     background: var(--light-bg);
     min-height: 100vh;
     padding: 8px;
@@ -641,1607 +650,338 @@
     color: var(--text);
   }
 
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
-  /* ===== HEADER ===== */
-  .dashboard-header {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 12px;
-    border: 1px solid var(--border);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  }
-
-  .user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--blue), var(--purple));
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: bold;
-    flex-shrink: 0;
-  }
-
-  .user-details h1 {
-    font-size: 16px;
-    color: var(--black);
-    margin-bottom: 2px;
-    line-height: 1.2;
-  }
-
-  .highlight {
-    color: var(--blue);
-    font-weight: 700;
-  }
-
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .badge.seller {
-    background: linear-gradient(135deg, var(--purple), #8B5CF6);
-    color: white;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .active-indicator {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--text);
-  }
-
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
-
-  .header-stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-  }
-
-  .stat {
-    text-align: center;
-    padding: 8px;
-    background: #f8fafc;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-  }
-
-  .stat small {
-    display: block;
-    font-size: 10px;
-    color: var(--text-light);
-    margin-bottom: 2px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .stat strong {
-    display: block;
-    font-size: 13px;
-    color: var(--black);
-    font-weight: 700;
-  }
-
-  /* ===== NOTIFICATIONS ===== */
-  .notifications {
-    margin-bottom: 12px;
-  }
-
-  .notification {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 6px;
-    font-size: 12px;
-    border-left: 3px solid transparent;
-  }
-
-  .notification.success {
-    background: rgba(34, 197, 94, 0.1);
-    color: #166534;
-    border-left-color: var(--green);
-  }
-
-  .notification.error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #b91c1c;
-    border-left-color: #ef4444;
-  }
-
-  .notification .close {
-    margin-left: auto;
-    background: none;
-    border: none;
-    font-size: 18px;
-    cursor: pointer;
-    opacity: 0.7;
-    padding: 0;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .notification .close:hover {
-    opacity: 1;
-  }
-
-  /* ===== SECTIONS ===== */
-  section {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 12px;
-    border: 1px solid var(--border);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  }
-
-  section h2 {
-    font-size: 15px;
-    color: var(--black);
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 600;
-  }
-
-  section h2::before {
-    content: '';
-    display: block;
-    width: 3px;
-    height: 14px;
-    background: var(--blue);
-    border-radius: 1.5px;
-  }
-
-  /* ===== QUICK STATS ===== */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .stat-card {
-    padding: 10px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border: 1px solid;
-  }
-
-  .stat-card.blue {
-    background: rgba(37, 99, 235, 0.08);
-    border-color: rgba(37, 99, 235, 0.2);
-  }
-
-  .stat-card.purple {
-    background: rgba(124, 58, 237, 0.08);
-    border-color: rgba(124, 58, 237, 0.2);
-  }
-
-  .stat-card.green {
-    background: rgba(34, 197, 94, 0.08);
-    border-color: rgba(34, 197, 94, 0.2);
-  }
-
-  .stat-card.orange {
-    background: rgba(249, 115, 22, 0.08);
-    border-color: rgba(249, 115, 22, 0.2);
-  }
-
-  .stat-card.black {
-    background: rgba(15, 23, 42, 0.08);
-    border-color: rgba(15, 23, 42, 0.2);
-  }
-
-  .stat-card .icon {
-    font-size: 18px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: white;
-    border-radius: 8px;
-    border: 1px solid rgba(0,0,0,0.1);
-    flex-shrink: 0;
-  }
-
-  .stat-card .details {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .stat-card .details h3 {
-    font-size: 11px;
-    color: var(--text);
-    margin-bottom: 2px;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .stat-card .value {
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--black);
-    margin-bottom: 1px;
-    line-height: 1.2;
-  }
-
-  .stat-card small {
-    font-size: 10px;
-    color: var(--text-light);
-    display: block;
-  }
-
-  .stat-card.green .value {
-    color: var(--green);
-  }
-
-  .stat-card.orange .value {
-    color: var(--orange);
-  }
-
-  /* ===== LOW STOCK SECTION ===== */
-  .low-stock-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .low-product {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: rgba(249, 115, 22, 0.05);
-    border-radius: 8px;
-    border: 1px solid rgba(249, 115, 22, 0.2);
-  }
-
-  .low-product-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .low-thumb {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid rgba(249, 115, 22, 0.3);
-  }
-
-  .low-thumb-placeholder {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    background: rgba(249, 115, 22, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: var(--orange);
-  }
-
-  .low-details {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .low-details h4 {
-    font-size: 13px;
-    color: var(--black);
-    margin-bottom: 4px;
-    font-weight: 600;
-  }
-
-  .low-meta {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .low-meta .price {
-    font-size: 12px;
-    color: var(--green);
-    font-weight: 700;
-  }
-
-  .low-meta .stock-warning {
-    font-size: 11px;
-    color: var(--orange);
-    font-weight: 600;
-    background: rgba(249, 115, 22, 0.1);
-    padding: 2px 6px;
-    border-radius: 8px;
-  }
-
-  .low-meta .category {
-    font-size: 11px;
-    color: var(--text);
-    background: rgba(124, 58, 237, 0.1);
-    padding: 2px 6px;
-    border-radius: 8px;
-  }
-
-  .low-meta .last-updated {
-    font-size: 10px;
-    color: var(--text-light);
-  }
-
-  .low-actions {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  /* ===== QUICK ACTIONS ===== */
-  .actions-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .action {
-    padding: 12px;
-    border-radius: 8px;
-    text-decoration: none;
-    text-align: center;
-    border: 1px solid var(--border);
-    background: #f8fafc;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 70px;
-  }
-
-  .action:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  }
-
-  .action.primary {
-    background: linear-gradient(135deg, var(--blue), #3B82F6);
-    color: white;
-    border: none;
-  }
-
-  .action.primary:hover {
-    background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  }
-
-  .action-icon {
-    font-size: 20px;
-    display: block;
-    margin-bottom: 6px;
-  }
-
-  .action-text {
-    display: block;
-    font-weight: 600;
-    font-size: 13px;
-  }
-
-  /* ===== SIMPLE CHART BAR STYLES ===== */
-  .chart-bar {
-    background: #22C55E;
-    border-radius: 2px 2px 0 0;
-    min-height: 1px;
-    position: relative;
-    flex: 1;
-    transition: background-color 0.2s;
-  }
-  
-  .chart-bar:hover {
-    background: #16a34a;
-  }
-  
-  .chart-tooltip {
-    position: absolute;
-    background: #1e293b;
-    color: white;
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    margin-bottom: 5px;
-    white-space: nowrap;
-    z-index: 100;
-    display: none;
-    pointer-events: none;
-  }
-  
-  .chart-bar:hover .chart-tooltip {
-    display: block;
-  }
-
-  /* ===== ENHANCED SALES TREND CHART ===== */
-  .sales-trend {
-    overflow: hidden;
-  }
-
-  .sales-trend .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .trend-period-toggle {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-  }
-
-  .period-btn {
-    padding: 6px 10px;
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    font-size: 11px;
-    color: #64748b;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-    flex: 1;
-    min-width: 80px;
-    text-align: center;
-  }
-
-  .period-btn:hover {
-    background: #e2e8f0;
-  }
-
-  .period-btn.active {
-    background: var(--blue);
-    color: white;
-    border-color: var(--blue);
-  }
-
-  .trend-summary {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .trend-summary small {
-    font-size: 11px;
-    color: var(--text-light);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .trend-chart-container {
-    margin-top: 16px;
-  }
-
-  .chart-legend {
-    display: flex;
-    gap: 16px;
-    justify-content: center;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text);
-  }
-
-  .legend-color {
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
-  }
-
-  /* Enhanced Trend Stats */
-  .trend-stats {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-  }
-
-  .trend-stat {
-    text-align: center;
-    padding: 10px;
-    background: #f8fafc;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-  }
-
-  .trend-stat small {
-    display: block;
-    font-size: 11px;
-    color: var(--text-light);
-    margin-bottom: 4px;
-  }
-
-  .trend-stat strong {
-    display: block;
-    font-size: 14px;
-    color: var(--black);
-    font-weight: 700;
-  }
-
-  /* Fix: Add missing CSS classes for dynamic elements */
-  #current-sales,
-  #avg-sales,
-  #total-sales,
-  #peak-sales,
-  #lowest-sales,
-  #growth-trend,
-  #projection {
-    font-weight: 600;
-  }
-
-  #growth-trend.positive,
-  #projection.positive {
-    color: var(--green);
-  }
-
-  #growth-trend.negative,
-  #projection.negative {
-    color: #ef4444;
-  }
-
-  /* Remove old chart styles that might conflict */
-  .chart-wrapper,
-  .chart-svg,
-  .trendline-svg,
-  .trend-chart,
-  .chart-container,
-  .chart-column,
-  .chart-value,
-  .chart-label {
-    display: none;
-  }
-
-  /* ===== BEST SELLERS ===== */
-  .best-sellers .sellers-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .seller-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px;
-    background: #f8fafc;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-  }
-
-  .seller-rank {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-
-  .rank-number {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--border);
-    border-radius: 50%;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-  }
-
-  .rank-badge {
-    font-size: 16px;
-  }
-
-  .rank-badge.gold { color: #fbbf24; }
-  .rank-badge.silver { color: #9ca3af; }
-  .rank-badge.bronze { color: #f97316; }
-
-  .seller-product {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .product-thumb {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid var(--border);
-  }
-
-  .thumb-placeholder {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    background: var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: var(--text-light);
-  }
-
-  .product-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .product-info h4 {
-    font-size: 13px;
-    color: var(--black);
-    margin-bottom: 2px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .product-info small {
-    font-size: 11px;
-    color: var(--text-light);
-  }
-
-  .seller-stats {
-    display: flex;
-    gap: 16px;
-    flex-shrink: 0;
-  }
-
-  .seller-stats .stat {
-    text-align: center;
-    padding: 0;
-    background: none;
-    border: none;
-  }
-
-  .seller-stats .stat small {
-    display: block;
-    font-size: 10px;
-    color: var(--text-light);
-    margin-bottom: 2px;
-  }
-
-  .seller-stats .stat strong {
-    display: block;
-    font-size: 12px;
-    color: var(--black);
-    font-weight: 700;
-  }
-
-  .seller-stats .stat .revenue {
-    color: var(--green);
-  }
-
-  .seller-action {
-    flex-shrink: 0;
-  }
-
-  .btn-small {
-    padding: 6px 12px;
-    background: var(--blue);
-    color: white;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 11px;
-    font-weight: 600;
-    border: none;
-    cursor: pointer;
-    display: inline-block;
-  }
-
-  .btn-small:hover {
-    background: #1d4ed8;
-  }
-
-  /* ===== OUT OF STOCK ===== */
-  .out-of-stock-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .out-product {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: rgba(239, 68, 68, 0.05);
-    border-radius: 8px;
-    border: 1px solid rgba(239, 68, 68, 0.2);
-  }
-
-  .out-product-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .out-thumb {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid rgba(239, 68, 68, 0.3);
-  }
-
-  .out-thumb-placeholder {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    background: rgba(239, 68, 68, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: #ef4444;
-  }
-
-  .out-details {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .out-details h4 {
-    font-size: 13px;
-    color: var(--black);
-    margin-bottom: 4px;
-    font-weight: 600;
-  }
-
-  .out-meta {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .out-meta .price {
-    font-size: 12px;
-    color: var(--green);
-    font-weight: 700;
-  }
-
-  .out-meta .category {
-    font-size: 11px;
-    color: var(--text);
-    background: rgba(124, 58, 237, 0.1);
-    padding: 2px 6px;
-    border-radius: 8px;
-  }
-
-  .out-meta .last-updated {
-    font-size: 10px;
-    color: var(--text-light);
-  }
-
-  .out-actions {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .btn-restock {
-    padding: 6px 12px;
-    background: #ef4444;
-    color: white;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 11px;
-    font-weight: 600;
-    border: none;
-  }
-
-  .btn-restock:hover {
-    background: #dc2626;
-  }
-
-  .btn-view {
-    padding: 6px 12px;
-    background: var(--blue);
-    color: white;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 11px;
-    font-weight: 600;
-    border: none;
-  }
-
-  .btn-view:hover {
-    background: #1d4ed8;
-  }
-
-  .more-products {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: #f8fafc;
-    border-radius: 8px;
-    border: 1px dashed var(--border);
-  }
-
-  .more-products span {
-    font-size: 12px;
-    color: var(--text);
-  }
-
-  .btn-view-all {
-    padding: 4px 12px;
-    background: var(--purple);
-    color: white;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  /* ===== PRODUCTS ===== */
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-
-  .view-all {
-    font-size: 12px;
-    color: var(--blue);
-    text-decoration: none;
-    font-weight: 600;
-    padding: 4px 8px;
-    border-radius: 6px;
-  }
-
-  .view-all:hover {
-    background: rgba(37, 99, 235, 0.1);
-  }
-
-  .products-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .product-item {
-    display: flex;
-    gap: 10px;
-    padding: 10px;
-    background: #f8fafc;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    align-items: center;
-  }
-
-  .product-image {
-    flex-shrink: 0;
-  }
-
-  .product-image img {
-    width: 44px;
-    height: 44px;
-    border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid var(--border);
-  }
-
-  .product-image .placeholder {
-    width: 44px;
-    height: 44px;
-    border-radius: 6px;
-    background: var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    color: var(--text-light);
-  }
-
-  .product-details {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .product-details h4 {
-    font-size: 13px;
-    color: var(--black);
-    margin-bottom: 2px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .product-details small {
-    font-size: 11px;
-    color: var(--text-light);
-    display: block;
-    margin-bottom: 4px;
-  }
-
-  .product-meta {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 4px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .category {
-    background: rgba(124, 58, 237, 0.1);
-    color: var(--purple);
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
-  .stock {
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-weight: 600;
-  }
-
-  .stock.good {
-    background: rgba(34, 197, 94, 0.1);
-    color: #166534;
-  }
-
-  .stock.low {
-    background: rgba(249, 115, 22, 0.1);
-    color: #92400e;
-  }
-
-  .status {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 600;
-    margin-top: 2px;
-  }
-
-  .status.in {
-    background: rgba(34, 197, 94, 0.1);
-    color: #166534;
-  }
-
-  .status.low {
-    background: rgba(249, 115, 22, 0.1);
-    color: #92400e;
-  }
-
-  .status.out {
-    background: rgba(239, 68, 68, 0.1);
-    color: #b91c1c;
-  }
-
-  /* ===== RECENT ORDERS ===== */
-  .orders-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .order-item {
-    padding: 10px;
-    background: #f8fafc;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-  }
-
-  .order-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-
-  .order-id {
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 12px;
-    color: var(--black);
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
-
-  .order-amount {
-    font-size: 13px;
-    color: var(--green);
-    font-weight: 700;
-  }
-
-  .order-details {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .order-details .status {
-    padding: 3px 8px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .status.completed,
-  .status.delivered,
-  .status.shipped {
-    background: rgba(34, 197, 94, 0.1);
-    color: #166534;
-  }
-
-  .status.pending,
-  .status.processing {
-    background: rgba(249, 115, 22, 0.1);
-    color: #92400e;
-  }
-
-  .status.cancelled,
-  .status.refunded {
-    background: rgba(239, 68, 68, 0.1);
-    color: #b91c1c;
-  }
-
-  .order-details .date {
-    font-size: 10px;
-    color: var(--text-light);
-  }
-
-  /* ===== EMPTY STATES ===== */
-  .empty-state {
-    padding: 32px 16px;
-    text-align: center;
-    color: var(--text-light);
-  }
-
-  .empty-state.success {
-    background: rgba(34, 197, 94, 0.05);
-    border-radius: 8px;
-  }
-
-  .empty-state span {
-    font-size: 32px;
-    display: block;
-    margin-bottom: 12px;
-    opacity: 0.5;
-  }
-
-  .empty-state p {
-    margin-bottom: 8px;
-    font-size: 14px;
-    color: var(--text);
-  }
-
-  .empty-state small {
-    font-size: 12px;
-    color: var(--text-light);
-    display: block;
-    margin-bottom: 16px;
-  }
-
-  .empty-state .btn {
-    display: inline-block;
-    padding: 10px 20px;
-    background: var(--blue);
-    color: white;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 600;
-    border: none;
-  }
-
-  /* ===== FOOTER ===== */
-  .dashboard-footer {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 12px;
-    margin-top: 12px;
-    border: 1px solid var(--border);
-    text-align: center;
-  }
-
-  .footer-section h4 {
-    font-size: 13px;
-    color: var(--black);
-    margin-bottom: 8px;
-    font-weight: 600;
-    text-align: left;
-  }
-
-  .footer-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 12px;
-    justify-content: center;
-  }
-
-  .footer-links a,
-  .logout-form button {
-    padding: 6px 10px;
-    color: var(--text);
-    text-decoration: none;
-    font-size: 12px;
-    border-radius: 6px;
-    background: #f8fafc;
-    border: 1px solid var(--border);
-    white-space: nowrap;
-  }
-
-  .logout-form {
-    display: inline;
-  }
-
-  .logout-form button {
-    background: none;
-    border: none;
-    font-family: inherit;
-    cursor: pointer;
-    width: auto;
-  }
-
-  .footer-links a:hover,
-  .logout-form button:hover {
-    color: var(--blue);
-    background: rgba(37, 99, 235, 0.1);
-  }
-
-  .copyright {
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-  }
-
-  .copyright small {
-    font-size: 10px;
-    color: var(--text-light);
-  }
-
-  /* ===== RESTOCK ALL ALERT STYLES ===== */
-
-  .restock-link .restock-all {
-    font-weight: 700;
-    letter-spacing: 0.5px;
-  }
-
-  /* When there ARE out-of-stock products */
-  .restock-link.has-out-of-stock .restock-all {
-    /* Color flashing + visibility blinking */
-    animation: restockColorBlink 0.5s infinite alternate,
-              restockVisibilityBlink 1s infinite;
-  }
-
-  /* When everything is in stock (no out-of-stock products) */
-  .restock-link.all-good .restock-all {
-    color: var(--green);
-    animation: restockOkPulse 1.5s infinite;
-  }
-
-  /* Color toggling: yellow <-> red */
-  @keyframes restockColorBlink {
-    0% {
-      color: #facc15; /* yellow */
-    }
-    50% {
-      color: #ef4444; /* red */
-    }
-    100% {
-      color: #facc15; /* yellow */
-    }
-  }
-
-  /* Blink (appear / disappear) */
-  @keyframes restockVisibilityBlink {
-    0%,
-    40% {
-      opacity: 1;
-    }
-    50%,
-    90% {
-      opacity: 0;
-    }
-    100% {
-      opacity: 1;
-    }
-  }
-
-  /* Calm green pulse when all good */
-  @keyframes restockOkPulse {
-    0% {
-      color: var(--green);
-      text-shadow: none;
-    }
-    50% {
-      color: #16a34a;
-      text-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
-    }
-    100% {
-      color: var(--green);
-      text-shadow: none;
-    }
-  }
-
-  /* ===== RESPONSIVE ===== */
-  @media (min-width: 375px) {
-    .dashboard-simple {
-      padding: 12px;
-    }
-    
-    .header-stats {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
-    
-    .stat {
-      padding: 10px;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  @media (min-width: 768px) {
-    .dashboard-simple {
-      padding: 16px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    
-    .dashboard-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 16px;
-    }
-    
-    .user-info {
-      margin-bottom: 0;
-    }
-    
-    .header-stats {
-      width: 200px;
-      padding-top: 0;
-      border-top: none;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(5, 1fr);
-    }
-    
-    .actions-grid {
-      grid-template-columns: repeat(4, 1fr);
-    }
-    
-    .seller-item {
-      gap: 16px;
-    }
-    
-    .seller-stats {
-      gap: 24px;
-    }
-    
-    .out-product,
-    .low-product {
-      gap: 16px;
-    }
-    
-    .footer-links {
-      justify-content: flex-start;
-    }
-    
-    .period-btn {
-      min-width: 100px;
-      font-size: 12px;
-      padding: 8px 12px;
-    }
-  }
-
-  /* Responsive adjustments for chart */
-  @media (max-width: 768px) {
-    .trend-stats {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .chart-legend {
-      flex-direction: column;
-      gap: 8px;
-    }
-    
-    .sales-trend .section-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    
-    .trend-summary {
-      width: 100%;
-      justify-content: space-between;
-    }
-    
-    #simple-chart,
-    #chart-labels {
-      padding: 20px 20px;
-    }
-    
-    .period-btn {
-      min-width: 70px;
-      font-size: 10px;
-      padding: 5px 8px;
-    }
-  }
-
-  @media (max-width: 375px) {
-    .period-btn {
-      padding: 4px 6px;
-      font-size: 9px;
-      min-width: 60px;
-    }
-    
-    .trend-stats {
-      grid-template-columns: 1fr;
-    }
-    
-    #simple-chart {
-      height: 200px;
-      padding: 15px;
-    }
-    
-    #chart-labels {
-      padding: 5px 15px;
-    }
-  }
-
-  /* Hisense U50 Lite specific (320px width) */
-  @media (max-width: 320px) {
-    .dashboard-simple {
-      padding: 6px;
-      font-size: 13px;
-    }
-    
-    .avatar {
-      width: 36px;
-      height: 36px;
-      font-size: 14px;
-    }
-    
-    .user-details h1 {
-      font-size: 14px;
-    }
-    
-    .stat-card {
-      padding: 8px;
-      gap: 6px;
-    }
-    
-    .stat-card .icon {
-      width: 32px;
-      height: 32px;
-      font-size: 16px;
-    }
-    
-    .stat-card .value {
-      font-size: 14px;
-    }
-    
-    .action {
-      padding: 8px;
-      min-height: 60px;
-    }
-    
-    .action-icon {
-      font-size: 18px;
-      margin-bottom: 4px;
-    }
-    
-    .action-text {
-      font-size: 12px;
-    }
-    
-    .seller-item {
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    
-    .seller-rank {
-      order: 1;
-    }
-    
-    .seller-product {
-      order: 2;
-      flex: 2;
-    }
-    
-    .seller-stats {
-      order: 3;
-      flex: 100%;
-      justify-content: space-around;
-    }
-    
-    .seller-action {
-      order: 4;
-      margin-left: auto;
-    }
-    
-    .out-product,
-    .low-product {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 12px;
-    }
-    
-    .out-actions,
-    .low-actions {
-      justify-content: flex-end;
-    }
-    
-    .more-products {
-      flex-direction: column;
-      gap: 8px;
-      text-align: center;
-    }
-    
-    .product-item,
-    .order-item {
-      padding: 8px;
-    }
-    
-    .product-image img,
-    .product-image .placeholder {
-      width: 36px;
-      height: 36px;
-    }
-    
-    .footer-links {
-      flex-direction: column;
-      align-items: stretch;
-    }
-    
-    .footer-links a,
-    .logout-form button {
-      text-align: center;
-      padding: 8px;
-    }
-    
-    #simple-chart {
-      padding: 10px;
-      height: 180px;
-    }
-    
-    #chart-labels {
-      padding: 5px 10px;
-      font-size: 9px;
-    }
-    
-    .period-btn {
-      min-width: 50px;
-      font-size: 8px;
-      padding: 3px 4px;
-    }
-    
-    .trend-period-toggle {
-      gap: 3px;
-    }
-  }
-
-  .pg-count-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-left: 6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 6px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    background: #0f172a;
-    color: #f9fafb;
-  }
-
-  /* Existing alert style for Out of Stock (example) */
-  .pg-link-alert {
-    background: rgba(239, 68, 68, 0.08);
-    border-left: 3px solid #ef4444;
-    color: #b91c1c;
-  }
-
-  /* New style for Low Stock */
-  .pg-link-warning {
-    background: rgba(249, 115, 22, 0.08);
-    border-left: 3px solid #f97316;
-    color: #92400e;
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* HEADER */
+  .dashboard-header{
+    background:var(--card-bg);
+    border-radius:12px;
+    padding:12px;
+    margin-bottom:12px;
+    border:1px solid var(--border);
+    box-shadow:0 1px 3px rgba(0,0,0,.05);
+  }
+  .user-info{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .avatar{
+    width:44px;height:44px;border-radius:50%;
+    background:linear-gradient(135deg,var(--blue),var(--purple));
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:18px;font-weight:800;flex-shrink:0;
+  }
+  .user-details h1{font-size:16px;color:var(--black);margin-bottom:2px;line-height:1.2;}
+  .highlight{color:var(--blue);font-weight:800;}
+  .status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .badge.seller{
+    background:linear-gradient(135deg,var(--purple),#8B5CF6);
+    color:#fff;padding:3px 8px;border-radius:12px;
+    font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  }
+  .active-indicator{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+  .header-stats{
+    display:grid;grid-template-columns:repeat(2,1fr);
+    gap:6px;padding-top:8px;border-top:1px solid var(--border);
+  }
+  .stat{text-align:center;padding:8px;background:#f8fafc;border-radius:6px;border:1px solid var(--border);}
+  .stat small{display:block;font-size:10px;color:var(--text-light);margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px;}
+  .stat strong{display:block;font-size:13px;color:var(--black);font-weight:800;}
+
+  /* NOTIFICATIONS */
+  .notifications{margin-bottom:12px;}
+  .notification{
+    display:flex;align-items:center;gap:8px;padding:10px;border-radius:8px;margin-bottom:6px;
+    font-size:12px;border-left:3px solid transparent;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .notification.success{background:rgba(34,197,94,.10);color:#166534;border-left-color:var(--green);}
+  .notification.error{background:rgba(239,68,68,.10);color:#b91c1c;border-left-color:#ef4444;}
+  .notification .close{
+    margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;opacity:.7;padding:0;
+    width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  }
+  .notification .close:hover{opacity:1;}
+
+  /* SECTIONS (safe) */
+  .card-section{
+    background:var(--card-bg);
+    border-radius:12px;
+    padding:12px;
+    margin-bottom:12px;
+    border:1px solid var(--border);
+    box-shadow:0 1px 3px rgba(0,0,0,.05);
+  }
+
+  .card-section h2{
+    font-size:15px;color:var(--black);margin-bottom:12px;display:flex;align-items:center;gap:6px;font-weight:700;
+  }
+  .card-section h2::before{
+    content:'';display:block;width:3px;height:14px;background:var(--blue);border-radius:1.5px;
+  }
+
+  /* QUICK STATS */
+  .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .stat-card{padding:10px;border-radius:8px;display:flex;align-items:center;gap:10px;border:1px solid;}
+  .stat-card a{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;width:100%;}
+  .stat-card.blue{background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.20);}
+  .stat-card.purple{background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.20);}
+  .stat-card.green{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.20);}
+  .stat-card.orange{background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.20);}
+  .stat-card.red{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.20);}
+
+  .stat-card .icon{
+    font-size:18px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+    background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,.10);flex-shrink:0;
+  }
+  .stat-card .details{flex:1;min-width:0;}
+  .stat-card .details h3{font-size:11px;color:var(--text);margin-bottom:2px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .stat-card .value{font-size:16px;font-weight:900;color:var(--black);margin-bottom:1px;line-height:1.2;}
+  .stat-card small{font-size:10px;color:var(--text-light);display:block;}
+  .stat-card.green .value{color:var(--green);}
+  .stat-card.orange .value{color:var(--orange);}
+  .stat-card.red .value{color:#ef4444;}
+
+  /* SECTION HEADER ROW */
+  .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;}
+  .view-all{font-size:12px;color:var(--blue);text-decoration:none;font-weight:700;padding:4px 8px;border-radius:6px;}
+  .view-all:hover{background:rgba(37,99,235,.10);}
+
+  /* LOW STOCK */
+  .low-stock-list{display:flex;flex-direction:column;gap:8px;}
+  .low-product{
+    display:flex;justify-content:space-between;align-items:center;padding:10px;
+    background:rgba(249,115,22,.05);border-radius:8px;border:1px solid rgba(249,115,22,.20);
+    gap:10px;
+  }
+  .low-product-info{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
+  .low-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;border:1px solid rgba(249,115,22,.30);}
+  .low-thumb-placeholder{width:40px;height:40px;border-radius:6px;background:rgba(249,115,22,.10);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--orange);}
+  .low-details{flex:1;min-width:0;}
+  .low-details h4{font-size:13px;color:var(--black);margin-bottom:4px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .low-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .low-meta .price{font-size:12px;color:var(--green);font-weight:800;}
+  .low-meta .stock-warning{font-size:11px;color:var(--orange);font-weight:800;background:rgba(249,115,22,.10);padding:2px 6px;border-radius:8px;}
+  .low-meta .category{font-size:11px;color:var(--text);background:rgba(124,58,237,.10);padding:2px 6px;border-radius:8px;}
+  .low-meta .last-updated{font-size:10px;color:var(--text-light);}
+  .low-actions{display:flex;gap:8px;flex-shrink:0;}
+
+  /* QUICK ACTIONS */
+  .actions-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .action{
+    padding:12px;border-radius:8px;text-decoration:none;text-align:center;
+    border:1px solid var(--border);background:#f8fafc;transition:all .2s;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70px;color:inherit;
+  }
+  .action:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,.10);}
+  .action.primary{background:linear-gradient(135deg,var(--blue),#3B82F6);color:#fff;border:none;}
+  .action.primary:hover{background:linear-gradient(135deg,#1d4ed8,#2563eb);}
+  .action-icon{font-size:20px;display:block;margin-bottom:6px;}
+  .action-text{display:block;font-weight:800;font-size:13px;}
+
+  /* CHART */
+  .sales-trend{overflow:hidden;}
+  .trend-period-toggle{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .period-btn{
+    padding:6px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;color:#64748b;
+    cursor:pointer;transition:all .2s;white-space:nowrap;flex:1;min-width:80px;text-align:center;
+  }
+  .period-btn:hover{background:#e2e8f0;}
+  .period-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+
+  .trend-summary{display:flex;gap:12px;flex-wrap:wrap;}
+  .trend-summary small{font-size:11px;color:var(--text-light);display:flex;align-items:center;gap:4px;}
+
+  .trend-chart-container{margin-top:16px;}
+  #simple-chart{
+    width:100%;
+    height:250px;
+    display:flex;
+    align-items:flex-end;
+    gap:2px;
+    padding:20px 40px;
+    border-bottom:1px solid #e2e8f0;
+    border-left:1px solid #e2e8f0;
+  }
+  #chart-labels{
+    display:flex;
+    justify-content:space-between;
+    padding:5px 40px;
+    font-size:10px;
+    color:#64748b;
+  }
+  .chart-bar{background:#22C55E;border-radius:2px 2px 0 0;min-height:1px;position:relative;flex:1;transition:background-color .2s;}
+  .chart-bar:hover{background:#16a34a;}
+  .chart-tooltip{
+    position:absolute;background:#1e293b;color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;
+    bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;white-space:nowrap;z-index:100;
+    display:none;pointer-events:none;
+  }
+  .chart-bar:hover .chart-tooltip{display:block;}
+
+  .chart-legend{display:flex;gap:16px;justify-content:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);}
+  .legend-color{width:12px;height:12px;border-radius:2px;background:#22C55E;}
+
+  .trend-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding-top:12px;border-top:1px solid var(--border);}
+  .trend-stat{text-align:center;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border);}
+  .trend-stat small{display:block;font-size:11px;color:var(--text-light);margin-bottom:4px;}
+  .trend-stat strong{display:block;font-size:14px;color:var(--black);font-weight:800;}
+  #growth-trend.positive,#projection.positive{color:var(--green);}
+  #growth-trend.negative,#projection.negative{color:#ef4444;}
+
+  /* BEST SELLERS */
+  .best-sellers .sellers-list{display:flex;flex-direction:column;gap:8px;}
+  .seller-item{display:flex;align-items:center;gap:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border);}
+  .seller-rank{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
+  .rank-number{width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:var(--border);border-radius:50%;font-size:12px;font-weight:800;color:var(--text);}
+  .rank-badge{font-size:16px;}
+  .rank-badge.gold{color:#fbbf24;} .rank-badge.silver{color:#9ca3af;} .rank-badge.bronze{color:#f97316;}
+  .seller-product{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
+  .product-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;border:1px solid var(--border);}
+  .thumb-placeholder{width:40px;height:40px;border-radius:6px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-light);}
+  .product-info{flex:1;min-width:0;}
+  .product-info h4{font-size:13px;color:var(--black);margin-bottom:2px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .product-info small{font-size:11px;color:var(--text-light);}
+  .seller-stats{display:flex;gap:16px;flex-shrink:0;}
+  .seller-stats .stat{text-align:center;padding:0;background:none;border:none;}
+  .seller-stats .stat small{display:block;font-size:10px;color:var(--text-light);margin-bottom:2px;}
+  .seller-stats .stat strong{display:block;font-size:12px;color:var(--black);font-weight:800;}
+  .seller-stats .stat .revenue{color:var(--green);}
+  .btn-small{padding:6px 12px;background:var(--blue);color:#fff;border-radius:6px;text-decoration:none;font-size:11px;font-weight:800;}
+  .btn-small:hover{background:#1d4ed8;}
+
+  /* OUT OF STOCK */
+  .out-of-stock-list{display:flex;flex-direction:column;gap:8px;}
+  .out-product{
+    display:flex;justify-content:space-between;align-items:center;padding:10px;
+    background:rgba(239,68,68,.05);border-radius:8px;border:1px solid rgba(239,68,68,.20);
+    gap:10px;
+  }
+  .out-product-info{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
+  .out-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;border:1px solid rgba(239,68,68,.30);}
+  .out-thumb-placeholder{width:40px;height:40px;border-radius:6px;background:rgba(239,68,68,.10);display:flex;align-items:center;justify-content:center;font-size:16px;color:#ef4444;}
+  .out-details{flex:1;min-width:0;}
+  .out-details h4{font-size:13px;color:var(--black);margin-bottom:4px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .out-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .out-meta .price{font-size:12px;color:var(--green);font-weight:800;}
+  .out-meta .category{font-size:11px;color:var(--text);background:rgba(124,58,237,.10);padding:2px 6px;border-radius:8px;}
+  .out-meta .last-updated{font-size:10px;color:var(--text-light);}
+  .out-actions{display:flex;gap:8px;flex-shrink:0;}
+  .btn-restock{padding:6px 12px;background:#ef4444;color:#fff;border-radius:6px;text-decoration:none;font-size:11px;font-weight:800;}
+  .btn-restock:hover{background:#dc2626;}
+  .btn-view{padding:6px 12px;background:var(--blue);color:#fff;border-radius:6px;text-decoration:none;font-size:11px;font-weight:800;}
+  .btn-view:hover{background:#1d4ed8;}
+
+  /* PRODUCTS / ORDERS */
+  .products-list,.orders-list{display:flex;flex-direction:column;gap:8px;}
+  .product-item,.order-item{padding:10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border);}
+  .product-item{display:flex;gap:10px;align-items:center;}
+  .product-image img{width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid var(--border);}
+  .product-image .placeholder{width:44px;height:44px;border-radius:6px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text-light);}
+  .product-details{flex:1;min-width:0;}
+  .product-details h4{font-size:13px;color:var(--black);margin-bottom:2px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .product-details small{font-size:11px;color:var(--text-light);display:block;margin-bottom:4px;}
+  .product-meta{display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap;align-items:center;}
+  .category{background:rgba(124,58,237,.10);color:var(--purple);padding:2px 6px;border-radius:8px;font-size:10px;font-weight:800;white-space:nowrap;}
+  .stock{font-size:11px;padding:2px 6px;border-radius:8px;font-weight:800;}
+  .stock.good{background:rgba(34,197,94,.10);color:#166534;}
+  .stock.low{background:rgba(249,115,22,.10);color:#92400e;}
+  .status.in{background:rgba(34,197,94,.10);color:#166534;}
+  .status.low{background:rgba(249,115,22,.10);color:#92400e;}
+  .status.out{background:rgba(239,68,68,.10);color:#b91c1c;}
+
+  .order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .order-id{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;font-size:12px;color:var(--black);font-weight:800;letter-spacing:.5px;}
+  .order-amount{font-size:13px;color:var(--green);font-weight:900;}
+  .order-details{display:flex;justify-content:space-between;align-items:center;}
+  .order-details .status{padding:3px 8px;border-radius:8px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;}
+  .status.completed,.status.delivered,.status.shipped{background:rgba(34,197,94,.10);color:#166534;}
+  .status.pending,.status.processing{background:rgba(249,115,22,.10);color:#92400e;}
+  .status.cancelled,.status.refunded{background:rgba(239,68,68,.10);color:#b91c1c;}
+  .order-details .date{font-size:10px;color:var(--text-light);}
+
+  /* EMPTY */
+  .empty-state{padding:32px 16px;text-align:center;color:var(--text-light);}
+  .empty-state.success{background:rgba(34,197,94,.05);border-radius:8px;}
+  .empty-state span{font-size:32px;display:block;margin-bottom:12px;opacity:.5;}
+  .empty-state p{margin-bottom:8px;font-size:14px;color:var(--text);}
+  .empty-state small{font-size:12px;color:var(--text-light);display:block;margin-bottom:16px;}
+  .empty-state .btn{display:inline-block;padding:10px 20px;background:var(--blue);color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:900;}
+
+  /* FOOTER */
+  .dashboard-footer{
+    background:var(--card-bg);
+    border-radius:12px;
+    padding:12px;
+    margin-top:12px;
+    border:1px solid var(--border);
+    text-align:center;
+  }
+  .footer-section h4{font-size:13px;color:var(--black);margin-bottom:8px;font-weight:800;text-align:left;}
+  .footer-links{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;justify-content:center;}
+  .footer-links a,.logout-form button{
+    padding:6px 10px;color:var(--text);text-decoration:none;font-size:12px;border-radius:6px;background:#f8fafc;border:1px solid var(--border);white-space:nowrap;
+  }
+  .logout-form{display:inline;}
+  .logout-form button{background:none;border:none;font-family:inherit;cursor:pointer;width:auto;}
+  .footer-links a:hover,.logout-form button:hover{color:var(--blue);background:rgba(37,99,235,.10);}
+  .copyright{padding-top:8px;border-top:1px solid var(--border);}
+  .copyright small{font-size:10px;color:var(--text-light);}
+
+  /* badges */
+  .pg-count-badge{
+    display:inline-flex;align-items:center;justify-content:center;margin-left:6px;
+    min-width:18px;height:18px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:900;background:#0f172a;color:#f9fafb;
+  }
+  .pg-link-warning{background:rgba(249,115,22,.08);border-left:3px solid #f97316;color:#92400e;}
+
+  /* restock blink */
+  .restock-link .restock-all{font-weight:900;letter-spacing:.5px;}
+  .restock-link.has-out-of-stock .restock-all{
+    animation: restockColorBlink .5s infinite alternate, restockVisibilityBlink 1s infinite;
+  }
+  .restock-link.all-good .restock-all{color:var(--green);animation: restockOkPulse 1.5s infinite;}
+  @keyframes restockColorBlink{0%{color:#facc15}50%{color:#ef4444}100%{color:#facc15}}
+  @keyframes restockVisibilityBlink{0%,40%{opacity:1}50%,90%{opacity:0}100%{opacity:1}}
+  @keyframes restockOkPulse{0%{color:var(--green);text-shadow:none}50%{color:#16a34a;text-shadow:0 0 6px rgba(34,197,94,.5)}100%{color:var(--green);text-shadow:none}}
+
+  /* RESPONSIVE */
+  @media (min-width: 768px){
+    .dashboard-simple{padding:16px;max-width:1200px;margin:0 auto;}
+    .dashboard-header{display:flex;justify-content:space-between;align-items:flex-start;padding:16px;}
+    .user-info{margin-bottom:0;}
+    .header-stats{width:200px;padding-top:0;border-top:none;}
+    .stats-grid{grid-template-columns:repeat(5,1fr);}
+    .actions-grid{grid-template-columns:repeat(4,1fr);}
+    .period-btn{min-width:100px;font-size:12px;padding:8px 12px;}
+  }
+  @media (max-width: 768px){
+    .trend-stats{grid-template-columns:repeat(2,1fr);}
+    .sales-trend .section-header{flex-direction:column;align-items:flex-start;}
+    .trend-summary{width:100%;justify-content:space-between;}
+    #simple-chart,#chart-labels{padding:20px 20px;}
+  }
+  @media (max-width: 320px){
+    .dashboard-simple{padding:6px;font-size:13px;}
+    .stats-grid{grid-template-columns:1fr 1fr;}
+    #simple-chart{height:180px;padding:10px;}
+    #chart-labels{padding:5px 10px;font-size:9px;}
+    .period-btn{min-width:50px;font-size:8px;padding:3px 4px;}
+    .trend-period-toggle{gap:3px;}
   }
 </style>
 
-<script nonce="<%= nonce %>">
+<script nonce="<%= NONCE %>">
   // Close notifications
   function setupNotifications() {
     document.querySelectorAll('.notification .close').forEach(button => {
       button.addEventListener('click', (e) => {
         const notification = e.target.closest('.notification');
+        if (!notification) return;
         notification.style.opacity = '0';
         notification.style.transform = 'translateY(-10px)';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 250);
       });
     });
 
@@ -2250,355 +990,201 @@
       document.querySelectorAll('.notification.success').forEach(notification => {
         notification.style.opacity = '0';
         notification.style.transform = 'translateY(-10px)';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 250);
       });
     }, 5000);
   }
 
-  // Helper function to format currency
   function fmtCurrency(amount) {
     return 'R ' + Number(amount || 0).toFixed(2);
   }
 
   // SIMPLE BAR CHART USING ANALYTICS API DATA
   async function createSimpleChart() {
-    console.log('📊 Creating simple chart using /business/analytics/chart-data ...');
-
-    // Fallback (uses whatever EJS prepared, probably zeros)
+    // EJS fallback data
     let dailyData   = <%- JSON.stringify(dailyChartData || []) %>;
     let monthlyData = <%- JSON.stringify(monthlyChartData || []) %>;
     let yearlyData  = <%- JSON.stringify(yearlyChartData || []) %>;
 
     try {
-      // ⚠️ Adjust path if your router is mounted differently.
-      // In your app it's usually app.use('/business', router)
-      // so this becomes /business/analytics/chart-data
-      const res = await fetch('/business/analytics/chart-data');
-
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
-      }
-
+      const res = await fetch('/business/analytics/chart-data', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
+
       if (json && json.success && json.chartData) {
         const chart = json.chartData;
 
-        // 🔄 Map analytics format → seller-dashboard format
-        // analytics.daily:  [{ date: "Mon 10", sales, orders }]
-        // analytics.monthly:[{ date: "10 Dec", sales, orders }]
-        // analytics.yearly: [{ month: "Dec 2025", sales, orders }]
+        // keep PERIOD SIZES consistent
+        // daily: 24 points
         dailyData = Array.isArray(chart.daily)
-          ? chart.daily.map(p => ({
-              time: p.date,                   // label for X-axis
+          ? chart.daily.slice(-24).map(p => ({
+              time: p.time || p.hour || p.date || p.label || '',
               sales: Number(p.sales || 0),
             }))
-          : [];
+          : dailyData;
 
+        // monthly: 30 points
         monthlyData = Array.isArray(chart.monthly)
-          ? chart.monthly.map(p => ({
-              date: p.date,
+          ? chart.monthly.slice(-30).map(p => ({
+              date: p.date || p.label || '',
               sales: Number(p.sales || 0),
             }))
-          : [];
+          : monthlyData;
 
+        // yearly: 12 points
         yearlyData = Array.isArray(chart.yearly)
-          ? chart.yearly.map(p => ({
-              month: p.month,
+          ? chart.yearly.slice(-12).map(p => ({
+              month: p.month || p.label || '',
               sales: Number(p.sales || 0),
             }))
-          : [];
-
-        console.log('✅ Loaded analytics data for seller dashboard', {
-          dailyPoints: dailyData.length,
-          monthlyPoints: monthlyData.length,
-          yearlyPoints: yearlyData.length,
-        });
-      } else {
-        console.warn('⚠️ analytics/chart-data returned no chartData, using fallback EJS data');
+          : yearlyData;
       }
     } catch (err) {
-      console.error('⚠️ Failed to fetch /business/analytics/chart-data, using EJS fallback', err);
+      console.warn('Chart fetch failed, using EJS fallback:', err);
     }
 
-    // If STILL no data, keep layout with dummy zeros
-    if (!dailyData.length) {
-      console.log('ℹ️ No daily data, generating dummy zeros');
-      const now = new Date();
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - i);
-        const label = d.toLocaleDateString('en-ZA', {
-          weekday: 'short',
-          day: 'numeric',
-        });
-        dailyData.push({ time: label, sales: 0 });
-      }
-    }
+    const safeValues = (data) => data.map(item => Number(item.sales || 0));
 
-    if (!monthlyData.length) {
-      const now = new Date();
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - i);
-        const label = d.toLocaleDateString('en-ZA', {
-          day: 'numeric',
-          month: 'short',
-        });
-        monthlyData.push({ date: label, sales: 0 });
-      }
-    }
-
-    if (!yearlyData.length) {
-      const now = new Date();
-      for (let i = 11; i >= 0; i--) {
-        const m = new Date(now);
-        m.setMonth(m.getMonth() - i, 1);
-        const label = m.toLocaleDateString('en-ZA', {
-          month: 'short',
-          year: '2-digit',
-        });
-        yearlyData.push({ month: label, sales: 0 });
-      }
-    }
-
-    let currentPeriod = 'daily';
-    let currentData   = dailyData;
-
-    function safeValues(data) {
-      return data.map(item => Number(item.sales || 0));
-    }
-
-    // Update statistics
     function updateStats(data, period) {
       const values = safeValues(data);
+      const $ = (id) => document.getElementById(id);
 
-      if (!values.length) {
-        document.getElementById('current-sales').textContent = fmtCurrency(0);
-        document.getElementById('avg-sales').textContent     = fmtCurrency(0);
-        document.getElementById('total-sales').textContent   = fmtCurrency(0);
-        document.getElementById('peak-sales').textContent    = fmtCurrency(0);
-        document.getElementById('lowest-sales').textContent  = fmtCurrency(0);
+      const total = values.reduce((s, v) => s + v, 0);
+      const avg = values.length ? (total / values.length) : 0;
+      const peak = values.length ? Math.max(...values) : 0;
 
-        const growthEl     = document.getElementById('growth-trend');
-        const projectionEl = document.getElementById('projection');
-
-        if (growthEl) {
-          growthEl.textContent = '0.0%';
-          growthEl.className   = 'positive';
-        }
-        if (projectionEl) {
-          projectionEl.textContent = '+0.0%';
-          projectionEl.className   = 'positive';
-        }
-
-        const legendText = document.getElementById('legend-text');
-        if (legendText) {
-          legendText.textContent =
-            period === 'daily'   ? 'Daily Sales'   :
-            period === 'monthly' ? 'Daily Sales'   :
-                                    'Monthly Sales';
-        }
-        return;
-      }
-
-      const total   = values.reduce((sum, val) => sum + val, 0);
-      const avg     = total / values.length;
-      const peak    = Math.max(...values);
+      // lowest = min positive
       const positives = values.filter(v => v > 0);
       const lowest = positives.length ? Math.min(...positives) : 0;
 
-      // current = last non-zero value if possible, else last
+      // current = last non-zero else last
       let current = 0;
       for (let i = values.length - 1; i >= 0; i--) {
         if (values[i] > 0) { current = values[i]; break; }
       }
       if (!current && values.length) current = values[values.length - 1];
 
-      // Calculate growth (very simple)
-      let growth = 0;
-      if (period === 'daily') {
-        if (values.length >= 2) {
-          const first = values[0] || 0;
-          const last  = values[values.length - 1] || 0;
-          growth = first > 0 ? ((last - first) / first) * 100 : 0;
-        }
-      } else {
-        const first = values[0] || 0;
-        const last  = values[values.length - 1] || 0;
-        growth = first > 0 ? ((last - first) / first) * 100 : 0;
-      }
+      // growth from first→last when first > 0
+      const first = values[0] || 0;
+      const last = values.length ? values[values.length - 1] : 0;
+      const growth = first > 0 ? ((last - first) / first) * 100 : 0;
 
-      // Update DOM
-      document.getElementById('current-sales').textContent = fmtCurrency(current);
-      document.getElementById('avg-sales').textContent     = fmtCurrency(avg);
-      document.getElementById('total-sales').textContent   = fmtCurrency(total);
-      document.getElementById('peak-sales').textContent    = fmtCurrency(peak);
-      document.getElementById('lowest-sales').textContent  = fmtCurrency(lowest);
+      $('current-sales').textContent = fmtCurrency(current);
+      $('avg-sales').textContent = fmtCurrency(avg);
+      $('total-sales').textContent = fmtCurrency(total);
+      $('peak-sales').textContent = fmtCurrency(peak);
+      $('lowest-sales').textContent = fmtCurrency(lowest);
 
-      const growthEl     = document.getElementById('growth-trend');
-      const projectionEl = document.getElementById('projection');
-
+      const growthEl = $('growth-trend');
+      const projEl = $('projection');
       if (growthEl) {
         growthEl.textContent = growth.toFixed(1) + '%';
-        growthEl.className   = growth >= 0 ? 'positive' : 'negative';
+        growthEl.className = growth >= 0 ? 'positive' : 'negative';
+      }
+      if (projEl) {
+        projEl.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+        projEl.className = growth >= 0 ? 'positive' : 'negative';
       }
 
-      if (projectionEl) {
-        projectionEl.textContent =
-          (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
-        projectionEl.className = growth >= 0 ? 'positive' : 'negative';
-      }
-
-      const legendText = document.getElementById('legend-text');
+      const legendText = $('legend-text');
       if (legendText) {
         legendText.textContent =
-          period === 'daily'   ? 'Daily Sales (7 days)' :
-          period === 'monthly' ? 'Daily Sales (30 days)' :
-                                  'Monthly Sales (12 months)';
+          period === 'daily'   ? 'Hourly Sales (24h)' :
+          period === 'monthly' ? 'Daily Sales (30d)' :
+                                 'Monthly Sales (12m)';
       }
-
-      console.log(`Stats updated for ${period}`, {
-        total: fmtCurrency(total),
-        avg: fmtCurrency(avg),
-        peak: fmtCurrency(peak),
-        growth: growth.toFixed(1) + '%'
-      });
     }
 
-    // Draw the chart using DIVs
     function drawChart(data, period) {
-      console.log(`Drawing ${period} chart with ${data.length} points`);
+      const chart = document.getElementById('simple-chart');
+      const labels = document.getElementById('chart-labels');
+      if (!chart || !labels) return;
 
-      const chartContainer  = document.getElementById('simple-chart');
-      const labelsContainer = document.getElementById('chart-labels');
+      chart.innerHTML = '';
+      labels.innerHTML = '';
 
-      if (!chartContainer || !labelsContainer) return;
+      const values = safeValues(data);
+      const maxValue = values.length ? Math.max(...values, 1) : 1;
+      const chartHeight = 200;
 
-      chartContainer.innerHTML  = '';
-      labelsContainer.innerHTML = '';
-
-      const values    = safeValues(data);
-      const maxValue  = values.length ? Math.max(...values, 1) : 1;
-      const chartHeight = 200; // px
-
+      // label frequency
       let labelFrequency = 1;
-      if (period === 'daily')   labelFrequency = 1;  // 7 points, show all
-      if (period === 'monthly') labelFrequency = 4;  // every ~4th day
+      if (period === 'daily') labelFrequency = 4;     // show every 4 hours
+      if (period === 'monthly') labelFrequency = 5;   // show every ~5 days
+      if (period === 'yearly') labelFrequency = 1;    // show all months
 
-      data.forEach((item, index) => {
-        const value = Number(item.sales || 0);
-        const barHeight = (value / maxValue) * chartHeight;
+      data.forEach((item, idx) => {
+        const val = Number(item.sales || 0);
+        const barHeight = (val / maxValue) * chartHeight;
 
         let label = '';
-        if (period === 'daily')   label = item.time;   // from analytics.daily.date
-        if (period === 'monthly') label = item.date;
-        if (period === 'yearly')  label = item.month;
+        if (period === 'daily') label = item.time || '';
+        if (period === 'monthly') label = item.date || '';
+        if (period === 'yearly') label = item.month || '';
 
         const bar = document.createElement('div');
         bar.className = 'chart-bar';
-        bar.style.height   = barHeight + 'px';
-        bar.style.minWidth = period === 'daily' ? '18px' : '10px';
-        bar.title = `${label}: ${fmtCurrency(value)}`;
+        bar.style.height = barHeight + 'px';
 
-        const tooltip = document.createElement('div');
-        tooltip.className = 'chart-tooltip';
-        tooltip.textContent = `${label}: ${fmtCurrency(value)}`;
-        bar.appendChild(tooltip);
+        const tip = document.createElement('div');
+        tip.className = 'chart-tooltip';
+        tip.textContent = `${label}: ${fmtCurrency(val)}`;
+        bar.appendChild(tip);
 
-        chartContainer.appendChild(bar);
+        chart.appendChild(bar);
 
-        // labels
         const labelEl = document.createElement('div');
-        labelEl.textContent = label || '';
         labelEl.style.textAlign = 'center';
-        labelEl.style.flex      = '1';
-
-        if (
-          period === 'yearly' ||
-          index % labelFrequency === 0 ||
-          index === data.length - 1
-        ) {
-          labelEl.style.fontSize = period === 'daily' ? '10px' : '10px';
-        } else {
-          labelEl.textContent = '';
-        }
-
-        labelsContainer.appendChild(labelEl);
-      });
-
-      console.log('Chart drawn with max value:', maxValue);
-    }
-
-    // Period buttons (with null checks)
-    const dailyBtn   = document.getElementById('daily-btn');
-    const monthlyBtn = document.getElementById('monthly-btn');
-    const yearlyBtn  = document.getElementById('yearly-btn');
-
-    if (dailyBtn) {
-      dailyBtn.addEventListener('click', function () {
-        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-        this.classList.add('active');
-
-        currentPeriod = 'daily';
-        currentData   = dailyData;
-        updateStats(currentData, currentPeriod);
-        drawChart(currentData, currentPeriod);
+        labelEl.style.flex = '1';
+        labelEl.textContent =
+          (idx % labelFrequency === 0 || idx === data.length - 1) ? label : '';
+        labels.appendChild(labelEl);
       });
     }
 
-    if (monthlyBtn) {
-      monthlyBtn.addEventListener('click', function () {
-        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-        this.classList.add('active');
+    // initial
+    let period = 'daily';
+    let current = dailyData;
 
-        currentPeriod = 'monthly';
-        currentData   = monthlyData;
-        updateStats(currentData, currentPeriod);
-        drawChart(currentData, currentPeriod);
-      });
-    }
+    const setActive = (id) => {
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.add('active');
+    };
 
-    if (yearlyBtn) {
-      yearlyBtn.addEventListener('click', function () {
-        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-        this.classList.add('active');
+    const apply = () => {
+      updateStats(current, period);
+      drawChart(current, period);
+    };
 
-        currentPeriod = 'yearly';
-        currentData   = yearlyData;
-        updateStats(currentData, currentPeriod);
-        drawChart(currentData, currentPeriod);
-      });
-    }
+    document.getElementById('daily-btn')?.addEventListener('click', () => {
+      period = 'daily';
+      current = dailyData;
+      setActive('daily-btn');
+      apply();
+    });
 
-    // Initial draw
-    updateStats(currentData, currentPeriod);
-    drawChart(currentData, currentPeriod);
+    document.getElementById('monthly-btn')?.addEventListener('click', () => {
+      period = 'monthly';
+      current = monthlyData;
+      setActive('monthly-btn');
+      apply();
+    });
 
-    console.log('✅ Simple chart with analytics data initialized');
+    document.getElementById('yearly-btn')?.addEventListener('click', () => {
+      period = 'yearly';
+      current = yearlyData;
+      setActive('yearly-btn');
+      apply();
+    });
+
+    apply();
   }
 
-  // Initialize dashboard
-  document.addEventListener('DOMContentLoaded', function () {
-    console.log('🚀 Seller dashboard loaded, initializing...');
+  document.addEventListener('DOMContentLoaded', () => {
     setupNotifications();
-
-    setTimeout(() => {
-      if (document.getElementById('simple-chart')) {
-        createSimpleChart();
-      } else {
-        console.error('Chart container not found!');
-      }
-    }, 100);
-
-    // Click ripple for buttons
-    document.querySelectorAll('.action, .btn, .btn-small, .btn-restock, .btn-view, .btn-view-all')
-      .forEach(button => {
-        button.addEventListener('click', function () {
-          this.style.transform = 'scale(0.98)';
-          setTimeout(() => {
-            this.style.transform = '';
-          }, 150);
-        });
-      });
+    if (document.getElementById('simple-chart')) {
+      createSimpleChart();
+    }
   });
 </script>

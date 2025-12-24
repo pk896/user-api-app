@@ -115,7 +115,13 @@ function computeTotalsFromSession(cart, delivery = 0) {
 }
 
 async function getAccessToken() {
-  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
+  const cid = String(PAYPAL_CLIENT_ID || '').trim();
+  const sec = String(PAYPAL_CLIENT_SECRET || '').trim();
+  if (!cid || !sec) {
+    throw new Error('Missing PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET');
+  }
+
+  const auth = Buffer.from(`${cid}:${sec}`).toString('base64');
   const res = await fetch(`${PP_API}/v1/oauth2/token`, {
     method: 'POST',
     headers: {
@@ -143,11 +149,9 @@ function saveSession(req) {
 async function findOrderByAnyId(id) {
   if (!Order) return null;
 
-  // 1) orderId (string)
   let doc = await Order.findOne({ orderId: String(id) }).lean();
   if (doc) return doc;
 
-  // 2) Mongo _id
   if (/^[0-9a-fA-F]{24}$/.test(String(id))) {
     try {
       doc = await Order.findById(id).lean();
@@ -183,17 +187,9 @@ function shapeOrderForClient(doc) {
 
   const b = doc.breakdown || {};
 
-  const itemTotalVal =
-    normalizeMoneyNumber(b?.itemTotal?.value) ??
-    null;
-
-  const taxTotalVal =
-    normalizeMoneyNumber(b?.taxTotal?.value) ??
-    null;
-
-  const shipVal =
-    normalizeMoneyNumber(b?.shipping?.value) ??
-    null;
+  const itemTotalVal = normalizeMoneyNumber(b?.itemTotal?.value) ?? null;
+  const taxTotalVal = normalizeMoneyNumber(b?.taxTotal?.value) ?? null;
+  const shipVal = normalizeMoneyNumber(b?.shipping?.value) ?? null;
 
   return {
     id: doc.orderId || String(doc._id),
@@ -264,7 +260,7 @@ router.get('/checkout', async (req, res) => {
   return res.render('checkout', {
     title: 'Checkout',
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),
+    nonce: resNonce(req),
     paypalClientId: PAYPAL_CLIENT_ID,
     currency: upperCcy,
     brandName: BRAND_NAME,
@@ -279,13 +275,13 @@ router.get('/orders', (req, res) => {
   return res.render('orders', {
     title: 'My Orders',
     themeCss: themeCssFrom(req),
-    NONCE: resNonce(req),
+    nonce: resNonce(req),
     success: [],
     error: [],
   });
 });
 
-// Printable receipt view (unchanged route, safer reading)
+// Printable receipt view
 router.get('/receipt/:id', async (req, res) => {
   const id = String(req.params.id || '');
   let doc = null;
@@ -658,7 +654,6 @@ router.post('/capture-order', express.json(), async (req, res) => {
             ? req.session.business._id
             : null;
 
-        // ✅ Build schema-correct "captures" entry
         const captureEntry =
           cap0
             ? {
@@ -693,7 +688,6 @@ router.post('/capture-order', express.json(), async (req, res) => {
               }
             : null;
 
-        // ✅ Upsert + set schema fields only
         const update = {
           orderId: orderID,
           status: String(capture?.status || 'COMPLETED'),
@@ -742,7 +736,6 @@ router.post('/capture-order', express.json(), async (req, res) => {
           businessBuyer,
         };
 
-        // create doc first
         doc = await Order.findOneAndUpdate(
           { orderId: orderID },
           {
@@ -752,7 +745,6 @@ router.post('/capture-order', express.json(), async (req, res) => {
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
-        // ✅ Ensure capture is stored in captures[] and is idempotent by captureId
         if (doc && captureEntry && captureId) {
           const already = Array.isArray(doc.captures)
             ? doc.captures.some((c) => String(c?.captureId || '') === String(captureId))
@@ -765,7 +757,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
           }
         }
 
-        // ✅ credit sellers (ledger) if completed
+        // ✅ credit sellers (ledger)
         try {
           if (doc && typeof creditSellersFromOrder === 'function') {
             const paidStatus = String(capture?.status || doc.status || '').toUpperCase();
@@ -962,7 +954,6 @@ router.get('/my-orders', async (req, res) => {
  *  POST /payment/refund
  * --------------------------------------------------------- */
 
-// middleware
 let requireOrdersAdmin = null;
 try {
   requireOrdersAdmin = require('../middleware/requireOrdersAdmin');
@@ -973,7 +964,6 @@ try {
   };
 }
 
-// Find an order by captureId (schema-correct)
 async function findOrderByCaptureId(captureId) {
   if (!Order) return null;
   const cid = String(captureId || '').trim();
@@ -981,34 +971,25 @@ async function findOrderByCaptureId(captureId) {
 
   return Order.findOne({
     $or: [
-      // ✅ schema: captures[].captureId
       { 'captures.captureId': cid },
-
-      // ✅ your raw paypal snapshot
       { 'raw.purchase_units.payments.captures.id': cid },
       { 'raw.purchase_units.payments.captures.capture_id': cid },
-
-      // sometimes nested differently
       { 'raw.purchase_units.0.payments.captures.0.id': cid },
     ],
   });
 }
 
-// Get captured amount (schema-correct)
 function getCapturedAmountFromOrder(doc) {
   try {
-    // ✅ prefer Order.amount
     const val1 = normalizeMoneyNumber(doc?.amount?.value);
     const ccy1 = doc?.amount?.currency || upperCcy;
     if (val1 != null) return { value: val1, currency: ccy1 };
 
-    // ✅ captures[0].amount
     const cap0 = Array.isArray(doc?.captures) ? doc.captures[0] : null;
     const val2 = normalizeMoneyNumber(cap0?.amount?.value);
     const ccy2 = cap0?.amount?.currency || upperCcy;
     if (val2 != null) return { value: val2, currency: ccy2 };
 
-    // fallback to raw
     const pu = Array.isArray(doc?.raw?.purchase_units) ? doc.raw.purchase_units[0] : null;
     const cap = pu?.payments?.captures?.[0] || null;
     const val3 = normalizeMoneyNumber(cap?.amount?.value);
@@ -1024,7 +1005,6 @@ function sumRefundedFromOrder(doc) {
     const arr = Array.isArray(doc?.refunds) ? doc.refunds : [];
     let sum = 0;
     for (const r of arr) {
-      // ✅ schema: amount is String
       const n = normalizeMoneyNumber(r?.amount);
       if (n != null) sum += n;
     }
@@ -1056,7 +1036,6 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
       }
     }
 
-    // ✅ let (may be overridden from captured currency)
     let currency = safeStr(req.body?.currency || upperCcy, 8).toUpperCase();
 
     let orderDoc = null;
@@ -1075,7 +1054,6 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
       }
     }
 
-    // guardrail + force currency to captured currency
     if (orderDoc) {
       const captured = getCapturedAmountFromOrder(orderDoc);
       const refundedSoFar = sumRefundedFromOrder(orderDoc);
@@ -1131,7 +1109,7 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
       });
     }
 
-    // persist (schema-correct + idempotent)
+    // ✅ Persist refund + ✅ Debit sellers ledger (the missing piece)
     try {
       if (orderDoc) {
         const refundId = refundJson?.id ? String(refundJson.id) : null;
@@ -1147,11 +1125,9 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
           }
         }
 
-        // Prefer PayPal's returned refund amount/currency
         const paypalRefundValue = refundJson?.amount?.value ?? null;
         const paypalRefundCurrency = refundJson?.amount?.currency_code ?? null;
 
-        // ✅ avoid storing "null" string and avoid saving empty string
         const refundedAmountStr = safeMoneyString(
           paypalRefundValue ?? (amountNum !== null ? amountNum.toFixed(2) : null),
           32
@@ -1166,12 +1142,12 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
         orderDoc.refunds.push({
           refundId: refundId,
           status: refundJson?.status || null,
-          amount: refundedAmountStr,           // ✅ null or "12.34"
+          amount: refundedAmountStr,
           currency: refundedCurrencyStr || null,
           createdAt: new Date(),
         });
 
-        // update refundedTotal + status safely
+        // update refundedTotal + status
         const captured = getCapturedAmountFromOrder(orderDoc);
         const refundedSoFar = sumRefundedFromOrder(orderDoc);
 
@@ -1189,10 +1165,9 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
 
         await orderDoc.save();
 
-        // debit sellers (net)
+        // ✅ IMPORTANT: reverse seller earnings in YOUR ledger
         try {
           if (typeof debitSellersFromRefund === 'function') {
-            // ✅ If admin requested full refund (no amount), pass amount=null so sellers debit FULL net
             const isFullRefundRequest = (amountNum === null);
 
             const r = await debitSellersFromRefund(orderDoc, {
@@ -1201,6 +1176,7 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
                 ? null
                 : (paypalRefundValue ?? (amountNum !== null ? amountNum.toFixed(2) : null)),
               currency: refundedCurrencyStr,
+              // ✅ keep true so it still works even if status changed to REFUNDED (paidLike might become false)
               allowWhenUnpaid: true,
               platformFeeBps: PLATFORM_FEE_BPS,
             });
@@ -1222,8 +1198,9 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
   }
 });
 
-module.exports = { router, computeTotalsFromSession };
 
+// ✅ IMPORTANT: export router normally so app.use('/payment', ...) works
+module.exports = router;
 
-
-
+// Optional: if you used this elsewhere via require('./payment').computeTotalsFromSession
+module.exports.computeTotalsFromSession = computeTotalsFromSession;

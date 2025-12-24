@@ -1,172 +1,358 @@
 <!-- views/admin-login.ejs -->
-<h1 class="page-title"><%= title || "🔐 Admin Login" %></h1>
+<%
+  const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '');
+  const pageTitle = title || "🔐 Admin Login";
+  const actionUrl = formAction || "/admin/login";
+  const dark = !!(themeCss && String(themeCss).includes('dark'));
+%>
 
-<!-- ✅ Flash Messages -->
-<% if (success && success.length > 0) { %>
-  <div class="flash flash-success"><%= success %></div>
-<% } %>
-<% if (error && error.length > 0) { %>
-  <div class="flash flash-error"><%= error %></div>
-<% } %>
-<% if (info && info.length > 0) { %>
-  <div class="flash flash-info"><%= info %></div>
-<% } %>
-<% if (warning && warning.length > 0) { %>
-  <div class="flash flash-warning"><%= warning %></div>
-<% } %>
+<section class="al-page <%= dark ? 'is-dark' : 'is-light' %>">
+  <div class="al-wrap">
 
-<!-- 🧭 Admin Login Form -->
-<form
-  action="<%= formAction || '/admin/login' %>"
-  method="POST"
-  class="login-form <%= themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>"
-  autocomplete="on"
->
-  <div class="form-group">
-    <label for="username">👤 Username</label>
-    <input
-      type="text"
-      name="username"
-      id="username"
-      placeholder="Enter admin username"
-      required
-      autofocus
-      autocomplete="username"
-    />
+    <!-- Title -->
+    <header class="al-hero">
+      <div class="al-badge" aria-hidden="true">🛡️</div>
+      <div class="al-hero-text">
+        <h1 class="al-title"><%= pageTitle %></h1>
+        <p class="al-sub">
+          Secure admin access for <span class="al-brand">Unicoporate</span>. Please log in to continue.
+        </p>
+      </div>
+    </header>
+
+    <!-- ✅ Flash Messages (If your layout already renders flash, remove this block) -->
+    <% if (success && String(success).length > 0) { %>
+      <div class="al-flash al-ok"><%= success %></div>
+    <% } %>
+    <% if (error && String(error).length > 0) { %>
+      <div class="al-flash al-err"><%= error %></div>
+    <% } %>
+    <% if (info && String(info).length > 0) { %>
+      <div class="al-flash al-info"><%= info %></div>
+    <% } %>
+    <% if (warning && String(warning).length > 0) { %>
+      <div class="al-flash al-warn"><%= warning %></div>
+    <% } %>
+
+    <!-- Admin Login Form -->
+    <form
+      action="<%= actionUrl %>"
+      method="POST"
+      class="al-card"
+      autocomplete="on"
+      novalidate
+    >
+      <div class="al-card-head">
+        <div class="al-card-title">Admin Sign In</div>
+        <div class="al-palette" aria-hidden="true">
+          <span class="dot dot-p"></span>
+          <span class="dot dot-b"></span>
+          <span class="dot dot-g"></span>
+          <span class="dot dot-k"></span>
+        </div>
+      </div>
+
+      <div class="al-fields">
+        <div class="al-field">
+          <label for="username" class="al-label">👤 Username</label>
+          <input
+            type="text"
+            name="username"
+            id="username"
+            placeholder="e.g. admin or phakisi-admin"
+            required
+            autofocus
+            autocomplete="username"
+            inputmode="text"
+          />
+          <div class="al-hint">Use your admin username (case-sensitive if your server enforces it).</div>
+        </div>
+
+        <div class="al-field">
+          <label for="password" class="al-label">🔒 Password</label>
+          <div class="al-pass">
+            <input
+              type="password"
+              name="password"
+              id="password"
+              placeholder="Enter your admin password"
+              required
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              id="togglePassword"
+              class="al-toggle"
+              aria-label="Show password"
+              title="Show/Hide password"
+            >
+              👁️
+            </button>
+          </div>
+          <div class="al-hint">For your safety, avoid logging in on public devices.</div>
+        </div>
+
+        <button type="submit" class="al-btn al-btn-primary">Login</button>
+
+        <% if (typeof showBackLink !== 'undefined' && showBackLink) { %>
+          <p class="al-back">
+            <a href="/" class="al-link">← Back to site</a>
+          </p>
+        <% } %>
+
+        <div class="al-security">
+          <div class="al-sec-item">
+            <span class="al-sec-ic">🔒</span>
+            <span>Encrypted session</span>
+          </div>
+          <div class="al-sec-item">
+            <span class="al-sec-ic">🧾</span>
+            <span>Admin-only access</span>
+          </div>
+          <div class="al-sec-item">
+            <span class="al-sec-ic">⚡</span>
+            <span>Fast & secure</span>
+          </div>
+        </div>
+      </div>
+    </form>
+
   </div>
+</section>
 
-  <div class="form-group">
-    <label for="password">🔒 Password</label>
-    <div class="password-wrapper">
-      <input
-        type="password"
-        name="password"
-        id="password"
-        placeholder="Enter admin password"
-        required
-        autocomplete="current-password"
-      />
-      <button
-        type="button"
-        id="togglePassword"
-        class="toggle-pass"
-        aria-label="Show/Hide password"
-      >👁️</button>
-    </div>
-  </div>
-
-  <button type="submit" class="btn login-btn">Login</button>
-
-  <% if (typeof showBackLink !== 'undefined' && showBackLink) { %>
-    <p class="footer-link"><a href="/">← Back to site</a></p>
-  <% } %>
-</form>
-
-<style>
-  .page-title {
-    text-align: center;
-    margin: 1.5rem 0;
-    font-size: 1.8rem;
-    font-weight: 700;
+<style nonce="<%= NONCE %>">
+  /* ===== Brand palette (Purple dominant) ===== */
+  .al-page{
+    --b:#2563EB; /* trust */
+    --p:#7C3AED; /* innovation (dominant) */
+    --g:#22C55E; /* growth */
+    --k:#0F172A; /* premium */
+    --bg:#f8fafc;
+    --mut:#64748B;
+    --line:rgba(15,23,42,.12);
+    --shadow:0 16px 30px rgba(15,23,42,.12);
+    padding: .9rem 0;
+    min-height: calc(100vh - 2rem);
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.22) 0%, rgba(37,99,235,.10) 55%, rgba(34,197,94,.06) 100%),
+      linear-gradient(180deg, var(--bg), var(--bg));
   }
 
-  .login-form {
-    max-width: 420px;
-    margin: 0 auto;
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 1.5rem 1.8rem;
-    box-shadow: 0 3px 10px rgba(0,0,0,.08);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+  .al-page.is-dark{
+    --bg:#0b1220;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.24) 0%, rgba(37,99,235,.14) 55%, rgba(34,197,94,.08) 100%),
+      linear-gradient(180deg, #0b1220, #0b1220);
   }
 
-  .dark-theme.login-form {
-    background: #1f2937;
-    color: #f9fafb;
-    box-shadow: 0 2px 10px rgba(255,255,255,.05);
+  .al-wrap{max-width:480px;margin:0 auto;padding:0 .85rem}
+
+  /* ===== Hero ===== */
+  .al-hero{
+    display:flex;
+    gap:.75rem;
+    align-items:flex-start;
+    margin: .2rem 0 .75rem;
+    padding: .85rem;
+    border-radius:18px;
+    color:#fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+    box-shadow: var(--shadow);
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .al-badge{
+    width:44px;height:44px;border-radius:14px;
+    display:grid;place-items:center;
+    background: rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.22);
+    font-size:20px;
+    flex:0 0 auto;
+  }
+  .al-title{margin:0;font-size:1.15rem;font-weight:950;letter-spacing:.2px}
+  .al-sub{margin:.35rem 0 0;font-size:.88rem;font-weight:750;color:rgba(255,255,255,.92)}
+  .al-brand{font-weight:950}
+
+  /* ===== Flash ===== */
+  .al-flash{
+    margin:.55rem 0;
+    border-radius:16px;
+    padding:.65rem .75rem;
+    font-size:.9rem;
+    font-weight:850;
+    border:1px solid transparent;
+    background:#fff;
+    box-shadow: 0 10px 18px rgba(15,23,42,.06);
+    color:var(--k);
+  }
+  .al-ok{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25)}
+  .al-err{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.25)}
+  .al-info{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.22)}
+  .al-warn{background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.22)}
+
+  /* ===== Card ===== */
+  .al-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .al-page.is-dark .al-card{background:#0f172a;border-color:rgba(255,255,255,.10)}
+  .al-card-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:.75rem;
+    padding:.85rem .9rem;
+    background: rgba(124,58,237,.08);
+    border-bottom:1px solid rgba(15,23,42,.08);
+  }
+  .al-page.is-dark .al-card-head{
+    background: rgba(124,58,237,.14);
+    border-bottom-color: rgba(255,255,255,.10);
+  }
+  .al-card-title{font-size:1rem;font-weight:950;color:var(--k)}
+  .al-page.is-dark .al-card-title{color:#f1f5f9}
+
+  .al-palette{display:flex;gap:.4rem;align-items:center}
+  .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+  .dot-p{background:var(--p)} .dot-b{background:var(--b)} .dot-g{background:var(--g)} .dot-k{background:var(--k)}
+
+  .al-fields{padding:.9rem}
+  .al-field{margin-bottom:.75rem}
+  .al-label{display:block;margin:0 0 .35rem;font-size:.85rem;font-weight:950;color:var(--k)}
+  .al-page.is-dark .al-label{color:#e2e8f0}
+
+  input{
+    width:100%;
+    padding:.75rem .8rem;
+    border-radius:16px;
+    border:1px solid rgba(15,23,42,.14);
+    outline:none;
+    font-size:.92rem;
+    font-weight:800;
+    background:#fff;
+    color:var(--k);
+  }
+  input::placeholder{color:rgba(100,116,139,.95);font-weight:750}
+
+  .al-page.is-dark input{
+    background:#0b1220;
+    border-color: rgba(255,255,255,.14);
+    color:#f1f5f9;
+  }
+  .al-page.is-dark input::placeholder{color:rgba(148,163,184,.95)}
+
+  input:focus{
+    border-color: rgba(124,58,237,.55);
+    box-shadow: 0 0 0 4px rgba(124,58,237,.14);
   }
 
-  label { font-weight: 600; margin-bottom: .2rem; display: block; }
+  .al-hint{
+    margin-top:.35rem;
+    font-size:.78rem;
+    font-weight:750;
+    color:var(--mut);
+  }
+  .al-page.is-dark .al-hint{color:rgba(148,163,184,.95)}
 
-  input {
-    width: 100%;
-    padding: .7rem;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    font-size: 1rem;
+  /* Password */
+  .al-pass{position:relative;display:flex;align-items:center}
+  .al-toggle{
+    position:absolute;
+    right:.45rem;
+    height:34px;
+    min-width:40px;
+    border-radius:12px;
+    border:1px solid rgba(15,23,42,.12);
+    background: rgba(15,23,42,.02);
+    cursor:pointer;
+    font-size:1rem;
+    display:grid;place-items:center;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .al-page.is-dark .al-toggle{
+    border-color: rgba(255,255,255,.14);
+    background: rgba(255,255,255,.06);
+    color:#e2e8f0;
+  }
+  .al-toggle:hover{transform: translateY(-1px)}
+
+  /* Button */
+  .al-btn{
+    width:100%;
+    border:none;
+    border-radius:16px;
+    padding:.8rem .9rem;
+    cursor:pointer;
+    font-weight:950;
+    font-size:.95rem;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .al-btn:hover{transform: translateY(-1px)}
+  .al-btn-primary{
+    color:#fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+    box-shadow: 0 14px 22px rgba(124,58,237,.18);
   }
 
-  .dark-theme input {
-    background: #374151;
-    border: 1px solid #4b5563;
-    color: #f9fafb;
+  /* Back link */
+  .al-back{margin:.65rem 0 0;text-align:center}
+  .al-link{
+    color: var(--p);
+    font-weight:950;
+    text-decoration:none;
   }
+  .al-link:hover{text-decoration:underline}
 
-  .password-wrapper { display: flex; align-items: center; position: relative; }
-
-  .toggle-pass {
-    position: absolute;
-    right: .5rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.1rem;
-    padding: .2rem .35rem;
+  /* Security row */
+  .al-security{
+    margin-top:.85rem;
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+    justify-content:center;
   }
-
-  .btn.login-btn {
-    background: #2563eb;
-    color: #fff;
-    padding: .7rem;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-weight: 700;
-    transition: background .2s ease;
+  .al-sec-item{
+    display:flex;
+    gap:.4rem;
+    align-items:center;
+    padding:.35rem .55rem;
+    border-radius:999px;
+    border:1px solid rgba(15,23,42,.10);
+    background: rgba(34,197,94,.06);
+    color: var(--k);
+    font-size:.78rem;
+    font-weight:850;
   }
-
-  .btn.login-btn:hover { background: #1d4ed8; }
-
-  .flash {
-    max-width: 420px;
-    margin: .5rem auto;
-    padding: .8rem 1rem;
-    border-radius: 6px;
-    text-align: center;
-    font-weight: 500;
+  .al-page.is-dark .al-sec-item{
+    border-color: rgba(255,255,255,.12);
+    background: rgba(34,197,94,.10);
+    color:#e2e8f0;
   }
+  .al-sec-ic{font-size:.95rem}
 
-  .flash-success { background: #dcfce7; color: #166534; }
-  .flash-error { background: #fee2e2; color: #991b1b; }
-  .flash-info { background: #dbeafe; color: #1e40af; }
-  .flash-warning { background: #fef3c7; color: #92400e; }
-
-  .dark-theme .flash-success { background: #064e3b; color: #bbf7d0; }
-  .dark-theme .flash-error { background: #7f1d1d; color: #fecaca; }
-  .dark-theme .flash-info { background: #0b2a5b; color: #bfdbfe; }
-  .dark-theme .flash-warning { background: #3a2a0b; color: #fde68a; }
-
-  .footer-link { text-align: center; margin: .2rem 0 0; opacity: .85; }
-  .footer-link a { color: #2563eb; font-weight: 700; text-decoration: none; }
-
-  @media (max-width: 500px){
-    .login-form { margin: 0 1rem; padding: 1.2rem; }
+  /* Hisense-friendly */
+  @media (max-width: 420px){
+    .al-wrap{padding:0 .65rem}
+    .al-hero{padding:.75rem}
+    .al-fields{padding:.8rem}
+    .al-title{font-size:1.05rem}
   }
 </style>
 
-<script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  const toggleBtn = document.getElementById("togglePassword");
-  const passwordInput = document.getElementById("password");
+<script nonce="<%= NONCE %>">
+  document.addEventListener("DOMContentLoaded", () => {
+    const toggleBtn = document.getElementById("togglePassword");
+    const passwordInput = document.getElementById("password");
 
-  if (toggleBtn && passwordInput) {
-    toggleBtn.addEventListener("click", () => {
-      const isHidden = passwordInput.type === "password";
-      passwordInput.type = isHidden ? "text" : "password";
-      toggleBtn.textContent = isHidden ? "🙈" : "👁️";
-    });
-  }
-});
+    if (toggleBtn && passwordInput) {
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = passwordInput.type === "password";
+        passwordInput.type = isHidden ? "text" : "password";
+        toggleBtn.textContent = isHidden ? "🙈" : "👁️";
+        toggleBtn.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+      });
+    }
+  });
 </script>

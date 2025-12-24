@@ -1,599 +1,591 @@
 <!-- views/home.ejs -->
 <%
-const pageStyles = `
-  /* ✅ Brand Color System */
-  :root {
-    --blue: #2563EB;
-    --blue-dark: #1d4ed8;
-    --purple: #7C3AED;
-    --purple-dark: #6d28d9;
-    --green: #22C55E;
-    --green-dark: #16a34a;
-    --black: #0F172A;
-    
-    --gray-50: #f8fafc;
-    --gray-100: #f1f5f9;
-    --gray-200: #e2e8f0;
-    --gray-300: #cbd5e1;
-    --gray-400: #94a3b8;
-    --gray-500: #64748b;
-    --gray-600: #475569;
-    --gray-700: #334155;
-    --gray-800: #1e293b;
-    --gray-900: #0f172a;
-    
-    --radius-sm: 0.375rem;
-    --radius-md: 0.5rem;
-    --radius-lg: 0.75rem;
-    --radius-xl: 1rem;
-    
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    
-    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .dark-theme {
-    --bg-primary: var(--black);
-    --bg-secondary: var(--gray-800);
-    --text-primary: var(--gray-100);
-    --text-secondary: var(--gray-300);
-    --border: var(--gray-700);
-  }
-
-  :root {
-    --bg-primary: var(--gray-50);
-    --bg-secondary: white;
-    --text-primary: var(--gray-900);
-    --text-secondary: var(--gray-600);
-    --border: var(--gray-200);
-  }
-
-  /* ✅ Home Page Container */
-  .home-page {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 0.75rem;
-    color: var(--text-primary);
-    background: linear-gradient(135deg, var(--green) 0%, #16a34a 100%);
-    border-radius: var(--radius-xl);
-    overflow: hidden;
-  }
-
-  .home-content {
-    background: var(--bg-primary);
-    margin: 2px;
-    border-radius: calc(var(--radius-xl) - 2px);
-    padding: 1.5rem;
-  }
-
-  /* ✅ Hero Section */
-  .hero {
-    text-align: center;
-    padding: 1.5rem 0 2rem;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: linear-gradient(135deg, var(--blue), var(--purple));
-    color: white;
-    padding: 0.375rem 0.75rem;
-    border-radius: 2rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-  }
-
-  .hero h1 {
-    font-size: 1.75rem;
-    font-weight: 800;
-    margin-bottom: 0.75rem;
-    background: linear-gradient(135deg, var(--blue), var(--purple));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    line-height: 1.2;
-  }
-
-  .hero-subtitle {
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-    max-width: 600px;
-    margin: 0 auto 1.5rem;
-    line-height: 1.6;
-  }
-
-  .hero-buttons {
-    display: flex;
-    gap: 0.75rem;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  /* ✅ Mission Section */
-  .mission {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(124, 58, 237, 0.05));
-    border-radius: var(--radius-lg);
-    padding: 1.5rem;
-    margin: 2rem 0;
-    border: 1px solid var(--border);
-  }
-
-  .mission h2 {
-    font-size: 1.25rem;
-    color: var(--blue);
-    margin-bottom: 0.75rem;
-    font-weight: 700;
-  }
-
-  .mission p {
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 0.9rem;
-  }
-
-  .mission strong {
-    color: var(--purple);
-    font-weight: 600;
-  }
-
-  /* ✅ Growth Section */
-  .growth {
-    margin: 2rem 0;
-  }
-
-  .growth h2 {
-    text-align: center;
-    font-size: 1.25rem;
-    color: var(--green);
-    margin-bottom: 1.25rem;
-    font-weight: 700;
-  }
-
-  .growth-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-  }
-
-  .growth-card {
-    background: var(--bg-secondary);
-    border-radius: var(--radius-lg);
-    padding: 1.25rem;
-    border: 1px solid var(--border);
-    transition: var(--transition);
-  }
-
-  .growth-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--green);
-  }
-
-  .growth-card h3 {
-    font-size: 0.95rem;
-    color: var(--blue);
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-  }
-
-  .growth-card p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-
-  .growth-card strong {
-    color: var(--purple);
-  }
-
-  /* ✅ Humanity Section */
-  .humanity {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(37, 99, 235, 0.05));
-    border-radius: var(--radius-lg);
-    padding: 1.5rem;
-    margin: 2rem 0;
-    border: 1px solid var(--border);
-  }
-
-  .humanity h2 {
-    font-size: 1.25rem;
-    color: var(--purple);
-    margin-bottom: 0.75rem;
-    font-weight: 700;
-  }
-
-  .humanity p {
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 0.9rem;
-  }
-
-  /* ✅ CTA Section */
-  .cta {
-    text-align: center;
-    padding: 2rem 1rem;
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(37, 99, 235, 0.05));
-    border-radius: var(--radius-lg);
-    margin: 2rem 0;
-    border: 1px solid var(--border);
-  }
-
-  .cta h2 {
-    font-size: 1.25rem;
-    color: var(--green);
-    margin-bottom: 0.75rem;
-    font-weight: 700;
-  }
-
-  .cta p {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    max-width: 600px;
-    margin: 0 auto 1.5rem;
-    line-height: 1.6;
-  }
-
-  .cta-buttons {
-    display: flex;
-    gap: 0.75rem;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  /* ✅ Buttons */
-  .btn {
-    padding: 0.625rem 1.25rem;
-    border-radius: var(--radius-md);
-    font-weight: 600;
-    font-size: 0.875rem;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    transition: var(--transition);
-    border: none;
-    cursor: pointer;
-  }
-
-  .btn-primary {
-    background: var(--green);
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: var(--green-dark);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-  }
-
-  .btn-secondary {
-    background: var(--blue);
-    color: white;
-  }
-
-  .btn-secondary:hover {
-    background: var(--blue-dark);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-  }
-
-  .btn-outline {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-  }
-
-  .btn-outline:hover {
-    background: var(--bg-primary);
-    border-color: var(--green);
-    transform: translateY(-2px);
-  }
-
-  /* ✅ Footer */
-  .home-footer {
-    text-align: center;
-    padding: 1.5rem 0;
-    border-top: 1px solid var(--border);
-    margin-top: 2rem;
-  }
-
-  .home-footer p {
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    font-weight: 500;
-  }
-
-  /* ✅ Mobile Optimizations for Hisense U50 Lite */
-  @media (max-width: 480px) {
-    .home-page {
-      margin: 0.5rem;
-      padding: 0 0.5rem;
-    }
-    
-    .home-content {
-      padding: 1rem;
-    }
-    
-    .hero h1 {
-      font-size: 1.5rem;
-    }
-    
-    .hero-subtitle {
-      font-size: 0.875rem;
-      padding: 0 0.5rem;
-    }
-    
-    .hero-buttons,
-    .cta-buttons {
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    
-    .btn {
-      width: 100%;
-      padding: 0.75rem;
-    }
-    
-    .growth-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .growth-card,
-    .mission,
-    .humanity,
-    .cta {
-      padding: 1rem;
-    }
-    
-    .mission h2,
-    .growth h2,
-    .humanity h2,
-    .cta h2 {
-      font-size: 1.125rem;
-    }
-  }
-
-  /* ✅ Very Small Screens */
-  @media (max-width: 360px) {
-    .home-page {
-      margin: 0.25rem;
-      padding: 0 0.25rem;
-    }
-    
-    .home-content {
-      padding: 0.75rem;
-    }
-    
-    .hero h1 {
-      font-size: 1.25rem;
-    }
-    
-    .growth-card h3 {
-      font-size: 0.875rem;
-    }
-    
-    .growth-card p,
-    .mission p,
-    .humanity p,
-    .cta p {
-      font-size: 0.8rem;
-    }
-  }
-
-  /* ✅ Tablet Optimization */
-  @media (min-width: 481px) and (max-width: 768px) {
-    .growth-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .hero-buttons,
-    .cta-buttons {
-      flex-wrap: wrap;
-    }
-    
-    .btn {
-      min-width: 140px;
-    }
-  }
-
-  /* ✅ Animation for Cards */
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .growth-card {
-    animation: fadeInUp 0.5s ease-out;
-  }
-
-  .growth-card:nth-child(2) { animation-delay: 0.1s; }
-  .growth-card:nth-child(3) { animation-delay: 0.2s; }
-  .growth-card:nth-child(4) { animation-delay: 0.3s; }
-`;
-
-const pageScripts = `
-  document.addEventListener('DOMContentLoaded', function() {
-    // Add scroll animation for cards
-    const cards = document.querySelectorAll('.growth-card');
-    
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.style.opacity = '1';
-          entry.target.style.transform = 'translateY(0)';
-        }
-      });
-    }, { threshold: 0.1 });
-    
-    cards.forEach(card => {
-      card.style.opacity = '0';
-      card.style.transform = 'translateY(20px)';
-      card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-      observer.observe(card);
-    });
-    
-    // Smooth scroll for anchor links
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-      anchor.addEventListener('click', function(e) {
-        e.preventDefault();
-        const targetId = this.getAttribute('href');
-        if (targetId === '#') return;
-        
-        const targetElement = document.querySelector(targetId);
-        if (targetElement) {
-          targetElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      });
-    });
-    
-    // Mobile menu toggle (if needed)
-    const initMobileMenu = () => {
-      const menuToggle = document.querySelector('.menu-toggle');
-      if (menuToggle) {
-        menuToggle.addEventListener('click', () => {
-          const nav = document.querySelector('nav');
-          nav.classList.toggle('active');
-        });
-      }
-    };
-    
-    initMobileMenu();
-  });
-`;
+  const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '');
 %>
 
-<!-- ✅ Inject styles -->
-<style nonce="<%= nonce %>">
-  <%= pageStyles %>
-</style>
+<section class="home-page">
+  <div class="home-shell">
 
-<!-- ✅ Home Page Content -->
-<div class="home-page">
-  <div class="home-content">
-    <!-- Hero Section -->
-    <section class="hero">
-      <div class="hero-badge">
-        <span>🚀</span>
-        <span>Welcome to the Future</span>
+    <!-- HERO -->
+    <header class="home-hero" aria-label="Home hero">
+      <div class="hero-bg" aria-hidden="true"></div>
+
+      <div class="hero-top">
+        <span class="hero-pill">
+          <span class="pill-ic" aria-hidden="true">🚀</span>
+          <span>Welcome to the Future</span>
+        </span>
+
+        <div class="hero-dots" aria-hidden="true">
+          <span class="dot p"></span>
+          <span class="dot b"></span>
+          <span class="dot g"></span>
+          <span class="dot k"></span>
+        </div>
       </div>
-      <h1>Welcome to <strong>Unicoporate.com</strong></h1>
-      <p class="hero-subtitle">
+
+      <h1 class="hero-title">
+        Welcome to <span class="hero-brand">Unicoporate.com</span>
+      </h1>
+
+      <p class="hero-sub">
         Empowering people, businesses, and nations — together we build a world where innovation and humanity thrive.
       </p>
-      <div class="hero-buttons">
+
+      <div class="hero-actions">
         <a href="/business/signup" class="btn btn-primary">
-          <span>🏢</span>
+          <span class="btn-ic" aria-hidden="true">🏢</span>
           Join as a Business
         </a>
         <a href="/users/signup" class="btn btn-secondary">
-          <span>👤</span>
+          <span class="btn-ic" aria-hidden="true">👤</span>
           Create Personal Account
         </a>
       </div>
-    </section>
 
-    <!-- Mission Section -->
-    <section class="mission">
-      <h2>Our Greater Mission</h2>
-      <p>
-        At <strong>Unicoporate.com</strong>, our mission goes far beyond commerce.  
-        We are a community of visionaries working to take humanity to the <strong>civilization of super power</strong> — 
-        where technology, opportunity, and compassion unite to uplift all people.  
+      <div class="hero-trust">
+        <div class="trust-item">
+          <span class="trust-ic" aria-hidden="true">🛡️</span>
+          <span>Trusted marketplace</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-ic" aria-hidden="true">💸</span>
+          <span>Built for growth</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-ic" aria-hidden="true">⚡</span>
+          <span>Fast & mobile-first</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MISSION -->
+    <section class="home-block mission" id="mission">
+      <div class="block-head">
+        <div class="block-ic" aria-hidden="true">🌍</div>
+        <div>
+          <h2 class="block-title">Our Greater Mission</h2>
+          <p class="block-sub">Commerce with purpose — progress with compassion.</p>
+        </div>
+      </div>
+
+      <p class="block-text">
+        At <b>Unicoporate.com</b>, our mission goes beyond commerce.
+        We are a community of visionaries working to take humanity to a <b>civilization of super power</b> —
+        where technology, opportunity, and compassion unite to uplift all people.
         We reform the business world not for profit alone, but for progress, equality, and the betterment of life on Earth.
       </p>
+
+      <div class="block-bar" aria-hidden="true"></div>
     </section>
 
-    <!-- Growth Section -->
-    <section class="growth">
-      <h2>Empowering Growth at Every Level</h2>
-      <div class="growth-grid">
-        <div class="growth-card">
-          <h3>🚀 Small Business Uplift</h3>
-          <p>
-            We help small and micro businesses grow into professional, competitive enterprises through mentorship, visibility, and digital transformation.
-          </p>
+    <!-- GROWTH -->
+    <section class="home-block growth" id="growth">
+      <div class="block-head">
+        <div class="block-ic" aria-hidden="true">📈</div>
+        <div>
+          <h2 class="block-title">Empowering Growth at Every Level</h2>
+          <p class="block-sub">Four pillars that help entrepreneurs and communities move forward.</p>
         </div>
-        <div class="growth-card">
-          <h3>📚 Business Training</h3>
-          <p>
-            Our platform offers access to ongoing <strong>business training programs</strong> and development workshops that empower entrepreneurs with real-world knowledge.
+      </div>
+
+      <div class="grid">
+        <article class="card card-blue">
+          <div class="card-top">
+            <span class="card-ic" aria-hidden="true">🚀</span>
+            <h3 class="card-title">Small Business Uplift</h3>
+          </div>
+          <p class="card-text">
+            We help small and micro businesses grow into professional, competitive enterprises through mentorship,
+            visibility, and digital transformation.
           </p>
-        </div>
-        <div class="growth-card">
-          <h3>💰 Capital Support</h3>
-          <p>
-            We connect qualified entrepreneurs with <strong>investment opportunities, startup funding,</strong> and partnership channels to support sustainable business growth.
+        </article>
+
+        <article class="card card-purple">
+          <div class="card-top">
+            <span class="card-ic" aria-hidden="true">📚</span>
+            <h3 class="card-title">Business Training</h3>
+          </div>
+          <p class="card-text">
+            Access ongoing <b>business training programs</b> and development workshops that empower entrepreneurs with real-world knowledge.
           </p>
-        </div>
-        <div class="growth-card">
-          <h3>🤝 Global Collaboration</h3>
-          <p>
-            Unicoporate.com bridges nations and industries — connecting suppliers, buyers, and innovators to collaborate for global prosperity.
+        </article>
+
+        <article class="card card-green">
+          <div class="card-top">
+            <span class="card-ic" aria-hidden="true">💰</span>
+            <h3 class="card-title">Capital Support</h3>
+          </div>
+          <p class="card-text">
+            We connect qualified entrepreneurs with <b>investment opportunities</b>, startup funding, and partnership channels for sustainable growth.
           </p>
-        </div>
+        </article>
+
+        <article class="card card-black">
+          <div class="card-top">
+            <span class="card-ic" aria-hidden="true">🤝</span>
+            <h3 class="card-title">Global Collaboration</h3>
+          </div>
+          <p class="card-text">
+            We bridge nations and industries — connecting suppliers, buyers, and innovators to collaborate for global prosperity.
+          </p>
+        </article>
       </div>
     </section>
 
-    <!-- Humanity Section -->
-    <section class="humanity">
-      <h2>Building Heaven on Earth</h2>
-      <p>
-        We believe that true progress lies in balance — business with purpose, wealth with wisdom, and success with compassion.  
-        Through every trade, every innovation, and every act of service, we strive to bring <strong>heaven on Earth</strong> — 
+    <!-- HUMANITY -->
+    <section class="home-block humanity" id="humanity">
+      <div class="block-head">
+        <div class="block-ic" aria-hidden="true">🕊️</div>
+        <div>
+          <h2 class="block-title">Building Heaven on Earth</h2>
+          <p class="block-sub">Balance: success with wisdom, business with purpose.</p>
+        </div>
+      </div>
+
+      <p class="block-text">
+        We believe true progress lies in balance — business with purpose, wealth with wisdom, and success with compassion.
+        Through every trade, every innovation, and every act of service, we strive to bring <b>heaven on Earth</b> —
         where communities flourish and humanity thrives together in peace, abundance, and creativity.
       </p>
+
+      <div class="block-bar alt" aria-hidden="true"></div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="cta">
-      <h2>Be Part of the Movement</h2>
-      <p>
-        Whether you're an individual, a startup, or an established company — Unicoporate.com welcomes you to join our mission.  
-        Sign up today, grow your business, empower your community, and help build the future of civilization.
+    <!-- CTA -->
+    <section class="home-block cta" id="cta">
+      <div class="block-head">
+        <div class="block-ic" aria-hidden="true">✨</div>
+        <div>
+          <h2 class="block-title">Be Part of the Movement</h2>
+          <p class="block-sub">Sign up today and grow with the Unicoporate community.</p>
+        </div>
+      </div>
+
+      <p class="block-text">
+        Whether you're an individual, a startup, or an established company — Unicoporate.com welcomes you.
+        Join our mission, grow your business, empower your community, and help build the future of civilization.
       </p>
-      <div class="cta-buttons">
+
+      <div class="cta-actions">
         <a href="/business/signup" class="btn btn-primary">
-          <span>🚀</span>
+          <span class="btn-ic" aria-hidden="true">🚀</span>
           Business Sign Up
         </a>
         <a href="/users/signup" class="btn btn-secondary">
-          <span>🙌</span>
+          <span class="btn-ic" aria-hidden="true">🙌</span>
           Join as a User
         </a>
         <a href="/contact" class="btn btn-outline">
-          <span>💬</span>
+          <span class="btn-ic" aria-hidden="true">💬</span>
           Contact Us
         </a>
       </div>
+
+      <div class="cta-mini" aria-hidden="true">
+        <span class="mini-chip">Purple = dominant brand</span>
+        <span class="mini-chip">Blue = trust</span>
+        <span class="mini-chip">Green = growth</span>
+        <span class="mini-chip">Black = premium</span>
+      </div>
     </section>
 
-    <!-- Footer -->
+    <!-- FOOTER (page-local; your layout footer remains unchanged) -->
     <footer class="home-footer">
       <p>© <%= new Date().getFullYear() %> Unicoporate.com. All rights reserved. Together, we rise.</p>
     </footer>
-  </div>
-</div>
 
-<!-- ✅ Inject scripts -->
-<script nonce="<%= nonce %>">
-  <%= pageScripts %>
+  </div>
+</section>
+
+<style nonce="<%= NONCE %>">
+  /* =========================
+     Unicoporate Home (compact)
+     Purple dominant + visible blocks
+     ========================= */
+
+  .home-page{
+    --b:#2563EB;     /* trust */
+    --p:#7C3AED;     /* dominant */
+    --g:#22C55E;     /* growth */
+    --k:#0F172A;     /* premium */
+    --bg:#f8fafc;
+    --card:#ffffff;
+    --mut:#64748B;
+    --line:rgba(15,23,42,.12);
+    --r1:14px;
+    --r2:18px;
+    --sh:0 18px 30px rgba(15,23,42,.12);
+
+    padding: .8rem 0;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.22) 0%, rgba(37,99,235,.10) 55%, rgba(34,197,94,.06) 100%),
+      linear-gradient(180deg, var(--bg), var(--bg));
+  }
+
+  .home-shell{
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 .85rem;
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+  }
+
+  /* HERO */
+  .home-hero{
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--r2);
+    padding: 1rem .95rem;
+    color: #fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+    border: 1px solid rgba(255,255,255,.16);
+    box-shadow: var(--sh);
+  }
+  .hero-bg{
+    position:absolute; inset:-30% -20%;
+    background:
+      radial-gradient(closest-side, rgba(255,255,255,.16), transparent 60%),
+      radial-gradient(closest-side, rgba(34,197,94,.12), transparent 65%);
+    filter: blur(10px);
+    pointer-events:none;
+  }
+  .hero-top{
+    position:relative;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:.75rem;
+    margin-bottom:.8rem;
+  }
+  .hero-pill{
+    display:inline-flex;align-items:center;gap:.45rem;
+    padding:.45rem .7rem;
+    border-radius:999px;
+    font-size:.78rem;
+    font-weight:900;
+    background: rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .pill-ic{font-size:.95rem}
+  .hero-dots{display:flex;gap:.35rem}
+  .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+  .dot.p{background:var(--p)} .dot.b{background:var(--b)} .dot.g{background:var(--g)} .dot.k{background:var(--k)}
+
+  .hero-title{
+    position:relative;
+    margin:0;
+    font-size: 1.35rem;
+    font-weight: 1000;
+    letter-spacing: .2px;
+    line-height: 1.15;
+  }
+  .hero-brand{
+    background: linear-gradient(135deg, #fff, rgba(255,255,255,.82));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  .hero-sub{
+    position:relative;
+    margin:.55rem 0 0;
+    font-size: .92rem;
+    font-weight: 800;
+    color: rgba(255,255,255,.92);
+    max-width: 62ch;
+    line-height: 1.45;
+  }
+
+  .hero-actions{
+    position:relative;
+    margin-top: .9rem;
+    display:flex;
+    gap:.6rem;
+    flex-wrap:wrap;
+  }
+
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:.45rem;
+    padding:.75rem .9rem;
+    border-radius: 16px;
+    font-size: .92rem;
+    font-weight: 950;
+    text-decoration:none;
+    border: 1px solid transparent;
+    cursor:pointer;
+    transition: transform .12s ease, filter .12s ease;
+    width: auto;
+  }
+  .btn:hover{transform: translateY(-1px)}
+  .btn-ic{font-size: 1rem}
+
+  .btn-primary{
+    background: linear-gradient(135deg, var(--g), #16a34a);
+    color:#0b1220;
+    border-color: rgba(255,255,255,.14);
+    box-shadow: 0 14px 22px rgba(34,197,94,.18);
+  }
+  .btn-secondary{
+    background: rgba(255,255,255,.14);
+    color:#fff;
+    border-color: rgba(255,255,255,.18);
+  }
+  .btn-outline{
+    background: transparent;
+    color:#0b1220;
+    border-color: rgba(15,23,42,.18);
+  }
+
+  .hero-trust{
+    position:relative;
+    margin-top:.85rem;
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+  }
+  .trust-item{
+    display:flex;align-items:center;gap:.4rem;
+    padding:.38rem .55rem;
+    border-radius:999px;
+    background: rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.16);
+    font-size:.78rem;
+    font-weight:900;
+  }
+  .trust-ic{font-size:.95rem}
+
+  /* BLOCKS (each one visibly different) */
+  .home-block{
+    background: var(--card);
+    border:1px solid var(--line);
+    border-radius: var(--r2);
+    padding: .95rem;
+    box-shadow: 0 12px 24px rgba(15,23,42,.08);
+    position: relative;
+    overflow: hidden;
+  }
+  .home-block::before{
+    content:"";
+    position:absolute; inset:0;
+    opacity:.7;
+    pointer-events:none;
+  }
+  .block-head{
+    display:flex;
+    align-items:flex-start;
+    gap:.7rem;
+    margin-bottom:.55rem;
+  }
+  .block-ic{
+    width:42px;height:42px;border-radius:16px;
+    display:grid;place-items:center;
+    font-size:18px;
+    color:#fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+    box-shadow: 0 12px 20px rgba(124,58,237,.18);
+    flex:0 0 auto;
+  }
+  .block-title{
+    margin:0;
+    font-size: 1.05rem;
+    font-weight: 1000;
+    color: var(--k);
+    letter-spacing: .1px;
+  }
+  .block-sub{
+    margin:.25rem 0 0;
+    font-size: .86rem;
+    font-weight: 850;
+    color: var(--mut);
+    line-height: 1.35;
+  }
+  .block-text{
+    margin:.55rem 0 0;
+    font-size: .92rem;
+    color: #0b1220;
+    line-height: 1.55;
+    font-weight: 750;
+  }
+  .block-text b{color: var(--p)}
+  .block-bar{
+    margin-top:.8rem;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--p), var(--b), var(--g));
+    opacity: .9;
+  }
+  .block-bar.alt{
+    background: linear-gradient(90deg, var(--b), var(--p));
+  }
+
+  /* Each section background tint (visible) */
+  .mission::before{
+    background: radial-gradient(closest-side, rgba(34,197,94,.14), transparent 70%);
+  }
+  .growth::before{
+    background: radial-gradient(closest-side, rgba(124,58,237,.16), transparent 70%);
+  }
+  .humanity::before{
+    background: radial-gradient(closest-side, rgba(37,99,235,.14), transparent 70%);
+  }
+  .cta::before{
+    background: radial-gradient(closest-side, rgba(15,23,42,.08), transparent 70%);
+  }
+
+  /* Growth cards */
+  .grid{
+    margin-top:.8rem;
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:.7rem;
+  }
+  .card{
+    background:#fff;
+    border:1px solid rgba(15,23,42,.10);
+    border-radius: 16px;
+    padding:.85rem;
+    box-shadow: 0 10px 18px rgba(15,23,42,.06);
+  }
+  .card-top{display:flex;gap:.55rem;align-items:center;margin-bottom:.35rem}
+  .card-ic{
+    width:34px;height:34px;border-radius:14px;
+    display:grid;place-items:center;
+    font-size:16px;color:#fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+  }
+  .card-title{margin:0;font-size:.98rem;font-weight:1000;color:var(--k)}
+  .card-text{margin:.35rem 0 0;font-size:.88rem;color:rgba(15,23,42,.86);line-height:1.5;font-weight:750}
+  .card-text b{color: var(--p)}
+
+  .card-blue{border-color: rgba(37,99,235,.22)}
+  .card-blue .card-ic{background: linear-gradient(135deg, var(--b), var(--p))}
+  .card-purple{border-color: rgba(124,58,237,.22)}
+  .card-purple .card-ic{background: linear-gradient(135deg, var(--p), #8b5cf6)}
+  .card-green{border-color: rgba(34,197,94,.24)}
+  .card-green .card-ic{background: linear-gradient(135deg, var(--g), #16a34a); color:#0b1220}
+  .card-black{border-color: rgba(15,23,42,.22)}
+  .card-black .card-ic{background: linear-gradient(135deg, var(--k), #111827)}
+
+  /* CTA actions */
+  .cta-actions{
+    margin-top:.8rem;
+    display:flex;
+    gap:.6rem;
+    flex-wrap:wrap;
+  }
+  .cta .btn-secondary{background: linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.10))}
+  .cta .btn-outline{
+    background:#fff;
+    color:var(--k);
+    border-color: rgba(15,23,42,.14);
+  }
+  .cta-mini{
+    margin-top:.8rem;
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .mini-chip{
+    font-size:.78rem;
+    font-weight:950;
+    padding:.35rem .6rem;
+    border-radius:999px;
+    background: rgba(124,58,237,.10);
+    border:1px solid rgba(124,58,237,.18);
+    color: var(--k);
+  }
+
+  /* Footer */
+  .home-footer{
+    text-align:center;
+    padding:.7rem .2rem;
+    color: rgba(15,23,42,.74);
+    font-weight: 850;
+    font-size: .82rem;
+  }
+
+  /* Mobile-first (Hisense U50 Lite) */
+  @media (max-width: 480px){
+    .home-shell{padding:0 .65rem}
+    .home-hero{padding:.95rem .85rem}
+    .hero-title{font-size:1.2rem}
+    .hero-sub{font-size:.9rem}
+    .btn{width:100%}
+    .hero-actions, .cta-actions{gap:.55rem}
+  }
+
+  /* Tablet+ */
+  @media (min-width: 720px){
+    .grid{grid-template-columns: repeat(2, 1fr)}
+    .btn{width:auto}
+  }
+
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark){
+    .home-page{
+      --bg:#0b1220;
+      --card:#0f172a;
+      --line:rgba(255,255,255,.12);
+      --mut:rgba(148,163,184,.95);
+      background:
+        radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.22) 0%, rgba(37,99,235,.14) 55%, rgba(34,197,94,.08) 100%),
+        linear-gradient(180deg, #0b1220, #0b1220);
+    }
+    .home-block, .card{background:var(--card); border-color: var(--line)}
+    .block-title, .card-title{color:#f1f5f9}
+    .block-text{color: rgba(241,245,249,.92)}
+    .card-text{color: rgba(241,245,249,.86)}
+    .home-footer{color: rgba(241,245,249,.70)}
+    .cta .btn-outline{background: rgba(255,255,255,.06); color:#f1f5f9; border-color: rgba(255,255,255,.14)}
+  }
+</style>
+
+<script nonce="<%= NONCE %>">
+  (function(){
+    // Small, safe animations (no external deps)
+    const cards = document.querySelectorAll('.card');
+
+    const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
+
+    // Intersection fade-in
+    const obs = ('IntersectionObserver' in window)
+      ? new IntersectionObserver((entries) => {
+          entries.forEach(e => {
+            if (e.isIntersecting) {
+              e.target.classList.add('in');
+              obs.unobserve(e.target);
+            }
+          });
+        }, { threshold: 0.12 })
+      : null;
+
+    cards.forEach((c, idx) => {
+      c.style.opacity = '0';
+      c.style.transform = 'translateY(12px)';
+      c.style.transition = 'opacity .45s ease, transform .45s ease';
+      if (obs) obs.observe(c);
+      else {
+        // fallback
+        setTimeout(() => {
+          c.style.opacity = '1';
+          c.style.transform = 'translateY(0)';
+        }, 80 + idx * 60);
+      }
+    });
+
+    // When "in" is added by observer
+    const styleIn = () => {
+      document.querySelectorAll('.card.in').forEach(c => {
+        c.style.opacity = '1';
+        c.style.transform = 'translateY(0)';
+      });
+    };
+    on(document, 'scroll', styleIn);
+    styleIn();
+  })();
 </script>
