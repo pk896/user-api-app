@@ -11,6 +11,34 @@
 <% const emailVerified = !!b.isVerified %>
 <% const numStatus = ((ver.status || 'pending') + '').toLowerCase() %>
 
+<%
+  // Profile completeness (simple, useful on mobile)
+  const hasName = !!String(b.name || '').trim();
+  const hasPhone = !!String(b.phone || '').trim();
+  const hasLocation = !!String(b.city || b.country || '').trim();
+  const hasAddress = !!String(b.address || '').trim();
+  const hasOfficial = !!String(b.officialNumber || '').trim();
+  const hasBankBasics = !!(bank.bankName || bank.accountHolderName || bank.accountNumberMasked || bank.branchCode);
+  const hasPaypal = !!ppEmail;
+
+  const checks = [
+    { ok: hasName, label: 'Business name' },
+    { ok: !!String(b.email || '').trim(), label: 'Business email' },
+    { ok: hasPhone, label: 'Phone number' },
+    { ok: hasLocation, label: 'City/Country' },
+    { ok: hasAddress, label: 'Address' },
+    { ok: hasOfficial, label: 'Official number' },
+    { ok: (hasPaypal || hasBankBasics), label: 'Payout method' }
+  ];
+
+  const total = checks.length;
+  const done = checks.filter(x => x.ok).length;
+  const pct = Math.round((done / total) * 100);
+  const pctSafe = Math.max(0, Math.min(100, pct));
+
+  const businessIdText = b.internalBusinessId || String(b._id || '—');
+%>
+
 <section class="biz-profile-page">
   <div class="bp-wrap">
 
@@ -28,7 +56,7 @@
 
           <div class="bp-title">
             <h1>Business Profile</h1>
-            <p>Manage your business settings and verification status</p>
+            <p>Manage your details, payouts and verification status</p>
           </div>
         </div>
 
@@ -47,31 +75,82 @@
             </span>
           <% } %>
         </div>
-
       </div>
 
       <!-- Status pills -->
       <div class="bp-pills" role="list" aria-label="Status">
-        <span class="pill pill-blue" role="listitem"><%= (b.role || 'business').toUpperCase() %></span>
+        <span class="pill pill-purple" role="listitem"><%= (b.role || 'business').toUpperCase() %></span>
 
-        <span class="pill pill-purple" role="listitem">
-          ID: <%= b.internalBusinessId || String(b._id || '—') %>
+        <span class="pill pill-blue" role="listitem" title="Internal ID">
+          ID: <span class="wrap-inline"><%= businessIdText %></span>
         </span>
 
         <% if (emailVerified) { %>
-          <span class="pill pill-green" role="listitem">Email Status: Verified</span>
+          <span class="pill pill-green" role="listitem">Email: Verified</span>
         <% } else { %>
-          <span class="pill pill-amber" role="listitem">Email Status: Unverified</span>
+          <span class="pill pill-amber" role="listitem">Email: Unverified</span>
         <% } %>
 
         <% if (numStatus === 'verified') { %>
-          <span class="pill pill-green" role="listitem">Official Number Status: Verified</span>
+          <span class="pill pill-green" role="listitem">Official No.: Verified</span>
         <% } else if (numStatus === 'rejected') { %>
-          <span class="pill pill-red" role="listitem">Official Number Status: Rejected</span>
+          <span class="pill pill-red" role="listitem">Official No.: Rejected</span>
         <% } else { %>
-          <span class="pill pill-amber" role="listitem">Official Number Status: Pending</span>
+          <span class="pill pill-amber" role="listitem">Official No.: Pending</span>
         <% } %>
       </div>
+
+      <!-- Quick actions (mobile-friendly) -->
+      <nav class="bp-quick" aria-label="Quick actions">
+        <a class="qa qa-purple" href="/business/profile/edit-details">
+          <span class="qa-ic" aria-hidden="true">✏️</span>
+          <span class="qa-txt">Edit Details</span>
+          <span class="qa-go" aria-hidden="true">›</span>
+        </a>
+        <a class="qa qa-green" href="/business/profile/edit-bank">
+          <span class="qa-ic" aria-hidden="true">💳</span>
+          <span class="qa-txt">Bank Details</span>
+          <span class="qa-go" aria-hidden="true">›</span>
+        </a>
+        <a class="qa qa-black" href="/business/change-password">
+          <span class="qa-ic" aria-hidden="true">🔒</span>
+          <span class="qa-txt">Password</span>
+          <span class="qa-go" aria-hidden="true">›</span>
+        </a>
+      </nav>
+
+      <!-- Profile completeness -->
+      <section class="bp-meter" aria-label="Profile completeness">
+        <div class="meter-top">
+          <div class="meter-title">
+            <span class="meter-ic" aria-hidden="true">📌</span>
+            <div>
+              <strong>Profile completeness</strong>
+              <div class="meter-sub"><%= done %>/<%= total %> completed</div>
+            </div>
+          </div>
+          <div class="meter-pct"><%= pctSafe %>%</div>
+        </div>
+
+        <div class="meter-bar" role="progressbar" aria-valuenow="<%= pctSafe %>" aria-valuemin="0" aria-valuemax="100">
+          <div class="meter-fill" style="width:<%= pctSafe %>%"></div>
+        </div>
+
+        <div class="meter-checks" role="list" aria-label="Checklist">
+          <% checks.forEach(function(c){ %>
+            <span class="mchip <%= c.ok ? 'mchip-ok' : 'mchip-warn' %>" role="listitem">
+              <span class="mchip-dot" aria-hidden="true"></span>
+              <%= c.label %>
+            </span>
+          <% }) %>
+        </div>
+
+        <% if (pctSafe < 60) { %>
+          <div class="meter-hint">
+            Tip: complete your profile to unlock smoother payouts & faster verification.
+          </div>
+        <% } %>
+      </section>
     </header>
 
     <!-- Grid -->
@@ -93,7 +172,7 @@
         <div class="card-body">
           <div class="row">
             <span class="k">Name</span>
-            <span class="v"><%= b.name || '—' %></span>
+            <span class="v wrap"><%= b.name || '—' %></span>
           </div>
           <div class="row">
             <span class="k">Email</span>
@@ -121,6 +200,12 @@
 
         <div class="card-foot">
           <a href="/business/profile/edit-details" class="btn btn-outline">Edit Business Details</a>
+          <% if (!hasPhone || !hasAddress) { %>
+            <p class="note">
+              Missing info: <%= !hasPhone ? 'phone' : '' %><%= (!hasPhone && !hasAddress) ? ' and ' : '' %><%= !hasAddress ? 'address' : '' %>.
+              Add them to look more professional to buyers.
+            </p>
+          <% } %>
         </div>
       </article>
 
@@ -161,7 +246,7 @@
 
           <div class="row">
             <span class="k">Number Type</span>
-            <span class="v"><%= b.officialNumberType || 'OTHER' %></span>
+            <span class="v wrap"><%= b.officialNumberType || 'OTHER' %></span>
           </div>
 
           <div class="row">
@@ -184,8 +269,9 @@
             <p class="note">Tip: Check your spam/junk folder too.</p>
           <% } else if (numStatus === 'rejected') { %>
             <div class="msg msg-red">
-              Your official number was rejected. Update details and wait for admin review.
+              Your official number was rejected. Update your details and wait for admin review.
             </div>
+            <a href="/business/profile/edit-details" class="btn btn-outline">Update Official Number</a>
           <% } else if (numStatus !== 'verified') { %>
             <div class="msg msg-amber">
               Official number is pending admin review. This usually takes 1–2 business days.
@@ -198,20 +284,19 @@
         </div>
       </article>
 
-      <!-- Bank -->
+      <!-- Bank / Payouts -->
       <article class="card card-green">
         <div class="card-head">
           <div class="card-head-left">
             <div class="ic ic-green" aria-hidden="true">🏦</div>
             <div>
-              <h2>Bank Details</h2>
-              <p class="muted">Masked preview for security</p>
+              <h2>Payouts &amp; Bank</h2>
+              <p class="muted">Secure preview (masked)</p>
             </div>
           </div>
-          <span class="tag tag-green">Preview</span>
+          <span class="tag tag-green">Payouts</span>
         </div>
 
-        <!--card body-->
         <div class="card-body">
           <div class="row">
             <span class="k">Payout Method</span>
@@ -233,29 +318,21 @@
 
           <div class="row">
             <span class="k">PayPal Email</span>
-            <span class="v wrap">
-              <%= ppEmail ? ppEmail : '—' %>
-            </span>
+            <span class="v wrap"><%= ppEmail ? ppEmail : '—' %></span>
           </div>
 
           <% if (!ppEmail) { %>
-            <p class="note" style="margin-top:8px;">
-              Use <a href="/business/profile/edit-details" style="color: var(--p); font-weight:900; text-decoration:none;">
-                Edit Business Details
-              </a>
-              to set your PayPal email for payouts.
-            </p>
+            <div class="hint hint-purple">
+              Add your PayPal email in <a href="/business/profile/edit-details">Edit Business Details</a> to receive seller payouts.
+            </div>
           <% } else if (!ppEnabled) { %>
-            <p class="note" style="margin-top:8px;">
-              Your PayPal email is saved but payouts are disabled. Enable payouts in
-              <a href="/business/profile/edit-details" style="color: var(--p); font-weight:900; text-decoration:none;">
-                Edit Business Details
-              </a>.
-            </p>
+            <div class="hint hint-amber">
+              Your PayPal email is saved but payouts are disabled. Enable payouts in <a href="/business/profile/edit-details">Edit Business Details</a>.
+            </div>
           <% } else { %>
-            <p class="note" style="margin-top:8px;">
+            <div class="hint hint-green">
               Payouts are enabled — we’ll use this PayPal email for seller payouts.
-            </p>
+            </div>
           <% } %>
 
           <div class="row">
@@ -268,7 +345,6 @@
             <span class="v wrap"><%= bank.accountHolderName || '—' %></span>
           </div>
 
-          <!--row-->
           <div class="row">
             <span class="k">Account</span>
             <span class="v"><%= bank.accountNumberMasked || '—' %></span>
@@ -318,7 +394,6 @@
           <p class="note">Only masked values are displayed on this page.</p>
         </div>
       </article>
-
     </div>
 
     <!-- Privacy & Security -->
@@ -329,7 +404,7 @@
       </div>
 
       <div class="sec-grid">
-        <a href="/business/profile/edit-details" class="sec-item sec-blue">
+        <a href="/business/profile/edit-details" class="sec-item sec-purple">
           <div class="sec-ic">✏️</div>
           <div class="sec-txt">
             <h3>Edit Business Details</h3>
@@ -347,7 +422,7 @@
           <div class="sec-go">›</div>
         </a>
 
-        <a href="/business/change-password" class="sec-item sec-purple">
+        <a href="/business/change-password" class="sec-item sec-black">
           <div class="sec-ic">🔒</div>
           <div class="sec-txt">
             <h3>Change Password</h3>
@@ -356,7 +431,7 @@
           <div class="sec-go">›</div>
         </a>
 
-        <a href="/business/profile/edit" class="sec-item sec-black">
+        <a href="/business/profile/edit" class="sec-item sec-blue">
           <div class="sec-ic">⚙️</div>
           <div class="sec-txt">
             <h3>Full Profile Editor</h3>
@@ -379,6 +454,7 @@
         </div>
       </div>
     </section>
+
   </div>
 </section>
 
@@ -386,13 +462,16 @@
   .biz-profile-page{
     --p:#7C3AED; --p2:#6D28D9;
     --b:#2563EB; --g:#22C55E; --k:#0F172A;
+
     --bg:#F8FAFC; --w:#ffffff;
     --t:#0F172A; --mut:#64748B;
-    --br:#E2E8F0; --br2:#CBD5E1;
-    --rad:14px; --rad2:12px;
-    --sh:0 8px 18px rgba(15,23,42,.08);
+    --br:#E2E8F0;
+
+    --rad:14px;
+    --sh:0 10px 22px rgba(15,23,42,.08);
+
     background: var(--bg);
-    padding: 14px 0 24px;
+    padding: 12px 0 22px;
   }
 
   .bp-wrap{
@@ -403,10 +482,13 @@
 
   /* Header */
   .bp-header{
-    background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(37,99,235,.10));
-    border: 1px solid rgba(124,58,237,.22);
+    background:
+      radial-gradient(900px 260px at 10% 0%, rgba(124,58,237,.22), transparent 60%),
+      radial-gradient(900px 260px at 90% 0%, rgba(37,99,235,.16), transparent 60%),
+      linear-gradient(135deg, rgba(255,255,255,.92), rgba(255,255,255,.80));
+    border: 1px solid rgba(124,58,237,.20);
     border-radius: var(--rad);
-    padding: 14px;
+    padding: 12px;
     box-shadow: var(--sh);
     overflow: hidden;
   }
@@ -414,12 +496,12 @@
   .bp-header-top{
     display:flex;
     flex-direction:column;
-    gap:12px;
+    gap:10px;
   }
 
   .bp-brand{
     display:flex;
-    gap:12px;
+    gap:10px;
     align-items:center;
     min-width:0;
   }
@@ -428,8 +510,8 @@
     display:flex;
     gap:6px;
     padding:8px;
-    border-radius: 12px;
-    background: rgba(255,255,255,.75);
+    border-radius: 14px;
+    background: rgba(255,255,255,.82);
     border: 1px solid rgba(124,58,237,.18);
     flex-shrink:0;
   }
@@ -443,7 +525,7 @@
   .bp-title h1{
     margin:0;
     font-size: 18px;
-    line-height:1.2;
+    line-height:1.15;
     color: var(--t);
     letter-spacing:.2px;
   }
@@ -465,7 +547,63 @@
     display:flex;
     gap:8px;
     flex-wrap:wrap;
-    margin-top: 12px;
+    margin-top: 10px;
+  }
+
+  .wrap-inline{
+    display:inline-block;
+    max-width: 220px;
+    vertical-align:bottom;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  /* Quick actions */
+  .bp-quick{
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .qa{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding: 10px 10px;
+    border-radius: 14px;
+    text-decoration:none;
+    border: 1px solid transparent;
+    background: rgba(255,255,255,.85);
+    min-height: 44px;
+  }
+  .qa-ic{ font-size: 16px; }
+  .qa-txt{
+    font-size: 12px;
+    font-weight: 1000;
+    color: var(--t);
+    flex:1;
+    min-width:0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .qa-go{
+    font-size: 18px;
+    font-weight: 1000;
+    opacity: .65;
+  }
+  .qa-purple{ border-color: rgba(124,58,237,.22); }
+  .qa-purple .qa-go{ color: rgba(124,58,237,.8); }
+  .qa-green{ border-color: rgba(34,197,94,.20); }
+  .qa-green .qa-go{ color: rgba(34,197,94,.85); }
+  .qa-black{ border-color: rgba(15,23,42,.18); }
+  .qa-black .qa-go{ color: rgba(15,23,42,.70); }
+  .qa:hover{ transform: translateY(-1px); }
+
+  @media (max-width: 430px){
+    .bp-quick{ grid-template-columns: 1fr; }
   }
 
   /* Buttons + badges */
@@ -475,29 +613,29 @@
     justify-content:center;
     gap:8px;
     padding: 10px 12px;
-    border-radius: 12px;
+    border-radius: 14px;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 900;
     text-decoration:none;
     border:1px solid transparent;
     cursor:pointer;
     user-select:none;
-    min-height: 42px; /* touch */
+    min-height: 44px;
   }
 
   .btn-primary{
-    background: var(--p);
+    background: linear-gradient(135deg, var(--p), var(--p2));
     color:#fff;
     border-color: rgba(124,58,237,.55);
   }
-  .btn-primary:hover{ background: var(--p2); }
+  .btn-primary:hover{ filter: brightness(.98); }
 
   .btn-ghost{
-    background: rgba(255,255,255,.85);
-    border-color: rgba(124,58,237,.22);
+    background: rgba(255,255,255,.88);
+    border-color: rgba(124,58,237,.20);
     color: var(--k);
   }
-  .btn-ghost:hover{ border-color: rgba(124,58,237,.45); }
+  .btn-ghost:hover{ border-color: rgba(124,58,237,.40); }
 
   .btn-outline{
     background: rgba(255,255,255,.9);
@@ -521,8 +659,8 @@
     border-radius: 999px;
     border: 1px solid transparent;
     font-size: 13px;
-    font-weight: 800;
-    min-height: 42px;
+    font-weight: 1000;
+    min-height: 44px;
     white-space: nowrap;
   }
   .badge.ok{
@@ -542,7 +680,7 @@
     padding: 7px 10px;
     border-radius: 999px;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: 1000;
     border: 1px solid transparent;
     max-width: 100%;
     overflow:hidden;
@@ -554,6 +692,110 @@
   .pill-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); color:#15803D; }
   .pill-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.28); color:#B45309; }
   .pill-red{ background: rgba(220,38,38,.12); border-color: rgba(220,38,38,.24); color:#B91C1C; }
+
+  /* Meter */
+  .bp-meter{
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(124,58,237,.18);
+    background: rgba(124,58,237,.07);
+  }
+  .meter-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 10px;
+  }
+  .meter-title{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    min-width:0;
+  }
+  .meter-ic{
+    width: 40px; height: 40px;
+    border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(124,58,237,.12);
+    border: 1px solid rgba(124,58,237,.20);
+    flex-shrink:0;
+  }
+  .meter-title strong{
+    display:block;
+    font-size: 13px;
+    color: var(--t);
+  }
+  .meter-sub{
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--mut);
+  }
+  .meter-pct{
+    font-size: 14px;
+    font-weight: 1100;
+    color: var(--p);
+    background: rgba(255,255,255,.75);
+    border: 1px solid rgba(124,58,237,.18);
+    padding: 8px 10px;
+    border-radius: 999px;
+    flex-shrink:0;
+  }
+
+  .meter-bar{
+    margin-top: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(15,23,42,.10);
+    overflow:hidden;
+    border: 1px solid rgba(15,23,42,.08);
+  }
+  .meter-fill{
+    height: 100%;
+    background: linear-gradient(90deg, var(--p), var(--b), var(--g));
+    border-radius: 999px;
+  }
+
+  .meter-checks{
+    margin-top: 10px;
+    display:flex;
+    gap: 8px;
+    flex-wrap:wrap;
+  }
+  .mchip{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding: 7px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    font-weight: 900;
+    background: rgba(255,255,255,.82);
+  }
+  .mchip-dot{
+    width:9px; height:9px; border-radius:50%;
+    background: rgba(245,158,11,1);
+    box-shadow: 0 0 0 3px rgba(245,158,11,.18);
+  }
+  .mchip-ok{
+    border-color: rgba(34,197,94,.18);
+    color: #166534;
+  }
+  .mchip-ok .mchip-dot{
+    background: rgba(34,197,94,1);
+    box-shadow: 0 0 0 3px rgba(34,197,94,.18);
+  }
+  .mchip-warn{
+    border-color: rgba(124,58,237,.18);
+    color: var(--k);
+  }
+  .meter-hint{
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--mut);
+    line-height: 1.35;
+  }
 
   /* Grid */
   .bp-grid{
@@ -567,12 +809,15 @@
 
   /* Cards */
   .card{
-    background: rgba(255,255,255,.95);
-    border: 1px solid var(--br);
+    background: rgba(255,255,255,.96);
+    border: 1px solid rgba(226,232,240,.95);
     border-radius: var(--rad);
     box-shadow: var(--sh);
     overflow:hidden;
   }
+  .card-purple{ border-color: rgba(124,58,237,.20); }
+  .card-blue{ border-color: rgba(37,99,235,.20); }
+  .card-green{ border-color: rgba(34,197,94,.20); }
 
   .card-head{
     display:flex;
@@ -590,25 +835,30 @@
     line-height: 1.2;
     color: var(--t);
   }
-  .muted{ margin:4px 0 0; color: var(--mut); font-size: 12px; line-height:1.35; }
+  .muted{
+    margin:4px 0 0;
+    color: var(--mut);
+    font-size: 12px;
+    line-height:1.35;
+  }
 
   .ic{
     width: 40px; height: 40px;
-    border-radius: 12px;
+    border-radius: 14px;
     display:flex; align-items:center; justify-content:center;
     font-size: 18px;
     flex-shrink:0;
     border: 1px solid transparent;
   }
-  .ic-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.25); }
-  .ic-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.25); }
-  .ic-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.25); }
+  .ic-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); }
+  .ic-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); }
+  .ic-green{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.22); }
 
   .tag{
     padding: 6px 10px;
     border-radius: 999px;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 1100;
     white-space:nowrap;
     border: 1px solid transparent;
   }
@@ -629,15 +879,15 @@
   .k{
     font-size: 12px;
     color: var(--mut);
-    font-weight: 800;
+    font-weight: 1000;
     min-width: 96px;
   }
   .v{
     font-size: 12.5px;
     color: var(--t);
-    font-weight: 900;
+    font-weight: 1100;
     text-align:right;
-    max-width: 65%;
+    max-width: 68%;
   }
   .wrap{
     white-space: normal;
@@ -663,9 +913,9 @@
 
   .msg{
     padding: 10px 12px;
-    border-radius: 12px;
+    border-radius: 14px;
     font-size: 12.5px;
-    font-weight: 800;
+    font-weight: 1000;
     border: 1px solid transparent;
     line-height:1.35;
   }
@@ -677,7 +927,7 @@
     padding: 5px 10px;
     border-radius: 999px;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 1100;
     border: 1px solid transparent;
     white-space:nowrap;
   }
@@ -685,17 +935,39 @@
   .chip-amber{ background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.28); color:#B45309; }
   .chip-red{ background: rgba(220,38,38,.12); border-color: rgba(220,38,38,.24); color:#B91C1C; }
 
-  /* Bank snapshot box */
+  /* Hints */
+  .hint{
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.35;
+    background: rgba(255,255,255,.85);
+  }
+  .hint a{
+    color: var(--p);
+    font-weight: 1100;
+    text-decoration:none;
+  }
+  .hint a:hover{ text-decoration: underline; }
+
+  .hint-purple{ border-color: rgba(124,58,237,.22); background: rgba(124,58,237,.08); }
+  .hint-amber{ border-color: rgba(245,158,11,.28); background: rgba(245,158,11,.10); }
+  .hint-green{ border-color: rgba(34,197,94,.22); background: rgba(34,197,94,.10); }
+
+  /* Bank snapshot */
   .snapshot{
     margin-top: 12px;
     padding: 10px;
-    border-radius: 14px;
+    border-radius: 16px;
     background: rgba(34,197,94,.08);
     border: 1px solid rgba(34,197,94,.18);
   }
   .snap-title{
     font-size: 12px;
-    font-weight: 1000;
+    font-weight: 1200;
     color: #166534;
     margin-bottom: 8px;
     letter-spacing: .2px;
@@ -708,18 +980,18 @@
     .snap-grid{ grid-template-columns: 1fr 1fr; }
   }
   .snap-item{
-    background: rgba(255,255,255,.75);
+    background: rgba(255,255,255,.78);
     border: 1px solid rgba(34,197,94,.14);
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 8px;
   }
-  .snap-item .k{ min-width: auto; display:block; margin-bottom: 4px; }
+  .snap-item .k{ min-width:auto; display:block; margin-bottom: 4px; }
   .snap-item .v{ max-width:100%; text-align:left; display:block; }
 
   /* Privacy & Security */
   .sec{
     margin-top: 14px;
-    background: rgba(255,255,255,.9);
+    background: rgba(255,255,255,.92);
     border: 1px solid rgba(124,58,237,.18);
     border-radius: var(--rad);
     padding: 12px;
@@ -751,17 +1023,17 @@
     gap: 10px;
     align-items:center;
     text-decoration:none;
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 12px;
     border: 1px solid transparent;
     background: #fff;
   }
-  .sec-item:hover{ border-color: rgba(124,58,237,.35); }
+  .sec-item:hover{ transform: translateY(-1px); }
 
   .sec-ic{
     width: 44px;
     height: 44px;
-    border-radius: 14px;
+    border-radius: 16px;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -774,6 +1046,7 @@
     margin:0;
     font-size: 13.5px;
     color: var(--t);
+    font-weight: 1100;
   }
   .sec-txt p{
     margin: 4px 0 0;
@@ -783,24 +1056,27 @@
   }
   .sec-go{
     font-size: 22px;
-    font-weight: 900;
+    font-weight: 1200;
     color: rgba(124,58,237,.55);
     flex-shrink:0;
   }
 
-  .sec-blue{ border-color: rgba(37,99,235,.18); }
-  .sec-blue .sec-ic{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.18); }
-  .sec-green{ border-color: rgba(34,197,94,.18); }
-  .sec-green .sec-ic{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.18); }
   .sec-purple{ border-color: rgba(124,58,237,.18); }
   .sec-purple .sec-ic{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.18); }
+
+  .sec-green{ border-color: rgba(34,197,94,.18); }
+  .sec-green .sec-ic{ background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.18); }
+
   .sec-black{ border-color: rgba(15,23,42,.18); }
   .sec-black .sec-ic{ background: rgba(15,23,42,.10); border-color: rgba(15,23,42,.18); }
+
+  .sec-blue{ border-color: rgba(37,99,235,.18); }
+  .sec-blue .sec-ic{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.18); }
 
   /* Danger */
   .danger{
     margin-top: 12px;
-    border-radius: 14px;
+    border-radius: 16px;
     border: 1px solid rgba(220,38,38,.22);
     background: rgba(220,38,38,.06);
     padding: 12px;
@@ -823,15 +1099,13 @@
     gap: 10px;
   }
 
-  /* Small phones (Hisense U50 Lite friendly) */
+  /* Small phones */
   @media (max-width: 360px){
     .bp-wrap{ padding: 0 10px; }
     .bp-actions{ flex-direction:column; align-items:stretch; }
     .btn, .badge{ width:100%; }
-    .v{ max-width: 100%; }
     .row{ flex-direction:column; align-items:flex-start; }
-    .v{ text-align:left; }
+    .v{ text-align:left; max-width:100%; }
+    .wrap-inline{ max-width: 160px; }
   }
-
-  /* Optional: If user has dark theme CSS already, we avoid forcing dark here */
 </style>

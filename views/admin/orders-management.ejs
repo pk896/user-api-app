@@ -1,0 +1,867 @@
+<!-- views/admin/orders-management.ejs -->
+<section class="admin-orders-page">
+  <header class="page-head">
+    <div class="title-wrap">
+      <div class="badge" aria-hidden="true">🧾</div>
+      <div class="title-text">
+        <h1>Orders Management</h1>
+        <p>View orders, refund safely, cancel (DB only), and audit activity.</p>
+      </div>
+    </div>
+
+    <div class="head-actions">
+      <a class="btn ghost" href="/admin">← Back to Dashboard</a>
+      <button class="btn purple" id="reloadBtn" type="button">Reload</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search">
+      <span class="icon" aria-hidden="true">🔎</span>
+      <input
+        id="searchInput"
+        type="text"
+        placeholder="Search by Order ID, Capture ID, payer email, payer name…"
+        autocomplete="off"
+        inputmode="search"
+      />
+    </div>
+
+    <div class="filters">
+      <label class="sr-only" for="statusFilter">Filter by status</label>
+      <select id="statusFilter">
+        <option value="">All statuses</option>
+        <option value="COMPLETED">COMPLETED</option>
+        <option value="PAID">PAID</option>
+        <option value="REFUNDED">REFUNDED</option>
+        <option value="PARTIALLY_REFUNDED">PARTIALLY_REFUNDED</option>
+        <option value="CANCELLED">CANCELLED</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+
+      <label class="sr-only" for="limitSelect">Limit orders</label>
+      <select id="limitSelect">
+        <option value="50">Last 50</option>
+        <option value="100" selected>Last 100</option>
+        <option value="200">Last 200</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="stats" role="region" aria-label="Orders stats">
+    <div class="stat blue">
+      <div class="k">Total</div>
+      <div class="v" id="statTotal">0</div>
+      <div class="hint">Orders loaded after filters</div>
+    </div>
+
+    <div class="stat purple">
+      <div class="k">Refunded</div>
+      <div class="v" id="statRefunded">0</div>
+      <div class="hint">Fully refunded orders</div>
+    </div>
+
+    <div class="stat green">
+      <div class="k">Revenue</div>
+      <div class="v" id="statRevenue">$0.00</div>
+      <div class="hint">Sum of amounts shown</div>
+    </div>
+
+    <div class="stat dark">
+      <div class="k">Last updated</div>
+      <div class="v" id="statUpdated">—</div>
+      <div class="hint">Local time</div>
+    </div>
+  </div>
+
+  <div class="table-wrap" role="region" aria-label="Orders table">
+    <table class="orders-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Order ID</th>
+          <th>Status</th>
+          <th>Payer</th>
+          <th>Amount</th>
+          <th>Capture ID</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="ordersBody">
+        <tr>
+          <td colspan="7" class="muted">Loading…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Refund Modal -->
+  <div class="modal-backdrop" id="refundModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="refundTitle">
+      <div class="modal-head">
+        <div class="modal-title">
+          <div class="modal-badge" aria-hidden="true">💸</div>
+          <div>
+            <h3 id="refundTitle">Refund Order</h3>
+            <p class="modal-sub">Refund via PayPal, then sync MongoDB status.</p>
+          </div>
+        </div>
+
+        <button class="x" type="button" id="closeRefundModal" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="row">
+          <div class="label">Order</div>
+          <div class="value" id="refundOrderLabel">—</div>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Amount (optional)</span>
+            <input
+              id="refundAmount"
+              type="text"
+              placeholder="Leave empty for FULL remaining refund (e.g. 10.50)"
+              inputmode="decimal"
+              autocomplete="off"
+            />
+            <small>Tip: leave empty for full remaining refund.</small>
+          </label>
+
+          <label class="field">
+            <span>Note to payer (optional)</span>
+            <input
+              id="refundNote"
+              type="text"
+              placeholder="e.g. Refund approved by admin"
+              maxlength="255"
+              autocomplete="off"
+            />
+            <small>Max 255 characters.</small>
+          </label>
+        </div>
+
+        <div class="warn" role="note">
+          <strong>⚠ Important:</strong> Refund will call PayPal first and then update the order in MongoDB.
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn ghost" type="button" id="cancelRefundBtn">Cancel</button>
+          <button class="btn purple" type="button" id="confirmRefundBtn">Refund</button>
+        </div>
+
+        <div class="result" id="refundResult" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%
+  styles = `
+<style nonce="${nonce || ''}">
+  :root{
+    --p:#7C3AED;   /* Purple (dominant) */
+    --b:#2563EB;   /* Blue */
+    --g:#22C55E;   /* Green */
+    --k:#0F172A;   /* Black */
+    --bg1:#F8FAFC; /* soft */
+    --bd:#E2E8F0;  /* border */
+    --mut:#64748B; /* muted text */
+    --card:#FFFFFF;
+    --shadow: 0 12px 30px rgba(15,23,42,.10);
+    --radius: 16px;
+  }
+
+  .admin-orders-page{
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 14px;
+  }
+
+  /* Header */
+  .page-head{
+    background: linear-gradient(135deg, rgba(124,58,237,.10), rgba(37,99,235,.06), rgba(34,197,94,.06));
+    border: 1px solid rgba(124,58,237,.18);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    box-shadow: var(--shadow);
+  }
+
+  .title-wrap{display:flex;gap:12px;align-items:flex-start;min-width: 260px;}
+  .title-text{min-width: 220px;}
+  .badge{
+    width: 42px;height: 42px;border-radius: 14px;
+    background: rgba(124,58,237,.14);
+    border: 1px solid rgba(124,58,237,.24);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow: 0 10px 22px rgba(124,58,237,.14);
+  }
+
+  .page-head h1{
+    margin:0;
+    font-size: 18px;
+    color: var(--k);
+    letter-spacing: .2px;
+  }
+  .page-head p{
+    margin: 6px 0 0;
+    color: var(--mut);
+    font-size: 12.5px;
+    line-height: 1.3;
+  }
+
+  .head-actions{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap: wrap;
+  }
+
+  /* Buttons */
+  .btn{
+    border: 1px solid var(--bd);
+    background: var(--k);
+    color: #fff;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-weight: 900;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 1;
+    transition: transform .08s ease, box-shadow .12s ease, opacity .12s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active{transform: translateY(1px);}
+  .btn:hover{box-shadow: 0 10px 18px rgba(15,23,42,.10);}
+  .btn:disabled{opacity:.65;cursor:not-allowed;box-shadow:none;transform:none;}
+
+  .btn.ghost{
+    background: #fff;
+    color: var(--k);
+    border-color: rgba(15,23,42,.18);
+  }
+  .btn.purple{
+    background: var(--p);
+    border-color: rgba(124,58,237,.55);
+    box-shadow: 0 12px 24px rgba(124,58,237,.20);
+  }
+  .btn.purple:hover{box-shadow: 0 14px 26px rgba(124,58,237,.24);}
+  .btn.purple:focus{outline: 2px solid rgba(124,58,237,.35); outline-offset: 2px;}
+
+  /* Toolbar */
+  .toolbar{
+    display:flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+    align-items: stretch;
+  }
+
+  .search{
+    flex: 1;
+    min-width: 220px;
+    background: var(--card);
+    border: 1px solid rgba(124,58,237,.18);
+    border-radius: 14px;
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 10px 24px rgba(124,58,237,.08);
+  }
+  .search .icon{opacity: .75;}
+  .search input{
+    border:none;
+    outline:none;
+    width: 100%;
+    font-size: 14px;
+    color: var(--k);
+    font-weight: 700;
+    background: transparent;
+  }
+  .search input::placeholder{color: rgba(100,116,139,.95); font-weight: 600;}
+
+  .filters{
+    display:flex;
+    gap:10px;
+    flex-wrap: wrap;
+  }
+
+  select{
+    background: var(--card);
+    border: 1px solid rgba(37,99,235,.18);
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-weight: 900;
+    color: var(--k);
+    min-height: 42px;
+    box-shadow: 0 10px 22px rgba(37,99,235,.06);
+    outline: none;
+  }
+  select:focus{outline: 2px solid rgba(37,99,235,.25); outline-offset: 2px;}
+
+  /* Stats */
+  .stats{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .stat{
+    background: var(--card);
+    border: 1px solid var(--bd);
+    border-radius: 16px;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 24px rgba(15,23,42,.06);
+  }
+
+  .stat:before{
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(800px 150px at 0% 0%, rgba(124,58,237,.10), transparent 60%),
+                radial-gradient(700px 150px at 100% 0%, rgba(37,99,235,.08), transparent 60%),
+                radial-gradient(700px 150px at 100% 100%, rgba(34,197,94,.08), transparent 60%);
+    pointer-events:none;
+  }
+
+  .stat > *{position:relative; z-index:1;}
+  .stat .k{
+    font-size: 11px;
+    color: var(--mut);
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .stat .v{
+    font-size: 18px;
+    color: var(--k);
+    font-weight: 1000;
+    margin-top: 4px;
+    letter-spacing: .2px;
+  }
+  .stat .hint{
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: rgba(100,116,139,.95);
+    font-weight: 700;
+  }
+
+  .stat.purple{border-top: 4px solid var(--p);}
+  .stat.blue{border-top: 4px solid var(--b);}
+  .stat.green{border-top: 4px solid var(--g);}
+  .stat.dark{border-top: 4px solid var(--k);}
+
+  /* Table */
+  .table-wrap{
+    background: var(--card);
+    border: 1px solid rgba(15,23,42,.10);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 16px 34px rgba(15,23,42,.08);
+  }
+
+  table{width:100%;border-collapse: collapse;}
+  th, td{
+    padding: 12px;
+    border-bottom: 1px solid #F1F5F9;
+    text-align: left;
+    font-size: 13px;
+    vertical-align: top;
+  }
+
+  th{
+    background: linear-gradient(180deg, #ffffff, var(--bg1));
+    color: var(--k);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 1000;
+    border-bottom: 1px solid rgba(124,58,237,.14);
+  }
+
+  tr:hover td{background: rgba(124,58,237,.035);}
+  td.muted{color: var(--mut);}
+
+  .right{text-align:right;}
+  .sr-only{
+    position:absolute;
+    width:1px;height:1px;
+    padding:0;margin:-1px;
+    overflow:hidden;clip:rect(0,0,0,0);
+    white-space:nowrap;border:0;
+  }
+
+  /* Status pills */
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-weight: 1000;
+    font-size: 12px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .pill.ok{background: rgba(34,197,94,.12); color: #15803D; border-color: rgba(34,197,94,.22);}
+  .pill.warn{background: rgba(245,158,11,.12); color: #B45309; border-color: rgba(245,158,11,.22);}
+  .pill.bad{background: rgba(239,68,68,.12); color: #B91C1C; border-color: rgba(239,68,68,.22);}
+  .pill.purple{background: rgba(124,58,237,.12); color: var(--p); border-color: rgba(124,58,237,.24);}
+
+  /* Row actions */
+  .actions{
+    display:flex;
+    gap: 8px;
+    justify-content:flex-end;
+    flex-wrap: wrap;
+  }
+  .smallbtn{
+    border: 1px solid rgba(15,23,42,.18);
+    background: #fff;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-weight: 1000;
+    font-size: 12px;
+    cursor: pointer;
+    transition: transform .08s ease, box-shadow .12s ease, background .12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .smallbtn:active{transform: translateY(1px);}
+  .smallbtn:hover{box-shadow: 0 10px 18px rgba(15,23,42,.10);}
+  .smallbtn.purple{border-color: rgba(124,58,237,.35); color: var(--p); background: rgba(124,58,237,.04);}
+  .smallbtn.red{border-color: rgba(239,68,68,.35); color: #DC2626; background: rgba(239,68,68,.04);}
+  .smallbtn.dark{border-color: rgba(15,23,42,.20); color: var(--k); background: rgba(15,23,42,.03);}
+  .smallbtn:focus{outline: 2px solid rgba(124,58,237,.25); outline-offset: 2px;}
+
+  /* Modal */
+  .modal-backdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,.62);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    z-index: 50;
+  }
+  .modal-backdrop.open{display:flex;}
+  .modal{
+    width: min(720px, 100%);
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid rgba(124,58,237,.18);
+    box-shadow: 0 24px 70px rgba(0,0,0,.30);
+    overflow:hidden;
+  }
+  .modal-head{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid #F1F5F9;
+    background: linear-gradient(135deg, rgba(124,58,237,.10), rgba(37,99,235,.06));
+  }
+  .modal-title{display:flex; gap:10px; align-items:flex-start;}
+  .modal-badge{
+    width: 40px; height: 40px;
+    border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(124,58,237,.14);
+    border: 1px solid rgba(124,58,237,.24);
+  }
+  .modal-head h3{margin:0;color: var(--k); font-size: 16px; font-weight: 1000;}
+  .modal-sub{margin:4px 0 0; color: rgba(100,116,139,.95); font-size: 12px; font-weight: 700;}
+  .x{
+    border:none;
+    background: rgba(255,255,255,.85);
+    border: 1px solid rgba(15,23,42,.12);
+    border-radius: 12px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .x:hover{box-shadow: 0 10px 18px rgba(15,23,42,.10);}
+
+  .modal-body{padding: 12px 14px 14px;}
+  .row{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px;align-items:center;}
+  .row .label{color: var(--mut); font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;}
+  .row .value{color: var(--k); font-weight: 1000; font-size: 13px; word-break: break-word; text-align:right;}
+
+  .form-grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .field span{display:block;font-weight: 1000;color: var(--k);margin-bottom: 6px;font-size: 12.5px;}
+  .field input{
+    width: 100%;
+    border: 1px solid rgba(124,58,237,.18);
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-weight: 800;
+    color: var(--k);
+    background: #fff;
+    outline: none;
+    box-shadow: 0 10px 22px rgba(124,58,237,.06);
+  }
+  .field input:focus{outline: 2px solid rgba(124,58,237,.22); outline-offset: 2px;}
+  .field input::placeholder{color: rgba(100,116,139,.92); font-weight: 700;}
+  .field small{display:block;color: var(--mut);margin-top: 6px;font-size: 12px;font-weight: 700;}
+
+  .warn{
+    margin-top: 10px;
+    background: rgba(245,158,11,.12);
+    border: 1px solid rgba(245,158,11,.25);
+    color: #92400E;
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-weight: 900;
+    line-height: 1.25;
+  }
+
+  .modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+
+  .result{
+    margin-top: 12px;
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-weight: 900;
+    border: 1px solid rgba(15,23,42,.10);
+  }
+  .result.ok{background: rgba(34,197,94,.12); color: #15803D; border-color: rgba(34,197,94,.22);}
+  .result.bad{background: rgba(239,68,68,.12); color: #B91C1C; border-color: rgba(239,68,68,.22);}
+
+  /* Mobile (Hisense U50 Lite friendly) */
+  @media (max-width: 780px){
+    .admin-orders-page{padding: 12px;}
+    .page-head{padding: 12px;}
+    .page-head h1{font-size: 16.5px;}
+    .toolbar{gap: 10px;}
+    .filters{width: 100%;}
+    .filters select{flex: 1; min-width: 140px;}
+    .stats{grid-template-columns: repeat(2, 1fr);}
+    th:nth-child(6), td:nth-child(6){display:none;} /* hide Capture ID col on small screens */
+    th, td{padding: 10px;}
+  }
+
+  @media (max-width: 420px){
+    .head-actions{width:100%;}
+    .head-actions .btn, .head-actions a.btn{flex: 1;}
+    .actions{gap: 6px;}
+    .smallbtn{padding: 8px 9px;}
+    .row{flex-direction: column; align-items:flex-start;}
+    .row .value{text-align:left;}
+    .form-grid{grid-template-columns: 1fr;}
+  }
+
+  /* ✅ MOBILE “CARD ROWS” TABLE (BEST UX ON PHONE) */
+  @media (max-width: 780px){
+    .table-wrap{overflow: visible;}
+    table{display:block;}
+    thead{display:none;}
+    tbody{display:block;}
+
+    tr{
+      display:block;
+      margin: 10px;
+      border: 1px solid rgba(124,58,237,.18);
+      border-radius: 16px;
+      padding: 10px;
+      background: #fff;
+      box-shadow: 0 10px 22px rgba(15,23,42,.06);
+    }
+
+    td{
+      display:flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px dashed rgba(15,23,42,.10);
+    }
+    td:last-child{border-bottom:none;}
+
+    /* labels */
+    td:nth-child(1)::before{content:"Date"; color: #64748B; font-weight: 900;}
+    td:nth-child(2)::before{content:"Order ID"; color: #64748B; font-weight: 900;}
+    td:nth-child(3)::before{content:"Status"; color: #64748B; font-weight: 900;}
+    td:nth-child(4)::before{content:"Payer"; color: #64748B; font-weight: 900;}
+    td:nth-child(5)::before{content:"Amount"; color: #64748B; font-weight: 900;}
+    td:nth-child(6)::before{content:"Capture"; color: #64748B; font-weight: 900;}
+    td:nth-child(7)::before{content:"Actions"; color: #64748B; font-weight: 900;}
+
+    td::before{flex: 0 0 auto;}
+    td > *{text-align:right;}
+
+    .right{text-align:left;}
+    .actions{justify-content:flex-start;}
+  }
+</style>
+`;
+%>
+
+<script nonce="<%= nonce || '' %>">
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const ordersBody = $('ordersBody');
+  const searchInput = $('searchInput');
+  const statusFilter = $('statusFilter');
+  const limitSelect = $('limitSelect');
+  const reloadBtn = $('reloadBtn');
+
+  const statTotal = $('statTotal');
+  const statRefunded = $('statRefunded');
+  const statRevenue = $('statRevenue');
+  const statUpdated = $('statUpdated');
+
+  const refundModal = $('refundModal');
+  const closeRefundModal = $('closeRefundModal');
+  const cancelRefundBtn = $('cancelRefundBtn');
+  const confirmRefundBtn = $('confirmRefundBtn');
+  const refundOrderLabel = $('refundOrderLabel');
+  const refundAmount = $('refundAmount');
+  const refundNote = $('refundNote');
+  const refundResult = $('refundResult');
+
+  let cache = [];
+  let currentRefundOrderId = null;
+
+  function money(n, ccy) {
+    const num = Number(n || 0);
+    const safe = Number.isFinite(num) ? num : 0;
+    return `${ccy || 'USD'} ${safe.toFixed(2)}`;
+  }
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function pillForStatus(s) {
+    const up = String(s || '').toUpperCase();
+    if (up === 'REFUNDED') return '<span class="pill purple">REFUNDED</span>';
+    if (up === 'PARTIALLY_REFUNDED') return '<span class="pill warn">PARTIAL</span>';
+    if (up === 'CANCELLED' || up === 'CANCELLED') return '<span class="pill bad">CANCELLED</span>';
+    if (up === 'COMPLETED' || up === 'PAID') return '<span class="pill ok">' + esc(up) + '</span>';
+    return '<span class="pill warn">' + esc(s || '—') + '</span>';
+  }
+
+  function openRefund(order) {
+    currentRefundOrderId = order.orderId;
+    refundOrderLabel.textContent = `${order.orderId} (${money(order.amount, order.currency)})`;
+    refundAmount.value = '';
+    refundNote.value = '';
+    refundResult.style.display = 'none';
+    refundResult.className = 'result';
+    refundResult.textContent = '';
+    refundModal.classList.add('open');
+    refundModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => refundAmount && refundAmount.focus(), 0);
+  }
+
+  function closeRefund() {
+    refundModal.classList.remove('open');
+    refundModal.setAttribute('aria-hidden', 'true');
+    currentRefundOrderId = null;
+  }
+
+  async function loadOrders() {
+    ordersBody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+
+    const limit = Number(limitSelect.value || 100);
+    const res = await fetch(`/api/admin/orders?limit=${encodeURIComponent(limit)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+      const msg = json.message || 'Failed to load orders.';
+      ordersBody.innerHTML = `<tr><td colspan="7" class="muted">${esc(msg)}</td></tr>`;
+      return;
+    }
+
+    cache = Array.isArray(json.orders) ? json.orders : [];
+    render();
+    statUpdated.textContent = new Date().toLocaleString();
+  }
+
+  function render() {
+    const q = String(searchInput.value || '').trim().toLowerCase();
+    const sf = String(statusFilter.value || '').trim().toUpperCase();
+
+    let rows = cache;
+
+    if (sf) {
+      rows = rows.filter(o => String(o.status || '').toUpperCase() === sf);
+    }
+
+    if (q) {
+      rows = rows.filter(o => {
+        const a = String(o.orderId || '').toLowerCase();
+        const b = String(o.captureId || '').toLowerCase();
+        const c = String(o.payerEmail || '').toLowerCase();
+        const d = String(o.payerName || '').toLowerCase();
+        return a.includes(q) || b.includes(q) || c.includes(q) || d.includes(q);
+      });
+    }
+
+    // stats
+    const total = rows.length;
+    const refunded = rows.filter(o => String(o.status || '').toUpperCase() === 'REFUNDED').length;
+    const revenue = rows.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+    statTotal.textContent = String(total);
+    statRefunded.textContent = String(refunded);
+    statRevenue.textContent = money(revenue, (rows[0]?.currency || 'USD'));
+
+    if (!rows.length) {
+      ordersBody.innerHTML = '<tr><td colspan="7" class="muted">No orders found.</td></tr>';
+      return;
+    }
+
+    ordersBody.innerHTML = rows.map(o => {
+      const dt = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
+      const payer = (o.payerEmail || o.payerName)
+        ? `${o.payerName || ''}${o.payerEmail ? ' (' + o.payerEmail + ')' : ''}`.trim()
+        : '—';
+      const cap = o.captureId || '—';
+
+      return `
+        <tr>
+          <td>${esc(dt)}</td>
+          <td><strong>${esc(o.orderId || '—')}</strong></td>
+          <td>${pillForStatus(o.status)}</td>
+          <td>${esc(payer)}</td>
+          <td><strong>${esc(money(o.amount, o.currency))}</strong></td>
+          <td title="${esc(cap)}">${esc(cap)}</td>
+          <td class="right">
+            <div class="actions">
+              <button class="smallbtn purple" data-action="refund" data-order="${esc(o.orderId)}" type="button">Refund</button>
+              <button class="smallbtn red" data-action="cancel" data-order="${esc(o.orderId)}" type="button">Cancel</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async function doCancel(orderId) {
+    const reason = prompt('Cancel reason (optional):', 'Admin cancelled');
+    if (reason === null) return;
+
+    const res = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ reason }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+      alert(json.message || 'Cancel failed.');
+      return;
+    }
+
+    await loadOrders();
+  }
+
+  async function doRefund() {
+    if (!currentRefundOrderId) return;
+
+    confirmRefundBtn.disabled = true;
+    const oldText = confirmRefundBtn.textContent;
+    confirmRefundBtn.textContent = 'Refunding…';
+
+    const amtRaw = String(refundAmount.value || '').trim();
+    const noteRaw = String(refundNote.value || '').trim();
+
+    const body = {};
+    if (amtRaw) body.amount = amtRaw;
+    if (noteRaw) body.note = noteRaw;
+
+    const res = await fetch(`/api/admin/orders/${encodeURIComponent(currentRefundOrderId)}/refund`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json().catch(() => ({}));
+
+    confirmRefundBtn.disabled = false;
+    confirmRefundBtn.textContent = oldText;
+
+    refundResult.style.display = 'block';
+    if (!res.ok || !json.ok) {
+      refundResult.className = 'result bad';
+      refundResult.textContent = json.message || 'Refund failed.';
+      return;
+    }
+
+    refundResult.className = 'result ok';
+    refundResult.textContent = '✅ Refund submitted successfully.';
+    await loadOrders();
+  }
+
+  reloadBtn.addEventListener('click', loadOrders);
+  searchInput.addEventListener('input', render);
+  statusFilter.addEventListener('change', render);
+  limitSelect.addEventListener('change', loadOrders);
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadOrders();
+  });
+
+  ordersBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+
+    const action = btn.getAttribute('data-action');
+    const orderId = btn.getAttribute('data-order');
+
+    const order = cache.find(x => String(x.orderId) === String(orderId));
+
+    if (action === 'refund' && order) openRefund(order);
+    if (action === 'cancel' && orderId) doCancel(orderId);
+  });
+
+  closeRefundModal.addEventListener('click', closeRefund);
+  cancelRefundBtn.addEventListener('click', closeRefund);
+  confirmRefundBtn.addEventListener('click', doRefund);
+  refundModal.addEventListener('click', (e) => { if (e.target === refundModal) closeRefund(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && refundModal.classList.contains('open')) closeRefund();
+  });
+
+  loadOrders().catch(err => {
+    console.error(err);
+    ordersBody.innerHTML = '<tr><td colspan="7" class="muted">Failed to load.</td></tr>';
+  });
+})();
+</script>

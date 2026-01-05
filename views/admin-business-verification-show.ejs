@@ -4,7 +4,6 @@
 <% const ver = b.verification || {} %>
 <% const bank = (typeof bankAdmin !== 'undefined' && bankAdmin) ? bankAdmin : (b.bankDetails || {}) %>
 
-
 <%
   const rawStatus = (ver.status || 'pending');
   const status = String(rawStatus).trim().toLowerCase();
@@ -23,557 +22,646 @@
   const badgeTone = status === 'verified' ? 'tone-green' : (status === 'rejected' ? 'tone-red' : 'tone-amber');
 %>
 
-<section class="wrap">
+<section class="abvs-page">
+  <div class="abvs-wrap">
 
-  <!-- Header -->
-  <header class="hdr">
-    <a href="/admin/business-verifications" class="back">
-      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-      </svg>
-      Back to Verification List
-    </a>
+    <!-- Header -->
+    <header class="abvs-hdr">
+      <a href="/admin/business-verifications" class="abvs-back">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Back to Verification List
+      </a>
 
-    <div class="hdr-row">
-      <div class="hdr-left">
-        <div class="hdr-badge">ADMIN • VERIFICATION</div>
-        <h1 class="title"><%= title %></h1>
-        <p class="sub">
-          Review official number details, bank snapshot (masked), and approve/reject with notes.
-        </p>
-      </div>
-
-      <div class="hdr-right">
-        <div class="mini-id">
-          <div class="mini-k">Request</div>
-          <div class="mini-v"><%= (b._id ? b._id.toString().slice(-8) : '—') %></div>
+      <div class="abvs-hdr-row">
+        <div class="abvs-hdr-left">
+          <div class="abvs-badge">ADMIN • VERIFICATION</div>
+          <h1 class="abvs-title"><%= title %></h1>
+          <p class="abvs-sub">
+            Review official number details, bank snapshot (masked), and approve/reject with notes.
+          </p>
         </div>
-      </div>
-    </div>
-  </header>
 
-  <!-- Profile / Status -->
-  <section class="panel panel-profile">
-    <div class="profile-top">
-      <div class="who">
-        <div class="avatar" aria-hidden="true"><%= firstLetter %></div>
-        <div class="who-text">
-          <h2 class="biz"><%= bizName %></h2>
-          <div class="meta">
-            <span class="pill pill-black"><%= b.role || '—' %></span>
-            <span class="pill pill-blue"><%= b.email || '—' %></span>
-            <% if (b.internalBusinessId) { %>
-              <span class="pill pill-purple">ID: <%= b.internalBusinessId %></span>
-            <% } %>
+        <div class="abvs-hdr-right">
+          <div class="abvs-mini">
+            <div class="abvs-mini-k">Request</div>
+            <div class="abvs-mini-v"><%= (b._id ? b._id.toString().slice(-8) : '—') %></div>
           </div>
         </div>
       </div>
 
-      <div class="statusbox <%= badgeTone %>">
-        <div class="statusline">
-          <span class="badge status-<%= status %>">
-            <% if (status === 'verified') { %>
-              ✅ <%= statusLabel %>
-            <% } else if (status === 'rejected') { %>
-              ⛔ <%= statusLabel %>
-            <% } else { %>
-              ⏳ <%= statusLabel %>
-            <% } %>
-          </span>
-          <span class="status-small">Created: <%= b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—' %></span>
+      <!-- Brand chips -->
+      <div class="abvs-chips" aria-hidden="true">
+        <span class="abvs-chip"><span class="dot dot-p"></span> Purple <b>#7C3AED</b></span>
+        <span class="abvs-chip"><span class="dot dot-b"></span> Blue <b>#2563EB</b></span>
+        <span class="abvs-chip"><span class="dot dot-g"></span> Green <b>#22C55E</b></span>
+        <span class="abvs-chip"><span class="dot dot-k"></span> Black <b>#0F172A</b></span>
+      </div>
+    </header>
+
+    <!-- Profile / Status -->
+    <section class="abvs-card abvs-card-purple">
+      <div class="abvs-profile">
+        <div class="abvs-who">
+          <div class="abvs-avatar" aria-hidden="true"><%= firstLetter %></div>
+          <div class="abvs-who-text">
+            <h2 class="abvs-biz"><%= bizName %></h2>
+            <div class="abvs-meta">
+              <span class="abvs-pill abvs-pill-black"><%= b.role || '—' %></span>
+              <span class="abvs-pill abvs-pill-blue"><%= b.email || '—' %></span>
+              <% if (b.internalBusinessId) { %>
+                <span class="abvs-pill abvs-pill-purple">ID: <%= b.internalBusinessId %></span>
+              <% } %>
+            </div>
+          </div>
         </div>
-        <div class="statushint">Use the action cards below to finalize.</div>
-      </div>
-    </div>
 
-    <!-- Business Details -->
-    <div class="grid grid-2">
-      <div class="card card-blue">
-        <div class="k">Official Number</div>
-        <div class="v mono"><%= b.officialNumber || '—' %></div>
-        <div class="note">Check number format and matching documents.</div>
-      </div>
-
-      <div class="card card-purple">
-        <div class="k">Business Type</div>
-        <div class="v"><span class="tag"><%= b.officialNumberType || 'OTHER' %></span></div>
-        <div class="note">Type should match registration documents.</div>
-      </div>
-
-      <div class="card card-green">
-        <div class="k">Country</div>
-        <div class="v"><%= b.country || '—' %></div>
-        <div class="note">Used for compliance and regional checks.</div>
-      </div>
-
-      <div class="card card-black">
-        <div class="k">Created Date</div>
-        <div class="v"><%= b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—' %></div>
-        <div class="note">Shows when the business joined.</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Bank Details -->
-  <section class="panel panel-bank">
-    <div class="panel-head">
-      <div>
-        <h3 class="h3">Bank Details (Admin)</h3>
-        <p class="muted">Sensitive info is masked (only last 4 digits shown).</p>
-      </div>
-      <span class="chip">Secure view</span>
-    </div>
-
-    <div class="grid grid-2">
-      <div class="card card-white">
-        <div class="k">Account Holder</div>
-        <div class="v"><%= bank.accountHolderName || '—' %></div>
-      </div>
-      <div class="card card-white">
-        <div class="k">Bank Name</div>
-        <div class="v"><%= bank.bankName || '—' %></div>
-      </div>
-      <div class="card card-white">
-        <div class="k">Account Number</div>
-        <div class="v mono"><%= bank.accountNumberMasked || maskedAcc %></div>
-      </div>
-      <div class="card card-white">
-        <div class="k">Branch Code</div>
-        <div class="v mono"><%= bank.branchCode || '—' %></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Verification Details -->
-  <% if (b.verification) { %>
-    <section class="panel panel-ver">
-      <div class="panel-head">
-        <div>
-          <h3 class="h3">Verification Details</h3>
-          <p class="muted">Audit trail for admin checks.</p>
+        <div class="abvs-status <%= badgeTone %>">
+          <div class="abvs-statusline">
+            <span class="abvs-badge2 abvs-status-<%= status %>">
+              <% if (status === 'verified') { %>
+                ✅ <%= statusLabel %>
+              <% } else if (status === 'rejected') { %>
+                ⛔ <%= statusLabel %>
+              <% } else { %>
+                ⏳ <%= statusLabel %>
+              <% } %>
+            </span>
+            <span class="abvs-status-small">Created: <%= b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—' %></span>
+          </div>
+          <div class="abvs-statushint">Use the action cards below to finalize.</div>
         </div>
-        <span class="chip chip-purple">Internal</span>
       </div>
 
-      <div class="grid grid-2">
-        <div class="card card-white">
-          <div class="k">Method</div>
-          <div class="v"><%= ver.method || 'manual' %></div>
+      <!-- Business Details -->
+      <div class="abvs-grid abvs-grid-2">
+        <div class="abvs-tile tile-blue">
+          <div class="k">Official Number</div>
+          <div class="v mono"><%= b.officialNumber || '—' %></div>
+          <div class="note">Check number format and matching documents.</div>
         </div>
-        <div class="card card-white">
-          <div class="k">Provider</div>
-          <div class="v"><%= ver.provider || 'manual' %></div>
+
+        <div class="abvs-tile tile-purple">
+          <div class="k">Business Type</div>
+          <div class="v"><span class="tag"><%= b.officialNumberType || 'OTHER' %></span></div>
+          <div class="note">Type should match registration documents.</div>
         </div>
-        <div class="card card-white">
-          <div class="k">Last Checked</div>
-          <div class="v"><%= ver.checkedAt ? new Date(ver.checkedAt).toLocaleString() : '—' %></div>
+
+        <div class="abvs-tile tile-green">
+          <div class="k">Country</div>
+          <div class="v"><%= b.country || '—' %></div>
+          <div class="note">Used for compliance and regional checks.</div>
         </div>
-        <div class="card card-white">
-          <div class="k">Verified On</div>
-          <div class="v"><%= ver.verifiedAt ? new Date(ver.verifiedAt).toLocaleString() : '—' %></div>
+
+        <div class="abvs-tile tile-black">
+          <div class="k">Created Date</div>
+          <div class="v"><%= b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—' %></div>
+          <div class="note">Shows when the business joined.</div>
         </div>
       </div>
     </section>
-  <% } %>
 
-  <!-- Notes -->
-  <section class="panel panel-notes">
-    <div class="panel-head">
-      <div>
-        <h3 class="h3">Admin Notes</h3>
-        <p class="muted">Previous review comments shared with the business.</p>
-      </div>
-      <span class="chip chip-black">Notes</span>
-    </div>
-
-    <% if (ver.reason) { %>
-      <div class="note-bubble">
-        <div class="note-top">
-          <span class="note-who">Admin</span>
-          <span class="note-when"><%= ver.checkedAt ? new Date(ver.checkedAt).toLocaleDateString() : 'Unknown date' %></span>
-        </div>
-        <p class="note-text"><%= ver.reason %></p>
-      </div>
-    <% } else { %>
-      <div class="empty">
-        <div class="empty-ico">📝</div>
+    <!-- Bank Details -->
+    <section class="abvs-card abvs-card-blue">
+      <div class="abvs-card-h abvs-row">
         <div>
-          <div class="empty-title">No notes yet</div>
-          <div class="empty-sub">Approve or reject with a clear note to help the business.</div>
+          <h3 class="abvs-h3">Bank Details (Admin)</h3>
+          <p class="abvs-muted">Sensitive info is masked (only last 4 digits shown).</p>
+        </div>
+        <span class="abvs-chip2">Secure view</span>
+      </div>
+
+      <div class="abvs-grid abvs-grid-2 abvs-pad">
+        <div class="abvs-tile tile-white">
+          <div class="k">Account Holder</div>
+          <div class="v"><%= bank.accountHolderName || '—' %></div>
+        </div>
+        <div class="abvs-tile tile-white">
+          <div class="k">Bank Name</div>
+          <div class="v"><%= bank.bankName || '—' %></div>
+        </div>
+        <div class="abvs-tile tile-white">
+          <div class="k">Account Number</div>
+          <div class="v mono"><%= bank.accountNumberMasked || maskedAcc %></div>
+        </div>
+        <div class="abvs-tile tile-white">
+          <div class="k">Branch Code</div>
+          <div class="v mono"><%= bank.branchCode || '—' %></div>
         </div>
       </div>
+    </section>
+
+    <!-- Verification Details -->
+    <% if (b.verification) { %>
+      <section class="abvs-card abvs-card-green">
+        <div class="abvs-card-h abvs-row">
+          <div>
+            <h3 class="abvs-h3">Verification Details</h3>
+            <p class="abvs-muted">Audit trail for admin checks.</p>
+          </div>
+          <span class="abvs-chip2 chip-purple">Internal</span>
+        </div>
+
+        <div class="abvs-grid abvs-grid-2 abvs-pad">
+          <div class="abvs-tile tile-white">
+            <div class="k">Method</div>
+            <div class="v"><%= ver.method || 'manual' %></div>
+          </div>
+          <div class="abvs-tile tile-white">
+            <div class="k">Provider</div>
+            <div class="v"><%= ver.provider || 'manual' %></div>
+          </div>
+          <div class="abvs-tile tile-white">
+            <div class="k">Last Checked</div>
+            <div class="v"><%= ver.checkedAt ? new Date(ver.checkedAt).toLocaleString() : '—' %></div>
+          </div>
+          <div class="abvs-tile tile-white">
+            <div class="k">Verified On</div>
+            <div class="v"><%= ver.verifiedAt ? new Date(ver.verifiedAt).toLocaleString() : '—' %></div>
+          </div>
+        </div>
+      </section>
     <% } %>
-  </section>
 
-  <!-- Actions -->
-  <section class="actions">
-    <!-- Approve -->
-    <div class="action action-approve">
-      <div class="action-head">
-        <div class="ic ic-green">✅</div>
+    <!-- Notes -->
+    <section class="abvs-card abvs-card-black">
+      <div class="abvs-card-h abvs-row">
         <div>
-          <h3 class="action-title">Approve Verification</h3>
-          <p class="action-sub">Confirm this business is legitimate and meets requirements.</p>
+          <h3 class="abvs-h3">Admin Notes</h3>
+          <p class="abvs-muted">Previous review comments shared with the business.</p>
         </div>
+        <span class="abvs-chip2 chip-black">Notes</span>
       </div>
 
-      <form method="POST" action="/admin/business-verifications/<%= b._id %>/approve" class="form">
-        <label class="lbl" for="approve-reason">Add a note (optional)</label>
-        <textarea id="approve-reason" name="reason" rows="3" class="ta"
-          placeholder="Add verification notes or feedback for the business..."></textarea>
-        <div class="hint">This note will be visible to the business.</div>
-
-        <button type="submit" class="btn btn-green">Approve Business Verification</button>
-      </form>
-    </div>
-
-    <!-- Reject -->
-    <div class="action action-reject">
-      <div class="action-head">
-        <div class="ic ic-red">⛔</div>
-        <div>
-          <h3 class="action-title">Reject Verification</h3>
-          <p class="action-sub">Give a clear reason so the business can correct issues.</p>
-        </div>
+      <div class="abvs-pad">
+        <% if (ver.reason) { %>
+          <div class="abvs-note">
+            <div class="abvs-note-top">
+              <span class="abvs-note-who">Admin</span>
+              <span class="abvs-note-when"><%= ver.checkedAt ? new Date(ver.checkedAt).toLocaleDateString() : 'Unknown date' %></span>
+            </div>
+            <p class="abvs-note-text"><%= ver.reason %></p>
+          </div>
+        <% } else { %>
+          <div class="abvs-empty">
+            <div class="abvs-empty-ic">📝</div>
+            <div>
+              <div class="abvs-empty-t">No notes yet</div>
+              <div class="abvs-empty-s">Approve or reject with a clear note to help the business.</div>
+            </div>
+          </div>
+        <% } %>
       </div>
+    </section>
 
-      <form method="POST" action="/admin/business-verifications/<%= b._id %>/reject" class="form"
-            onsubmit="return confirmReject()">
-        <label class="lbl" for="reject-reason">Reason for rejection <span class="req">*</span></label>
-        <textarea id="reject-reason" name="reason" rows="3" class="ta" required
-          placeholder="Explain why verification cannot be approved (invalid docs, mismatch info, insufficient proof...)"></textarea>
-        <div class="hint">Required. This note will be shared with the business.</div>
-
-        <button type="submit" class="btn btn-red">Reject Business Verification</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- Timeline -->
-  <section class="panel panel-log">
-    <div class="panel-head">
-      <div>
-        <h3 class="h3">Verification History</h3>
-        <p class="muted">Last updated: <%= b.updatedAt ? new Date(b.updatedAt).toLocaleDateString() : '—' %></p>
-      </div>
-      <span class="chip chip-blue">Timeline</span>
-    </div>
-
-    <div class="timeline">
-      <div class="titem">
-        <div class="dot dot-blue"></div>
-        <div class="tcontent">
-          <div class="ttitle">Application Submitted</div>
-          <div class="tdate"><%= b.createdAt ? new Date(b.createdAt).toLocaleString() : '—' %></div>
-        </div>
-      </div>
-
-      <% if (status === 'verified' || status === 'rejected') { %>
-        <div class="titem">
-          <div class="dot <%= status === 'verified' ? 'dot-green' : 'dot-red' %>"></div>
-          <div class="tcontent">
-            <div class="ttitle">Verification <%= statusLabel %></div>
-            <div class="tdate"><%= ver.checkedAt ? new Date(ver.checkedAt).toLocaleString() : 'Recently' %></div>
-            <% if (ver.reason) { %>
-              <div class="tnote"><%= ver.reason %></div>
-            <% } %>
+    <!-- Actions -->
+    <section class="abvs-actions">
+      <!-- Approve -->
+      <div class="abvs-action action-approve">
+        <div class="abvs-action-head">
+          <div class="abvs-ic ic-green">✅</div>
+          <div>
+            <h3 class="abvs-action-title">Approve Verification</h3>
+            <p class="abvs-action-sub">Confirm this business is legitimate and meets requirements.</p>
           </div>
         </div>
-      <% } else { %>
-        <div class="titem">
-          <div class="dot dot-amber"></div>
-          <div class="tcontent">
-            <div class="ttitle">Awaiting Review</div>
-            <div class="tdate">Currently in pending status</div>
+
+        <form method="POST" action="/admin/business-verifications/<%= b._id %>/approve" class="abvs-form">
+          <label class="abvs-lbl" for="approve-reason">Add a note (optional)</label>
+          <textarea
+            id="approve-reason"
+            name="reason"
+            rows="3"
+            class="abvs-ta"
+            placeholder="Add verification notes or feedback for the business..."
+          ></textarea>
+          <div class="abvs-hint">This note will be visible to the business.</div>
+
+          <button type="submit" class="abvs-btn abvs-btn-green">Approve Business Verification</button>
+        </form>
+      </div>
+
+      <!-- Reject -->
+      <div class="abvs-action action-reject">
+        <div class="abvs-action-head">
+          <div class="abvs-ic ic-red">⛔</div>
+          <div>
+            <h3 class="abvs-action-title">Reject Verification</h3>
+            <p class="abvs-action-sub">Give a clear reason so the business can correct issues.</p>
           </div>
         </div>
-      <% } %>
-    </div>
-  </section>
 
+        <form
+          method="POST"
+          action="/admin/business-verifications/<%= b._id %>/reject"
+          class="abvs-form"
+          onsubmit="return confirmReject()"
+        >
+          <label class="abvs-lbl" for="reject-reason">Reason for rejection <span class="req">*</span></label>
+          <textarea
+            id="reject-reason"
+            name="reason"
+            rows="3"
+            class="abvs-ta"
+            required
+            placeholder="Explain why verification cannot be approved (invalid docs, mismatch info, insufficient proof...)"
+          ></textarea>
+          <div class="abvs-hint">Required. This note will be shared with the business.</div>
+
+          <button type="submit" class="abvs-btn abvs-btn-red">Reject Business Verification</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Timeline -->
+    <section class="abvs-card abvs-card-purple">
+      <div class="abvs-card-h abvs-row">
+        <div>
+          <h3 class="abvs-h3">Verification History</h3>
+          <p class="abvs-muted">Last updated: <%= b.updatedAt ? new Date(b.updatedAt).toLocaleDateString() : '—' %></p>
+        </div>
+        <span class="abvs-chip2 chip-blue">Timeline</span>
+      </div>
+
+      <div class="abvs-pad">
+        <div class="abvs-timeline">
+          <div class="titem">
+            <div class="tdot dot-blue"></div>
+            <div class="tbox">
+              <div class="ttitle">Application Submitted</div>
+              <div class="tdate"><%= b.createdAt ? new Date(b.createdAt).toLocaleString() : '—' %></div>
+            </div>
+          </div>
+
+          <% if (status === 'verified' || status === 'rejected') { %>
+            <div class="titem">
+              <div class="tdot <%= status === 'verified' ? 'dot-green' : 'dot-red' %>"></div>
+              <div class="tbox">
+                <div class="ttitle">Verification <%= statusLabel %></div>
+                <div class="tdate"><%= ver.checkedAt ? new Date(ver.checkedAt).toLocaleString() : 'Recently' %></div>
+                <% if (ver.reason) { %>
+                  <div class="tnote"><%= ver.reason %></div>
+                <% } %>
+              </div>
+            </div>
+          <% } else { %>
+            <div class="titem">
+              <div class="tdot dot-amber"></div>
+              <div class="tbox">
+                <div class="ttitle">Awaiting Review</div>
+                <div class="tdate">Currently in pending status</div>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+  </div>
 </section>
 
-<style nonce="<%= NONCE %>">
-  :root{
-    --blue:#2563EB; --purple:#7C3AED; --green:#22C55E; --black:#0F172A;
-    --slate:#64748b; --border: rgba(15,23,42,.12);
+<%
+  // ✅ Use your layout styles slot if available.
+  styles = `
+<style nonce="${NONCE}">
+  .abvs-page{
+    --b:#2563EB; --p:#7C3AED; --g:#22C55E; --k:#0F172A;
+    --mut:#64748B; --line:rgba(15,23,42,.10); --shadow:0 12px 26px rgba(15,23,42,.10);
+    padding:.75rem 0;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.22) 0%, rgba(37,99,235,.08) 55%, rgba(34,197,94,.06) 100%),
+      linear-gradient(180deg, #f8fafc, #f8fafc);
   }
 
   /* ✅ NO HORIZONTAL SCROLL */
-  html, body { max-width: 100%; overflow-x: hidden; }
-  .wrap * { box-sizing: border-box; }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+  html, body { max-width:100%; overflow-x:hidden; }
+  .abvs-page *{ box-sizing:border-box; }
+
+  .abvs-wrap{ max-width:1200px; margin:0 auto; padding:0 .85rem; display:grid; gap:.85rem; }
 
   /* Header */
-  .hdr{
-    border-radius: 18px;
-    padding: 1rem;
-    border: 1px solid rgba(124,58,237,.35);
+  .abvs-hdr{
+    border-radius:18px;
+    padding:.95rem;
+    border:1px solid rgba(124,58,237,.30);
     background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(37,99,235,.12));
+    box-shadow: 0 10px 18px rgba(15,23,42,.06);
+    display:grid;
+    gap:.7rem;
   }
-  .back{
+  .abvs-back{
     display:inline-flex; align-items:center; gap:.5rem;
-    text-decoration:none; color: var(--blue);
-    font-weight: 900; font-size: .9rem;
-    padding: .55rem .75rem;
-    border-radius: 14px;
-    background: rgba(255,255,255,.75);
-    border: 1px solid rgba(37,99,235,.20);
+    text-decoration:none; color:var(--b);
+    font-weight:950; font-size:.9rem;
+    padding:.55rem .75rem; border-radius:14px;
+    background: rgba(255,255,255,.78);
+    border:1px solid rgba(37,99,235,.20);
     width: fit-content;
+    -webkit-tap-highlight-color: transparent;
   }
-  .hdr-row{ display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-top:.75rem; }
-  .hdr-badge{
+  .abvs-back:hover{ filter: brightness(.98); }
+
+  .abvs-hdr-row{
+    display:flex; justify-content:space-between; gap:.85rem; flex-wrap:wrap; align-items:flex-start;
+  }
+  .abvs-hdr-left{ flex:1 1 280px; min-width:240px; }
+  .abvs-badge{
     display:inline-flex; width: fit-content;
     padding:.25rem .6rem; border-radius:999px;
-    font-weight: 950; font-size:.72rem; letter-spacing:.08em;
-    background: rgba(124,58,237,.16); color: var(--purple);
-    border: 1px solid rgba(124,58,237,.28);
+    font-weight:950; font-size:.72rem; letter-spacing:.08em;
+    background: rgba(124,58,237,.16); color:var(--p);
+    border:1px solid rgba(124,58,237,.28);
   }
-  .title{ margin:.35rem 0 0; font-size: 1.35rem; font-weight: 950; color: var(--black); }
-  .sub{ margin:.3rem 0 0; color: var(--slate); font-weight: 700; font-size:.88rem; max-width: 60ch; }
+  .abvs-title{ margin:.35rem 0 0; font-size:1.22rem; font-weight:950; color:var(--k); }
+  .abvs-sub{ margin:.3rem 0 0; color:var(--mut); font-weight:750; font-size:.88rem; max-width:60ch; }
 
-  .mini-id{
-    border-radius: 16px;
-    padding: .75rem .9rem;
+  .abvs-mini{
+    border-radius:16px;
+    padding:.75rem .9rem;
     background: rgba(15,23,42,.08);
-    border: 1px solid rgba(15,23,42,.12);
+    border:1px solid rgba(15,23,42,.12);
     min-width: 180px;
   }
-  .mini-k{ font-size:.72rem; color: var(--slate); font-weight: 900; }
-  .mini-v{ font-size:1.05rem; font-weight: 950; color: var(--black); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  .abvs-mini-k{ font-size:.72rem; color:var(--mut); font-weight:900; }
+  .abvs-mini-v{
+    margin-top:.2rem;
+    font-size:1.05rem; font-weight:950; color:var(--k);
+    font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  }
 
-  /* Panels (distinct colors) */
-  .panel{ border-radius: 18px; padding: 1rem; border: 1px solid var(--border); }
-  .panel-profile{ background: linear-gradient(180deg, rgba(124,58,237,.10), rgba(255,255,255,.95)); border-color: rgba(124,58,237,.25); }
-  .panel-bank{ background: linear-gradient(180deg, rgba(37,99,235,.10), rgba(255,255,255,.95)); border-color: rgba(37,99,235,.22); }
-  .panel-ver{ background: linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,.95)); border-color: rgba(34,197,94,.22); }
-  .panel-notes{ background: linear-gradient(180deg, rgba(15,23,42,.08), rgba(255,255,255,.95)); border-color: rgba(15,23,42,.18); }
-  .panel-log{ background: linear-gradient(180deg, rgba(124,58,237,.10), rgba(255,255,255,.95)); border-color: rgba(124,58,237,.22); }
+  .abvs-chips{ display:flex; flex-wrap:wrap; gap:.5rem; }
+  .abvs-chip{
+    display:inline-flex; align-items:center; gap:.45rem;
+    padding:.35rem .55rem; border-radius:999px;
+    background: rgba(255,255,255,.70);
+    border:1px solid rgba(15,23,42,.10);
+    font-size:.78rem; font-weight:850; white-space:nowrap; color:var(--k);
+  }
+  .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; }
+  .dot-p{ background:var(--p) } .dot-b{ background:var(--b) } .dot-g{ background:var(--g) } .dot-k{ background:var(--k) }
 
-  .panel-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:.75rem; flex-wrap:wrap; margin-bottom:.85rem; }
-  .h3{ margin:0; font-size: 1.05rem; font-weight: 950; color: var(--black); }
-  .muted{ margin:.25rem 0 0; color: var(--slate); font-weight: 700; font-size:.85rem; }
+  /* Cards */
+  .abvs-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .abvs-card-h{
+    padding:.8rem .85rem;
+    border-bottom:1px solid rgba(15,23,42,.08);
+  }
+  .abvs-card-purple .abvs-card-h{ background: rgba(124,58,237,.09); }
+  .abvs-card-blue .abvs-card-h{ background: rgba(37,99,235,.08); }
+  .abvs-card-green .abvs-card-h{ background: rgba(34,197,94,.08); }
+  .abvs-card-black .abvs-card-h{ background: rgba(15,23,42,.08); }
 
-  .chip{
+  .abvs-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
+  .abvs-h3{ margin:0; font-size:1.02rem; font-weight:950; color:var(--k); }
+  .abvs-muted{ margin:.25rem 0 0; color:var(--mut); font-weight:750; font-size:.85rem; }
+
+  .abvs-chip2{
     display:inline-flex; align-items:center; justify-content:center;
     padding:.28rem .65rem; border-radius:999px;
-    font-size:.72rem; font-weight: 950;
-    background: rgba(255,255,255,.7); border: 1px solid rgba(15,23,42,.12);
-    color: var(--black);
+    font-size:.72rem; font-weight:950;
+    background: rgba(255,255,255,.70);
+    border:1px solid rgba(15,23,42,.12);
+    color:var(--k);
     width: fit-content;
   }
-  .chip-purple{ background: rgba(124,58,237,.16); border-color: rgba(124,58,237,.25); color: var(--purple); }
-  .chip-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); color: var(--blue); }
-  .chip-black{ background: rgba(15,23,42,.10); border-color: rgba(15,23,42,.18); color: var(--black); }
+  .chip-purple{ background: rgba(124,58,237,.16); border-color: rgba(124,58,237,.25); color:var(--p); }
+  .chip-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); color:var(--b); }
+  .chip-black{ background: rgba(15,23,42,.10); border-color: rgba(15,23,42,.18); color:var(--k); }
 
-  /* Profile top */
-  .profile-top{ display:flex; gap:1rem; justify-content:space-between; flex-wrap:wrap; align-items:stretch; }
-  .who{ display:flex; gap:.85rem; align-items:center; flex: 1 1 320px; min-width: 260px; }
-  .avatar{
-    width:54px; height:54px; border-radius: 16px;
-    background: linear-gradient(135deg, var(--blue), var(--purple));
-    color:#fff; display:flex; align-items:center; justify-content:center;
-    font-weight: 950; font-size: 1.35rem;
-    flex: 0 0 54px;
+  .abvs-pad{ padding:.85rem; }
+
+  /* Profile */
+  .abvs-profile{
+    padding:.85rem;
+    display:flex;
+    gap:.85rem;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    align-items:stretch;
+  }
+  .abvs-who{ display:flex; gap:.85rem; align-items:center; flex:1 1 320px; min-width:240px; }
+  .abvs-avatar{
+    width:54px;height:54px;border-radius:16px;
+    background: linear-gradient(135deg, var(--b), var(--p));
+    color:#fff; display:grid; place-items:center;
+    font-weight:950; font-size:1.35rem;
+    flex:0 0 54px;
     box-shadow: 0 16px 35px rgba(124,58,237,.18);
   }
-  .biz{ margin:0; font-weight: 950; color: var(--black); font-size: 1.15rem; }
-  .meta{ display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.35rem; }
-  .pill{
+  .abvs-biz{ margin:0; font-weight:950; color:var(--k); font-size:1.12rem; }
+  .abvs-meta{ display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.35rem; }
+
+  .abvs-pill{
     display:inline-flex; align-items:center;
-    padding:.25rem .6rem; border-radius: 999px;
-    font-size:.72rem; font-weight: 950;
-    border: 1px solid rgba(15,23,42,.10);
-    max-width: 100%;
-    word-break: break-word;
+    padding:.25rem .6rem; border-radius:999px;
+    font-size:.72rem; font-weight:950;
+    border:1px solid rgba(15,23,42,.10);
+    max-width:100%;
+    word-break:break-word;
+    background:#fff;
+    color:var(--k);
   }
-  .pill-black{ background: rgba(15,23,42,.10); color: var(--black); }
-  .pill-blue{ background: rgba(37,99,235,.12); color: var(--blue); border-color: rgba(37,99,235,.22); }
-  .pill-purple{ background: rgba(124,58,237,.14); color: var(--purple); border-color: rgba(124,58,237,.22); }
+  .abvs-pill-black{ background: rgba(15,23,42,.10); }
+  .abvs-pill-blue{ background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.22); color:var(--b); }
+  .abvs-pill-purple{ background: rgba(124,58,237,.14); border-color: rgba(124,58,237,.22); color:var(--p); }
 
-  .statusbox{
-    flex: 1 1 240px;
-    min-width: 240px;
-    border-radius: 18px;
-    padding: .9rem;
-    border: 1px solid rgba(15,23,42,.10);
-    background: rgba(255,255,255,.75);
+  .abvs-status{
+    flex:1 1 260px; min-width:240px;
+    border-radius:18px;
+    padding:.9rem;
+    border:1px solid rgba(15,23,42,.10);
+    background: rgba(255,255,255,.78);
   }
-  .statusbox.tone-green{ border-color: rgba(34,197,94,.28); background: rgba(34,197,94,.10); }
-  .statusbox.tone-red{ border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.10); }
-  .statusbox.tone-amber{ border-color: rgba(245,158,11,.25); background: rgba(245,158,11,.12); }
+  .abvs-status.tone-green{ border-color: rgba(34,197,94,.28); background: rgba(34,197,94,.10); }
+  .abvs-status.tone-red{ border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.10); }
+  .abvs-status.tone-amber{ border-color: rgba(245,158,11,.25); background: rgba(245,158,11,.12); }
 
-  .statusline{ display:flex; gap:.6rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-  .badge{
+  .abvs-statusline{ display:flex; gap:.6rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .abvs-badge2{
     display:inline-flex; align-items:center; gap:.35rem;
-    padding:.35rem .75rem;
-    border-radius: 999px;
-    font-size:.72rem;
-    font-weight: 950;
-    text-transform: uppercase;
-    letter-spacing:.04em;
-    border: 1px solid rgba(15,23,42,.10);
+    padding:.35rem .75rem; border-radius:999px;
+    font-size:.72rem; font-weight:950;
+    text-transform:uppercase; letter-spacing:.04em;
+    border:1px solid rgba(15,23,42,.10);
     background: rgba(255,255,255,.75);
   }
-  .status-pending{ background:#fef3c7; color:#92400e; border-color: rgba(245,158,11,.30); }
-  .status-verified{ background:#dcfce7; color:#166534; border-color: rgba(34,197,94,.30); }
-  .status-rejected{ background:#fee2e2; color:#991b1b; border-color: rgba(239,68,68,.30); }
+  .abvs-status-pending{ background:#fef3c7; color:#92400e; border-color: rgba(245,158,11,.30); }
+  .abvs-status-verified{ background:#dcfce7; color:#166534; border-color: rgba(34,197,94,.30); }
+  .abvs-status-rejected{ background:#fee2e2; color:#991b1b; border-color: rgba(239,68,68,.30); }
 
-  .status-small{ font-size:.78rem; font-weight: 850; color: var(--black); opacity:.85; }
-  .statushint{ margin-top:.5rem; color: var(--slate); font-weight: 750; font-size:.85rem; }
+  .abvs-status-small{ font-size:.78rem; font-weight:850; color:var(--k); opacity:.85; }
+  .abvs-statushint{ margin-top:.5rem; color:var(--mut); font-weight:750; font-size:.85rem; }
 
-  /* Grids / Cards */
-  .grid{ display:grid; gap:.85rem; }
-  .grid-2{ grid-template-columns: 1fr; }
-  .card{
-    border-radius: 16px;
-    padding: .9rem;
-    border: 1px solid rgba(15,23,42,.10);
-    background: rgba(255,255,255,.85);
+  /* Tiles */
+  .abvs-grid{ display:grid; gap:.85rem; }
+  .abvs-grid-2{ grid-template-columns:1fr; }
+
+  .abvs-tile{
+    border-radius:16px;
+    padding:.9rem;
+    border:1px solid rgba(15,23,42,.10);
+    background: rgba(255,255,255,.86);
   }
-  .card-blue{ background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.22); }
-  .card-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); }
-  .card-green{ background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.22); }
-  .card-black{ background: rgba(15,23,42,.10); border-color: rgba(15,23,42,.18); }
-  .card-white{ background: rgba(255,255,255,.85); }
+  .tile-blue{ background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.22); }
+  .tile-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.22); }
+  .tile-green{ background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.22); }
+  .tile-black{ background: rgba(15,23,42,.10); border-color: rgba(15,23,42,.18); }
+  .tile-white{ background: rgba(255,255,255,.88); }
 
-  .k{ font-size:.75rem; font-weight: 950; color: var(--purple); }
-  .card-black .k{ color: var(--black); }
-  .v{ margin-top:.35rem; font-size: .95rem; font-weight: 950; color: var(--black); }
-  .note{ margin-top:.35rem; color: var(--slate); font-weight: 700; font-size:.82rem; }
-  .tag{ display:inline-block; padding:.25rem .6rem; border-radius: 999px; background: rgba(124,58,237,.16); border:1px solid rgba(124,58,237,.25); color: var(--purple); font-weight: 950; font-size:.82rem; }
-  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  .k{ font-size:.75rem; font-weight:950; color:var(--p); }
+  .tile-black .k{ color:var(--k); }
+  .v{ margin-top:.35rem; font-size:.95rem; font-weight:950; color:var(--k); }
+  .note{ margin-top:.35rem; color:var(--mut); font-weight:750; font-size:.82rem; }
+  .tag{
+    display:inline-block;
+    padding:.25rem .6rem;
+    border-radius:999px;
+    background: rgba(124,58,237,.16);
+    border:1px solid rgba(124,58,237,.25);
+    color:var(--p);
+    font-weight:950;
+    font-size:.82rem;
+  }
+  .mono{ font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace; }
 
   /* Notes */
-  .note-bubble{
-    border-radius: 18px;
-    padding: 1rem;
+  .abvs-note{
+    border-radius:18px;
+    padding:1rem;
     background: rgba(124,58,237,.10);
-    border: 1px solid rgba(124,58,237,.22);
-    border-left: 5px solid var(--purple);
+    border:1px solid rgba(124,58,237,.22);
+    border-left:5px solid var(--p);
   }
-  .note-top{ display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:.5rem; }
-  .note-who{ font-weight: 950; color: var(--black); }
-  .note-when{ font-weight: 850; color: var(--slate); font-size:.82rem; }
-  .note-text{ margin:0; color: var(--black); font-weight: 800; line-height:1.55; }
+  .abvs-note-top{ display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:.5rem; }
+  .abvs-note-who{ font-weight:950; color:var(--k); }
+  .abvs-note-when{ font-weight:850; color:var(--mut); font-size:.82rem; }
+  .abvs-note-text{ margin:0; color:var(--k); font-weight:800; line-height:1.55; }
 
-  .empty{
+  .abvs-empty{
     display:flex; gap:.85rem; align-items:flex-start;
-    border-radius: 18px;
-    padding: 1rem;
+    border-radius:18px;
+    padding:1rem;
     background: rgba(15,23,42,.08);
-    border: 1px dashed rgba(15,23,42,.22);
+    border:1px dashed rgba(15,23,42,.22);
   }
-  .empty-ico{ font-size:1.4rem; }
-  .empty-title{ font-weight: 950; color: var(--black); }
-  .empty-sub{ color: var(--slate); font-weight: 750; font-size:.85rem; margin-top:.2rem; }
+  .abvs-empty-ic{ font-size:1.4rem; }
+  .abvs-empty-t{ font-weight:950; color:var(--k); }
+  .abvs-empty-s{ margin-top:.2rem; color:var(--mut); font-weight:750; font-size:.85rem; }
 
   /* Actions */
-  .actions{ display:grid; grid-template-columns: 1fr; gap: 1rem; }
-  .action{
-    border-radius: 18px;
-    padding: 1rem;
-    border: 1px solid rgba(15,23,42,.10);
-    background: rgba(255,255,255,.85);
+  .abvs-actions{ display:grid; grid-template-columns:1fr; gap:1rem; }
+  .abvs-action{
+    border-radius:18px;
+    padding:1rem;
+    border:1px solid rgba(15,23,42,.10);
+    background: rgba(255,255,255,.88);
+    box-shadow: var(--shadow);
   }
   .action-approve{ background: linear-gradient(180deg, rgba(34,197,94,.12), rgba(255,255,255,.92)); border-color: rgba(34,197,94,.22); }
   .action-reject{ background: linear-gradient(180deg, rgba(239,68,68,.12), rgba(255,255,255,.92)); border-color: rgba(239,68,68,.22); }
 
-  .action-head{ display:flex; gap:.75rem; align-items:flex-start; margin-bottom:.85rem; }
-  .ic{
-    width:44px; height:44px; border-radius: 16px;
-    display:flex; align-items:center; justify-content:center;
-    font-size: 1.2rem; font-weight: 950;
-    border: 1px solid rgba(15,23,42,.10);
-    flex: 0 0 44px;
+  .abvs-action-head{ display:flex; gap:.75rem; align-items:flex-start; margin-bottom:.85rem; }
+  .abvs-ic{
+    width:44px;height:44px;border-radius:16px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:1.2rem;font-weight:950;
+    border:1px solid rgba(15,23,42,.10);
+    flex:0 0 44px;
     background: rgba(255,255,255,.75);
   }
   .ic-green{ background: rgba(34,197,94,.14); border-color: rgba(34,197,94,.25); }
   .ic-red{ background: rgba(239,68,68,.14); border-color: rgba(239,68,68,.25); }
 
-  .action-title{ margin:0; font-size: 1.05rem; font-weight: 950; color: var(--black); }
-  .action-sub{ margin:.25rem 0 0; color: var(--slate); font-weight: 750; font-size:.85rem; }
+  .abvs-action-title{ margin:0; font-size:1.05rem; font-weight:950; color:var(--k); }
+  .abvs-action-sub{ margin:.25rem 0 0; color:var(--mut); font-weight:750; font-size:.85rem; }
 
-  .form{ display:grid; gap:.65rem; }
-  .lbl{ font-weight: 950; color: var(--black); font-size:.9rem; }
-  .req{ color:#ef4444; font-weight: 950; }
-  .ta{
+  .abvs-form{ display:grid; gap:.65rem; }
+  .abvs-lbl{ font-weight:950; color:var(--k); font-size:.9rem; }
+  .req{ color:#ef4444; font-weight:950; }
+
+  .abvs-ta{
     width:100%;
     padding:.8rem .85rem;
-    border-radius: 16px;
-    border: 1.5px solid rgba(15,23,42,.12);
-    font-size: .92rem;
+    border-radius:16px;
+    border:1.5px solid rgba(15,23,42,.12);
+    font-size:.92rem;
     font-family: inherit;
     background: rgba(255,255,255,.92);
     resize: vertical;
     min-height: 96px;
     outline:none;
   }
-  .ta:focus{
-    border-color: rgba(124,58,237,.65);
-    box-shadow: 0 0 0 3px rgba(124,58,237,.14);
-  }
-  .hint{ color: var(--slate); font-weight: 750; font-size:.82rem; }
+  .abvs-ta::placeholder{ color:rgba(100,116,139,.92); font-weight:750; }
+  .abvs-ta:focus{ border-color: rgba(124,58,237,.65); box-shadow: 0 0 0 4px rgba(124,58,237,.14); }
 
-  .btn{
-    min-height: 48px;
-    border-radius: 16px;
-    border: 1px solid transparent;
-    font-weight: 950;
-    font-size: .95rem;
-    padding: .85rem 1rem;
+  .abvs-hint{ color:var(--mut); font-weight:750; font-size:.82rem; }
+
+  .abvs-btn{
+    min-height:48px;
+    border-radius:16px;
+    border:1px solid transparent;
+    font-weight:950;
+    font-size:.95rem;
+    padding:.85rem 1rem;
     cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center;
     text-align:center;
+    -webkit-tap-highlight-color: transparent;
   }
-  .btn-green{ background: var(--green); color:#fff; box-shadow: 0 14px 32px rgba(34,197,94,.18); }
-  .btn-green:hover{ filter: brightness(.95); }
-  .btn-red{ background: #ef4444; color:#fff; box-shadow: 0 14px 32px rgba(239,68,68,.18); }
-  .btn-red:hover{ filter: brightness(.95); }
+  .abvs-btn-green{ background: var(--g); color:#fff; box-shadow: 0 14px 32px rgba(34,197,94,.18); }
+  .abvs-btn-green:hover{ filter: brightness(.97); }
+  .abvs-btn-red{ background: #ef4444; color:#fff; box-shadow: 0 14px 32px rgba(239,68,68,.18); }
+  .abvs-btn-red:hover{ filter: brightness(.97); }
 
   /* Timeline */
-  .timeline{ display:grid; gap:.85rem; }
+  .abvs-timeline{ display:grid; gap:.85rem; }
   .titem{ display:flex; gap:.85rem; align-items:flex-start; }
-  .dot{ width:14px; height:14px; border-radius:999px; margin-top:.25rem; border: 3px solid rgba(255,255,255,.95); }
-  .dot-blue{ background: var(--blue); }
-  .dot-green{ background: var(--green); }
+  .tdot{ width:14px; height:14px; border-radius:999px; margin-top:.25rem; border:3px solid rgba(255,255,255,.95); }
+  .dot-blue{ background: var(--b); }
+  .dot-green{ background: var(--g); }
   .dot-red{ background: #ef4444; }
   .dot-amber{ background: #f59e0b; }
 
-  .tcontent{
-    border-radius: 16px;
-    padding: .85rem;
-    background: rgba(255,255,255,.85);
-    border: 1px solid rgba(15,23,42,.10);
-    width: 100%;
+  .tbox{
+    border-radius:16px;
+    padding:.85rem;
+    background: rgba(255,255,255,.86);
+    border:1px solid rgba(15,23,42,.10);
+    width:100%;
   }
-  .ttitle{ font-weight: 950; color: var(--black); font-size:.92rem; }
-  .tdate{ margin-top:.2rem; color: var(--slate); font-weight: 750; font-size:.82rem; }
+  .ttitle{ font-weight:950; color:var(--k); font-size:.92rem; }
+  .tdate{ margin-top:.2rem; color:var(--mut); font-weight:750; font-size:.82rem; }
   .tnote{
     margin-top:.55rem;
     padding:.75rem;
-    border-radius: 16px;
+    border-radius:16px;
     background: rgba(124,58,237,.10);
-    border: 1px solid rgba(124,58,237,.20);
-    color: var(--black);
-    font-weight: 800;
+    border:1px solid rgba(124,58,237,.20);
+    color:var(--k);
+    font-weight:800;
     font-size:.85rem;
     line-height:1.55;
   }
 
-  /* Responsive */
   @media (min-width: 720px){
-    .grid-2{ grid-template-columns: 1fr 1fr; }
-    .actions{ grid-template-columns: 1fr 1fr; }
+    .abvs-grid-2{ grid-template-columns: 1fr 1fr; }
+    .abvs-actions{ grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 520px){
-    .wrap{ padding: .75rem; }
-    .title{ font-size: 1.2rem; }
-    .mini-id{ min-width: 160px; }
-    .who{ min-width: 0; }
-    .ta{ min-height: 110px; }
+    .abvs-title{ font-size: 1.15rem; }
+    .abvs-mini{ min-width: 160px; }
+    .abvs-ta{ min-height: 110px; }
   }
 </style>
+`;
+%>
 
 <script nonce="<%= NONCE %>">
   function confirmReject() {
@@ -587,35 +675,33 @@
   }
 
   // Auto-expand textareas
-  document.querySelectorAll('.ta').forEach(textarea => {
+  document.querySelectorAll('.abvs-ta').forEach(textarea => {
     textarea.addEventListener('input', function() {
       this.style.height = 'auto';
       this.style.height = (this.scrollHeight) + 'px';
     });
   });
 
-  // Character counters (required only)
+  // Character counter for required textarea
   document.addEventListener('DOMContentLoaded', function() {
-    const textareas = document.querySelectorAll('.ta[required]');
-    textareas.forEach(textarea => {
-      const wrap = textarea.closest('form');
-      if (!wrap) return;
+    const textarea = document.querySelector('.abvs-ta[required]');
+    if (!textarea) return;
 
-      const counter = document.createElement('div');
-      counter.style.fontSize = '0.75rem';
-      counter.style.color = '#64748b';
-      counter.style.textAlign = 'right';
-      counter.style.marginTop = '0.15rem';
-      textarea.insertAdjacentElement('afterend', counter);
+    const counter = document.createElement('div');
+    counter.className = 'abvs-counter';
+    counter.style.fontSize = '0.75rem';
+    counter.style.color = '#64748b';
+    counter.style.textAlign = 'right';
+    counter.style.marginTop = '0.15rem';
+    textarea.insertAdjacentElement('afterend', counter);
 
-      const update = () => {
-        const count = textarea.value.length;
-        counter.textContent = `${count} characters`;
-        counter.style.color = (count < 10) ? '#ef4444' : '#64748b';
-      };
+    const update = () => {
+      const count = textarea.value.length;
+      counter.textContent = `${count} characters`;
+      counter.style.color = (count < 10) ? '#ef4444' : '#64748b';
+    };
 
-      textarea.addEventListener('input', update);
-      update();
-    });
+    textarea.addEventListener('input', update);
+    update();
   });
 </script>

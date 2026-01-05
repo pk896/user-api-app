@@ -1,21 +1,19 @@
 // models/Order.js
-const mongoose = require('mongoose');
+'use strict';
 
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-// --- Reusable helpers ---
-// ✅ include both your app states + PayPal states (case-insensitive check)
-const PAID_STATES = [
-  'COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED',
-  'Completed', 'Paid', 'Shipped', 'Delivered',
-];
+// ✅ Single canonical paid-like list (always compare UPPERCASE)
+const PAID_STATES = ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
 
+// ---------- Schemas ----------
 const MoneySchema = new Schema(
   {
     value: { type: String, required: true }, // keep as string to avoid FP drift
     currency: { type: String, default: 'USD' },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const BreakdownMoneySchema = new Schema(
@@ -23,7 +21,7 @@ const BreakdownMoneySchema = new Schema(
     value: { type: String, required: true },
     currency: { type: String, default: 'USD' },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const SellerReceivableSchema = new Schema(
@@ -32,12 +30,12 @@ const SellerReceivableSchema = new Schema(
     paypalFee: { type: MoneySchema },
     net: { type: MoneySchema },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const CaptureSchema = new Schema(
   {
-    captureId: String,
+    captureId: { type: String, index: true }, // ✅ helps find by captureId fast
     status: String,
     amount: MoneySchema,
     sellerReceivable: SellerReceivableSchema,
@@ -45,7 +43,7 @@ const CaptureSchema = new Schema(
     updateTime: Date,
     links: [{ rel: String, href: String, method: String }],
   },
-  { _id: false },
+  { _id: false }
 );
 
 const OrderItemSchema = new Schema(
@@ -57,7 +55,7 @@ const OrderItemSchema = new Schema(
     quantity: { type: Number, min: 1, default: 1 },
     imageUrl: String,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const PayerNameSchema = new Schema({ given: String, surname: String }, { _id: false });
@@ -69,19 +67,20 @@ const PayerSchema = new Schema(
     name: PayerNameSchema,
     countryCode: String,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const ShippingAddressSchema = new Schema(
   {
     name: String,
     address_line_1: String,
+    address_line_2: String, // ✅ you were capturing this in routes/payment.js
     admin_area_2: String,
     admin_area_1: String,
     postal_code: String,
     country_code: String,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const BreakdownSchema = new Schema(
@@ -90,10 +89,10 @@ const BreakdownSchema = new Schema(
     taxTotal: BreakdownMoneySchema,
     shipping: BreakdownMoneySchema,
   },
-  { _id: false },
+  { _id: false }
 );
 
-// ✅ delivery snapshot you wanted to display on thank-you/receipt
+// ✅ delivery snapshot for thank-you/receipt
 const DeliverySnapshotSchema = new Schema(
   {
     id: String, // DeliveryOption _id
@@ -101,10 +100,10 @@ const DeliverySnapshotSchema = new Schema(
     deliveryDays: Number,
     amount: String, // "15.00"
   },
-  { _id: false },
+  { _id: false }
 );
 
-// --- Tracking (NEW) ---
+// --- Tracking ---
 const ShippingTrackingSchema = new Schema(
   {
     carrier: {
@@ -132,20 +131,22 @@ const ShippingTrackingSchema = new Schema(
     shippedAt: Date,
     deliveredAt: Date,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const RefundSchema = new Schema(
   {
-    refundId: String,
+    refundId: { type: String, index: true }, // ✅ helps idempotency + lookups
     status: String,
     amount: String,
     currency: String,
     createdAt: { type: Date, default: Date.now },
+    source: String, // ✅ lets webhook store "webhook:EVENT"
   },
-  { _id: false },
+  { _id: false }
 );
 
+// ---------- Main Order schema ----------
 const OrderSchema = new Schema(
   {
     // If a personal user placed the order
@@ -155,7 +156,17 @@ const OrderSchema = new Schema(
     businessBuyer: { type: Schema.Types.ObjectId, ref: 'Business', index: true },
 
     orderId: { type: String, index: true, unique: true, sparse: true },
-    status: { type: String, index: true },
+
+    // ✅ these two are what payouts/charts should filter on
+    status: { type: String, index: true }, // e.g. COMPLETED / REFUNDED / PARTIALLY_REFUNDED
+    paymentStatus: { type: String, index: true }, // e.g. paid / refunded (optional but helpful)
+
+    // ✅ easy, reliable captureId storage for webhooks
+    paypal: {
+      captureId: { type: String, index: true },
+      orderId: { type: String, index: true }, // PayPal order id (same as your orderId usually)
+    },
+
     purchaseUnitRef: String,
 
     payer: PayerSchema,
@@ -179,31 +190,44 @@ const OrderSchema = new Schema(
 
     refunds: [RefundSchema],
     refundedTotal: { type: String, default: '0.00' },
+    refundedAt: Date,
 
     raw: { type: Schema.Types.Mixed },
 
-    // ✅ idempotency guard for inventory adjustment after capture
+   // ✅ idempotency guard for inventory adjustment after capture
     inventoryAdjusted: { type: Boolean, default: false },
 
-    // (Optional but useful for payout idempotency)
-    // sellerEarningsCredited: { type: Boolean, default: false },
+    // ✅ track what we deducted (so restore is correct & idempotent)
+    inventoryAdjustedItems: [
+      {
+        productId: { type: String }, // Product.customId
+        quantity: { type: Number, min: 1, default: 1 },
+      },
+    ],
+
+    // ✅ idempotency guard for restoring stock on full refund
+    inventoryRestored: { type: Boolean, default: false }, 
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 // ---------- Indexes ----------
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ 'payer.email': 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
+OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
 OrderSchema.index({ 'items.productId': 1, createdAt: -1 });
 OrderSchema.index({ businessBuyer: 1, createdAt: -1 });
+OrderSchema.index({ 'paypal.captureId': 1, createdAt: -1 });
+OrderSchema.index({ 'captures.captureId': 1, createdAt: -1 });
+OrderSchema.index({ 'refunds.refundId': 1, createdAt: -1 });
 
 // ---------- Statics / helpers ----------
 OrderSchema.statics.PAID_STATES = PAID_STATES;
 
 OrderSchema.methods.isPaidLike = function isPaidLike() {
   const up = String(this.status || '').trim().toUpperCase();
-  return ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'].includes(up);
+  return PAID_STATES.includes(up);
 };
 
 // ✅ Guard against OverwriteModelError in dev

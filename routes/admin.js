@@ -226,6 +226,30 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
 });
 
 /* -------------------------------------------
+   ✅ GET /admin/orders (protected)
+------------------------------------------- */
+router.get('/orders', requireAdmin, (req, res) => {
+  try {
+    const themeCss = themeCssFromSession(req);
+
+    return res.render('admin/orders-management', {
+      title: 'Orders Management',
+      nonce: res.locals.nonce,
+      themeCss,
+      admin: req.session.admin,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      info: req.flash('info'),
+      warning: req.flash('warning'),
+    });
+  } catch (err) {
+    console.error('❌ Error loading orders management page:', err);
+    req.flash('error', '❌ Could not load orders management page.');
+    return res.redirect('/admin/dashboard');
+  }
+});
+
+/* -------------------------------------------
    ✅ Logout (ONLY one GET + one POST)
 ------------------------------------------- */
 router.post('/logout', requireAdmin, (req, res) => {

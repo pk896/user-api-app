@@ -1,15 +1,21 @@
 <!-- views/admin-dashboard.ejs -->
+<%
+  // Safe fallback if layout didn’t inject nonce for some reason (should exist)
+  const PAGE_NONCE = typeof nonce !== 'undefined' ? nonce : '';
+%>
+
 <div class="admin-dashboard">
   <!-- Dashboard Header -->
   <div class="dashboard-header">
     <div class="header-main">
       <div>
         <h1 class="dashboard-title">
-          <span class="title-icon" style="background: #2563EB;">🛡️</span>
+          <span class="title-icon">🛡️</span>
           Admin Dashboard
         </h1>
         <p class="dashboard-subtitle">Platform management & business oversight</p>
       </div>
+
       <form method="POST" action="/admin/logout" class="logout-form">
         <button type="submit" class="logout-btn">
           <span class="logout-icon">→</span>
@@ -17,32 +23,35 @@
         </button>
       </form>
     </div>
-    
+
     <!-- Quick Stats -->
     <div class="quick-stats">
-      <div class="stat-item">
-        <div class="stat-icon" style="background: rgba(37, 99, 235, 0.1); color: #2563EB; border-color: #2563EB;">📊</div>
+      <div class="stat-item stat-blue">
+        <div class="stat-icon">📊</div>
         <div class="stat-info">
           <span class="stat-label">Today</span>
           <span class="stat-value">Active</span>
         </div>
       </div>
-      <div class="stat-item">
-        <div class="stat-icon" style="background: rgba(124, 58, 237, 0.1); color: #7C3AED; border-color: #7C3AED;">⏳</div>
+
+      <div class="stat-item stat-purple">
+        <div class="stat-icon">⏳</div>
         <div class="stat-info">
           <span class="stat-label">Pending</span>
           <span class="stat-value" id="pendingCount">0</span>
         </div>
       </div>
-      <div class="stat-item">
-        <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1); color: #22C55E; border-color: #22C55E;">📈</div>
+
+      <div class="stat-item stat-green">
+        <div class="stat-icon">📈</div>
         <div class="stat-info">
           <span class="stat-label">Growth</span>
           <span class="stat-value">+12%</span>
         </div>
       </div>
-      <div class="stat-item">
-        <div class="stat-icon" style="background: rgba(15, 23, 42, 0.1); color: #0F172A; border-color: #0F172A;">💰</div>
+
+      <div class="stat-item stat-black">
+        <div class="stat-icon">💰</div>
         <div class="stat-info">
           <span class="stat-label">Revenue</span>
           <span class="stat-value">$--</span>
@@ -51,31 +60,31 @@
     </div>
   </div>
 
-  <!-- Flash Messages -->
+  <!-- Flash Messages (kept as-is, just reduced inline styling) -->
   <% if (success && success.length) { %>
-    <div class="alert-message" style="background: rgba(34, 197, 94, 0.1); color: #22C55E; border-color: rgba(34, 197, 94, 0.2);">
-      <div class="alert-icon" style="background: #22C55E;">✓</div>
+    <div class="alert-message alert-success">
+      <div class="alert-icon">✓</div>
       <div class="alert-text"><%= success %></div>
     </div>
   <% } %>
-  
+
   <% if (error && error.length) { %>
-    <div class="alert-message" style="background: rgba(239, 68, 68, 0.1); color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-      <div class="alert-icon" style="background: #EF4444;">!</div>
+    <div class="alert-message alert-error">
+      <div class="alert-icon">!</div>
       <div class="alert-text"><%= error %></div>
     </div>
   <% } %>
-  
+
   <% if (info && info.length) { %>
-    <div class="alert-message" style="background: rgba(37, 99, 235, 0.1); color: #2563EB; border-color: rgba(37, 99, 235, 0.2);">
-      <div class="alert-icon" style="background: #2563EB;">i</div>
+    <div class="alert-message alert-info">
+      <div class="alert-icon">i</div>
       <div class="alert-text"><%= info %></div>
     </div>
   <% } %>
-  
+
   <% if (warning && warning.length) { %>
-    <div class="alert-message" style="background: rgba(245, 158, 11, 0.1); color: #F59E0B; border-color: rgba(245, 158, 11, 0.2);">
-      <div class="alert-icon" style="background: #F59E0B;">⚠</div>
+    <div class="alert-message alert-warning">
+      <div class="alert-icon">⚠</div>
       <div class="alert-text"><%= warning %></div>
     </div>
   <% } %>
@@ -83,49 +92,49 @@
   <!-- Main Admin Cards -->
   <div class="admin-cards-grid">
     <!-- Business Verification - BLUE -->
-    <a href="/admin/business-verifications" class="admin-card" style="border-top: 4px solid #2563EB;">
+    <a href="/admin/business-verifications" class="admin-card card-blue">
       <div class="card-header">
         <div class="card-icon-wrapper">
-          <div class="card-icon" style="background: #2563EB;">
-            <svg viewBox="0 0 24 24" fill="white">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="white" aria-hidden="true">
               <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
           </div>
-          <span class="card-badge" style="background: #2563EB;"><%= pendingBusinessVerifications || 0 %></span>
+          <span class="card-badge"><%= pendingBusinessVerifications || 0 %></span>
         </div>
         <h3 class="card-title">Business Verification</h3>
       </div>
       <p class="card-description">Verify business registration documents</p>
       <div class="card-footer">
-        <span class="card-action" style="color: #2563EB;">Manage queue →</span>
+        <span class="card-action">Manage queue →</span>
       </div>
     </a>
 
-    <!-- Orders Management - PURPLE -->
-    <a href="/admin/orders" class="admin-card" style="border-top: 4px solid #7C3AED;">
+    <!-- Orders Management - PURPLE (dominant) -->
+    <a href="/admin/orders" class="admin-card card-purple">
       <div class="card-header">
         <div class="card-icon-wrapper">
-          <div class="card-icon" style="background: #7C3AED;">
-            <svg viewBox="0 0 24 24" fill="white">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="white" aria-hidden="true">
               <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
             </svg>
           </div>
-          <span class="card-badge" style="background: #7C3AED;"><%= pendingOrders || 0 %></span>
+          <span class="card-badge"><%= pendingOrders || 0 %></span>
         </div>
         <h3 class="card-title">Orders Management</h3>
       </div>
       <p class="card-description">Process refunds, cancellations, audits</p>
       <div class="card-footer">
-        <span class="card-action" style="color: #7C3AED;">View orders →</span>
+        <span class="card-action">View orders →</span>
       </div>
     </a>
 
     <!-- Delivery Options - GREEN -->
-    <a href="/admin/delivery-options" class="admin-card" style="border-top: 4px solid #22C55E;">
+    <a href="/admin/delivery-options" class="admin-card card-green">
       <div class="card-header">
         <div class="card-icon-wrapper">
-          <div class="card-icon" style="background: #22C55E;">
-            <svg viewBox="0 0 24 24" fill="white">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="white" aria-hidden="true">
               <path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/>
               <path d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
             </svg>
@@ -135,75 +144,107 @@
       </div>
       <p class="card-description">Configure shipping & delivery rules</p>
       <div class="card-footer">
-        <span class="card-action" style="color: #22C55E;">Configure →</span>
+        <span class="card-action">Configure →</span>
       </div>
     </a>
 
     <!-- Payments & Payouts - BLACK -->
-    <a href="/admin/payouts" class="admin-card" style="border-top: 4px solid #0F172A; opacity: 0.9;">
+    <a href="/admin/payouts" class="admin-card card-black">
       <div class="card-header">
         <div class="card-icon-wrapper">
-          <div class="card-icon" style="background: #0F172A;">
-            <svg viewBox="0 0 24 24" fill="white">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="white" aria-hidden="true">
               <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
             </svg>
           </div>
-          <span class="card-badge" style="background: #64748B;">Pay!</span>
+          <span class="card-badge card-badge-muted">Pay!</span>
         </div>
         <h3 class="card-title">Payments & Payouts</h3>
       </div>
       <p class="card-description">Monitor transactions & process payouts</p>
       <div class="card-footer">
-        <span class="card-action" style="color: #94A3B8;">Seller payouts →</span>
+        <span class="card-action muted">Seller payouts →</span>
       </div>
     </a>
   </div>
 
-  <!-- Quick Actions -->
+  <!-- Quick Actions (NO path changes, NO onclick; CSP-safe) -->
   <div class="quick-actions-section">
     <h3 class="section-title">Quick Actions</h3>
+
     <div class="quick-actions-grid">
-      <button class="quick-action-btn" onclick="window.location.href='/admin/business-verifications'" style="border-color: #2563EB; color: #2563EB;">
+      <button
+        type="button"
+        class="quick-action-btn qa-blue"
+        data-href="/admin/business-verifications"
+        aria-label="Verify business"
+      >
         <span class="action-icon">✓</span>
         <span class="action-text">Verify Business</span>
       </button>
-      <button class="quick-action-btn" onclick="window.location.href='/admin/orders'" style="border-color: #7C3AED; color: #7C3AED;">
+
+      <button
+        type="button"
+        class="quick-action-btn qa-purple"
+        data-href="/admin/orders"
+        aria-label="View orders"
+      >
         <span class="action-icon">📦</span>
         <span class="action-text">View Orders</span>
       </button>
-      <button class="quick-action-btn" onclick="window.location.href='/admin/delivery-options'" style="border-color: #22C55E; color: #22C55E;">
+
+      <button
+        type="button"
+        class="quick-action-btn qa-green"
+        data-href="/admin/delivery-options"
+        aria-label="Delivery settings"
+      >
         <span class="action-icon">⚙️</span>
         <span class="action-text">Settings</span>
       </button>
-      <button class="quick-action-btn" style="border-color: #0F172A; color: #0F172A;">
+
+      <!-- Export Data: no link provided in your original, so keep it as a button (disabled style) -->
+      <button
+        type="button"
+        class="quick-action-btn qa-black is-disabled"
+        aria-disabled="true"
+        title="Export route not set yet"
+      >
         <span class="action-icon">📊</span>
         <span class="action-text">Export Data</span>
       </button>
     </div>
+
+    <p class="qa-hint">
+      Tip: When you create your export route later, I’ll wire it here without changing your existing links.
+    </p>
   </div>
 
   <!-- Recent Activity -->
   <div class="recent-activity">
     <h3 class="section-title">Recent Activity</h3>
+
     <div class="activity-list">
-      <div class="activity-item">
-        <div class="activity-icon" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">✓</div>
+      <div class="activity-item activity-blue">
+        <div class="activity-icon">✓</div>
         <div class="activity-content">
           <div class="activity-title">Business Verified</div>
           <div class="activity-desc">"Tech Innovators Inc." approved</div>
           <div class="activity-time">Just now</div>
         </div>
       </div>
-      <div class="activity-item">
-        <div class="activity-icon" style="background: rgba(124, 58, 237, 0.1); color: #7C3AED;">📦</div>
+
+      <div class="activity-item activity-purple">
+        <div class="activity-icon">📦</div>
         <div class="activity-content">
           <div class="activity-title">Order Processed</div>
           <div class="activity-desc">Order #ORD-7890 completed</div>
           <div class="activity-time">5 min ago</div>
         </div>
       </div>
-      <div class="activity-item">
-        <div class="activity-icon" style="background: rgba(34, 197, 94, 0.1); color: #22C55E;">🚚</div>
+
+      <div class="activity-item activity-green">
+        <div class="activity-icon">🚚</div>
         <div class="activity-content">
           <div class="activity-title">Delivery Updated</div>
           <div class="activity-desc">Express shipping added</div>
@@ -214,269 +255,326 @@
   </div>
 </div>
 
-<style>
-/* ===== BASE STYLES ===== */
+<style nonce="<%= PAGE_NONCE %>">
+/* =========================================================
+   PHK ADMIN DASHBOARD (Mobile-first, Purple dominant)
+   Brand: Blue #2563EB | Purple #7C3AED | Green #22C55E | Black #0F172A
+========================================================= */
+
+:root {
+  --phk-blue: #2563EB;
+  --phk-purple: #7C3AED; /* dominant */
+  --phk-green: #22C55E;
+  --phk-black: #0F172A;
+
+  --ink: #0F172A;
+  --muted: #64748B;
+  --muted2: #94A3B8;
+  --line: #E2E8F0;
+  --bg: #F8FAFC;
+
+  --card: #ffffff;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+
+  --r12: 12px;
+  --r14: 14px;
+  --r16: 16px;
+}
+
 .admin-dashboard {
-  padding: 16px;
-  max-width: 1200px;
+  padding: 12px;
+  max-width: 1100px;
   margin: 0 auto;
-  background: #F8FAFC;
+  background:
+    radial-gradient(900px 300px at 20% -10%, rgba(124, 58, 237, 0.12), transparent 60%),
+    radial-gradient(700px 220px at 90% 10%, rgba(37, 99, 235, 0.10), transparent 55%),
+    var(--bg);
   min-height: 100vh;
 }
 
-/* ===== DASHBOARD HEADER ===== */
+/* ===== HEADER ===== */
 .dashboard-header {
-  background: white;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
-  border: 1px solid #E2E8F0;
+  background: var(--card);
+  border-radius: var(--r16);
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(124, 58, 237, 0.12), rgba(37, 99, 235, 0.08), rgba(34, 197, 94, 0.08));
+  opacity: 0.9;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black 0%, black 25%, transparent 75%);
 }
 
 .header-main {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 16px;
+  margin-bottom: 12px;
 }
 
 .dashboard-title {
-  font-size: 24px;
-  font-weight: 800;
-  color: #0F172A;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--ink);
   margin: 0 0 4px 0;
   display: flex;
   align-items: center;
   gap: 10px;
+  letter-spacing: -0.02em;
 }
 
 .title-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  display: flex;
+  border-radius: 10px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
   color: white;
+  background: var(--phk-purple); /* dominant */
+  box-shadow: 0 10px 22px rgba(124, 58, 237, 0.25);
+  font-size: 16px;
 }
 
 .dashboard-subtitle {
-  color: #64748B;
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 13px;
   margin: 0;
   line-height: 1.4;
 }
 
-.logout-form {
-  margin: 0;
-}
+.logout-form { margin: 0; }
 
 .logout-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  background: white;
-  border: 1px solid #CBD5E1;
-  border-radius: 10px;
-  color: #475569;
-  font-size: 14px;
-  font-weight: 600;
+  padding: 10px 12px;
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  border-radius: 12px;
+  color: var(--phk-purple);
+  font-size: 13px;
+  font-weight: 800;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform .15s ease, background .2s ease, border-color .2s ease;
 }
 
 .logout-btn:hover {
-  background: #F1F5F9;
-  border-color: #94A3B8;
-  color: #0F172A;
+  background: rgba(124, 58, 237, 0.10);
+  border-color: rgba(124, 58, 237, 0.35);
+  transform: translateY(-1px);
 }
 
-.logout-icon {
-  font-size: 16px;
-  font-weight: 700;
-}
+.logout-icon { font-size: 16px; font-weight: 900; }
 
 /* ===== QUICK STATS ===== */
 .quick-stats {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: white;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  transition: transform 0.2s;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  backdrop-filter: blur(6px);
 }
 
 .stat-item:hover {
   transform: translateY(-2px);
+  box-shadow: var(--shadow);
 }
 
 .stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
   flex-shrink: 0;
   border: 1px solid;
 }
 
-.stat-info {
-  flex: 1;
-  min-width: 0;
-}
+/* Color blocks visible */
+.stat-blue  .stat-icon  { background: rgba(37, 99, 235, 0.10); color: var(--phk-blue);  border-color: rgba(37, 99, 235, 0.35); }
+.stat-purple .stat-icon { background: rgba(124, 58, 237, 0.10); color: var(--phk-purple); border-color: rgba(124, 58, 237, 0.35); }
+.stat-green .stat-icon  { background: rgba(34, 197, 94, 0.10); color: var(--phk-green); border-color: rgba(34, 197, 94, 0.35); }
+.stat-black .stat-icon  { background: rgba(15, 23, 42, 0.08); color: var(--phk-black); border-color: rgba(15, 23, 42, 0.20); }
 
+.stat-info { flex: 1; min-width: 0; }
 .stat-label {
   display: block;
-  font-size: 12px;
-  color: #64748B;
-  font-weight: 600;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   margin-bottom: 2px;
 }
-
 .stat-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: #0F172A;
-  line-height: 1;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1.1;
 }
 
-/* ===== ALERT MESSAGES ===== */
+/* ===== ALERTS ===== */
 .alert-message {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 16px;
-  animation: slideIn 0.3s ease;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 10px 0 12px 0;
+  border: 1px solid;
 }
 
 .alert-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
   flex-shrink: 0;
   color: white;
 }
 
-.alert-text {
-  flex: 1;
-  min-width: 0;
-}
+.alert-text { flex: 1; min-width: 0; }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+.alert-success { background: rgba(34, 197, 94, 0.10); color: var(--phk-green); border-color: rgba(34, 197, 94, 0.22); }
+.alert-success .alert-icon { background: var(--phk-green); }
 
-/* ===== ADMIN CARDS ===== */
+.alert-error { background: rgba(239, 68, 68, 0.10); color: #EF4444; border-color: rgba(239, 68, 68, 0.22); }
+.alert-error .alert-icon { background: #EF4444; }
+
+.alert-info { background: rgba(124, 58, 237, 0.10); color: var(--phk-purple); border-color: rgba(124, 58, 237, 0.22); }
+.alert-info .alert-icon { background: var(--phk-purple); }
+
+.alert-warning { background: rgba(245, 158, 11, 0.10); color: #F59E0B; border-color: rgba(245, 158, 11, 0.22); }
+.alert-warning .alert-icon { background: #F59E0B; }
+
+/* ===== CARDS GRID ===== */
 .admin-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .admin-card {
-  background: white;
-  border-radius: 14px;
-  padding: 20px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px;
   text-decoration: none;
   color: inherit;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--line);
+  transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
   position: relative;
   overflow: hidden;
-  border: 1px solid #E2E8F0;
 }
 
 .admin-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  border-color: #CBD5E1;
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+  border-color: rgba(124, 58, 237, 0.25); /* purple dominant */
 }
+
+.admin-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+.card-blue::before { background: linear-gradient(90deg, var(--phk-blue), transparent 65%); }
+.card-purple::before { background: linear-gradient(90deg, var(--phk-purple), transparent 65%); }
+.card-green::before { background: linear-gradient(90deg, var(--phk-green), transparent 65%); }
+.card-black::before { background: linear-gradient(90deg, var(--phk-black), transparent 65%); opacity: 0.07; }
 
 .card-header {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.card-icon-wrapper {
+  gap: 12px;
+  margin-bottom: 10px;
   position: relative;
 }
 
+.card-icon-wrapper { position: relative; }
+
 .card-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
 }
 
-.card-icon svg {
-  width: 24px;
-  height: 24px;
-}
+.card-icon svg { width: 22px; height: 22px; }
+
+.card-blue .card-icon { background: var(--phk-blue); }
+.card-purple .card-icon { background: var(--phk-purple); }
+.card-green .card-icon { background: var(--phk-green); }
+.card-black .card-icon { background: var(--phk-black); }
 
 .card-badge {
   position: absolute;
   top: -6px;
   right: -6px;
   color: white;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 10px;
-  min-width: 20px;
-  text-align: center;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 7px;
+  border-radius: 999px;
   border: 2px solid white;
+  background: var(--phk-purple); /* dominant badge */
 }
 
+.card-blue .card-badge { background: var(--phk-blue); }
+.card-purple .card-badge { background: var(--phk-purple); }
+.card-badge-muted { background: #64748B !important; }
+
 .card-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #0F172A;
-  margin: 4px 0 0 0;
-  line-height: 1.3;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--ink);
+  margin: 2px 0 0 0;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .card-description {
-  color: #64748B;
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0 0 20px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0 0 12px 0;
+  position: relative;
 }
 
 .card-footer {
@@ -486,31 +584,48 @@
 }
 
 .card-action {
-  font-size: 14px;
-  font-weight: 600;
-  transition: color 0.2s;
+  font-size: 13px;
+  font-weight: 900;
 }
+
+.card-blue .card-action { color: var(--phk-blue); }
+.card-purple .card-action { color: var(--phk-purple); }
+.card-green .card-action { color: var(--phk-green); }
+.card-black .card-action { color: #94A3B8; }
+.card-black .card-action.muted { color: #94A3B8; }
 
 /* ===== QUICK ACTIONS ===== */
 .quick-actions-section {
-  background: white;
-  border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 24px;
-  border: 1px solid #E2E8F0;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-actions-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(500px 120px at 30% 0%, rgba(124, 58, 237, 0.14), transparent 60%);
+  pointer-events: none;
 }
 
 .section-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #0F172A;
-  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ink);
+  margin: 0 0 12px 0;
+  position: relative;
 }
 
 .quick-actions-grid {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .quick-action-btn {
@@ -518,263 +633,166 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 16px;
-  background: #F8FAFC;
-  border: 2px solid;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  padding: 12px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 2px solid rgba(124, 58, 237, 0.22); /* purple dominant */
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 900;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
   width: 100%;
+  min-height: 86px;
 }
 
 .quick-action-btn:hover {
   background: white;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
+  border-color: rgba(124, 58, 237, 0.35);
 }
 
-.action-icon {
-  font-size: 20px;
-  margin-bottom: 4px;
+.quick-action-btn:active { transform: translateY(0); }
+
+.action-icon { font-size: 18px; margin-bottom: 2px; }
+.action-text { text-align: center; line-height: 1.2; }
+
+.qa-blue { border-color: rgba(37, 99, 235, 0.35); color: var(--phk-blue); }
+.qa-blue:hover { border-color: rgba(37, 99, 235, 0.55); }
+
+.qa-purple { border-color: rgba(124, 58, 237, 0.35); color: var(--phk-purple); }
+.qa-purple:hover { border-color: rgba(124, 58, 237, 0.60); }
+
+.qa-green { border-color: rgba(34, 197, 94, 0.35); color: var(--phk-green); }
+.qa-green:hover { border-color: rgba(34, 197, 94, 0.55); }
+
+.qa-black { border-color: rgba(15, 23, 42, 0.25); color: var(--phk-black); }
+.qa-black:hover { border-color: rgba(15, 23, 42, 0.35); }
+
+.is-disabled,
+.is-disabled:hover {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  background: rgba(248, 250, 252, 0.9);
 }
 
-.action-text {
-  text-align: center;
-  line-height: 1.3;
+.qa-hint {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  position: relative;
+  line-height: 1.4;
 }
 
 /* ===== RECENT ACTIVITY ===== */
 .recent-activity {
-  background: white;
-  border-radius: 14px;
-  padding: 20px;
-  border: 1px solid #E2E8F0;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
 }
 
 .activity-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .activity-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 10px;
-  transition: background 0.2s;
-}
-
-.activity-item:hover {
-  background: #F8FAFC;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(248, 250, 252, 0.8);
 }
 
 .activity-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.activity-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.activity-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0F172A;
-  margin-bottom: 2px;
-}
-
-.activity-desc {
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
   font-size: 13px;
-  color: #64748B;
-  margin-bottom: 2px;
+  flex-shrink: 0;
+  border: 1px solid;
 }
 
-.activity-time {
-  font-size: 12px;
-  color: #94A3B8;
-}
+/* Colored blocks visible per activity */
+.activity-blue .activity-icon { background: rgba(37, 99, 235, 0.10); color: var(--phk-blue); border-color: rgba(37, 99, 235, 0.35); }
+.activity-purple .activity-icon { background: rgba(124, 58, 237, 0.10); color: var(--phk-purple); border-color: rgba(124, 58, 237, 0.35); }
+.activity-green .activity-icon { background: rgba(34, 197, 94, 0.10); color: var(--phk-green); border-color: rgba(34, 197, 94, 0.35); }
 
-/* ===== RESPONSIVE DESIGN ===== */
-@media (max-width: 768px) {
-  .admin-dashboard {
-    padding: 12px;
-  }
-  
-  .dashboard-header {
-    padding: 16px;
-  }
-  
-  .header-main {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .logout-btn {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .quick-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .admin-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .quick-actions-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.activity-title { font-size: 13px; font-weight: 900; color: var(--ink); margin-bottom: 2px; }
+.activity-desc { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.activity-time { font-size: 11px; color: var(--muted2); }
+
+/* ===== RESPONSIVE ===== */
+@media (min-width: 768px) {
+  .admin-dashboard { padding: 16px; }
+
+  .dashboard-title { font-size: 24px; }
+  .quick-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .admin-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .quick-actions-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 360px) {
-  .admin-dashboard {
-    padding: 8px;
-  }
-  
-  .dashboard-title {
-    font-size: 20px;
-  }
-  
-  .dashboard-header {
-    padding: 12px;
-  }
-  
-  .quick-stats {
-    grid-template-columns: 1fr;
-  }
-  
-  .stat-item {
-    padding: 10px;
-  }
-  
-  .admin-card {
-    padding: 16px;
-  }
-  
-  .card-icon {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .card-icon svg {
-    width: 20px;
-    height: 20px;
-  }
-  
-  .card-title {
-    font-size: 16px;
-  }
-  
-  .quick-actions-section,
-  .recent-activity {
-    padding: 16px;
-  }
-  
-  .quick-actions-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .quick-action-btn {
-    padding: 12px;
-  }
+  .admin-dashboard { padding: 10px; }
+  .quick-stats { grid-template-columns: 1fr; }
+  .quick-actions-grid { grid-template-columns: 1fr; }
 }
 </style>
 
-<script>
+<script nonce="<%= PAGE_NONCE %>">
 document.addEventListener('DOMContentLoaded', function() {
-  // Update pending count display with brand colors
+  // -------------------------
+  // Pending count (NO route changes)
+  // -------------------------
   function updatePendingCount() {
-    const businessPending = parseInt('<%= pendingBusinessVerifications || 0 %>');
-    const ordersPending = parseInt('<%= pendingOrders || 0 %>');
+    const businessPending = parseInt('<%= pendingBusinessVerifications || 0 %>', 10) || 0;
+    const ordersPending = parseInt('<%= pendingOrders || 0 %>', 10) || 0;
     const totalPending = businessPending + ordersPending;
-    
+
     const pendingCountEl = document.getElementById('pendingCount');
     if (pendingCountEl) {
-      pendingCountEl.textContent = totalPending;
+      pendingCountEl.textContent = String(totalPending);
       if (totalPending > 0) {
         pendingCountEl.style.color = '#7C3AED';
-        pendingCountEl.style.fontWeight = '700';
+        pendingCountEl.style.fontWeight = '900';
       }
     }
   }
-  
-  // Add interactive hover effects
-  const adminCards = document.querySelectorAll('.admin-card[href]');
-  adminCards.forEach(card => {
-    card.addEventListener('mouseenter', function() {
-      this.style.transform = 'translateY(-4px)';
-    });
-    
-    card.addEventListener('mouseleave', function() {
-      this.style.transform = 'translateY(0)';
-    });
-  });
-  
-  // Add click effect to quick action buttons
-  const quickActionBtns = document.querySelectorAll('.quick-action-btn');
-  quickActionBtns.forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      // Add visual feedback
-      this.style.transform = 'scale(0.98)';
-      setTimeout(() => {
-        this.style.transform = '';
-      }, 150);
+
+  // -------------------------
+  // CSP-safe Quick Actions nav (replaces inline onclick)
+  // Keeps the EXACT same paths you already had.
+  // -------------------------
+  document.querySelectorAll('.quick-action-btn[data-href]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const href = btn.getAttribute('data-href');
+      if (href) window.location.assign(href);
     });
   });
-  
-  // Auto-dismiss alerts after 5 seconds
+
+  // -------------------------
+  // Card micro-hover (CSS already handles, JS not required; keep minimal)
+  // -------------------------
   const alerts = document.querySelectorAll('.alert-message');
   alerts.forEach(alert => {
     setTimeout(() => {
       alert.style.opacity = '0';
-      alert.style.transform = 'translateY(-10px)';
-      setTimeout(() => {
-        alert.style.display = 'none';
-      }, 300);
+      alert.style.transform = 'translateY(-6px)';
+      alert.style.transition = 'opacity .25s ease, transform .25s ease';
+      setTimeout(() => { alert.style.display = 'none'; }, 250);
     }, 5000);
   });
-  
-  // Initialize
+
   updatePendingCount();
-  
-  // Add loading animation for stats
-  const statItems = document.querySelectorAll('.stat-item');
-  statItems.forEach((item, index) => {
-    item.style.animationDelay = `${index * 0.1}s`;
-    item.style.animation = 'fadeInUp 0.5s ease forwards';
-    item.style.opacity = '0';
-  });
-  
-  // Add CSS animation
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-  `;
-  document.head.appendChild(style);
 });
 </script>
-
-

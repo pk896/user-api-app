@@ -5,1123 +5,940 @@
 
 <main class="orders-list-page">
   <!-- Header Section -->
-  <div class="page-header">
+  <header class="page-header" aria-label="Order history header">
     <div class="header-content">
       <div class="header-main">
-        <h1 class="page-title">
-          <span class="title-icon">📦</span>
-          Order History
-        </h1>
-        <div class="header-subtitle">
+        <div class="title-row">
+          <h1 class="page-title">
+            <span class="title-icon" aria-hidden="true">📦</span>
+            Order History
+          </h1>
           <p class="subtitle">View and manage your recent orders</p>
-          <div class="order-stats">
-            <div class="stat-item">
-              <span class="stat-icon">📊</span>
-              <span class="stat-label">Total Orders</span>
-              <span class="stat-value" id="total-orders">—</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-icon">⏳</span>
-              <span class="stat-label">Active</span>
-              <span class="stat-value" id="active-orders">—</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-icon">✅</span>
-              <span class="stat-label">Completed</span>
-              <span class="stat-value" id="completed-orders">—</span>
-            </div>
+        </div>
+
+        <div class="order-stats" role="list" aria-label="Order statistics">
+          <div class="stat-item stat-total" role="listitem">
+            <span class="stat-icon" aria-hidden="true">📊</span>
+            <span class="stat-label">Total Orders</span>
+            <span class="stat-value" id="total-orders">—</span>
+          </div>
+          <div class="stat-item stat-active" role="listitem">
+            <span class="stat-icon" aria-hidden="true">⏳</span>
+            <span class="stat-label">Active</span>
+            <span class="stat-value" id="active-orders">—</span>
+          </div>
+          <div class="stat-item stat-completed" role="listitem">
+            <span class="stat-icon" aria-hidden="true">✅</span>
+            <span class="stat-label">Completed</span>
+            <span class="stat-value" id="completed-orders">—</span>
           </div>
         </div>
       </div>
-      
+
       <div class="header-actions">
         <a href="/sales" class="btn btn-primary btn-with-icon">
-          <span class="btn-icon">←</span>
+          <span class="btn-icon" aria-hidden="true">←</span>
           Continue Shopping
         </a>
-        <div class="view-toggle">
-          <button class="view-btn active" data-view="grid" aria-label="Grid view">
-            <span class="view-icon">⬜</span>
+
+        <div class="view-toggle" role="group" aria-label="Change view">
+          <button class="view-btn active" data-view="grid" aria-label="Grid view" type="button">
+            <span class="view-icon" aria-hidden="true">⬜</span>
           </button>
-          <button class="view-btn" data-view="list" aria-label="List view">
-            <span class="view-icon">☰</span>
+          <button class="view-btn" data-view="list" aria-label="List view" type="button">
+            <span class="view-icon" aria-hidden="true">☰</span>
           </button>
         </div>
       </div>
     </div>
-  </div>
+  </header>
 
   <!-- Main Content -->
-  <div class="main-content">
+  <section class="main-content" aria-label="Orders content">
     <!-- Notifications -->
-    <div class="notifications-container" id="notifications">
+    <div class="notifications-container" id="notifications" aria-live="polite">
       <% if (success && success.length > 0) { %>
-        <div class="notification notification-success">
-          <span class="notification-icon">✓</span>
+        <div class="notification notification-success" role="status">
+          <span class="notification-icon" aria-hidden="true">✓</span>
           <span class="notification-text"><%= success %></span>
-          <button class="notification-close">&times;</button>
+          <button class="notification-close" type="button" aria-label="Close notification">&times;</button>
         </div>
       <% } %>
       <% if (error && error.length > 0) { %>
-        <div class="notification notification-error">
-          <span class="notification-icon">!</span>
+        <div class="notification notification-error" role="alert">
+          <span class="notification-icon" aria-hidden="true">!</span>
           <span class="notification-text"><%= error %></span>
-          <button class="notification-close">&times;</button>
+          <button class="notification-close" type="button" aria-label="Close notification">&times;</button>
         </div>
       <% } %>
     </div>
 
     <!-- Orders Container -->
-    <div class="orders-container">
+    <section class="orders-container" aria-label="Orders list">
       <div class="orders-header">
-        <h2 class="orders-title">Recent Orders</h2>
+        <div class="orders-header-left">
+          <h2 class="orders-title">Recent Orders</h2>
+          <p class="orders-hint" id="ordersHint">
+            Search by <strong>Order ID</strong>, <strong>Status</strong>, or <strong>Item name</strong>.
+          </p>
+        </div>
+
         <div class="orders-controls">
           <div class="search-box">
-            <input type="text" 
-                   id="order-search" 
-                   placeholder="Search orders..." 
-                   class="search-input"
-                   aria-label="Search orders">
-            <span class="search-icon">🔍</span>
+            <label class="sr-only" for="order-search">Search orders</label>
+            <input
+              type="text"
+              id="order-search"
+              placeholder="Search orders… (e.g. 8AR41122 or chair)"
+              class="search-input"
+              aria-describedby="ordersHint"
+              autocomplete="off"
+              inputmode="search"
+            />
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <button id="clear-search" class="clear-search" type="button" aria-label="Clear search" title="Clear">
+              ✕
+            </button>
           </div>
-          <select class="sort-select" id="sort-orders" aria-label="Sort orders by">
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="amount-high">Amount (High to Low)</option>
-            <option value="amount-low">Amount (Low to High)</option>
-          </select>
+
+          <div class="sort-wrap">
+            <label class="sr-only" for="sort-orders">Sort orders</label>
+            <select class="sort-select" id="sort-orders" aria-label="Sort orders by">
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="amount-high">Amount (High to Low)</option>
+              <option value="amount-low">Amount (Low to High)</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <!-- Orders Grid/List -->
-      <div id="ordersWrap" class="orders-view grid-view">
-        <div class="loading-state">
-          <div class="loading-spinner"></div>
+      <div id="ordersWrap" class="orders-view grid-view" aria-live="polite">
+        <div class="loading-state" role="status" aria-label="Loading orders">
+          <div class="loading-spinner" aria-hidden="true"></div>
           <p>Loading your orders…</p>
         </div>
       </div>
 
       <!-- Empty State -->
-      <div id="empty-state" class="empty-state" style="display: none;">
+      <div id="empty-state" class="empty-state" style="display:none;">
         <div class="empty-content">
-          <span class="empty-icon">📦</span>
+          <span class="empty-icon" aria-hidden="true">📦</span>
           <h3>No Orders Found</h3>
-          <p>You haven't placed any orders yet.</p>
+          <p>You haven't placed any orders yet, or your search returned no results.</p>
           <a href="/sales" class="btn btn-primary">Browse Products</a>
         </div>
       </div>
 
       <!-- Loading More -->
-      <div id="loading-more" class="loading-more" style="display: none;">
-        <div class="loading-spinner"></div>
+      <div id="loading-more" class="loading-more" style="display:none;">
+        <div class="loading-spinner" aria-hidden="true"></div>
         <span>Loading more orders…</span>
       </div>
-    </div>
+    </section>
 
     <!-- Quick Actions -->
-    <div class="quick-actions">
-      <div class="action-card">
-        <div class="action-icon">📱</div>
+    <section class="quick-actions" aria-label="Quick actions">
+      <div class="action-card qa-purple">
+        <div class="action-icon" aria-hidden="true">📱</div>
         <div class="action-content">
           <h4>Mobile Friendly</h4>
-          <p>View orders on any device</p>
+          <p>Compact layout with easy tap targets.</p>
         </div>
       </div>
-      <div class="action-card">
-        <div class="action-icon">🚚</div>
+
+      <div class="action-card qa-blue">
+        <div class="action-icon" aria-hidden="true">🚚</div>
         <div class="action-content">
           <h4>Track Shipments</h4>
-          <p>Monitor delivery status</p>
+          <p>Monitor delivery status in one click.</p>
         </div>
       </div>
-      <div class="action-card">
-        <div class="action-icon">📄</div>
+
+      <div class="action-card qa-green">
+        <div class="action-icon" aria-hidden="true">📄</div>
         <div class="action-content">
           <h4>Download Receipts</h4>
-          <p>Save or print invoices</p>
+          <p>Save or print invoices anytime.</p>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Footer -->
-  <div class="page-footer">
-    <div class="footer-content">
-      <div class="footer-section">
-        <h4>Need Help?</h4>
-        <a href="/contact" class="footer-link">Contact Support</a>
-        <a href="/help/returns" class="footer-link">Returns & Refunds</a>
-        <a href="/help/shipping" class="footer-link">Shipping Info</a>
-      </div>
-      
-      <div class="footer-section">
-        <h4>Quick Links</h4>
-        <button class="footer-action" onclick="window.print()">
-          <span class="action-icon">🖨️</span>
-          Print Order History
-        </button>
-        <a href="/cart" class="footer-action">
-          <span class="action-icon">🛒</span>
-          View Cart
-        </a>
-        <a href="/account" class="footer-action">
-          <span class="action-icon">👤</span>
-          My Account
-        </a>
-      </div>
-      
-      <div class="footer-section">
-        <h4>Order Status Guide</h4>
-        <div class="status-guide">
-          <div class="status-item">
-            <span class="status-dot processing"></span>
-            <span>Processing - Order confirmed</span>
-          </div>
-          <div class="status-item">
-            <span class="status-dot shipped"></span>
-            <span>Shipped - On its way</span>
-          </div>
-          <div class="status-item">
-            <span class="status-dot delivered"></span>
-            <span>Delivered - Received</span>
+    <!-- Footer Panel (inside page content) -->
+    <section class="page-footer" aria-label="Order help and links">
+      <div class="footer-content">
+        <div class="footer-section fs-purple">
+          <h4>Need Help?</h4>
+          <a href="/contact" class="footer-link">Contact Support</a>
+          <a href="/help/returns" class="footer-link">Returns & Refunds</a>
+          <a href="/help/shipping" class="footer-link">Shipping Info</a>
+        </div>
+
+        <div class="footer-section fs-blue">
+          <h4>Quick Links</h4>
+          <button class="footer-action" type="button" onclick="window.print()">
+            <span class="action-icon" aria-hidden="true">🖨️</span>
+            Print Order History
+          </button>
+          <a href="/cart" class="footer-action">
+            <span class="action-icon" aria-hidden="true">🛒</span>
+            View Cart
+          </a>
+          <a href="/account" class="footer-action">
+            <span class="action-icon" aria-hidden="true">👤</span>
+            My Account
+          </a>
+        </div>
+
+        <div class="footer-section fs-green">
+          <h4>Order Status Guide</h4>
+          <div class="status-guide">
+            <div class="status-item">
+              <span class="status-dot processing" aria-hidden="true"></span>
+              <span>Processing — order confirmed</span>
+            </div>
+            <div class="status-item">
+              <span class="status-dot shipped" aria-hidden="true"></span>
+              <span>Shipped — on its way</span>
+            </div>
+            <div class="status-item">
+              <span class="status-dot delivered" aria-hidden="true"></span>
+              <span>Delivered — received</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
+  </section>
 </main>
 
 <style nonce="<%= NONCE %>">
-  /* ===== VARIABLES ===== */
-  .orders-list-page {
-    --primary-blue: #2563EB;
-    --primary-purple: #7C3AED;
-    --primary-green: #22C55E;
-    --primary-black: #0F172A;
-    --gray-50: #F8FAFC;
-    --gray-100: #F1F5F9;
-    --gray-200: #E2E8F0;
-    --gray-300: #CBD5E1;
-    --gray-400: #94A3B8;
-    --gray-500: #64748B;
-    --gray-600: #475569;
-    --gray-700: #334155;
-    --gray-800: #1E293B;
-    --gray-900: #0F172A;
-    --radius-lg: 16px;
-    --radius-md: 12px;
-    --radius-sm: 8px;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    padding: 1rem;
-    background: var(--primary-green);
+  /* =========================================================
+     Phakisi / Unicoporate Brand Tokens (Purple dominant)
+     ========================================================= */
+  .orders-list-page{
+    --blue:#2563EB;
+    --purple:#7C3AED;      /* dominant */
+    --green:#22C55E;
+    --black:#0F172A;
+
+    --bg0:#070A13;
+    --bg1:#0B1022;
+    --card:#0F172A;
+    --card2:#111A2E;
+    --muted:#94A3B8;
+    --line:rgba(148,163,184,.18);
+
+    --w:#FFFFFF;
+    --shadow: 0 10px 22px rgba(2,6,23,.35);
+    --shadow2: 0 6px 16px rgba(2,6,23,.28);
+
+    --r-lg:18px;
+    --r-md:14px;
+    --r-sm:10px;
+
+    padding: .85rem;
     min-height: 100vh;
+
+    /* Premium dark canvas with purple tone */
+    background:
+      radial-gradient(900px 420px at 20% -10%, rgba(124,58,237,.38), transparent 58%),
+      radial-gradient(900px 420px at 95% 0%, rgba(37,99,235,.28), transparent 55%),
+      radial-gradient(900px 420px at 70% 105%, rgba(34,197,94,.18), transparent 55%),
+      linear-gradient(180deg, var(--bg0), var(--bg1));
+    color: var(--w);
   }
 
-  /* ===== PAGE HEADER ===== */
-  .page-header {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    box-shadow: var(--shadow-md);
+  /* A11y helper */
+  .sr-only{
+    position:absolute !important;
+    width:1px;height:1px;
+    padding:0;margin:-1px;
+    overflow:hidden;clip:rect(0,0,0,0);
+    white-space:nowrap;border:0;
   }
 
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 1.5rem;
+  /* =========================================================
+     Header
+     ========================================================= */
+  .page-header{
+    background: linear-gradient(180deg, rgba(124,58,237,.18), rgba(15,23,42,.92));
+    border: 1px solid rgba(124,58,237,.20);
+    border-radius: var(--r-lg);
+    padding: 1rem;
+    box-shadow: var(--shadow);
   }
 
-  .header-main {
-    flex: 1;
-    min-width: 300px;
+  .header-content{
+    display:flex;
+    gap:1rem;
+    justify-content:space-between;
+    align-items:flex-start;
+    flex-wrap:wrap;
   }
 
-  .page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--primary-black);
-    margin: 0 0 0.5rem 0;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+  .header-main{ flex:1; min-width: 260px; }
+  .title-row{ display:flex; flex-direction:column; gap:.35rem; }
+
+  .page-title{
+    margin:0;
+    display:flex;
+    gap:.6rem;
+    align-items:center;
+    font-weight:900;
+    font-size:1.35rem;  /* compact mobile-first */
+    letter-spacing:.2px;
+    color: var(--w);
   }
 
-  .title-icon {
-    font-size: 1.8rem;
+  .title-icon{ font-size:1.35rem; filter: drop-shadow(0 6px 10px rgba(124,58,237,.25)); }
+
+  .subtitle{
+    margin:0;
+    color: rgba(226,232,240,.86);
+    font-size:.92rem;
+    line-height:1.25;
   }
 
-  .header-subtitle {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+  .order-stats{
+    margin-top:.85rem;
+    display:grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap:.6rem;
   }
 
-  .subtitle {
-    font-size: 1rem;
-    color: var(--gray-600);
-    margin: 0;
+  .stat-item{
+    border-radius: var(--r-md);
+    padding:.75rem .75rem;
+    border:1px solid var(--line);
+    background: rgba(15,23,42,.55);
+    display:flex;
+    flex-direction:column;
+    gap:.2rem;
+    position:relative;
+    overflow:hidden;
   }
 
-  .order-stats {
-    display: flex;
-    gap: 1.5rem;
-    flex-wrap: wrap;
+  .stat-item::before{
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(250px 90px at 20% 0%, rgba(124,58,237,.22), transparent 60%);
+    pointer-events:none;
   }
 
-  .stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 80px;
+  .stat-total{ border-color: rgba(124,58,237,.22); }
+  .stat-active{ border-color: rgba(37,99,235,.22); }
+  .stat-completed{ border-color: rgba(34,197,94,.22); }
+
+  .stat-icon{ font-size:1rem; opacity:.95; }
+  .stat-label{
+    font-size:.70rem;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    color: rgba(148,163,184,.95);
+  }
+  .stat-value{
+    font-size:1.12rem;
+    font-weight:900;
+    color: var(--w);
   }
 
-  .stat-icon {
-    font-size: 1.5rem;
-    margin-bottom: 0.25rem;
+  .header-actions{
+    display:flex;
+    gap:.6rem;
+    align-items:flex-end;
+    flex-direction:column;
   }
 
-  .stat-label {
-    font-size: 0.75rem;
-    color: var(--gray-500);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 0.125rem;
-  }
-
-  .stat-value {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--primary-black);
-  }
-
-  .header-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-end;
-  }
-
-  .view-toggle {
-    display: flex;
-    gap: 0.5rem;
-    background: var(--gray-100);
-    padding: 0.25rem;
-    border-radius: var(--radius-md);
-  }
-
-  .view-btn {
-    background: none;
-    border: none;
-    padding: 0.5rem;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--gray-500);
-    transition: all 0.2s ease;
-  }
-
-  .view-btn.active {
-    background: white;
-    color: var(--primary-blue);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .view-icon {
-    font-size: 1rem;
-  }
-
-  /* ===== MAIN CONTENT ===== */
-  .main-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  /* ===== NOTIFICATIONS ===== */
-  .notifications-container {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .notification {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    animation: slideIn 0.3s ease-out;
-    border-left: 4px solid transparent;
-  }
-
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .notification-success {
-    background: rgba(34, 197, 94, 0.1);
-    color: #166534;
-    border-left-color: var(--primary-green);
-  }
-
-  .notification-error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #b91c1c;
-    border-left-color: #EF4444;
-  }
-
-  .notification-icon {
-    font-weight: bold;
-    font-size: 1rem;
-  }
-
-  .notification-close {
-    margin-left: auto;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: inherit;
-    opacity: 0.7;
-    font-size: 1.25rem;
-    line-height: 1;
-  }
-
-  .notification-close:hover {
-    opacity: 1;
-  }
-
-  /* ===== ORDERS CONTAINER ===== */
-  .orders-container {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: 1.5rem;
-    box-shadow: var(--shadow-md);
-  }
-
-  .orders-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-
-  .orders-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--primary-black);
-    margin: 0;
-  }
-
-  .orders-controls {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-
-  .search-box {
-    position: relative;
-    min-width: 200px;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 0.5rem 2.5rem 0.5rem 1rem;
-    border: 1px solid var(--gray-300);
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    color: var(--gray-700);
-    background: white;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--primary-blue);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-  }
-
-  .search-icon {
-    position: absolute;
-    right: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--gray-400);
-    font-size: 0.875rem;
-  }
-
-  .sort-select {
-    appearance: none;
-    background: white;
-    border: 1px solid var(--gray-300);
-    border-radius: var(--radius-md);
-    padding: 0.5rem 2rem 0.5rem 1rem;
-    font-size: 0.875rem;
-    color: var(--gray-700);
-    cursor: pointer;
-    min-width: 160px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748B'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    background-size: 1rem;
-  }
-
-  .sort-select:focus {
-    outline: none;
-    border-color: var(--primary-blue);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-  }
-
-  /* ===== ORDERS VIEW ===== */
-  .orders-view {
-    transition: all 0.3s ease;
-  }
-
-  .orders-view.grid-view {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1rem;
-  }
-
-  .orders-view.list-view {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  @media (max-width: 768px) {
-    .orders-view.grid-view {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* ===== ORDER CARD ===== */
-  .order-card {
-    background: var(--gray-50);
-    border-radius: var(--radius-md);
-    padding: 1.25rem;
-    border: 1px solid var(--gray-200);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .orders-view.grid-view .order-card {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .orders-view.list-view .order-card {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 1rem;
-    align-items: center;
-  }
-
-  @media (max-width: 768px) {
-    .orders-view.list-view .order-card {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .order-card:hover {
-    border-color: var(--primary-blue);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-  }
-
-  .order-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: var(--gray-300);
-  }
-
-  .order-card.processing::before {
-    background: #F59E0B;
-  }
-
-  .order-card.shipped::before {
-    background: var(--primary-blue);
-  }
-
-  .order-card.delivered::before {
-    background: var(--primary-green);
-  }
-
-  .order-card.cancelled::before {
-    background: #EF4444;
-  }
-
-  .order-main {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .order-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .order-id {
-    font-family: 'SF Mono', Monaco, 'Cascadia Mono', monospace;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--primary-black);
-  }
-
-  .order-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.75rem;
+  .view-toggle{
+    display:flex;
+    gap:.35rem;
+    background: rgba(2,6,23,.35);
+    border: 1px solid var(--line);
+    padding:.25rem;
     border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
-  .order-status.processing {
-    background: rgba(245, 158, 11, 0.1);
-    color: #92400E;
+  .view-btn{
+    border:0;
+    background: transparent;
+    color: rgba(226,232,240,.75);
+    padding:.5rem .6rem;
+    border-radius: 999px;
+    cursor:pointer;
+    transition: transform .12s ease, background .12s ease, color .12s ease;
+  }
+  .view-btn:hover{ transform: translateY(-1px); }
+  .view-btn.active{
+    background: rgba(124,58,237,.22);
+    color: var(--w);
+    border: 1px solid rgba(124,58,237,.28);
+    box-shadow: 0 8px 18px rgba(124,58,237,.18);
   }
 
-  .order-status.shipped {
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--primary-blue);
+  /* =========================================================
+     Main blocks
+     ========================================================= */
+  .main-content{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+    margin-top:1rem;
   }
 
-  .order-status.delivered {
-    background: rgba(34, 197, 94, 0.1);
-    color: #166534;
+  /* Notifications */
+  .notifications-container{ display:flex; flex-direction:column; gap:.5rem; }
+  .notification{
+    display:flex;
+    gap:.65rem;
+    align-items:center;
+    padding:.75rem .85rem;
+    border-radius: var(--r-md);
+    border:1px solid var(--line);
+    background: rgba(15,23,42,.72);
+    box-shadow: var(--shadow2);
   }
 
-  .order-status.cancelled {
-    background: rgba(239, 68, 68, 0.1);
-    color: #B91C1C;
+  .notification-success{
+    border-color: rgba(34,197,94,.25);
+    background: linear-gradient(180deg, rgba(34,197,94,.12), rgba(15,23,42,.75));
+  }
+  .notification-error{
+    border-color: rgba(239,68,68,.25);
+    background: linear-gradient(180deg, rgba(239,68,68,.12), rgba(15,23,42,.75));
   }
 
-  .order-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+  .notification-icon{ font-weight:900; }
+  .notification-text{ font-size:.92rem; color: rgba(226,232,240,.95); }
+  .notification-close{
+    margin-left:auto;
+    border:0;
+    background: transparent;
+    color: rgba(226,232,240,.85);
+    font-size:1.2rem;
+    cursor:pointer;
+    opacity:.85;
+  }
+  .notification-close:hover{ opacity:1; }
+
+  /* Orders container */
+  .orders-container{
+    background: linear-gradient(180deg, rgba(17,26,46,.92), rgba(15,23,42,.92));
+    border: 1px solid rgba(37,99,235,.16);
+    border-radius: var(--r-lg);
+    padding: 1rem;
+    box-shadow: var(--shadow);
   }
 
-  .order-date {
-    font-size: 0.875rem;
-    color: var(--gray-600);
+  .orders-header{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.85rem;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:.85rem;
   }
 
-  .order-items {
-    font-size: 0.875rem;
-    color: var(--gray-500);
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
+  .orders-title{
+    margin:0;
+    font-size:1.05rem;
+    font-weight:900;
+    color: var(--w);
   }
 
-  .order-right {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.75rem;
+  .orders-hint{
+    margin:.35rem 0 0 0;
+    color: rgba(148,163,184,.95);
+    font-size:.82rem;
+    line-height:1.2;
+  }
+
+  .orders-controls{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.6rem;
+    align-items:center;
+  }
+
+  .search-box{
+    position:relative;
+    min-width: 240px;
+    flex: 1;
+  }
+
+  .search-input{
+    width:100%;
+    padding:.65rem 2.6rem .65rem 2.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(124,58,237,.28);
+    background: rgba(2,6,23,.35);
+    color: rgba(226,232,240,.95);
+    font-size:.92rem;
+    outline:none;
+  }
+  .search-input::placeholder{ color: rgba(148,163,184,.85); }
+  .search-input:focus{
+    border-color: rgba(124,58,237,.55);
+    box-shadow: 0 0 0 3px rgba(124,58,237,.18);
+  }
+
+  .search-icon{
+    position:absolute;
+    left:.85rem;
+    top:50%;
+    transform: translateY(-50%);
+    opacity:.9;
+    pointer-events:none;
+  }
+
+  .clear-search{
+    position:absolute;
+    right:.55rem;
+    top:50%;
+    transform: translateY(-50%);
+    border:0;
+    cursor:pointer;
+    width: 32px; height: 32px;
+    border-radius: 999px;
+    background: rgba(148,163,184,.12);
+    color: rgba(226,232,240,.88);
+    display:none; /* shown when text present */
+  }
+  .clear-search:hover{ background: rgba(124,58,237,.22); }
+
+  .sort-wrap{ min-width: 170px; }
+  .sort-select{
+    width:100%;
+    appearance:none;
+    border-radius: 999px;
+    border: 1px solid rgba(37,99,235,.28);
+    background: rgba(2,6,23,.35);
+    color: rgba(226,232,240,.95);
+    padding:.65rem 2.2rem .65rem 1rem;
+    font-size:.92rem;
+    cursor:pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23CBD5E1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right .85rem center;
+    background-size: 1rem;
+    outline:none;
+  }
+  .sort-select:focus{
+    border-color: rgba(37,99,235,.55);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.18);
+  }
+
+  /* Orders view */
+  .orders-view{ transition: all .2s ease; }
+
+  .orders-view.grid-view{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap:.75rem;
+  }
+
+  .orders-view.list-view{
+    display:flex;
+    flex-direction:column;
+    gap:.6rem;
+  }
+
+  /* Order card */
+  .order-card{
+    border-radius: var(--r-md);
+    border: 1px solid rgba(148,163,184,.16);
+    background: linear-gradient(180deg, rgba(15,23,42,.82), rgba(2,6,23,.35));
+    padding: .9rem;
+    position:relative;
+    overflow:hidden;
+    box-shadow: 0 10px 18px rgba(2,6,23,.22);
+    transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
+
+  .order-card:hover{
+    transform: translateY(-2px);
+    border-color: rgba(124,58,237,.30);
+    box-shadow: 0 14px 28px rgba(2,6,23,.28);
+  }
+
+  .order-card::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; height:100%; width:4px;
+    background: rgba(148,163,184,.35);
+  }
+
+  .order-card.processing::before{ background:#F59E0B; }
+  .order-card.shipped::before{ background: var(--blue); }
+  .order-card.delivered::before{ background: var(--green); }
+  .order-card.cancelled::before{ background:#EF4444; }
+
+  .orders-view.grid-view .order-card{
+    display:flex;
+    flex-direction:column;
+    gap:.75rem;
+  }
+
+  .orders-view.list-view .order-card{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    gap:.75rem;
+    align-items:center;
+  }
+
+  .order-header{
+    display:flex;
+    justify-content:space-between;
+    gap:.6rem;
+    flex-wrap:wrap;
+    align-items:flex-start;
+  }
+
+  .order-id{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: rgba(226,232,240,.96);
+    font-size:.88rem;
+    font-weight:800;
+  }
+
+  .order-status{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+    padding:.3rem .65rem;
+    border-radius: 999px;
+    font-size:.72rem;
+    font-weight:900;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    border: 1px solid transparent;
+  }
+
+  .order-status.processing{
+    background: rgba(245,158,11,.12);
+    color: #FBBF24;
+    border-color: rgba(245,158,11,.22);
+  }
+  .order-status.shipped{
+    background: rgba(37,99,235,.12);
+    color: #93C5FD;
+    border-color: rgba(37,99,235,.22);
+  }
+  .order-status.delivered{
+    background: rgba(34,197,94,.12);
+    color: #86EFAC;
+    border-color: rgba(34,197,94,.22);
+  }
+  .order-status.cancelled{
+    background: rgba(239,68,68,.12);
+    color: #FCA5A5;
+    border-color: rgba(239,68,68,.22);
+  }
+
+  .order-meta{
+    display:flex;
+    flex-direction:column;
+    gap:.25rem;
+    margin-top:.15rem;
+  }
+
+  .order-date{
+    color: rgba(148,163,184,.92);
+    font-size:.86rem;
+  }
+
+  .order-items{
+    color: rgba(226,232,240,.86);
+    font-size:.86rem;
+    display:flex;
+    gap:.4rem;
+    align-items:center;
+  }
+
+  .order-right{
+    display:flex;
+    flex-direction:column;
+    gap:.6rem;
+    align-items:flex-end;
     min-width: 120px;
   }
 
-  .orders-view.list-view .order-right {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
+  .orders-view.list-view .order-right{
+    flex-direction:row;
+    justify-content:space-between;
+    align-items:center;
+    width:100%;
   }
 
-  .order-amount {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--primary-black);
+  .order-amount{
+    font-weight: 950;
+    font-size:1.05rem;
+    color: var(--w);
+    text-shadow: 0 8px 20px rgba(124,58,237,.12);
   }
 
-  .order-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+  .order-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.45rem;
   }
 
-  .orders-view.grid-view .order-actions {
-    flex-direction: column;
+  .orders-view.grid-view .order-actions{ flex-direction:row; }
+
+  /* Buttons */
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:.45rem;
+    padding:.65rem 1rem;
+    border-radius: 999px;
+    border:1px solid transparent;
+    text-decoration:none;
+    cursor:pointer;
+    font-weight:800;
+    font-size:.92rem;
+    transition: transform .12s ease, filter .12s ease, background .12s ease, border-color .12s ease;
+    user-select:none;
   }
 
-  @media (max-width: 768px) {
-    .order-actions {
-      flex-direction: column;
-    }
+  .btn-primary{
+    background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(37,99,235,.9));
+    border-color: rgba(124,58,237,.35);
+    color: var(--w);
+    box-shadow: 0 12px 22px rgba(124,58,237,.18);
   }
+  .btn-primary:hover{ transform: translateY(-1px); filter: brightness(1.03); }
 
-  /* ===== BUTTONS ===== */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    font-weight: 500;
-    text-decoration: none;
-    cursor: pointer;
+  .action-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:.35rem;
+    padding:.55rem .7rem;
+    border-radius: 999px;
     border: 1px solid transparent;
-    transition: all 0.2s ease;
+    text-decoration:none;
+    font-weight:900;
+    font-size:.78rem;
+    letter-spacing:.02em;
+    min-width: 92px;
+    transition: transform .12s ease, background .12s ease, border-color .12s ease;
   }
 
-  .btn-primary {
-    background: var(--primary-blue);
-    color: white;
-    border-color: var(--primary-blue);
+  /* Receipt = purple */
+  .action-btn.receipt{
+    background: rgba(124,58,237,.14);
+    color: rgba(226,232,240,.95);
+    border-color: rgba(124,58,237,.30);
   }
-
-  .btn-primary:hover {
-    background: #1D4ED8;
-    border-color: #1D4ED8;
+  .action-btn.receipt:hover{
+    background: rgba(124,58,237,.28);
     transform: translateY(-1px);
   }
 
-  .btn-with-icon {
-    padding: 0.5rem 1rem;
+  /* Track = blue */
+  .action-btn.track{
+    background: rgba(37,99,235,.14);
+    color: rgba(226,232,240,.95);
+    border-color: rgba(37,99,235,.30);
   }
-
-  .btn-icon {
-    font-size: 1rem;
-  }
-
-  .action-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-md);
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-decoration: none;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 0.2s ease;
-    min-width: 80px;
-  }
-
-  .action-btn.receipt {
-    background: rgba(6, 182, 212, 0.1);
-    color: #0891B2;
-    border-color: rgba(6, 182, 212, 0.2);
-  }
-
-  .action-btn.receipt:hover {
-    background: #06B6D4;
-    color: white;
+  .action-btn.track:hover{
+    background: rgba(37,99,235,.28);
     transform: translateY(-1px);
   }
 
-  .action-btn.track {
-    background: rgba(245, 158, 11, 0.1);
-    color: #D97706;
-    border-color: rgba(245, 158, 11, 0.2);
-  }
-
-  .action-btn.track:hover {
-    background: #F59E0B;
-    color: white;
-    transform: translateY(-1px);
-  }
-
-  /* ===== LOADING STATES ===== */
-  .loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    padding: 3rem;
-    color: var(--gray-500);
+  /* Loading states */
+  .loading-state{
     grid-column: 1 / -1;
+    display:flex;
+    flex-direction:column;
+    gap:.75rem;
+    align-items:center;
+    justify-content:center;
+    padding: 2.2rem 1rem;
+    color: rgba(148,163,184,.95);
   }
 
-  .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid var(--gray-200);
-    border-top-color: var(--primary-blue);
+  .loading-spinner{
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
+    border: 3px solid rgba(148,163,184,.18);
+    border-top-color: rgba(124,58,237,.85);
     animation: spin 1s linear infinite;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
 
-  .loading-more {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    padding: 2rem;
-    color: var(--gray-500);
+  .empty-state{
     grid-column: 1 / -1;
+    padding: 2.4rem 1rem;
+    text-align:center;
   }
 
-  /* ===== EMPTY STATE ===== */
-  .empty-state {
-    padding: 3rem;
-    text-align: center;
-    grid-column: 1 / -1;
+  .empty-content{
+    display:flex;
+    flex-direction:column;
+    gap:.75rem;
+    align-items:center;
+    color: rgba(148,163,184,.95);
   }
 
-  .empty-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  .empty-icon{ font-size: 2.6rem; opacity:.85; }
+
+  /* Quick actions blocks – each visibly different */
+  .quick-actions{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:.75rem;
+  }
+
+  .action-card{
+    border-radius: var(--r-lg);
+    border: 1px solid var(--line);
+    padding: .9rem;
+    display:flex;
+    gap:.75rem;
+    align-items:center;
+    background: rgba(15,23,42,.72);
+    box-shadow: var(--shadow2);
+  }
+
+  .qa-purple{ border-color: rgba(124,58,237,.25); }
+  .qa-blue{ border-color: rgba(37,99,235,.25); }
+  .qa-green{ border-color: rgba(34,197,94,.25); }
+
+  .action-icon{
+    width: 44px; height: 44px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius: 14px;
+    background: rgba(2,6,23,.35);
+    border: 1px solid var(--line);
+    font-size: 1.2rem;
+  }
+
+  .qa-purple .action-icon{ box-shadow: inset 0 0 0 1px rgba(124,58,237,.22); }
+  .qa-blue .action-icon{ box-shadow: inset 0 0 0 1px rgba(37,99,235,.22); }
+  .qa-green .action-icon{ box-shadow: inset 0 0 0 1px rgba(34,197,94,.22); }
+
+  .action-content h4{
+    margin:0;
+    color: rgba(226,232,240,.96);
+    font-size: .92rem;
+    font-weight: 950;
+  }
+  .action-content p{
+    margin:.15rem 0 0 0;
+    color: rgba(148,163,184,.95);
+    font-size: .82rem;
+  }
+
+  /* Footer panel blocks – colored accents */
+  .page-footer{
+    background: rgba(15,23,42,.72);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 1rem;
+    box-shadow: var(--shadow2);
+  }
+
+  .footer-content{
+    display:grid;
+    grid-template-columns: 1fr;
     gap: 1rem;
-    color: var(--gray-500);
   }
 
-  .empty-icon {
-    font-size: 3rem;
-    opacity: 0.5;
+  .footer-section{
+    padding:.85rem;
+    border-radius: var(--r-md);
+    border: 1px solid var(--line);
+    background: rgba(2,6,23,.25);
   }
 
-  .empty-content h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--gray-700);
-    margin: 0;
+  .fs-purple{ border-color: rgba(124,58,237,.25); }
+  .fs-blue{ border-color: rgba(37,99,235,.25); }
+  .fs-green{ border-color: rgba(34,197,94,.25); }
+
+  .footer-section h4{
+    margin:0 0 .6rem 0;
+    font-size:.80rem;
+    font-weight: 950;
+    letter-spacing:.10em;
+    text-transform:uppercase;
+    color: rgba(226,232,240,.95);
   }
 
-  .empty-content p {
-    margin: 0;
-    max-width: 400px;
+  .footer-link{
+    display:block;
+    padding:.45rem 0;
+    text-decoration:none;
+    color: rgba(148,163,184,.98);
+    font-size:.90rem;
+  }
+  .footer-link:hover{ color: rgba(226,232,240,.96); }
+
+  .footer-action{
+    width:100%;
+    text-align:left;
+    display:flex;
+    gap:.55rem;
+    align-items:center;
+    padding:.45rem 0;
+    border:0;
+    background: transparent;
+    color: rgba(148,163,184,.98);
+    cursor:pointer;
+    font-size:.90rem;
+    text-decoration:none;
+  }
+  .footer-action:hover{ color: rgba(226,232,240,.96); }
+
+  .status-guide{ display:flex; flex-direction:column; gap:.45rem; }
+  .status-item{ display:flex; gap:.55rem; align-items:center; color: rgba(148,163,184,.98); font-size:.90rem; }
+  .status-dot{ width: 9px; height: 9px; border-radius: 50%; }
+  .status-dot.processing{ background:#F59E0B; }
+  .status-dot.shipped{ background: var(--blue); }
+  .status-dot.delivered{ background: var(--green); }
+
+  /* =========================================================
+     Responsive tweaks (Hisense U50 Lite friendly)
+     ========================================================= */
+  @media (min-width: 520px){
+    .quick-actions{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .footer-content{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
 
-  /* ===== QUICK ACTIONS ===== */
-  .quick-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
+  @media (max-width: 520px){
+    .orders-list-page{ padding:.7rem; }
+    .order-stats{ grid-template-columns: 1fr; }
+    .orders-controls{ width:100%; }
+    .search-box, .sort-wrap{ width:100%; min-width: 0; }
+    .header-actions{ width:100%; align-items:stretch; }
+    .btn{ width:100%; }
+    .orders-view.grid-view{ grid-template-columns: 1fr; }
+    .orders-view.list-view .order-card{ grid-template-columns: 1fr; }
+    .order-right{ align-items:stretch; width:100%; }
+    .orders-view.list-view .order-right{ flex-direction:column; align-items:stretch; }
+    .order-actions{ width:100%; }
+    .action-btn{ width:100%; }
   }
 
-  .action-card {
-    background: white;
-    border-radius: var(--radius-md);
-    padding: 1.25rem;
-    border: 1px solid var(--gray-200);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    transition: all 0.2s ease;
-  }
-
-  .action-card:hover {
-    border-color: var(--primary-blue);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .action-icon {
-    font-size: 1.5rem;
-    width: 3rem;
-    height: 3rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--gray-100);
-    border-radius: var(--radius-sm);
-  }
-
-  .action-content {
-    flex: 1;
-  }
-
-  .action-content h4 {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--primary-black);
-    margin: 0 0 0.25rem 0;
-  }
-
-  .action-content p {
-    font-size: 0.75rem;
-    color: var(--gray-500);
-    margin: 0;
-  }
-
-  /* ===== PAGE FOOTER ===== */
-  .page-footer {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: 1.5rem;
-    margin-top: 2rem;
-    box-shadow: var(--shadow-md);
-  }
-
-  .footer-content {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 2rem;
-  }
-
-  .footer-section h4 {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--primary-black);
-    margin: 0 0 1rem 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .footer-link {
-    display: block;
-    padding: 0.5rem 0;
-    color: var(--gray-600);
-    text-decoration: none;
-    font-size: 0.875rem;
-    transition: color 0.2s ease;
-  }
-
-  .footer-link:hover {
-    color: var(--primary-blue);
-  }
-
-  .footer-action {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0;
-    color: var(--gray-600);
-    text-decoration: none;
-    font-size: 0.875rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-    transition: color 0.2s ease;
-  }
-
-  .footer-action:hover {
-    color: var(--primary-blue);
-  }
-
-  .action-icon {
-    font-size: 1rem;
-  }
-
-  .status-guide {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .status-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    color: var(--gray-600);
-  }
-
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-
-  .status-dot.processing {
-    background: #F59E0B;
-  }
-
-  .status-dot.shipped {
-    background: var(--primary-blue);
-  }
-
-  .status-dot.delivered {
-    background: var(--primary-green);
-  }
-
-  /* ===== MOBILE OPTIMIZATIONS ===== */
-  @media (max-width: 768px) {
-    .orders-list-page {
-      padding: 0.75rem;
-    }
-
-    .page-header,
-    .orders-container,
-    .page-footer {
-      padding: 1rem;
-    }
-
-    .header-content {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 1rem;
-    }
-
-    .header-actions {
-      align-items: stretch;
-    }
-
-    .btn {
-      width: 100%;
-      justify-content: center;
-    }
-
-    .orders-controls {
-      flex-direction: column;
-      width: 100%;
-    }
-
-    .search-box,
-    .sort-select {
-      width: 100%;
-    }
-
-    .quick-actions {
-      grid-template-columns: 1fr;
-    }
-
-    .footer-content {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .page-title {
-      font-size: 1.5rem;
-    }
-
-    .order-stats {
-      justify-content: space-between;
-    }
-
-    .stat-item {
-      min-width: 60px;
-    }
-
-    .orders-view.list-view .order-card {
-      padding: 1rem;
-    }
-
-    .order-actions {
-      flex-direction: column;
-    }
-
-    .action-btn {
-      width: 100%;
-    }
-  }
-
-  /* ===== DARK THEME SUPPORT ===== */
-  @media (prefers-color-scheme: dark) {
-    .orders-list-page {
-      background: var(--gray-900);
-    }
-
-    .page-header,
-    .orders-container,
-    .quick-actions .action-card,
-    .page-footer {
-      background: var(--gray-800);
-    }
-
-    .page-title,
-    .orders-title,
-    .order-id,
-    .order-amount,
-    .action-content h4,
-    .footer-section h4,
-    .stat-value {
-      color: var(--gray-100);
-    }
-
-    .subtitle,
-    .stat-label,
-    .order-date,
-    .order-items,
-    .action-content p,
-    .footer-link,
-    .footer-action,
-    .status-item {
-      color: var(--gray-400);
-    }
-
-    .view-toggle {
-      background: var(--gray-700);
-    }
-
-    .view-btn.active {
-      background: var(--gray-600);
-    }
-
-    .search-input,
-    .sort-select {
-      background: var(--gray-700);
-      border-color: var(--gray-600);
-      color: var(--gray-300);
-    }
-
-    .search-icon {
-      color: var(--gray-400);
-    }
-
-    .sort-select {
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23CBD5E1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    }
-
-    .order-card {
-      background: var(--gray-700);
-      border-color: var(--gray-600);
-    }
-
-    .action-card {
-      background: var(--gray-700);
-      border-color: var(--gray-600);
-    }
-
-    .action-icon {
-      background: var(--gray-600);
-    }
-
-    .loading-spinner {
-      border-color: var(--gray-700);
-      border-top-color: var(--primary-blue);
-    }
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
   }
 </style>
 
 <script nonce="<%= NONCE %>">
-  (function(){
+  (function () {
     // DOM Elements
     const ordersWrap = document.getElementById('ordersWrap');
     const emptyState = document.getElementById('empty-state');
     const loadingMore = document.getElementById('loading-more');
-    const notifications = document.getElementById('notifications');
     const orderSearch = document.getElementById('order-search');
+    const clearBtn = document.getElementById('clear-search');
     const sortSelect = document.getElementById('sort-orders');
     const viewBtns = document.querySelectorAll('.view-btn');
     const statTotal = document.getElementById('total-orders');
@@ -1138,18 +955,16 @@
     // Utility Functions
     function formatCurrency(amount, currency = 'ZAR') {
       const symbols = { USD: '$', ZAR: 'R', EUR: '€', GBP: '£' };
-      const symbol = symbols[currency.toUpperCase()] || currency + ' ';
-      return symbol + Number(amount || 0).toFixed(2);
+      const c = String(currency || 'ZAR').toUpperCase();
+      const symbol = symbols[c] || (c + ' ');
+      const n = Number(amount || 0);
+      return symbol + (Number.isFinite(n) ? n.toFixed(2) : '0.00');
     }
 
     function formatDate(dateString) {
       try {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-ZA', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric'
-        });
+        return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
       } catch {
         return '—';
       }
@@ -1173,23 +988,34 @@
       return '⏳';
     }
 
+    function normalizeItemsText(order) {
+      const items = Array.isArray(order.items) ? order.items : [];
+      const parts = [];
+      for (const it of items) {
+        const name = (it && (it.name || it.title || it.productName)) ? String(it.name || it.title || it.productName) : '';
+        if (name) parts.push(name);
+      }
+      return parts.join(' ').toLowerCase();
+    }
+
     // Notification Management
     function setupNotifications() {
-      document.querySelectorAll('.notification-close').forEach(button => {
+      document.querySelectorAll('.notification-close').forEach((button) => {
         button.addEventListener('click', (e) => {
           const notification = e.target.closest('.notification');
+          if (!notification) return;
           notification.style.opacity = '0';
           notification.style.transform = 'translateY(-10px)';
-          setTimeout(() => notification.remove(), 300);
+          setTimeout(() => notification.remove(), 200);
         });
       });
 
       // Auto-hide success notifications after 5 seconds
       setTimeout(() => {
-        document.querySelectorAll('.notification-success').forEach(notification => {
+        document.querySelectorAll('.notification-success').forEach((notification) => {
           notification.style.opacity = '0';
           notification.style.transform = 'translateY(-10px)';
-          setTimeout(() => notification.remove(), 300);
+          setTimeout(() => notification.remove(), 200);
         });
       }, 5000);
     }
@@ -1203,12 +1029,13 @@
       const status = order.status || 'Processing';
       const statusClass = getStatusClass(status);
       const statusIcon = getStatusIcon(status);
-      
+
+      // ✅ keep your existing paths/links
       const receiptHref = `/payment/receipt/${encodeURIComponent(orderId)}`;
       const trackHref = `/orders/${encodeURIComponent(orderId)}/track`;
 
       // Count items
-      const itemCount = order.items ? order.items.length : 0;
+      const itemCount = Array.isArray(order.items) ? order.items.length : 0;
       const itemsText = itemCount === 1 ? '1 item' : `${itemCount} items`;
 
       return `
@@ -1220,19 +1047,19 @@
             </div>
             <div class="order-meta">
               <div class="order-date">${date}</div>
-              ${itemCount > 0 ? `<div class="order-items">${itemsText}</div>` : ''}
+              ${itemCount > 0 ? `<div class="order-items">🧾 ${itemsText}</div>` : ``}
             </div>
           </div>
-          
+
           <div class="order-right">
             <div class="order-amount">${amount}</div>
             <div class="order-actions">
               <a href="${receiptHref}" class="action-btn receipt" title="View receipt">
-                <span class="btn-icon">📄</span>
+                <span class="btn-icon" aria-hidden="true">📄</span>
                 Receipt
               </a>
               <a href="${trackHref}" class="action-btn track" title="Track shipment">
-                <span class="btn-icon">🚚</span>
+                <span class="btn-icon" aria-hidden="true">🚚</span>
                 Track
               </a>
             </div>
@@ -1244,21 +1071,19 @@
     // Load Orders
     async function loadOrders() {
       ordersWrap.innerHTML = `
-        <div class="loading-state">
-          <div class="loading-spinner"></div>
+        <div class="loading-state" role="status" aria-label="Loading orders">
+          <div class="loading-spinner" aria-hidden="true"></div>
           <p>Loading your orders…</p>
         </div>
       `;
-      
+
       emptyState.style.display = 'none';
       loadingMore.style.display = 'none';
 
       try {
         const response = await fetch('/payment/my-orders', {
           credentials: 'same-origin',
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
+          headers: { 'Cache-Control': 'no-cache' }
         });
 
         if (!response.ok) throw new Error('Failed to load orders');
@@ -1269,20 +1094,17 @@
         allOrders = data.orders || [];
         updateOrderStats();
         applyFiltersAndSort();
-        
-        if (allOrders.length === 0) {
-          showEmptyState();
-        }
 
+        if (allOrders.length === 0) showEmptyState();
       } catch (error) {
         console.error('Error loading orders:', error);
         ordersWrap.innerHTML = `
           <div class="empty-state">
             <div class="empty-content">
-              <span class="empty-icon">⚠️</span>
+              <span class="empty-icon" aria-hidden="true">⚠️</span>
               <h3>Unable to Load Orders</h3>
               <p>Please try again later.</p>
-              <button onclick="window.location.reload()" class="btn btn-primary">Retry</button>
+              <button type="button" onclick="window.location.reload()" class="btn btn-primary">Retry</button>
             </div>
           </div>
         `;
@@ -1292,15 +1114,15 @@
     // Update Order Statistics
     function updateOrderStats() {
       const total = allOrders.length;
-      const active = allOrders.filter(o => {
-        const status = (o.status || '').toLowerCase();
-        return !status.includes('delivered') && 
-               !status.includes('completed') && 
-               !status.includes('cancelled');
+
+      const active = allOrders.filter((o) => {
+        const s = (o.status || '').toLowerCase();
+        return !s.includes('delivered') && !s.includes('completed') && !s.includes('cancelled') && !s.includes('refunded');
       }).length;
-      const completed = allOrders.filter(o => {
-        const status = (o.status || '').toLowerCase();
-        return status.includes('delivered') || status.includes('completed');
+
+      const completed = allOrders.filter((o) => {
+        const s = (o.status || '').toLowerCase();
+        return s.includes('delivered') || s.includes('completed');
       }).length;
 
       statTotal.textContent = total;
@@ -1308,21 +1130,20 @@
       statCompleted.textContent = completed;
     }
 
-    // Apply Filters and Sort
+    // Apply Filters and Sort (✅ now includes item name search)
     function applyFiltersAndSort() {
       let filtered = [...allOrders];
 
-      // Apply search filter
       if (currentSearch) {
-        const searchTerm = currentSearch.toLowerCase();
-        filtered = filtered.filter(order => {
+        const term = currentSearch.toLowerCase();
+        filtered = filtered.filter((order) => {
           const orderId = (order.orderId || order.id || '').toString().toLowerCase();
           const status = (order.status || '').toLowerCase();
-          return orderId.includes(searchTerm) || status.includes(searchTerm);
+          const itemsText = normalizeItemsText(order);
+          return orderId.includes(term) || status.includes(term) || itemsText.includes(term);
         });
       }
 
-      // Apply sorting
       filtered.sort((a, b) => {
         const dateA = new Date(a.createdAt || 0);
         const dateB = new Date(b.createdAt || 0);
@@ -1330,16 +1151,11 @@
         const amountB = parseFloat(b.amount || 0);
 
         switch (currentSort) {
-          case 'newest':
-            return dateB - dateA;
-          case 'oldest':
-            return dateA - dateB;
-          case 'amount-high':
-            return amountB - amountA;
-          case 'amount-low':
-            return amountA - amountB;
-          default:
-            return dateB - dateA;
+          case 'newest': return dateB - dateA;
+          case 'oldest': return dateA - dateB;
+          case 'amount-high': return amountB - amountA;
+          case 'amount-low': return amountA - amountB;
+          default: return dateB - dateA;
         }
       });
 
@@ -1355,37 +1171,46 @@
       }
 
       ordersWrap.className = `orders-view ${currentView}-view`;
-      const ordersHtml = filteredOrders.map(order => createOrderCard(order)).join('');
-      ordersWrap.innerHTML = ordersHtml;
+      ordersWrap.innerHTML = filteredOrders.map(createOrderCard).join('');
       emptyState.style.display = 'none';
     }
 
-    // Show Empty State
     function showEmptyState() {
       ordersWrap.innerHTML = '';
       emptyState.style.display = 'block';
     }
 
-    // Event Listeners
+    // Events
     function setupEventListeners() {
       // View toggle
-      viewBtns.forEach(btn => {
+      viewBtns.forEach((btn) => {
         btn.addEventListener('click', () => {
-          viewBtns.forEach(b => b.classList.remove('active'));
+          viewBtns.forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
           currentView = btn.dataset.view;
           renderOrders();
         });
       });
 
-      // Search
+      // Search (debounced)
       let searchTimeout;
       orderSearch.addEventListener('input', (e) => {
+        const v = String(e.target.value || '');
+        clearBtn.style.display = v.trim().length ? 'inline-flex' : 'none';
+
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-          currentSearch = e.target.value.trim().toLowerCase();
+          currentSearch = v.trim().toLowerCase();
           applyFiltersAndSort();
-        }, 300);
+        }, 250);
+      });
+
+      clearBtn.addEventListener('click', () => {
+        orderSearch.value = '';
+        clearBtn.style.display = 'none';
+        currentSearch = '';
+        applyFiltersAndSort();
+        orderSearch.focus();
       });
 
       // Sort
@@ -1395,19 +1220,13 @@
       });
     }
 
-    // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       setupNotifications();
       setupEventListeners();
       loadOrders();
     });
 
-    // Expose functions for debugging
-    window.orderListApp = {
-      loadOrders,
-      applyFiltersAndSort,
-      renderOrders
-    };
-
+    // Debug helpers
+    window.orderListApp = { loadOrders, applyFiltersAndSort, renderOrders };
   })();
 </script>

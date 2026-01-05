@@ -1,15 +1,37 @@
 // routes/adminOrdersApi.js
+'use strict';
+
 const express = require('express');
 const { fetch } = require('undici');
 
+// -------------------- Model --------------------
 let Order = null;
 try { Order = require('../models/Order'); } catch {
-  // optional model
+  Order = null;
+}
+
+// -------------------- Admin guard (PROD SAFE) --------------------
+let requireAdmin = null;
+try {
+  requireAdmin = require('../middleware/requireAdmin');
+} catch (e) {
+  if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+    throw new Error('Missing middleware/requireAdmin in production. Refusing to start.');
+  }
+  // DEV fallback only
+  requireAdmin = (req, res, next) => {
+    if (req.session?.admin) return next();
+    return res.status(401).json({ ok: false, message: 'Unauthorized (admin only).' });
+  };
 }
 
 const router = express.Router();
 router.use(express.json());
 
+// ✅ lock ALL admin orders API
+router.use(requireAdmin);
+
+// -------------------- ENV --------------------
 const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
@@ -18,7 +40,9 @@ const {
 } = process.env;
 
 const PP_API =
-  PAYPAL_MODE === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+  String(PAYPAL_MODE).toLowerCase() === 'live'
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com';
 
 const upperCcy = String(BASE_CURRENCY || 'USD').toUpperCase();
 
@@ -44,6 +68,7 @@ function safeStr(v, max = 255) {
 
 async function getAccessToken() {
   const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
+
   const res = await fetch(`${PP_API}/v1/oauth2/token`, {
     method: 'POST',
     headers: {
@@ -52,6 +77,7 @@ async function getAccessToken() {
     },
     body: 'grant_type=client_credentials',
   });
+
   if (!res.ok) throw new Error(`PayPal token error: ${res.status} ${await res.text()}`);
   return (await res.json()).access_token;
 }
@@ -63,23 +89,9 @@ function getCaptureIdFromOrder(doc) {
     doc?.capture?.id ||
     doc?.raw?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
     doc?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
+    doc?.paypal?.captureId ||
     null
   );
-}
-
-async function findOrderByCaptureId(captureId) {
-  if (!Order) return null;
-  const cid = String(captureId || '').trim();
-  if (!cid) return null;
-
-  return Order.findOne({
-    $or: [
-      { captureId: cid },
-      { 'capture.captureId': cid },
-      { 'raw.purchase_units.payments.captures.id': cid },
-      { 'purchase_units.payments.captures.id': cid },
-    ],
-  });
 }
 
 function getCapturedAmountFromOrder(doc) {
@@ -115,10 +127,7 @@ function wouldExceed(captured, refundedSoFar, want) {
 }
 
 // -------------------- LIST --------------------
-/**
- * GET /api/admin/orders?limit=100
- * Returns list used by orders-admin.ejs
- */
+// GET /api/admin/orders?limit=100
 router.get('/orders', async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
@@ -132,30 +141,19 @@ router.get('/orders', async (req, res) => {
 
     const orders = docs.map((o) => {
       const amount = moneyToNumber(o.amount?.value ?? o.amount);
-      const currency = o.amount?.currency || o.breakdown?.currency || 'USD';
+      const currency = o.amount?.currency || o.breakdown?.currency || o.currency || upperCcy;
 
-      const captureId =
-        o.captureId ||
-        o.capture?.captureId ||
-        o.capture?.id ||
-        o.raw?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
-        '';
-
-      const fee = moneyToNumber(o.capture?.sellerReceivable?.paypalFee?.value);
-      const net = moneyToNumber(o.capture?.sellerReceivable?.net?.value);
+      const captureId = getCaptureIdFromOrder(o) || '';
 
       return {
         createdAt: o.createdAt,
-        orderId: o.orderId || o._id?.toString(),
+        orderId: o.orderId || o.paypalOrderId || o._id?.toString(),
         status: o.status || o.state || '—',
-        payerName: o.payer?.name || o.payerName || '',
-        payerEmail: o.payer?.email || o.payerEmail || '',
-        amount,
-        currency,
-        fee: Number.isFinite(fee) ? fee : null,
-        net: Number.isFinite(net) ? net : null,
+        payerName: o.payer?.name ? `${o.payer?.name?.given || ''} ${o.payer?.name?.surname || ''}`.trim() : (o.payerName || ''),
+        payerEmail: o.payer?.email || o.payerEmail || o.payer?.email_address || '',
+        amount: Number.isFinite(amount) ? amount : 0,
+        currency: String(currency || upperCcy).toUpperCase(),
         captureId,
-        shipment: o.shippingTracking || o.shipment || null,
       };
     });
 
@@ -166,15 +164,14 @@ router.get('/orders', async (req, res) => {
   }
 });
 
-// -------------------- CANCEL --------------------
-/**
- * POST /api/admin/orders/:orderId/cancel
- */
+// -------------------- CANCEL (DB only) --------------------
+// POST /api/admin/orders/:orderId/cancel
 router.post('/orders/:orderId/cancel', async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
 
     const { orderId } = req.params;
+
     const doc = await Order.findOne({
       $or: [{ orderId }, { paypalOrderId: orderId }, { _id: orderId }],
     });
@@ -199,16 +196,14 @@ router.post('/orders/:orderId/cancel', async (req, res) => {
 });
 
 // -------------------- REFUND (ORDER) --------------------
-/**
- * POST /api/admin/orders/:orderId/refund
- * body: { amount?: number|string, note?: string }
- * - amount omitted => full remaining refund
- */
+// POST /api/admin/orders/:orderId/refund
+// body: { amount?: number|string, note?: string }
 router.post('/orders/:orderId/refund', async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
 
     const orderId = String(req.params.orderId || '').trim();
+
     const doc = await Order.findOne({
       $or: [{ orderId }, { paypalOrderId: orderId }, { _id: orderId }],
     });
@@ -220,17 +215,15 @@ router.post('/orders/:orderId/refund', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'No captureId found on this order (cannot refund).' });
     }
 
-    // optional partial amount
     const amountNum = normalizeMoneyNumber(req.body?.amount);
     if (amountNum !== null && (!Number.isFinite(amountNum) || amountNum <= 0)) {
       return res.status(400).json({ ok: false, message: 'Amount must be a positive number, or omit for full refund.' });
     }
 
-    // guardrail (if we can calculate captured)
     const captured = getCapturedAmountFromOrder(doc);
     const refundedSoFar = sumRefundedFromOrder(doc);
 
-    let finalRefundAmount = amountNum; // null => full
+    let finalRefundAmount = amountNum; // null => full remaining
     if (captured.value != null) {
       const remaining = +(captured.value - refundedSoFar).toFixed(2);
       const want = amountNum === null ? remaining : amountNum;
@@ -245,7 +238,7 @@ router.post('/orders/:orderId/refund', async (req, res) => {
       if (amountNum === null) finalRefundAmount = remaining;
     }
 
-    const currency = (doc.amount?.currency || doc.breakdown?.currency || upperCcy).toUpperCase();
+    const currency = String(doc.amount?.currency || doc.breakdown?.currency || upperCcy).toUpperCase();
 
     const payload = {};
     if (finalRefundAmount !== null) {
@@ -256,6 +249,7 @@ router.post('/orders/:orderId/refund', async (req, res) => {
     if (note) payload.note_to_payer = note;
 
     const token = await getAccessToken();
+
     const ppRes = await fetch(`${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -263,6 +257,7 @@ router.post('/orders/:orderId/refund', async (req, res) => {
     });
 
     const refundJson = await ppRes.json().catch(() => ({}));
+
     if (!ppRes.ok) {
       console.error('PayPal refund error:', ppRes.status, refundJson);
       return res.status(502).json({
@@ -272,7 +267,7 @@ router.post('/orders/:orderId/refund', async (req, res) => {
       });
     }
 
-    // best-effort: persist audit trail on order
+    // save refund in DB
     try {
       doc.refunds = Array.isArray(doc.refunds) ? doc.refunds : [];
       doc.refunds.push({
@@ -297,121 +292,12 @@ router.post('/orders/:orderId/refund', async (req, res) => {
 
       await doc.save();
     } catch (e) {
-      console.warn('Refund saved to PayPal but failed to persist to DB:', e?.message || e);
+      console.warn('Refund succeeded in PayPal but DB save failed:', e?.message || e);
     }
 
     return res.json({ ok: true, refund: refundJson });
   } catch (err) {
     console.error('[adminOrdersApi:refund] error:', err?.stack || err);
-    return res.status(500).json({ ok: false, message: 'Server error refunding payment.' });
-  }
-});
-
-// -------------------- REFUND (CAPTURE ID) --------------------
-/**
- * POST /api/admin/refunds
- * body: { captureId: string, amount?: number|string, currency?: string, orderId?: string, note?: string }
- */
-router.post('/refunds', async (req, res) => {
-  try {
-    const captureId = safeStr(req.body?.captureId, 128);
-    if (!captureId) return res.status(400).json({ ok: false, message: 'captureId is required.' });
-
-    const amountNum = normalizeMoneyNumber(req.body?.amount);
-    if (amountNum !== null && (!Number.isFinite(amountNum) || amountNum <= 0)) {
-      return res.status(400).json({ ok: false, message: 'Amount must be a positive number, or omit for full refund.' });
-    }
-
-    const currency = safeStr(req.body?.currency || upperCcy, 8).toUpperCase();
-    const note = safeStr(req.body?.note, 255);
-
-    let orderDoc = null;
-    if (Order) {
-      orderDoc = await findOrderByCaptureId(captureId);
-
-      const bodyOrderId = safeStr(req.body?.orderId, 64);
-      if (bodyOrderId && orderDoc) {
-        const dbOrderId = String(orderDoc.orderId || orderDoc.paypalOrderId || orderDoc._id);
-        if (dbOrderId !== bodyOrderId) {
-          return res.status(400).json({ ok: false, message: 'captureId does not match the provided orderId.' });
-        }
-      }
-    }
-
-    // guardrail if we found an order
-    if (orderDoc) {
-      const captured = getCapturedAmountFromOrder(orderDoc);
-      const refundedSoFar = sumRefundedFromOrder(orderDoc);
-      if (captured.value != null) {
-        const remaining = +(captured.value - refundedSoFar).toFixed(2);
-        const want = amountNum === null ? remaining : amountNum;
-
-        if (want <= 0) return res.status(400).json({ ok: false, message: 'Nothing left to refund for this capture.' });
-        if (wouldExceed(captured.value, refundedSoFar, want)) {
-          return res.status(400).json({
-            ok: false,
-            message: `Refund exceeds remaining refundable amount (${remaining.toFixed(2)}).`,
-          });
-        }
-      }
-    }
-
-    const payload = {};
-    if (amountNum !== null) payload.amount = { value: amountNum.toFixed(2), currency_code: currency };
-    if (note) payload.note_to_payer = note;
-
-    const token = await getAccessToken();
-    const ppRes = await fetch(`${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const refundJson = await ppRes.json().catch(() => ({}));
-    if (!ppRes.ok) {
-      console.error('PayPal refund error:', ppRes.status, refundJson);
-      return res.status(502).json({
-        ok: false,
-        message: refundJson?.message || `PayPal refund failed (${ppRes.status}).`,
-        details: refundJson,
-      });
-    }
-
-    // best-effort persist
-    try {
-      if (orderDoc) {
-        orderDoc.refunds = Array.isArray(orderDoc.refunds) ? orderDoc.refunds : [];
-        orderDoc.refunds.push({
-          refundId: refundJson.id || null,
-          captureId,
-          status: refundJson.status || null,
-          amount: {
-            value: refundJson?.amount?.value ?? (amountNum !== null ? amountNum.toFixed(2) : null),
-            currency: refundJson?.amount?.currency_code ?? currency,
-          },
-          createdAt: new Date(),
-          raw: refundJson,
-        });
-
-        const captured = getCapturedAmountFromOrder(orderDoc);
-        const refundedSoFar = sumRefundedFromOrder(orderDoc);
-
-        if (captured.value != null) {
-          if (refundedSoFar >= captured.value - 0.00001) orderDoc.status = 'REFUNDED';
-          else if (refundedSoFar > 0) orderDoc.status = 'PARTIALLY_REFUNDED';
-        } else {
-          orderDoc.status = 'REFUND_SUBMITTED';
-        }
-
-        await orderDoc.save();
-      }
-    } catch (e) {
-      console.warn('Refund saved to PayPal but failed to persist to DB:', e?.message || e);
-    }
-
-    return res.json({ ok: true, refund: refundJson });
-  } catch (err) {
-    console.error('[adminOrdersApi:refunds] error:', err?.stack || err);
     return res.status(500).json({ ok: false, message: 'Server error refunding payment.' });
   }
 });

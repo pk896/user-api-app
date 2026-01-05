@@ -1,4 +1,6 @@
 // routes/deliveryOptionsApi.js
+'use strict';
+
 const express = require('express');
 const DeliveryOption = require('../models/DeliveryOption');
 
@@ -6,23 +8,17 @@ const router = express.Router();
 
 /**
  * GET /api/delivery-options
- * Public, read-only list of ACTIVE options for checkout.
+ * Public read-only list (checkout uses this).
  *
- * Query params (all optional):
- *  - q:         text search on name (case-insensitive)
- *  - region:    exact match on region (case-insensitive)
- *  - minDays:   minimum deliveryDays (int)
- *  - maxDays:   maximum deliveryDays (int)
- *  - sort:      "price" | "days" | "name"  (default "price")
- *  - order:     "asc" | "desc"             (default "asc")
- *  - limit:     number of items (1..100)   (default 50)
- *
- * Response items include both priceCents and price (float).
+ * Query params (optional):
+ *  - q, region, minDays, maxDays, sort=price|days|name, order=asc|desc, limit
+ *  - active=1|0 (default: 1)
  */
-router.get('/api/delivery-options', async (req, res) => {
+router.get('/delivery-options', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     const region = String(req.query.region || '').trim();
+
     const minDays = Number.isFinite(Number(req.query.minDays))
       ? Number(req.query.minDays)
       : undefined;
@@ -30,13 +26,22 @@ router.get('/api/delivery-options', async (req, res) => {
       ? Number(req.query.maxDays)
       : undefined;
 
-    const sortKey = (req.query.sort || 'price').toLowerCase();
-    const order = (req.query.order || 'asc').toLowerCase() === 'desc' ? -1 : 1;
+    const sortKey = String(req.query.sort || 'price').toLowerCase();
+    const order = String(req.query.order || 'asc').toLowerCase() === 'desc' ? -1 : 1;
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
 
-    const where = { active: true };
-    if (q) {where.name = new RegExp(q, 'i');}
-    if (region) {where.region = new RegExp(`^${escapeRegExp(region)}$`, 'i');}
+    // ✅ default to active=1 for checkout
+    const activeParam = String(req.query.active ?? '1').trim();
+    const active =
+      activeParam === '0' || activeParam.toLowerCase() === 'false'
+        ? false
+        : true;
+
+    const where = { active };
+
+    if (q) where.name = new RegExp(escapeRegExp(q), 'i');
+    if (region) where.region = new RegExp(`^${escapeRegExp(region)}$`, 'i');
+
     if (typeof minDays === 'number' && !Number.isNaN(minDays)) {
       where.deliveryDays = { ...(where.deliveryDays || {}), $gte: minDays };
     }
@@ -52,7 +57,7 @@ router.get('/api/delivery-options', async (req, res) => {
     const sort = sortMap[sortKey] || sortMap.price;
 
     const docs = await DeliveryOption.find(where)
-      .select('name deliveryDays priceCents region description active') // only public-safe fields
+      .select('name deliveryDays priceCents region description active')
       .sort(sort)
       .limit(limit)
       .lean();
@@ -65,10 +70,10 @@ router.get('/api/delivery-options', async (req, res) => {
       price: Number(((d.priceCents || 0) / 100).toFixed(2)),
       region: d.region || '',
       description: d.description || '',
+      active: !!d.active,
     }));
 
-    // small cache (optional): 30s
-    res.setHeader('Cache-Control', 'public, max-age=30');
+    res.setHeader('Cache-Control', 'no-store');
     return res.json({ options: items });
   } catch (err) {
     console.error('[api:delivery-options] error:', err);
@@ -77,7 +82,7 @@ router.get('/api/delivery-options', async (req, res) => {
 });
 
 function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 module.exports = router;

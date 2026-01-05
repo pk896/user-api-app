@@ -8,369 +8,461 @@
     `/admin/business-verifications?status=${encodeURIComponent(f.status)}&q=${encodeURIComponent(safe(f.q))}&country=${encodeURIComponent(safe(f.country))}&page=${p}`;
 %>
 
-<section class="admin-wrap">
+<section class="abv-page">
+  <div class="abv-wrap">
 
-  <!-- Header -->
-  <header class="hdr">
-    <div class="hdr-left">
-      <div class="hdr-badge">ADMIN</div>
-      <h1 class="hdr-title"><%= title %></h1>
-      <p class="hdr-sub">Verify official numbers, review details, approve/reject.</p>
-    </div>
-    <div class="hdr-right">
-      <button id="exportBtn" class="btn btn-purple" type="button">Export CSV</button>
-    </div>
-  </header>
-
-  <!-- Filters -->
-  <section class="panel panel-filters">
-    <div class="panel-head">
-      <h2 class="panel-title">Filters</h2>
-      <span class="panel-chip">Purple is dominant</span>
-    </div>
-
-    <form method="GET" action="/admin/business-verifications" id="filterForm" class="filter-grid">
-      <div class="field">
-        <label for="q">Search</label>
-        <input id="q" name="q" value="<%= safe(f.q) %>" placeholder="Business name, email, official #, ID…" />
-        <div class="hint">Tip: try “@gmail” or part of official number</div>
+    <!-- Header (Purple dominant) -->
+    <header class="abv-hdr">
+      <div class="abv-hdr-left">
+        <div class="abv-badge">ADMIN</div>
+        <div class="abv-title-wrap">
+          <h1 class="abv-title"><%= title %></h1>
+          <p class="abv-sub">Verify official numbers, review details, approve/reject.</p>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="country">Country</label>
-        <input id="country" name="country" value="<%= safe(f.country) %>" placeholder="e.g. South Africa" />
-        <div class="hint">Exact or partial country works</div>
+      <div class="abv-hdr-right">
+        <button id="exportBtn" class="abv-btn abv-btn-purple" type="button">Export CSV</button>
+      </div>
+    </header>
+
+    <!-- Filters -->
+    <section class="abv-card abv-card-purple">
+      <div class="abv-card-h abv-row">
+        <div>
+          <h2 class="abv-h2">Filters</h2>
+          <p class="abv-sub2">Search quickly and filter by status/country. Status auto-applies when changed.</p>
+        </div>
+        <div class="abv-chips">
+          <span class="abv-chip"><span class="dot dot-p"></span> Purple <b>#7C3AED</b></span>
+          <span class="abv-chip"><span class="dot dot-b"></span> Blue <b>#2563EB</b></span>
+          <span class="abv-chip"><span class="dot dot-g"></span> Green <b>#22C55E</b></span>
+          <span class="abv-chip"><span class="dot dot-k"></span> Black <b>#0F172A</b></span>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="status">Status</label>
-        <select name="status" id="status">
-          <option value="all" <%= f.status==='all'?'selected':'' %>>All</option>
-          <option value="pending" <%= f.status==='pending'?'selected':'' %>>Pending</option>
-          <option value="verified" <%= f.status==='verified'?'selected':'' %>>Verified</option>
-          <option value="rejected" <%= f.status==='rejected'?'selected':'' %>>Rejected</option>
-        </select>
-        <div class="hint">Auto-applies when changed</div>
+      <form method="GET" action="/admin/business-verifications" id="filterForm" class="abv-grid" autocomplete="off">
+        <div class="abv-field">
+          <label for="q" class="abv-lbl">Search</label>
+          <input
+            id="q"
+            name="q"
+            value="<%= safe(f.q) %>"
+            placeholder="Business name, email, official #, ID…"
+            autocomplete="off"
+          />
+          <div class="abv-hint">Tip: try “@gmail” or part of official number.</div>
+        </div>
+
+        <div class="abv-field">
+          <label for="country" class="abv-lbl">Country</label>
+          <input
+            id="country"
+            name="country"
+            value="<%= safe(f.country) %>"
+            placeholder="e.g. South Africa"
+            autocomplete="off"
+          />
+          <div class="abv-hint">Exact or partial country works.</div>
+        </div>
+
+        <div class="abv-field">
+          <label for="status" class="abv-lbl">Status</label>
+          <select name="status" id="status">
+            <option value="all" <%= f.status==='all'?'selected':'' %>>All</option>
+            <option value="pending" <%= f.status==='pending'?'selected':'' %>>Pending</option>
+            <option value="verified" <%= f.status==='verified'?'selected':'' %>>Verified</option>
+            <option value="rejected" <%= f.status==='rejected'?'selected':'' %>>Rejected</option>
+          </select>
+          <div class="abv-hint">Auto-applies when changed.</div>
+        </div>
+
+        <div class="abv-actions">
+          <button class="abv-btn abv-btn-blue" type="submit">Apply</button>
+          <a href="/admin/business-verifications" class="abv-btn abv-btn-ghost">Clear</a>
+        </div>
+      </form>
+    </section>
+
+    <!-- Meta KPIs -->
+    <section class="abv-kpis">
+      <div class="abv-kpi abv-kpi-purple">
+        <div class="abv-kpi-l">Showing</div>
+        <div class="abv-kpi-v"><%= (items||[]).length %> <span class="abv-kpi-m">/ <%= f.total %></span></div>
       </div>
 
-      <button class="btn btn-blue" type="submit">Apply</button>
-      <a href="/admin/business-verifications" class="btn btn-outline">Clear</a>
-    </form>
-  </section>
-
-  <!-- Results meta -->
-  <section class="panel panel-meta">
-    <div class="meta-row">
-      <div class="meta-box meta-purple">
-        <div class="meta-label">Showing</div>
-        <div class="meta-value"><%= (items||[]).length %> <span class="meta-muted">/ <%= f.total %></span></div>
+      <div class="abv-kpi abv-kpi-blue">
+        <div class="abv-kpi-l">Page</div>
+        <div class="abv-kpi-v"><%= f.page %> <span class="abv-kpi-m">/ <%= f.totalPages %></span></div>
       </div>
 
-      <div class="meta-box meta-blue">
-        <div class="meta-label">Page</div>
-        <div class="meta-value"><%= f.page %> <span class="meta-muted">/ <%= f.totalPages %></span></div>
+      <div class="abv-kpi abv-kpi-green">
+        <div class="abv-kpi-l">Status filter</div>
+        <div class="abv-kpi-v"><%= (safe(f.status)||'pending').toUpperCase() %></div>
       </div>
+    </section>
 
-      <div class="meta-box meta-green">
-        <div class="meta-label">Status Filter</div>
-        <div class="meta-value"><%= (safe(f.status)||'pending').toUpperCase() %></div>
-      </div>
-    </div>
-  </section>
+    <!-- Cards -->
+    <section class="abv-cards">
+      <% if (!items || items.length === 0) { %>
+        <div class="abv-empty">
+          <div class="abv-empty-ic">😕</div>
+          <div class="abv-empty-t">No verification requests</div>
+          <div class="abv-empty-s">Try changing filters above.</div>
+        </div>
+      <% } %>
 
-  <!-- Cards -->
-  <section class="cards-grid">
-    <% if (!items || items.length === 0) { %>
-      <div class="empty">
-        <div class="empty-icon">😕</div>
-        <h3>No verification requests</h3>
-        <p>Try changing filters. This panel is purple-themed and always visible.</p>
-      </div>
+      <% (items || []).forEach(b => {
+        const status = (b.verification?.status || 'pending').toLowerCase();
+        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+        const tone = status === 'verified' ? 'tone-green' : (status === 'rejected' ? 'tone-red' : 'tone-amber');
+
+        const role = b.role || '—';
+        const name = b.name || '—';
+        const email = b.email || '—';
+        const created = b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—';
+        const internalId = b.internalBusinessId;
+        const country = b.country || '—';
+        const offNum = b.officialNumber || '—';
+        const offType = b.officialNumberType || '—';
+      %>
+
+        <article class="abv-card2 <%= tone %>">
+          <div class="abv-top">
+            <div class="abv-left">
+              <div class="abv-avatar"><%= String(name).trim().charAt(0).toUpperCase() %></div>
+
+              <div class="abv-main">
+                <div class="abv-name-row">
+                  <h3 class="abv-name"><%= name %></h3>
+                  <span class="abv-status abv-status-<%= status %>"><%= statusLabel %></span>
+                </div>
+
+                <div class="abv-subrow">
+                  <span class="abv-pill abv-pill-black"><%= role %></span>
+                  <% if (internalId) { %>
+                    <span class="abv-pill abv-pill-purple">ID: <%= internalId %></span>
+                  <% } %>
+                  <span class="abv-pill abv-pill-blue"><%= created %></span>
+                </div>
+
+                <div class="abv-email"><%= email %></div>
+              </div>
+            </div>
+
+            <div class="abv-right">
+              <a href="/admin/business-verifications/<%= b._id %>" class="abv-btn abv-btn-mini abv-btn-purple">Review →</a>
+            </div>
+          </div>
+
+          <div class="abv-body">
+            <div class="abv-kv">
+              <div class="abv-k">Country</div>
+              <div class="abv-v"><%= country %></div>
+            </div>
+
+            <div class="abv-kv">
+              <div class="abv-k">Official #</div>
+              <div class="abv-v abv-mono"><%= offNum %></div>
+            </div>
+
+            <div class="abv-kv">
+              <div class="abv-k">Type</div>
+              <div class="abv-v"><%= offType %></div>
+            </div>
+
+            <div class="abv-kv">
+              <div class="abv-k">Action</div>
+              <div class="abv-v">
+                <a href="/admin/business-verifications/<%= b._id %>" class="abv-link">Open verification</a>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      <% }) %>
+    </section>
+
+    <!-- Pagination -->
+    <% if (f.totalPages > 1) { %>
+      <nav class="abv-card abv-card-green">
+        <div class="abv-pager">
+          <% if (f.page > 1) { %>
+            <a class="abv-btn abv-btn-ghost" href="<%= buildHref(f.page-1) %>">← Prev</a>
+          <% } else { %>
+            <span class="abv-btn abv-btn-ghost abv-disabled">← Prev</span>
+          <% } %>
+
+          <div class="abv-pager-mid">
+            <span class="abv-pagepill">Page <b><%= f.page %></b> of <b><%= f.totalPages %></b></span>
+          </div>
+
+          <% if (f.page < f.totalPages) { %>
+            <a class="abv-btn abv-btn-blue" href="<%= buildHref(f.page+1) %>">Next →</a>
+          <% } else { %>
+            <span class="abv-btn abv-btn-blue abv-disabled">Next →</span>
+          <% } %>
+        </div>
+      </nav>
     <% } %>
 
-    <% (items || []).forEach(b => { 
-      const status = (b.verification?.status || 'pending').toLowerCase();
-      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-      const cardTone = status === 'verified' ? 'tone-green' : (status === 'rejected' ? 'tone-red' : 'tone-amber');
-    %>
-
-      <article class="card <%= cardTone %>">
-        <div class="card-top">
-          <div class="card-title">
-            <div class="avatar"><%= (b.name || 'B').trim().charAt(0).toUpperCase() %></div>
-            <div class="t">
-              <h3 class="name"><%= b.name %></h3>
-              <div class="sub">
-                <span class="pill pill-black"><%= b.role || '—' %></span>
-                <% if (b.internalBusinessId) { %>
-                  <span class="pill pill-purple">ID: <%= b.internalBusinessId %></span>
-                <% } %>
-              </div>
-              <div class="email"><%= b.email %></div>
-            </div>
-          </div>
-
-          <div class="card-status">
-            <span class="status status-<%= status %>"><%= statusLabel %></span>
-            <span class="date"><%= new Date(b.createdAt).toLocaleDateString() %></span>
-          </div>
-        </div>
-
-        <div class="card-body">
-          <div class="kv">
-            <div class="k">Country</div>
-            <div class="v"><%= b.country || '—' %></div>
-          </div>
-          <div class="kv">
-            <div class="k">Official #</div>
-            <div class="v mono"><%= b.officialNumber || '—' %></div>
-          </div>
-          <div class="kv">
-            <div class="k">Type</div>
-            <div class="v"><%= b.officialNumberType || '—' %></div>
-          </div>
-          <div class="kv">
-            <div class="k">Action</div>
-            <div class="v">
-              <a href="/admin/business-verifications/<%= b._id %>" class="btn btn-mini btn-purple">Review →</a>
-            </div>
-          </div>
-        </div>
-      </article>
-
-    <% }) %>
-  </section>
-
-  <!-- Pagination -->
-  <% if (f.totalPages > 1) { %>
-    <nav class="panel panel-pager">
-      <div class="pager">
-        <% if (f.page > 1) { %>
-          <a class="btn btn-outline" href="<%= buildHref(f.page-1) %>">← Prev</a>
-        <% } else { %>
-          <span class="btn btn-outline btn-disabled">← Prev</span>
-        <% } %>
-
-        <div class="pager-center">
-          <span class="pager-pill">Page <b><%= f.page %></b> of <b><%= f.totalPages %></b></span>
-        </div>
-
-        <% if (f.page < f.totalPages) { %>
-          <a class="btn btn-blue" href="<%= buildHref(f.page+1) %>">Next →</a>
-        <% } else { %>
-          <span class="btn btn-blue btn-disabled">Next →</span>
-        <% } %>
-      </div>
-    </nav>
-  <% } %>
-
+  </div>
 </section>
 
-<style nonce="<%= NONCE %>">
-  :root{
-    --blue:#2563EB;
-    --purple:#7C3AED;
-    --green:#22C55E;
-    --black:#0F172A;
-    --slate:#64748b;
-    --border:#e2e8f0;
+<%
+  // ✅ Use your layout styles slot if available.
+  styles = `
+<style nonce="${NONCE}">
+  /* ===== Brand palette (Purple dominant) ===== */
+  .abv-page{
+    --b:#2563EB;
+    --p:#7C3AED;
+    --g:#22C55E;
+    --k:#0F172A;
+    --mut:#64748B;
+    --line:rgba(15,23,42,.10);
+    --shadow:0 12px 26px rgba(15,23,42,.10);
+    padding:.75rem 0;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.22) 0%, rgba(37,99,235,.08) 55%, rgba(34,197,94,.06) 100%),
+      linear-gradient(180deg, #f8fafc, #f8fafc);
   }
+  /* ✅ hard stop: no horizontal scroll */
+  html, body { max-width:100%; overflow-x:hidden; }
+  .abv-page *{box-sizing:border-box}
 
-  /* ✅ hard stop: no horizontal scroll anywhere in this page */
-  html, body { max-width: 100%; overflow-x: hidden; }
-  .admin-wrap * { box-sizing: border-box; }
-  .admin-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+  .abv-wrap{max-width:1200px;margin:0 auto;padding:0 .85rem;display:grid;gap:.85rem}
 
-  /* Header (Purple dominant) */
-  .hdr{
-    border-radius: 18px;
-    padding: 1rem;
-    background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(37,99,235,.12));
-    border: 1px solid rgba(124,58,237,.35);
-    display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;
+  /* Header */
+  .abv-hdr{
+    border-radius:18px;
+    padding:.95rem;
+    background: linear-gradient(135deg, rgba(124,58,237,.16), rgba(37,99,235,.10));
+    border:1px solid rgba(124,58,237,.30);
+    display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
+    box-shadow: 0 10px 18px rgba(15,23,42,.06);
   }
-  .hdr-badge{
-    display:inline-flex; align-items:center; gap:.4rem;
-    padding:.25rem .6rem; border-radius:999px;
-    font-weight:900; font-size:.7rem; letter-spacing:.08em;
-    background: rgba(124,58,237,.18); color: var(--purple); border: 1px solid rgba(124,58,237,.35);
-    width: fit-content;
+  .abv-hdr-left{display:flex;gap:.75rem;align-items:flex-start;flex:1 1 260px;min-width:240px}
+  .abv-badge{
+    display:inline-flex;align-items:center;justify-content:center;
+    height:38px;padding:0 .7rem;border-radius:999px;
+    font-weight:950;font-size:.72rem;letter-spacing:.08em;
+    background: rgba(124,58,237,.16);
+    border:1px solid rgba(124,58,237,.28);
+    color:var(--p);
+    flex:0 0 auto;
   }
-  .hdr-title{ margin:.25rem 0 0; color: var(--black); font-weight: 950; font-size: 1.35rem; }
-  .hdr-sub{ margin:.25rem 0 0; color: var(--slate); font-size:.85rem; max-width: 48ch; }
-  .hdr-right{ display:flex; gap:.5rem; }
+  .abv-title{margin:0;color:var(--k);font-weight:950;font-size:1.2rem}
+  .abv-sub{margin:.25rem 0 0;color:var(--mut);font-weight:750;font-size:.86rem;max-width:60ch}
+  .abv-hdr-right{display:flex;gap:.5rem;align-items:center}
 
-  /* Panels = visibly different colors */
-  .panel{ border-radius: 18px; padding: 1rem; border: 1px solid var(--border); }
-  .panel-filters{
-    background: linear-gradient(180deg, rgba(124,58,237,.10), rgba(255,255,255,1));
-    border-color: rgba(124,58,237,.35);
+  /* Generic card */
+  .abv-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow: var(--shadow);
+    overflow:hidden;
   }
-  .panel-meta{
-    background: linear-gradient(180deg, rgba(37,99,235,.10), rgba(255,255,255,1));
-    border-color: rgba(37,99,235,.30);
+  .abv-card-h{
+    padding:.8rem .85rem;
+    border-bottom:1px solid rgba(15,23,42,.08);
   }
-  .panel-pager{
-    background: linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,1));
-    border-color: rgba(34,197,94,.30);
-  }
-  .panel-head{ display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem; }
-  .panel-title{ margin:0; font-size: 1rem; font-weight: 950; color: var(--black); }
-  .panel-chip{
-    font-size:.75rem; font-weight:800;
-    background: rgba(124,58,237,.16); color: var(--purple);
-    border: 1px solid rgba(124,58,237,.30);
-    padding: .25rem .6rem; border-radius: 999px;
-  }
+  .abv-card-purple .abv-card-h{background: rgba(124,58,237,.09)}
+  .abv-card-green .abv-card-h{background: rgba(34,197,94,.08)}
+  .abv-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+  .abv-h2{margin:0;color:var(--k);font-weight:950;font-size:1rem}
+  .abv-sub2{margin:.25rem 0 0;color:#475569;font-weight:750;font-size:.86rem}
 
-  /* Buttons */
-  .btn{
-    display:inline-flex; align-items:center; justify-content:center;
-    padding:.7rem 1rem; border-radius: 14px; font-weight: 900; text-decoration:none;
-    border: 1px solid transparent; cursor:pointer;
-    white-space: nowrap;
-    min-height: 44px;
+  /* chips */
+  .abv-chips{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end}
+  .abv-chip{
+    display:inline-flex;align-items:center;gap:.45rem;
+    padding:.35rem .55rem;border-radius:999px;
+    background: rgba(15,23,42,.03);
+    border:1px solid rgba(15,23,42,.10);
+    font-size:.78rem;font-weight:850;white-space:nowrap;color:var(--k);
   }
-  .btn-purple{ background: var(--purple); color:#fff; box-shadow: 0 10px 25px rgba(124,58,237,.18); }
-  .btn-blue{ background: var(--blue); color:#fff; box-shadow: 0 10px 25px rgba(37,99,235,.16); }
-  .btn-outline{ background: rgba(255,255,255,.85); color: var(--black); border-color: rgba(15,23,42,.14); }
-  .btn-mini{ padding:.55rem .9rem; border-radius: 12px; min-height: 40px; }
-  .btn-disabled{ opacity:.55; pointer-events:none; }
+  .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+  .dot-p{background:var(--p)} .dot-b{background:var(--b)} .dot-g{background:var(--g)} .dot-k{background:var(--k)}
 
-  /* Filter grid */
-  .filter-grid{ display:grid; grid-template-columns: 1fr; gap:.75rem; }
-  .field{ background: rgba(255,255,255,.9); border:1px solid rgba(124,58,237,.15); border-radius: 16px; padding:.75rem; }
-  .field label{ display:block; font-size:.75rem; font-weight:900; color: var(--purple); margin-bottom:.4rem; }
-  .field input,.field select{
+  /* buttons */
+  .abv-btn{
+    display:inline-flex;align-items:center;justify-content:center;
+    border-radius:16px;
+    padding:.65rem .8rem;
+    font-weight:950;
+    border:1px solid rgba(15,23,42,.12);
+    background:#fff;
+    color:var(--k);
+    cursor:pointer;
+    text-decoration:none;
+    white-space:nowrap;
+    min-height:44px;
+    transition: transform .12s ease, filter .12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .abv-btn:hover{transform: translateY(-1px)}
+  .abv-btn-purple{
+    background: linear-gradient(135deg, var(--p), var(--b));
+    border-color: transparent;
+    color:#fff;
+    box-shadow: 0 12px 22px rgba(124,58,237,.18);
+  }
+  .abv-btn-blue{
+    background: rgba(37,99,235,1);
+    border-color: transparent;
+    color:#fff;
+    box-shadow: 0 12px 22px rgba(37,99,235,.16);
+  }
+  .abv-btn-ghost{background:#fff}
+  .abv-btn-mini{min-height:40px;padding:.55rem .8rem;border-radius:14px}
+  .abv-disabled{opacity:.55;pointer-events:none}
+
+  /* filters */
+  .abv-grid{padding:.85rem;display:grid;grid-template-columns:1fr;gap:.75rem}
+  .abv-field{
+    background: rgba(255,255,255,.95);
+    border:1px solid rgba(124,58,237,.14);
+    border-radius:16px;
+    padding:.75rem;
+  }
+  .abv-lbl{display:block;margin:0 0 .35rem;color:var(--p);font-weight:950;font-size:.8rem}
+  .abv-field input, .abv-field select{
     width:100%;
     padding:.75rem .8rem;
-    border-radius: 14px;
-    border: 1.5px solid rgba(15,23,42,.12);
-    font-size:.9rem;
-    background: #fff;
-    outline: none;
+    border-radius:14px;
+    border:1.5px solid rgba(15,23,42,.12);
+    font-size:.92rem;
+    font-weight:800;
+    background:#fff;
+    outline:none;
+    color:var(--k);
   }
-  .field input:focus,.field select:focus{
-    border-color: rgba(124,58,237,.7);
-    box-shadow: 0 0 0 3px rgba(124,58,237,.14);
+  .abv-field input::placeholder{color:rgba(100,116,139,.92);font-weight:750}
+  .abv-field input:focus, .abv-field select:focus{
+    border-color: rgba(124,58,237,.65);
+    box-shadow: 0 0 0 4px rgba(124,58,237,.14);
   }
-  .hint{ margin-top:.45rem; font-size:.72rem; color: var(--slate); }
+  .abv-hint{margin-top:.4rem;color:var(--mut);font-size:.78rem;font-weight:750}
+  .abv-actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:stretch}
 
-  /* Meta blocks (colored) */
-  .meta-row{ display:grid; grid-template-columns: 1fr; gap:.75rem; }
-  .meta-box{
-    border-radius: 16px; padding:.85rem;
-    border: 1px solid rgba(15,23,42,.10);
-    display:flex; justify-content:space-between; align-items:flex-end; gap:.75rem;
+  /* KPIs */
+  .abv-kpis{display:grid;grid-template-columns:1fr;gap:.65rem}
+  .abv-kpi{
+    background:#fff;border:1px solid var(--line);border-radius:18px;
+    padding:.75rem;box-shadow: 0 10px 18px rgba(15,23,42,.06);position:relative;overflow:hidden;
   }
-  .meta-label{ font-size:.75rem; color: var(--slate); font-weight: 800; }
-  .meta-value{ font-size:1.1rem; font-weight: 950; color: var(--black); line-height:1; }
-  .meta-muted{ color: var(--slate); font-weight: 800; font-size:.85rem; }
-  .meta-purple{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.25); }
-  .meta-blue{ background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.22); }
-  .meta-green{ background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.22); }
+  .abv-kpi:before{content:"";position:absolute;inset:0 0 auto 0;height:6px;background: rgba(124,58,237,.35)}
+  .abv-kpi-purple:before{background: rgba(124,58,237,.7)}
+  .abv-kpi-blue:before{background: rgba(37,99,235,.7)}
+  .abv-kpi-green:before{background: rgba(34,197,94,.7)}
+  .abv-kpi-l{font-size:.78rem;color:#475569;font-weight:900;text-transform:uppercase;letter-spacing:.03em}
+  .abv-kpi-v{margin-top:.35rem;font-size:1.15rem;font-weight:950;color:var(--k)}
+  .abv-kpi-m{color:var(--mut);font-weight:850;font-size:.9rem}
 
-  /* Cards (no table, no overflow-x) */
-  .cards-grid{ display:grid; grid-template-columns: 1fr; gap: .9rem; }
-  .card{
-    border-radius: 18px;
-    border: 1px solid rgba(15,23,42,.10);
-    overflow: hidden;
-    background: #fff;
+  /* cards list */
+  .abv-cards{display:grid;grid-template-columns:1fr;gap:.85rem}
+
+  .abv-card2{
+    background:#fff;border:1px solid rgba(15,23,42,.10);
+    border-radius:18px;overflow:hidden;box-shadow: var(--shadow);
   }
-  .card.tone-amber{ border-top: 5px solid #f59e0b; background: linear-gradient(180deg, rgba(245,158,11,.08), #fff 55%); }
-  .card.tone-green{ border-top: 5px solid var(--green); background: linear-gradient(180deg, rgba(34,197,94,.10), #fff 55%); }
-  .card.tone-red{ border-top: 5px solid #ef4444; background: linear-gradient(180deg, rgba(239,68,68,.10), #fff 55%); }
+  .abv-card2.tone-amber{border-top:5px solid #f59e0b;background: linear-gradient(180deg, rgba(245,158,11,.08), #fff 60%)}
+  .abv-card2.tone-green{border-top:5px solid var(--g);background: linear-gradient(180deg, rgba(34,197,94,.10), #fff 60%)}
+  .abv-card2.tone-red{border-top:5px solid #ef4444;background: linear-gradient(180deg, rgba(239,68,68,.10), #fff 60%)}
 
-  .card-top{ padding: .9rem; display:flex; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
-  .card-title{ display:flex; gap:.75rem; min-width: 220px; flex: 1 1 240px; }
-  .avatar{
-    width:44px; height:44px; border-radius: 14px;
-    background: linear-gradient(135deg, var(--blue), var(--purple));
-    color:#fff; display:flex; align-items:center; justify-content:center;
-    font-weight: 950;
-    flex: 0 0 44px;
+  .abv-top{
+    padding:.9rem;
+    display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
   }
-  .name{ margin:0; color: var(--black); font-weight: 950; font-size: 1.02rem; }
-  .email{ margin-top:.2rem; font-size:.78rem; color: var(--slate); word-break: break-word; }
-  .sub{ display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.35rem; }
-
-  .pill{
-    display:inline-flex; align-items:center;
-    padding:.22rem .55rem; border-radius: 999px;
-    font-size:.72rem; font-weight: 900;
-    border: 1px solid rgba(15,23,42,.10);
-    max-width: 100%;
+  .abv-left{display:flex;gap:.75rem;flex:1 1 260px;min-width:240px}
+  .abv-avatar{
+    width:44px;height:44px;border-radius:14px;flex:0 0 44px;
+    background: linear-gradient(135deg, var(--b), var(--p));
+    color:#fff;display:grid;place-items:center;font-weight:950;
   }
-  .pill-black{ background: rgba(15,23,42,.08); color: var(--black); }
-  .pill-purple{ background: rgba(124,58,237,.14); color: var(--purple); border-color: rgba(124,58,237,.25); }
+  .abv-name-row{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}
+  .abv-name{margin:0;color:var(--k);font-weight:950;font-size:1.02rem}
+  .abv-email{margin-top:.25rem;color:var(--mut);font-weight:750;font-size:.82rem;word-break:break-word}
 
-  .card-status{ display:flex; flex-direction:column; align-items:flex-end; gap:.35rem; flex: 0 0 auto; }
-  .date{ font-size:.72rem; color: var(--slate); font-weight: 800; }
-
-  .status{
-    display:inline-flex;
-    padding:.32rem .7rem;
-    border-radius: 999px;
-    font-size:.7rem;
-    font-weight: 950;
-    text-transform: uppercase;
-    letter-spacing: .04em;
+  .abv-status{
+    display:inline-flex;padding:.32rem .7rem;border-radius:999px;
+    font-size:.72rem;font-weight:950;text-transform:uppercase;letter-spacing:.04em;
   }
-  .status-pending{ background:#fef3c7; color:#92400e; }
-  .status-verified{ background:#dcfce7; color:#166534; }
-  .status-rejected{ background:#fee2e2; color:#991b1b; }
+  .abv-status-pending{background:#fef3c7;color:#92400e}
+  .abv-status-verified{background:#dcfce7;color:#166534}
+  .abv-status-rejected{background:#fee2e2;color:#991b1b}
 
-  .card-body{
-    padding: .9rem;
+  .abv-subrow{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.4rem}
+  .abv-pill{
+    display:inline-flex;align-items:center;
+    padding:.24rem .58rem;border-radius:999px;
+    font-size:.73rem;font-weight:900;
+    border:1px solid rgba(15,23,42,.10);
+    background:#fff;color:var(--k);
+  }
+  .abv-pill-black{background: rgba(15,23,42,.08);color:var(--k)}
+  .abv-pill-purple{background: rgba(124,58,237,.14);border-color: rgba(124,58,237,.25);color:var(--p)}
+  .abv-pill-blue{background: rgba(37,99,235,.10);border-color: rgba(37,99,235,.22);color:var(--k)}
+
+  .abv-right{display:flex;gap:.5rem;align-items:center}
+
+  .abv-body{
+    padding:.9rem;
+    border-top:1px solid rgba(15,23,42,.08);
+    background: rgba(255,255,255,.92);
     display:grid;
-    grid-template-columns: 1fr;
-    gap: .65rem;
-    border-top: 1px solid rgba(15,23,42,.08);
-    background: rgba(255,255,255,.85);
+    grid-template-columns:1fr;
+    gap:.65rem;
   }
-  .kv{ display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
-  .k{ font-size:.75rem; font-weight: 950; color: var(--purple); }
-  .v{ font-size:.85rem; font-weight: 800; color: var(--black); text-align:right; word-break: break-word; }
-  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  .abv-kv{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}
+  .abv-k{font-size:.78rem;font-weight:950;color:var(--p)}
+  .abv-v{font-size:.88rem;font-weight:850;color:var(--k);text-align:right;word-break:break-word}
+  .abv-mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+  .abv-link{color:var(--b);font-weight:950;text-decoration:none}
+  .abv-link:hover{text-decoration:underline}
 
-  /* Empty */
-  .empty{
-    border-radius: 18px;
-    padding: 1.2rem;
+  /* empty */
+  .abv-empty{
+    border-radius:18px;
+    padding:1.1rem;
     background: rgba(124,58,237,.10);
-    border: 1px dashed rgba(124,58,237,.35);
+    border:1px dashed rgba(124,58,237,.35);
     text-align:center;
-    color: var(--black);
+    color:var(--k);
   }
-  .empty-icon{ font-size: 1.8rem; }
-  .empty h3{ margin:.5rem 0 0; font-weight: 950; }
-  .empty p{ margin:.35rem 0 0; color: var(--slate); font-weight: 700; font-size:.85rem; }
+  .abv-empty-ic{font-size:1.8rem}
+  .abv-empty-t{margin-top:.35rem;font-weight:950}
+  .abv-empty-s{margin-top:.2rem;font-size:.86rem;font-weight:750;color:var(--mut)}
 
-  /* Pager */
-  .pager{ display:flex; gap:.75rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-  .pager-center{ flex: 1 1 auto; display:flex; justify-content:center; }
-  .pager-pill{
-    padding:.35rem .75rem;
-    border-radius: 999px;
+  /* pager */
+  .abv-pager{padding:.85rem;display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .abv-pager-mid{flex:1 1 auto;display:flex;justify-content:center}
+  .abv-pagepill{
+    padding:.35rem .75rem;border-radius:999px;
     background: rgba(34,197,94,.12);
-    border: 1px solid rgba(34,197,94,.25);
-    color: var(--black);
-    font-weight: 900;
-    font-size:.8rem;
+    border:1px solid rgba(34,197,94,.25);
+    color:var(--k);
+    font-weight:900;
+    font-size:.82rem;
   }
 
-  /* ✅ Responsive grids */
+  /* responsive */
   @media (min-width: 640px){
-    .filter-grid{ grid-template-columns: 1fr 1fr; }
-    .meta-row{ grid-template-columns: 1fr 1fr 1fr; }
-    .card-body{ grid-template-columns: 1fr 1fr; }
+    .abv-grid{grid-template-columns: 1fr 1fr; align-items:stretch}
+    .abv-actions{grid-column:1/-1}
+    .abv-kpis{grid-template-columns: repeat(3, 1fr)}
+    .abv-body{grid-template-columns: 1fr 1fr}
   }
   @media (min-width: 1024px){
-    .filter-grid{ grid-template-columns: 2fr 1fr 1fr auto auto; align-items:end; }
-    .cards-grid{ grid-template-columns: repeat(2, 1fr); }
+    .abv-grid{grid-template-columns: 2fr 1fr 1fr; align-items:end}
+    .abv-actions{grid-column:auto; justify-content:flex-end}
+    .abv-cards{grid-template-columns: repeat(2, 1fr)}
   }
 </style>
+`;
+%>
 
 <script nonce="<%= NONCE %>">
   // Status auto-submit
@@ -378,7 +470,7 @@
     document.getElementById('filterForm')?.submit();
   });
 
-  // Export CSV
+  // Export CSV (keeps your current filters)
   document.getElementById('exportBtn')?.addEventListener('click', function () {
     const params = new URLSearchParams(window.location.search);
     params.set('export', 'csv');

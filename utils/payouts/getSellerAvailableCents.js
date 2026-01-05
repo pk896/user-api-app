@@ -20,7 +20,10 @@ async function getSellerAvailableCents(businessId, currency = 'USD') {
 
   const ccy = normCcy(currency, 'USD');
 
-const match = { businessId: bid, currency: ccy };
+  // Keep it ledger-based and simple:
+  // + credits (EARNING / SELLER_CREDIT / etc.)
+  // - debits (REFUND_DEBIT / PAYOUT_DEBIT / etc.)
+  const match = { businessId: bid, currency: ccy };
 
   const agg = await SellerBalanceLedger.aggregate([
     { $match: match },
@@ -34,5 +37,6 @@ const match = { businessId: bid, currency: ccy };
 }
 
 module.exports = { getSellerAvailableCents };
+
 
 

@@ -31,6 +31,10 @@ function grossToNetCents(grossCents, platformFeeBps) {
   return grossCents - fee;
 }
 
+// If your crediting file uses a different type, add it here.
+// This ensures refund debits will ALWAYS find the credited rows.
+const CREDIT_TYPES = ['EARNING', 'SELLER_CREDIT', 'EARNING_CREDIT'];
+
 async function debitSellersFromRefund(order, opts = {}) {
   const {
     refundId = null,
@@ -42,12 +46,15 @@ async function debitSellersFromRefund(order, opts = {}) {
 
   if (!order) return { debited: 0, skipped: 'no-order' };
 
+  // Your refund route sets allowWhenUnpaid: true, so this will not block refunds.
   if (!allowWhenUnpaid && typeof order.isPaidLike === 'function' && !order.isPaidLike()) {
     return { debited: 0, skipped: 'not-paid' };
   }
 
   const orderId = safeId(order._id);
   if (!orderId) return { debited: 0, skipped: 'missing-order-_id' };
+
+  const orderObjId = new mongoose.Types.ObjectId(orderId);
 
   const ccy = toUpper(
     currency ||
@@ -60,21 +67,42 @@ async function debitSellersFromRefund(order, opts = {}) {
   // ✅ clamp fee bps once (mirror credit file)
   const feeBps = clampInt(platformFeeBps, 0, 3000);
 
-  // 1) Fetch seller NET EARNING entries for this order
-  const earnings = await SellerBalanceLedger.find({
-    type: 'EARNING',
-    orderId,
+  // 1) Fetch seller CREDIT entries for this order (support different type names + orderId shapes)
+  const earningsRaw = await SellerBalanceLedger.find({
+    type: { $in: CREDIT_TYPES },
+    $or: [
+      { orderId: orderObjId }, // ✅ if orderId stored as ObjectId (most common)
+      { orderId: orderId },    // ✅ if stored as string (defensive)
+    ],
   })
-    .select('businessId amountCents currency meta')
+    .select('businessId amountCents currency meta orderId type')
     .lean();
 
-  if (!earnings.length) return { debited: 0, skipped: 'no-earnings-to-debit' };
+  if (!earningsRaw.length) {
+    return { debited: 0, skipped: 'no-earnings-to-debit', creditTypes: CREDIT_TYPES, currency: ccy };
+  }
+
+  // Normalize currency on rows (if missing, assume ccy)
+  const earnings = earningsRaw.map((e) => ({
+    ...e,
+    currency: toUpper(e.currency, ccy),
+  }));
 
   const sameCcy = earnings.filter((e) => toUpper(e.currency, ccy) === ccy);
-  if (!sameCcy.length) return { debited: 0, skipped: 'no-earnings-in-currency' };
+  if (!sameCcy.length) {
+    return {
+      debited: 0,
+      skipped: 'no-earnings-in-currency',
+      wantedCurrency: ccy,
+      foundCurrencies: [...new Set(earnings.map((e) => e.currency))],
+    };
+  }
 
-  const totalNetCents = sameCcy.reduce((sum, e) => sum + Math.max(0, Number(e.amountCents || 0)), 0);
-  if (totalNetCents <= 0) return { debited: 0, skipped: 'total-net-zero' };
+  const totalNetCents = sameCcy.reduce(
+    (sum, e) => sum + Math.max(0, Number(e.amountCents || 0)),
+    0
+  );
+  if (totalNetCents <= 0) return { debited: 0, skipped: 'total-net-zero', currency: ccy };
 
   // 2) Determine wanted NET debit cents
   let wantNetCents = totalNetCents;
@@ -82,13 +110,13 @@ async function debitSellersFromRefund(order, opts = {}) {
   if (amount != null) {
     const grossRefundCents = moneyToCents(amount);
     if (!Number.isFinite(grossRefundCents) || grossRefundCents <= 0) {
-      return { debited: 0, skipped: 'bad-amount' };
+      return { debited: 0, skipped: 'bad-amount', currency: ccy };
     }
 
     wantNetCents = grossToNetCents(grossRefundCents, feeBps);
 
     if (!Number.isFinite(wantNetCents) || wantNetCents <= 0) {
-      return { debited: 0, skipped: 'net-zero-after-fee' };
+      return { debited: 0, skipped: 'net-zero-after-fee', currency: ccy, feeBps };
     }
 
     if (wantNetCents > totalNetCents) wantNetCents = totalNetCents;
@@ -103,16 +131,19 @@ async function debitSellersFromRefund(order, opts = {}) {
   }
 
   const sellers = [...bySeller.entries()];
-  if (!sellers.length) return { debited: 0, skipped: 'no-seller-ids' };
+  if (!sellers.length) return { debited: 0, skipped: 'no-seller-ids', currency: ccy };
 
   sellers.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 
-  // ✅ Idempotency: find existing debits for this refund/order/currency
+  // ✅ Idempotency: existing debits for this refund/order/currency
   const refundKeyPrefix = `refunddebit:${String(orderId)}:${String(refundId || 'noRefundId')}:`;
 
   const existingDebits = await SellerBalanceLedger.find({
     type: 'REFUND_DEBIT',
-    orderId,
+    $or: [
+      { orderId: orderObjId },
+      { orderId: orderId },
+    ],
     currency: ccy,
     'meta.uniqueKey': { $regex: `^${escapeRegex(refundKeyPrefix)}` },
   })
@@ -144,7 +175,17 @@ async function debitSellersFromRefund(order, opts = {}) {
       debitedCents: wantNetCents,
       requestedNetCents: wantNetCents,
       skipped: 'already-debited',
+      feeBps,
     };
+  }
+
+  // Helper to find last allocatable seller index (not already debited)
+  function lastAllocatableIndex() {
+    for (let j = sellers.length - 1; j >= 0; j--) {
+      const [bidJ, centsJ] = sellers[j];
+      if (centsJ > 0 && !existingBySeller.has(bidJ)) return j;
+    }
+    return -1;
   }
 
   for (let i = 0; i < sellers.length; i++) {
@@ -154,15 +195,7 @@ async function debitSellersFromRefund(order, opts = {}) {
     // Skip seller if already has debit(s) for this refund
     if (existingBySeller.has(businessId)) continue;
 
-    // Find last allocatable seller index (that isn't already debited)
-    let lastIndex = -1;
-    for (let j = sellers.length - 1; j >= 0; j--) {
-      const [bidJ, centsJ] = sellers[j];
-      if (centsJ > 0 && !existingBySeller.has(bidJ)) {
-        lastIndex = j;
-        break;
-      }
-    }
+    const lastIndex = lastAllocatableIndex();
     const isLastAllocatable = (i === lastIndex);
 
     let sellerDebit = 0;
@@ -176,7 +209,9 @@ async function debitSellersFromRefund(order, opts = {}) {
 
     if (sellerDebit <= 0) continue;
 
-    const uniqueKey = `refunddebit:${String(orderId)}:${String(refundId || 'noRefundId')}:${businessId}:${ccy}:${wantNetCents}`;
+    const uniqueKey =
+      `refunddebit:${String(orderId)}:${String(refundId || 'noRefundId')}` +
+      `:${businessId}:${ccy}:${wantNetCents}`;
 
     try {
       await SellerBalanceLedger.create({
@@ -184,7 +219,7 @@ async function debitSellersFromRefund(order, opts = {}) {
         type: 'REFUND_DEBIT',
         amountCents: -Math.abs(sellerDebit),
         currency: ccy,
-        orderId,
+        orderId: orderObjId, // ✅ store as ObjectId consistently
         note: `Refund debit (net) for order ${order.orderId || orderId} (${refundId || 'refund'})`,
         meta: {
           uniqueKey,
@@ -203,6 +238,7 @@ async function debitSellersFromRefund(order, opts = {}) {
     } catch (e) {
       const msg = String(e?.message || '');
       if (msg.includes('E11000')) {
+        // Treat as already created; move on.
         existingBySeller.set(businessId, sellerDebit);
         remaining -= sellerDebit;
         if (remaining <= 0) break;
@@ -222,3 +258,6 @@ async function debitSellersFromRefund(order, opts = {}) {
 }
 
 module.exports = { debitSellersFromRefund };
+
+
+

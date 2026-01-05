@@ -4,24 +4,57 @@
 const express = require('express');
 const router = express.Router();
 const { fetch } = require('undici');
+const crypto = require('crypto');
 
 const DeliveryOption = require('../models/DeliveryOption');
 const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOrder');
 
+// ======================================================
+// ✅ Admin guard (PROD SAFE)
+// ======================================================
+let requireAdmin = null;
+try {
+  requireAdmin = require('../middleware/requireAdmin');
+} catch (e) {
+  if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+    throw new Error(
+      'Missing middleware/requireAdmin in production. Fix path or deploy build. Refusing to start.'
+    );
+  }
+  // DEV fallback only
+  requireAdmin = (req, res, next) => {
+    if (req.session?.admin) return next();
+    return res.status(401).json({ ok: false, message: 'Unauthorized (admin only).' });
+  };
+}
+
+// ======================================================
+// ✅ Optional helpers/models
+// ======================================================
 let debitSellersFromRefund = null;
 try {
   ({ debitSellersFromRefund } = require('../utils/payouts/debitSellersFromRefund'));
-} catch {
+} catch (e) {
   // optional
 }
 
 let Order = null;
 try {
   Order = require('../models/Order');
-} catch {
-  /* optional model */
+} catch (e) {
+  Order = null;
 }
 
+let Product = null;
+try {
+  Product = require('../models/Product');
+} catch (e) {
+  Product = null;
+}
+
+// ======================================================
+// ✅ ENV
+// ======================================================
 const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
@@ -30,6 +63,7 @@ const {
   VAT_RATE = '0.15',
   BRAND_NAME = 'Phakisi Global',
   SHIPPING_PREF = 'NO_SHIPPING',
+  RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
 } = process.env;
 
 const PP_API =
@@ -39,40 +73,85 @@ const PP_API =
 
 const upperCcy = String(BASE_CURRENCY || 'USD').toUpperCase();
 const vatRate = Number(VAT_RATE || 0);
-
-// ✅ platform fee bps (1000 = 10%)
 const PLATFORM_FEE_BPS = Number(process.env.PLATFORM_FEE_BPS || 1000);
 
-// ---------- helpers ----------
+// ======================================================
+// ✅ AUTH helpers (everyone can buy; everyone sees ONLY own orders)
+// ======================================================
+function getUserId(req) {
+  return req.user?._id || req.session?.user?._id || req.session?.userId || null;
+}
+function getBusinessId(req) {
+  return req.session?.business?._id || req.session?.businessId || null;
+}
+function isAnyLoggedIn(req) {
+  return !!(req.session?.admin || getUserId(req) || getBusinessId(req));
+}
+function requireAnyAuth(req, res, next) {
+  if (isAnyLoggedIn(req)) return next();
+  try {
+    req.flash?.('error', 'Please login first.');
+  } catch {}
+  return res.redirect('/users/login');
+}
+
+// ======================================================
+// ✅ Small helpers
+// ======================================================
 function resNonce(req) {
   return req?.res?.locals?.nonce || '';
 }
 function themeCssFrom(req) {
   return req.session?.theme === 'dark' ? '/css/dark.css' : '/css/light.css';
 }
-
-function normalizeMoneyNumber(v) {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') return v;
-  const n = Number(String(v).trim());
-  return Number.isFinite(n) ? n : null;
-}
-
 function safeStr(v, max = 2000) {
   return String(v || '').trim().slice(0, max);
 }
-
+function normalizeMoneyNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
+function toMoney2(v, fallback = '0.00') {
+  const n = normalizeMoneyNumber(v);
+  if (n === null) return fallback;
+  return n.toFixed(2);
+}
+function toQty(v, fallback = 1) {
+  const n = normalizeMoneyNumber(v);
+  if (n === null) return fallback;
+  const q = Math.floor(n);
+  return q >= 1 ? q : fallback;
+}
 function safeMoneyString(v, max = 32) {
   if (v === null || v === undefined || v === '') return null;
   const s = String(v).trim().slice(0, max);
   return s ? s : null;
 }
-
-function toUpper(v, fallback = 'USD') {
-  const s = String(v || '').trim().toUpperCase();
-  return s || fallback;
+function saveSession(req) {
+  return new Promise((resolve) => {
+    if (req.session && typeof req.session.save === 'function') req.session.save(() => resolve());
+    else resolve();
+  });
 }
 
+// ======================================================
+// ✅ PayPal fetch timeout wrapper
+// ======================================================
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: ac.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// ======================================================
+// ✅ Delivery helpers
+// ======================================================
 async function cheapestDelivery() {
   const opt = await DeliveryOption.findOne({ active: true })
     .sort({ priceCents: 1, deliveryDays: 1, name: 1 })
@@ -84,20 +163,26 @@ async function cheapestDelivery() {
   return { opt, dollars };
 }
 
+// ======================================================
+// ✅ Totals from cart
+// ======================================================
 function computeTotalsFromSession(cart, delivery = 0) {
   const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
   let sub = 0;
 
   const ppItems = itemsArr.map((it, i) => {
-    const price = Number(it.price || 0);
-    const qty = Number(it.qty != null ? it.qty : it.quantity != null ? it.quantity : 1);
+    const priceN = normalizeMoneyNumber(it.price ?? it.unitPrice);
+    const qtyN = toQty(it.qty ?? it.quantity, 1);
+
+    const price = priceN === null ? 0 : priceN;
     const name = (it.name || `Item ${i + 1}`).toString().slice(0, 127);
-    sub += price * qty;
+
+    sub += price * qtyN;
 
     return {
       name,
-      quantity: String(qty),
-      unit_amount: { currency_code: upperCcy, value: price.toFixed(2) },
+      quantity: String(qtyN),
+      unit_amount: { currency_code: upperCcy, value: toMoney2(price) },
     };
   });
 
@@ -105,71 +190,357 @@ function computeTotalsFromSession(cart, delivery = 0) {
   const del = +Number(delivery || 0).toFixed(2);
   const grand = +(sub + vat + del).toFixed(2);
 
-  return {
-    items: ppItems,
-    subTotal: +sub.toFixed(2),
-    vatTotal: vat,
-    delivery: del,
-    grandTotal: grand,
-  };
+  return { items: ppItems, subTotal: +sub.toFixed(2), vatTotal: vat, delivery: del, grandTotal: grand };
 }
+
+// ======================================================
+// ✅ PayPal auth (token cache)
+// ======================================================
+let _ppTokenCache = { token: null, expiresAt: 0 };
 
 async function getAccessToken() {
   const cid = String(PAYPAL_CLIENT_ID || '').trim();
   const sec = String(PAYPAL_CLIENT_SECRET || '').trim();
-  if (!cid || !sec) {
-    throw new Error('Missing PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET');
-  }
+  if (!cid || !sec) throw new Error('Missing PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET');
+
+  const now = Date.now();
+  if (_ppTokenCache.token && _ppTokenCache.expiresAt > now + 20_000) return _ppTokenCache.token;
 
   const auth = Buffer.from(`${cid}:${sec}`).toString('base64');
-  const res = await fetch(`${PP_API}/v1/oauth2/token`, {
+
+  const res = await fetchWithTimeout(`${PP_API}/v1/oauth2/token`, {
     method: 'POST',
-    headers: {
-      Authorization: `Basic ${auth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'grant_type=client_credentials',
   });
 
-  if (!res.ok) {
-    throw new Error(`PayPal token error: ${res.status} ${await res.text()}`);
-  }
-  return (await res.json()).access_token;
+  if (!res.ok) throw new Error(`PayPal token error: ${res.status} ${await res.text()}`);
+
+  const json = await res.json();
+  _ppTokenCache.token = json.access_token;
+  _ppTokenCache.expiresAt = Date.now() + Math.max(30, Number(json.expires_in || 0)) * 1000;
+
+  return _ppTokenCache.token;
 }
 
-function saveSession(req) {
-  return new Promise((resolve) => {
-    if (req.session && typeof req.session.save === 'function') {
-      req.session.save(() => resolve());
-    } else resolve();
+// ======================================================
+// ✅ Order lookups
+// ======================================================
+async function findOrderByAnyId(id) {
+  if (!Order) return null;
+  const s = String(id || '').trim();
+  if (!s) return null;
+
+  let doc =
+    (await Order.findOne({ orderId: s }).lean()) ||
+    (await Order.findOne({ paypalOrderId: s }).lean()) ||
+    (await Order.findOne({ 'paypal.orderId': s }).lean());
+
+  if (doc) return doc;
+
+  if (/^[0-9a-fA-F]{24}$/.test(s)) {
+    try {
+      doc = await Order.findById(s).lean();
+      if (doc) return doc;
+    } catch {}
+  }
+
+  doc =
+    (await Order.findOne({ 'paypal.captureId': s }).lean()) ||
+    (await Order.findOne({ 'captures.captureId': s }).lean()) ||
+    (await Order.findOne({ 'captures.0.captureId': s }).lean()) ||
+    (await Order.findOne({ captureId: s }).lean());
+
+  return doc || null;
+}
+
+async function findOrderByCaptureId(captureId) {
+  if (!Order) return null;
+  const cid = String(captureId || '').trim();
+  if (!cid) return null;
+
+  return Order.findOne({
+    $or: [{ 'paypal.captureId': cid }, { 'captures.captureId': cid }, { captureId: cid }],
   });
 }
 
-// --- find order by orderId or Mongo _id ---
-async function findOrderByAnyId(id) {
-  if (!Order) return null;
+// ======================================================
+// ✅ Ownership helpers (only own orders)
+// ======================================================
+function docOwnedByRequester(req, doc) {
+  if (!doc) return false;
+  if (req.session?.admin) return true;
 
-  let doc = await Order.findOne({ orderId: String(id) }).lean();
-  if (doc) return doc;
+  const userId = getUserId(req);
+  const bizId = getBusinessId(req);
 
-  if (/^[0-9a-fA-F]{24}$/.test(String(id))) {
-    try {
-      doc = await Order.findById(id).lean();
-      if (doc) return doc;
-    } catch {
-      /* ignore */
+  const ownedByUser = userId && doc?.userId && String(doc.userId) === String(userId);
+  const ownedByBiz = bizId && doc?.businessBuyer && String(doc.businessBuyer) === String(bizId);
+
+  return !!(ownedByUser || ownedByBiz);
+}
+
+// ======================================================
+// ✅ Refund helpers
+// ======================================================
+async function listRefundsForCapture(captureId) {
+  const token = await getAccessToken();
+
+  const res = await fetchWithTimeout(
+    `${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refunds`,
+    { method: 'GET', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+  );
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      `PayPal list refunds failed (${res.status}): ${json?.message || JSON.stringify(json)}`
+    );
+  }
+
+  return Array.isArray(json.refunds) ? json.refunds : [];
+}
+
+function getCapturedAmountFromOrder(doc) {
+  try {
+    const v1 = normalizeMoneyNumber(doc?.amount?.value);
+    const c1 = doc?.amount?.currency || upperCcy;
+    if (v1 != null) return { value: v1, currency: c1 };
+
+    const cap0 = Array.isArray(doc?.captures) ? doc.captures[0] : null;
+    const v2 = normalizeMoneyNumber(cap0?.amount?.value);
+    const c2 = cap0?.amount?.currency || upperCcy;
+    if (v2 != null) return { value: v2, currency: c2 };
+
+    const pu = Array.isArray(doc?.raw?.purchase_units) ? doc.raw.purchase_units[0] : null;
+    const cap = pu?.payments?.captures?.[0] || null;
+    const v3 = normalizeMoneyNumber(cap?.amount?.value);
+    const c3 = cap?.amount?.currency_code || c1;
+
+    return { value: v3 ?? null, currency: c3 || upperCcy };
+  } catch {
+    return { value: null, currency: doc?.amount?.currency || upperCcy };
+  }
+}
+
+function sumRefundedFromOrder(doc) {
+  try {
+    const arr = Array.isArray(doc?.refunds) ? doc.refunds : [];
+    let sum = 0;
+    for (const r of arr) {
+      const n = normalizeMoneyNumber(r?.amount);
+      if (n != null) sum += n;
+    }
+    return +sum.toFixed(2);
+  } catch {
+    return 0;
+  }
+}
+
+async function reconcileRefundsForOrderDoc(orderDoc, captureId, { source = 'sync' } = {}) {
+  if (!Order || !orderDoc) return { ok: false, reason: 'NO_ORDER' };
+
+  const cid = String(captureId || '').trim();
+  if (!cid) return { ok: false, reason: 'NO_CAPTURE_ID' };
+
+  const refunds = await listRefundsForCapture(cid);
+  orderDoc.refunds = Array.isArray(orderDoc.refunds) ? orderDoc.refunds : [];
+
+  let newlyAdded = 0;
+  const processed = [];
+
+  for (const r of refunds) {
+    const refundId = r?.id ? String(r.id) : null;
+    if (!refundId) continue;
+
+    const exists = orderDoc.refunds.some((x) => String(x?.refundId || '') === refundId);
+    if (exists) {
+      processed.push({ refundId, skipped: true });
+      continue;
+    }
+
+    const amtVal = r?.amount?.value ?? null;
+    const ccy = String(r?.amount?.currency_code || orderDoc?.amount?.currency || upperCcy).toUpperCase();
+
+    orderDoc.refunds.push({
+      refundId,
+      status: r?.status || null,
+      amount: safeMoneyString(amtVal, 32),
+      currency: ccy,
+      createdAt: r?.create_time ? new Date(r.create_time) : new Date(),
+      source,
+    });
+
+    newlyAdded++;
+
+    if (typeof debitSellersFromRefund === 'function') {
+      try {
+        const rr = await debitSellersFromRefund(orderDoc, {
+          refundId,
+          amount: amtVal ?? null,
+          currency: ccy,
+          allowWhenUnpaid: true,
+          platformFeeBps: PLATFORM_FEE_BPS,
+        });
+        processed.push({ refundId, debited: true, result: rr });
+      } catch (e) {
+        processed.push({ refundId, debited: false, error: e?.message || String(e) });
+      }
+    } else {
+      processed.push({ refundId, debited: false, warning: 'debitSellersFromRefund NOT loaded.' });
     }
   }
 
-  return null;
+  const captured = getCapturedAmountFromOrder(orderDoc);
+  const refundedSoFar = sumRefundedFromOrder(orderDoc);
+
+  orderDoc.refundedTotal = String(refundedSoFar.toFixed(2));
+
+  if (captured.value != null) {
+    if (refundedSoFar >= captured.value - 0.00001) {
+      orderDoc.status = 'REFUNDED';
+      orderDoc.paymentStatus = 'refunded';
+    } else if (refundedSoFar > 0) {
+      orderDoc.status = 'PARTIALLY_REFUNDED';
+      orderDoc.paymentStatus = 'partially_refunded';
+    }
+  } else {
+    orderDoc.status = 'REFUND_SUBMITTED';
+    orderDoc.paymentStatus = 'refund_submitted';
+  }
+
+  if (refundedSoFar > 0) orderDoc.refundedAt = new Date();
+
+  await orderDoc.save();
+
+  return {
+    ok: true,
+    orderId: String(orderDoc.orderId || orderDoc._id),
+    captureId: cid,
+    paypalRefundsFound: refunds.length,
+    newlyAdded,
+    status: orderDoc.status,
+    refundedTotal: orderDoc.refundedTotal,
+    processed,
+  };
 }
 
-// --- shape DB order for client ---
+// ======================================================
+// ✅ INVENTORY (Stock decrease on sale, restore on refund)
+// IMPORTANT: Your Order.items[].productId stores Product.customId (string)
+// ======================================================
+function pickProductKeyFromItem(it) {
+  return String(it?.productId || it?.customId || it?.pid || it?.sku || '').trim();
+}
+
+async function applyStockDelta(items, deltaSign /* -1 sale, +1 restore */) {
+  if (!Product) return { ok: false, reason: 'NO_PRODUCT_MODEL' };
+
+  const arr = Array.isArray(items) ? items : [];
+  if (arr.length === 0) return { ok: true, changed: 0 };
+
+  const ops = [];
+
+  for (const it of arr) {
+    const key = String(it?.productId || it?.customId || it?.pid || it?.sku || '').trim(); // should be customId
+    const qty = Number(it?.quantity || 1);
+
+    if (!key) continue;
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+
+    ops.push({
+      updateOne: {
+        filter: { customId: key }, // ✅ match Product.customId
+        update: { $inc: { stock: deltaSign * qty } },
+      },
+    });
+  }
+
+  if (ops.length === 0) return { ok: true, changed: 0 };
+
+  const res = await Product.bulkWrite(ops, { ordered: false });
+  const changed = Number(res?.modifiedCount || 0);
+
+  return { ok: true, changed };
+}
+
+function buildStockAppliedItemsFromOrder(orderDoc) {
+  const items = Array.isArray(orderDoc?.items) ? orderDoc.items : [];
+  return items
+    .map((it) => ({
+      productId: pickProductKeyFromItem(it),
+      name: String(it?.name || '').slice(0, 120),
+      quantity: Number(it?.quantity || 1),
+    }))
+    .filter((x) => x.productId && Number.isFinite(x.quantity) && x.quantity > 0);
+}
+
+async function applyInventoryOnPaidOrder(orderDoc) {
+  if (!orderDoc || !Order) return { ok: false, reason: 'NO_ORDERDOC' };
+
+  if (orderDoc.inventoryAdjusted) {
+    return { ok: true, skipped: true, reason: 'ALREADY_ADJUSTED' };
+  }
+
+  const appliedItems = buildStockAppliedItemsFromOrder(orderDoc);
+  if (appliedItems.length === 0) return { ok: false, reason: 'NO_ITEMS_TO_APPLY' };
+
+  const out = await applyStockDelta(appliedItems, -1);
+
+  if (out.ok) {
+    // ✅ requires these fields in Order model:
+    // inventoryAdjustedItems: [{ productId, quantity }]
+    orderDoc.inventoryAdjusted = true;
+    orderDoc.inventoryAdjustedItems = appliedItems.map((x) => ({
+      productId: x.productId,
+      quantity: x.quantity,
+    }));
+    await orderDoc.save();
+  }
+
+  return out;
+}
+
+async function restoreInventoryOnRefundedOrder(orderDoc, reason = 'refund') {
+  if (!orderDoc || !Order) return { ok: false, reason: 'NO_ORDERDOC' };
+
+  // ✅ requires this field in Order model:
+  // inventoryRestored: Boolean
+  if (orderDoc.inventoryRestored) {
+    return { ok: true, skipped: true, reason: 'ALREADY_RESTORED' };
+  }
+
+  // Only restore if we actually deducted before
+  if (!orderDoc.inventoryAdjusted) {
+    return { ok: true, skipped: true, reason: 'NOT_DEDUCTED_BEFORE' };
+  }
+
+  const items =
+    Array.isArray(orderDoc.inventoryAdjustedItems) && orderDoc.inventoryAdjustedItems.length
+      ? orderDoc.inventoryAdjustedItems
+      : buildStockAppliedItemsFromOrder(orderDoc);
+
+  if (!items.length) return { ok: false, reason: 'NO_ITEMS_TO_RESTORE' };
+
+  const out = await applyStockDelta(items, +1);
+
+  if (out.ok) {
+    orderDoc.inventoryRestored = true;
+    // keep inventoryAdjusted true for history (or set false if you prefer)
+    // orderDoc.inventoryAdjusted = false;
+    orderDoc.raw = orderDoc.raw || {};
+    orderDoc.raw._inventoryRestoreReason = String(reason).slice(0, 80); // harmless debug note
+    await orderDoc.save();
+  }
+
+  return out;
+}
+
+// ======================================================
+// ✅ View shaping (NO NaN)
+// ======================================================
 function shapeOrderForClient(doc) {
-  const currency =
-    doc?.amount?.currency ||
-    doc?.breakdown?.itemTotal?.currency ||
-    upperCcy;
+  const currency = doc?.amount?.currency || doc?.breakdown?.itemTotal?.currency || upperCcy;
 
   const amountVal =
     normalizeMoneyNumber(doc?.amount?.value) ??
@@ -177,22 +548,33 @@ function shapeOrderForClient(doc) {
     0;
 
   const items = Array.isArray(doc?.items)
-    ? doc.items.map((it) => ({
-        name: it.name,
-        quantity: Number(it.quantity || 1),
-        price: { value: Number(it.price?.value ?? 0) },
-        imageUrl: it.imageUrl || '',
-      }))
+    ? doc.items.map((it) => {
+        const raw =
+          it?.price?.value ??
+          it?.price ??
+          it?.unitPrice ??
+          it?.unit_amount?.value ??
+          it?.unit_amount ??
+          0;
+
+        const priceN = normalizeMoneyNumber(raw);
+        return {
+          name: it?.name || '',
+          quantity: toQty(it?.quantity, 1),
+          price: { value: priceN === null ? 0 : Number(priceN) },
+          imageUrl: it?.imageUrl || '',
+        };
+      })
     : [];
 
   const b = doc.breakdown || {};
-
   const itemTotalVal = normalizeMoneyNumber(b?.itemTotal?.value) ?? null;
   const taxTotalVal = normalizeMoneyNumber(b?.taxTotal?.value) ?? null;
   const shipVal = normalizeMoneyNumber(b?.shipping?.value) ?? null;
 
   return {
     id: doc.orderId || String(doc._id),
+    orderId: doc.orderId || String(doc._id),
     status: doc.status || 'COMPLETED',
     createdAt: doc.createdAt || new Date(),
     currency,
@@ -217,51 +599,78 @@ function shapeOrderForClient(doc) {
 function buildSessionSnapshot(orderId, pending) {
   const items = Array.isArray(pending?.itemsBrief)
     ? pending.itemsBrief.map((it) => ({
-        name: it.name,
-        quantity: Number(it.quantity || 1),
-        price: { value: Number(it.unitPrice || 0) },
+        name: it?.name || '',
+        quantity: toQty(it?.quantity, 1),
+        price: { value: Number(normalizeMoneyNumber(it?.unitPrice) ?? 0) },
       }))
     : [];
 
   return {
     id: orderId,
+    orderId,
     status: 'COMPLETED',
     createdAt: new Date(),
     currency: pending?.currency || upperCcy,
-    amount: { value: Number(pending?.grandTotal || 0) },
+    amount: { value: Number(normalizeMoneyNumber(pending?.grandTotal) ?? 0) },
     items,
     breakdown: {
-      itemTotal: pending?.subTotal != null ? { value: Number(pending.subTotal) } : null,
-      taxTotal: pending?.vatTotal != null ? { value: Number(pending.vatTotal) } : null,
-      shipping: pending?.deliveryPrice != null ? { value: Number(pending.deliveryPrice) } : null,
+      itemTotal: pending?.subTotal != null ? { value: Number(normalizeMoneyNumber(pending.subTotal) ?? 0) } : null,
+      taxTotal: pending?.vatTotal != null ? { value: Number(normalizeMoneyNumber(pending.vatTotal) ?? 0) } : null,
+      shipping:
+        pending?.deliveryPrice != null
+          ? { value: Number(normalizeMoneyNumber(pending.deliveryPrice) ?? 0) }
+          : null,
     },
     delivery:
       pending && (pending.deliveryName || pending.deliveryDays != null)
         ? {
             name: pending.deliveryName || null,
             deliveryDays: pending.deliveryDays ?? null,
-            amount: pending.deliveryPrice != null ? Number(pending.deliveryPrice) : null,
+            amount:
+              pending.deliveryPrice != null
+                ? Number(normalizeMoneyNumber(pending.deliveryPrice) ?? 0)
+                : null,
           }
         : null,
     shipping: null,
   };
 }
 
-// ---------- views ----------
-router.get('/checkout', async (req, res) => {
+// ======================================================
+// ✅ Receipt token helpers (optional public share links)
+// ======================================================
+function makeReceiptToken(orderId) {
+  const secret = String(RECEIPT_TOKEN_SECRET || '').trim();
+  if (!secret) return null;
+  return crypto.createHmac('sha256', secret).update(String(orderId)).digest('hex');
+}
+function safeEq(a, b) {
+  const aa = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
+}
+function buildReceiptLink(orderId) {
+  const tok = makeReceiptToken(orderId);
+  if (!tok) return `/payment/receipt/${encodeURIComponent(orderId)}`; // logged-in only
+  return `/payment/receipt/${encodeURIComponent(orderId)}?t=${tok}`; // shareable
+}
+
+// ======================================================
+// ✅ VIEWS
+// ======================================================
+router.get('/checkout', requireAnyAuth, async (req, res) => {
   let shippingFlat = 0;
   try {
     const { dollars } = await cheapestDelivery();
     shippingFlat = dollars;
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   return res.render('checkout', {
     title: 'Checkout',
     themeCss: themeCssFrom(req),
     nonce: resNonce(req),
-    paypalClientId: PAYPAL_CLIENT_ID,
+    paypalClientId: String(PAYPAL_CLIENT_ID || '').trim(),
     currency: upperCcy,
     brandName: BRAND_NAME,
     vatRate,
@@ -271,134 +680,19 @@ router.get('/checkout', async (req, res) => {
   });
 });
 
-router.get('/orders', (req, res) => {
+router.get('/orders', requireAnyAuth, (req, res) => {
   return res.render('orders', {
     title: 'My Orders',
     themeCss: themeCssFrom(req),
     nonce: resNonce(req),
-    success: [],
-    error: [],
+    success: req.flash?.('success') || [],
+    error: req.flash?.('error') || [],
   });
 });
 
-// Printable receipt view
-router.get('/receipt/:id', async (req, res) => {
-  const id = String(req.params.id || '');
-  let doc = null;
-
-  try {
-    doc = await findOrderByAnyId(id);
-  } catch {
-    /* ignore */
-  }
-
-  const mapItems = (arr) =>
-    Array.isArray(arr)
-      ? arr.map((it) => ({
-          name: it.name,
-          quantity: Number(it.quantity || 1),
-          price: { value: Number(it.price?.value ?? it.unitPrice ?? it.unit_amount?.value ?? it.price ?? 0) },
-          imageUrl: it.imageUrl || '',
-        }))
-      : [];
-
-  // session snapshot
-  if (!doc && req.session?.lastOrderSnapshot && String(req.session.lastOrderSnapshot.id) === id) {
-    const s = req.session.lastOrderSnapshot;
-    const currency = s.currency || upperCcy;
-    const itemsFromSnap = mapItems(s.items || s.itemsBrief);
-    const b = s.breakdown || {};
-
-    const rawSub = (b.itemTotal && (b.itemTotal.value ?? b.itemTotal)) ?? s.subTotal ?? s.subtotal ?? 0;
-    const rawTax = (b.taxTotal && (b.taxTotal.value ?? b.taxTotal)) ?? s.vatTotal ?? s.tax ?? 0;
-    const rawShip = (b.shipping && (b.shipping.value ?? b.shipping)) ?? s.delivery ?? s.deliveryPrice ?? 0;
-
-    const totals = {
-      subtotal: Number(rawSub) || 0,
-      tax: Number(rawTax) || 0,
-      shipping: Number(rawShip) || 0,
-    };
-    totals.total = Number(s.amount?.value ?? b.grandTotal ?? b.total ?? totals.subtotal + totals.tax + totals.shipping);
-
-    return res.render('receipt', {
-      title: 'Order Receipt',
-      themeCss: themeCssFrom(req),
-      nonce: resNonce(req),
-      order: {
-        id: s.id,
-        status: s.status || 'COMPLETED',
-        createdAt: s.createdAt || new Date(),
-        currency,
-        items: itemsFromSnap,
-        totals,
-        delivery: s.delivery
-          ? {
-              name: s.delivery.name || s.deliveryName || null,
-              deliveryDays: s.delivery.deliveryDays ?? s.deliveryDays ?? null,
-              amount: s.delivery.amount != null ? Number(s.delivery.amount) : (s.deliveryPrice != null ? Number(s.deliveryPrice) : null),
-            }
-          : null,
-        shipping: s.shipping || null,
-      },
-      success: [],
-      error: [],
-    });
-  }
-
-  if (!doc) return res.status(404).send('Order not found');
-
-  // db doc
-  let items = mapItems(doc.items);
-
-  if (
-    !items.length &&
-    req.session?.lastOrderSnapshot &&
-    String(req.session.lastOrderSnapshot.id) === (doc.orderId || String(doc._id))
-  ) {
-    const s = req.session.lastOrderSnapshot;
-    items = mapItems(s.items || s.itemsBrief);
-  }
-
-  const currency = doc?.amount?.currency || upperCcy;
-
-  const totals = {
-    subtotal: normalizeMoneyNumber(doc?.breakdown?.itemTotal?.value) || 0,
-    tax: normalizeMoneyNumber(doc?.breakdown?.taxTotal?.value) || 0,
-    shipping: normalizeMoneyNumber(doc?.breakdown?.shipping?.value) || 0,
-  };
-  totals.total = normalizeMoneyNumber(doc?.amount?.value) ?? (totals.subtotal + totals.tax + totals.shipping);
-
-  const orderForView = {
-    id: doc.orderId || String(doc._id),
-    status: doc.status || 'COMPLETED',
-    createdAt: doc.createdAt || new Date(),
-    currency,
-    items,
-    totals,
-    delivery: doc.delivery
-      ? {
-          name: doc.delivery.name || null,
-          deliveryDays: doc.delivery.deliveryDays ?? null,
-          amount: doc.delivery.amount != null ? Number(doc.delivery.amount) : null,
-        }
-      : null,
-    shipping: doc.shipping || null,
-  };
-
-  return res.render('receipt', {
-    title: 'Order Receipt',
-    themeCss: themeCssFrom(req),
-    nonce: resNonce(req),
-    order: orderForView,
-    success: [],
-    error: [],
-  });
-});
-
-// Frontend config
-router.get('/config', (_req, res) => {
+router.get('/config', requireAnyAuth, (req, res) => {
   res.json({
-    clientId: PAYPAL_CLIENT_ID,
+    clientId: String(PAYPAL_CLIENT_ID || '').trim(),
     currency: upperCcy,
     intent: 'capture',
     mode: PAYPAL_MODE,
@@ -407,55 +701,71 @@ router.get('/config', (_req, res) => {
   });
 });
 
-router.post('/create-order', express.json(), async (req, res) => {
+// ======================================================
+// ✅ CREATE ORDER (PayPal)
+// ======================================================
+router.post('/create-order', requireAnyAuth, express.json(), async (req, res) => {
   try {
-    const cart = req.session.cart || { items: [] };
+    const cart = req.session?.cart || { items: [] };
+
     if (!Array.isArray(cart.items) || cart.items.length === 0) {
-      return res.status(422).json({
-        ok: false,
-        code: 'CART_EMPTY',
-        message: 'Cart is empty (server session).',
-      });
+      return res.status(422).json({ ok: false, code: 'CART_EMPTY', message: 'Cart is empty (server session).' });
     }
 
-    const itemsBrief = (Array.isArray(cart.items) ? cart.items : []).map((it, i) => {
-      const qty = Number(it.qty != null ? it.qty : it.quantity != null ? it.quantity : 1);
-      const unitPrice = Number(it.price || 0);
+    const itemsBrief = cart.items.map((it, i) => {
+      const qty = toQty(it.qty ?? it.quantity, 1);
+      const unitPriceN = normalizeMoneyNumber(it.price ?? it.unitPrice);
+      if (unitPriceN === null || unitPriceN < 0) {
+        throw new Error(`Invalid price for item #${i + 1}. Fix cart item price before checkout.`);
+      }
+
       const productId = String(
-        it.customId != null ? it.customId :
-        it.productId != null ? it.productId :
-        it.pid != null ? it.pid :
-        it.sku != null ? it.sku : ''
+        it.customId != null
+          ? it.customId
+          : it.productId != null
+          ? it.productId
+          : it.pid != null
+          ? it.pid
+          : it.sku != null
+          ? it.sku
+          : ''
       ).trim();
 
+      if (!productId) {
+        throw new Error(
+          `Missing productId/customId for cart item #${i + 1}. Your cart must store Product.customId.`
+        );
+      }
+
       return {
-        productId,
-        name: (it.name || `Item ${i + 1}`).toString().slice(0, 127),
+        productId, // ✅ MUST be Product.customId (string)
+        name: (it.name || it.title || `Item ${i + 1}`).toString().slice(0, 127),
         quantity: qty,
-        unitPrice,
+        unitPrice: Number(unitPriceN.toFixed(2)),
         imageUrl: it.imageUrl || it.image || '',
       };
     });
 
-    const providedId = String(req.body?.deliveryOptionId || '').trim();
-    const simpleDelivery = String(req.body?.delivery || '').trim().toLowerCase();
+    const providedId = safeStr(req.body?.deliveryOptionId, 64);
+    const simpleDelivery = safeStr(req.body?.delivery, 32).toLowerCase();
 
     let opt = null;
+
     if (simpleDelivery === 'collect') {
       opt = { _id: null, name: 'Collect in store', deliveryDays: 0, priceCents: 0, active: true };
     } else if (providedId) {
       try {
         const found = await DeliveryOption.findById(providedId).lean();
         if (found && found.active) opt = found;
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     }
+
     if (!opt) {
       opt = await DeliveryOption.findOne({ active: true })
         .sort({ priceCents: 1, deliveryDays: 1, name: 1 })
         .lean();
     }
+
     if (!opt) {
       return res.status(404).json({
         ok: false,
@@ -466,17 +776,10 @@ router.post('/create-order', express.json(), async (req, res) => {
 
     const deliveryDollars = Number(((opt.priceCents || 0) / 100).toFixed(2));
 
-    const { items: ppItems, subTotal, vatTotal, delivery: del, grandTotal: grand } =
-      computeTotalsFromSession(
-        {
-          items: itemsBrief.map((it) => ({
-            name: it.name,
-            price: it.unitPrice,
-            quantity: it.quantity,
-          })),
-        },
-        deliveryDollars
-      );
+    const { items: ppItems, subTotal, vatTotal, delivery: del, grandTotal: grand } = computeTotalsFromSession(
+      { items: itemsBrief.map((x) => ({ name: x.name, price: x.unitPrice, quantity: x.quantity })) },
+      deliveryDollars
+    );
 
     const orderBody = {
       intent: 'CAPTURE',
@@ -503,32 +806,23 @@ router.post('/create-order', express.json(), async (req, res) => {
       },
     };
 
-    let token;
-    try {
-      token = await getAccessToken();
-    } catch (e) {
-      console.error('PayPal token error:', e?.message || e);
-      return res.status(502).json({
-        ok: false,
-        code: 'PAYPAL_TOKEN',
-        message: 'Failed to get PayPal token. Check client id/secret & network.',
-      });
-    }
+    const token = await getAccessToken();
 
-    const ppRes = await fetch(`${PP_API}/v2/checkout/orders`, {
+    const ppRes = await fetchWithTimeout(`${PP_API}/v2/checkout/orders`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(orderBody),
     });
 
     const data = await ppRes.json().catch(() => ({}));
+
     if (!ppRes.ok) {
       console.error('PayPal create error:', ppRes.status, data);
       return res.status(502).json({
         ok: false,
         code: 'PAYPAL_CREATE_FAILED',
         message: `PayPal create order failed (${ppRes.status}).`,
-        details: data,
+        details: String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : data,
       });
     }
 
@@ -546,30 +840,38 @@ router.post('/create-order', express.json(), async (req, res) => {
       createdAt: Date.now(),
     };
 
+    await saveSession(req);
     return res.json({ ok: true, id: data.id });
   } catch (err) {
     console.error('create-order error:', err?.stack || err);
-    return res.status(500).json({
-      ok: false,
-      code: 'SERVER_ERROR',
-      message: err?.message || 'Server error creating order',
-    });
+    return res.status(500).json({ ok: false, code: 'SERVER_ERROR', message: err?.message || 'Server error creating order' });
   }
 });
 
-router.post('/capture-order', express.json(), async (req, res) => {
+// ======================================================
+// ✅ CAPTURE ORDER (PayPal)
+// ======================================================
+router.post('/capture-order', requireAnyAuth, express.json(), async (req, res) => {
   try {
-    const orderID = String(req.body?.orderID || req.query?.orderId || '');
+    const orderID = safeStr(req.body?.orderID || req.query?.orderId, 128);
     if (!orderID) {
-      return res.status(400).json({
+      return res.status(400).json({ ok: false, code: 'MISSING_ORDER_ID', message: 'Missing orderId/orderID' });
+    }
+
+    const pending = req.session.pendingOrder || null;
+
+    // ✅ Prevent replay/cross-session capture when pending exists
+    if (pending?.id && String(pending.id) !== String(orderID)) {
+      return res.status(409).json({
         ok: false,
-        code: 'MISSING_ORDER_ID',
-        message: 'Missing orderId/orderID',
+        code: 'ORDER_MISMATCH',
+        message: 'OrderID does not match the pending session order.',
       });
     }
 
     const token = await getAccessToken();
-    const capRes = await fetch(`${PP_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
+
+    const capRes = await fetchWithTimeout(`${PP_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
@@ -582,12 +884,9 @@ router.post('/capture-order', express.json(), async (req, res) => {
         ok: false,
         code: 'PAYPAL_CAPTURE_FAILED',
         message: 'PayPal capture failed',
-        details: capture,
+        details: String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : capture,
       });
     }
-
-    const pending = req.session.pendingOrder || null;
-    const cart = req.session.cart || { items: [] };
 
     const pu = capture?.purchase_units?.[0] || {};
     const cap0 = Array.isArray(pu?.payments?.captures) ? pu.payments.captures[0] : null;
@@ -602,11 +901,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
     const puAddr = puShipping.address || {};
 
     const shippingAddress = {
-      name:
-        puShipping.name?.full_name ||
-        puShipping.name?.name ||
-        payerFullName ||
-        'No name provided',
+      name: puShipping.name?.full_name || puShipping.name?.name || payerFullName || 'No name provided',
       address_line_1: puAddr.address_line_1 || puAddr.line1 || '',
       address_line_2: puAddr.address_line_2 || puAddr.line2 || '',
       admin_area_2: puAddr.admin_area_2 || puAddr.city || '',
@@ -615,12 +910,9 @@ router.post('/capture-order', express.json(), async (req, res) => {
       country_code: puAddr.country_code || '',
     };
 
-    const captureAmount = cap0?.amount || null; // { currency_code, value }
-    const orderAmount = pu?.amount || null;
-
     const finalAmount =
-      captureAmount ||
-      orderAmount || {
+      cap0?.amount ||
+      pu?.amount || {
         value: String(pending?.grandTotal || '0'),
         currency_code: upperCcy,
       };
@@ -633,64 +925,64 @@ router.post('/capture-order', express.json(), async (req, res) => {
     const grossVal = srb?.gross_amount?.value ?? null;
 
     const itemsFromPending = Array.isArray(pending?.itemsBrief)
-      ? pending.itemsBrief.map((it) => ({
-          productId: String(it.productId || '').trim(),
-          name: it.name,
-          quantity: Number(it.quantity || 1),
-          price: {
-            value: String(Number(it.unitPrice || 0).toFixed(2)),
-            currency: upperCcy,
-          },
-          imageUrl: it.imageUrl || '',
-        }))
+      ? pending.itemsBrief.map((it) => {
+          const unitPriceN = normalizeMoneyNumber(it?.unitPrice);
+          const safeUnit = unitPriceN === null ? 0 : Number(unitPriceN.toFixed(2));
+          return {
+            productId: String(it?.productId || '').trim(), // ✅ Product.customId
+            name: it?.name || '',
+            quantity: toQty(it?.quantity, 1),
+            price: { value: toMoney2(safeUnit), currency: upperCcy },
+            imageUrl: it?.imageUrl || '',
+          };
+        })
       : [];
+
+    // ✅ ANYONE can buy (user or business buyer)
+    const businessBuyer = getBusinessId(req) || null;
+    const userId = getUserId(req) || null;
 
     let doc = null;
 
+    // Persist order (best effort)
     try {
       if (Order) {
-        const businessBuyer =
-          req.session?.business && req.session.business.role === 'buyer'
-            ? req.session.business._id
-            : null;
-
         const captureEntry =
-          cap0
+          cap0 && captureId
             ? {
-                captureId: cap0.id || undefined,
+                captureId,
                 status: cap0.status || undefined,
                 amount: cap0.amount
-                  ? {
-                      value: String(cap0.amount.value || '0'),
-                      currency: cap0.amount.currency_code || upperCcy,
-                    }
+                  ? { value: String(cap0.amount.value || '0'), currency: cap0.amount.currency_code || upperCcy }
                   : undefined,
                 sellerReceivable: srb
                   ? {
-                      gross: grossVal != null
-                        ? { value: String(grossVal), currency: cap0.amount?.currency_code || upperCcy }
-                        : undefined,
-                      paypalFee: paypalFeeVal != null
-                        ? { value: String(paypalFeeVal), currency: cap0.amount?.currency_code || upperCcy }
-                        : undefined,
-                      net: netVal != null
-                        ? { value: String(netVal), currency: cap0.amount?.currency_code || upperCcy }
-                        : undefined,
+                      gross:
+                        grossVal != null
+                          ? { value: String(grossVal), currency: cap0.amount?.currency_code || upperCcy }
+                          : undefined,
+                      paypalFee:
+                        paypalFeeVal != null
+                          ? { value: String(paypalFeeVal), currency: cap0.amount?.currency_code || upperCcy }
+                          : undefined,
+                      net:
+                        netVal != null
+                          ? { value: String(netVal), currency: cap0.amount?.currency_code || upperCcy }
+                          : undefined,
                     }
                   : undefined,
                 createTime: cap0?.create_time ? new Date(cap0.create_time) : undefined,
                 updateTime: cap0?.update_time ? new Date(cap0.update_time) : undefined,
-                links: Array.isArray(cap0?.links) ? cap0.links.map((l) => ({
-                  rel: l.rel,
-                  href: l.href,
-                  method: l.method,
-                })) : undefined,
               }
             : null;
+
+        const paidLike = String(capture?.status || '').toUpperCase() === 'COMPLETED';
 
         const update = {
           orderId: orderID,
           status: String(capture?.status || 'COMPLETED'),
+          paymentStatus: paidLike ? 'paid' : (safeStr(capture?.status, 32).toLowerCase() || 'unknown'),
+          paypal: { orderId: orderID, captureId: captureId || null },
 
           payer: {
             payerId: payer.payer_id || null,
@@ -701,22 +993,13 @@ router.post('/capture-order', express.json(), async (req, res) => {
 
           shipping: shippingAddress,
 
-          amount: {
-            value: String(finalAmount.value || '0'),
-            currency: finalAmount.currency_code || upperCcy,
-          },
+          amount: { value: toMoney2(finalAmount.value || '0'), currency: finalAmount.currency_code || upperCcy },
 
           breakdown: pending
             ? {
-                itemTotal: pending.subTotal != null
-                  ? { value: String(Number(pending.subTotal).toFixed(2)), currency: upperCcy }
-                  : undefined,
-                taxTotal: pending.vatTotal != null
-                  ? { value: String(Number(pending.vatTotal).toFixed(2)), currency: upperCcy }
-                  : undefined,
-                shipping: pending.deliveryPrice != null
-                  ? { value: String(Number(pending.deliveryPrice).toFixed(2)), currency: upperCcy }
-                  : undefined,
+                itemTotal: pending.subTotal != null ? { value: toMoney2(pending.subTotal), currency: upperCcy } : undefined,
+                taxTotal: pending.vatTotal != null ? { value: toMoney2(pending.vatTotal), currency: upperCcy } : undefined,
+                shipping: pending.deliveryPrice != null ? { value: toMoney2(pending.deliveryPrice), currency: upperCcy } : undefined,
               }
             : undefined,
 
@@ -725,31 +1008,27 @@ router.post('/capture-order', express.json(), async (req, res) => {
                 id: pending.deliveryOptionId || null,
                 name: pending.deliveryName || null,
                 deliveryDays: pending.deliveryDays ?? null,
-                amount: pending.deliveryPrice != null ? String(Number(pending.deliveryPrice).toFixed(2)) : null,
+                amount: pending.deliveryPrice != null ? toMoney2(pending.deliveryPrice) : null,
               }
             : null,
 
           items: itemsFromPending,
           raw: capture,
 
-          userId: req.session?.user?._id || null,
+          userId,
           businessBuyer,
         };
 
         doc = await Order.findOneAndUpdate(
           { orderId: orderID },
-          {
-            $set: update,
-            $setOnInsert: { createdAt: new Date() },
-          },
+          { $set: update, $setOnInsert: { createdAt: new Date() } },
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
-        if (doc && captureEntry && captureId) {
+        if (doc && captureEntry) {
           const already = Array.isArray(doc.captures)
             ? doc.captures.some((c) => String(c?.captureId || '') === String(captureId))
             : false;
-
           if (!already) {
             doc.captures = Array.isArray(doc.captures) ? doc.captures : [];
             doc.captures.push(captureEntry);
@@ -757,83 +1036,34 @@ router.post('/capture-order', express.json(), async (req, res) => {
           }
         }
 
-        // ✅ credit sellers (ledger)
+        // ✅ credit sellers (ledger) best effort
         try {
           if (doc && typeof creditSellersFromOrder === 'function') {
             const paidStatus = String(capture?.status || doc.status || '').toUpperCase();
             if (paidStatus === 'COMPLETED' || paidStatus === 'PAID') {
               const feeBps = Number.isFinite(PLATFORM_FEE_BPS) ? PLATFORM_FEE_BPS : 1000;
-              const r = await creditSellersFromOrder(doc, {
-                platformFeeBps: feeBps,
-                onlyIfPaidLike: false,
-              });
-              console.log('✅ Seller earnings credited (ledger):', r);
+              await creditSellersFromOrder(doc, { platformFeeBps: feeBps, onlyIfPaidLike: false });
             }
           }
         } catch (e) {
           console.error('⚠️ Seller crediting failed (checkout continues):', e?.message || e);
+        }
+
+        // ✅ stock decrement (IDEMPOTENT)
+        try {
+          const paidStatus = String(capture?.status || doc?.status || '').toUpperCase();
+          if (doc && (paidStatus === 'COMPLETED' || paidStatus === 'PAID')) {
+            const invOut = await applyInventoryOnPaidOrder(doc);
+            if (!invOut.ok) console.warn('⚠️ Inventory decrement failed:', invOut);
+          }
+        } catch (invErr) {
+          console.warn('⚠️ Inventory decrement exception:', invErr?.message || String(invErr));
         }
       }
     } catch (e) {
       console.error('❌ Failed to persist Order:', e?.message || e);
     }
 
-    // ---- inventory adjust (unchanged) ----
-    try {
-      if (Order && doc) {
-        if (!doc.inventoryAdjusted) {
-          const Product = require('../models/Product');
-
-          const srcItems =
-            Array.isArray(pending?.itemsBrief) && pending.itemsBrief.length
-              ? pending.itemsBrief
-              : Array.isArray(cart.items)
-              ? cart.items
-              : [];
-
-          const perProduct = new Map();
-          for (const it of srcItems) {
-            const pid = String(
-              it.productId != null ? it.productId :
-              it.customId != null ? it.customId :
-              it.pid != null ? it.pid :
-              it.sku != null ? it.sku : ''
-            ).trim();
-            if (!pid) continue;
-
-            const qty = Number(it.quantity != null ? it.quantity : it.qty != null ? it.qty : 1);
-            const prev = perProduct.get(pid) || { qty: 0, orderBump: 0 };
-            prev.qty += qty;
-            prev.orderBump = 1;
-            perProduct.set(pid, prev);
-          }
-
-          if (perProduct.size > 0) {
-            const ops = [];
-            for (const [pid, t] of perProduct.entries()) {
-              ops.push({
-                updateOne: {
-                  filter: { customId: pid },
-                  update: { $inc: { stock: -t.qty, soldCount: t.qty, soldOrders: t.orderBump } },
-                },
-              });
-            }
-
-            if (ops.length) {
-              await Product.bulkWrite(ops);
-              await Product.updateMany({ stock: { $lt: 0 } }, { $set: { stock: 0 } });
-            }
-          }
-
-          doc.inventoryAdjusted = true;
-          await doc.save();
-        }
-      }
-    } catch (e) {
-      console.warn('⚠️ Inventory adjust failed:', e?.message || e);
-    }
-
-    // snapshot + clear session
     req.session.lastOrderSnapshot = {
       ...buildSessionSnapshot(orderID, pending),
       shipping: shippingAddress,
@@ -849,31 +1079,37 @@ router.post('/capture-order', express.json(), async (req, res) => {
       capture,
       hasShipping: !!shippingAddress.address_line_1,
       amount: finalAmount,
+      captureId,
     });
   } catch (err) {
     console.error('capture-order error:', err?.stack || err);
-    return res.status(500).json({
-      ok: false,
-      code: 'SERVER_ERROR',
-      message: 'Server error capturing order',
-    });
+    return res.status(500).json({ ok: false, code: 'SERVER_ERROR', message: 'Server error capturing order' });
   }
 });
 
-// Thank-you JSON fetch
+// ======================================================
+// ✅ THANK-YOU JSON fetch (ONLY owner/admin; snapshot allowed for same session)
+// GET /payment/order/:id
+// ======================================================
 router.get('/order/:id', async (req, res) => {
   try {
-    const id = String(req.params.id || '');
+    const id = safeStr(req.params.id, 128);
+    const snap = req.session?.lastOrderSnapshot;
+
+    if (!isAnyLoggedIn(req)) {
+      if (snap && String(snap.id) === id) return res.json({ success: true, order: snap });
+      return res.status(401).json({ success: false, message: 'Login required.' });
+    }
 
     if (Order) {
       const doc = await findOrderByAnyId(id);
-      if (doc) return res.json({ success: true, order: shapeOrderForClient(doc) });
+      if (doc) {
+        if (!docOwnedByRequester(req, doc)) return res.status(403).json({ success: false, message: 'Forbidden.' });
+        return res.json({ success: true, order: shapeOrderForClient(doc) });
+      }
     }
 
-    const snap = req.session?.lastOrderSnapshot;
-    if (snap && String(snap.id) === id) {
-      return res.json({ success: true, order: snap });
-    }
+    if (snap && String(snap.id) === id) return res.json({ success: true, order: snap });
 
     return res.status(404).json({ success: false, message: 'Order not found' });
   } catch (err) {
@@ -882,12 +1118,12 @@ router.get('/order/:id', async (req, res) => {
   }
 });
 
-router.get('/thank-you', (req, res) => {
-  const id = String(req.query.orderId || '');
+router.get('/thank-you', requireAnyAuth, (req, res) => {
+  const id = safeStr(req.query.orderId, 128);
   const snapId = req.session?.lastOrderSnapshot?.id;
-  if (!id && snapId) {
-    return res.redirect(`/payment/thank-you?orderId=${encodeURIComponent(snapId)}`);
-  }
+
+  if (!id && snapId) return res.redirect(`/payment/thank-you?orderId=${encodeURIComponent(snapId)}`);
+
   return res.render('thank-you', {
     title: 'Thank you',
     themeCss: themeCssFrom(req),
@@ -897,12 +1133,12 @@ router.get('/thank-you', (req, res) => {
   });
 });
 
-router.get('/success', (req, res) => {
-  const qid = String(req.query.id || '');
+router.get('/success', requireAnyAuth, (req, res) => {
+  const qid = safeStr(req.query.id, 128);
   const snapId = req.session?.lastOrderSnapshot?.id;
-  if (!qid && snapId) {
-    return res.redirect(`/payment/success?id=${encodeURIComponent(snapId)}`);
-  }
+
+  if (!qid && snapId) return res.redirect(`/payment/success?id=${encodeURIComponent(snapId)}`);
+
   return res.render('thank-you', {
     title: 'Thank you',
     themeCss: themeCssFrom(req),
@@ -910,6 +1146,56 @@ router.get('/success', (req, res) => {
     success: ['Payment captured successfully.'],
     error: [],
   });
+});
+
+// ======================================================
+// ✅ RECEIPT (owner/admin OR valid token)
+// GET /payment/receipt/:id
+// ======================================================
+router.get('/receipt/:id', async (req, res) => {
+  try {
+    if (!Order) return res.status(500).send('Order model not available.');
+
+    const wantedId = String(req.params.id || '').trim();
+    if (!wantedId) return res.redirect('/payment/orders');
+
+    const doc = await findOrderByAnyId(wantedId);
+    if (!doc) {
+      req.flash?.('error', 'Receipt not found.');
+      return res.redirect('/payment/orders');
+    }
+
+    const tokenFromQuery = String(req.query.t || '').trim();
+    const expectedToken = makeReceiptToken(doc.orderId || wantedId);
+    const tokenOk = expectedToken && tokenFromQuery && safeEq(tokenFromQuery, expectedToken);
+
+    const loggedIn = isAnyLoggedIn(req);
+    const ownerOk = loggedIn && docOwnedByRequester(req, doc);
+
+    if (!tokenOk && !ownerOk) {
+      if (!loggedIn) {
+        req.flash?.('error', 'Please login to view your receipt.');
+        return res.redirect('/users/login');
+      }
+      return res.status(403).send('Forbidden.');
+    }
+
+    return res.render('receipt', {
+      title: 'Receipt',
+      themeCss: themeCssFrom(req),
+      nonce: resNonce(req),
+      order: doc,
+      brandName: BRAND_NAME,
+      currency: doc?.amount?.currency || doc?.currency || upperCcy,
+      publicMode: tokenOk && !loggedIn,
+      shareLink: doc?.orderId ? buildReceiptLink(doc.orderId) : null,
+      success: req.flash?.('success') || [],
+      error: req.flash?.('error') || [],
+    });
+  } catch (err) {
+    console.error('receipt error:', err);
+    return res.status(500).send('Failed to load receipt.');
+  }
 });
 
 router.get('/cancel', (req, res) => {
@@ -922,118 +1208,97 @@ router.get('/cancel', (req, res) => {
   });
 });
 
-router.get('/my-orders', async (req, res) => {
+// ======================================================
+// ✅ My Orders JSON (ONLY purchases for current identity)
+// GET /payment/my-orders
+// ======================================================
+router.get('/my-orders', requireAnyAuth, async (req, res) => {
   try {
-    if (!Order) return res.json({ ok: true, orders: [] });
+    if (!Order) return res.status(500).json({ ok: false, error: 'Order model not available.' });
 
-    const q = {};
-    if (req.session?.user?._id) q.userId = req.session.user._id;
-    if (req.session?.business?._id && req.session.business.role === 'buyer') {
-      q.businessBuyer = req.session.business._id;
-    }
+    const userId = getUserId(req);
+    const businessId = getBusinessId(req);
 
-    const list = await Order.find(q).sort({ createdAt: -1 }).limit(20).lean();
+    let query = null;
+    if (businessId) query = { businessBuyer: businessId };
+    else if (userId) query = { userId };
+    else return res.status(401).json({ ok: false, error: 'Not logged in.' });
 
-    const mapped = list.map((o) => ({
-      orderId: o.orderId || String(o._id),
-      status: o.status || '',
-      createdAt: o.createdAt || null,
-      amount: Number(normalizeMoneyNumber(o?.amount?.value) ?? 0),
-      currency: o?.amount?.currency || upperCcy,
-    }));
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .select(
+        'orderId paypalOrderId status paymentStatus createdAt amount total totalAmount currency items shippingTracking refunds refundedTotal'
+      )
+      .lean();
 
-    return res.json({ ok: true, orders: mapped });
+    const normalized = orders.map((o) => {
+      const orderId = o.orderId || o.paypalOrderId || (o._id ? String(o._id) : '');
+
+      const status = String(o.status || 'PROCESSING');
+      const paymentStatus = String(o.paymentStatus || '').toLowerCase();
+
+      let amountRaw =
+        (o.amount && (o.amount.value ?? o.amount)) ??
+        (o.total?.value ?? o.total) ??
+        (o.totalAmount?.value ?? o.totalAmount) ??
+        0;
+
+      if (amountRaw && typeof amountRaw === 'object') {
+        amountRaw = amountRaw.value ?? amountRaw.amount ?? 0;
+      }
+
+      const amountNum = Number(amountRaw);
+      const amount = Number.isFinite(amountNum) ? amountNum : 0;
+
+      const currency =
+        (o.amount && (o.amount.currency ?? o.amount.currency_code ?? o.currency)) ??
+        o.currency ??
+        upperCcy;
+
+      return {
+        id: o._id ? String(o._id) : orderId,
+        orderId,
+        status,
+        paymentStatus,
+        createdAt: o.createdAt,
+        amount,
+        currency: String(currency || upperCcy).toUpperCase(),
+        items: Array.isArray(o.items) ? o.items : [],
+        shippingTracking: o.shippingTracking || {},
+        refundedTotal: o.refundedTotal ?? null,
+        refundsCount: Array.isArray(o.refunds) ? o.refunds.length : 0,
+        receiptLink: orderId ? buildReceiptLink(orderId) : null,
+      };
+    });
+
+    return res.json({ ok: true, orders: normalized });
   } catch (err) {
-    console.error('my-orders error:', err?.stack || err);
-    return res.status(500).json({ ok: false, message: 'Server error fetching orders' });
+    console.error('GET /payment/my-orders error:', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load orders.' });
   }
 });
 
-/* -----------------------------------------------------------
- * 💸 Admin Refunds (Full + Partial)
- *  POST /payment/refund
- * --------------------------------------------------------- */
-
-let requireOrdersAdmin = null;
-try {
-  requireOrdersAdmin = require('../middleware/requireOrdersAdmin');
-} catch {
-  requireOrdersAdmin = (req, res, next) => {
-    if (req.session?.ordersAdmin || req.session?.admin) return next();
-    return res.status(401).json({ success: false, message: 'Unauthorized (orders admin only).' });
-  };
-}
-
-async function findOrderByCaptureId(captureId) {
-  if (!Order) return null;
-  const cid = String(captureId || '').trim();
-  if (!cid) return null;
-
-  return Order.findOne({
-    $or: [
-      { 'captures.captureId': cid },
-      { 'raw.purchase_units.payments.captures.id': cid },
-      { 'raw.purchase_units.payments.captures.capture_id': cid },
-      { 'raw.purchase_units.0.payments.captures.0.id': cid },
-    ],
-  });
-}
-
-function getCapturedAmountFromOrder(doc) {
-  try {
-    const val1 = normalizeMoneyNumber(doc?.amount?.value);
-    const ccy1 = doc?.amount?.currency || upperCcy;
-    if (val1 != null) return { value: val1, currency: ccy1 };
-
-    const cap0 = Array.isArray(doc?.captures) ? doc.captures[0] : null;
-    const val2 = normalizeMoneyNumber(cap0?.amount?.value);
-    const ccy2 = cap0?.amount?.currency || upperCcy;
-    if (val2 != null) return { value: val2, currency: ccy2 };
-
-    const pu = Array.isArray(doc?.raw?.purchase_units) ? doc.raw.purchase_units[0] : null;
-    const cap = pu?.payments?.captures?.[0] || null;
-    const val3 = normalizeMoneyNumber(cap?.amount?.value);
-    const ccy3 = cap?.amount?.currency_code || ccy1;
-    return { value: val3 ?? null, currency: ccy3 || upperCcy };
-  } catch {
-    return { value: null, currency: doc?.amount?.currency || upperCcy };
-  }
-}
-
-function sumRefundedFromOrder(doc) {
-  try {
-    const arr = Array.isArray(doc?.refunds) ? doc.refunds : [];
-    let sum = 0;
-    for (const r of arr) {
-      const n = normalizeMoneyNumber(r?.amount);
-      if (n != null) sum += n;
-    }
-    return +sum.toFixed(2);
-  } catch {
-    return 0;
-  }
-}
-
+// ======================================================
+// 💸 Admin Refunds
+// POST /payment/refund
+// ======================================================
 function refundSoFarWouldExceed(captured, refundedSoFar, want) {
   const remaining = captured - refundedSoFar;
   return want > remaining + 0.00001;
 }
 
-router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
+router.post('/refund', requireAdmin, express.json(), async (req, res) => {
   try {
     const captureId = safeStr(req.body?.captureId, 128);
-    if (!captureId) {
-      return res.status(400).json({ success: false, message: 'captureId is required.' });
-    }
+    if (!captureId) return res.status(400).json({ success: false, message: 'captureId is required.' });
 
     const amountNum = normalizeMoneyNumber(req.body?.amount);
-    if (amountNum !== null) {
-      if (!Number.isFinite(amountNum) || amountNum <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Amount must be a positive number, or omit for full refund.',
-        });
-      }
+    if (amountNum !== null && (!Number.isFinite(amountNum) || amountNum <= 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Amount must be a positive number, or omit for full refund.',
+      });
     }
 
     let currency = safeStr(req.body?.currency || upperCcy, 8).toUpperCase();
@@ -1046,10 +1311,7 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
       if (bodyOrderId && orderDoc) {
         const dbOrderId = String(orderDoc.orderId || orderDoc._id);
         if (dbOrderId !== bodyOrderId) {
-          return res.status(400).json({
-            success: false,
-            message: 'captureId does not match the provided orderId.',
-          });
+          return res.status(400).json({ success: false, message: 'captureId does not match the provided orderId.' });
         }
       }
     }
@@ -1062,13 +1324,10 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
       if (capturedCcy) currency = capturedCcy;
 
       if (captured.value != null) {
-        const want = amountNum === null ? (captured.value - refundedSoFar) : amountNum;
+        const want = amountNum === null ? captured.value - refundedSoFar : amountNum;
 
         if (want <= 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'Nothing left to refund for this capture.',
-          });
+          return res.status(400).json({ success: false, message: 'Nothing left to refund for this capture.' });
         }
 
         if (refundSoFarWouldExceed(captured.value, refundedSoFar, want)) {
@@ -1081,23 +1340,18 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
     }
 
     const payload = {};
-    if (amountNum !== null) {
-      payload.amount = { value: amountNum.toFixed(2), currency_code: currency };
-    }
+    if (amountNum !== null) payload.amount = { value: amountNum.toFixed(2), currency_code: currency };
 
     const note = safeStr(req.body?.note, 255);
     if (note) payload.note_to_payer = note;
 
     const token = await getAccessToken();
 
-    const ppRes = await fetch(
-      `${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }
-    );
+    const ppRes = await fetchWithTimeout(`${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
     const refundJson = await ppRes.json().catch(() => ({}));
     if (!ppRes.ok) {
@@ -1105,26 +1359,18 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
       return res.status(502).json({
         success: false,
         message: refundJson?.message || `PayPal refund failed (${ppRes.status}).`,
-        details: refundJson,
+        details: String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : refundJson,
       });
     }
 
-    // ✅ Persist refund + ✅ Debit sellers ledger (the missing piece)
+    let duplicated = false;
+    let ledger = null;
+    let inventoryRestore = null;
+
+    // Persist refund to DB + seller debit + reconcile (best effort)
     try {
       if (orderDoc) {
         const refundId = refundJson?.id ? String(refundJson.id) : null;
-
-        // idempotency by refundId
-        if (refundId) {
-          const already = Array.isArray(orderDoc.refunds)
-            ? orderDoc.refunds.some((r) => String(r?.refundId || '') === refundId)
-            : false;
-
-          if (already) {
-            return res.json({ success: true, refund: refundJson, duplicated: true });
-          }
-        }
-
         const paypalRefundValue = refundJson?.amount?.value ?? null;
         const paypalRefundCurrency = refundJson?.amount?.currency_code ?? null;
 
@@ -1132,75 +1378,174 @@ router.post('/refund', requireOrdersAdmin, express.json(), async (req, res) => {
           paypalRefundValue ?? (amountNum !== null ? amountNum.toFixed(2) : null),
           32
         );
-
-        const refundedCurrencyStr = toUpper(
-          paypalRefundCurrency ?? currency,
-          currency
-        );
+        const refundedCurrencyStr = String(paypalRefundCurrency || currency || upperCcy).toUpperCase();
 
         orderDoc.refunds = Array.isArray(orderDoc.refunds) ? orderDoc.refunds : [];
-        orderDoc.refunds.push({
-          refundId: refundId,
-          status: refundJson?.status || null,
-          amount: refundedAmountStr,
-          currency: refundedCurrencyStr || null,
-          createdAt: new Date(),
-        });
+        if (refundId) duplicated = orderDoc.refunds.some((r) => String(r?.refundId || '') === refundId);
 
-        // update refundedTotal + status
+        if (!duplicated) {
+          orderDoc.refunds.push({
+            refundId,
+            status: refundJson?.status || null,
+            amount: refundedAmountStr,
+            currency: refundedCurrencyStr || null,
+            createdAt: new Date(),
+            source: 'admin-refund',
+          });
+        }
+
         const captured = getCapturedAmountFromOrder(orderDoc);
         const refundedSoFar = sumRefundedFromOrder(orderDoc);
 
         orderDoc.refundedTotal = String(refundedSoFar.toFixed(2));
+        orderDoc.refundedAt = new Date();
 
         if (captured.value != null) {
           if (refundedSoFar >= captured.value - 0.00001) {
             orderDoc.status = 'REFUNDED';
+            orderDoc.paymentStatus = 'refunded';
           } else if (refundedSoFar > 0) {
             orderDoc.status = 'PARTIALLY_REFUNDED';
+            orderDoc.paymentStatus = 'partially_refunded';
           }
         } else {
           orderDoc.status = 'REFUND_SUBMITTED';
+          orderDoc.paymentStatus = 'refund_submitted';
         }
 
         await orderDoc.save();
 
-        // ✅ IMPORTANT: reverse seller earnings in YOUR ledger
+        // ✅ restore inventory ONLY on full refund (IDEMPOTENT)
         try {
-          if (typeof debitSellersFromRefund === 'function') {
-            const isFullRefundRequest = (amountNum === null);
+          if (String(orderDoc.status || '').toUpperCase() === 'REFUNDED') {
+            inventoryRestore = await restoreInventoryOnRefundedOrder(orderDoc, 'admin-refund');
+            if (!inventoryRestore.ok) console.warn('⚠️ Inventory restore failed:', inventoryRestore);
+          }
+        } catch (e) {
+          console.warn('⚠️ Inventory restore exception:', e?.message || String(e));
+        }
 
-            const r = await debitSellersFromRefund(orderDoc, {
-              refundId: refundId,
-              amount: isFullRefundRequest
-                ? null
-                : (paypalRefundValue ?? (amountNum !== null ? amountNum.toFixed(2) : null)),
+        // ✅ debit sellers using PayPal-returned amount
+        if (typeof debitSellersFromRefund === 'function') {
+          try {
+            ledger = await debitSellersFromRefund(orderDoc, {
+              refundId,
+              amount: paypalRefundValue ?? refundedAmountStr,
               currency: refundedCurrencyStr,
-              // ✅ keep true so it still works even if status changed to REFUNDED (paidLike might become false)
               allowWhenUnpaid: true,
               platformFeeBps: PLATFORM_FEE_BPS,
             });
-
-            console.log('✅ Seller earnings debited (ledger):', r);
+          } catch (e2) {
+            ledger = { ok: false, error: e2?.message || String(e2) };
           }
-        } catch (e2) {
-          console.error('⚠️ Seller debit failed (refund continues):', e2?.message || e2);
+        } else {
+          ledger = { ok: false, error: 'debitSellersFromRefund not available' };
         }
+
+        try {
+          await reconcileRefundsForOrderDoc(orderDoc, captureId, { source: 'admin-refund-sync' });
+        } catch (e3) {
+          console.warn('⚠️ reconcileRefundsForOrderDoc failed:', e3?.message || String(e3));
+        }
+      } else {
+        console.warn('⚠️ Refund succeeded in PayPal but no matching orderDoc found for captureId:', captureId);
       }
     } catch (e) {
-      console.warn('Refund saved to PayPal but failed to persist to DB:', e?.message || e);
+      console.warn('⚠️ Refund saved to PayPal but failed to persist to DB:', e?.message || String(e));
     }
 
-    return res.json({ success: true, refund: refundJson });
+    return res.json({ success: true, refund: refundJson, duplicated, ledger, inventoryRestore });
   } catch (err) {
     console.error('refund error:', err?.stack || err);
     return res.status(500).json({ success: false, message: 'Server error refunding payment.' });
   }
 });
 
+// ======================================================
+// 🔒 Manual sync routes (ADMIN ONLY)
+// ======================================================
+router.post('/sync-refunds', requireAdmin, express.json(), async (req, res) => {
+  try {
+    const captureId = safeStr(req.body?.captureId, 128);
+    if (!captureId) return res.status(400).json({ ok: false, message: 'captureId is required.' });
+    if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
 
-// ✅ IMPORTANT: export router normally so app.use('/payment', ...) works
+    const orderDoc = await findOrderByCaptureId(captureId);
+    if (!orderDoc) {
+      return res.status(404).json({
+        ok: false,
+        message: 'No local order found for this captureId. Refund exists in PayPal, but your DB has no matching order.',
+      });
+    }
+
+    const out = await reconcileRefundsForOrderDoc(orderDoc, captureId, { source: 'sync-refunds' });
+
+    // If full refund detected, restore inventory
+    try {
+      if (out?.ok && String(out.status || '').toUpperCase() === 'REFUNDED') {
+        await restoreInventoryOnRefundedOrder(orderDoc, 'sync-refunds');
+      }
+    } catch (e) {
+      console.warn('⚠️ restoreInventoryOnRefundedOrder (sync-refunds) failed:', e?.message || String(e));
+    }
+
+    return res.json(out);
+  } catch (err) {
+    console.error('sync-refunds error:', err?.stack || err);
+    return res.status(500).json({ ok: false, message: err?.message || 'Server error syncing refunds.' });
+  }
+});
+
+router.post('/reconcile-recent-refunds', requireAdmin, express.json(), async (req, res) => {
+  try {
+    if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
+
+    const days = Math.max(1, Math.min(120, Number(req.body?.days || 30)));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const candidates = await Order.find({
+      createdAt: { $gte: since },
+      status: { $in: ['COMPLETED', 'PAID', 'REFUND_SUBMITTED', 'PARTIALLY_REFUNDED', 'REFUNDED'] },
+      $or: [
+        { 'paypal.captureId': { $exists: true, $ne: null } },
+        { 'captures.0.captureId': { $exists: true } },
+      ],
+    }).sort({ createdAt: -1 });
+
+    const results = [];
+    let changed = 0;
+
+    for (const orderDoc of candidates) {
+      const cid =
+        orderDoc?.paypal?.captureId ||
+        (Array.isArray(orderDoc.captures) && orderDoc.captures[0]?.captureId) ||
+        null;
+
+      if (!cid) continue;
+
+      const out = await reconcileRefundsForOrderDoc(orderDoc, cid, { source: 'reconcile-recent' });
+      results.push(out);
+      if (out?.ok && out.newlyAdded > 0) changed++;
+
+      // If now fully refunded, restore inventory
+      try {
+        if (out?.ok && String(out.status || '').toUpperCase() === 'REFUNDED') {
+          await restoreInventoryOnRefundedOrder(orderDoc, 'reconcile-recent-refunds');
+        }
+      } catch (e) {
+        console.warn('⚠️ restoreInventoryOnRefundedOrder (reconcile-recent) failed:', e?.message || String(e));
+      }
+    }
+
+    return res.json({ ok: true, days, scanned: candidates.length, changed, results });
+  } catch (err) {
+    console.error('reconcile-recent-refunds error:', err?.stack || err);
+    return res.status(500).json({ ok: false, message: err?.message || 'Server error reconciling refunds.' });
+  }
+});
+
+// ======================================================
+// Export
+// ======================================================
+router.computeTotalsFromSession = computeTotalsFromSession;
 module.exports = router;
-
-// Optional: if you used this elsewhere via require('./payment').computeTotalsFromSession
-module.exports.computeTotalsFromSession = computeTotalsFromSession;

@@ -101,6 +101,12 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use((req, res, next) => {
+  // ensures layout.ejs always has these variables
+  res.locals.title = res.locals.title || '';
+  next();
+});
+
 /* ---------------------------------------
    Database connection state middleware
 --------------------------------------- */
@@ -163,10 +169,11 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+// PayPal Webhooks MUST use RAW body (before express.json)
 const paypalWebhooks = require('./routes/paypalWebhooks');
 
-// IMPORTANT: mount webhook route BEFORE express.json()
-app.use('/webhooks', express.raw({ type: 'application/json' }), paypalWebhooks);
+// Accept any content-type to avoid charset/proxy issues
+app.use('/webhooks', express.raw({ type: '*/*' }), paypalWebhooks);
 
 /* ---------------------------------------
    ORDER OF MIDDLEWARE (CRITICAL)
@@ -422,11 +429,11 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    Import and Register Routers
 --------------------------------------- */
-const deliveryOptionRouter = require('./routes/deliveryOptions');
+const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
+const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
-const adminOrdersRoutes = require('./routes/ordersAdmin');
 const cartRoutes = require('./routes/cart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
@@ -434,8 +441,6 @@ const businessAuthRoutes = require('./routes/businessAuth');
 const staticPagesRoutes = require('./routes/staticPages');
 const salesRoutes = require('./routes/sales');
 const someLinksRoutes = require('./routes/someRoute');
-const requireOrdersAdmin = require('./middleware/requireOrdersAdmin');
-const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const demandsRoutes = require('./routes/demands');
 const matchesRoutes = require('./routes/matches');
 const notificationsRoutes = require('./routes/notifications');
@@ -445,14 +450,18 @@ const productRatingsRoutes = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminOrdersApi = require('./routes/adminOrdersApi');
-//const paypalWebhooksRoutes = require('./routes/paypalWebhooks');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
+const ordersRoutes = require('./routes/orders');
+const debugDangerRoutes = require('./routes/debugDanger');
+app.use('/_danger', debugDangerRoutes);
 
 // API first
 app.use('/api/cart', cartRoutes);
 
+// Public API for checkout
+app.use('/api', deliveryOptionsApi);
+
 // Admin API
-app.use('/api/admin', requireOrdersAdmin);
 app.use('/api/admin', adminOrdersApi);
 
 // Auth & identity
@@ -461,16 +470,13 @@ app.use('/business', businessAuthRoutes);
 
 // Business/admin pages
 app.use('/admin', adminRoutes);
-app.use('/admin', adminOrdersRoutes);
+// app.use('/admin', adminOrdersRoutes);
 app.use('/admin', adminBizVerifyRoutes);
-app.use('/admin', deliveryOptionRouter);
+// Admin pages/forms
+app.use('/admin', deliveryOptionsAdmin);
 app.use('/admin', adminPayoutsRoutes);
 
-// PayPal Webhooks (payout status updates + verification)
-//app.use('/webhooks', paypalWebhooksRoutes); // POST /webhooks/paypal
 
-// Delivery options API
-app.use(deliveryOptionsApi);
 
 // Commerce / catalog
 app.use('/products', productsRouter);
@@ -499,9 +505,10 @@ app.use('/users', wishlistRoutes);
 
 // Password reset
 app.use('/users/password', passwordResetRoutes);
-
-// Order tracking
-app.use('/orders', orderTrackingRoutes);
+// Orders list + details pages
+app.use('/orders', ordersRoutes);
+// Tracking (separate namespace so it never conflicts)
+app.use('/orders/tracking', orderTrackingRoutes);
 
 // Dev mail test route
 app.use(require('./routes/dev-mail'));

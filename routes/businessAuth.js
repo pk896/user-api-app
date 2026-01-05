@@ -122,6 +122,47 @@ function pickField(body, dottedPath, fallback = '') {
 const LOW_STOCK_THRESHOLD = 10;
 
 // -------------------------------------------------------
+// ✅ Helper: exclude refunded / canceled orders everywhere
+// -------------------------------------------------------
+function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
+  const PAID_STATES = Array.isArray(OrderModel?.PAID_STATES)
+    ? OrderModel.PAID_STATES
+    : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
+
+  const CANCEL_STATES = ['Cancelled', 'Canceled', 'CANCELLED', 'CANCELED', 'VOIDED', 'Voided'];
+
+  // Treat these as refunded (so they never count in seller/supplier charts + KPIs)
+  const REFUND_STATES = ['Refunded', 'REFUNDED', 'PARTIALLY_REFUNDED', 'Partially Refunded', 'REFUND_SUBMITTED'];
+
+  const REFUND_PAYMENT_STATUSES = [
+    'refunded',
+    'partially_refunded',
+    'refund_submitted',
+    'refund_pending',
+  ];
+
+  return {
+    // paid-ish order states (can be overridden by extra.status if you pass a regex)
+    status: { $in: PAID_STATES },
+
+    // ✅ hard excludes
+    $and: [
+      { status: { $nin: [...CANCEL_STATES, ...REFUND_STATES] } },
+      { paymentStatus: { $nin: REFUND_PAYMENT_STATUSES } },
+
+      // common fields (safe even if not in schema)
+      { isRefunded: { $ne: true } },
+      { refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED', 'COMPLETED'] } },
+
+      // ✅ IMPORTANT: exclude if refundedAt is set (exists + not null)
+      { $or: [{ refundedAt: { $exists: false } }, { refundedAt: null }] },
+    ],
+
+    ...extra,
+  };
+}
+
+// -------------------------------------------------------
 // Helper: resolve base URL (Render-safe)
 // -------------------------------------------------------
 function resolveBaseUrl(req) {
@@ -253,18 +294,17 @@ function maskEmail(email = '') {
 
 // -------------------------------------------------------
 // Helper: computeSupplierKpis (used by supplier + seller)
+// ✅ EXCLUDES refunded/cancelled orders AND refunded items
+// ✅ Uses buildNonRefundedPaidMatch(OrderModel, extra) (must exist ONCE above)
 // -------------------------------------------------------
 async function computeSupplierKpis(businessId) {
-  // Load products for this supplier (we want customId, price, etc.)
+  // 1) Load products for this business (supplier/seller)
   const products = await Product.find({ business: businessId })
-    .select('stock customId price soldCount name category imageUrl')
+    .select('stock customId price soldCount name category imageUrl _id')
     .lean();
 
   const totalProducts = products.length;
-  const totalStock = products.reduce(
-    (sum, p) => sum + (Number(p.stock) || 0),
-    0,
-  );
+  const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
   const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
   const lowStock = products.filter((p) => {
     const s = Number(p.stock) || 0;
@@ -277,87 +317,115 @@ async function computeSupplierKpis(businessId) {
 
   const perProductMap = new Map();
 
-  const supplierCustomIds = products
-    .map((p) => (p.customId ? String(p.customId) : null))
-    .filter(Boolean);
+  // Build a quick lookup for product details (avoid products.find in a loop)
+  const productIdSet = new Set();
+  const productsByKey = new Map();
+
+  for (const p of products) {
+    if (p.customId) {
+      const k = String(p.customId).trim();
+      if (k) {
+        productIdSet.add(k);
+        productsByKey.set(k, p);
+      }
+    }
+    // also allow matching by _id if your order items store ObjectId strings
+    const oid = String(p._id || '').trim();
+    if (oid) {
+      productIdSet.add(oid);
+      productsByKey.set(oid, p);
+    }
+  }
+
+  const supplierIds = Array.from(productIdSet);
 
   // Prefer using Order docs for last 30 days
-  if (Order && supplierCustomIds.length) {
+  if (Order && supplierIds.length) {
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
-    const PAID_STATES = Array.isArray(Order.PAID_STATES)
-      ? Order.PAID_STATES
-      : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
-
     const idMatchOr = [
-      { 'items.productId': { $in: supplierCustomIds } },
-      { 'items.customId': { $in: supplierCustomIds } },
-      { 'items.pid': { $in: supplierCustomIds } },
-      { 'items.sku': { $in: supplierCustomIds } },
+      { 'items.productId': { $in: supplierIds } },
+      { 'items.customId': { $in: supplierIds } },
+      { 'items.pid': { $in: supplierIds } },
+      { 'items.sku': { $in: supplierIds } },
     ];
 
-    const recentOrders = await Order.find({
+    // ✅ Exclude refunded/cancelled orders using the shared helper
+    const match = buildNonRefundedPaidMatch(Order, {
       createdAt: { $gte: since },
-      status: { $in: PAID_STATES },
       $or: idMatchOr,
-    })
-      .select('items amount createdAt status shippingTracking')
+    });
+
+    const recentOrders = await Order.find(match)
+      .select('items amount total createdAt status refundStatus isRefunded refundedAt')
       .lean();
 
-    for (const o of recentOrders) {
-      const amt = Number(o?.amount?.value || 0);
-      if (!Number.isNaN(amt)) {
-        revenueLast30 += amt;
-      }
+    // Money helpers (handles MoneySchema or number/string)
+    const moneyToNumber = (m) => {
+      if (!m) return 0;
+      if (typeof m === 'number') return m;
+      if (typeof m === 'string') return Number(m) || 0;
+      if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
+      return 0;
+    };
 
+    for (const o of recentOrders) {
       const items = Array.isArray(o.items) ? o.items : [];
+      if (!items.length) continue;
+
+      // ✅ Add revenue ONLY for this business's items that are NOT refunded
       for (const it of items) {
-        const pid = String(
-          it.productId ?? it.customId ?? it.pid ?? it.sku ?? '',
-        ).trim();
+        // ✅ item-level refund skip (safe even if your schema doesn't have these fields)
+        if (it && it.isRefunded === true) continue;
+        if (String(it?.refundStatus || '').toUpperCase() === 'REFUNDED') continue;
+
+        const pid = String(it.productId ?? it.customId ?? it.pid ?? it.sku ?? '').trim();
         if (!pid) continue;
-        if (!supplierCustomIds.includes(pid)) continue;
+        if (!productIdSet.has(pid)) continue;
 
         const qty = Number(it.quantity || 1);
         if (!Number.isFinite(qty) || qty <= 0) continue;
 
+        const prod = productsByKey.get(pid) || {};
+        const unitPrice = Number(prod.price || moneyToNumber(it.price) || 0);
+        const lineRevenue = unitPrice * qty;
+
         soldLast30 += qty;
+        revenueLast30 += lineRevenue;
 
-        const prod =
-          products.find((p) => String(p.customId) === pid) || {};
+        if (!perProductMap.has(pid)) {
+          perProductMap.set(pid, {
+            productId: pid,
+            name: prod.name || it.name || '(unknown)',
+            imageUrl: prod.imageUrl || '',
+            category: prod.category || '',
+            price: unitPrice,
+            qty: 0,
+            estRevenue: 0,
+          });
+        }
 
-        const price = Number(prod.price || 0);
-        const estRevenue = price * qty;
-
-        const existing = perProductMap.get(pid) || {
-          productId: pid,
-          name: prod.name || it.name || '(unknown)',
-          imageUrl: prod.imageUrl || '',
-          category: prod.category || '',
-          price,
-          qty: 0,
-          estRevenue: 0,
-        };
-
-        existing.qty += qty;
-        existing.estRevenue += estRevenue;
-        perProductMap.set(pid, existing);
+        const stat = perProductMap.get(pid);
+        stat.qty += qty;
+        stat.estRevenue += lineRevenue;
       }
     }
   }
 
   // Fallback: lifetime counters on Product (soldCount)
+  // NOTE: This cannot perfectly exclude refunds because Product.soldCount is lifetime.
+  // Use it only when there are NO recent paid orders at all.
   if (soldLast30 === 0 && revenueLast30 === 0) {
     for (const p of products) {
       const qty = Number(p.soldCount || 0);
       if (!qty) continue;
-      const price = Number(p.price || 0);
 
+      const price = Number(p.price || 0);
       soldLast30 += qty;
       revenueLast30 += qty * price;
 
-      const pid = p.customId ? String(p.customId) : null;
+      const pid = p.customId ? String(p.customId).trim() : String(p._id || '').trim();
       if (!pid) continue;
 
       const existing = perProductMap.get(pid) || {
@@ -369,24 +437,17 @@ async function computeSupplierKpis(businessId) {
         qty: 0,
         estRevenue: 0,
       };
+
       existing.qty += qty;
       existing.estRevenue += qty * price;
       perProductMap.set(pid, existing);
     }
   }
 
-  const perProduct = Array.from(perProductMap.values()).sort(
-    (a, b) => b.qty - a.qty,
-  );
+  const perProduct = Array.from(perProductMap.values()).sort((a, b) => b.qty - a.qty);
 
-  const perProductTotalQty = perProduct.reduce(
-    (sum, p) => sum + (Number(p.qty) || 0),
-    0,
-  );
-  const perProductEstRevenue = perProduct.reduce(
-    (sum, p) => sum + (Number(p.estRevenue) || 0),
-    0,
-  );
+  const perProductTotalQty = perProduct.reduce((sum, p) => sum + (Number(p.qty) || 0), 0);
+  const perProductEstRevenue = perProduct.reduce((sum, p) => sum + (Number(p.estRevenue) || 0), 0);
 
   return {
     totalProducts,
@@ -395,7 +456,7 @@ async function computeSupplierKpis(businessId) {
     lowStock,
     outOfStock,
     soldLast30,
-    revenueLast30,
+    revenueLast30: Number(Number(revenueLast30 || 0).toFixed(2)),
     perProduct,
     perProductTotalQty,
     perProductEstRevenue: Number(perProductEstRevenue.toFixed(2)),
@@ -1298,7 +1359,7 @@ router.post('/password/reset/:token', async (req, res) => {
 });
 
 /* ----------------------------------------------------------
- * SELLER DASHBOARD (NO CHART LOGIC)
+ * SELLER DASHBOARD (NO CHART LOGIC)  ✅ NOW EXCLUDES REFUNDED/CANCELLED
  * -------------------------------------------------------- */
 router.get(
   '/dashboards/seller-dashboard',
@@ -1323,21 +1384,13 @@ router.get(
         return res.redirect('/business/login');
       }
 
-      // Keep your existing check as well (extra safety)
+      // Extra safety
       if (!sellerDoc.isVerified) {
-        req.flash(
-          'error',
-          'Please verify your email to access the seller dashboard.',
-        );
+        req.flash('error', 'Please verify your email to access the seller dashboard.');
         return res.redirect('/business/verify-pending');
       }
 
       const OrderModel = require('../models/Order');
-
-      // PAID_STATES (used for KPI "last 30 days" only — NOT charts)
-      const PAID_STATES = Array.isArray(OrderModel?.PAID_STATES)
-        ? OrderModel.PAID_STATES
-        : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
 
       // 1) Products for this seller
       const products = await Product.find({ business: sessionBusiness._id })
@@ -1348,10 +1401,13 @@ router.get(
       const totalProducts = products.length;
       const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
       const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+
+      // keep your seller threshold (<= 5)
       const lowStock = products.filter((p) => {
         const s = Number(p.stock) || 0;
         return s > 0 && s <= 5;
       }).length;
+
       const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
 
       // Map by customId / _id (for KPIs & matching order items)
@@ -1377,13 +1433,16 @@ router.get(
           ]
         : [];
 
-      // 2) Orders (Recent Orders) — NOT chart logic
+      // 2) Orders (Recent Orders) — ✅ EXCLUDES refunded/cancelled via helper
       let ordersTotal = 0;
       let ordersByStatus = {};
       let recentOrders = [];
 
       if (OrderModel && hasSellerProducts) {
-        const baseOrderMatch = { $or: idMatchOr };
+        const baseOrderMatch = {
+          ...buildNonRefundedPaidMatch(OrderModel),
+          $or: idMatchOr,
+        };
 
         const ordersAgg = await OrderModel.aggregate([
           { $match: baseOrderMatch },
@@ -1404,7 +1463,7 @@ router.get(
           .lean();
       }
 
-      // 3) Shipping tracking stats — NOT chart logic
+      // 3) Shipping tracking stats — ✅ EXCLUDES refunded/cancelled via helper
       let trackingStats = {
         pending: 0,
         processing: 0,
@@ -1417,9 +1476,12 @@ router.get(
         const trackingAgg = await OrderModel.aggregate([
           {
             $match: {
+              ...buildNonRefundedPaidMatch(OrderModel),
               $or: [
                 { 'items.productId': { $in: sellerCustomIds } },
                 { 'items.customId': { $in: sellerCustomIds } },
+                { 'items.pid': { $in: sellerCustomIds } },
+                { 'items.sku': { $in: sellerCustomIds } },
               ],
             },
           },
@@ -1441,7 +1503,7 @@ router.get(
         });
       }
 
-      // 4) 30-day KPIs (sold products + revenue) — still allowed (NOT charts)
+      // 4) 30-day KPIs (sold products + revenue) — ✅ EXCLUDES refunded/cancelled via helper
       const SINCE_DAYS = 30;
       const since = new Date();
       since.setDate(since.getDate() - SINCE_DAYS);
@@ -1453,11 +1515,10 @@ router.get(
       let last30Items = 0;
 
       if (OrderModel && hasSellerProducts) {
-        const baseMatch = {
+        const baseMatch = buildNonRefundedPaidMatch(OrderModel, {
           createdAt: { $gte: since },
-          status: { $in: PAID_STATES },
           $or: idMatchOr,
-        };
+        });
 
         const recentOrders30 = await OrderModel.find(baseMatch)
           .select('items createdAt status')
@@ -1469,6 +1530,10 @@ router.get(
           const items = Array.isArray(order.items) ? order.items : [];
 
           for (const item of items) {
+            // ✅ Optional item-level refund skip (safe if fields don't exist)
+            if (item && item.isRefunded === true) continue;
+            if (String(item?.refundStatus || '').toUpperCase() === 'REFUNDED') continue;
+
             const productId = String(
               item.productId || item.customId || item.pid || item.sku || '',
             ).trim();
@@ -1476,7 +1541,7 @@ router.get(
             if (!productId || !sellerCustomIds.includes(productId)) continue;
 
             const quantity = Number(item.quantity || 1);
-            if (quantity <= 0) continue;
+            if (!Number.isFinite(quantity) || quantity <= 0) continue;
 
             const product = productsByKey.get(productId);
             if (!product) continue;
@@ -1561,7 +1626,6 @@ router.get(
           recent: recentOrders,
         },
         kpis,
-        // ✅ IMPORTANT: removed salesTrend entirely
         deliveryOptions,
         isOrdersAdmin: Boolean(req.session.ordersAdmin),
         themeCss: res.locals.themeCss,
@@ -1570,13 +1634,14 @@ router.get(
     } catch (err) {
       console.error('❌ Seller dashboard error:', err);
       req.flash('error', 'Failed to load seller dashboard.');
-      res.redirect('/business/login');
+      return res.redirect('/business/login');
     }
   }
 );
 
 /* ----------------------------------------------------------
  * SUPPLIER DASHBOARD (NO CHART LOGIC)
+ * ✅ NOW IGNORES refunded/cancelled orders AND refunded items
  * -------------------------------------------------------- */
 router.get(
   '/dashboards/supplier-dashboard',
@@ -1602,14 +1667,55 @@ router.get(
       }
 
       if (!supplierDoc.isVerified) {
-        req.flash(
-          'error',
-          'Please verify your email to access the supplier dashboard.',
-        );
+        req.flash('error', 'Please verify your email to access the supplier dashboard.');
         return res.redirect('/business/verify-pending');
       }
 
       const OrderModel = require('../models/Order');
+
+      // ✅ Helper: refunded/cancelled order detector (works even if fields don't exist)
+      function isRefundedOrCancelledOrder(o) {
+        if (!o) return true;
+
+        // explicit flags
+        if (o.isRefunded === true) return true;
+
+        const refundStatus = String(o.refundStatus || '').trim().toUpperCase();
+        if (refundStatus === 'REFUNDED' || refundStatus === 'FULL' || refundStatus === 'FULLY_REFUNDED') {
+          return true;
+        }
+
+        // Some schemas set refundedAt
+        if (o.refundedAt) return true;
+
+        // cancellation by status (covers most projects)
+        const st = String(o.status || '').trim().toUpperCase();
+        if (st === 'CANCELLED' || st === 'CANCELED' || st === 'VOIDED') return true;
+
+        return false;
+      }
+
+      // ✅ Helper: refunded item detector (safe if fields don't exist)
+      function isRefundedItem(item) {
+        if (!item) return false;
+        if (item.isRefunded === true) return true;
+
+        const rs = String(item.refundStatus || '').trim().toUpperCase();
+        if (rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED') return true;
+
+        if (item.refundedAt) return true;
+
+        return false;
+      }
+
+      // ✅ Helper: Convert MoneySchema to number
+      function moneyToNumber(m) {
+        if (!m) return 0;
+        if (typeof m === 'number') return m;
+        if (typeof m === 'string') return Number(m) || 0;
+        if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
+        return 0;
+      }
 
       // 1) Products for this supplier
       const products = await Product.find({ business: sessionBusiness._id })
@@ -1665,23 +1771,31 @@ router.get(
 
         const baseOrderMatch = { $or: idMatchOr };
 
-        const ordersAgg = await OrderModel.aggregate([
-          { $match: baseOrderMatch },
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ]);
+        // ✅ Pull only minimal fields we need, then filter out refunded/cancelled orders in JS
+        const rawForCounts = await OrderModel.find(baseOrderMatch)
+          .select('status refundStatus isRefunded refundedAt')
+          .lean();
 
-        ordersByStatus = ordersAgg.reduce((m, r) => {
-          m[r._id || 'Unknown'] = Number(r.count || 0);
+        const nonRefundedOrders = rawForCounts.filter((o) => !isRefundedOrCancelledOrder(o));
+
+        ordersTotal = nonRefundedOrders.length;
+
+        ordersByStatus = nonRefundedOrders.reduce((m, o) => {
+          const k = o.status || 'Unknown';
+          m[k] = (m[k] || 0) + 1;
           return m;
         }, {});
 
-        ordersTotal = await OrderModel.countDocuments(baseOrderMatch);
-
-        recentOrders = await OrderModel.find(baseOrderMatch)
-          .select('orderId status amount createdAt shippingTracking')
+        // ✅ Recent orders list (also ignore refunded/cancelled)
+        const rawRecent = await OrderModel.find(baseOrderMatch)
+          .select('orderId status amount createdAt shippingTracking refundStatus isRefunded refundedAt')
           .sort({ createdAt: -1 })
-          .limit(5)
+          .limit(20) // fetch extra so we can filter and still show 5
           .lean();
+
+        recentOrders = rawRecent
+          .filter((o) => !isRefundedOrCancelledOrder(o))
+          .slice(0, 5);
       }
 
       // 3) Shipping tracking stats — NOT chart logic
@@ -1694,26 +1808,26 @@ router.get(
       };
 
       if (OrderModel && allProductIdentifiers.length) {
-        const trackingAgg = await OrderModel.aggregate([
+        const rawForTracking = await OrderModel.find(
           {
-            $match: {
-              $or: [
-                { 'items.productId': { $in: allProductIdentifiers } },
-                { 'items.customId': { $in: allProductIdentifiers } },
-              ],
-            },
+            $or: [
+              { 'items.productId': { $in: allProductIdentifiers } },
+              { 'items.customId': { $in: allProductIdentifiers } },
+            ],
           },
-          { $group: { _id: '$shippingTracking.status', count: { $sum: 1 } } },
-        ]);
+          'shippingTracking status refundStatus isRefunded refundedAt'
+        ).lean();
 
-        trackingAgg.forEach((stat) => {
-          const status = (stat._id || 'PENDING').toString().toUpperCase();
-          if (status === 'PENDING') trackingStats.pending = stat.count;
-          else if (status === 'PROCESSING') trackingStats.processing = stat.count;
-          else if (status === 'SHIPPED') trackingStats.shipped = stat.count;
-          else if (status === 'IN_TRANSIT') trackingStats.inTransit = stat.count;
-          else if (status === 'DELIVERED') trackingStats.delivered = stat.count;
-        });
+        const nonRefundedForTracking = rawForTracking.filter((o) => !isRefundedOrCancelledOrder(o));
+
+        for (const o of nonRefundedForTracking) {
+          const status = String(o?.shippingTracking?.status || 'PENDING').toUpperCase();
+          if (status === 'PENDING') trackingStats.pending += 1;
+          else if (status === 'PROCESSING') trackingStats.processing += 1;
+          else if (status === 'SHIPPED') trackingStats.shipped += 1;
+          else if (status === 'IN_TRANSIT') trackingStats.inTransit += 1;
+          else if (status === 'DELIVERED') trackingStats.delivered += 1;
+        }
       }
 
       // 4) 30-day KPIs (sold products + revenue) — keep (NOT charts)
@@ -1743,9 +1857,16 @@ router.get(
           $or: idMatchOr,
         };
 
-        const recentPaidOrders = await OrderModel.find(baseMatch)
-          .select('items amount createdAt status shippingTracking')
+        // ✅ We fetch refund fields + item refund fields, then ignore them in JS
+        const recentPaidOrdersRaw = await OrderModel.find(baseMatch)
+          .select(
+            'items amount createdAt status shippingTracking refundStatus isRefunded refundedAt'
+          )
           .lean();
+
+        const recentPaidOrders = recentPaidOrdersRaw.filter(
+          (o) => !isRefundedOrCancelledOrder(o)
+        );
 
         const productSales = new Map();
 
@@ -1753,12 +1874,16 @@ router.get(
           const items = Array.isArray(order.items) ? order.items : [];
 
           for (const item of items) {
+            // ✅ ignore refunded items
+            if (isRefundedItem(item)) continue;
+
             let productId = null;
             const possibleIds = [item.productId, item.customId, item.pid, item.sku];
 
             for (const id of possibleIds) {
-              if (id && allProductIdentifiers.includes(String(id))) {
-                productId = String(id);
+              const sid = id ? String(id) : '';
+              if (sid && allProductIdentifiers.includes(sid)) {
+                productId = sid;
                 break;
               }
             }
@@ -1769,7 +1894,14 @@ router.get(
             if (!product) continue;
 
             const quantity = Number(item.quantity || 1);
-            const price = Number(product.price || item.price || 0);
+            if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+            // ✅ price from product OR from item money schema
+            const price =
+              Number(product.price || 0) ||
+              moneyToNumber(item.price) ||
+              0;
+
             const revenue = quantity * price;
 
             last30Items += quantity;
@@ -1796,7 +1928,7 @@ router.get(
         soldPerProduct = Array.from(productSales.values()).sort((a, b) => b.qty - a.qty);
       }
 
-      // Fallback to computeSupplierKpis (kept)
+      // ✅ Fallback to computeSupplierKpis (your UPDATED version should also ignore refunds)
       if (soldPerProduct.length === 0 && last30Items === 0) {
         try {
           const kpisRaw = await computeSupplierKpis(sessionBusiness._id);
@@ -1833,7 +1965,11 @@ router.get(
         .lean();
 
       const supportInbox = process.env.SUPPORT_INBOX || 'support@phakisi-global.test';
-      const mailerOk = !!(process.env.SENDGRID_API_KEY || process.env.SMTP_HOST || process.env.SMTP_URL);
+      const mailerOk = !!(
+        process.env.SENDGRID_API_KEY ||
+        process.env.SMTP_HOST ||
+        process.env.SMTP_URL
+      );
 
       return res.render('dashboards/supplier-dashboard', {
         title: 'Supplier Dashboard',
@@ -1854,7 +1990,6 @@ router.get(
           recent: recentOrders,
         },
         kpis,
-        // ✅ IMPORTANT: removed salesTrend entirely
         deliveryOptions,
         isOrdersAdmin: Boolean(req.session.ordersAdmin),
         mailerOk,
@@ -1867,7 +2002,7 @@ router.get(
       req.flash('error', '❌ Failed to load supplier dashboard.');
       res.redirect('/business/login');
     }
-  },
+  }
 );
 
 /* ----------------------------------------------------------
@@ -1908,132 +2043,303 @@ router.get('/api/seller/kpis', requireBusiness, async (req, res) => {
 
 /* ----------------------------------------------------------
  * BUYER DASHBOARD
+ * ✅ Shows refunded/cancelled clearly in table (uiStatus)
+ * ✅ KPIs ignore refunded/cancelled (DB-backed)
+ * ✅ Shipping stats ignore refunded/cancelled
+ * ✅ orderedProducts ignores refunded/cancelled orders + refunded items
+ * ✅ demands/matches added (safe defaults)
+ * ✅ /business/api/buyer/stats added for auto-refresh
  * -------------------------------------------------------- */
-router.get(
-  '/dashboards/buyer-dashboard',
-  requireBusiness,
-  async (req, res) => {
-    try {
-      const sessionBusiness = req.session.business;
-      if (!sessionBusiness || !sessionBusiness._id) {
-        req.flash('error', 'Session expired. Please log in again.');
-        return res.redirect('/business/login');
-      }
-      if (sessionBusiness.role !== 'buyer') {
-        req.flash('error', '⛔ Access denied. Buyer accounts only.');
-        return res.redirect('/business/dashboard');
-      }
 
-      const business = await Business.findById(sessionBusiness._id).lean();
-      if (!business) {
-        req.flash('error', 'Business not found. Please log in again.');
-        return res.redirect('/business/login');
-      }
-      if (!business.isVerified) {
-        req.flash(
-          'error',
-          'Please verify your email to access the buyer dashboard.',
-        );
-        return res.redirect('/business/verify-pending');
-      }
+// NOTE: ensure these are imported at top of your file:
+// const Business = require('../models/Business');
+// const Product = require('../models/Product');
+// const requireBusiness = require('../middleware/requireBusiness');
 
-      const OrderModel = require('../models/Order');
+router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
+  try {
+    const sessionBusiness = req.session.business;
 
-      // 1) Orders for this buyer
-      const orders = await OrderModel.find({ businessBuyer: business._id })
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean();
-
-      const totalOrders = await OrderModel.countDocuments({
-        businessBuyer: business._id,
-      });
-      const completedOrders = await OrderModel.countDocuments({
-        businessBuyer: business._id,
-        status: { $in: ['Completed', 'COMPLETED', 'Delivered'] },
-      });
-      const pendingOrders = await OrderModel.countDocuments({
-        businessBuyer: business._id,
-        status: { $in: ['Pending', 'Processing', 'PAID', 'Shipped'] },
-      });
-
-      // 2) Shipping tracking stats
-      let shipStats = { inTransit: 0, delivered: 0 };
-
-      if (orders.length > 0) {
-        const orderIds = orders.map((o) => o.orderId).filter(Boolean);
-        if (orderIds.length > 0) {
-          const trackingAgg = await OrderModel.aggregate([
-            { $match: { orderId: { $in: orderIds } } },
-            { $group: { 
-              _id: '$shippingTracking.status', 
-              count: { $sum: 1 } 
-            } }
-          ]);
-
-          for (const r of trackingAgg) {
-            if (r._id === 'IN_TRANSIT' || r._id === 'SHIPPED') {
-              shipStats.inTransit += r.count;
-            }
-            if (r._id === 'DELIVERED') {
-              shipStats.delivered += r.count;
-            }
-          }
-        }
-      }
-
-      // 3) Products from orders
-      const orderedCustomIds = new Set();
-      for (const o of orders) {
-        (o.items || []).forEach((it) => {
-          if (it.productId) orderedCustomIds.add(String(it.productId));
-          if (it.customId) orderedCustomIds.add(String(it.customId));
-        });
-      }
-
-      let orderedProducts = [];
-      if (orderedCustomIds.size > 0) {
-        orderedProducts = await Product.find({
-          $or: [
-            { customId: { $in: Array.from(orderedCustomIds) } },
-            { _id: { $in: Array.from(orderedCustomIds) } },
-          ],
-        })
-          .select('customId name price imageUrl category stock')
-          .limit(8)
-          .lean();
-      }
-
-      // 4) Mailer status
-      const mailerOk = !!(
-        process.env.SENDGRID_API_KEY ||
-        process.env.SMTP_HOST ||
-        process.env.SMTP_URL
-      );
-
-      // 5) Recent orders list
-      const recentOrders = orders.slice(0, 5);
-
-      res.render('dashboards/buyer-dashboard', {
-        title: 'Buyer Dashboard',
-        business,
-        totalOrders,
-        completedOrders,
-        pendingOrders,
-        orders: recentOrders,
-        shipStats,
-        orderedProducts,
-        mailerOk,
-        themeCss: res.locals.themeCss,
-        nonce: res.locals.nonce,
-      });
-    } catch (err) {
-      console.error('❌ Buyer dashboard error:', err);
-      req.flash('error', 'Failed to load buyer dashboard.');
-      res.redirect('/business/login');
+    if (!sessionBusiness || !sessionBusiness._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
     }
-  },
-);
+
+    if (sessionBusiness.role !== 'buyer') {
+      req.flash('error', '⛔ Access denied. Buyer accounts only.');
+      return res.redirect('/business/dashboard');
+    }
+
+    const business = await Business.findById(sessionBusiness._id).lean();
+    if (!business) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    if (!business.isVerified) {
+      req.flash('error', 'Please verify your email to access the buyer dashboard.');
+      return res.redirect('/business/verify-pending');
+    }
+
+    const OrderModel = require('../models/Order');
+
+    // ----------------------------
+    // Helpers (order + item)
+    // ----------------------------
+    function isRefundedOrder(o) {
+      if (!o) return false;
+      if (o.isRefunded === true) return true;
+      if (o.refundedAt) return true;
+      const rs = String(o.refundStatus || '').trim().toUpperCase();
+      return rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED';
+    }
+
+    function isCancelledOrder(o) {
+      const st = String(o?.status || '').trim().toUpperCase();
+      return st === 'CANCELLED' || st === 'CANCELED' || st === 'VOIDED';
+    }
+
+    function isRefundedItem(it) {
+      if (!it) return false;
+      if (it.isRefunded === true) return true;
+      if (it.refundedAt) return true;
+      const rs = String(it.refundStatus || '').trim().toUpperCase();
+      return rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED';
+    }
+
+    // ----------------------------
+    // 1) Orders list (KEEP ALL so buyer sees refunded/cancelled)
+    // ----------------------------
+    const ordersRaw = await OrderModel.find({ businessBuyer: business._id })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const ordersWithUi = ordersRaw.map((o) => {
+      const refunded = isRefundedOrder(o);
+      const cancelled = !refunded && isCancelledOrder(o);
+
+      const uiStatus = refunded
+        ? 'Refunded'
+        : cancelled
+        ? 'Cancelled'
+        : (o.status || 'Unknown');
+
+      const uiStatusKey = String(uiStatus).toLowerCase().replace(/\s+/g, '-');
+
+      return {
+        ...o,
+        uiStatus,
+        uiStatusKey,
+        _isRefunded: refunded,
+        _isCancelled: cancelled,
+      };
+    });
+
+    const activeOrders = ordersWithUi.filter((o) => !o._isRefunded && !o._isCancelled);
+
+    // ----------------------------
+    // 2) KPI counts (DB-backed, ignore refunded/cancelled)
+    // ----------------------------
+    const nonRefundedCancelMatch = {
+      businessBuyer: business._id,
+      status: { $nin: ['Cancelled', 'CANCELLED', 'Canceled', 'CANCELED', 'Voided', 'VOIDED'] },
+      isRefunded: { $ne: true },
+      refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED'] },
+      refundedAt: { $exists: false },
+    };
+
+    const totalOrders = await OrderModel.countDocuments(nonRefundedCancelMatch);
+
+    const completedOrders = await OrderModel.countDocuments({
+      ...nonRefundedCancelMatch,
+      status: { $in: ['Completed', 'COMPLETED', 'Delivered', 'DELIVERED'] },
+    });
+
+    const pendingOrders = await OrderModel.countDocuments({
+      ...nonRefundedCancelMatch,
+      status: { $in: ['Pending', 'PENDING', 'Processing', 'PROCESSING', 'PAID', 'Shipped', 'SHIPPED'] },
+    });
+
+    const refundedOrders = await OrderModel.countDocuments({
+      businessBuyer: business._id,
+      $or: [
+        { isRefunded: true },
+        { refundStatus: { $in: ['REFUNDED', 'FULL', 'FULLY_REFUNDED'] } },
+        { refundedAt: { $exists: true, $ne: null } },
+      ],
+    });
+
+    // ----------------------------
+    // 3) Shipping stats (ignore refunded/cancelled)
+    // ----------------------------
+    let shipStats = { inTransit: 0, delivered: 0, processing: 0 };
+
+    // Prefer orderId when present, else fallback to _id
+    const activeOrderKeys = activeOrders
+      .map((o) => (o.orderId ? { orderId: o.orderId } : { _id: o._id }))
+      .filter(Boolean);
+
+    if (activeOrderKeys.length > 0) {
+      const matchStage = {
+        $match: {
+          $or: activeOrderKeys,
+        },
+      };
+
+      const trackingAgg = await OrderModel.aggregate([
+        matchStage,
+        { $group: { _id: '$shippingTracking.status', count: { $sum: 1 } } },
+      ]);
+
+      for (const r of trackingAgg) {
+        const s = String(r._id || '').toUpperCase();
+        if (s === 'IN_TRANSIT' || s === 'SHIPPED') shipStats.inTransit += Number(r.count || 0);
+        if (s === 'DELIVERED') shipStats.delivered += Number(r.count || 0);
+        if (s === 'PROCESSING') shipStats.processing += Number(r.count || 0);
+      }
+    }
+
+    // ----------------------------
+    // 4) Products from orders (ignore refunded/cancelled orders + refunded items)
+    // ----------------------------
+    const orderedCustomIds = new Set();
+
+    for (const o of activeOrders) {
+      const items = Array.isArray(o.items) ? o.items : [];
+      for (const it of items) {
+        if (isRefundedItem(it)) continue;
+
+        const pid = it.productId || it.customId || it.pid || it.sku;
+        if (pid) orderedCustomIds.add(String(pid));
+      }
+    }
+
+    let orderedProducts = [];
+    if (orderedCustomIds.size > 0) {
+      const ids = Array.from(orderedCustomIds);
+
+      orderedProducts = await Product.find({
+        $or: [{ customId: { $in: ids } }, { _id: { $in: ids } }],
+      })
+        .select('customId name price imageUrl category stock')
+        .limit(8)
+        .lean();
+    }
+
+    // ----------------------------
+    // 5) Demands + Matches (safe defaults for now)
+    // ----------------------------
+    // If you already have models later, replace this section with real queries.
+    const demands = { active: 0, pendingMatches: 0 };
+    const matches = [];
+
+    // ----------------------------
+    // 6) Mailer status
+    // ----------------------------
+    const mailerOk = !!(process.env.SENDGRID_API_KEY || process.env.SMTP_HOST || process.env.SMTP_URL);
+
+    // Table wants 6 items
+    const recentOrders = ordersWithUi.slice(0, 6);
+
+    return res.render('dashboards/buyer-dashboard', {
+      title: 'Buyer Dashboard',
+      business,
+
+      success: req.flash('success'),
+      error: req.flash('error'),
+
+      totalOrders,
+      completedOrders,
+      pendingOrders,
+      refundedOrders, // optional KPI
+
+      orders: recentOrders, // includes uiStatus/uiStatusKey/_isRefunded/_isCancelled
+      shipStats,
+      orderedProducts,
+
+      demands,
+      matches,
+
+      mailerOk,
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Buyer dashboard error:', err);
+    req.flash('error', 'Failed to load buyer dashboard.');
+    return res.redirect('/business/login');
+  }
+});
+
+/* ----------------------------------------------------------
+ * BUYER DASHBOARD API (auto-refresh)
+ * This matches the EJS refresh script fields exactly.
+ * -------------------------------------------------------- */
+router.get('/api/buyer/stats', requireBusiness, async (req, res) => {
+  try {
+    const sessionBusiness = req.session.business;
+    if (!sessionBusiness?._id) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    if (sessionBusiness.role !== 'buyer') return res.status(403).json({ ok: false, error: 'Forbidden' });
+
+    const business = await Business.findById(sessionBusiness._id).select('_id isVerified').lean();
+    if (!business) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    if (!business.isVerified) return res.status(403).json({ ok: false, error: 'Unverified' });
+
+    const OrderModel = require('../models/Order');
+
+    const nonRefundedCancelMatch = {
+      businessBuyer: business._id,
+      status: { $nin: ['Cancelled', 'CANCELLED', 'Canceled', 'CANCELED', 'Voided', 'VOIDED'] },
+      isRefunded: { $ne: true },
+      refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED'] },
+      refundedAt: { $exists: false },
+    };
+
+    const totalOrders = await OrderModel.countDocuments(nonRefundedCancelMatch);
+
+    const completedOrders = await OrderModel.countDocuments({
+      ...nonRefundedCancelMatch,
+      status: { $in: ['Completed', 'COMPLETED', 'Delivered', 'DELIVERED'] },
+    });
+
+    const pendingOrders = await OrderModel.countDocuments({
+      ...nonRefundedCancelMatch,
+      status: { $in: ['Pending', 'PENDING', 'Processing', 'PROCESSING', 'PAID', 'Shipped', 'SHIPPED'] },
+    });
+
+    // Shipping stats from active orders (recent window = last 30 days optional)
+    // Keep simple: aggregate for the buyer ignoring refunded/cancelled
+    const trackingAgg = await OrderModel.aggregate([
+      { $match: nonRefundedCancelMatch },
+      { $group: { _id: '$shippingTracking.status', count: { $sum: 1 } } },
+    ]);
+
+    let delivered = 0;
+    let inTransit = 0;
+    let processing = 0;
+
+    for (const r of trackingAgg) {
+      const s = String(r._id || '').toUpperCase();
+      if (s === 'DELIVERED') delivered += Number(r.count || 0);
+      if (s === 'IN_TRANSIT' || s === 'SHIPPED') inTransit += Number(r.count || 0);
+      if (s === 'PROCESSING') processing += Number(r.count || 0);
+    }
+
+    return res.json({
+      ok: true,
+      totalOrders,
+      completedOrders,
+      pendingOrders,
+      delivered,
+      inTransit,
+      processing,
+    });
+  } catch (err) {
+    console.error('❌ Buyer stats api error:', err);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
 
 /* ----------------------------------------------------------
  * 🧭 GET: Universal Dashboard Redirector
@@ -2236,7 +2542,7 @@ router.get('/profile/edit', requireBusiness, async (req, res) => {
 });
 
 /* ----------------------------------------------------------
- * ✏️ Edit Profile (POST)  (UPDATED: payoutsEnabled + paypalEmail + save-first verification)
+ * ✏️ Edit Profile (POST)  (FIXED: payoutsEnabled + paypalEmail)
  * -------------------------------------------------------- */
 router.post('/profile/edit', requireBusiness, async (req, res) => {
   try {
@@ -2281,7 +2587,7 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
       currentPassword,
       newPassword,
       confirmPassword,
-    } = req.body;
+    } = req.body || {};
 
     const isNonEmptyStr = (v) => typeof v === 'string' && v.trim().length > 0;
 
@@ -2289,12 +2595,18 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
     // Track changes we need after save
     // ------------------------------------------------
     const currentEmail = normalizeEmail(business.email);
-    const nextEmail = (email !== undefined) ? normalizeEmail(email) : currentEmail;
-    const emailChanged = (email !== undefined) && nextEmail && nextEmail !== currentEmail;
+    const nextEmail =
+      email !== undefined ? normalizeEmail(email) : currentEmail;
+    const emailChanged =
+      email !== undefined && nextEmail && nextEmail !== currentEmail;
 
     const currentOfficial = String(business.officialNumber || '').trim();
-    const nextOfficial = (officialNumber !== undefined) ? String(officialNumber || '').trim() : currentOfficial;
-    const officialChanged = (officialNumber !== undefined) && nextOfficial && nextOfficial !== currentOfficial;
+    const nextOfficial =
+      officialNumber !== undefined
+        ? String(officialNumber || '').trim()
+        : currentOfficial;
+    const officialChanged =
+      officialNumber !== undefined && nextOfficial && nextOfficial !== currentOfficial;
 
     // ------------------------------------------------
     // Validate email (if provided)
@@ -2319,30 +2631,16 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
     }
 
     // ------------------------------------------------
-    // ✅ PayPal payouts: combine checkbox + email
+    // ✅ PayPal payouts (FIXED)
+    // - convert payoutsEnabled to boolean once
+    // - let applyPaypalPayouts do validation + updating
     // ------------------------------------------------
     const payoutsOn = String(payoutsEnabled || '0') === '1';
-    const paypalNorm = String(paypalEmail || '').trim().replace(/\s+/g, '').toLowerCase();
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    // If payouts enabled, PayPal email is required + must be valid
-    if (payoutsOn) {
-      if (!paypalNorm) {
-        req.flash('error', 'Please enter your PayPal email to enable payouts.');
-        return res.redirect('/business/profile/edit');
-      }
-      if (!emailRegex.test(paypalNorm)) {
-        req.flash('error', 'Invalid PayPal email format.');
-        return res.redirect('/business/profile/edit');
-      }
-    } else {
-      // If payouts disabled, we still allow paypal email to be stored (optional),
-      // but if they typed one, validate format to avoid garbage.
-      if (paypalNorm && !emailRegex.test(paypalNorm)) {
-        req.flash('error', 'Invalid PayPal email format.');
-        return res.redirect('/business/profile/edit');
-      }
+    const applied = applyPaypalPayouts(business, paypalEmail, payoutsOn);
+    if (!applied || applied.ok !== true) {
+      req.flash('error', applied?.error || 'Invalid PayPal payouts settings.');
+      return res.redirect('/business/profile/edit'); // ✅ correct redirect
     }
 
     // ------------------------------------------------
@@ -2398,7 +2696,7 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
     }
 
     // ------------------------------------------------
-    // Bank details (same as yours)
+    // Bank details (same behavior as yours)
     // ------------------------------------------------
     business.bankDetails = business.bankDetails || {};
     let bankTouched = false;
@@ -2438,15 +2736,6 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
     if (bankTouched) business.bankDetails.updatedAt = new Date();
 
     // ------------------------------------------------
-    // ✅ Apply payouts to DB (adminPayouts uses this)
-    // ------------------------------------------------
-    const applied = applyPaypalPayouts(business, paypalEmail, payoutsEnabled);
-    if (!applied.ok) {
-      req.flash('error', applied.error);
-      return res.redirect('/business/profile/edit-details');
-    }
-
-    // ------------------------------------------------
     // Optional password change
     // ------------------------------------------------
     const wantsPwChange =
@@ -2476,7 +2765,7 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
         return res.redirect('/business/profile/edit');
       }
 
-      business.password = await bcrypt.hash(String(newPassword), 12);
+      business.password = await bcrypt.hash(String(newPassword).trim(), 12);
     }
 
     // ------------------------------------------------
@@ -2498,7 +2787,7 @@ router.post('/profile/edit', requireBusiness, async (req, res) => {
     // ✅ Save first so payouts + token are stored
     await business.save();
 
-    // Keep session in sync
+    // Keep session in sync (including payouts)
     if (!req.session.business) req.session.business = {};
     req.session.business._id = business._id;
     req.session.business.name = business.name;
@@ -2872,6 +3161,8 @@ router.get(
 
 // ----------------------------------------------------------
 // 📊 ANALYTICS CHART DATA API (per business only)
+// ✅ IGNORES refunded/cancelled orders AND refunded items
+// ✅ Uses buildNonRefundedPaidMatch(OrderModel, extra) that exists ONCE above
 // ----------------------------------------------------------
 router.get(
   '/analytics/chart-data',
@@ -2881,92 +3172,77 @@ router.get(
     try {
       const sessionBusiness = req.session.business;
       if (!sessionBusiness || !sessionBusiness._id) {
-        return res.status(401).json({
-          success: false,
-          message: 'Unauthorized',
-        });
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
 
-      // Use the Order model defined at the top of the file
-      if (!Order) {
-        return res.status(500).json({
-          success: false,
-          message: 'Order model not available',
-        });
+      const OrderModel = require('../models/Order');
+      if (!OrderModel) {
+        return res.status(500).json({ success: false, message: 'Order model not available' });
       }
 
       const businessId = sessionBusiness._id;
       const now = new Date();
 
-      // ✅ FIX: Case-insensitive status matching
-      const statusRegex = new RegExp('^(completed|paid|shipped|delivered)$', 'i');
-
-      // ----------------------------------------------------
-      // 1. Only THIS business's products
-      // ----------------------------------------------------
+      // ----------------------------
+      // 1) Load THIS business products
+      // ----------------------------
       const products = await Product.find({ business: businessId })
-        .select('customId name price stock soldCount')
+        .select('customId name price stock soldCount _id')
         .lean();
 
-      const productIds = products
-        .map((p) => {
-          const id = p.customId ? String(p.customId).trim() : null;
-          return id;
+      // Build keys set (supports BOTH customId and _id matching)
+      const productKeys = products
+        .flatMap((p) => {
+          const keys = [];
+          if (p?.customId) keys.push(String(p.customId).trim());
+          if (p?._id) keys.push(String(p._id).trim());
+          return keys;
         })
         .filter(Boolean);
 
-      console.log(`🚀 Found ${productIds.length} product IDs for ${sessionBusiness.name}`);
+      const productKeySet = new Set(productKeys);
 
-      const productIdSet = new Set(productIds);
-      const productsByKey = new Map();
-      products.forEach(p => {
-        if (p.customId) productsByKey.set(String(p.customId), p);
-      });
-
+      // Active products count (stock > 0)
       const activeProducts = products.filter((p) => (Number(p.stock) || 0) > 0).length;
 
-      // If this business has no products -> return zeroed chart
-      if (productIds.length === 0) {
+      // Price lookup map for fast revenue calculation
+      const productPriceByKey = new Map();
+      for (const p of products) {
+        const price = Number(p?.price || 0) || 0;
+        if (p?.customId) productPriceByKey.set(String(p.customId).trim(), price);
+        if (p?._id) productPriceByKey.set(String(p._id).trim(), price);
+      }
+
+      // If no products, return zero chart
+      if (productKeys.length === 0) {
         const dailyData = [];
         const monthlyData = [];
         const yearlyData = [];
 
-        // Last 7 days
         for (let i = 6; i >= 0; i--) {
-          const date = new Date(now);
-          date.setDate(date.getDate() - i);
+          const d = new Date(now);
+          d.setDate(d.getDate() - i);
           dailyData.push({
-            date: date.toLocaleDateString('en-ZA', {
-              weekday: 'short',
-              day: 'numeric',
-            }),
+            date: d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }),
             sales: 0,
             orders: 0,
           });
         }
 
-        // Last 30 days
         for (let i = 29; i >= 0; i--) {
-          const date = new Date(now);
-          date.setDate(date.getDate() - i);
+          const d = new Date(now);
+          d.setDate(d.getDate() - i);
           monthlyData.push({
-            date: date.toLocaleDateString('en-ZA', {
-              day: 'numeric',
-              month: 'short',
-            }),
+            date: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }),
             sales: 0,
             orders: 0,
           });
         }
 
-        // Last 12 months
         for (let i = 11; i >= 0; i--) {
-          const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
           yearlyData.push({
-            month: monthStart.toLocaleDateString('en-ZA', {
-              month: 'short',
-              year: 'numeric',
-            }),
+            month: m.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' }),
             sales: 0,
             orders: 0,
           });
@@ -2974,12 +3250,7 @@ router.get(
 
         return res.json({
           success: true,
-          chartData: {
-            daily: dailyData,
-            monthly: monthlyData,
-            yearly: yearlyData,
-            custom: [],
-          },
+          chartData: { daily: dailyData, monthly: monthlyData, yearly: yearlyData, custom: [] },
           metrics: {
             totalRevenue: 0,
             totalOrders: 0,
@@ -2994,185 +3265,167 @@ router.get(
         });
       }
 
-      // ----------------------------------------------------
-      // 2. Base match for orders
-      // ----------------------------------------------------
+      // ----------------------------
+      // 2) Helpers
+      // ----------------------------
       const idMatchOr = [
-        { 'items.productId': { $in: productIds } },
-        { 'items.customId': { $in: productIds } },
-        { 'items.pid': { $in: productIds } },
-        { 'items.sku': { $in: productIds } },
+        { 'items.productId': { $in: productKeys } },
+        { 'items.customId': { $in: productKeys } },
+        { 'items.pid': { $in: productKeys } },
+        { 'items.sku': { $in: productKeys } },
       ];
 
-      // ✅ Helper: Convert MoneySchema to number
       function moneyToNumber(m) {
         if (!m) return 0;
         if (typeof m === 'number') return m;
         if (typeof m === 'string') return Number(m) || 0;
-        if (typeof m === 'object' && m.value !== undefined) {
-          return Number(m.value) || 0;
-        }
+        if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
         return 0;
       }
 
-      // ✅ Helper: Compute revenue for THIS business from an order
+      function isRefundedItem(item) {
+        if (!item) return false;
+        if (item.isRefunded === true) return true;
+
+        const rs = String(item.refundStatus || '').trim().toUpperCase();
+        if (rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED' || rs === 'COMPLETED')
+          return true;
+
+        if (item.refundedAt) return true;
+        return false;
+      }
+
+      // revenue for THIS business from an order (ignore refunded items)
       function computeSellerAmount(order) {
         let sellerAmount = 0;
+        if (!Array.isArray(order.items)) return 0;
 
-        if (!Array.isArray(order.items)) {
-          return 0;
-        }
+        for (const item of order.items) {
+          if (isRefundedItem(item)) continue;
 
-        order.items.forEach((item) => {
           const pid = String(item.productId || item.customId || item.pid || item.sku || '').trim();
-          
-          if (!pid || !productIdSet.has(pid)) return;
+          if (!pid || !productKeySet.has(pid)) continue;
 
-          const quantity = Number(item.quantity || 1);
-          const unitPrice = moneyToNumber(item.price);
-          const lineAmount = quantity * unitPrice;
-          
-          if (lineAmount > 0) {
-            sellerAmount += lineAmount;
-          }
-        });
+          const qty = Number(item.quantity || 1);
+          if (!Number.isFinite(qty) || qty <= 0) continue;
+
+          const unitFromItem = moneyToNumber(item.price);
+          const unitFromProduct = productPriceByKey.get(pid) || 0;
+
+          const unit = unitFromItem || unitFromProduct;
+          const line = qty * unit;
+
+          if (line > 0) sellerAmount += line;
+        }
 
         return sellerAmount;
       }
 
-      // ----------------------------------------------------
-      // 3. Daily data (last 7 days)
-      // ----------------------------------------------------
-      const dailyData = [];
-      console.log('📊 Generating daily data (last 7 days)...');
-      
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-
-        const startOfDay = new Date(dateStr);
-        const endOfDay = new Date(startOfDay);
-        endOfDay.setDate(endOfDay.getDate() + 1);
-
-        const dailyOrders = await Order.find({
-          createdAt: { $gte: startOfDay, $lt: endOfDay },
-          status: statusRegex,
+      // Use your shared refund/cancel exclusion helper
+      function buildBaseMatch(extra = {}) {
+        return buildNonRefundedPaidMatch(OrderModel, {
+          ...extra,
           $or: idMatchOr,
-        }).lean();
-
-        let dailyRevenue = 0;
-        let dailyOrdersCount = 0;
-
-        dailyOrders.forEach((order) => {
-          const sellerAmount = computeSellerAmount(order);
-          if (sellerAmount > 0) {
-            dailyRevenue += sellerAmount;
-            dailyOrdersCount++;
-          }
-        });
-
-        dailyData.push({
-          date: date.toLocaleDateString('en-ZA', {
-            weekday: 'short',
-            day: 'numeric',
-          }),
-          sales: Math.round(dailyRevenue * 100) / 100,
-          orders: dailyOrdersCount,
         });
       }
 
-      console.log(`✅ Daily data: ${dailyData.length} points, total: R${dailyData.reduce((s, d) => s + d.sales, 0).toFixed(2)}`);
+      // Date keys (UTC-based, stable)
+      const dayKey = (d) => new Date(d).toISOString().slice(0, 10); // YYYY-MM-DD
+      const monthKey = (d) => new Date(d).toISOString().slice(0, 7); // YYYY-MM
 
-      // ----------------------------------------------------
-      // 4. Monthly data (last 30 days, by day)
-      // ----------------------------------------------------
+      // ----------------------------
+      // 3) Pull orders ONCE for last 30 days (covers daily + monthly)
+      // ----------------------------
+      const start30 = new Date(now);
+      start30.setDate(start30.getDate() - 29);
+      start30.setHours(0, 0, 0, 0);
+
+      const orders30 = await OrderModel.find(buildBaseMatch({ createdAt: { $gte: start30 } }))
+        .select('createdAt items status refundStatus isRefunded refundedAt')
+        .lean();
+
+      const salesByDay = new Map();   // YYYY-MM-DD -> { sales, orders }
+      for (const o of orders30) {
+        const amt = computeSellerAmount(o);
+        if (amt <= 0) continue; // if all items refunded, don’t count order
+
+        const k = dayKey(o.createdAt || now);
+        const cur = salesByDay.get(k) || { sales: 0, orders: 0 };
+        cur.sales += amt;
+        cur.orders += 1;
+        salesByDay.set(k, cur);
+      }
+
+      // Build monthlyData (last 30 days)
       const monthlyData = [];
-      console.log('📊 Generating monthly data (last 30 days)...');
-      
       for (let i = 29; i >= 0; i--) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-
-        const startOfDay = new Date(dateStr);
-        const endOfDay = new Date(startOfDay);
-        endOfDay.setDate(endOfDay.getDate() + 1);
-
-        const dailyOrders = await Order.find({
-          createdAt: { $gte: startOfDay, $lt: endOfDay },
-          status: statusRegex,
-          $or: idMatchOr,
-        }).lean();
-
-        let dailyRevenue = 0;
-        let dailyOrdersCount = 0;
-
-        dailyOrders.forEach((order) => {
-          const sellerAmount = computeSellerAmount(order);
-          if (sellerAmount > 0) {
-            dailyRevenue += sellerAmount;
-            dailyOrdersCount++;
-          }
-        });
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const k = dayKey(d);
+        const v = salesByDay.get(k) || { sales: 0, orders: 0 };
 
         monthlyData.push({
-          date: date.toLocaleDateString('en-ZA', {
-            day: 'numeric',
-            month: 'short',
-          }),
-          sales: Math.round(dailyRevenue * 100) / 100,
-          orders: dailyOrdersCount,
+          date: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }),
+          sales: Math.round((v.sales || 0) * 100) / 100,
+          orders: Number(v.orders || 0),
         });
       }
 
-      console.log(`✅ Monthly data: ${monthlyData.length} points, total: R${monthlyData.reduce((s, d) => s + d.sales, 0).toFixed(2)}`);
+      // Build dailyData (last 7 days)
+      const dailyData = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const k = dayKey(d);
+        const v = salesByDay.get(k) || { sales: 0, orders: 0 };
 
-      // ----------------------------------------------------
-      // 5. Yearly data (last 12 months, by month)
-      // ----------------------------------------------------
-      const yearlyData = [];
-      console.log('📊 Generating yearly data (last 12 months)...');
-      
-      for (let i = 11; i >= 0; i--) {
-        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-        monthEnd.setHours(23, 59, 59, 999);
-
-        const monthlyOrders = await Order.find({
-          createdAt: { $gte: monthStart, $lte: monthEnd },
-          status: statusRegex,
-          $or: idMatchOr,
-        }).lean();
-
-        let monthlyRevenue = 0;
-        let monthlyOrdersCount = 0;
-
-        monthlyOrders.forEach((order) => {
-          const sellerAmount = computeSellerAmount(order);
-          if (sellerAmount > 0) {
-            monthlyRevenue += sellerAmount;
-            monthlyOrdersCount++;
-          }
+        dailyData.push({
+          date: d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }),
+          sales: Math.round((v.sales || 0) * 100) / 100,
+          orders: Number(v.orders || 0),
         });
+      }
+
+      // ----------------------------
+      // 4) Pull orders ONCE for last 12 months (yearly)
+      // ----------------------------
+      const start12 = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      start12.setHours(0, 0, 0, 0);
+
+      const orders12 = await OrderModel.find(buildBaseMatch({ createdAt: { $gte: start12 } }))
+        .select('createdAt items status refundStatus isRefunded refundedAt')
+        .lean();
+
+      const salesByMonth = new Map(); // YYYY-MM -> { sales, orders }
+      for (const o of orders12) {
+        const amt = computeSellerAmount(o);
+        if (amt <= 0) continue;
+
+        const k = monthKey(o.createdAt || now);
+        const cur = salesByMonth.get(k) || { sales: 0, orders: 0 };
+        cur.sales += amt;
+        cur.orders += 1;
+        salesByMonth.set(k, cur);
+      }
+
+      const yearlyData = [];
+      for (let i = 11; i >= 0; i--) {
+        const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const k = monthKey(m);
+        const v = salesByMonth.get(k) || { sales: 0, orders: 0 };
 
         yearlyData.push({
-          month: monthStart.toLocaleDateString('en-ZA', {
-            month: 'short',
-            year: 'numeric',
-          }),
-          sales: Math.round(monthlyRevenue * 100) / 100,
-          orders: monthlyOrdersCount,
+          month: m.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' }),
+          sales: Math.round((v.sales || 0) * 100) / 100,
+          orders: Number(v.orders || 0),
         });
       }
 
-      console.log(`✅ Yearly data: ${yearlyData.length} points, total: R${yearlyData.reduce((s, d) => s + d.sales, 0).toFixed(2)}`);
-
-      // ----------------------------------------------------
-      // 6. Metrics (all based only on THIS business revenue)
-      // ----------------------------------------------------
-      const totalRevenue = yearlyData.reduce((sum, m) => sum + m.sales, 0);
-      const totalOrders = yearlyData.reduce((sum, m) => sum + m.orders, 0);
+      // ----------------------------
+      // 5) Metrics
+      // ----------------------------
+      const totalRevenue = yearlyData.reduce((sum, m) => sum + (Number(m.sales) || 0), 0);
+      const totalOrders = yearlyData.reduce((sum, m) => sum + (Number(m.orders) || 0), 0);
       const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
       const lastIdx = yearlyData.length - 1;
@@ -3194,23 +3447,14 @@ router.get(
           ? ((currentMonthOrders - previousMonthOrders) / previousMonthOrders) * 100
           : 0;
 
-      const currentAvg =
-        currentMonthOrders > 0 ? currentMonthRevenue / currentMonthOrders : 0;
-      const previousAvg =
-        previousMonthOrders > 0 ? previousMonthRevenue / previousMonthOrders : 0;
+      const currentAvg = currentMonthOrders > 0 ? currentMonthRevenue / currentMonthOrders : 0;
+      const previousAvg = previousMonthOrders > 0 ? previousMonthRevenue / previousMonthOrders : 0;
 
-      const avgOrderChange =
-        previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
+      const avgOrderChange = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
 
-      console.log('💰 Metrics calculated:', {
-        totalRevenue: totalRevenue.toFixed(2),
-        totalOrders,
-        avgOrderValue: avgOrderValue.toFixed(2)
-      });
-
-      // ----------------------------------------------------
-      // 7. Product performance (top 5)
-      // ----------------------------------------------------
+      // ----------------------------
+      // 6) Product performance (top 5) - same behavior as before
+      // ----------------------------
       const productPerformance = [];
 
       if (products.length > 0) {
@@ -3221,15 +3465,9 @@ router.get(
 
         if (topProducts.length > 0) {
           topProducts.forEach((product) => {
-            const name =
-              product.name.length > 15
-                ? product.name.substring(0, 15) + '...'
-                : product.name;
-
-            productPerformance.push({
-              name,
-              sales: product.soldCount || 0,
-            });
+            const nm = String(product.name || '');
+            const name = nm.length > 15 ? nm.substring(0, 15) + '...' : nm;
+            productPerformance.push({ name, sales: product.soldCount || 0 });
           });
         } else {
           const inStockProducts = products
@@ -3239,15 +3477,9 @@ router.get(
 
           if (inStockProducts.length > 0) {
             inStockProducts.forEach((product) => {
-              const name =
-                product.name.length > 15
-                  ? product.name.substring(0, 15) + '...'
-                  : product.name;
-
-              productPerformance.push({
-                name,
-                sales: Number(product.stock) || 0,
-              });
+              const nm = String(product.name || '');
+              const name = nm.length > 15 ? nm.substring(0, 15) + '...' : nm;
+              productPerformance.push({ name, sales: Number(product.stock) || 0 });
             });
           } else {
             productPerformance.push(
@@ -3258,17 +3490,10 @@ router.get(
         }
       }
 
-      console.log('📦 Product performance:', productPerformance.length, 'items');
-
       // Final response
-      const response = {
+      return res.json({
         success: true,
-        chartData: {
-          daily: dailyData,
-          monthly: monthlyData,
-          yearly: yearlyData,
-          custom: [],
-        },
+        chartData: { daily: dailyData, monthly: monthlyData, yearly: yearlyData, custom: [] },
         metrics: {
           totalRevenue: Math.round(totalRevenue * 100) / 100,
           totalOrders,
@@ -3280,18 +3505,7 @@ router.get(
         },
         productPerformance,
         lastUpdated: new Date().toISOString(),
-      };
-
-      console.log('✅ Sending response with:', {
-        dailyPoints: response.chartData.daily.length,
-        monthlyPoints: response.chartData.monthly.length,
-        yearlyPoints: response.chartData.yearly.length,
-        totalRevenue: response.metrics.totalRevenue,
-        totalOrders: response.metrics.totalOrders
       });
-
-      return res.json(response);
-      
     } catch (error) {
       console.error('❌ Chart data API error:', error);
       return res.status(500).json({
@@ -3302,6 +3516,9 @@ router.get(
     }
   }
 );
+
+router.get('/_ping', (req, res) => res.send('business router OK'));
+
 
 module.exports = router;
 

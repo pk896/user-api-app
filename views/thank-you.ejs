@@ -1,3 +1,4 @@
+<!--views/thank-you.ejs-->
 <%
   const NONCE = typeof nonce !== 'undefined' ? nonce : '';
   const THEME_CLASS = themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme';
@@ -844,10 +845,22 @@
             o.items.forEach(function(item, index) {
               var div = document.createElement('div');
               div.className = 'item-row';
+              var qty = Number(item.quantity || 1);
+
+              // price can be: { value }, number, or string (depending on old orders)
+              // so we normalize safely:
+              var unit =
+                (item.price && item.price.value != null) ? Number(item.price.value) :
+                (item.unitPrice != null) ? Number(item.unitPrice) :
+                (item.unit_amount && item.unit_amount.value != null) ? Number(item.unit_amount.value) :
+                Number(item.price);
+
+              if (!Number.isFinite(unit)) unit = 0;
+
               div.innerHTML = `
                 <span class="item-name">${item.name || 'Item ' + (index + 1)}</span>
-                <span class="item-qty">${item.quantity || 1} × ${money(item.price || 0)}</span>
-                <span class="item-line">${money((item.price || 0) * (item.quantity || 1))}</span>
+                <span class="item-qty">${qty} × ${money(unit)}</span>
+                <span class="item-line">${money(unit * qty)}</span>
               `;
               itemsList.appendChild(div);
             });
