@@ -75,7 +75,7 @@ function adminLoginThrottle(req, res, next) {
     req._adminAttemptKey = key;
     req._adminAttemptRec = rec;
     return next();
-  } catch (e) {
+  } catch {
     return next(); // fail open (don’t block login if limiter breaks)
   }
 }

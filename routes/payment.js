@@ -15,7 +15,7 @@ const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOr
 let requireAdmin = null;
 try {
   requireAdmin = require('../middleware/requireAdmin');
-} catch (e) {
+} catch {
   if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
     throw new Error(
       'Missing middleware/requireAdmin in production. Fix path or deploy build. Refusing to start.'
@@ -34,21 +34,21 @@ try {
 let debitSellersFromRefund = null;
 try {
   ({ debitSellersFromRefund } = require('../utils/payouts/debitSellersFromRefund'));
-} catch (e) {
+} catch {
   // optional
 }
 
 let Order = null;
 try {
   Order = require('../models/Order');
-} catch (e) {
+} catch {
   Order = null;
 }
 
 let Product = null;
 try {
   Product = require('../models/Product');
-} catch (e) {
+} catch {
   Product = null;
 }
 
@@ -91,7 +91,9 @@ function requireAnyAuth(req, res, next) {
   if (isAnyLoggedIn(req)) return next();
   try {
     req.flash?.('error', 'Please login first.');
-  } catch {}
+  } catch {
+    // placeholding
+  }
   return res.redirect('/users/login');
 }
 
@@ -242,7 +244,9 @@ async function findOrderByAnyId(id) {
     try {
       doc = await Order.findById(s).lean();
       if (doc) return doc;
-    } catch {}
+    } catch {
+      // placeholging
+    }
   }
 
   doc =
@@ -664,7 +668,9 @@ router.get('/checkout', requireAnyAuth, async (req, res) => {
   try {
     const { dollars } = await cheapestDelivery();
     shippingFlat = dollars;
-  } catch {}
+  } catch {
+    // placeholding
+  }
 
   return res.render('checkout', {
     title: 'Checkout',
@@ -757,7 +763,9 @@ router.post('/create-order', requireAnyAuth, express.json(), async (req, res) =>
       try {
         const found = await DeliveryOption.findById(providedId).lean();
         if (found && found.active) opt = found;
-      } catch {}
+      } catch {
+        // placeholding
+      }
     }
 
     if (!opt) {

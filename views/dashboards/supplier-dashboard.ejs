@@ -1,784 +1,1063 @@
 <!-- views/dashboards/supplier-dashboard.ejs -->
-<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '') %>
 
-<section class="dashboard-simple supplier" style="background-color: #F8FAFC; min-height: 100vh; padding: 1rem;">
-  <!-- Top Header -->
-  <header class="dashboard-header" style="background: linear-gradient(135deg, #7C3AED 0%, #2563EB 100%); color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px rgba(124, 58, 237, 0.1);">
-    <div class="user-info" style="display: flex; align-items: center; gap: 1rem;">
-      <div class="avatar" style="width: 60px; height: 60px; border-radius: 50%; background-color: #22C55E; color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold;">
-        <% if (business && business.name) { %>
-          <%= business.name.charAt(0).toUpperCase() %>
-        <% } else { %>
-          <span>S</span>
-        <% } %>
-      </div>
-      <div class="user-details">
-        <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Welcome, <span class="highlight" style="color: white; font-weight: 800;">
-          <% if (business && business.name) { %>
-            <%= business.name %>
-          <% } else { %>
-            Supplier
-          <% } %>
-        </span></h1>
-        <div class="status" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-          <span class="badge supplier" style="background-color: #0F172A; color: white; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">SUPPLIER ACCOUNT</span>
-          <span class="active-indicator" style="display: flex; align-items: center; gap: 0.5rem; color: rgba(255,255,255,0.9);">
-            <span class="dot <%= mailerOk ? 'online' : 'offline' %>" style="width: 8px; height: 8px; border-radius: 50%; background-color: <%= mailerOk ? '#22C55E' : '#EF4444' %>;"></span>
-            <%= mailerOk ? 'Mail Service Active' : 'Mail Service Offline' %>
-          </span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="header-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem;">
-      <div class="stat" style="background-color: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px; text-align: center;">
-        <small style="display: block; font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.25rem;">Today</small>
-        <strong style="display: block; font-size: 1.125rem; font-weight: 600;"><%= new Date().toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' }) %></strong>
-      </div>
-      <div class="stat" style="background-color: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px; text-align: center;">
-        <small style="display: block; font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.25rem;">Store ID</small>
-        <strong style="display: block; font-size: 1.125rem; font-weight: 600;"><% if (business && business._id) { %>
-          <%= business._id.toString().slice(-6).toUpperCase() %>
-        <% } else { %>
-          N/A
-        <% } %></strong>
-      </div>
-    </div>
-  </header>
+<%
+  // Helper functions
+  function fmtDate(d) {
+    try {
+      if (!d) return '';
+      const dd = (d instanceof Date) ? d : new Date(d);
+      return dd.toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    } catch { return String(d); }
+  }
 
-  <!-- Notifications -->
-  <% if (success && success.length > 0) { %>
-    <div class="notifications" style="margin-bottom: 1.5rem;">
-      <% success.forEach(msg => { %>
-        <div class="notification success" style="background-color: #22C55E; color: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
-          <span>✓</span>
-          <%= msg %>
-          <button class="close" style="margin-left: auto; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">&times;</button>
-        </div>
-      <% }) %>
-    </div>
-  <% } %>
-  
-  <% if (error && error.length > 0) { %>
-    <div class="notifications" style="margin-bottom: 1.5rem;">
-      <% error.forEach(msg => { %>
-        <div class="notification error" style="background-color: #EF4444; color: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
-          <span>!</span>
-          <%= msg %>
-          <button class="close" style="margin-left: auto; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">&times;</button>
-        </div>
-      <% }) %>
-    </div>
-  <% } %>
+  function fmtCurrency(amount) {
+    return 'R ' + Number(amount || 0).toFixed(2);
+  }
 
-  <%
-    // Helper functions
-    function fmtDate(d) {
-      try {
-        if (!d) return '';
-        const dd = (d instanceof Date) ? d : new Date(d);
-        return dd.toLocaleString('en-ZA', {
-          timeZone: 'Africa/Johannesburg',
-          dateStyle: 'medium',
-          timeStyle: 'short'
-        });
-      } catch { return String(d); }
-    }
+  // Use the actual data from your router
+  const supplierProducts = Array.isArray(products) ? products : [];
+  const supplierTotals = totals || {};
+  const supplierKpis = kpis || {};
+  const supplierOrders = (orders && orders.recent) ? orders.recent : [];
+  const supplierTrackingStats = trackingStats || {};
 
-    function fmtCurrency(amount) {
-      return 'R ' + Number(amount || 0).toFixed(2);
-    }
+  // Calculate real stats
+  const totalProducts = supplierTotals.totalProducts || 0;
+  const totalStock = supplierTotals.totalStock || 0;
+  const inStockCount = supplierTotals.inStock || 0;
+  const lowStockCount = supplierTotals.lowStock || 0;
+  const outOfStockCount = supplierTotals.outOfStock || 0;
 
-    // Use the actual data from your router
-    const supplierProducts = Array.isArray(products) ? products : [];
-    const supplierTotals = totals || {};
-    const supplierKpis = kpis || {};
-    const supplierOrders = (orders && orders.recent) ? orders.recent : [];
-    const supplierTrackingStats = trackingStats || {};
-    
-    // Calculate real stats
-    const totalProducts = supplierTotals.totalProducts || 0;
-    const totalStock = supplierTotals.totalStock || 0;
-    const inStockCount = supplierTotals.inStock || 0;
-    const lowStockCount = supplierTotals.lowStock || 0;
-    const outOfStockCount = supplierTotals.outOfStock || 0;
-    
-    // Calculate inventory value from products
-    const inventoryValue = supplierProducts.reduce((sum, p) => {
-      const price = Number(p.price) || 0;
+  // Calculate inventory value from products
+  const inventoryValue = supplierProducts.reduce((sum, p) => {
+    const price = Number(p.price) || 0;
+    const stock = Number(p.stock) || 0;
+    return sum + (price * stock);
+  }, 0);
+
+  // Top 10
+  const topProducts = Array.isArray(supplierKpis.perProduct)
+    ? supplierKpis.perProduct.slice(0, 10)
+    : [];
+
+  // In-stock samples
+  const availableProducts = supplierProducts
+    .filter(p => (Number(p.stock) || 0) > 0)
+    .slice(0, 3);
+
+  // Low stock (actual stock < 20)
+  const lowStockProducts = supplierProducts
+    .filter(p => {
       const stock = Number(p.stock) || 0;
-      return sum + (price * stock);
-    }, 0);
-    
-    // Get top performing products from kpis (Top 10)
-    const topProducts = Array.isArray(supplierKpis.perProduct) ? 
-      supplierKpis.perProduct.slice(0, 10) : [];
-      
-    // Get products with stock for display
-    const availableProducts = supplierProducts
-      .filter(p => (Number(p.stock) || 0) > 0)
-      .slice(0, 3);
-      
-    // Get low stock products (stock < 20)
-    const lowStockProducts = supplierProducts
-      .filter(p => {
-        const stock = Number(p.stock) || 0;
-        return stock > 0 && stock < 20;
-      })
-      .slice(0, 5);
-    
-    // Get out of stock products
-    const outOfStockProducts = supplierProducts
-      .filter(p => (Number(p.stock) || 0) <= 0)
-      .slice(0, 5);
-  %>
+      return stock > 0 && stock < 20;
+    })
+    .slice(0, 5);
 
-  <!-- Quick Stats Section -->
-  <section class="quick-stats-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #7C3AED; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-    <h2 style="color: #0F172A; margin-bottom: 1.5rem; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
-      <span style="display: inline-block; width: 4px; height: 20px; background-color: #7C3AED; border-radius: 2px;"></span>
-      Supplier Overview
-    </h2>
-    <div class="stats-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
-      <div class="stat-card" style="background-color: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 8px; padding: 1rem;">
-        <div class="icon" style="background-color: #2563EB; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">📦</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Total Products</h3>
-          <p class="value" data-kpi="totalProducts" style="font-size: 1.5rem; font-weight: 700; color: #0F172A;"><%= totalProducts %></p>
-          <small style="font-size: 0.75rem; color: #64748B;"><%= inStockCount %> in stock</small>
-        </div>
-      </div>
-      
-      <a href="/products/low-stock" class="stat-card" style="background-color: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; padding: 1rem; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 1rem;">
-        <div class="icon" style="background-color: #7C3AED; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">🔢</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Total Stock</h3>
-          <p class="value" data-kpi="totalStock" style="font-size: 1.5rem; font-weight: 700; color: #0F172A;"><%= totalStock %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Units available</small>
-        </div>
-      </a>
-      
-      <div class="stat-card" style="background-color: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 8px; padding: 1rem;">
-        <div class="icon" style="background-color: #22C55E; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">💰</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Inventory Value</h3>
-          <p class="value" style="font-size: 1.5rem; font-weight: 700; color: #22C55E;"><%= fmtCurrency(inventoryValue) %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Current stock value</small>
-        </div>
-      </div>
-      
-      <a href="/products/low-stock" class="stat-card" style="background-color: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 8px; padding: 1rem; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 1rem;">
-        <div class="icon" style="background-color: #F97316; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">⚠️</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Low Stock</h3>
-          <p class="value" data-kpi="lowStock" style="font-size: 1.5rem; font-weight: 700; color: #F97316;"><%= lowStockCount %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Stock &lt; 20 units</small>
-        </div>
-      </a>
-      
-      <a href="/products/out-of-stock" class="stat-card" style="background-color: rgba(15, 23, 42, 0.08); border: 1px solid rgba(15, 23, 42, 0.2); border-radius: 8px; padding: 1rem; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 1rem;">
-        <div class="icon" style="background-color: #0F172A; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">🚨</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Out of Stock</h3>
-          <p class="value" data-kpi="outOfStock" style="font-size: 1.5rem; font-weight: 700; color: #0F172A;"><%= outOfStockCount %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Products to restock</small>
-        </div>
-      </a>
-    </div>
-  </section>
+  // Out of stock
+  const outOfStockProducts = supplierProducts
+    .filter(p => (Number(p.stock) || 0) <= 0)
+    .slice(0, 5);
+%>
 
-  <!-- Main Content Grid -->
-  <div class="dashboard-grid" style="display: grid; grid-template-columns: 1fr; gap: 1.5rem;">
-    <!-- Left Column -->
-    <div class="left-column">
-      <!-- Low Stock Products -->
-      <% if (lowStockCount > 0) { %>
-        <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #F97316; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-          <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Low Stock Products (<%= lowStockCount %>)</h2>
-            <a href="/products?filter=low_stock" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
-          </div>
-          
-          <div class="low-stock-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <% lowStockProducts.forEach(p => { 
-              const stock = Number(p.stock) || 0;
-              const price = Number(p.price) || 0;
-              const lastUpdated = p.updatedAt || p.createdAt;
-            %>
-              <div class="low-product" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: rgba(249, 115, 22, 0.05); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 8px;">
-                <div class="low-product-info" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="low-thumb" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(249, 115, 22, 0.3);">
-                  <% } else { %>
-                    <div class="low-thumb-placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: rgba(249, 115, 22, 0.1); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #F97316;">📦</div>
-                  <% } %>
-                  <div class="low-details" style="flex: 1;">
-                    <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                    <div class="low-meta" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                      <span class="price" style="font-size: 0.875rem; color: #22C55E; font-weight: 600;"><%= fmtCurrency(price) %></span>
-                      <span class="stock-warning" style="font-size: 0.75rem; color: #F97316; background-color: rgba(249, 115, 22, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px; font-weight: 600;">Stock: <%= stock %></span>
-                      <span class="category" style="font-size: 0.75rem; color: #7C3AED; background-color: rgba(124, 58, 237, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px;"><%= p.category || 'General' %></span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="low-actions" style="display: flex; gap: 0.5rem;">
-                  <a href="/products/edit/<%= p._id || p.customId %>" class="btn-restock" style="background-color: #F97316; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Restock</a>
-                  <a href="/products/view/<%= p._id || p.customId %>" class="btn-view" style="background-color: #2563EB; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">View</a>
-                </div>
-              </div>
-            <% }) %>
-            
-            <% if (lowStockCount > 5) { %>
-              <div class="more-products" style="text-align: center; padding: 1rem; color: #64748B;">
-                <span>+<%= lowStockCount - 5 %> more low stock products</span>
-                <a href="/products?filter=low_stock" class="btn-view-all" style="display: block; color: #7C3AED; text-decoration: none; font-weight: 600; margin-top: 0.5rem;">View All</a>
-              </div>
+<section class="supDash">
+  <div class="supDash__wrap">
+
+    <!-- Header -->
+    <header class="sdCard sdHeader">
+      <div class="sdHeader__row">
+        <div class="sdHeader__user">
+          <div class="sdAvatar" aria-hidden="true">
+            <% if (business && business.name) { %>
+              <%= business.name.charAt(0).toUpperCase() %>
+            <% } else { %>
+              <span>S</span>
             <% } %>
           </div>
-        </section>
-      <% } %>
 
-      <!-- Quick Actions -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #2563EB; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <h2 style="color: #0F172A; margin-bottom: 1.5rem; font-size: 1.125rem; font-weight: 600;">Quick Actions</h2>
-        <div class="actions-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
-          <a href="/products/add" class="action primary" style="background-color: #7C3AED; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">➕</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">Add Product</span>
-          </a>
-          
-          <a href="/orders" class="action" style="background-color: #2563EB; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">📦</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">View Orders</span>
-          </a>
-          
-          <a href="/products/mine" class="action" style="background-color: #0F172A; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">📋</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">All Products</span>
-          </a>
-          
-          <a href="/business/analytics/chart" class="action" style="background-color: #22C55E; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">📈</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">Analytics</span>
-          </a>
-        </div>
-      </section>
-
-      <!-- Top 10 Best Sellers -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #22C55E; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Top 10 Best Sellers</h2>
-          <a href="/products/performance" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
-        </div>
-        
-        <% if (topProducts.length > 0) { %>
-          <div class="sellers-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <% topProducts.forEach((p, index) => { %>
-              <div class="seller-item" style="display: flex; align-items: center; padding: 1rem; background-color: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; gap: 1rem;">
-                <div class="seller-rank" style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
-                  <span class="rank-number" style="width: 28px; height: 28px; background-color: #E2E8F0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;"><%= index + 1 %></span>
-                  <% if (index < 3) { %>
-                    <span class="rank-badge" style="font-size: 1rem;">
-                      <%= index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : '')) %>
-                    </span>
-                  <% } %>
-                </div>
-                
-                <div class="seller-product" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="product-thumb" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid #E2E8F0;">
-                  <% } else { %>
-                    <div class="thumb-placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: #E2E8F0; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">📦</div>
-                  <% } %>
-                  <div class="product-info" style="flex: 1;">
-                    <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                    <small style="font-size: 0.75rem; color: #64748B;"><%= p.category || 'General' %></small>
-                  </div>
-                </div>
-                
-                <div class="seller-stats" style="display: flex; gap: 1rem;">
-                  <div class="stat" style="text-align: center;">
-                    <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Sold</small>
-                    <strong style="display: block; font-size: 0.875rem; color: #0F172A; font-weight: 700;"><%= p.qty || 0 %></strong>
-                  </div>
-                  <div class="stat" style="text-align: center;">
-                    <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Revenue</small>
-                    <strong class="revenue" style="display: block; font-size: 0.875rem; color: #22C55E; font-weight: 700;"><%= fmtCurrency(p.estRevenue || 0) %></strong>
-                  </div>
-                </div>
-                
-                <div class="seller-action">
-                  <a href="/products/view/<%= p.productId || '#' %>" class="btn-small" style="background-color: #7C3AED; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">View</a>
-                </div>
-              </div>
-            <% }) %>
-          </div>
-        <% } else { %>
-          <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B;">
-            <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">📊</span>
-            <p style="color: #0F172A; margin-bottom: 0.25rem;">No sales data available yet</p>
-            <small>Start selling to see your best sellers</small>
-          </div>
-        <% } %>
-      </section>
-    </div>
-
-    <!-- Right Column -->
-    <div class="right-column">
-      <!-- Sales Trend Chart -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #7C3AED; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <div>
-            <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">Sales Trend</h2>
-            <div class="trend-period-toggle" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button class="period-btn active" id="daily-btn" style="background-color: #7C3AED; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Last 7 Days</button>
-              <button class="period-btn" id="monthly-btn" style="background-color: #E2E8F0; color: #64748B; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Last 30 Days</button>
-              <button class="period-btn" id="yearly-btn" style="background-color: #E2E8F0; color: #64748B; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Last 12 Months</button>
-            </div>
-          </div>
-          <div class="trend-summary" style="display: flex; flex-direction: column; gap: 0.25rem; text-align: right;">
-            <small>Current: <span id="current-sales" style="color: #22C55E; font-weight: 600;">R 0.00</span></small>
-            <small>Avg: <span id="avg-sales" style="color: #2563EB; font-weight: 600;">R 0.00</span></small>
-            <small>Total: <span id="total-sales" style="color: #7C3AED; font-weight: 600;">R 0.00</span></small>
-          </div>
-        </div>
-        
-        <div class="trend-chart-container">
-          <!-- Simple div-based chart -->
-          <div id="simple-chart" style="width: 100%; height: 200px; display: flex; align-items: flex-end; gap: 2px; padding: 1rem; border-bottom: 1px solid #E2E8F0; border-left: 1px solid #E2E8F0; background-color: #F8FAFC;"></div>
-          
-          <!-- X-axis labels container -->
-          <div id="chart-labels" style="display: flex; justify-content: space-between; padding: 0.5rem 1rem; font-size: 0.75rem; color: #64748B;"></div>
-          
-          <!-- Chart Legend -->
-          <div class="chart-legend" style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #E2E8F0;">
-            <div class="legend-item" style="display: flex; align-items: center; gap: 0.5rem;">
-              <span class="legend-color" style="width: 12px; height: 12px; background: #7C3AED; border-radius: 2px;"></span>
-              <span id="legend-text" style="font-size: 0.875rem; color: #64748B;">Daily Revenue</span>
-            </div>
-          </div>
-          
-          <!-- Trend Stats -->
-          <div class="trend-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1.5rem;">
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Peak</small>
-              <strong id="peak-sales" style="display: block; font-size: 1.125rem; color: #0F172A; font-weight: 700;">R 0.00</strong>
-            </div>
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Lowest</small>
-              <strong id="lowest-sales" style="display: block; font-size: 1.125rem; color: #0F172A; font-weight: 700;">R 0.00</strong>
-            </div>
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Growth</small>
-              <strong id="growth-trend" class="positive" style="display: block; font-size: 1.125rem; color: #22C55E; font-weight: 700;">0%</strong>
-            </div>
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Projection</small>
-              <strong id="projection" class="positive" style="display: block; font-size: 1.125rem; color: #22C55E; font-weight: 700;">+0%</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Out of Stock Products -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #EF4444; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Out of Stock Products (<%= outOfStockCount %>)</h2>
-          <% if (outOfStockCount > 0) { %>
-            <a href="/products?filter=out_of_stock" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">Restock All</a>
-          <% } %>
-        </div>
-        
-        <% if (outOfStockProducts.length > 0) { %>
-          <div class="out-of-stock-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <% outOfStockProducts.forEach(p => { 
-              const price = Number(p.price) || 0;
-              const lastUpdated = p.updatedAt || p.createdAt;
-            %>
-              <div class="out-product" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px;">
-                <div class="out-product-info" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="out-thumb" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(239, 68, 68, 0.3);">
-                  <% } else { %>
-                    <div class="out-thumb-placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: rgba(239, 68, 68, 0.1); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #EF4444;">📦</div>
-                  <% } %>
-                  <div class="out-details" style="flex: 1;">
-                    <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                    <div class="out-meta" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                      <span class="price" style="font-size: 0.875rem; color: #22C55E; font-weight: 600;"><%= fmtCurrency(price) %></span>
-                      <span class="category" style="font-size: 0.75rem; color: #7C3AED; background-color: rgba(124, 58, 237, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px;"><%= p.category || 'General' %></span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="out-actions" style="display: flex; gap: 0.5rem;">
-                  <a href="/products/edit/<%= p._id || p.customId %>" class="btn-restock" style="background-color: #EF4444; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Restock</a>
-                  <a href="/products/view/<%= p._id || p.customId %>" class="btn-view" style="background-color: #2563EB; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">View</a>
-                </div>
-              </div>
-            <% }) %>
-            
-            <% if (outOfStockCount > 5) { %>
-              <div class="more-products" style="text-align: center; padding: 1rem; color: #64748B;">
-                <span>+<%= outOfStockCount - 5 %> more products out of stock</span>
-                <a href="/products?filter=out_of_stock" class="btn-view-all" style="display: block; color: #7C3AED; text-decoration: none; font-weight: 600; margin-top: 0.5rem;">View All</a>
-              </div>
-            <% } %>
-          </div>
-        <% } else { %>
-          <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B; background-color: rgba(34, 197, 94, 0.05); border-radius: 8px;">
-            <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">✅</span>
-            <p style="color: #0F172A; margin-bottom: 0.25rem;">All products are in stock!</p>
-            <small>Great job managing your inventory</small>
-          </div>
-        <% } %>
-      </section>
-
-      <!-- Available Products -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #0F172A; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Available Products</h2>
-          <a href="/products/mine" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
-        </div>
-        
-        <div class="products-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <% if (availableProducts.length > 0) { %>
-            <% availableProducts.forEach(p => { 
-              const stock = Number(p.stock) || 0;
-              const price = Number(p.price) || 0;
-            %>
-              <div class="product-item" style="display: flex; gap: 1rem; padding: 1rem; background-color: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; align-items: center;">
-                <div class="product-image">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid #E2E8F0;">
-                  <% } else { %>
-                    <div class="placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: #E2E8F0; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #64748B;">📦</div>
-                  <% } %>
-                </div>
-                <div class="product-details" style="flex: 1;">
-                  <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                  <small style="font-size: 0.75rem; color: #64748B; display: block; margin-bottom: 0.5rem;">Price: <%= fmtCurrency(price) %></small>
-                  <div class="product-meta" style="display: flex; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; align-items: center;">
-                    <span class="category" style="background-color: rgba(124, 58, 237, 0.1); color: #7C3AED; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;"><%= p.category || 'General' %></span>
-                    <span class="stock <%= stock < 20 ? 'low' : 'good' %>" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 6px; font-weight: 600; <%= stock < 20 ? 'background-color: rgba(249, 115, 22, 0.1); color: #92400e;' : 'background-color: rgba(34, 197, 94, 0.1); color: #166534;' %>">
-                      <%= stock %> in stock
-                    </span>
-                  </div>
-                  <% if (stock <= 0) { %>
-                    <span class="status out" style="background-color: rgba(239, 68, 68, 0.1); color: #b91c1c; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">Out of Stock</span>
-                  <% } else if (stock < 20) { %>
-                    <span class="status low" style="background-color: rgba(249, 115, 22, 0.1); color: #92400e; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">Low Stock</span>
-                  <% } else { %>
-                    <span class="status in" style="background-color: rgba(34, 197, 94, 0.1); color: #166534; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">In Stock</span>
-                  <% } %>
-                </div>
-              </div>
-            <% }) %>
-          <% } else { %>
-            <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B;">
-              <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">📦</span>
-              <p style="color: #0F172A; margin-bottom: 0.25rem;">No products in stock</p>
-              <a href="/products/add" class="btn" style="background-color: #7C3AED; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-size: 0.875rem; font-weight: 600; display: inline-block;">Add First Product</a>
-            </div>
-          <% } %>
-        </div>
-      </section>
-    </div>
-  </div>
-
-  <!-- Recent Orders -->
-  <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #22C55E; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Recent Orders</h2>
-      <a href="/orders" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
-    </div>
-    
-    <div class="orders-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-      <% if (supplierOrders.length > 0) { %>
-        <% supplierOrders.forEach(o => { 
-          const status = o.status || 'pending';
-          const statusClass = status.toLowerCase().replace(/\s+/g, '-');
-        %>
-          <div class="order-item" style="padding: 1rem; background-color: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0;">
-            <div class="order-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <span class="order-id" style="font-family: monospace; font-size: 0.875rem; color: #0F172A; font-weight: 600;">
-                <% if (o.orderId) { %>
-                  #<%= o.orderId.slice(-8) %>
-                <% } else if (o._id) { %>
-                  #<%= o._id.toString().slice(-8) %>
+          <div class="sdHeader__meta">
+            <h1 class="sdHeader__title">
+              Welcome,
+              <span class="sdHeader__titleStrong">
+                <% if (business && business.name) { %>
+                  <%= business.name %>
                 <% } else { %>
-                  #N/A
+                  Supplier
                 <% } %>
               </span>
-              <span class="order-amount" style="font-size: 0.875rem; color: #22C55E; font-weight: 700;">
-                <% if (o.amount && o.amount.value) { %>
-                  <%= fmtCurrency(o.amount.value) %>
-                <% } else if (o.total) { %>
-                  <%= fmtCurrency(o.total) %>
-                <% } else { %>
-                  <%= fmtCurrency(0) %>
-                <% } %>
+            </h1>
+
+            <div class="sdHeader__badges">
+              <span class="sdBadge sdBadge--dark">SUPPLIER ACCOUNT</span>
+
+              <span class="sdActive">
+                <span class="sdDot <%= mailerOk ? 'is-on' : 'is-off' %>" aria-hidden="true"></span>
+                <%= mailerOk ? 'Mail Service Active' : 'Mail Service Offline' %>
               </span>
             </div>
-            <div class="order-details" style="display: flex; justify-content: space-between; align-items: center;">
-              <span class="status <%= statusClass %>" style="<%= statusClass.includes('completed') || statusClass.includes('delivered') || statusClass.includes('shipped') ? 'background-color: rgba(34, 197, 94, 0.1); color: #166534;' :
-                                                                  statusClass.includes('pending') || statusClass.includes('processing') ? 'background-color: rgba(249, 115, 22, 0.1); color: #92400e;' :
-                                                                  'background-color: rgba(239, 68, 68, 0.1); color: #b91c1c;' %> padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
-                <%= status.charAt(0).toUpperCase() + status.slice(1) %>
-              </span>
-              <span class="date" style="font-size: 0.75rem; color: #64748B;"><%= fmtDate(o.createdAt) %></span>
-            </div>
+          </div>
+        </div>
+
+        <div class="sdHeader__stats">
+          <div class="sdMiniStat">
+            <small>Today</small>
+            <strong><%= new Date().toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' }) %></strong>
+          </div>
+
+          <div class="sdMiniStat">
+            <small>Store ID</small>
+            <strong>
+              <% if (business && business._id) { %>
+                <%= business._id.toString().slice(-6).toUpperCase() %>
+              <% } else { %>
+                N/A
+              <% } %>
+            </strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Notifications -->
+    <% if (success && success.length > 0) { %>
+      <div class="sdNotices">
+        <% success.forEach(msg => { %>
+          <div class="sdNotice sdNotice--success notification success">
+            <span class="sdNotice__ico" aria-hidden="true">✓</span>
+            <div class="sdNotice__text"><%= msg %></div>
+            <button class="sdNotice__close close" type="button" aria-label="Close">&times;</button>
           </div>
         <% }) %>
-      <% } else { %>
-        <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B;">
-          <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">📋</span>
-          <p style="color: #0F172A; margin-bottom: 0.25rem;">No recent orders</p>
-          <small>Orders will appear here</small>
-        </div>
-      <% } %>
-    </div>
-  </section>
-
-  <!-- Shipping Tracking Stats -->
-  <% if (supplierTrackingStats && Object.keys(supplierTrackingStats).length > 0) { %>
-    <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #2563EB; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Shipping Status</h2>
-        <a href="/orders" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">Track All</a>
       </div>
-      
-      <div class="stats-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
-        <div class="stat-card <%= supplierTrackingStats.pending > 0 ? 'orange' : 'blue' %>" style="<%= supplierTrackingStats.pending > 0 ? 'background-color: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.2);' : 'background-color: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.2);' %> border-radius: 8px; padding: 1rem; text-align: center;">
-          <div class="icon" style="background-color: <%= supplierTrackingStats.pending > 0 ? '#F97316' : '#2563EB' %>; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 0.5rem;">⏳</div>
-          <div class="details">
-            <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Pending</h3>
-            <p class="value" style="font-size: 1.5rem; font-weight: 700; color: <%= supplierTrackingStats.pending > 0 ? '#F97316' : '#0F172A' %>;"><%= supplierTrackingStats.pending || 0 %></p>
+    <% } %>
+
+    <% if (error && error.length > 0) { %>
+      <div class="sdNotices">
+        <% error.forEach(msg => { %>
+          <div class="sdNotice sdNotice--error notification error">
+            <span class="sdNotice__ico" aria-hidden="true">!</span>
+            <div class="sdNotice__text"><%= msg %></div>
+            <button class="sdNotice__close close" type="button" aria-label="Close">&times;</button>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <!-- Overview KPIs -->
+    <section class="sdCard sdSection sdSection--purple">
+      <div class="sdSection__head">
+        <h2 class="sdSection__title">
+          <span class="sdSection__bar" aria-hidden="true"></span>
+          Supplier Overview
+        </h2>
+      </div>
+
+      <div class="sdStats sdStats--five">
+        <div class="sdStat sdStat--blue">
+          <a href="/products/mine" class="sdStat__link">
+            <div class="sdIcon sdIcon--blue" aria-hidden="true">📦</div>
+            <div class="sdStat__body">
+              <h3>Total Products</h3>
+              <p class="sdValue" data-kpi="totalProducts"><%= totalProducts %></p>
+              <small><%= inStockCount %> in stock</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--purple">
+          <a href="/products/low-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--purple" aria-hidden="true">🔢</div>
+            <div class="sdStat__body">
+              <h3>Total Stock</h3>
+              <p class="sdValue" data-kpi="totalStock"><%= totalStock %></p>
+              <small>Units available</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--green">
+          <div class="sdStat__link">
+            <div class="sdIcon sdIcon--green" aria-hidden="true">💰</div>
+            <div class="sdStat__body">
+              <h3>Inventory Value</h3>
+              <p class="sdValue sdValue--green"><%= fmtCurrency(inventoryValue) %></p>
+              <small>Current stock value</small>
+            </div>
           </div>
         </div>
-        
-        <div class="stat-card <%= supplierTrackingStats.processing > 0 ? 'orange' : 'purple' %>" style="<%= supplierTrackingStats.processing > 0 ? 'background-color: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.2);' : 'background-color: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.2);' %> border-radius: 8px; padding: 1rem; text-align: center;">
-          <div class="icon" style="background-color: <%= supplierTrackingStats.processing > 0 ? '#F97316' : '#7C3AED' %>; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 0.5rem;">⚙️</div>
-          <div class="details">
-            <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Processing</h3>
-            <p class="value" style="font-size: 1.5rem; font-weight: 700; color: <%= supplierTrackingStats.processing > 0 ? '#F97316' : '#0F172A' %>;"><%= supplierTrackingStats.processing || 0 %></p>
-          </div>
+
+        <div class="sdStat sdStat--orange">
+          <a href="/products/low-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--orange" aria-hidden="true">⚠️</div>
+            <div class="sdStat__body">
+              <h3>Low Stock</h3>
+              <p class="sdValue sdValue--orange" data-kpi="lowStock"><%= lowStockCount %></p>
+              <small>Stock &lt; 20 units</small>
+            </div>
+          </a>
         </div>
-        
-        <div class="stat-card <%= supplierTrackingStats.shipped > 0 ? 'green' : 'blue' %>" style="<%= supplierTrackingStats.shipped > 0 ? 'background-color: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background-color: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.2);' %> border-radius: 8px; padding: 1rem; text-align: center;">
-          <div class="icon" style="background-color: <%= supplierTrackingStats.shipped > 0 ? '#22C55E' : '#2563EB' %>; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 0.5rem;">🚚</div>
-          <div class="details">
-            <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Shipped</h3>
-            <p class="value" style="font-size: 1.5rem; font-weight: 700; color: <%= supplierTrackingStats.shipped > 0 ? '#22C55E' : '#0F172A' %>;"><%= supplierTrackingStats.shipped || 0 %></p>
-          </div>
-        </div>
-        
-        <div class="stat-card <%= supplierTrackingStats.delivered > 0 ? 'green' : 'black' %>" style="<%= supplierTrackingStats.delivered > 0 ? 'background-color: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background-color: rgba(15, 23, 42, 0.08); border: 1px solid rgba(15, 23, 42, 0.2);' %> border-radius: 8px; padding: 1rem; text-align: center;">
-          <div class="icon" style="background-color: <%= supplierTrackingStats.delivered > 0 ? '#22C55E' : '#0F172A' %>; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 0.5rem;">✅</div>
-          <div class="details">
-            <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Delivered</h3>
-            <p class="value" style="font-size: 1.5rem; font-weight: 700; color: <%= supplierTrackingStats.delivered > 0 ? '#22C55E' : '#0F172A' %>;"><%= supplierTrackingStats.delivered || 0 %></p>
-          </div>
+
+        <div class="sdStat sdStat--dark">
+          <a href="/products/out-of-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--dark" aria-hidden="true">🚨</div>
+            <div class="sdStat__body">
+              <h3>Out of Stock</h3>
+              <p class="sdValue" data-kpi="outOfStock"><%= outOfStockCount %></p>
+              <small>Products to restock</small>
+            </div>
+          </a>
         </div>
       </div>
     </section>
-  <% } %>
 
-  <!-- Dashboard Footer -->
-  <footer class="dashboard-footer" style="background-color: #0F172A; color: white; border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem;">
-    <div class="footer-section" style="margin-bottom: 1.5rem;">
-      <h4 style="color: white; margin-bottom: 1rem; font-size: 1rem;">Quick Links</h4>
-      <div class="footer-links" style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-        <a href="/products/add" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">➕ Add Product</a>
-        <a href="/products/mine" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">📋 View Products</a>
-        <a href="/products/out-of-stock" class="pg-link" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">
-          🚨 View Out of Stock
-        </a>
-        <a href="/orders" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">📦 Orders</a>
-        <a href="/business/profile" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">👤 Profile</a>
-        <a href="/business/analytics/chart" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">📈 Analytics</a>
-        <form action="/business/logout" method="post" class="logout-form" style="display: inline;">
-          <button type="submit" style="background: none; border: none; color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem; cursor: pointer;">🚪 Logout</button>
-        </form>
+    <!-- Main Grid -->
+    <div class="sdGrid">
+      <!-- Left -->
+      <div class="sdCol">
+
+        <!-- Low Stock -->
+        <% if (lowStockCount > 0) { %>
+          <section class="sdCard sdSection sdSection--orange">
+            <div class="sdSection__row">
+              <h2 class="sdSection__titlePlain">Low Stock Products (<%= lowStockCount %>)</h2>
+              <a href="/products?filter=low_stock" class="sdLink">View All</a>
+            </div>
+
+            <div class="sdList">
+              <% lowStockProducts.forEach(p => {
+                const stock = Number(p.stock) || 0;
+                const price = Number(p.price) || 0;
+              %>
+                <div class="sdItem sdItem--orange">
+                  <div class="sdItem__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdItem__meta">
+                      <h4 class="sdItem__title"><%= p.name || 'Unnamed Product' %></h4>
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--green"><%= fmtCurrency(price) %></span>
+                        <span class="sdChip sdChip--orange">Stock: <%= stock %></span>
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdItem__actions">
+                    <a href="/products/edit/<%= p._id || p.customId %>" class="sdBtn sdBtn--orange">Restock</a>
+                    <a href="/products/view/<%= p._id || p.customId %>" class="sdBtn sdBtn--blue">View</a>
+                  </div>
+                </div>
+              <% }) %>
+
+              <% if (lowStockCount > 5) { %>
+                <div class="sdMore">
+                  <span>+<%= lowStockCount - 5 %> more low stock products</span>
+                  <a href="/products?filter=low_stock" class="sdLink">View All</a>
+                </div>
+              <% } %>
+            </div>
+          </section>
+        <% } %>
+
+        <!-- Quick Actions -->
+        <section class="sdCard sdSection sdSection--blue">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Quick Actions</h2>
+          </div>
+
+          <div class="sdActions">
+            <a href="/products/add" class="sdAction sdAction--purple">
+              <span class="sdAction__ico" aria-hidden="true">➕</span>
+              <span class="sdAction__txt">Add Product</span>
+            </a>
+
+            <a href="/orders" class="sdAction sdAction--blue">
+              <span class="sdAction__ico" aria-hidden="true">📦</span>
+              <span class="sdAction__txt">View Orders</span>
+            </a>
+
+            <a href="/products/mine" class="sdAction sdAction--dark">
+              <span class="sdAction__ico" aria-hidden="true">📋</span>
+              <span class="sdAction__txt">All Products</span>
+            </a>
+
+            <a href="/business/analytics/chart" class="sdAction sdAction--green">
+              <span class="sdAction__ico" aria-hidden="true">📈</span>
+              <span class="sdAction__txt">Analytics</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- Top 10 -->
+        <section class="sdCard sdSection sdSection--green">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Top 10 Best Sellers</h2>
+            <a href="/products/performance" class="sdLink">View All</a>
+          </div>
+
+          <% if (topProducts.length > 0) { %>
+            <div class="sdList sdScroll">
+              <% topProducts.forEach((p, index) => { %>
+                <div class="sdSellerRow">
+                  <div class="sdRank" aria-hidden="true"><%= index + 1 %></div>
+
+                  <div class="sdSellerRow__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdSellerRow__meta">
+                      <div class="sdItem__title"><%= p.name || 'Unnamed Product' %></div>
+                      <div class="sdMuted"><%= p.category || 'General' %></div>
+                    </div>
+                  </div>
+
+                  <div class="sdSellerRow__stats">
+                    <div class="sdMini">
+                      <small>Sold</small>
+                      <strong><%= p.qty || 0 %></strong>
+                    </div>
+                    <div class="sdMini">
+                      <small>Revenue</small>
+                      <strong class="sdGreen"><%= fmtCurrency(p.estRevenue || 0) %></strong>
+                    </div>
+                  </div>
+
+                  <div class="sdSellerRow__act">
+                    <a href="/products/view/<%= p.productId || '#' %>" class="sdBtn sdBtn--purple">View</a>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty">
+              <div class="sdEmpty__ico" aria-hidden="true">📊</div>
+              <div class="sdEmpty__title">No sales data available yet</div>
+              <div class="sdEmpty__sub">Start selling to see your best sellers</div>
+            </div>
+          <% } %>
+        </section>
+      </div>
+
+      <!-- Right -->
+      <div class="sdCol">
+
+        <!-- Sales Trend -->
+        <section class="sdCard sdSection sdSection--purple">
+          <div class="sdSection__row sdSection__row--top">
+            <div>
+              <h2 class="sdSection__titlePlain">Sales Trend</h2>
+              <div class="sdToggle">
+                <button class="sdToggle__btn is-active" id="daily-btn" type="button">Last 7 Days</button>
+                <button class="sdToggle__btn" id="monthly-btn" type="button">Last 30 Days</button>
+                <button class="sdToggle__btn" id="yearly-btn" type="button">Last 12 Months</button>
+              </div>
+            </div>
+
+            <div class="sdTrend">
+              <small>Current: <span id="current-sales" class="sdGreen">R 0.00</span></small>
+              <small>Avg: <span id="avg-sales" class="sdBlue">R 0.00</span></small>
+              <small>Total: <span id="total-sales" class="sdPurple">R 0.00</span></small>
+            </div>
+          </div>
+
+          <div class="sdChart">
+            <div id="simple-chart" class="sdChart__bars" aria-label="Sales chart"></div>
+            <div id="chart-labels" class="sdChart__labels"></div>
+
+            <div class="sdTrendStats">
+              <div class="sdKpi">
+                <small>Peak</small>
+                <strong id="peak-sales">R 0.00</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Lowest</small>
+                <strong id="lowest-sales">R 0.00</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Growth</small>
+                <strong id="growth-trend" class="positive">0%</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Projection</small>
+                <strong id="projection" class="positive">+0%</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Out of Stock -->
+        <section class="sdCard sdSection sdSection--red">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Out of Stock Products (<%= outOfStockCount %>)</h2>
+            <% if (outOfStockCount > 0) { %>
+              <a href="/products?filter=out_of_stock" class="sdLink">Restock All</a>
+            <% } %>
+          </div>
+
+          <% if (outOfStockProducts.length > 0) { %>
+            <div class="sdList">
+              <% outOfStockProducts.forEach(p => { const price = Number(p.price) || 0; %>
+                <div class="sdItem sdItem--red">
+                  <div class="sdItem__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdItem__meta">
+                      <h4 class="sdItem__title"><%= p.name || 'Unnamed Product' %></h4>
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--green"><%= fmtCurrency(price) %></span>
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdItem__actions">
+                    <a href="/products/edit/<%= p._id || p.customId %>" class="sdBtn sdBtn--red">Restock</a>
+                    <a href="/products/view/<%= p._id || p.customId %>" class="sdBtn sdBtn--blue">View</a>
+                  </div>
+                </div>
+              <% }) %>
+
+              <% if (outOfStockCount > 5) { %>
+                <div class="sdMore">
+                  <span>+<%= outOfStockCount - 5 %> more products out of stock</span>
+                  <a href="/products?filter=out_of_stock" class="sdLink">View All</a>
+                </div>
+              <% } %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty sdEmpty--good">
+              <div class="sdEmpty__ico" aria-hidden="true">✅</div>
+              <div class="sdEmpty__title">All products are in stock!</div>
+              <div class="sdEmpty__sub">Great job managing your inventory</div>
+            </div>
+          <% } %>
+        </section>
+
+        <!-- Available products -->
+        <section class="sdCard sdSection sdSection--dark">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Available Products</h2>
+            <a href="/products/mine" class="sdLink">View All</a>
+          </div>
+
+          <% if (availableProducts.length > 0) { %>
+            <div class="sdList">
+              <% availableProducts.forEach(p => {
+                const stock = Number(p.stock) || 0;
+                const price = Number(p.price) || 0;
+              %>
+                <div class="sdProdRow">
+                  <div class="sdProdRow__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdProdRow__meta">
+                      <div class="sdItem__title"><%= p.name || 'Unnamed Product' %></div>
+                      <div class="sdMuted">Price: <span class="sdGreen"><%= fmtCurrency(price) %></span></div>
+
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+
+                        <% if (stock <= 0) { %>
+                          <span class="sdChip sdChip--red">Out of Stock</span>
+                        <% } else if (stock < 20) { %>
+                          <span class="sdChip sdChip--orange">Low Stock</span>
+                        <% } else { %>
+                          <span class="sdChip sdChip--green">In Stock</span>
+                        <% } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdProdRow__right">
+                    <span class="sdQty"><%= stock %></span>
+                    <span class="sdMuted">units</span>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty">
+              <div class="sdEmpty__ico" aria-hidden="true">📦</div>
+              <div class="sdEmpty__title">No products in stock</div>
+              <div class="sdEmpty__sub">
+                <a href="/products/add" class="sdBtn sdBtn--purple">Add First Product</a>
+              </div>
+            </div>
+          <% } %>
+        </section>
       </div>
     </div>
-    <div class="copyright" style="text-align: center; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
-      <small style="color: #94A3B8; font-size: 0.875rem;">© <%= new Date().getFullYear() %> <%= business && business.name ? business.name : 'Your Business' %></small>
-    </div>
-  </footer>
+
+    <!-- Recent Orders -->
+    <section class="sdCard sdSection sdSection--green">
+      <div class="sdSection__row">
+        <h2 class="sdSection__titlePlain">Recent Orders</h2>
+        <a href="/orders" class="sdLink">View All</a>
+      </div>
+
+      <div class="sdList sdScroll">
+        <% if (supplierOrders.length > 0) { %>
+          <% supplierOrders.forEach(o => {
+            const status = o.status || 'pending';
+            const statusClass = String(status).toLowerCase().replace(/\s+/g, '-');
+          %>
+            <div class="sdOrder">
+              <div class="sdOrder__top">
+                <span class="sdMono">
+                  <% if (o.orderId) { %>
+                    #<%= o.orderId.slice(-8) %>
+                  <% } else if (o._id) { %>
+                    #<%= o._id.toString().slice(-8) %>
+                  <% } else { %>
+                    #N/A
+                  <% } %>
+                </span>
+
+                <span class="sdOrder__amt sdGreen">
+                  <% if (o.amount && o.amount.value) { %>
+                    <%= fmtCurrency(o.amount.value) %>
+                  <% } else if (o.total) { %>
+                    <%= fmtCurrency(o.total) %>
+                  <% } else { %>
+                    <%= fmtCurrency(0) %>
+                  <% } %>
+                </span>
+              </div>
+
+              <div class="sdOrder__bottom">
+                <span class="sdPill <%= statusClass %>">
+                  <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+                </span>
+                <span class="sdMuted"><%= fmtDate(o.createdAt) %></span>
+              </div>
+            </div>
+          <% }) %>
+        <% } else { %>
+          <div class="sdEmpty">
+            <div class="sdEmpty__ico" aria-hidden="true">📋</div>
+            <div class="sdEmpty__title">No recent orders</div>
+            <div class="sdEmpty__sub">Orders will appear here</div>
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <!-- Shipping Tracking Stats -->
+    <% if (supplierTrackingStats && Object.keys(supplierTrackingStats).length > 0) { %>
+      <section class="sdCard sdSection sdSection--blue">
+        <div class="sdSection__row">
+          <h2 class="sdSection__titlePlain">Shipping Status</h2>
+          <a href="/orders" class="sdLink">Track All</a>
+        </div>
+
+        <div class="sdShipGrid">
+          <div class="sdShipCard <%= (supplierTrackingStats.pending || 0) > 0 ? 'is-warn' : '' %>">
+            <div class="sdShipIcon is-blue" aria-hidden="true">⏳</div>
+            <div class="sdShipMeta">
+              <small>Pending</small>
+              <strong><%= supplierTrackingStats.pending || 0 %></strong>
+            </div>
+          </div>
+
+          <div class="sdShipCard <%= (supplierTrackingStats.processing || 0) > 0 ? 'is-warn' : '' %>">
+            <div class="sdShipIcon is-purple" aria-hidden="true">⚙️</div>
+            <div class="sdShipMeta">
+              <small>Processing</small>
+              <strong><%= supplierTrackingStats.processing || 0 %></strong>
+            </div>
+          </div>
+
+          <div class="sdShipCard <%= (supplierTrackingStats.shipped || 0) > 0 ? 'is-good' : '' %>">
+            <div class="sdShipIcon is-green" aria-hidden="true">🚚</div>
+            <div class="sdShipMeta">
+              <small>Shipped</small>
+              <strong><%= supplierTrackingStats.shipped || 0 %></strong>
+            </div>
+          </div>
+
+          <div class="sdShipCard <%= (supplierTrackingStats.delivered || 0) > 0 ? 'is-good' : '' %>">
+            <div class="sdShipIcon is-dark" aria-hidden="true">✅</div>
+            <div class="sdShipMeta">
+              <small>Delivered</small>
+              <strong><%= supplierTrackingStats.delivered || 0 %></strong>
+            </div>
+          </div>
+        </div>
+      </section>
+    <% } %>
+
+    <!-- Footer -->
+    <footer class="sdFooter">
+      <div class="sdFooter__top">
+        <h4>Quick Links</h4>
+
+        <div class="sdFooter__links">
+          <a href="/products/add">➕ Add Product</a>
+          <a href="/products/mine">📋 View Products</a>
+          <a href="/products/out-of-stock">🚨 View Out of Stock</a>
+          <a href="/orders">📦 Orders</a>
+          <a href="/business/profile">👤 Profile</a>
+          <a href="/business/analytics/chart">📈 Analytics</a>
+
+          <form action="/business/logout" method="post" class="sdLogout">
+            <button type="submit">🚪 Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="sdFooter__bottom">
+        <small>© <%= new Date().getFullYear() %> <%= business && business.name ? business.name : 'Your Business' %></small>
+      </div>
+    </footer>
+
+  </div>
 </section>
 
 <style nonce="<%= NONCE %>">
-  /* Mobile-first responsive styles */
-  @media (max-width: 640px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .stats-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .actions-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .trend-stats {
-      grid-template-columns: 1fr;
-    }
-    
-    .section-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-    
-    .trend-summary {
-      width: 100%;
-      flex-direction: row;
-      justify-content: space-between;
-    }
-    
-    .trend-period-toggle {
-      width: 100%;
-    }
-    
-    .trend-period-toggle button {
-      flex: 1;
-      text-align: center;
-    }
+  :root{
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --dark:#0F172A;
+
+    --bg:#F8FAFC;
+    --text:#0F172A;
+    --muted:#64748B;
+    --line:#E2E8F0;
+
+    --r12:12px;
+    --r10:10px;
   }
 
-  @media (min-width: 641px) and (max-width: 1023px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
+  /* ✅ stop “bigger than phone” */
+  .supDash, .supDash *{ box-sizing:border-box; }
+  .supDash{ background: var(--bg); min-height: 100vh; overflow-x: hidden; }
+  .supDash__wrap{ width:100%; max-width:1100px; margin:0 auto; padding: 12px; }
+  .supDash img{ max-width:100%; display:block; }
+  .sdHeader__meta, .sdStat__body, .sdItem__meta{ min-width:0; }
+  .sdHeader__titleStrong, .sdItem__title, .sdMono{ overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sdCard{
+    background:#fff;
+    border-radius: var(--r12);
+    box-shadow: 0 2px 10px rgba(15,23,42,.06);
+    overflow:hidden;
   }
 
-  @media (min-width: 1024px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: 2rem;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(5, 1fr);
-    }
+  /* header */
+  .sdHeader{
+    background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+    color:#fff;
+    padding: 14px;
+  }
+  .sdHeader__row{ display:flex; flex-direction: column; gap: 12px; }
+  .sdHeader__user{ display:flex; gap: 12px; align-items: center; }
+  .sdAvatar{
+    width: 48px; height: 48px; border-radius: 999px;
+    background: var(--green);
+    display:flex; align-items:center; justify-content:center;
+    font-weight: 900; font-size: 18px;
+    flex: 0 0 auto;
+  }
+  .sdHeader__title{ margin:0; font-size: 16px; line-height: 1.2; }
+  .sdHeader__titleStrong{ font-weight: 1000; }
+  .sdHeader__badges{ display:flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; align-items:center; }
+  .sdBadge{
+    display:inline-flex;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .02em;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.18);
+    color:#fff;
+  }
+  .sdBadge--dark{ background: var(--dark); border-color: rgba(255,255,255,.12); }
+
+  .sdActive{ display:inline-flex; align-items:center; gap: 6px; font-size: 12px; opacity: .95; }
+  .sdDot{ width: 8px; height: 8px; border-radius: 999px; background: #EF4444; }
+  .sdDot.is-on{ background: var(--green); }
+  .sdDot.is-off{ background: #EF4444; }
+
+  .sdHeader__stats{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sdMiniStat{
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: var(--r10);
+    padding: 10px;
+    text-align:center;
+  }
+  .sdMiniStat small{ display:block; opacity:.92; font-size: 12px; margin-bottom: 2px; }
+  .sdMiniStat strong{ font-size: 13px; }
+
+  /* notices */
+  .sdNotices{ margin: 12px 0; display:flex; flex-direction: column; gap: 8px; }
+  .sdNotice{
+    display:flex; align-items:center; gap: 10px;
+    padding: 12px;
+    border-radius: var(--r10);
+    color:#fff;
+  }
+  .sdNotice__text{ flex:1; font-size: 13px; line-height: 1.35; }
+  .sdNotice__close{
+    margin-left:auto; background: transparent; border: 0;
+    color:#fff; font-size: 18px; cursor:pointer; padding: 0 6px;
+  }
+  .sdNotice--success{ background: var(--green); }
+  .sdNotice--error{ background: #EF4444; }
+
+  /* sections */
+  .sdSection{ padding: 12px; }
+  .sdSection--purple{ border-top: 4px solid var(--purple); }
+  .sdSection--blue{ border-top: 4px solid var(--blue); }
+  .sdSection--green{ border-top: 4px solid var(--green); }
+  .sdSection--dark{ border-top: 4px solid var(--dark); }
+  .sdSection--orange{ border-top: 4px solid #F97316; }
+  .sdSection--red{ border-top: 4px solid #EF4444; }
+
+  .sdSection__head{ margin-bottom: 10px; }
+  .sdSection__title{
+    margin:0;
+    display:flex; align-items:center; gap: 8px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 1000;
+  }
+  .sdSection__bar{ width: 4px; height: 18px; background: var(--purple); border-radius: 999px; }
+  .sdSection__titlePlain{ margin:0; color: var(--text); font-size: 14px; font-weight: 1000; }
+  .sdSection__row{
+    display:flex; align-items:center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .sdSection__row--top{ align-items:flex-start; }
+  .sdLink{ color: var(--purple); text-decoration:none; font-weight: 1000; font-size: 12px; white-space: nowrap; }
+
+  /* stats */
+  .sdStats{ display:grid; grid-template-columns: 1fr; gap: 10px; }
+  .sdStats--five{ grid-template-columns: 1fr; }
+  .sdStat{ border-radius: var(--r12); overflow:hidden; border: 1px solid var(--line); }
+  .sdStat--blue{ background: rgba(37,99,235,.07); border-color: rgba(37,99,235,.18); }
+  .sdStat--purple{ background: rgba(124,58,237,.07); border-color: rgba(124,58,237,.18); }
+  .sdStat--green{ background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.18); }
+  .sdStat--orange{ background: rgba(249,115,22,.07); border-color: rgba(249,115,22,.18); }
+  .sdStat--dark{ background: rgba(15,23,42,.06); border-color: rgba(15,23,42,.16); }
+
+  .sdStat__link{
+    display:flex; align-items:center; gap: 10px;
+    padding: 12px; text-decoration:none; color: inherit;
+    width: 100%; min-width: 0;
+  }
+  .sdIcon{
+    width: 42px; height: 42px; border-radius: 12px;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 18px; color:#fff; flex: 0 0 auto;
+  }
+  .sdIcon--blue{ background: var(--blue); }
+  .sdIcon--purple{ background: var(--purple); }
+  .sdIcon--green{ background: var(--green); }
+  .sdIcon--orange{ background: #F97316; }
+  .sdIcon--dark{ background: var(--dark); }
+
+  .sdStat__body h3{ margin:0 0 2px; font-size: 12px; color: var(--muted); font-weight: 900; }
+  .sdValue{ margin:0; font-size: 20px; font-weight: 1000; color: var(--text); line-height:1.1; }
+  .sdValue--green{ color: var(--green); }
+  .sdValue--orange{ color: #F97316; }
+  .sdStat__body small{ color: var(--muted); font-size: 11px; }
+
+  /* layout grid */
+  .sdGrid{ display:grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
+  .sdCol{ display:flex; flex-direction: column; gap: 12px; }
+
+  /* lists/items */
+  .sdList{ display:flex; flex-direction: column; gap: 10px; }
+  .sdScroll{ max-height: 360px; overflow:auto; padding-right: 4px; }
+
+  .sdItem{
+    display:flex; align-items:flex-start; justify-content: space-between;
+    gap: 10px; padding: 12px;
+    border-radius: var(--r12);
+    border: 1px solid var(--line);
+    background: #fff;
+    flex-wrap: wrap; /* ✅ */
+  }
+  .sdItem--orange{ background: rgba(249,115,22,.05); border-color: rgba(249,115,22,.18); }
+  .sdItem--red{ background: rgba(239,68,68,.05); border-color: rgba(239,68,68,.18); }
+
+  .sdItem__left{ display:flex; gap: 10px; align-items:center; min-width:0; flex: 1; }
+  .sdThumb{
+    width: 44px; height: 44px; border-radius: 10px;
+    object-fit: cover; border: 1px solid var(--line);
+    flex: 0 0 auto;
+  }
+  .sdThumb--ph{ display:flex; align-items:center; justify-content:center; background:#EEF2FF; border-color:#E0E7FF; }
+  .sdItem__meta{ min-width:0; flex: 1; }
+  .sdItem__title{ margin:0; font-size: 13px; font-weight: 1000; color: var(--text); }
+
+  .sdChips{ margin-top: 6px; display:flex; gap: 6px; flex-wrap: wrap; }
+  .sdChip{
+    font-size: 11px; font-weight: 900;
+    padding: 4px 8px; border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1; white-space: nowrap;
+  }
+  .sdChip--green{ background: rgba(34,197,94,.10); color: #166534; border-color: rgba(34,197,94,.18); }
+  .sdChip--orange{ background: rgba(249,115,22,.10); color: #92400e; border-color: rgba(249,115,22,.18); }
+  .sdChip--purple{ background: rgba(124,58,237,.10); color: #5B21B6; border-color: rgba(124,58,237,.18); }
+  .sdChip--red{ background: rgba(239,68,68,.10); color: #b91c1c; border-color: rgba(239,68,68,.18); }
+
+  .sdItem__actions{ display:flex; gap: 8px; flex: 0 0 auto; }
+  .sdBtn{
+    display:inline-flex; align-items:center; justify-content:center;
+    text-decoration:none; border: 0;
+    border-radius: 10px; padding: 8px 10px;
+    font-size: 12px; font-weight: 1000; color:#fff;
+    white-space: nowrap;
+  }
+  .sdBtn--blue{ background: var(--blue); }
+  .sdBtn--purple{ background: var(--purple); }
+  .sdBtn--green{ background: var(--green); }
+  .sdBtn--orange{ background: #F97316; }
+  .sdBtn--red{ background: #EF4444; }
+
+  /* actions */
+  .sdActions{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sdAction{
+    border-radius: var(--r12);
+    padding: 14px 10px;
+    text-decoration:none; color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    gap: 10px; font-weight: 1000;
+    min-height: 56px;
+  }
+  .sdAction__ico{ font-size: 18px; }
+  .sdAction__txt{ font-size: 12px; }
+  .sdAction--purple{ background: var(--purple); }
+  .sdAction--blue{ background: var(--blue); }
+  .sdAction--green{ background: var(--green); }
+  .sdAction--dark{ background: var(--dark); }
+  .sdAction:hover{ filter: brightness(.98); transform: translateY(-1px); box-shadow: 0 10px 18px rgba(15,23,42,.08); }
+
+  /* sellers row */
+  .sdSellerRow{
+    display:flex; align-items:center; justify-content: space-between;
+    gap: 10px; padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    background: #F8FAFC;
+    flex-wrap: wrap;
+  }
+  .sdRank{
+    width: 26px; height: 26px; border-radius: 999px;
+    background: #E2E8F0; display:flex; align-items:center; justify-content:center;
+    font-size: 11px; font-weight: 1000; color: var(--dark);
+    flex: 0 0 auto;
+  }
+  .sdSellerRow__left{ display:flex; align-items:center; gap: 10px; min-width:0; flex: 1; }
+  .sdSellerRow__meta{ min-width:0; }
+  .sdSellerRow__stats{ display:flex; gap: 10px; flex: 0 0 auto; }
+  .sdSellerRow__act{ flex: 0 0 auto; }
+
+  .sdMuted{ color: var(--muted); font-size: 11px; }
+  .sdGreen{ color: var(--green); font-weight: 1000; }
+  .sdBlue{ color: var(--blue); font-weight: 1000; }
+  .sdPurple{ color: var(--purple); font-weight: 1000; }
+
+  /* chart */
+  .sdToggle{ display:flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .sdToggle__btn{
+    border: 1px solid var(--line);
+    background: #F1F5F9;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 1000;
+    cursor:pointer;
+    flex: 1 1 auto;
+  }
+  .sdToggle__btn.is-active{ background: var(--purple); color:#fff; border-color: rgba(124,58,237,.35); }
+  .sdTrend{ display:flex; flex-direction: column; gap: 4px; font-size: 12px; text-align: left; color: var(--muted); width: 100%; }
+
+  .sdChart{ margin-top: 10px; }
+  .sdChart__bars{
+    width: 100%; height: 190px;
+    display:flex; align-items:flex-end; gap: 2px;
+    padding: 10px;
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    overflow:hidden;
+  }
+  .sdChart__labels{
+    display:flex; justify-content: space-between;
+    padding: 8px 6px 0;
+    font-size: 11px; color: var(--muted);
+    gap: 4px;
+  }
+  .sdTrendStats{
+    margin-top: 10px;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sdKpi{
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 10px;
+    text-align:center;
+  }
+  .sdKpi small{ display:block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .sdKpi strong{ display:block; color: var(--text); font-size: 14px; font-weight: 1000; }
+  .positive{ color: var(--green) !important; }
+  .negative{ color: #EF4444 !important; }
+
+  /* available products row */
+  .sdProdRow{
+    display:flex; align-items:center; justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    background: #F8FAFC;
+  }
+  .sdProdRow__left{ display:flex; align-items:center; gap: 10px; min-width:0; flex: 1; }
+  .sdProdRow__meta{ min-width:0; flex: 1; }
+  .sdProdRow__right{ text-align:center; flex: 0 0 auto; }
+  .sdQty{ display:block; font-weight: 1000; color: var(--dark); }
+
+  /* orders */
+  .sdOrder{
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 10px;
+  }
+  .sdOrder__top{ display:flex; justify-content: space-between; gap: 10px; align-items:center; }
+  .sdMono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; font-weight: 1000; color: var(--dark); }
+  .sdOrder__amt{ font-size: 12px; font-weight: 1000; white-space: nowrap; }
+  .sdOrder__bottom{ display:flex; justify-content: space-between; align-items:center; margin-top: 8px; gap: 8px; flex-wrap: wrap; }
+  .sdPill{
+    padding: 4px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 1000;
+    border: 1px solid transparent;
+    background: rgba(124,58,237,.08);
+    color: #5B21B6;
+    white-space: nowrap;
+  }
+  .sdPill.completed, .sdPill.delivered, .sdPill.shipped { background: rgba(34,197,94,.10); color:#166534; border-color: rgba(34,197,94,.18); }
+  .sdPill.pending, .sdPill.processing { background: rgba(249,115,22,.10); color:#92400e; border-color: rgba(249,115,22,.18); }
+  .sdPill.cancelled, .sdPill.refunded { background: rgba(239,68,68,.10); color:#b91c1c; border-color: rgba(239,68,68,.18); }
+
+  /* shipping */
+  .sdShipGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sdShipCard{
+    background:#F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 12px;
+    display:flex; align-items:center; gap: 10px;
+  }
+  .sdShipCard.is-warn{ background: rgba(249,115,22,.06); border-color: rgba(249,115,22,.18); }
+  .sdShipCard.is-good{ background: rgba(34,197,94,.06); border-color: rgba(34,197,94,.18); }
+  .sdShipIcon{
+    width: 44px; height: 44px; border-radius: 12px;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-size: 18px; flex: 0 0 auto;
+    background: var(--blue);
+  }
+  .sdShipIcon.is-blue{ background: var(--blue); }
+  .sdShipIcon.is-purple{ background: var(--purple); }
+  .sdShipIcon.is-green{ background: var(--green); }
+  .sdShipIcon.is-dark{ background: var(--dark); }
+  .sdShipMeta small{ display:block; color: var(--muted); font-size: 12px; font-weight: 800; }
+  .sdShipMeta strong{ display:block; color: var(--text); font-size: 18px; font-weight: 1000; }
+
+  /* empty */
+  .sdEmpty{
+    padding: 18px 10px;
+    border-radius: var(--r12);
+    text-align:center;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    background: #fff;
+  }
+  .sdEmpty--good{ background: rgba(34,197,94,.05); border-style: solid; }
+  .sdEmpty__ico{ font-size: 26px; opacity: .55; }
+  .sdEmpty__title{ font-weight: 1000; color: var(--text); margin-top: 6px; }
+  .sdEmpty__sub{ font-size: 12px; margin-top: 8px; }
+
+  /* footer */
+  .sdFooter{
+    margin-top: 12px;
+    background: var(--dark);
+    color:#fff;
+    border-radius: var(--r12);
+    padding: 14px;
+  }
+  .sdFooter__top h4{ margin:0 0 10px; font-size: 14px; font-weight: 1000; }
+  .sdFooter__links{ display:flex; flex-wrap: wrap; gap: 8px; }
+  .sdFooter__links a,
+  .sdLogout button{
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.12);
+    color: #E2E8F0;
+    text-decoration:none;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 900;
+    display:inline-flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .sdLogout{ display:inline; }
+  .sdLogout button{ cursor:pointer; }
+
+  .sdFooter__bottom{
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,.10);
+    text-align:center;
+  }
+  .sdFooter__bottom small{ color: #94A3B8; font-size: 12px; }
+
+  /* responsive */
+  @media (min-width: 720px){
+    .supDash__wrap{ padding: 16px; }
+    .sdHeader__row{ flex-direction: row; justify-content: space-between; align-items: center; }
+    .sdHeader__stats{ width: 340px; }
+    .sdStats{ grid-template-columns: repeat(2, 1fr); }
+    .sdGrid{ grid-template-columns: 1fr 1fr; }
+    .sdShipGrid{ grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 1024px){
+    .sdStats--five{ grid-template-columns: repeat(5, 1fr); }
   }
 
-  /* Animation for chart bars */
-  @keyframes barGrow {
-    from { height: 0; }
-    to { height: var(--final-height); }
-  }
-
-  /* Hover effects */
-  .action:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  }
-
-  .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  }
-
-  /* Scrollbar styling */
-  .sellers-list,
-  .out-of-stock-list,
-  .orders-list,
-  .products-list,
-  .low-stock-list {
-    max-height: 400px;
-    overflow-y: auto;
-  }
-
-  .sellers-list::-webkit-scrollbar,
-  .out-of-stock-list::-webkit-scrollbar,
-  .orders-list::-webkit-scrollbar,
-  .products-list::-webkit-scrollbar,
-  .low-stock-list::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .sellers-list::-webkit-scrollbar-track,
-  .out-of-stock-list::-webkit-scrollbar-track,
-  .orders-list::-webkit-scrollbar-track,
-  .products-list::-webkit-scrollbar-track,
-  .low-stock-list::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 3px;
-  }
-
-  .sellers-list::-webkit-scrollbar-thumb,
-  .out-of-stock-list::-webkit-scrollbar-thumb,
-  .orders-list::-webkit-scrollbar-thumb,
-  .products-list::-webkit-scrollbar-thumb,
-  .low-stock-list::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-  }
-
-  .sellers-list::-webkit-scrollbar-thumb:hover,
-  .out-of-stock-list::-webkit-scrollbar-thumb:hover,
-  .orders-list::-webkit-scrollbar-thumb:hover,
-  .products-list::-webkit-scrollbar-thumb:hover,
-  .low-stock-list::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-
-  /* Loading animation */
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-
-  .loading {
-    animation: pulse 2s infinite;
-  }
-
-  /* Status colors */
-  .status.completed,
-  .status.delivered,
-  .status.shipped {
-    background-color: rgba(34, 197, 94, 0.1) !important;
-    color: #166534 !important;
-  }
-
-  .status.pending,
-  .status.processing {
-    background-color: rgba(249, 115, 22, 0.1) !important;
-    color: #92400e !important;
-  }
-
-  .status.cancelled,
-  .status.refunded {
-    background-color: rgba(239, 68, 68, 0.1) !important;
-    color: #b91c1c !important;
-  }
-
-  /* Print styles */
-  @media print {
-    .dashboard-header,
-    .dashboard-footer {
-      display: none;
-    }
-    
-    .card-section {
-      break-inside: avoid;
-      box-shadow: none !important;
-      border: 1px solid #ddd !important;
-    }
+  @media print{
+    .sdHeader, .sdFooter{ display:none !important; }
+    .sdCard{ box-shadow:none !important; border: 1px solid #ddd !important; }
   }
 </style>
 
@@ -788,335 +1067,194 @@
     document.querySelectorAll('.notification .close').forEach(button => {
       button.addEventListener('click', (e) => {
         const notification = e.target.closest('.notification');
+        if (!notification) return;
         notification.style.opacity = '0';
         notification.style.transform = 'translateY(-10px)';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 250);
       });
     });
 
-    // Auto-hide success notifications after 5 seconds
     setTimeout(() => {
       document.querySelectorAll('.notification.success').forEach(notification => {
         notification.style.opacity = '0';
         notification.style.transform = 'translateY(-10px)';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 250);
       });
     }, 5000);
   }
 
-  // Helper function to format currency
   function fmtCurrency(amount) {
     return 'R ' + Number(amount || 0).toFixed(2);
   }
 
-  // Fetch chart data from API
   async function fetchChartData() {
     try {
-      const response = await fetch('/business/analytics/chart-data');
-      if (!response.ok) {
-        throw new Error('Failed to fetch chart data');
-      }
-      
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to load chart data');
-      }
-      
+      const res = await fetch('/business/analytics/chart-data', { headers: { 'Accept': 'application/json' }});
+      if (!res.ok) throw new Error('Failed to fetch chart data');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Failed to load chart data');
       return data;
-    } catch (error) {
-      console.error('Error fetching chart data:', error);
+    } catch (e) {
+      console.error('Chart fetch error:', e);
       return null;
     }
   }
 
-  // Create Simple Bar Chart with API data
-  async function createSimpleChart() {
-    const chartData = await fetchChartData();
-    
-    if (!chartData || !chartData.chartData) {
-      // Show error state
-      console.error('No chart data available');
-      const chartContainer = document.getElementById('simple-chart');
-      if (chartContainer) {
-        chartContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #64748B;">No data available</div>';
-      }
-      return;
-    }
-
-    const { daily, monthly, yearly } = chartData.chartData;
-    const metrics = chartData.metrics || {};
-
-    let currentData = daily;
-    let currentPeriod = 'daily';
-
-    function updateChart(data, period) {
-      const chartContainer = document.getElementById('simple-chart');
-      const labelsContainer = document.getElementById('chart-labels');
-      if (!chartContainer || !labelsContainer) return;
-
-      chartContainer.innerHTML = '';
-      labelsContainer.innerHTML = '';
-
-      if (!data || data.length === 0) {
-        // Show empty state
-        chartContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #64748B;">No data available</div>';
-        labelsContainer.innerHTML = '';
-        return;
-      }
-
-      // Calculate statistics
-      const salesValues = data.map(item => item.sales || 0);
-      const totalSales = salesValues.reduce((sum, val) => sum + val, 0);
-      const averageSales = salesValues.length > 0 ? totalSales / salesValues.length : 0;
-      const maxSales = Math.max(...salesValues, 1); // Ensure at least 1 to prevent division by zero
-      const minSales = Math.min(...salesValues.filter(val => val > 0)) || 0;
-
-      // Update stats display
-      document.getElementById('current-sales').textContent = fmtCurrency(salesValues[salesValues.length - 1] || 0);
-      document.getElementById('avg-sales').textContent = fmtCurrency(averageSales);
-      document.getElementById('total-sales').textContent = fmtCurrency(totalSales);
-      document.getElementById('peak-sales').textContent = fmtCurrency(maxSales);
-      document.getElementById('lowest-sales').textContent = fmtCurrency(minSales);
-
-      // Calculate growth from first to last
-      const firstValue = salesValues[0] || 0;
-      const lastValue = salesValues[salesValues.length - 1] || 0;
-      let growth = 0;
-      if (firstValue > 0) {
-        growth = ((lastValue - firstValue) / firstValue) * 100;
-      }
-
-      const growthElement = document.getElementById('growth-trend');
-      const projectionElement = document.getElementById('projection');
-      
-      if (growthElement) {
-        growthElement.textContent = growth.toFixed(1) + '%';
-        growthElement.className = growth >= 0 ? 'positive' : 'negative';
-      }
-      
-      if (projectionElement) {
-        projectionElement.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
-        projectionElement.className = growth >= 0 ? 'positive' : 'negative';
-      }
-
-      // Update legend text
-      const legendText = document.getElementById('legend-text');
-      if (legendText) {
-        legendText.textContent = period === 'daily' ? 'Daily Revenue' : 
-                                period === 'monthly' ? 'Monthly Revenue' : 'Yearly Revenue';
-      }
-
-      // Draw chart bars
-      const chartHeight = 150;
-      data.forEach((item, index) => {
-        const value = item.sales || 0;
-        const barHeight = (value / maxSales) * chartHeight;
-
-        const bar = document.createElement('div');
-        bar.style.cssText = `
-          height: ${barHeight}px;
-          background-color: ${period === 'daily' ? '#7C3AED' : period === 'monthly' ? '#2563EB' : '#22C55E'};
-          border-radius: 2px 2px 0 0;
-          flex: 1;
-          position: relative;
-          transition: height 0.3s ease;
-          cursor: pointer;
-          animation: barGrow 0.5s ease-out;
-          min-width: 10px;
-        `;
-
-        // Tooltip
-        bar.innerHTML = `
-          <div style="
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #0F172A;
-            color: white;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity 0.2s;
-            pointer-events: none;
-            z-index: 10;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-          ">
-            ${period === 'daily' ? item.date : period === 'monthly' ? item.date : item.month}: ${fmtCurrency(value)}
-            ${item.orders ? `<br><small style="opacity: 0.8;">${item.orders} orders</small>` : ''}
-          </div>
-        `;
-
-        bar.addEventListener('mouseenter', (e) => {
-          const tooltip = e.target.querySelector('div');
-          if (tooltip) tooltip.style.opacity = '1';
-        });
-
-        bar.addEventListener('mouseleave', (e) => {
-          const tooltip = e.target.querySelector('div');
-          if (tooltip) tooltip.style.opacity = '0';
-        });
-
-        chartContainer.appendChild(bar);
-
-        // Labels
-        const label = document.createElement('div');
-        label.style.cssText = `
-          text-align: center;
-          flex: 1;
-          font-size: 10px;
-          color: #64748B;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        `;
-
-        let labelText = '';
-        if (period === 'daily') {
-          labelText = item.date || '';
-        } else if (period === 'monthly') {
-          labelText = (item.date || '').split(' ')[0] || ''; // Just show day number
-        } else {
-          labelText = item.month || '';
-        }
-
-        // Show only some labels for readability
-        const showEvery = Math.ceil(data.length / 8);
-        const showLabel = index % showEvery === 0 || index === data.length - 1;
-        label.textContent = showLabel ? labelText : '';
-
-        labelsContainer.appendChild(label);
-      });
-    }
-
-    // Period toggle functionality
+  // ✅ init once, refresh without rebinding (prevents “slow phone” + memory leaks)
+  function initSimpleChart() {
+    const chartContainer = document.getElementById('simple-chart');
+    const labelsContainer = document.getElementById('chart-labels');
     const dailyBtn = document.getElementById('daily-btn');
     const monthlyBtn = document.getElementById('monthly-btn');
     const yearlyBtn = document.getElementById('yearly-btn');
 
-    function setActiveButton(button) {
-      [dailyBtn, monthlyBtn, yearlyBtn].forEach(btn => {
-        if (btn) {
-          btn.style.backgroundColor = '#E2E8F0';
-          btn.style.color = '#64748B';
-        }
-      });
-      if (button) {
-        button.style.backgroundColor = '#7C3AED';
-        button.style.color = 'white';
+    if (!chartContainer || !labelsContainer) return;
+
+    let datasets = { daily: [], monthly: [], yearly: [] };
+    let currentPeriod = 'daily';
+
+    function setActive(period) {
+      currentPeriod = period;
+      [dailyBtn, monthlyBtn, yearlyBtn].forEach(btn => btn && btn.classList.remove('is-active'));
+      if (period === 'daily') dailyBtn && dailyBtn.classList.add('is-active');
+      if (period === 'monthly') monthlyBtn && monthlyBtn.classList.add('is-active');
+      if (period === 'yearly') yearlyBtn && yearlyBtn.classList.add('is-active');
+      updateChart(datasets[currentPeriod] || [], currentPeriod);
+    }
+
+    function updateChart(data, period) {
+      chartContainer.innerHTML = '';
+      labelsContainer.innerHTML = '';
+
+      if (!Array.isArray(data) || data.length === 0) {
+        chartContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#64748B;font-weight:800;">No data available</div>';
+        return;
       }
-    }
 
-    if (dailyBtn) {
-      dailyBtn.addEventListener('click', () => {
-        currentData = daily;
-        currentPeriod = 'daily';
-        setActiveButton(dailyBtn);
-        updateChart(currentData, currentPeriod);
+      const salesValues = data.map(item => Number(item.sales || 0));
+      const totalSales = salesValues.reduce((sum, v) => sum + v, 0);
+      const avgSales = salesValues.length ? totalSales / salesValues.length : 0;
+      const maxSales = Math.max(...salesValues, 1);
+      const minSales = Math.min(...salesValues.filter(v => v > 0)) || 0;
+
+      document.getElementById('current-sales').textContent = fmtCurrency(salesValues[salesValues.length - 1] || 0);
+      document.getElementById('avg-sales').textContent = fmtCurrency(avgSales);
+      document.getElementById('total-sales').textContent = fmtCurrency(totalSales);
+      document.getElementById('peak-sales').textContent = fmtCurrency(maxSales);
+      document.getElementById('lowest-sales').textContent = fmtCurrency(minSales);
+
+      const firstValue = salesValues[0] || 0;
+      const lastValue = salesValues[salesValues.length - 1] || 0;
+      let growth = 0;
+      if (firstValue > 0) growth = ((lastValue - firstValue) / firstValue) * 100;
+
+      const growthEl = document.getElementById('growth-trend');
+      const projEl = document.getElementById('projection');
+
+      if (growthEl) {
+        growthEl.textContent = growth.toFixed(1) + '%';
+        growthEl.className = (growth >= 0 ? 'positive' : 'negative');
+      }
+      if (projEl) {
+        projEl.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+        projEl.className = (growth >= 0 ? 'positive' : 'negative');
+      }
+
+      const chartHeight = 150;
+      const showEvery = Math.ceil(data.length / 8);
+
+      data.forEach((item, index) => {
+        const value = Number(item.sales || 0);
+        const barHeight = (value / maxSales) * chartHeight;
+
+        const bar = document.createElement('div');
+        bar.style.cssText = `
+          height:${barHeight}px;
+          background-color:${period === 'daily' ? '#7C3AED' : period === 'monthly' ? '#2563EB' : '#22C55E'};
+          border-radius:4px 4px 0 0;
+          flex:1;
+          position:relative;
+          transition:height .25s ease;
+          cursor:pointer;
+          min-width: 8px;
+        `;
+
+        const labelText = (period === 'yearly') ? (item.month || '') : (item.date || '');
+        bar.title = `${labelText}: ${fmtCurrency(value)}${item.orders ? ` | ${item.orders} orders` : ''}`;
+
+        chartContainer.appendChild(bar);
+
+        const label = document.createElement('div');
+        label.style.cssText = 'text-align:center;flex:1;font-size:10px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const showLabel = (index % showEvery === 0) || (index === data.length - 1);
+        label.textContent = showLabel ? labelText : '';
+        labelsContainer.appendChild(label);
       });
     }
 
-    if (monthlyBtn) {
-      monthlyBtn.addEventListener('click', () => {
-        currentData = monthly;
-        currentPeriod = 'monthly';
-        setActiveButton(monthlyBtn);
-        updateChart(currentData, currentPeriod);
-      });
+    async function refreshDataAndRender() {
+      const chartData = await fetchChartData();
+      if (!chartData || !chartData.chartData) return;
+
+      const { daily, monthly, yearly } = chartData.chartData;
+      datasets = {
+        daily: Array.isArray(daily) ? daily : [],
+        monthly: Array.isArray(monthly) ? monthly : [],
+        yearly: Array.isArray(yearly) ? yearly : []
+      };
+      updateChart(datasets[currentPeriod] || [], currentPeriod);
     }
 
-    if (yearlyBtn) {
-      yearlyBtn.addEventListener('click', () => {
-        currentData = yearly;
-        currentPeriod = 'yearly';
-        setActiveButton(yearlyBtn);
-        updateChart(currentData, currentPeriod);
-      });
+    // bind buttons ONCE
+    if (!document.documentElement.dataset.supChartBound) {
+      dailyBtn && dailyBtn.addEventListener('click', () => setActive('daily'));
+      monthlyBtn && monthlyBtn.addEventListener('click', () => setActive('monthly'));
+      yearlyBtn && yearlyBtn.addEventListener('click', () => setActive('yearly'));
+      document.documentElement.dataset.supChartBound = '1';
     }
 
-    // Initial chart
-    setActiveButton(dailyBtn);
-    updateChart(currentData, currentPeriod);
+    refreshDataAndRender();
+    setInterval(refreshDataAndRender, 60000);
   }
 
-  // Auto-refresh KPIs
+  // KPI refresh (safe)
   async function refreshKPIs() {
     try {
       const res = await fetch('/business/api/supplier/kpis', {
         credentials: 'same-origin',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 'Cache-Control': 'no-cache', 'Accept': 'application/json' }
       });
-      
       if (!res.ok) return;
 
       const data = await res.json().catch(() => ({}));
       if (!data || data.ok === false) return;
 
-      const updateValue = (selector, value, formatter) => {
-        const elements = document.querySelectorAll(`[data-kpi="${selector}"]`);
-        elements.forEach(el => {
-          const newValue = formatter ? formatter(value) : (value ?? 0);
-          if (el.textContent !== newValue.toString()) {
-            el.textContent = newValue;
-            el.classList.add('value-updated');
-            setTimeout(() => el.classList.remove('value-updated'), 500);
-          }
+      const setText = (key, value) => {
+        document.querySelectorAll(`[data-kpi="${key}"]`).forEach(el => {
+          const v = (value ?? 0).toString();
+          if (el.textContent !== v) el.textContent = v;
         });
       };
 
-      updateValue('totalProducts', data.totalProducts);
-      updateValue('totalStock', data.totalStock);
-      updateValue('lowStock', data.lowStock);
-      updateValue('outOfStock', data.outOfStock);
-
-    } catch (error) {
-      console.warn('KPI refresh failed:', error);
+      setText('totalProducts', data.totalProducts);
+      setText('totalStock', data.totalStock);
+      setText('lowStock', data.lowStock);
+      setText('outOfStock', data.outOfStock);
+    } catch (e) {
+      console.warn('KPI refresh failed:', e);
     }
   }
 
-  // Initialize dashboard
-  document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Supplier dashboard loaded, initializing...');
-    
+  document.addEventListener('DOMContentLoaded', () => {
     setupNotifications();
-    
-    // Initialize chart with small delay
-    setTimeout(() => {
-      if (document.getElementById('simple-chart')) {
-        createSimpleChart();
-      } else {
-        console.error('Chart container not found!');
-      }
-    }, 100);
-    
-    // Add click effects to buttons
-    document.querySelectorAll('.action, .btn, .btn-small, .btn-restock, .btn-view, .btn-view-all')
-      .forEach(button => {
-        button.addEventListener('click', function() {
-          this.style.transform = 'scale(0.98)';
-          setTimeout(() => {
-            this.style.transform = '';
-          }, 150);
-        });
-      });
-    
-    // Initial KPI refresh
+    initSimpleChart();
     refreshKPIs();
-    
-    // Refresh chart every 60 seconds
-    setInterval(() => {
-      createSimpleChart();
-    }, 60000);
-    
-    // Refresh KPIs every 30 seconds
+
     setInterval(refreshKPIs, 30000);
-    
-    // Refresh when tab becomes visible
+
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         refreshKPIs();
-        createSimpleChart();
       }
     });
   });

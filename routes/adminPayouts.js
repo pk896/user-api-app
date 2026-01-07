@@ -601,8 +601,8 @@ router.post('/payouts/sync-recent', requireAdmin, async (req, res) => {
  * AUTO payouts routes (Cron) (unchanged)
  * --------------------------- */
 
-router.post('/payouts/auto-run', requireCronSecret, async (req, res) => { /* unchanged */ });
-router.post('/payouts/auto-sync-recent', requireCronSecret, async (req, res) => { /* unchanged */ });
+router.post('/payouts/auto-run', requireCronSecret, async (_req, _res) => { /* unchanged */ });
+router.post('/payouts/auto-sync-recent', requireCronSecret, async (_req, _res) => { /* unchanged */ });
 
 router.get('/payouts/_ping', requireAdmin, (req, res) => {
   res.send('payouts route OK');

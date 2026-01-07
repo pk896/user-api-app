@@ -1356,12 +1356,12 @@ router.get('/about', (req, res) => {
    ⚠️ Disabled automatically in production
 ======================================================= */
 
-function requireDevMode(req, res, next) {
+/*function requireDevMode(req, res, next) {
   if (process.env.NODE_ENV === 'production') {
     return res.status(403).send('Dev maintenance routes are disabled in production.');
   }
   next();
-}
+}*/
 
 /**
  * GET /users/debug/accounts

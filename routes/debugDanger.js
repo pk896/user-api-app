@@ -7,7 +7,7 @@ const router = express.Router();
 let requireAdmin = null;
 try {
   requireAdmin = require('../middleware/requireAdmin');
-} catch (e) {
+} catch {
   // Fallback (ONLY if your requireAdmin file is missing for some reason)
   requireAdmin = (req, res, next) => {
     if (req.session?.admin) return next();
@@ -18,7 +18,7 @@ try {
 let Order = null;
 try {
   Order = require('../models/Order');
-} catch (e) {
+} catch {
   Order = null;
 }
 
@@ -176,7 +176,7 @@ router.get('/orders/:id', requireAdmin, async (req, res) => {
     let doc = null;
     try {
       doc = await Order.findById(id).lean();
-    } catch (e) {
+    } catch {
       doc = null;
     }
 

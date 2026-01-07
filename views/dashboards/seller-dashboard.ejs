@@ -1,667 +1,1022 @@
 <!-- views/dashboards/seller-dashboard.ejs -->
 <% const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '') %>
 
-<section class="dashboard-simple seller" style="background-color: #F8FAFC; min-height: 100vh; padding: 1rem;">
-  <!-- Top Header -->
-  <header class="dashboard-header" style="background: linear-gradient(135deg, #7C3AED 0%, #2563EB 100%); color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px rgba(124, 58, 237, 0.1);">
-    <div class="user-info" style="display: flex; align-items: center; gap: 1rem;">
-      <div class="avatar" style="width: 60px; height: 60px; border-radius: 50%; background-color: #22C55E; color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold;">
-        <% if (business && business.name) { %>
-          <%= business.name.charAt(0).toUpperCase() %>
-        <% } else { %>
-          <span>S</span>
-        <% } %>
-      </div>
-      <div class="user-details">
-        <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">
-          Welcome,
-          <span class="highlight" style="color: white; font-weight: 800;">
-            <% if (business && business.name) { %>
-              <%= business.name %>
-            <% } else { %>
-              Seller
-            <% } %>
-          </span>
-        </h1>
-        <div class="status" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-          <span class="badge seller" style="background-color: #0F172A; color: white; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">SELLER ACCOUNT</span>
-          <span class="active-indicator" style="display: flex; align-items: center; gap: 0.5rem; color: rgba(255,255,255,0.9);">
-            <span class="dot" style="width: 8px; height: 8px; border-radius: 50%; background-color: #22C55E;"></span>
-            Active
-          </span>
-        </div>
-      </div>
-    </div>
+<%
+  // Helper functions
+  function fmtDate(d) {
+    try {
+      if (!d) return '';
+      const dd = (d instanceof Date) ? d : new Date(d);
+      return dd.toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    } catch { return String(d); }
+  }
 
-    <div class="header-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem;">
-      <div class="stat" style="background-color: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px; text-align: center;">
-        <small style="display: block; font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.25rem;">Today</small>
-        <strong style="display: block; font-size: 1.125rem; font-weight: 600;"><%= new Date().toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' }) %></strong>
-      </div>
-      <div class="stat" style="background-color: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px; text-align: center;">
-        <small style="display: block; font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.25rem;">Store ID</small>
-        <strong style="display: block; font-size: 1.125rem; font-weight: 600;">
-          <% if (business && business._id) { %>
-            <%= business._id.toString().slice(-6).toUpperCase() %>
-          <% } else { %>
-            N/A
-          <% } %>
-        </strong>
-      </div>
-    </div>
-  </header>
+  function fmtCurrency(amount) {
+    return 'R ' + Number(amount || 0).toFixed(2);
+  }
 
-  <!-- Notifications -->
-  <% if (success && success.length > 0) { %>
-    <div class="notifications" style="margin-bottom: 1.5rem;">
-      <% success.forEach(msg => { %>
-        <div class="notification success" style="background-color: #22C55E; color: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
-          <span>✓</span>
-          <%= msg %>
-          <button class="close" type="button" aria-label="Close" style="margin-left: auto; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">&times;</button>
-        </div>
-      <% }) %>
-    </div>
-  <% } %>
+  // Use actual router data safely
+  const sellerProducts = Array.isArray(products) ? products : [];
+  const sellerTotals = totals || {};
+  const sellerKpis = kpis || {};
+  const sellerOrders = (orders && orders.recent) ? orders.recent : [];
 
-  <% if (error && error.length > 0) { %>
-    <div class="notifications" style="margin-bottom: 1.5rem;">
-      <% error.forEach(msg => { %>
-        <div class="notification error" style="background-color: #EF4444; color: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
-          <span>!</span>
-          <%= msg %>
-          <button class="close" type="button" aria-label="Close" style="margin-left: auto; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">&times;</button>
-        </div>
-      <% }) %>
-    </div>
-  <% } %>
+  const totalProducts = sellerTotals.totalProducts || 0;
+  const totalStock = sellerTotals.totalStock || 0;
+  const inStockCount = sellerTotals.inStock || 0;
+  const outOfStockCount = sellerTotals.outOfStock || 0;
 
-  <%
-    // Helper functions
-    function fmtDate(d) {
-      try {
-        if (!d) return '';
-        const dd = (d instanceof Date) ? d : new Date(d);
-        return dd.toLocaleString('en-ZA', {
-          timeZone: 'Africa/Johannesburg',
-          dateStyle: 'medium',
-          timeStyle: 'short'
-        });
-      } catch { return String(d); }
-    }
+  const inventoryValue = sellerProducts.reduce((sum, p) => {
+    const price = Number(p.price) || 0;
+    const stock = Number(p.stock) || 0;
+    return sum + (price * stock);
+  }, 0);
 
-    function fmtCurrency(amount) {
-      return 'R ' + Number(amount || 0).toFixed(2);
-    }
+  const lowStockCount = sellerProducts.filter(p => {
+    const stock = Number(p.stock) || 0;
+    return stock > 0 && stock < 20;
+  }).length;
 
-    // Use actual router data safely
-    const sellerProducts = Array.isArray(products) ? products : [];
-    const sellerTotals = totals || {};
-    const sellerKpis = kpis || {};
-    const sellerOrders = (orders && orders.recent) ? orders.recent : [];
-
-    const totalProducts = sellerTotals.totalProducts || 0;
-    const totalStock = sellerTotals.totalStock || 0;
-    const inStockCount = sellerTotals.inStock || 0;
-    const outOfStockCount = sellerTotals.outOfStock || 0;
-
-    const inventoryValue = sellerProducts.reduce((sum, p) => {
-      const price = Number(p.price) || 0;
-      const stock = Number(p.stock) || 0;
-      return sum + (price * stock);
-    }, 0);
-
-    const lowStockCount = sellerProducts.filter(p => {
+  const lowStockProducts = sellerProducts
+    .filter(p => {
       const stock = Number(p.stock) || 0;
       return stock > 0 && stock < 20;
-    }).length;
+    })
+    .slice(0, 5);
 
-    const lowStockProducts = sellerProducts
-      .filter(p => {
-        const stock = Number(p.stock) || 0;
-        return stock > 0 && stock < 20;
-      })
-      .slice(0, 5);
+  const topProducts = Array.isArray(sellerKpis.perProduct)
+    ? sellerKpis.perProduct.slice(0, 10)
+    : [];
 
-    const topProducts = Array.isArray(sellerKpis.perProduct)
-      ? sellerKpis.perProduct.slice(0, 10)
-      : [];
+  const outOfStockProducts = sellerProducts
+    .filter(p => (Number(p.stock) || 0) <= 0)
+    .slice(0, 5);
+%>
 
-    const availableProducts = sellerProducts
-      .filter(p => (Number(p.stock) || 0) > 0)
-      .slice(0, 3);
+<section class="sellerDash">
+  <div class="sellerDash__wrap">
 
-    const outOfStockProducts = sellerProducts
-      .filter(p => (Number(p.stock) || 0) <= 0)
-      .slice(0, 5);
-
-    // Chart data placeholders - will be fetched via API
-  %>
-
-  <!-- Quick Stats -->
-  <section class="card-section quick-stats-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #7C3AED; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-    <h2 style="color: #0F172A; margin-bottom: 1.5rem; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
-      <span style="display: inline-block; width: 4px; height: 20px; background-color: #7C3AED; border-radius: 2px;"></span>
-      Business Overview
-    </h2>
-    <div class="stats-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
-      <div class="stat-card" style="background-color: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 8px; padding: 1rem;">
-        <a href="/products/mine" style="display: flex; align-items: center; gap: 1rem; text-decoration: none; color: inherit;">
-          <div class="icon" style="background-color: #2563EB; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">📦</div>
-          <div class="details">
-            <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Total Products</h3>
-            <p class="value" style="font-size: 1.5rem; font-weight: 700; color: #0F172A;"><%= totalProducts %></p>
-            <small style="font-size: 0.75rem; color: #64748B;"><%= inStockCount %> in stock</small>
-          </div>
-        </a>
-      </div>
-
-      <div class="stat-card" style="background-color: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; padding: 1rem;">
-        <a href="/products/edit" style="display: flex; align-items: center; gap: 1rem; text-decoration: none; color: inherit;">
-          <div class="icon" style="background-color: #7C3AED; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">🔢</div>
-          <div class="details">
-            <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Total Stock</h3>
-            <p class="value" style="font-size: 1.5rem; font-weight: 700; color: #0F172A;"><%= totalStock %></p>
-            <small style="font-size: 0.75rem; color: #64748B;">Units available</small>
-          </div>
-        </a>
-      </div>
-
-      <div class="stat-card" style="background-color: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 8px; padding: 1rem;">
-        <div class="icon" style="background-color: #22C55E; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">💰</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Inventory Value</h3>
-          <p class="value" style="font-size: 1.5rem; font-weight: 700; color: #22C55E;"><%= fmtCurrency(inventoryValue) %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Current stock value</small>
-        </div>
-      </div>
-
-      <a href="/products/low-stock" class="stat-card" style="background-color: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 8px; padding: 1rem; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 1rem;">
-        <div class="icon" style="background-color: #F97316; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">⚠️</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Low Stock</h3>
-          <p class="value" style="font-size: 1.5rem; font-weight: 700; color: #F97316;"><%= lowStockCount %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Stock &lt; 20 units</small>
-        </div>
-      </a>
-
-      <a href="/products/out-of-stock" class="stat-card" style="background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 1rem; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 1rem;">
-        <div class="icon" style="background-color: #EF4444; color: white; width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">🚨</div>
-        <div class="details">
-          <h3 style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.25rem;">Out of Stock</h3>
-          <p class="value" style="font-size: 1.5rem; font-weight: 700; color: #EF4444;"><%= outOfStockCount %></p>
-          <small style="font-size: 0.75rem; color: #64748B;">Needs restocking</small>
-        </div>
-      </a>
-    </div>
-  </section>
-
-  <!-- Main Content Grid -->
-  <div class="dashboard-grid" style="display: grid; grid-template-columns: 1fr; gap: 1.5rem;">
-    <!-- Left Column -->
-    <div class="left-column">
-      <!-- Low Stock -->
-      <% if (lowStockCount > 0) { %>
-        <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #F97316; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-          <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Low Stock Products (<%= lowStockCount %>)</h2>
-            <a href="/products/low-stock" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
+    <!-- Top Header -->
+    <header class="sdCard sdHeader">
+      <div class="sdHeader__row">
+        <div class="sdHeader__user">
+          <div class="sdAvatar" aria-hidden="true">
+            <% if (business && business.name) { %>
+              <%= business.name.charAt(0).toUpperCase() %>
+            <% } else { %>
+              <span>S</span>
+            <% } %>
           </div>
 
-          <div class="low-stock-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <% lowStockProducts.forEach(p => { 
-              const stock = Number(p.stock) || 0;
-              const price = Number(p.price) || 0;
-              const lastUpdated = p.updatedAt || p.createdAt;
-            %>
-              <div class="low-product" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: rgba(249, 115, 22, 0.05); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 8px;">
-                <div class="low-product-info" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="low-thumb" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(249, 115, 22, 0.3);">
-                  <% } else { %>
-                    <div class="low-thumb-placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: rgba(249, 115, 22, 0.1); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #F97316;">📦</div>
-                  <% } %>
-                  <div class="low-details" style="flex: 1;">
-                    <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                    <div class="low-meta" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                      <span class="price" style="font-size: 0.875rem; color: #22C55E; font-weight: 600;"><%= fmtCurrency(price) %></span>
-                      <span class="stock-warning" style="font-size: 0.75rem; color: #F97316; background-color: rgba(249, 115, 22, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px; font-weight: 600;">Stock: <%= stock %></span>
-                      <span class="category" style="font-size: 0.75rem; color: #7C3AED; background-color: rgba(124, 58, 237, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px;"><%= p.category || 'General' %></span>
+          <div class="sdHeader__meta">
+            <h1 class="sdHeader__title">
+              Welcome,
+              <span class="sdHeader__titleStrong">
+                <% if (business && business.name) { %>
+                  <%= business.name %>
+                <% } else { %>
+                  Seller
+                <% } %>
+              </span>
+            </h1>
+
+            <div class="sdHeader__badges">
+              <span class="sdBadge sdBadge--dark">SELLER ACCOUNT</span>
+              <span class="sdActive">
+                <span class="sdDot" aria-hidden="true"></span>
+                Active
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sdHeader__stats">
+          <div class="sdMiniStat">
+            <small>Today</small>
+            <strong><%= new Date().toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' }) %></strong>
+          </div>
+          <div class="sdMiniStat">
+            <small>Store ID</small>
+            <strong>
+              <% if (business && business._id) { %>
+                <%= business._id.toString().slice(-6).toUpperCase() %>
+              <% } else { %>
+                N/A
+              <% } %>
+            </strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Notifications -->
+    <% if (success && success.length > 0) { %>
+      <div class="sdNotices">
+        <% success.forEach(msg => { %>
+          <div class="sdNotice sdNotice--success notification success">
+            <span class="sdNotice__ico" aria-hidden="true">✓</span>
+            <div class="sdNotice__text"><%= msg %></div>
+            <button class="sdNotice__close close" type="button" aria-label="Close">&times;</button>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <% if (error && error.length > 0) { %>
+      <div class="sdNotices">
+        <% error.forEach(msg => { %>
+          <div class="sdNotice sdNotice--error notification error">
+            <span class="sdNotice__ico" aria-hidden="true">!</span>
+            <div class="sdNotice__text"><%= msg %></div>
+            <button class="sdNotice__close close" type="button" aria-label="Close">&times;</button>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <!-- Quick Stats -->
+    <section class="sdCard sdSection sdSection--purple">
+      <div class="sdSection__head">
+        <h2 class="sdSection__title">
+          <span class="sdSection__bar" aria-hidden="true"></span>
+          Business Overview
+        </h2>
+      </div>
+
+      <div class="sdStats">
+        <div class="sdStat sdStat--blue">
+          <a href="/products/mine" class="sdStat__link">
+            <div class="sdIcon sdIcon--blue" aria-hidden="true">📦</div>
+            <div class="sdStat__body">
+              <h3>Total Products</h3>
+              <p class="sdValue"><%= totalProducts %></p>
+              <small><%= inStockCount %> in stock</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--purple">
+          <a href="/products/edit" class="sdStat__link">
+            <div class="sdIcon sdIcon--purple" aria-hidden="true">🔢</div>
+            <div class="sdStat__body">
+              <h3>Total Stock</h3>
+              <p class="sdValue"><%= totalStock %></p>
+              <small>Units available</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--green">
+          <div class="sdStat__link">
+            <div class="sdIcon sdIcon--green" aria-hidden="true">💰</div>
+            <div class="sdStat__body">
+              <h3>Inventory Value</h3>
+              <p class="sdValue sdValue--green"><%= fmtCurrency(inventoryValue) %></p>
+              <small>Current stock value</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="sdStat sdStat--orange">
+          <a href="/products/low-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--orange" aria-hidden="true">⚠️</div>
+            <div class="sdStat__body">
+              <h3>Low Stock</h3>
+              <p class="sdValue sdValue--orange"><%= lowStockCount %></p>
+              <small>Stock &lt; 20 units</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--red">
+          <a href="/products/out-of-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--red" aria-hidden="true">🚨</div>
+            <div class="sdStat__body">
+              <h3>Out of Stock</h3>
+              <p class="sdValue sdValue--red"><%= outOfStockCount %></p>
+              <small>Needs restocking</small>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content Grid -->
+    <div class="sdGrid">
+      <!-- Left Column -->
+      <div class="sdCol">
+        <!-- Low Stock -->
+        <% if (lowStockCount > 0) { %>
+          <section class="sdCard sdSection sdSection--orange">
+            <div class="sdSection__row">
+              <h2 class="sdSection__titlePlain">Low Stock Products (<%= lowStockCount %>)</h2>
+              <a href="/products/low-stock" class="sdLink">View All</a>
+            </div>
+
+            <div class="sdList">
+              <% lowStockProducts.forEach(p => {
+                const stock = Number(p.stock) || 0;
+                const price = Number(p.price) || 0;
+              %>
+                <div class="sdItem sdItem--orange">
+                  <div class="sdItem__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdItem__meta">
+                      <h4 class="sdItem__title"><%= p.name || 'Unnamed Product' %></h4>
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--green"><%= fmtCurrency(price) %></span>
+                        <span class="sdChip sdChip--orange">Stock: <%= stock %></span>
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdItem__actions">
+                    <a href="/products/low-stock" class="sdBtn sdBtn--orange">Restock</a>
+                    <a href="/products/edit" class="sdBtn sdBtn--blue">View</a>
+                  </div>
+                </div>
+              <% }) %>
+
+              <% if (lowStockCount > 5) { %>
+                <div class="sdMore">
+                  <span>+<%= lowStockCount - 5 %> more low stock products</span>
+                  <a href="/products?filter=low_stock" class="sdLink">View All</a>
+                </div>
+              <% } %>
+            </div>
+          </section>
+        <% } %>
+
+        <!-- Quick Actions -->
+        <section class="sdCard sdSection sdSection--blue">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Quick Actions</h2>
+          </div>
+
+          <div class="sdActions">
+            <a href="/products/add" class="sdAction sdAction--purple">
+              <span class="sdAction__ico" aria-hidden="true">➕</span>
+              <span class="sdAction__txt">Add Product</span>
+            </a>
+
+            <a href="/orders" class="sdAction sdAction--blue">
+              <span class="sdAction__ico" aria-hidden="true">📦</span>
+              <span class="sdAction__txt">View Orders</span>
+            </a>
+
+            <a href="/products/mine" class="sdAction sdAction--dark">
+              <span class="sdAction__ico" aria-hidden="true">📋</span>
+              <span class="sdAction__txt">All Products</span>
+            </a>
+
+            <a href="/business/analytics/chart" class="sdAction sdAction--green">
+              <span class="sdAction__ico" aria-hidden="true">📈</span>
+              <span class="sdAction__txt">Analytics</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- Top 10 Best Sellers -->
+        <section class="sdCard sdSection sdSection--green">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Top 10 Best Sellers</h2>
+            <a href="/products/performance" class="sdLink">View All</a>
+          </div>
+
+          <% if (topProducts.length > 0) { %>
+            <div class="sdList sdScroll">
+              <% topProducts.forEach((p, index) => { %>
+                <div class="sdSellerRow">
+                  <div class="sdRank" aria-hidden="true"><%= index + 1 %></div>
+
+                  <div class="sdSellerRow__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdSellerRow__meta">
+                      <div class="sdItem__title"><%= p.name || 'Unnamed Product' %></div>
+                      <div class="sdMuted"><%= p.category || 'General' %></div>
+                    </div>
+                  </div>
+
+                  <div class="sdSellerRow__stats">
+                    <div class="sdMini">
+                      <small>Sold</small>
+                      <strong><%= p.qty || 0 %></strong>
+                    </div>
+                    <div class="sdMini">
+                      <small>Revenue</small>
+                      <strong class="sdGreen"><%= fmtCurrency(p.estRevenue || 0) %></strong>
                     </div>
                   </div>
                 </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty">
+              <div class="sdEmpty__ico" aria-hidden="true">📊</div>
+              <div class="sdEmpty__title">No sales data available yet</div>
+              <div class="sdEmpty__sub">Start selling to see your best sellers</div>
+            </div>
+          <% } %>
+        </section>
+      </div>
 
-                <div class="low-actions" style="display: flex; gap: 0.5rem;">
-                  <a href="/products/low-stock" class="btn-restock" style="background-color: #F97316; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Restock</a>
-                  <a href="/products/edit" class="btn-view" style="background-color: #2563EB; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">View</a>
-                </div>
+      <!-- Right Column -->
+      <div class="sdCol">
+        <!-- Sales Trend Chart -->
+        <section class="sdCard sdSection sdSection--purple">
+          <div class="sdSection__row sdSection__row--top">
+            <div>
+              <h2 class="sdSection__titlePlain">Sales Trend</h2>
+              <div class="sdToggle">
+                <button class="sdToggle__btn is-active" id="daily-btn" type="button">Last 7 Days</button>
+                <button class="sdToggle__btn" id="monthly-btn" type="button">Last 30 Days</button>
+                <button class="sdToggle__btn" id="yearly-btn" type="button">Last 12 Months</button>
               </div>
-            <% }) %>
+            </div>
 
-            <% if (lowStockCount > 5) { %>
-              <div class="more-products" style="text-align: center; padding: 1rem; color: #64748B;">
-                <span>+<%= lowStockCount - 5 %> more low stock products</span>
-                <a href="/products?filter=low_stock" class="btn-view-all" style="display: block; color: #7C3AED; text-decoration: none; font-weight: 600; margin-top: 0.5rem;">View All</a>
+            <div class="sdTrend">
+              <small>Current: <span id="current-sales" class="sdGreen">R 0.00</span></small>
+              <small>Avg: <span id="avg-sales" class="sdBlue">R 0.00</span></small>
+              <small>Total: <span id="total-sales" class="sdPurple">R 0.00</span></small>
+            </div>
+          </div>
+
+          <div class="sdChart">
+            <div id="simple-chart" class="sdChart__bars" aria-label="Sales chart"></div>
+            <div id="chart-labels" class="sdChart__labels"></div>
+
+            <div class="sdTrendStats">
+              <div class="sdKpi">
+                <small>Peak</small>
+                <strong id="peak-sales">R 0.00</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Lowest</small>
+                <strong id="lowest-sales">R 0.00</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Growth</small>
+                <strong id="growth-trend" class="positive">0%</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Projection</small>
+                <strong id="projection" class="positive">+0%</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Out of Stock -->
+        <section class="sdCard sdSection sdSection--red">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Out of Stock Products (<%= outOfStockCount %>)</h2>
+            <a href="/products/out-of-stock"
+              class="sdLink">
+              <span aria-hidden="true">🚨</span>
+              <span>Restock All</span>
+            </a>
+          </div>
+
+          <% if (outOfStockProducts.length > 0) { %>
+            <div class="sdList">
+              <% outOfStockProducts.forEach(p => { const price = Number(p.price) || 0; %>
+                <div class="sdItem sdItem--red">
+                  <div class="sdItem__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdItem__meta">
+                      <h4 class="sdItem__title"><%= p.name || 'Unnamed Product' %></h4>
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--green"><%= fmtCurrency(price) %></span>
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdItem__actions">
+                    <a href="/products/edit/<%= p._id || p.customId %>" class="sdBtn sdBtn--red">Restock</a>
+                    <a href="/products/view/<%= p._id || p.customId %>" class="sdBtn sdBtn--blue">View</a>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty sdEmpty--good">
+              <div class="sdEmpty__ico" aria-hidden="true">✅</div>
+              <div class="sdEmpty__title">All products are in stock!</div>
+              <div class="sdEmpty__sub">Great job managing your inventory</div>
+            </div>
+          <% } %>
+        </section>
+
+        <!-- Recent Orders -->
+        <section class="sdCard sdSection sdSection--dark">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Recent Orders</h2>
+            <a href="/orders" class="sdLink">View All</a>
+          </div>
+
+          <div class="sdList sdScroll">
+            <% if (sellerOrders.length > 0) { %>
+              <% sellerOrders.forEach(o => {
+                const status = o.status || 'pending';
+                const statusClass = status.toLowerCase().replace(/\s+/g, '-');
+              %>
+                <div class="sdOrder">
+                  <div class="sdOrder__top">
+                    <span class="sdMono">
+                      <% if (o.orderId) { %>
+                        #<%= o.orderId.slice(-8) %>
+                      <% } else if (o._id) { %>
+                        #<%= o._id.toString().slice(-8) %>
+                      <% } else { %>
+                        #N/A
+                      <% } %>
+                    </span>
+
+                    <span class="sdOrder__amt sdGreen">
+                      <% if (o.amount && o.amount.value) { %>
+                        <%= fmtCurrency(o.amount.value) %>
+                      <% } else if (o.total) { %>
+                        <%= fmtCurrency(o.total) %>
+                      <% } else { %>
+                        <%= fmtCurrency(0) %>
+                      <% } %>
+                    </span>
+                  </div>
+
+                  <div class="sdOrder__bottom">
+                    <span class="sdPill <%= statusClass %>">
+                      <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+                    </span>
+                    <span class="sdMuted"><%= fmtDate(o.createdAt) %></span>
+                  </div>
+                </div>
+              <% }) %>
+            <% } else { %>
+              <div class="sdEmpty">
+                <div class="sdEmpty__ico" aria-hidden="true">📋</div>
+                <div class="sdEmpty__title">No recent orders</div>
+                <div class="sdEmpty__sub">Orders will appear here</div>
               </div>
             <% } %>
           </div>
         </section>
-      <% } %>
-
-      <!-- Quick Actions -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #2563EB; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <h2 style="color: #0F172A; margin-bottom: 1.5rem; font-size: 1.125rem; font-weight: 600;">Quick Actions</h2>
-        <div class="actions-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
-          <a href="/products/add" class="action primary" style="background-color: #7C3AED; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">➕</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">Add Product</span>
-          </a>
-
-          <a href="/orders" class="action" style="background-color: #2563EB; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">📦</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">View Orders</span>
-          </a>
-
-          <a href="/products/mine" class="action" style="background-color: #0F172A; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">📋</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">All Products</span>
-          </a>
-
-          <a href="/business/analytics/chart" class="action" style="background-color: #22C55E; color: white; padding: 1.5rem; border-radius: 8px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
-            <span class="action-icon" style="font-size: 1.5rem;">📈</span>
-            <span class="action-text" style="font-weight: 600; font-size: 0.875rem;">Analytics</span>
-          </a>
-        </div>
-      </section>
-
-      <!-- Top 10 Best Sellers -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #22C55E; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Top 10 Best Sellers</h2>
-          <a href="/products/performance" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
-        </div>
-
-        <% if (topProducts.length > 0) { %>
-          <div class="sellers-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <% topProducts.forEach((p, index) => { %>
-              <div class="seller-item" style="display: flex; align-items: center; padding: 1rem; background-color: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; gap: 1rem;">
-                <div class="seller-rank" style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
-                  <span class="rank-number" style="width: 28px; height: 28px; background-color: #E2E8F0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;"><%= index + 1 %></span>
-                </div>
-
-                <div class="seller-product" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="product-thumb" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid #E2E8F0;">
-                  <% } else { %>
-                    <div class="thumb-placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: #E2E8F0; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">📦</div>
-                  <% } %>
-                  <div class="product-info" style="flex: 1;">
-                    <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                    <small style="font-size: 0.75rem; color: #64748B;"><%= p.category || 'General' %></small>
-                  </div>
-                </div>
-
-                <div class="seller-stats" style="display: flex; gap: 1rem;">
-                  <div class="stat" style="text-align: center;">
-                    <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Sold</small>
-                    <strong style="display: block; font-size: 0.875rem; color: #0F172A; font-weight: 700;"><%= p.qty || 0 %></strong>
-                  </div>
-                  <div class="stat" style="text-align: center;">
-                    <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Revenue</small>
-                    <strong class="revenue" style="display: block; font-size: 0.875rem; color: #22C55E; font-weight: 700;"><%= fmtCurrency(p.estRevenue || 0) %></strong>
-                  </div>
-                </div>
-              </div>
-            <% }) %>
-          </div>
-        <% } else { %>
-          <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B;">
-            <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">📊</span>
-            <p style="color: #0F172A; margin-bottom: 0.25rem;">No sales data available yet</p>
-            <small>Start selling to see your best sellers</small>
-          </div>
-        <% } %>
-      </section>
-    </div>
-
-    <!-- Right Column -->
-    <div class="right-column">
-      <!-- Sales Trend Chart -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #7C3AED; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <div>
-            <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">Sales Trend</h2>
-            <div class="trend-period-toggle" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button class="period-btn active" id="daily-btn" type="button" style="background-color: #7C3AED; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Last 7 Days</button>
-              <button class="period-btn" id="monthly-btn" type="button" style="background-color: #E2E8F0; color: #64748B; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Last 30 Days</button>
-              <button class="period-btn" id="yearly-btn" type="button" style="background-color: #E2E8F0; color: #64748B; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Last 12 Months</button>
-            </div>
-          </div>
-          <div class="trend-summary" style="display: flex; flex-direction: column; gap: 0.25rem; text-align: right;">
-            <small>Current: <span id="current-sales" style="color: #22C55E; font-weight: 600;">R 0.00</span></small>
-            <small>Avg: <span id="avg-sales" style="color: #2563EB; font-weight: 600;">R 0.00</span></small>
-            <small>Total: <span id="total-sales" style="color: #7C3AED; font-weight: 600;">R 0.00</span></small>
-          </div>
-        </div>
-
-        <div class="trend-chart-container">
-          <div id="simple-chart" style="width: 100%; height: 200px; display: flex; align-items: flex-end; gap: 2px; padding: 1rem; border-bottom: 1px solid #E2E8F0; border-left: 1px solid #E2E8F0; background-color: #F8FAFC;"></div>
-          <div id="chart-labels" style="display: flex; justify-content: space-between; padding: 0.5rem 1rem; font-size: 0.75rem; color: #64748B;"></div>
-
-          <div class="trend-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1.5rem;">
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Peak</small>
-              <strong id="peak-sales" style="display: block; font-size: 1.125rem; color: #0F172A; font-weight: 700;">R 0.00</strong>
-            </div>
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Lowest</small>
-              <strong id="lowest-sales" style="display: block; font-size: 1.125rem; color: #0F172A; font-weight: 700;">R 0.00</strong>
-            </div>
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Growth</small>
-              <strong id="growth-trend" class="positive" style="display: block; font-size: 1.125rem; color: #22C55E; font-weight: 700;">0%</strong>
-            </div>
-            <div class="trend-stat" style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; border: 1px solid #E2E8F0; text-align: center;">
-              <small style="display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.25rem;">Projection</small>
-              <strong id="projection" class="positive" style="display: block; font-size: 1.125rem; color: #22C55E; font-weight: 700;">+0%</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Out of Stock -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #EF4444; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Out of Stock Products (<%= outOfStockCount %>)</h2>
-          <a href="/products/out-of-stock"
-            class="pg-link <%= outOfStockCount > 0 ? 'has-out-of-stock' : 'all-good' %>"
-            style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">
-            <span class="pg-ico">🚨</span>
-            <span class="restock-all">Restock All</span>
-          </a>
-        </div>
-
-        <% if (outOfStockProducts.length > 0) { %>
-          <div class="out-of-stock-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <% outOfStockProducts.forEach(p => {
-              const price = Number(p.price) || 0;
-              const lastUpdated = p.updatedAt || p.createdAt;
-            %>
-              <div class="out-product" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px;">
-                <div class="out-product-info" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                  <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
-                    <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="out-thumb" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(239, 68, 68, 0.3);">
-                  <% } else { %>
-                    <div class="out-thumb-placeholder" style="width: 50px; height: 50px; border-radius: 6px; background-color: rgba(239, 68, 68, 0.1); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #EF4444;">📦</div>
-                  <% } %>
-                  <div class="out-details" style="flex: 1;">
-                    <h4 style="font-size: 0.875rem; color: #0F172A; font-weight: 600; margin-bottom: 0.25rem;"><%= p.name || 'Unnamed Product' %></h4>
-                    <div class="out-meta" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                      <span class="price" style="font-size: 0.875rem; color: #22C55E; font-weight: 600;"><%= fmtCurrency(price) %></span>
-                      <span class="category" style="font-size: 0.75rem; color: #7C3AED; background-color: rgba(124, 58, 237, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px;"><%= p.category || 'General' %></span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="out-actions" style="display: flex; gap: 0.5rem;">
-                  <a href="/products/edit/<%= p._id || p.customId %>" class="btn-restock" style="background-color: #EF4444; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Restock</a>
-                  <a href="/products/view/<%= p._id || p.customId %>" class="btn-view" style="background-color: #2563EB; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 600;">View</a>
-                </div>
-              </div>
-            <% }) %>
-          </div>
-        <% } else { %>
-          <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B; background-color: rgba(34, 197, 94, 0.05); border-radius: 8px;">
-            <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">✅</span>
-            <p style="color: #0F172A; margin-bottom: 0.25rem;">All products are in stock!</p>
-            <small>Great job managing your inventory</small>
-          </div>
-        <% } %>
-      </section>
-
-      <!-- Recent Orders -->
-      <section class="card-section" style="background-color: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-top: 4px solid #0F172A; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="color: #0F172A; font-size: 1.125rem; font-weight: 600;">Recent Orders</h2>
-          <a href="/orders" class="view-all" style="color: #7C3AED; text-decoration: none; font-weight: 600; font-size: 0.875rem;">View All</a>
-        </div>
-
-        <div class="orders-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <% if (sellerOrders.length > 0) { %>
-            <% sellerOrders.forEach(o => {
-              const status = o.status || 'pending';
-              const statusClass = status.toLowerCase().replace(/\s+/g, '-');
-            %>
-              <div class="order-item" style="padding: 1rem; background-color: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0;">
-                <div class="order-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                  <span class="order-id" style="font-family: monospace; font-size: 0.875rem; color: #0F172A; font-weight: 600;">
-                    <% if (o.orderId) { %>
-                      #<%= o.orderId.slice(-8) %>
-                    <% } else if (o._id) { %>
-                      #<%= o._id.toString().slice(-8) %>
-                    <% } else { %>
-                      #N/A
-                    <% } %>
-                  </span>
-                  <span class="order-amount" style="font-size: 0.875rem; color: #22C55E; font-weight: 700;">
-                    <% if (o.amount && o.amount.value) { %>
-                      <%= fmtCurrency(o.amount.value) %>
-                    <% } else if (o.total) { %>
-                      <%= fmtCurrency(o.total) %>
-                    <% } else { %>
-                      <%= fmtCurrency(0) %>
-                    <% } %>
-                  </span>
-                </div>
-                <div class="order-details" style="display: flex; justify-content: space-between; align-items: center;">
-                  <span class="status <%= statusClass %>" style="<%= statusClass.includes('completed') || statusClass.includes('delivered') ? 'background-color: rgba(34, 197, 94, 0.1); color: #166534;' :
-                                                                  statusClass.includes('pending') || statusClass.includes('processing') ? 'background-color: rgba(249, 115, 22, 0.1); color: #92400e;' :
-                                                                  'background-color: rgba(239, 68, 68, 0.1); color: #b91c1c;' %> padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
-                    <%= status.charAt(0).toUpperCase() + status.slice(1) %>
-                  </span>
-                  <span class="date" style="font-size: 0.75rem; color: #64748B;"><%= fmtDate(o.createdAt) %></span>
-                </div>
-              </div>
-            <% }) %>
-          <% } else { %>
-            <div class="empty-state" style="padding: 2rem; text-align: center; color: #64748B;">
-              <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">📋</span>
-              <p style="color: #0F172A; margin-bottom: 0.25rem;">No recent orders</p>
-              <small>Orders will appear here</small>
-            </div>
-          <% } %>
-        </div>
-      </section>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <footer class="dashboard-footer" style="background-color: #0F172A; color: white; border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem;">
-    <div class="footer-section" style="margin-bottom: 1.5rem;">
-      <h4 style="color: white; margin-bottom: 1rem; font-size: 1rem;">Quick Links</h4>
-      <div class="footer-links" style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-        <a href="/products/add" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">➕ Add Product</a>
-        <a href="/products/mine" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">📋 View Products</a>
-        <a href="/products/low-stock" class="<%= lowStockCount > 0 ? 'pg-link-warning' : '' %>" 
-           style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">
-          <span>⚠️ Low Stock</span>
-          <% if (lowStockCount > 0) { %>
-            <span style="display: inline-flex; align-items: center; justify-content: center; margin-left: 0.5rem; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background-color: #F97316; color: white; font-size: 0.75rem; font-weight: 600;"><%= lowStockCount %></span>
-          <% } %>
-        </a>
-        <a href="/orders" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">📦 Orders</a>
-        <a href="/business/profile" style="color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem;">👤 Profile</a>
-        <form action="/business/logout" method="post" class="logout-form" style="display: inline;">
-          <button type="submit" style="background: none; border: none; color: #E2E8F0; text-decoration: none; padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.875rem; cursor: pointer;">🚪 Logout</button>
-        </form>
       </div>
     </div>
-    <div class="copyright" style="text-align: center; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
-      <small style="color: #94A3B8; font-size: 0.875rem;">© <%= new Date().getFullYear() %> <%= business && business.name ? business.name : 'Your Business' %></small>
-    </div>
-  </footer>
+
+    <!-- Footer -->
+    <footer class="sdFooter">
+      <div class="sdFooter__top">
+        <h4>Quick Links</h4>
+
+        <div class="sdFooter__links">
+          <a href="/products/add">➕ Add Product</a>
+          <a href="/products/mine">📋 View Products</a>
+
+          <a href="/products/low-stock" class="<%= lowStockCount > 0 ? 'is-warn' : '' %>">
+            ⚠️ Low Stock
+            <% if (lowStockCount > 0) { %>
+              <span class="sdCount"><%= lowStockCount %></span>
+            <% } %>
+          </a>
+
+          <a href="/orders">📦 Orders</a>
+          <a href="/business/profile">👤 Profile</a>
+
+          <form action="/business/logout" method="post" class="sdLogout">
+            <button type="submit">🚪 Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="sdFooter__bottom">
+        <small>© <%= new Date().getFullYear() %> <%= business && business.name ? business.name : 'Your Business' %></small>
+      </div>
+    </footer>
+
+  </div>
 </section>
 
 <style nonce="<%= NONCE %>">
-  /* Mobile-first responsive styles */
-  @media (max-width: 640px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .stats-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .actions-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .trend-stats {
-      grid-template-columns: 1fr;
-    }
-    
-    .section-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-    
-    .trend-summary {
-      width: 100%;
-      flex-direction: row;
-      justify-content: space-between;
-    }
-    
-    .trend-period-toggle {
-      width: 100%;
-    }
-    
-    .trend-period-toggle button {
-      flex: 1;
-      text-align: center;
-    }
+  :root{
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --dark:#0F172A;
+
+    --bg:#F8FAFC;
+    --text:#0F172A;
+    --muted:#64748B;
+    --line:#E2E8F0;
+
+    --r12:12px;
+    --r10:10px;
+    --r8:8px;
   }
 
-  @media (min-width: 641px) and (max-width: 1023px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
+  /* ✅ Fix the “bigger than phone” issue */
+  .sellerDash, .sellerDash * { box-sizing: border-box; }
+  .sellerDash { background: var(--bg); min-height: 100vh; overflow-x: hidden; }
+  .sellerDash__wrap{
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 12px;
+  }
+  /* prevent long text from forcing horizontal scroll */
+  .sellerDash img{ max-width:100%; display:block; }
+  .sdStat__body, .sdHeader__meta, .sdSellerRow__meta { min-width: 0; }
+  .sdHeader__titleStrong, .sdItem__title, .sdMono { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* cards */
+  .sdCard{
+    background:#fff;
+    border-radius: var(--r12);
+    box-shadow: 0 2px 10px rgba(15,23,42,.06);
+    overflow: hidden;
   }
 
-  @media (min-width: 1024px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: 2rem;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(5, 1fr);
-    }
+  /* header */
+  .sdHeader{
+    background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+    color:#fff;
+    padding: 14px;
+  }
+  .sdHeader__row{
+    display:flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sdHeader__user{ display:flex; gap: 12px; align-items: center; }
+  .sdAvatar{
+    width: 48px; height: 48px; border-radius: 999px;
+    background: var(--green);
+    display:flex; align-items:center; justify-content:center;
+    font-weight: 900; font-size: 18px;
+    flex: 0 0 auto;
+  }
+  .sdHeader__title{ margin:0; font-size: 16px; line-height: 1.2; }
+  .sdHeader__titleStrong{ font-weight: 900; }
+  .sdHeader__badges{ display:flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; align-items: center; }
+  .sdBadge{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .02em;
+  }
+  .sdBadge--dark{ background: var(--dark); color:#fff; }
+  .sdActive{ display:inline-flex; align-items:center; gap: 6px; font-size: 12px; opacity: .95; }
+  .sdDot{ width: 8px; height: 8px; border-radius: 999px; background: var(--green); }
+
+  .sdHeader__stats{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sdMiniStat{
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: var(--r10);
+    padding: 10px;
+    text-align:center;
+  }
+  .sdMiniStat small{ display:block; opacity:.92; font-size: 12px; margin-bottom: 2px; }
+  .sdMiniStat strong{ font-size: 13px; }
+
+  /* notices */
+  .sdNotices{ margin: 12px 0; display:flex; flex-direction: column; gap: 8px; }
+  .sdNotice{
+    display:flex; align-items:center; gap: 10px;
+    padding: 12px;
+    border-radius: var(--r10);
+    color:#fff;
+  }
+  .sdNotice__ico{ font-weight: 900; }
+  .sdNotice__text{ flex:1; font-size: 13px; line-height: 1.35; }
+  .sdNotice__close{
+    margin-left:auto;
+    background: transparent;
+    border: 0;
+    color: #fff;
+    font-size: 18px;
+    cursor:pointer;
+    padding: 0 6px;
+  }
+  .sdNotice--success{ background: var(--green); }
+  .sdNotice--error{ background: #EF4444; }
+
+  /* sections */
+  .sdSection{ padding: 12px; }
+  .sdSection--purple{ border-top: 4px solid var(--purple); }
+  .sdSection--blue{ border-top: 4px solid var(--blue); }
+  .sdSection--green{ border-top: 4px solid var(--green); }
+  .sdSection--dark{ border-top: 4px solid var(--dark); }
+  .sdSection--orange{ border-top: 4px solid #F97316; }
+  .sdSection--red{ border-top: 4px solid #EF4444; }
+
+  .sdSection__head{ margin-bottom: 10px; }
+  .sdSection__title{
+    margin:0;
+    display:flex; align-items:center; gap: 8px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 900;
+  }
+  .sdSection__bar{ width: 4px; height: 18px; background: var(--purple); border-radius: 999px; }
+  .sdSection__titlePlain{ margin:0; color: var(--text); font-size: 14px; font-weight: 900; }
+  .sdSection__row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .sdSection__row--top{ align-items:flex-start; }
+
+  .sdLink{
+    color: var(--purple);
+    text-decoration:none;
+    font-weight: 900;
+    font-size: 12px;
+    white-space: nowrap;
   }
 
-  /* Animation for chart bars */
-  @keyframes barGrow {
-    from { height: 0; }
-    to { height: var(--final-height); }
+  /* stats */
+  .sdStats{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .sdStat{
+    border-radius: var(--r12);
+    overflow:hidden;
+    border: 1px solid var(--line);
+  }
+  .sdStat--blue{ background: rgba(37,99,235,.07); border-color: rgba(37,99,235,.18); }
+  .sdStat--purple{ background: rgba(124,58,237,.07); border-color: rgba(124,58,237,.18); }
+  .sdStat--green{ background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.18); }
+  .sdStat--orange{ background: rgba(249,115,22,.07); border-color: rgba(249,115,22,.18); }
+  .sdStat--red{ background: rgba(239,68,68,.07); border-color: rgba(239,68,68,.18); }
+
+  .sdStat__link{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    padding: 12px;
+    text-decoration:none;
+    color: inherit;
+    width: 100%;
+    min-width: 0;
+  }
+  .sdIcon{
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 18px;
+    color:#fff;
+    flex: 0 0 auto;
+  }
+  .sdIcon--blue{ background: var(--blue); }
+  .sdIcon--purple{ background: var(--purple); }
+  .sdIcon--green{ background: var(--green); }
+  .sdIcon--orange{ background: #F97316; }
+  .sdIcon--red{ background: #EF4444; }
+
+  .sdStat__body h3{ margin:0 0 2px; font-size: 12px; color: var(--muted); font-weight: 800; }
+  .sdValue{ margin:0; font-size: 20px; font-weight: 1000; color: var(--text); line-height:1.1; }
+  .sdValue--green{ color: var(--green); }
+  .sdValue--orange{ color: #F97316; }
+  .sdValue--red{ color: #EF4444; }
+  .sdStat__body small{ color: var(--muted); font-size: 11px; }
+
+  /* grid layout */
+  .sdGrid{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .sdCol{ display:flex; flex-direction: column; gap: 12px; }
+
+  /* lists + items */
+  .sdList{ display:flex; flex-direction: column; gap: 10px; }
+  .sdScroll{ max-height: 360px; overflow:auto; padding-right: 4px; }
+
+  .sdItem{
+    display:flex;
+    align-items:flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--r12);
+    border: 1px solid var(--line);
+    background: #fff;
+    flex-wrap: wrap;  /* ✅ key: stops overflow on small screens */
+  }
+  .sdItem--orange{ background: rgba(249,115,22,.05); border-color: rgba(249,115,22,.18); }
+  .sdItem--red{ background: rgba(239,68,68,.05); border-color: rgba(239,68,68,.18); }
+
+  .sdItem__left{ display:flex; gap: 10px; align-items:center; min-width: 0; flex: 1; }
+  .sdThumb{
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid var(--line);
+    flex: 0 0 auto;
+  }
+  .sdThumb--ph{ display:flex; align-items:center; justify-content:center; background:#EEF2FF; border-color:#E0E7FF; }
+  .sdItem__meta{ min-width: 0; flex: 1; }
+  .sdItem__title{ margin:0; font-size: 13px; font-weight: 900; color: var(--text); }
+
+  .sdChips{ margin-top: 6px; display:flex; gap: 6px; flex-wrap: wrap; }
+  .sdChip{
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .sdChip--green{ background: rgba(34,197,94,.10); color: #166534; border-color: rgba(34,197,94,.18); }
+  .sdChip--orange{ background: rgba(249,115,22,.10); color: #92400e; border-color: rgba(249,115,22,.18); }
+  .sdChip--purple{ background: rgba(124,58,237,.10); color: #5B21B6; border-color: rgba(124,58,237,.18); }
+
+  .sdItem__actions{ display:flex; gap: 8px; flex: 0 0 auto; }
+  .sdBtn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    text-decoration:none;
+    border: 0;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 900;
+    color:#fff;
+    white-space: nowrap;
+  }
+  .sdBtn--blue{ background: var(--blue); }
+  .sdBtn--purple{ background: var(--purple); }
+  .sdBtn--green{ background: var(--green); }
+  .sdBtn--orange{ background: #F97316; }
+  .sdBtn--red{ background: #EF4444; }
+
+  .sdMore{ text-align:center; padding: 10px; color: var(--muted); font-size: 12px; }
+
+  /* actions */
+  .sdActions{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sdAction{
+    border-radius: var(--r12);
+    padding: 14px 10px;
+    text-decoration:none;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 10px;
+    font-weight: 1000;
+    min-height: 56px;
+  }
+  .sdAction__ico{ font-size: 18px; }
+  .sdAction__txt{ font-size: 12px; }
+  .sdAction--purple{ background: var(--purple); }
+  .sdAction--blue{ background: var(--blue); }
+  .sdAction--green{ background: var(--green); }
+  .sdAction--dark{ background: var(--dark); }
+  .sdAction:hover{ filter: brightness(.98); transform: translateY(-1px); box-shadow: 0 10px 18px rgba(15,23,42,.08); }
+
+  /* best sellers row */
+  .sdSellerRow{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    background: #F8FAFC;
+  }
+  .sdRank{
+    width: 26px; height: 26px;
+    border-radius: 999px;
+    background: #E2E8F0;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 11px; font-weight: 1000; color: var(--dark);
+    flex: 0 0 auto;
+  }
+  .sdSellerRow__left{ display:flex; align-items:center; gap: 10px; min-width:0; flex: 1; }
+  .sdSellerRow__stats{ display:flex; gap: 10px; flex: 0 0 auto; }
+  .sdMini small{ display:block; font-size: 11px; color: var(--muted); }
+  .sdMini strong{ display:block; font-size: 12px; color: var(--text); }
+  .sdMuted{ color: var(--muted); font-size: 11px; }
+  .sdGreen{ color: var(--green); font-weight: 900; }
+  .sdBlue{ color: var(--blue); font-weight: 900; }
+  .sdPurple{ color: var(--purple); font-weight: 900; }
+
+  /* chart */
+  .sdToggle{ display:flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .sdToggle__btn{
+    border: 1px solid var(--line);
+    background: #F1F5F9;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 1000;
+    cursor:pointer;
+    flex: 1 1 auto;
+  }
+  .sdToggle__btn.is-active{
+    background: var(--purple);
+    color: #fff;
+    border-color: rgba(124,58,237,.35);
+  }
+  .sdTrend{
+    display:flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    text-align: left;
+    color: var(--muted);
+    width: 100%;
   }
 
-  /* Hover effects */
-  .action:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  .sdChart{ margin-top: 10px; }
+  .sdChart__bars{
+    width: 100%;
+    height: 190px;
+    display:flex;
+    align-items:flex-end;
+    gap: 2px;
+    padding: 10px;
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    overflow: hidden; /* ✅ prevents any bar tooltip from pushing width */
+  }
+  .sdChart__labels{
+    display:flex;
+    justify-content: space-between;
+    padding: 8px 6px 0;
+    font-size: 11px;
+    color: var(--muted);
+    gap: 4px;
+  }
+  .sdTrendStats{
+    margin-top: 10px;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sdKpi{
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 10px;
+    text-align:center;
+  }
+  .sdKpi small{ display:block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .sdKpi strong{ display:block; color: var(--text); font-size: 14px; font-weight: 1000; }
+  .positive{ color: var(--green) !important; }
+  .negative{ color: #EF4444 !important; }
+
+  /* orders */
+  .sdOrder{
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 10px;
+  }
+  .sdOrder__top{ display:flex; justify-content: space-between; gap: 10px; align-items:center; }
+  .sdMono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; font-weight: 900; color: var(--dark); }
+  .sdOrder__amt{ font-size: 12px; font-weight: 1000; white-space: nowrap; }
+  .sdOrder__bottom{ display:flex; justify-content: space-between; align-items:center; margin-top: 8px; gap: 8px; }
+  .sdPill{
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 1000;
+    border: 1px solid transparent;
+    background: rgba(124,58,237,.08);
+    color: #5B21B6;
+    white-space: nowrap;
+  }
+  .sdPill.completed, .sdPill.delivered { background: rgba(34,197,94,.10); color:#166534; border-color: rgba(34,197,94,.18); }
+  .sdPill.pending, .sdPill.processing { background: rgba(249,115,22,.10); color:#92400e; border-color: rgba(249,115,22,.18); }
+  .sdPill.cancelled, .sdPill.refunded { background: rgba(239,68,68,.10); color:#b91c1c; border-color: rgba(239,68,68,.18); }
+
+  /* empty */
+  .sdEmpty{
+    padding: 18px 10px;
+    border-radius: var(--r12);
+    text-align:center;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    background: #fff;
+  }
+  .sdEmpty--good{ background: rgba(34,197,94,.05); border-style: solid; }
+  .sdEmpty__ico{ font-size: 26px; opacity: .55; }
+  .sdEmpty__title{ font-weight: 1000; color: var(--text); margin-top: 6px; }
+  .sdEmpty__sub{ font-size: 12px; margin-top: 4px; }
+
+  /* footer */
+  .sdFooter{
+    margin-top: 12px;
+    background: var(--dark);
+    color:#fff;
+    border-radius: var(--r12);
+    padding: 14px;
+  }
+  .sdFooter__top h4{ margin:0 0 10px; font-size: 14px; font-weight: 1000; }
+  .sdFooter__links{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sdFooter__links a,
+  .sdLogout button{
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.12);
+    color: #E2E8F0;
+    text-decoration:none;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 900;
+    display:inline-flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .sdLogout{ display:inline; }
+  .sdLogout button{ cursor:pointer; }
+  .sdCount{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width: 20px; height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #F97316;
+    color:#fff;
+    font-size: 11px;
+    font-weight: 1000;
+  }
+  .sdFooter__bottom{
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,.10);
+    text-align:center;
+  }
+  .sdFooter__bottom small{ color: #94A3B8; font-size: 12px; }
+
+  /* ✅ Larger screens */
+  @media (min-width: 720px){
+    .sellerDash__wrap{ padding: 16px; }
+    .sdHeader__row{ flex-direction: row; justify-content: space-between; align-items: center; }
+    .sdHeader__stats{ width: 340px; }
+    .sdStats{ grid-template-columns: repeat(2, 1fr); }
+    .sdGrid{ grid-template-columns: 1fr 1fr; }
   }
 
-  .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  }
-
-  /* Scrollbar styling */
-  .sellers-list,
-  .out-of-stock-list,
-  .orders-list {
-    max-height: 400px;
-    overflow-y: auto;
-  }
-
-  .sellers-list::-webkit-scrollbar,
-  .out-of-stock-list::-webkit-scrollbar,
-  .orders-list::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .sellers-list::-webkit-scrollbar-track,
-  .out-of-stock-list::-webkit-scrollbar-track,
-  .orders-list::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 3px;
-  }
-
-  .sellers-list::-webkit-scrollbar-thumb,
-  .out-of-stock-list::-webkit-scrollbar-thumb,
-  .orders-list::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-  }
-
-  .sellers-list::-webkit-scrollbar-thumb:hover,
-  .out-of-stock-list::-webkit-scrollbar-thumb:hover,
-  .orders-list::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-
-  /* Loading animation */
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-
-  .loading {
-    animation: pulse 2s infinite;
-  }
-
-  /* Status colors */
-  .status.completed,
-  .status.delivered {
-    background-color: rgba(34, 197, 94, 0.1) !important;
-    color: #166534 !important;
-  }
-
-  .status.pending,
-  .status.processing {
-    background-color: rgba(249, 115, 22, 0.1) !important;
-    color: #92400e !important;
-  }
-
-  .status.cancelled,
-  .status.refunded {
-    background-color: rgba(239, 68, 68, 0.1) !important;
-    color: #b91c1c !important;
+  @media (min-width: 1024px){
+    .sdStats{ grid-template-columns: repeat(5, 1fr); }
+    .sdActions{ grid-template-columns: repeat(2, 1fr); }
   }
 
   /* Print styles */
   @media print {
-    .dashboard-header,
-    .quick-actions,
-    .dashboard-footer {
-      display: none;
-    }
-    
-    .card-section {
-      break-inside: avoid;
-      box-shadow: none !important;
-      border: 1px solid #ddd !important;
-    }
+    .sdHeader, .sdFooter { display:none !important; }
+    .sdCard { box-shadow: none !important; border: 1px solid #ddd !important; }
   }
 </style>
 
@@ -692,19 +1047,12 @@
     return 'R ' + Number(amount || 0).toFixed(2);
   }
 
-  // Fetch chart data from API
   async function fetchChartData() {
     try {
-      const response = await fetch('/business/analytics/chart-data');
-      if (!response.ok) {
-        throw new Error('Failed to fetch chart data');
-      }
-      
+      const response = await fetch('/business/analytics/chart-data', { headers: { 'Accept': 'application/json' }});
+      if (!response.ok) throw new Error('Failed to fetch chart data');
       const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to load chart data');
-      }
-      
+      if (!data.success) throw new Error(data.message || 'Failed to load chart data');
       return data;
     } catch (error) {
       console.error('Error fetching chart data:', error);
@@ -712,209 +1060,127 @@
     }
   }
 
-  // Create Simple Bar Chart with API data
-  async function createSimpleChart() {
-    const chartData = await fetchChartData();
-    
-    if (!chartData || !chartData.chartData) {
-      // Show error state
-      console.error('No chart data available');
-      return;
-    }
+  // ✅ Build chart ONCE, refresh data without re-binding buttons each time
+  function initSimpleChart() {
+    const chartContainer = document.getElementById('simple-chart');
+    const labelsContainer = document.getElementById('chart-labels');
+    const dailyBtn = document.getElementById('daily-btn');
+    const monthlyBtn = document.getElementById('monthly-btn');
+    const yearlyBtn = document.getElementById('yearly-btn');
 
-    const { daily, monthly, yearly } = chartData.chartData;
-    const metrics = chartData.metrics || {};
+    if (!chartContainer || !labelsContainer) return;
 
-    let currentData = daily;
+    let datasets = { daily: [], monthly: [], yearly: [] };
     let currentPeriod = 'daily';
 
+    function setActive(period) {
+      currentPeriod = period;
+      [dailyBtn, monthlyBtn, yearlyBtn].forEach(btn => btn && btn.classList.remove('is-active'));
+      if (period === 'daily') dailyBtn && dailyBtn.classList.add('is-active');
+      if (period === 'monthly') monthlyBtn && monthlyBtn.classList.add('is-active');
+      if (period === 'yearly') yearlyBtn && yearlyBtn.classList.add('is-active');
+      updateChart(datasets[currentPeriod] || [], currentPeriod);
+    }
+
     function updateChart(data, period) {
-      const chartContainer = document.getElementById('simple-chart');
-      const labelsContainer = document.getElementById('chart-labels');
       chartContainer.innerHTML = '';
       labelsContainer.innerHTML = '';
 
-      if (!data || data.length === 0) {
-        // Show empty state
-        chartContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #64748B;">No data available</div>';
-        labelsContainer.innerHTML = '';
+      if (!Array.isArray(data) || data.length === 0) {
+        chartContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#64748B;font-weight:700;">No data available</div>';
         return;
       }
 
-      // Calculate statistics
-      const salesValues = data.map(item => item.sales || 0);
+      const salesValues = data.map(item => Number(item.sales || 0));
       const totalSales = salesValues.reduce((sum, val) => sum + val, 0);
-      const averageSales = salesValues.length > 0 ? totalSales / salesValues.length : 0;
-      const maxSales = Math.max(...salesValues, 1); // Ensure at least 1 to prevent division by zero
-      const minSales = Math.min(...salesValues.filter(val => val > 0)) || 0;
+      const averageSales = salesValues.length ? (totalSales / salesValues.length) : 0;
+      const maxSales = Math.max(...salesValues, 1);
+      const minSales = Math.min(...salesValues.filter(v => v > 0)) || 0;
 
-      // Update stats display
       document.getElementById('current-sales').textContent = fmtCurrency(salesValues[salesValues.length - 1] || 0);
       document.getElementById('avg-sales').textContent = fmtCurrency(averageSales);
       document.getElementById('total-sales').textContent = fmtCurrency(totalSales);
       document.getElementById('peak-sales').textContent = fmtCurrency(maxSales);
       document.getElementById('lowest-sales').textContent = fmtCurrency(minSales);
 
-      // Calculate growth from first to last
       const firstValue = salesValues[0] || 0;
       const lastValue = salesValues[salesValues.length - 1] || 0;
       let growth = 0;
-      if (firstValue > 0) {
-        growth = ((lastValue - firstValue) / firstValue) * 100;
-      }
+      if (firstValue > 0) growth = ((lastValue - firstValue) / firstValue) * 100;
 
       const growthElement = document.getElementById('growth-trend');
       const projectionElement = document.getElementById('projection');
-      
-      growthElement.textContent = growth.toFixed(1) + '%';
-      growthElement.className = growth >= 0 ? 'positive' : 'negative';
-      
-      projectionElement.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
-      projectionElement.className = growth >= 0 ? 'positive' : 'negative';
 
-      // Draw chart bars
+      growthElement.textContent = growth.toFixed(1) + '%';
+      growthElement.className = (growth >= 0 ? 'positive' : 'negative');
+
+      projectionElement.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+      projectionElement.className = (growth >= 0 ? 'positive' : 'negative');
+
       const chartHeight = 150;
+      const showEvery = Math.ceil(data.length / 8);
+
       data.forEach((item, index) => {
-        const value = item.sales || 0;
+        const value = Number(item.sales || 0);
         const barHeight = (value / maxSales) * chartHeight;
 
         const bar = document.createElement('div');
         bar.style.cssText = `
-          height: ${barHeight}px;
-          background-color: ${period === 'daily' ? '#7C3AED' : period === 'monthly' ? '#2563EB' : '#22C55E'};
-          border-radius: 2px 2px 0 0;
-          flex: 1;
-          position: relative;
-          transition: height 0.3s ease;
-          cursor: pointer;
-          animation: barGrow 0.5s ease-out;
+          height:${barHeight}px;
+          background-color:${period === 'daily' ? '#7C3AED' : period === 'monthly' ? '#2563EB' : '#22C55E'};
+          border-radius:4px 4px 0 0;
+          flex:1;
+          position:relative;
+          transition:height .25s ease;
+          cursor:pointer;
         `;
 
-        // Tooltip
-        bar.innerHTML = `
-          <div style="
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #0F172A;
-            color: white;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity 0.2s;
-            pointer-events: none;
-            z-index: 10;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-          ">
-            ${period === 'daily' ? item.date : period === 'monthly' ? item.date : item.month}: ${fmtCurrency(value)}
-            ${item.orders ? `<br><small style="opacity: 0.8;">${item.orders} orders</small>` : ''}
-          </div>
-        `;
+        const labelText = (period === 'yearly') ? (item.month || '') : (item.date || '');
+        const tooltipText = `${labelText}: ${fmtCurrency(value)}${item.orders ? `\n${item.orders} orders` : ''}`;
 
-        bar.addEventListener('mouseenter', (e) => {
-          const tooltip = e.target.querySelector('div');
-          if (tooltip) tooltip.style.opacity = '1';
-        });
-
-        bar.addEventListener('mouseleave', (e) => {
-          const tooltip = e.target.querySelector('div');
-          if (tooltip) tooltip.style.opacity = '0';
-        });
+        bar.title = tooltipText; // ✅ native tooltip (no layout issues)
 
         chartContainer.appendChild(bar);
 
-        // Labels
         const label = document.createElement('div');
-        label.style.cssText = `
-          text-align: center;
-          flex: 1;
-          font-size: 10px;
-          color: #64748B;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        `;
-
-        let labelText = '';
-        if (period === 'daily') {
-          labelText = item.date;
-        } else if (period === 'monthly') {
-          labelText = item.date;
-        } else {
-          labelText = item.month;
-        }
-
-        // Show only some labels for readability
-        const showEvery = Math.ceil(data.length / 8);
-        const showLabel = index % showEvery === 0 || index === data.length - 1;
+        label.style.cssText = 'text-align:center;flex:1;font-size:10px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const showLabel = (index % showEvery === 0) || (index === data.length - 1);
         label.textContent = showLabel ? labelText : '';
-
         labelsContainer.appendChild(label);
       });
     }
 
-    // Period toggle functionality
-    const dailyBtn = document.getElementById('daily-btn');
-    const monthlyBtn = document.getElementById('monthly-btn');
-    const yearlyBtn = document.getElementById('yearly-btn');
+    async function refreshDataAndRender() {
+      const chartData = await fetchChartData();
+      if (!chartData || !chartData.chartData) return;
 
-    function setActiveButton(button) {
-      [dailyBtn, monthlyBtn, yearlyBtn].forEach(btn => {
-        btn.style.backgroundColor = '#E2E8F0';
-        btn.style.color = '#64748B';
-      });
-      button.style.backgroundColor = '#7C3AED';
-      button.style.color = 'white';
+      const { daily, monthly, yearly } = chartData.chartData;
+      datasets = {
+        daily: Array.isArray(daily) ? daily : [],
+        monthly: Array.isArray(monthly) ? monthly : [],
+        yearly: Array.isArray(yearly) ? yearly : []
+      };
+
+      updateChart(datasets[currentPeriod] || [], currentPeriod);
     }
 
-    dailyBtn?.addEventListener('click', () => {
-      currentData = daily;
-      currentPeriod = 'daily';
-      setActiveButton(dailyBtn);
-      updateChart(currentData, currentPeriod);
-    });
+    // bind buttons once
+    if (!document.documentElement.dataset.sdChartBound) {
+      dailyBtn && dailyBtn.addEventListener('click', () => setActive('daily'));
+      monthlyBtn && monthlyBtn.addEventListener('click', () => setActive('monthly'));
+      yearlyBtn && yearlyBtn.addEventListener('click', () => setActive('yearly'));
+      document.documentElement.dataset.sdChartBound = '1';
+    }
 
-    monthlyBtn?.addEventListener('click', () => {
-      currentData = monthly;
-      currentPeriod = 'monthly';
-      setActiveButton(monthlyBtn);
-      updateChart(currentData, currentPeriod);
-    });
+    // initial
+    refreshDataAndRender();
 
-    yearlyBtn?.addEventListener('click', () => {
-      currentData = yearly;
-      currentPeriod = 'yearly';
-      setActiveButton(yearlyBtn);
-      updateChart(currentData, currentPeriod);
-    });
-
-    // Initial chart
-    updateChart(currentData, currentPeriod);
+    // auto refresh (no rebind)
+    setInterval(refreshDataAndRender, 60000);
   }
 
-  // Auto-refresh chart data every 60 seconds
-  function startChartAutoRefresh() {
-    setInterval(async () => {
-      console.log('🔄 Refreshing chart data...');
-      await createSimpleChart();
-    }, 60000); // 60 seconds
-  }
-
-  // Initialize on DOM ready
   document.addEventListener('DOMContentLoaded', () => {
     setupNotifications();
-    createSimpleChart();
-    startChartAutoRefresh();
-    
-    // Add loading indicators for async data
-    const statCards = document.querySelectorAll('.stat-card');
-    statCards.forEach(card => {
-      card.addEventListener('click', function() {
-        this.classList.add('loading');
-        setTimeout(() => this.classList.remove('loading'), 1000);
-      });
-    });
+    initSimpleChart();
   });
 </script>

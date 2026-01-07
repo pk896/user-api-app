@@ -20,8 +20,11 @@
 <main id="shopRoot" class="amz-wrap <%= (themeCss||'').includes('dark') ? 'dark-theme' : 'light-theme' %>">
   <!-- ====== Top Nav (Amazon-like) ====== -->
   <header class="amz-top">
-    <a href="/home" class="brand">🌍 Unicoporate.com</a>
-
+   <a href="/home" class="brand" aria-label="Unicoporate.com">
+      <img class="brand-logo" src="/images/branding/logo-unincorporate.png" alt="Unicoporate logo" />
+      <span class="brand-text">Unicoporate.com</span>
+    </a>
+    
     <form id="searchForm" class="amz-search" role="search" action="javascript:void(0)">
       <select id="catSelect" aria-label="Category">
         <option value="">All</option>
@@ -282,7 +285,6 @@
   </div>
 </aside>
 
-<!-- ===== Styles (CSP-safe) ===== -->
 <style nonce="<%= nonce %>">
   :root{
     --brand:#232f3e; --brand2:#37475a; --accent:#ff9900; --card:#fff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
@@ -315,18 +317,55 @@
     z-index:60;
   }
 
+  /* ===== Brand (logo + short text) ===== */
   .brand{
     display:inline-flex;
     align-items:center;
-    gap:4px;
-    font-weight:900;
+    gap:.45rem;
     color:#fff;
     text-decoration:none;
+    font-weight:900;
+    line-height:1;
+    min-width:0;              /* important for truncation */
+  }
+
+  /* Logo: responsive but consistent */
+  .brand-logo{
+    width:26px;
+    height:26px;
+    border-radius:8px;
+    object-fit:contain;
+    flex:0 0 auto;
+    box-shadow:0 1px 6px rgba(0,0,0,.25);
+  }
+
+  /* Short name comes from HTML now (you will set it to 5 letters) */
+  .brand-text{
+    display:block;
+    min-width:0;
     white-space:nowrap;
-    font-size:0.85rem;   /* smaller text */
-    max-width:120px;     /* limit how wide it can be */
     overflow:hidden;
-    text-overflow:ellipsis; /* show “Unicoporate…” if too long */
+    text-overflow:ellipsis;
+    font-size:.95rem;
+    letter-spacing:.01em;
+  }
+
+  /* Phone */
+  @media (max-width:480px){
+    .brand-logo{ width:24px; height:24px; }
+    .brand-text{ font-size:.88rem; }
+  }
+
+  /* Tablet / medium */
+  @media (min-width:768px){
+    .brand-logo{ width:28px; height:28px; }
+    .brand-text{ font-size:1rem; }
+  }
+
+  /* Desktop */
+  @media (min-width:1024px){
+    .brand-logo{ width:30px; height:30px; }
+    .brand-text{ font-size:1.05rem; }
   }
 
   .amz-search{
@@ -364,6 +403,7 @@
     cursor:pointer;
     font-weight:700;
     font-size:.9rem;
+    color:#0f172a;
   }
   .subnav-meta{ display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; font-size:.92rem }
   .sort-wrap{ display:flex; gap:.3rem; align-items:center }
@@ -424,9 +464,7 @@
 
   /* --- GRID is the default on all screens --- */
   .amz-list{ list-style:none; padding:0; margin:0; display:grid; gap:.6rem; }
-  .amz-list.grid-mode{
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  }
+  .amz-list.grid-mode{ grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   @media (min-width: 768px){
     .amz-list.grid-mode{ grid-template-columns: repeat(3, minmax(0,1fr)); }
   }
@@ -482,18 +520,22 @@
   .tag.hot{ background:#93c5fd; }
 
   .info{ display:grid; gap:.28rem }
+
+  /* ✅ No -webkit-line-clamp (eslint friendly) */
   .title{
     font-weight:800;
     color:inherit;
     text-decoration:none;
     font-size:.98rem;
     line-height:1.2;
-    max-height: 2.6em;
+
+    display:block;
     overflow:hidden;
-    display:-webkit-box;
-    -webkit-line-clamp:2;
-    -webkit-box-orient:vertical;
+
+    /* 2 lines max */
+    max-height:2.4em;
   }
+
   .rating{ display:flex; align-items:center; gap:.28rem; color:#6b7280; font-size:.86rem }
   .stars{ letter-spacing:.12ch }
 
@@ -520,7 +562,6 @@
     padding:.6rem 0;
   }
 
-  /* Default state: white button, dark text (always visible) */
   .pg-btn{
     border:1px solid var(--line);
     background:#ffffff;
@@ -528,20 +569,15 @@
     padding:.35rem .7rem;
     cursor:pointer;
     font-weight:700;
-    color:#0f172a;          /* text always visible on white */
+    color:#0f172a;
   }
-
-  /* Hover / focus: blue button with white text (still visible) */
   .pg-btn:hover,
   .pg-btn:focus-visible{
-    background:#1d4ed8;     /* blue */
+    background:#1d4ed8;
     border-color:#1d4ed8;
-    color:#ffffff;          /* white text on blue */
+    color:#ffffff;
   }
-
-  .pg-meta{
-    color:var(--muted);
-  }
+  .pg-meta{ color:var(--muted); }
 
   .empty{ text-align:center; padding:1.6rem 1rem; }
   .muted{ color:var(--muted) }
@@ -559,11 +595,10 @@
     align-items:center;
     gap:.6rem;
 
-    /* 🔹 Barely there */
-    background: rgba(15, 23, 42, 0.03);          /* almost fully transparent */
-    border: 1px solid rgba(148, 163, 184, 0.10); /* very faint border */
-    backdrop-filter: blur(2px);                  /* tiny blur, almost none */
-    box-shadow: none;                            /* no heavy shadow */
+    background: rgba(15, 23, 42, 0.03);
+    border: 1px solid rgba(148, 163, 184, 0.10);
+    backdrop-filter: blur(2px);
+    box-shadow: none;
 
     color:#16a34a;
     border-radius:999px;
@@ -579,26 +614,6 @@
     padding:.45rem .8rem;
     border-radius:999px;
   }
-
-  
-
-  /* Mini checkout bar */
-  /*.mini-co{
-    position: fixed; left:50%; transform:translateX(-50%);
-    bottom: 72px; z-index:55;
-    display:flex; justify-content:space-between; align-items:center; gap:.6rem;
-    background: rgba(255,255,255,0.92); color:inherit; border:1px solid rgba(17,24,39,.12);
-    border-radius:999px; padding:.5rem .7rem; box-shadow:var(--shadow);
-    width:min(740px,94vw);
-  }
-  .co-btn{
-    text-decoration:none;
-    background:#16a34a;
-    color:#fff;
-    font-weight:900;
-    padding:.45rem .8rem;
-    border-radius:999px;
-  }*/
 
   /* Drawer */
   .drawer-overlay{
@@ -682,11 +697,8 @@
     .amz-body{ grid-template-columns: 1fr; gap:.5rem; padding:.5rem }
     .amz-side{ display:none } /* toggled via JS */
 
-    /* Grid stays grid, but tighter */
     .amz-list.grid-mode{ grid-template-columns: repeat(2, minmax(0,1fr)); gap:.5rem }
 
-    /* Mobile image: show full image without cropping */
-    .imgbox{ aspect-ratio: 1 / 1; }
     .imgbox img{
       object-fit: contain;
       padding: 6px;
@@ -697,61 +709,31 @@
     .amz-item{ grid-template-columns: 1fr; padding:.5rem; gap:.45rem }
     .title{ font-size:.92rem }
     .price{ font-size:.98rem }
-    .mini-co{ bottom:64px; width:94vw }
 
-   .mini-co{
+    .mini-co{
       bottom:64px;
       width: calc(94vw - 15px);
-
       background: rgba(15, 23, 42, 0.03);
       border: 1px solid rgba(148, 163, 184, 0.10);
       backdrop-filter: blur(2px);
       box-shadow: none;
-    } 
+    }
   }
 
   /* Cart count: navy by default, white on hover */
   .cart-count-top{
-    color: #0f1f35 !important;   /* deep navy */
+    color: #0f1f35 !important;
     font-weight: 900;
     transition: color .15s ease;
   }
-
   .amz-cart-btn:hover .cart-count-top,
   .amz-cart-btn:focus-visible .cart-count-top{
-    color: #ffffff !important;   /* turn white on hover/focus */
+    color: #ffffff !important;
   }
+  .dark-theme .cart-count-top{ color: #c7d2fe; }
 
-  .dark-theme .cart-count-top{
-    color: #c7d2fe;
-  }
-
-  /* Make subnav buttons readable */
-  .subnav-btn {
-    background: #ffffff;
-    color: #0f172a;
-  }
-
-  .subnav-btn:hover,
-  .subnav-btn:focus-visible,
-  .subnav-btn[aria-pressed="true"] {
-    background: #ffffff;
-    border-color: #1d4ed8;
-    color: #0f172a;
-  }
-
-  .drawer-head {
-    visibility: hidden; /* keeps height, hides content */
-  }
-
-  .amz-top .brand {
-    font-size: 0.8rem !important;
-    max-width: 80px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    display: inline-block !important;
-  }
+  /* Drawer head hidden (keeps spacing) */
+  .drawer-head{ visibility: hidden; }
 
   /* Variants (size + color) – hidden by default */
   .variants{
@@ -761,20 +743,8 @@
     margin-top:.1rem;
     font-size:.85rem;
   }
+  .amz-item.show-variants .variants{ display:flex; }
 
-  /* Show variants when card is in "choose mode" */
-  .amz-item.show-variants .variants{
-    display:flex;
-  }
-
-  /* Variants (size + color) */
-  /*.variants{
-    display:flex;
-    flex-wrap:wrap;
-    gap:.35rem;
-    margin-top:.1rem;
-    font-size:.85rem;
-  }*/
   .variants label{
     display:flex;
     flex-direction:column;
@@ -795,14 +765,11 @@
     background:var(--card);
     color:var(--ink);
   }
-
   @media (max-width:480px){
-    .variants{
-      gap:.25rem;
-    }
+    .variants{ gap:.25rem; }
   }
 
-    /* ===== Variant warning toast ===== */
+  /* ===== Variant warning toast ===== */
   .variant-toast{
     position: fixed;
     left: 50%;
@@ -831,9 +798,7 @@
     box-shadow: var(--shadow);
     font-size: .86rem;
   }
-  .variant-toast-icon{
-    font-size: 1rem;
-  }
+  .variant-toast-icon{ font-size: 1rem; }
   .variant-toast-close{
     border: 0;
     background: transparent;
@@ -842,9 +807,7 @@
     font-size: .9rem;
     padding: 0 .1rem;
   }
-  .dark-theme .variant-toast-inner{
-    background: #0b1120;
-  }
+  .dark-theme .variant-toast-inner{ background: #0b1120; }
 </style>
 
 <!-- ===== Page Script (CSP-safe) ===== -->

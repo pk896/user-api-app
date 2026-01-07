@@ -7,7 +7,7 @@ const router = express.Router();
 let Order = null;
 try {
   Order = require('../models/Order');
-} catch (e) {
+} catch {
   // optional in some deployments
   Order = null;
 }
@@ -15,14 +15,14 @@ try {
 let Product = null;
 try {
   Product = require('../models/Product');
-} catch (e) {
+} catch {
   Product = null;
 }
 
 let debitSellersFromRefund = null;
 try {
   ({ debitSellersFromRefund } = require('../utils/payouts/debitSellersFromRefund'));
-} catch (e) {
+} catch {
   // optional
   debitSellersFromRefund = null;
 }
@@ -39,7 +39,7 @@ function safeJsonParse(raw) {
     if (typeof raw === 'string') return JSON.parse(raw);
     if (typeof raw === 'object' && raw) return raw;
     return null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -62,7 +62,7 @@ function sumRefunds(order) {
       if (n != null) sum += n;
     }
     return +sum.toFixed(2);
-  } catch (e) {
+  } catch {
     return 0;
   }
 }

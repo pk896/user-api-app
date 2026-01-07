@@ -14,7 +14,7 @@ try { Order = require('../models/Order'); } catch {
 let requireAdmin = null;
 try {
   requireAdmin = require('../middleware/requireAdmin');
-} catch (e) {
+} catch {
   if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
     throw new Error('Missing middleware/requireAdmin in production. Refusing to start.');
   }

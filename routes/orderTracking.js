@@ -8,7 +8,7 @@ const axios = require('axios');
 let Order = null;
 try {
   Order = require('../models/Order');
-} catch (e) {
+} catch {
   Order = null;
 }
 
