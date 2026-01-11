@@ -1,0 +1,550 @@
+<!-- views/users-wishlisted-products.ejs -->
+<%
+  const items = Array.isArray(wishlistItems) ? wishlistItems : [];
+
+  // normalize each wishlist entry -> product object
+  const toProduct = (it) => {
+    if (!it) return null;
+    return it.product || it.productId || it;
+  };
+
+  const safeStr = (v, fallback = '') => (v === undefined || v === null) ? fallback : String(v);
+  const money = (n) => {
+    const v = Number(n || 0);
+    return `R ${v.toFixed(2)}`;
+  };
+%>
+
+<% if (success) { %>
+  <div class="flash success"><%= success %></div>
+<% } %>
+<% if (error) { %>
+  <div class="flash error"><%= error %></div>
+<% } %>
+
+<section class="wl-wrap">
+  <header class="wl-head">
+    <div class="wl-title-row">
+      <a class="wl-back" href="/users/dashboard" aria-label="Back to dashboard">←</a>
+      <div class="wl-title">
+        <h1>My Wishlist</h1>
+        <p>Your saved products</p>
+      </div>
+      <a class="wl-shop" href="/sales" title="Continue shopping">🛒</a>
+    </div>
+
+    <div class="wl-meta">
+      <div class="wl-pill">
+        <span class="dot"></span>
+        <span><%= items.length %> item<%= items.length === 1 ? '' : 's' %></span>
+      </div>
+      <div class="wl-note">Tip: remove anything you don’t need anymore.</div>
+    </div>
+  </header>
+
+  <% if (!items.length) { %>
+    <div class="wl-empty">
+      <div class="wl-empty-ico">💜</div>
+      <h2>No wishlisted products yet</h2>
+      <p>Tap the wishlist button on a product to save it here.</p>
+      <a class="btn btn-primary" href="/sales">Browse products</a>
+    </div>
+  <% } else { %>
+    <div class="wl-grid">
+      <% items.forEach((it) => {
+        const p = toProduct(it);
+        if (!p) return;
+
+        const pid = safeStr(p.customId || p._id, '');
+        const title = safeStr(p.name, 'Product');
+        const img = safeStr(p.imageUrl, '/img/placeholder.png');
+        const price = Number(p.price || 0);
+        const stock = Number(p.stock || 0);
+      %>
+
+        <article class="wl-card">
+          <a class="wl-img" href="/products/view/<%= pid %>">
+            <img src="<%= img %>" alt="<%= title %>">
+          </a>
+
+          <div class="wl-body">
+            <div class="wl-name" title="<%= title %>"><%= title %></div>
+
+            <div class="wl-row">
+              <div class="wl-price"><%= money(price) %></div>
+              <div class="wl-badges">
+                <% if (p.sale) { %><span class="badge sale">SALE</span><% } %>
+                <% if (p.isNew) { %><span class="badge new">NEW</span><% } %>
+                <span class="badge stock <%= stock > 0 ? 'in' : 'out' %>"><%= stock > 0 ? 'IN STOCK' : 'OUT' %></span>
+              </div>
+            </div>
+
+            <div class="wl-actions">
+              <a class="btn btn-view" href="/products/view/<%= pid %>">View</a>
+
+              <!-- ✅ Add To Cart (same flow as product-details) -->
+              <button
+                class="btn btn-cart add-to-cart-btn"
+                type="button"
+                data-pid="<%= pid %>"
+                <%= stock > 0 ? '' : 'disabled' %>
+              >
+                Add to Cart
+              </button>
+            </div>
+
+            <div class="wl-actions wl-actions--second">
+              <!-- ✅ Checkout link -->
+              <a class="btn btn-checkout" href="/payment/checkout">Checkout</a>
+
+              <!-- ✅ Remove from wishlist -->
+              <form method="POST" action="/users/wishlist/remove" class="wl-form">
+                <input type="hidden" name="productId" value="<%= pid %>">
+                <button type="submit" class="btn btn-remove" aria-label="Remove from wishlist">Remove</button>
+              </form>
+            </div>
+          </div>
+        </article>
+
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<!-- ✅ Bottom cart bar (like product-details) -->
+<div class="wl-cartbar" id="wlCartBar">
+  <div class="wl-cartbar__info">
+    <div class="wl-cartbar__total">R <span id="wlCartTotal">0.00</span></div>
+    <div class="wl-cartbar__count"><span id="wlCartCount">0</span> items</div>
+  </div>
+  <a href="/payment/checkout" class="wl-cartbar__checkout">Checkout</a>
+</div>
+
+<style nonce="<%= nonce %>">
+  :root{
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --black:#0F172A;
+    --muted:#64748B;
+    --bg:#F8FAFC;
+    --card:#FFFFFF;
+    --border:#E2E8F0;
+    --shadow: 0 8px 24px rgba(15,23,42,0.08);
+  }
+
+  .wl-wrap{
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 14px;
+    padding-bottom: 90px; /* space for bottom cart bar */
+  }
+
+  .wl-head{
+    background: linear-gradient(135deg, rgba(124,58,237,0.10), rgba(37,99,235,0.08));
+    border: 1px solid rgba(124,58,237,0.18);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 8px 22px rgba(124,58,237,0.08);
+    overflow: hidden;
+  }
+
+  .wl-title-row{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+  }
+
+  .wl-back, .wl-shop{
+    width: 40px;
+    height: 40px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius: 12px;
+    text-decoration:none;
+    border: 1px solid rgba(124,58,237,0.20);
+    background: rgba(255,255,255,0.7);
+    color: var(--black);
+    font-weight: 900;
+  }
+  .wl-back:hover, .wl-shop:hover{ transform: translateY(-1px); }
+
+  .wl-title{ flex:1; min-width: 0; }
+  .wl-title h1{
+    margin:0;
+    font-size: 18px;
+    line-height: 1.1;
+    font-weight: 900;
+    color: var(--black);
+  }
+  .wl-title p{
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .wl-meta{
+    margin-top: 10px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .wl-pill{
+    display:inline-flex;
+    align-items:center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(34,197,94,0.10);
+    border: 1px solid rgba(34,197,94,0.22);
+    color: #065F46;
+    font-weight: 800;
+    font-size: 12px;
+  }
+  .wl-pill .dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--green);
+  }
+
+  .wl-note{
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .wl-empty{
+    margin-top: 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+    text-align:center;
+  }
+  .wl-empty-ico{ font-size: 38px; }
+  .wl-empty h2{
+    margin: 8px 0 6px;
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--black);
+  }
+  .wl-empty p{
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .wl-grid{
+    margin-top: 14px;
+    display:grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .wl-card{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow:hidden;
+    box-shadow: var(--shadow);
+    display:flex;
+    flex-direction: column;
+    min-width:0;
+  }
+
+  .wl-img{
+    display:block;
+    background: #fff;
+    aspect-ratio: 1 / 1;
+    border-bottom: 1px solid var(--border);
+  }
+  .wl-img img{
+    width:100%;
+    height:100%;
+    object-fit: contain;
+    padding: 10px;
+    display:block;
+  }
+
+  .wl-body{
+    padding: 12px;
+    display:flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .wl-name{
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--black);
+    overflow:hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .wl-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .wl-price{
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--blue);
+  }
+
+  .wl-badges{ display:flex; gap: 6px; flex-wrap: wrap; justify-content:flex-end; }
+  .badge{
+    font-size: 10px;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #fff;
+    white-space: nowrap;
+  }
+  .badge.sale{ background: var(--purple); }
+  .badge.new{ background: var(--green); }
+  .badge.stock{ background: rgba(15,23,42,0.80); }
+  .badge.stock.in{ background: rgba(34,197,94,0.90); }
+  .badge.stock.out{ background: rgba(239,68,68,0.92); }
+
+  .wl-actions{
+    display:flex;
+    gap: 8px;
+    align-items:center;
+    margin-top: 2px;
+  }
+  .wl-actions--second{ margin-top: 0; }
+
+  .wl-form{ margin:0; flex:1; }
+
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 900;
+    text-decoration:none;
+    cursor:pointer;
+    min-height: 42px;
+    width: 100%;
+  }
+
+  .btn:disabled{
+    opacity:.55;
+    cursor:not-allowed;
+  }
+
+  .btn-primary{
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color:#fff;
+    box-shadow: 0 10px 18px rgba(124,58,237,0.18);
+  }
+  .btn-primary:hover{ transform: translateY(-1px); }
+
+  .btn-view{
+    background: rgba(37,99,235,0.10);
+    border-color: rgba(37,99,235,0.22);
+    color: var(--blue);
+    width: 44%;
+  }
+
+  .btn-cart{
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color:#fff;
+    width: 56%;
+    box-shadow: 0 10px 18px rgba(37,99,235,0.14);
+  }
+
+  .btn-checkout{
+    background: rgba(34,197,94,0.12);
+    border-color: rgba(34,197,94,0.22);
+    color: #065F46;
+  }
+
+  .btn-remove{
+    background: rgba(124,58,237,0.10);
+    border-color: rgba(124,58,237,0.22);
+    color: var(--purple);
+  }
+
+  /* Flash */
+  .flash{
+    margin: 12px 14px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    text-align:center;
+    border: 1px solid var(--border);
+    background: #fff;
+  }
+  .flash.success{
+    border-color: rgba(34,197,94,0.35);
+    background: rgba(34,197,94,0.10);
+    color: #065F46;
+  }
+  .flash.error{
+    border-color: rgba(239,68,68,0.35);
+    background: rgba(239,68,68,0.10);
+    color: #991B1B;
+  }
+
+  /* Bottom cart bar (wishlist) */
+  .wl-cartbar{
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #fff;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 12px rgba(15,23,42,0.10);
+    padding: 12px 14px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 120;
+  }
+  .wl-cartbar__info{ display:flex; flex-direction: column; gap: 2px; }
+  .wl-cartbar__total{ font-weight: 1000; color: var(--blue); }
+  .wl-cartbar__count{ font-size: 12px; color: var(--muted); font-weight: 800; }
+  .wl-cartbar__checkout{
+    background: var(--green);
+    color: #fff;
+    text-decoration:none;
+    font-weight: 1000;
+    padding: 12px 18px;
+    border-radius: 12px;
+    white-space: nowrap;
+  }
+
+  /* Responsive */
+  @media (min-width: 640px){
+    .wl-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .btn-view{ width: 46%; }
+    .btn-cart{ width: 54%; }
+  }
+  @media (min-width: 900px){
+    .wl-grid{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+</style>
+
+<script nonce="<%= nonce %>">
+(function(){
+  const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));
+  const $ = (s, c = document) => c.querySelector(s);
+
+  function showToast(message, type){
+    // remove old
+    $$('.wl-toast').forEach(n => n.remove());
+
+    const el = document.createElement('div');
+    el.className = 'wl-toast';
+    el.textContent = message;
+    el.style.cssText = `
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 900;
+      border: 1px solid rgba(226,232,240,1);
+      background: #fff;
+      box-shadow: 0 10px 18px rgba(15,23,42,0.12);
+      max-width: 92%;
+      text-align: center;
+    `;
+
+    if (type === 'success') {
+      el.style.background = 'rgba(34,197,94,0.12)';
+      el.style.borderColor = 'rgba(34,197,94,0.28)';
+      el.style.color = '#065F46';
+    } else {
+      el.style.background = 'rgba(239,68,68,0.12)';
+      el.style.borderColor = 'rgba(239,68,68,0.28)';
+      el.style.color = '#991B1B';
+    }
+
+    document.body.appendChild(el);
+
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .25s';
+      setTimeout(() => el.remove(), 250);
+    }, 2200);
+  }
+
+  async function fetchCart(){
+    try{
+      const r = await fetch('/api/cart', { credentials: 'same-origin' });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch {
+      return null;
+    }
+  }
+
+  function renderCartBar(cart){
+    const bar = $('#wlCartBar');
+    const totalEl = $('#wlCartTotal');
+    const countEl = $('#wlCartCount');
+    if (!bar || !totalEl || !countEl) return;
+
+    const items = cart && Array.isArray(cart.items) ? cart.items : [];
+    const count = items.reduce((sum, it) => sum + Number(it.quantity || 1), 0);
+    const total = items.reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+
+    totalEl.textContent = total.toFixed(2);
+    countEl.textContent = String(count);
+
+    bar.style.display = count > 0 ? 'flex' : 'none';
+  }
+
+  async function refreshCartBar(){
+    const cart = await fetchCart();
+    if (cart) renderCartBar(cart);
+  }
+
+  async function addToCart(pid, btn){
+    if (!pid) return;
+    if (btn) btn.disabled = true;
+
+    try{
+      const url = `/api/cart/add?pid=${encodeURIComponent(pid)}&json=1`;
+      const r = await fetch(url, { credentials: 'same-origin' });
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok) throw new Error(data.message || 'Failed to add to cart');
+
+      showToast('✓ Added to cart!', 'success');
+      await refreshCartBar();
+    } catch(e){
+      showToast('✗ ' + (e.message || 'Error'), 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // bind add-to-cart buttons
+  $$('.add-to-cart-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pid = String(btn.dataset.pid || '').trim();
+      addToCart(pid, btn);
+    });
+  });
+
+  // init bottom cart bar
+  document.addEventListener('DOMContentLoaded', refreshCartBar);
+  refreshCartBar();
+})();
+</script>

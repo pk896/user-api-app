@@ -1,376 +1,63 @@
+<!-- views/partials/rating-stars.ejs -->
 <%
-// expects: avg (0..5), count (int)
-// usage: <%- include('partials/rating-stars', { avg: product.avgRating, count: product.ratingsCount }) %>
-const rounded = Number(avg || 0).toFixed(1);
-const full = Math.floor(avg || 0);
-const half = (avg - full) >= 0.5;
-const empty = 5 - full - (half ? 1 : 0);
-const hasReviews = count > 0;
+  // expects: avg (0..5), count (int), nonce (string)
+  const a = Math.max(0, Math.min(5, Number(avg || 0)));
+  const c = Math.max(0, Number(count || 0));
+
+  const full = Math.floor(a);
+  const frac = a - full;
+  const half = frac >= 0.5;
 %>
-<div class="rs" aria-label="<%= hasReviews ? `Average rating ${rounded} out of 5 based on ${count} reviews` : 'No ratings yet' %>">
+
+<div
+  class="rs"
+  aria-label="<%= c > 0
+    ? ('Average rating ' + a.toFixed(1) + ' out of 5 based on ' + c + ' review' + (c === 1 ? '' : 's'))
+    : 'No ratings yet' %>"
+>
   <div class="rs-stars" aria-hidden="true">
-    <% for (let i = 0; i < full; i++) { %>
-      <svg class="rs-star rs-star-full" width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <path d="M8 1.5l2.32 4.7 5.18.76-3.75 3.65.89 5.17L8 13.1l-4.64 2.44.89-5.17L.5 6.96l5.18-.76L8 1.5z" 
-              fill="currentColor"/>
-      </svg>
-    <% } %>
-    <% if (half) { %>
-      <svg class="rs-star rs-star-half" width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <defs>
-          <linearGradient id="half-star-<%= full %>" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="50%" stop-color="currentColor"/>
-            <stop offset="50%" stop-color="#E5E7EB"/>
-          </linearGradient>
-        </defs>
-        <path d="M8 1.5l2.32 4.7 5.18.76-3.75 3.65.89 5.17L8 13.1l-4.64 2.44.89-5.17L.5 6.96l5.18-.76L8 1.5z" 
-              fill="url(#half-star-<%= full %>)"/>
-      </svg>
-    <% } %>
-    <% for (let i = 0; i < empty; i++) { %>
-      <svg class="rs-star rs-star-empty" width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <path d="M8 1.5l2.32 4.7 5.18.76-3.75 3.65.89 5.17L8 13.1l-4.64 2.44.89-5.17L.5 6.96l5.18-.76L8 1.5z" 
-              stroke="currentColor" stroke-width="1" fill="none"/>
-      </svg>
+    <% for (let i = 1; i <= 5; i++) { %>
+      <% const isFull = i <= full; %>
+      <% const isHalf = (!isFull && i === full + 1 && half); %>
+
+      <span class="rs-star <%= isFull ? 'on' : (isHalf ? 'half' : 'off') %>">★</span>
     <% } %>
   </div>
-  
+
   <div class="rs-meta">
-    <span class="rs-avg <%= hasReviews ? 'has-reviews' : 'no-reviews' %>">
-      <%= hasReviews ? rounded : '—' %>
-    </span>
-    <% if (hasReviews) { %>
-      <span class="rs-count">(<%= count %>)</span>
+    <% if (c > 0) { %>
+      <span class="rs-avg"><%= a.toFixed(1) %></span>
+      <span class="rs-count">(<%= c %>)</span>
     <% } else { %>
       <span class="rs-none">No ratings</span>
     <% } %>
   </div>
 </div>
 
-<style>
-  /* ===== COMPANY COLORS & VARIABLES ===== */
-  .rs {
-    --blue: #2563EB;
-    --purple: #7C3AED;
-    --green: #22C55E;
-    --black: #0F172A;
-    --transition: all 0.2s ease;
+<style nonce="<%= nonce %>">
+  .rs { display:inline-flex; align-items:center; gap:6px; line-height:1; }
+  .rs-stars { display:flex; gap:2px; }
+  .rs-star { font-size:14px; }
+
+  .rs-star.on { color:#F59E0B; }
+  .rs-star.off { color:#CBD5E1; }
+
+  /* half = gray star with gold left-half overlay */
+  .rs-star.half {
+    color:#CBD5E1;
+    position:relative;
+    display:inline-block;
+  }
+  .rs-star.half::after{
+    content:"★";
+    position:absolute;
+    left:0; top:0;
+    width:50%;
+    overflow:hidden;
+    color:#F59E0B;
   }
 
-  /* ===== RATING CONTAINER ===== */
-  .rs {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0;
-    line-height: 1;
-  }
-
-  /* ===== STAR DISPLAY ===== */
-  .rs-stars {
-    display: flex;
-    gap: 2px;
-  }
-
-  .rs-star {
-    display: block;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-  }
-
-  .rs-star-full {
-    color: #F59E0B;
-  }
-
-  .rs-star-half {
-    color: #F59E0B;
-  }
-
-  .rs-star-empty {
-    color: #E5E7EB;
-  }
-
-  /* ===== RATING META ===== */
-  .rs-meta {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    font-size: 12px;
-    line-height: 1;
-  }
-
-  .rs-avg {
-    font-weight: 700;
-    color: var(--black);
-    font-size: 13px;
-    min-width: 24px;
-    text-align: center;
-  }
-
-  .rs-avg.has-reviews {
-    color: var(--black);
-  }
-
-  .rs-avg.no-reviews {
-    color: #94A3B8;
-  }
-
-  .rs-count {
-    color: #64748B;
-    font-weight: 500;
-  }
-
-  .rs-none {
-    color: #94A3B8;
-    font-style: italic;
-    font-size: 11px;
-  }
-
-  /* ===== COMPACT VARIATIONS ===== */
-  .rs.rs-compact .rs-stars {
-    gap: 1px;
-  }
-  
-  .rs.rs-compact .rs-star {
-    width: 12px;
-    height: 12px;
-  }
-  
-  .rs.rs-compact .rs-meta {
-    font-size: 11px;
-  }
-  
-  .rs.rs-compact .rs-avg {
-    font-size: 12px;
-    min-width: 20px;
-  }
-
-  /* ===== INLINE VARIATIONS ===== */
-  .rs.rs-inline {
-    display: inline-flex;
-    vertical-align: middle;
-  }
-
-  /* ===== CARD VARIATIONS ===== */
-  .rs.rs-card {
-    background: rgba(34, 197, 94, 0.05);
-    padding: 4px 8px;
-    border-radius: 12px;
-    border: 1px solid #D1FAE5;
-  }
-  
-  .rs.rs-card .rs-avg.has-reviews {
-    color: var(--green);
-  }
-
-  /* ===== DARK THEME ===== */
-  .dark-theme .rs-avg.has-reviews {
-    color: #F1F5F9;
-  }
-
-  .dark-theme .rs-avg.no-reviews {
-    color: #94A3B8;
-  }
-
-  .dark-theme .rs-count {
-    color: #94A3B8;
-  }
-
-  .dark-theme .rs-none {
-    color: #64748B;
-  }
-
-  .dark-theme .rs-star-empty {
-    color: #374151;
-  }
-
-  .dark-theme .rs.rs-card {
-    background: rgba(34, 197, 94, 0.1);
-    border-color: #2D5A2D;
-  }
-
-  /* ===== MOBILE OPTIMIZATION ===== */
-  @media (max-width: 360px) {
-    .rs {
-      gap: 4px;
-    }
-    
-    .rs-star {
-      width: 12px;
-      height: 12px;
-    }
-    
-    .rs-meta {
-      font-size: 11px;
-    }
-    
-    .rs-avg {
-      font-size: 12px;
-      min-width: 20px;
-    }
-  }
-
-  /* ===== HOVER EFFECTS (optional) ===== */
-  .rs-interactive {
-    cursor: pointer;
-    transition: var(--transition);
-  }
-
-  .rs-interactive:hover {
-    opacity: 0.8;
-  }
-
-  /* ===== ANIMATIONS ===== */
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
-
-  .rs-loading .rs-star {
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  .rs-loading .rs-avg,
-  .rs-loading .rs-count {
-    color: transparent;
-    background: linear-gradient(90deg, #E5E7EB 25%, #D1D5DB 50%, #E5E7EB 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s ease-in-out infinite;
-    border-radius: 2px;
-  }
-
-  @keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
+  .rs-meta { display:flex; gap:4px; font-size:12px; color:#64748B; }
+  .rs-avg { font-weight:700; color:#0F172A; }
+  .rs-none { font-style:italic; color:#94A3B8; }
 </style>
-
-<script>
-// Optional: Add loading state if needed
-if (typeof window !== 'undefined') {
-  window.RatingStars = {
-    // Method to create loading state
-    createLoading: function(element) {
-      element.classList.add('rs-loading');
-      return {
-        stop: function() {
-          element.classList.remove('rs-loading');
-        }
-      };
-    },
-    
-    // Method to update rating dynamically
-    update: function(element, avg, count) {
-      const starsContainer = element.querySelector('.rs-stars');
-      const avgElement = element.querySelector('.rs-avg');
-      const countElement = element.querySelector('.rs-count');
-      const noneElement = element.querySelector('.rs-none');
-      
-      if (!starsContainer || !avgElement) return;
-      
-      // Update average
-      avgElement.textContent = count > 0 ? Number(avg || 0).toFixed(1) : '—';
-      avgElement.className = count > 0 ? 'rs-avg has-reviews' : 'rs-avg no-reviews';
-      
-      // Update count or "No ratings"
-      if (count > 0) {
-        if (countElement) {
-          countElement.textContent = `(${count})`;
-          countElement.style.display = 'inline';
-        }
-        if (noneElement) noneElement.style.display = 'none';
-      } else {
-        if (countElement) countElement.style.display = 'none';
-        if (noneElement) noneElement.style.display = 'inline';
-      }
-      
-      // Update stars
-      const full = Math.floor(avg || 0);
-      const half = (avg - full) >= 0.5;
-      const empty = 5 - full - (half ? 1 : 0);
-      
-      let starsHTML = '';
-      
-      // Full stars
-      for (let i = 0; i < full; i++) {
-        starsHTML += `
-          <svg class="rs-star rs-star-full" width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M8 1.5l2.32 4.7 5.18.76-3.75 3.65.89 5.17L8 13.1l-4.64 2.44.89-5.17L.5 6.96l5.18-.76L8 1.5z" fill="currentColor"/>
-          </svg>
-        `;
-      }
-      
-      // Half star
-      if (half) {
-        starsHTML += `
-          <svg class="rs-star rs-star-half" width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <defs>
-              <linearGradient id="half-star-dynamic" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="50%" stop-color="currentColor"/>
-                <stop offset="50%" stop-color="#E5E7EB"/>
-              </linearGradient>
-            </defs>
-            <path d="M8 1.5l2.32 4.7 5.18.76-3.75 3.65.89 5.17L8 13.1l-4.64 2.44.89-5.17L.5 6.96l5.18-.76L8 1.5z" fill="url(#half-star-dynamic)"/>
-          </svg>
-        `;
-      }
-      
-      // Empty stars
-      for (let i = 0; i < empty; i++) {
-        starsHTML += `
-          <svg class="rs-star rs-star-empty" width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M8 1.5l2.32 4.7 5.18.76-3.75 3.65.89 5.17L8 13.1l-4.64 2.44.89-5.17L.5 6.96l5.18-.76L8 1.5z" stroke="currentColor" stroke-width="1" fill="none"/>
-          </svg>
-        `;
-      }
-      
-      starsContainer.innerHTML = starsHTML;
-    },
-    
-    // Method to add click handler for interactive ratings
-    makeInteractive: function(element, onClick) {
-      element.classList.add('rs-interactive');
-      element.style.cursor = 'pointer';
-      
-      element.addEventListener('click', function(e) {
-        if (typeof onClick === 'function') {
-          onClick({
-            element: this,
-            avg: parseFloat(this.querySelector('.rs-avg').textContent) || 0,
-            count: parseInt(this.querySelector('.rs-count')?.textContent?.replace(/[()]/g, '') || 0)
-          });
-        }
-        
-        // Visual feedback
-        this.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-          this.style.transform = '';
-        }, 150);
-      });
-      
-      return element;
-    }
-  };
-}
-</script>
-
-<!-- Usage examples in comments -->
-<% /*
-  Basic usage:
-  <%- include('partials/rating-stars', { avg: 4.5, count: 24 }) %>
-  
-  Compact version:
-  <div class="rs rs-compact">...</div>
-  
-  Card version (with green accent):
-  <div class="rs rs-card">...</div>
-  
-  Interactive version (with JavaScript):
-  <div class="rs" id="rating-123">...</div>
-  <script>
-    RatingStars.makeInteractive(document.getElementById('rating-123'), function(data) {
-      console.log('Clicked rating:', data);
-    });
-  </script>
-*/ %>

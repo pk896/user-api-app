@@ -1,24 +1,32 @@
 // models/Wishlist.js
-//const { mongoose } = require('../db');
+'use strict';
+
 const mongoose = require('mongoose');
 
 const wishlistSchema = new mongoose.Schema(
   {
-    ownerType: { type: String, enum: ['user', 'business'], required: true },
-    ownerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-
-    productId: {
+    ownerType: {
+      type: String,
+      enum: ['user', 'business'],
+      required: true,
+      index: true,
+    },
+    ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       index: true,
+    },
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
+      required: true,
+      index: true,
     },
   },
   { timestamps: true },
 );
 
-// A single owner can wishlist a product only once
+// ✅ one row per owner+product
 wishlistSchema.index({ ownerType: 1, ownerId: 1, productId: 1 }, { unique: true });
 
-// Safe export to avoid OverwriteModelError
 module.exports = mongoose.models.Wishlist || mongoose.model('Wishlist', wishlistSchema);

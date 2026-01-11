@@ -45,7 +45,9 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
     const ok = /^image\/(png|jpe?g|webp|gif|bmp|svg\+xml)$/.test(file.mimetype);
-    if (!ok) {return cb(new Error('Only image uploads are allowed'));}
+    if (!ok) {
+      return cb(new Error('Only image uploads are allowed'));
+    }
     cb(null, true);
   },
 });
@@ -61,6 +63,13 @@ function randomKey(ext) {
   return `products/${uuidv4()}.${ext}`;
 }
 
+/*function safeRedirectPath(p) {
+  if (typeof p !== 'string') return null;
+  if (!p.startsWith('/')) return null;
+  if (p.startsWith('//')) return null;
+  return p;
+}*/
+
 /*  router.get('/low-stock', requireBusiness, async (req, res) => {
   console.log('[DEBUG] /low-stock route hit');
   console.log('[DEBUG] req.session.business:', req.session.business);
@@ -71,16 +80,22 @@ function randomKey(ext) {
 /* ---------------------------------------------
  * 🧾 GET /products/add — show Add Product form
  * ------------------------------------------- */
-router.get('/add', requireBusiness, requireVerifiedBusiness, requireOfficialNumberVerified, (req, res) => {
-  const business = req.session.business; // ✅ Get from session
-  res.render('add-product', {
-    title: 'Add Product',
-    business, // ✅ Pass it to EJS
-    success: req.flash('success'),
-    error: req.flash('error'),
-    themeCss: res.locals.themeCss,
-  });
-});
+router.get(
+  '/add',
+  requireBusiness,
+  requireVerifiedBusiness,
+  requireOfficialNumberVerified,
+  (req, res) => {
+    const business = req.session.business; // ✅ Get from session
+    res.render('add-product', {
+      title: 'Add Product',
+      business, // ✅ Pass it to EJS
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+    });
+  },
+);
 
 // GET: Public sales products page
 router.get('/sales', async (req, res) => {
@@ -158,7 +173,7 @@ router.get('/low-stock', requireBusiness, async (req, res) => {
       title: 'Low Stock Products',
       business,
       products,
-      lowStockThreshold,          // ✅ used in EJS
+      lowStockThreshold, // ✅ used in EJS
       success: req.flash('success'),
       error: req.flash('error'),
       themeCss: res.locals.themeCss, // ✅ match your other pages
@@ -175,89 +190,96 @@ router.get('/low-stock', requireBusiness, async (req, res) => {
 /* ---------------------------------------------
  * ➕ POST /products/add — create product
  * ------------------------------------------- */
-router.post('/add', requireBusiness, requireVerifiedBusiness, requireOfficialNumberVerified, upload.single('imageFile'), async (req, res) => {
-  console.log('🟢 POST /products/add reached');
-  try {
-    const business = req.session.business;
+router.post(
+  '/add',
+  requireBusiness,
+  requireVerifiedBusiness,
+  requireOfficialNumberVerified,
+  upload.single('imageFile'),
+  async (req, res) => {
+    console.log('🟢 POST /products/add reached');
+    try {
+      const business = req.session.business;
 
-    if (!business || !business._id) {
-      req.flash('error', 'Unauthorized. Please log in as a business.');
-      return res.redirect('/business/login');
-    }
+      if (!business || !business._id) {
+        req.flash('error', 'Unauthorized. Please log in as a business.');
+        return res.redirect('/business/login');
+      }
 
-    // Validate name & price
-    const { name, price } = req.body;
-    if (!name || !price) {
-      req.flash('error', 'Name and price are required.');
+      // Validate name & price
+      const { name, price } = req.body;
+      if (!name || !price) {
+        req.flash('error', 'Name and price are required.');
+        return res.redirect('/products/add');
+      }
+
+      const numericPrice = Number(price);
+      if (Number.isNaN(numericPrice) || numericPrice < 0) {
+        req.flash('error', 'Price must be a valid positive number.');
+        return res.redirect('/products/add');
+      }
+
+      // Validate image
+      if (!req.file) {
+        req.flash('error', 'Product image is required.');
+        return res.redirect('/products/add');
+      }
+
+      // Upload image to S3
+      const { originalname, buffer, mimetype } = req.file;
+      const ext = extFromFilename(originalname);
+      const key = randomKey(ext);
+
+      console.log(`🟡 Uploading to S3: s3://${BUCKET}/${key}`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: BUCKET,
+          Key: key,
+          Body: buffer,
+          ContentType: mimetype,
+        }),
+      );
+      const imageUrl = buildImageUrl(key);
+      console.log(`✅ S3 upload successful -> ${imageUrl}`);
+
+      // Prepare and save product
+      const customId = req.body.id?.trim() || uuidv4();
+
+      const product = new Product({
+        customId,
+        name: name.trim(),
+        price: numericPrice,
+        description: req.body.description?.trim(),
+        imageUrl,
+        stock: req.body.stock ? Number(req.body.stock) : 0,
+        category: req.body.category?.trim(),
+        color: req.body.color?.trim(),
+        size: req.body.size?.trim(),
+        quality: req.body.quality?.trim(),
+        made: req.body.made?.trim(),
+        manufacturer: req.body.manufacturer?.trim(),
+        type: req.body.type?.trim(),
+        business: business._id,
+      });
+
+      await product.save();
+      console.log(`✅ MongoDB save successful -> ${product.customId}`);
+
+      req.flash('success', '✅ Product added successfully!');
+      return res.redirect('/products/all');
+    } catch (err) {
+      console.error('❌ Add product error:', err);
+
+      if (err.code === 11000) {
+        req.flash('error', 'That Product ID already exists. Try another.');
+        return res.redirect('/products/add');
+      }
+
+      req.flash('error', `Failed to add product: ${err.message}`);
       return res.redirect('/products/add');
     }
-
-    const numericPrice = Number(price);
-    if (Number.isNaN(numericPrice) || numericPrice < 0) {
-      req.flash('error', 'Price must be a valid positive number.');
-      return res.redirect('/products/add');
-    }
-
-    // Validate image
-    if (!req.file) {
-      req.flash('error', 'Product image is required.');
-      return res.redirect('/products/add');
-    }
-
-    // Upload image to S3
-    const { originalname, buffer, mimetype } = req.file;
-    const ext = extFromFilename(originalname);
-    const key = randomKey(ext);
-
-    console.log(`🟡 Uploading to S3: s3://${BUCKET}/${key}`);
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: key,
-        Body: buffer,
-        ContentType: mimetype,
-      }),
-    );
-    const imageUrl = buildImageUrl(key);
-    console.log(`✅ S3 upload successful -> ${imageUrl}`);
-
-    // Prepare and save product
-    const customId = req.body.id?.trim() || uuidv4();
-
-    const product = new Product({
-      customId,
-      name: name.trim(),
-      price: numericPrice,
-      description: req.body.description?.trim(),
-      imageUrl,
-      stock: req.body.stock ? Number(req.body.stock) : 0,
-      category: req.body.category?.trim(),
-      color: req.body.color?.trim(),
-      size: req.body.size?.trim(),
-      quality: req.body.quality?.trim(),
-      made: req.body.made?.trim(),
-      manufacturer: req.body.manufacturer?.trim(),
-      type: req.body.type?.trim(),
-      business: business._id,
-    });
-
-    await product.save();
-    console.log(`✅ MongoDB save successful -> ${product.customId}`);
-
-    req.flash('success', '✅ Product added successfully!');
-    return res.redirect('/products/all');
-  } catch (err) {
-    console.error('❌ Add product error:', err);
-
-    if (err.code === 11000) {
-      req.flash('error', 'That Product ID already exists. Try another.');
-      return res.redirect('/products/add');
-    }
-
-    req.flash('error', `Failed to add product: ${err.message}`);
-    return res.redirect('/products/add');
-  }
-});
+  },
+);
 
 /* ===========================================================
  * 📦 GET: All Products (owned by this business)
@@ -331,46 +353,95 @@ router.get('/view/:id', async (req, res) => {
   }
 });
 
-// BUSINESS-ONLY: view a product you own by customId
-router.get('/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
+// =======================================================
+// ⭐ POST: Create/Update rating for a product (public page)
+// POST /products/view/:id/ratings
+// =======================================================
+/*router.post('/view/:id/ratings', async (req, res) => {
   try {
     const customId = String(req.params.id || '').trim();
-    const business = req.session.business;
-
-    if (!business || !business._id) {
-      req.flash('error', '❌ Unauthorized. Please log in.');
-      return res.redirect('/business/login');
+    if (!customId) {
+      req.flash('error', '❌ Invalid product id.');
+      return res.redirect('/products/sales');
     }
 
-    const product = await Product.findOne({
-      customId,
-      business: business._id,
-    }).lean();
+    // You can decide who is allowed to rate:
+    // - If you only want logged-in users: enforce it here.
+    const userIdRaw =
+      (req.session?.user && (req.session.user._id || req.session.user.id)) ||
+      (req.session?.business && (req.session.business._id || req.session.business.id)) ||
+      null;
 
+    if (!userIdRaw) {
+      req.flash('error', 'Please log in to rate this product.');
+      return res.redirect(`/products/view/${customId}`);
+    }
+
+    const userId = req.session?.user
+      ? `u:${String(userIdRaw)}`
+      : `b:${String(userIdRaw)}`;
+
+    const stars = Number(req.body.stars || 0);
+    const title = typeof req.body.title === 'string' ? req.body.title.trim().slice(0, 80) : '';
+    const body = typeof req.body.body === 'string' ? req.body.body.trim().slice(0, 500) : '';
+
+    if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
+      req.flash('error', 'Please select a star rating (1 to 5).');
+      return res.redirect(`/products/view/${customId}`);
+    }
+
+    const product = await Product.findOne({ customId });
     if (!product) {
-      req.flash('error', '❌ Product not found or unauthorized.');
-      return res.redirect('/products/all');
+      req.flash('error', '❌ Product not found.');
+      return res.redirect('/products/sales');
     }
 
-    // Provide defaults so the view never breaks
-    const shipmentStats = { inTransit: 0, delivered: 0 };
+    // Ensure ratings array exists
+    if (!Array.isArray(product.ratings)) product.ratings = [];
 
-    return res.render('product-details', {
-      title: product.name,
-      product,
-      shipmentStats, // ✅ consistent with public route
-      business,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      themeCss: res.locals.themeCss,
-      nonce: res.locals.nonce,
-    });
+    // Upsert: one rating per userId
+    const existingIndex = product.ratings.findIndex((r) => String(r.userId) === userId);
+
+    const ratingDoc = {
+      userId, // ✅ save string
+      stars,
+      title,
+      body,
+      updatedAt: new Date(),
+    };
+
+    if (existingIndex >= 0) {
+      product.ratings[existingIndex] = {
+        ...product.ratings[existingIndex],
+        ...ratingDoc,
+      };
+    } else {
+      product.ratings.push({
+        ...ratingDoc,
+        createdAt: new Date(),
+      });
+    }
+
+    // Recalculate summary fields (optional but recommended)
+    const count = product.ratings.length;
+    const sum = product.ratings.reduce((acc, r) => acc + Number(r.stars || 0), 0);
+    const avg = count ? sum / count : 0;
+
+    product.ratingCount = count;
+    product.avgRating = Math.round(avg * 10) / 10; // 1 decimal
+
+    await product.save();
+
+    req.flash('success', '✅ Rating saved.');
+    const redirectTo = safeRedirectPath(req.body.redirect) || `/products/view/${customId}`;
+    return res.redirect(redirectTo);
   } catch (err) {
-    console.error('❌ Error loading product details:', err);
-    req.flash('error', '❌ Could not load product details.');
-    return res.redirect('/products/all');
+    console.error('❌ Rating save error:', err);
+    req.flash('error', '❌ Could not save rating.');
+    // fallback to product page
+    return res.redirect(`/products/view/${req.params.id}`);
   }
-});
+});*/
 
 /* ===========================================================
  * ✏️ GET: Edit Product (only own)
@@ -425,7 +496,16 @@ router.post(
       }
 
       // ---------- BASIC FIELDS ----------
-      const baseFields = ['name', 'category', 'color', 'size', 'quality', 'made', 'manufacturer', 'type'];
+      const baseFields = [
+        'name',
+        'category',
+        'color',
+        'size',
+        'quality',
+        'made',
+        'manufacturer',
+        'type',
+      ];
 
       baseFields.forEach((f) => {
         if (typeof req.body[f] === 'string') {
@@ -560,6 +640,47 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
     console.error('❌ Delete product error:', err);
     req.flash('error', '❌ Could not delete product.');
     res.redirect('/products/all');
+  }
+});
+
+// BUSINESS-ONLY: view a product you own by customId
+router.get('/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
+  try {
+    const customId = String(req.params.id || '').trim();
+    const business = req.session.business;
+
+    if (!business || !business._id) {
+      req.flash('error', '❌ Unauthorized. Please log in.');
+      return res.redirect('/business/login');
+    }
+
+    const product = await Product.findOne({
+      customId,
+      business: business._id,
+    }).lean();
+
+    if (!product) {
+      req.flash('error', '❌ Product not found or unauthorized.');
+      return res.redirect('/products/all');
+    }
+
+    // Provide defaults so the view never breaks
+    const shipmentStats = { inTransit: 0, delivered: 0 };
+
+    return res.render('product-details', {
+      title: product.name,
+      product,
+      shipmentStats, // ✅ consistent with public route
+      business,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+    });
+  } catch (err) {
+    console.error('❌ Error loading product details:', err);
+    req.flash('error', '❌ Could not load product details.');
+    return res.redirect('/products/all');
   }
 });
 

@@ -172,9 +172,28 @@
             <div class="info">
               <a class="title" href="/products/view/<%= p.customId %>"><%= name %></a>
 
-              <div class="rating">
-                <span class="stars" aria-hidden="true">★★★★★</span>
-                <span class="count">(<%= Math.floor(Math.random()*90)+10 %>)</span>
+              <%
+                // ✅ Real rating from DB (already on product document)
+                const avg = Number(p.avgRating || 0);
+                const cnt = Number(p.ratingsCount || 0);
+
+                // If your list route doesn't include avgRating/ratingsCount yet, these will be 0,
+                // and JS (below) can optionally fetch them per product without breaking other flows.
+              %>
+
+              <div class="rating" data-pid="<%= p.customId %>" data-avg="<%= avg %>" data-count="<%= cnt %>">
+                <span class="stars" aria-hidden="true">
+                  <span class="stars-bg">★★★★★</span>
+                  <span class="stars-fill">★★★★★</span>
+                </span>
+
+                <span class="rating-num">
+                  <%= (cnt > 0) ? avg.toFixed(1) : '—' %>
+                </span>
+
+                <span class="count">
+                  (<span class="rating-count"><%= cnt %></span>)
+                </span>
               </div>
 
               <div class="price-row">
@@ -287,80 +306,92 @@
 
 <style nonce="<%= nonce %>">
   :root{
-    --brand:#232f3e; --brand2:#37475a; --accent:#ff9900; --card:#fff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
-    --shadow:0 6px 24px rgba(0,0,0,.08);
-  }
-  .dark-theme{ --card:#0f172a; --ink:#e5e7eb; --muted:#9ca3af; --line:#334155; --brand:#111827; --brand2:#1f2937; }
+  --brand:#232f3e;
+  --brand2:#37475a;
+  --accent:#ff9900;
+  --card:#fff;
+  --ink:#111827;
+  --muted:#6b7280;
+  --line:#e5e7eb;
+  --shadow:0 6px 24px rgba(0,0,0,.08);
+}
 
-  /* === Cinematic Navy Backdrop (keeps your Amazon layout) === */
-  .amz-wrap{
-    --brand:  #0f1f35;   /* top bar */
-    --brand2: #1b2a41;   /* secondary */
-    --accent: #ffb703;   /* warm amber */
-    background:
-      radial-gradient(1000px 480px at 50% -10%, #1c2c4d 0%, rgba(12,22,38,.9) 48%, #0b1220 100%),
-      linear-gradient(180deg, #0b1220, #0b1220);
-    min-height: 100dvh;
-    color: var(--ink);
-  }
+.dark-theme{
+  --card:#0f172a;
+  --ink:#e5e7eb;
+  --muted:#9ca3af;
+  --line:#334155;
+  --brand:#111827;
+  --brand2:#1f2937;
+}
 
-  .amz-top{
-    display:grid;
-    grid-template-columns: 140px 1fr auto;
-    gap:.6rem;
-    align-items:center;
-    padding:.5rem .6rem;
-    background:var(--brand);
-    color:#fff;
-    position:sticky;
-    top:0;
-    z-index:60;
-  }
+/* === Cinematic Navy Backdrop (keeps your Amazon layout) === */
+.amz-wrap{
+  --brand:#0f1f35;   /* top bar */
+  --brand2:#1b2a41;  /* secondary */
+  --accent:#ffb703;  /* warm amber */
+  background:
+    radial-gradient(1000px 480px at 50% -10%, #1c2c4d 0%, rgba(12,22,38,.9) 48%, #0b1220 100%),
+    linear-gradient(180deg, #0b1220, #0b1220);
+  min-height:100dvh;
+  color:var(--ink);
+}
 
-  /* ===== Brand (logo + short text) ===== */
-  .brand{
-    display:inline-flex;
-    align-items:center;
-    gap:.45rem;
-    color:#fff;
-    text-decoration:none;
-    font-weight:900;
-    line-height:1;
-    min-width:0;              /* important for truncation */
-  }
+.amz-top{
+  display:grid;
+  grid-template-columns:140px 1fr auto;
+  gap:.6rem;
+  align-items:center;
+  padding:.5rem .6rem;
+  background:var(--brand);
+  color:#fff;
+  position:sticky;
+  top:0;
+  z-index:60;
+}
 
-  /* Logo: responsive but consistent */
-  .brand-logo{
-    width:26px;
-    height:26px;
-    border-radius:8px;
-    object-fit:contain;
-    flex:0 0 auto;
-    box-shadow:0 1px 6px rgba(0,0,0,.25);
-  }
+/* ===== Brand (logo + short text) ===== */
+.brand{
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
+  color:#fff;
+  text-decoration:none;
+  font-weight:900;
+  line-height:1;
+  min-width:0; /* important for truncation */
+}
 
-  /* Short name comes from HTML now (you will set it to 5 letters) */
-  .brand-text{
-    display:block;
-    min-width:0;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    font-size:.95rem;
-    letter-spacing:.01em;
-  }
+.brand-logo{
+  width:26px;
+  height:26px;
+  border-radius:8px;
+  object-fit:contain;
+  flex:0 0 auto;
+  box-shadow:0 1px 6px rgba(0,0,0,.25);
+}
 
-  /* Phone */
-  @media (max-width:480px){
-    .brand-logo{ width:24px; height:24px; }
-    .brand-text{ font-size:.88rem; }
-  }
+.brand-text{
+  display:block;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:.95rem;
+  letter-spacing:.01em;
+}
 
-  /* Tablet / medium */
-  @media (min-width:768px){
-    .brand-logo{ width:28px; height:28px; }
-    .brand-text{ font-size:1rem; }
-  }
+/* Phone */
+@media (max-width:480px){
+  .brand-logo{ width:24px; height:24px; }
+  .brand-text{ font-size:.88rem; }
+}
+
+/* Tablet / medium */
+@media (min-width:768px){
+  .brand-logo{ width:28px; height:28px; }
+  .brand-text{ font-size:1rem; }
+}
 
   /* Desktop */
   @media (min-width:1024px){
@@ -370,31 +401,71 @@
 
   .amz-search{
     display:grid;
-    grid-template-columns: 96px 1fr 40px;
+    grid-template-columns:96px 1fr 40px;
     background:#fff;
     border-radius:999px;
     overflow:hidden;
   }
-  .amz-search select, .amz-search input{
+
+  .amz-search select,
+  .amz-search input{
     border:0;
     padding:.5rem .55rem;
     font:inherit;
     outline:none;
   }
-  .amz-search input{ min-width:0; font-size:.95rem }
-  .amz-search-btn{ border:0; background:var(--accent); color:#111; font-weight:900; cursor:pointer }
-  .amz-quick{ display:flex; gap:.6rem; align-items:center }
-  .amz-link{ color:#fff; text-decoration:none; font-size:.92rem }
-  .amz-cart-btn{ background:#f3f4f6; border:0; border-radius:999px; padding:.3rem .6rem; cursor:pointer; font-weight:800 }
+
+  .amz-search input{
+    min-width:0;
+    font-size:.95rem;
+  }
+
+  .amz-search-btn{
+    border:0;
+    background:var(--accent);
+    color:#111;
+    font-weight:900;
+    cursor:pointer;
+  }
+
+  .amz-quick{
+    display:flex;
+    gap:.6rem;
+    align-items:center;
+  }
+
+  .amz-link{
+    color:#fff;
+    text-decoration:none;
+    font-size:.92rem;
+  }
+
+  .amz-cart-btn{
+    background:#f3f4f6;
+    border:0;
+    border-radius:999px;
+    padding:.3rem .6rem;
+    cursor:pointer;
+    font-weight:800;
+  }
 
   .amz-subnav{
-    display:flex; justify-content:space-between; align-items:center; gap:.5rem;
-    background: rgba(255,255,255,0.05);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:.5rem;
+    background:rgba(255,255,255,0.05);
     border-bottom:1px solid rgba(255,255,255,0.12);
-    backdrop-filter: saturate(120%) blur(6px);
+    backdrop-filter:saturate(120%) blur(6px);
     padding:.45rem .6rem;
   }
-  .left{ display:flex; gap:.45rem; align-items:center }
+
+  .left{
+    display:flex;
+    gap:.45rem;
+    align-items:center;
+  }
+
   .subnav-btn{
     border:1px solid var(--line);
     background:#fff;
@@ -405,8 +476,21 @@
     font-size:.9rem;
     color:#0f172a;
   }
-  .subnav-meta{ display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; font-size:.92rem }
-  .sort-wrap{ display:flex; gap:.3rem; align-items:center }
+
+  .subnav-meta{
+    display:flex;
+    gap:.6rem;
+    align-items:center;
+    flex-wrap:wrap;
+    font-size:.92rem;
+  }
+
+  .sort-wrap{
+    display:flex;
+    gap:.3rem;
+    align-items:center;
+  }
+
   .sort-wrap select{
     padding:.3rem .5rem;
     border:1px solid var(--line);
@@ -417,11 +501,12 @@
 
   .amz-body{
     display:grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns:220px 1fr;
     gap:.7rem;
     padding:.6rem;
     align-items:start;
   }
+
   .amz-side{
     background:var(--card);
     border:1px solid var(--line);
@@ -429,10 +514,23 @@
     box-shadow:var(--shadow);
     padding:.6rem;
   }
-  .filter-block + .filter-block{ margin-top:.7rem }
-  .filter-block h3{ margin:.05rem 0 .35rem; font-size:.95rem }
-  .chk{ display:block; margin:.2rem 0; color:var(--ink); font-size:.95rem }
-  .region-row{ display:grid; gap:.35rem; margin-top:.35rem }
+
+  .filter-block + .filter-block{ margin-top:.7rem; }
+  .filter-block h3{ margin:.05rem 0 .35rem; font-size:.95rem; }
+
+  .chk{
+    display:block;
+    margin:.2rem 0;
+    color:var(--ink);
+    font-size:.95rem;
+  }
+
+  .region-row{
+    display:grid;
+    gap:.35rem;
+    margin-top:.35rem;
+  }
+
   .region-row select{
     border:1px solid var(--line);
     background:var(--card);
@@ -440,11 +538,16 @@
     border-radius:8px;
     padding:.4rem .5rem;
   }
-  .tiny{ color:var(--muted); font-size:.82rem; margin-top:.25rem }
+
+  .tiny{
+    color:var(--muted);
+    font-size:.82rem;
+    margin-top:.25rem;
+  }
 
   .price-row{
     display:grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns:1fr auto 1fr;
     gap:.35rem;
     align-items:center;
   }
@@ -458,26 +561,38 @@
     cursor:pointer;
     font-weight:700;
   }
-  .btn.sm{ font-size:.9rem }
 
-  .amz-results{ min-height:40vh }
+  .btn.sm{ font-size:.9rem; }
+
+  .amz-results{ min-height:40vh; }
 
   /* --- GRID is the default on all screens --- */
-  .amz-list{ list-style:none; padding:0; margin:0; display:grid; gap:.6rem; }
-  .amz-list.grid-mode{ grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-  @media (min-width: 768px){
-    .amz-list.grid-mode{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .amz-list{
+    list-style:none;
+    padding:0;
+    margin:0;
+    display:grid;
+    gap:.6rem;
   }
-  @media (min-width: 1024px){
-    .amz-list.grid-mode{ grid-template-columns: repeat(4, minmax(0,1fr)); }
+
+  .amz-list.grid-mode{
+    grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  @media (min-width:768px){
+    .amz-list.grid-mode{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (min-width:1024px){
+    .amz-list.grid-mode{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
   }
 
   /* Grid cards stack image on top */
-  .amz-list.grid-mode .amz-item{ grid-template-columns: 1fr; }
+  .amz-list.grid-mode .amz-item{ grid-template-columns:1fr; }
 
   .amz-item{
     display:grid;
-    grid-template-columns: 150px 1fr;
+    grid-template-columns:150px 1fr;
     gap:.55rem;
     padding:.55rem;
     border:1px solid var(--line);
@@ -495,15 +610,18 @@
     display:flex;
     align-items:center;
     justify-content:center;
-    aspect-ratio: 1 / 1;
+    aspect-ratio:1 / 1;
   }
+
   .imgbox img{
     width:100%;
     height:100%;
-    object-fit: cover;
-    transition: transform .3s ease;
+    object-fit:cover;
+    transition:transform .3s ease;
   }
-  .imgbox:hover img{ transform: scale(1.04) }
+
+  .imgbox:hover img{ transform:scale(1.04); }
+
   .tag{
     position:absolute;
     top:6px;
@@ -515,11 +633,15 @@
     color:#111;
     background:#fde68a;
   }
+
   .tag.new{ background:#a7f3d0; }
   .tag.sale{ background:#fda4af; }
   .tag.hot{ background:#93c5fd; }
 
-  .info{ display:grid; gap:.28rem }
+  .info{
+    display:grid;
+    gap:.28rem;
+  }
 
   /* ✅ No -webkit-line-clamp (eslint friendly) */
   .title{
@@ -528,16 +650,10 @@
     text-decoration:none;
     font-size:.98rem;
     line-height:1.2;
-
     display:block;
     overflow:hidden;
-
-    /* 2 lines max */
-    max-height:2.4em;
+    max-height:2.4em; /* 2 lines max */
   }
-
-  .rating{ display:flex; align-items:center; gap:.28rem; color:#6b7280; font-size:.86rem }
-  .stars{ letter-spacing:.12ch }
 
   /* Override price-row inside card to flex layout */
   .info .price-row{
@@ -547,12 +663,55 @@
     gap:.5rem;
   }
 
-  .price{ color:#B12704; font-weight:900; font-size:1.02rem }
-  .stock.in{ color:#16a34a; font-weight:700 }
-  .stock.out{ color:#ef4444; font-weight:700 }
-  .act{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.15rem }
-  .btn.add{ background:#ffd814; border-color:#facc15 }
-  .btn.ghost{ background:transparent }
+  /* ===== REAL RATING STARS (no inline style attributes) ===== */
+  .rating{
+    display:flex;
+    align-items:center;
+    gap:.35rem;
+    color:#6b7280;
+    font-size:.86rem;
+  }
+
+  .rating .stars{
+    position:relative;
+    display:inline-block;
+    line-height:1;
+    letter-spacing:.12ch;
+    font-size:.92rem;
+  }
+
+  .rating .stars-bg{ color:#E5E7EB; }
+
+  .rating .stars-fill{
+    position:absolute;
+    left:0;
+    top:0;
+    overflow:hidden;
+    width:0%; /* JS sets this */
+    color:#F59E0B;
+    white-space:nowrap;
+  }
+
+  .rating .rating-num{
+    font-weight:800;
+    color:var(--ink);
+  }
+
+  .dark-theme .rating .rating-num{ color:#E5E7EB; }
+
+  .price{ color:#B12704; font-weight:900; font-size:1.02rem; }
+  .stock.in{ color:#16a34a; font-weight:700; }
+  .stock.out{ color:#ef4444; font-weight:700; }
+
+  .act{
+    display:flex;
+    gap:.45rem;
+    flex-wrap:wrap;
+    margin-top:.15rem;
+  }
+
+  .btn.add{ background:#ffd814; border-color:#facc15; }
+  .btn.ghost{ background:transparent; }
 
   .pager{
     display:flex;
@@ -571,35 +730,34 @@
     font-weight:700;
     color:#0f172a;
   }
+
   .pg-btn:hover,
   .pg-btn:focus-visible{
     background:#1d4ed8;
     border-color:#1d4ed8;
     color:#ffffff;
   }
+
   .pg-meta{ color:var(--muted); }
 
   .empty{ text-align:center; padding:1.6rem 1rem; }
-  .muted{ color:var(--muted) }
+  .muted{ color:var(--muted); }
 
   /* Mini checkout bar – almost invisible */
   .mini-co{
-    position: fixed;
+    position:fixed;
     left:50%;
     transform:translateX(-50%);
-    bottom: 72px;
+    bottom:72px;
     z-index:55;
-
     display:flex;
     justify-content:space-between;
     align-items:center;
     gap:.6rem;
-
-    background: rgba(15, 23, 42, 0.03);
-    border: 1px solid rgba(148, 163, 184, 0.10);
-    backdrop-filter: blur(2px);
-    box-shadow: none;
-
+    background:rgba(15, 23, 42, 0.03);
+    border:1px solid rgba(148, 163, 184, 0.10);
+    backdrop-filter:blur(2px);
+    box-shadow:none;
     color:#16a34a;
     border-radius:999px;
     padding:.5rem .7rem;
@@ -623,12 +781,13 @@
     display:none;
     z-index:70;
   }
+
   .drawer{
     position:fixed;
     right:0;
     top:0;
     bottom:0;
-    width:min(420px,92vw);
+    width:min(420px, 92vw);
     background:var(--card);
     box-shadow:-10px 0 24px rgba(0,0,0,.25);
     transform:translateX(100%);
@@ -638,7 +797,9 @@
     flex-direction:column;
     border-left:1px solid var(--line);
   }
-  .drawer.open{ transform: translateX(0) }
+
+  .drawer.open{ transform:translateX(0); }
+
   .drawer-head{
     padding:.8rem;
     display:flex;
@@ -646,6 +807,7 @@
     align-items:center;
     border-bottom:1px solid var(--line);
   }
+
   .drawer-body{
     padding:.6rem .8rem;
     overflow:auto;
@@ -654,6 +816,7 @@
     flex-direction:column;
     gap:.6rem;
   }
+
   .drawer-item{
     display:grid;
     grid-template-columns:64px 1fr auto;
@@ -663,19 +826,27 @@
     border-radius:.7rem;
     padding:.45rem;
   }
+
   .drawer-item img{
     width:64px;
     height:64px;
     object-fit:cover;
     border-radius:.6rem;
   }
+
   .drawer-foot{
     padding:.8rem;
     border-top:1px solid var(--line);
     display:grid;
     gap:.5rem;
   }
-  .total-row{ display:flex; justify-content:space-between; font-weight:900 }
+
+  .total-row{
+    display:flex;
+    justify-content:space-between;
+    font-weight:900;
+  }
+
   .btn-checkout{
     border:0;
     border-radius:.7rem;
@@ -686,54 +857,64 @@
     cursor:pointer;
   }
 
-  .close-x{ background:transparent; border:0; font-size:1.05rem; cursor:pointer }
+  .close-x{
+    background:transparent;
+    border:0;
+    font-size:1.05rem;
+    cursor:pointer;
+  }
 
   /* ===== Mobile (Hisense U50 Lite ~360x720) ===== */
-  @media (max-width: 480px){
-    .amz-top{ grid-template-columns: 1fr; gap:.45rem }
-    .amz-search{ grid-template-columns: 80px 1fr 38px }
-    .amz-subnav{ padding:.4rem .5rem }
-    .subnav-btn{ padding:.3rem .45rem; font-size:.88rem }
-    .amz-body{ grid-template-columns: 1fr; gap:.5rem; padding:.5rem }
-    .amz-side{ display:none } /* toggled via JS */
+  @media (max-width:480px){
+    .amz-top{ grid-template-columns:1fr; gap:.45rem; }
+    .amz-search{ grid-template-columns:80px 1fr 38px; }
+    .amz-subnav{ padding:.4rem .5rem; }
+    .subnav-btn{ padding:.3rem .45rem; font-size:.88rem; }
+    .amz-body{ grid-template-columns:1fr; gap:.5rem; padding:.5rem; }
+    .amz-side{ display:none; } /* toggled via JS */
 
-    .amz-list.grid-mode{ grid-template-columns: repeat(2, minmax(0,1fr)); gap:.5rem }
-
-    .imgbox img{
-      object-fit: contain;
-      padding: 6px;
-      background: #fff;
-      transform: none;
+    .amz-list.grid-mode{
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:.5rem;
     }
 
-    .amz-item{ grid-template-columns: 1fr; padding:.5rem; gap:.45rem }
-    .title{ font-size:.92rem }
-    .price{ font-size:.98rem }
+    .imgbox img{
+      object-fit:contain;
+      padding:6px;
+      background:#fff;
+      transform:none;
+    }
+
+    .amz-item{ grid-template-columns:1fr; padding:.5rem; gap:.45rem; }
+    .title{ font-size:.92rem; }
+    .price{ font-size:.98rem; }
 
     .mini-co{
       bottom:64px;
-      width: calc(94vw - 15px);
-      background: rgba(15, 23, 42, 0.03);
-      border: 1px solid rgba(148, 163, 184, 0.10);
-      backdrop-filter: blur(2px);
-      box-shadow: none;
+      width:calc(94vw - 15px);
+      background:rgba(15, 23, 42, 0.03);
+      border:1px solid rgba(148, 163, 184, 0.10);
+      backdrop-filter:blur(2px);
+      box-shadow:none;
     }
   }
 
   /* Cart count: navy by default, white on hover */
   .cart-count-top{
-    color: #0f1f35 !important;
-    font-weight: 900;
-    transition: color .15s ease;
+    color:#0f1f35 !important;
+    font-weight:900;
+    transition:color .15s ease;
   }
+
   .amz-cart-btn:hover .cart-count-top,
   .amz-cart-btn:focus-visible .cart-count-top{
-    color: #ffffff !important;
+    color:#ffffff !important;
   }
-  .dark-theme .cart-count-top{ color: #c7d2fe; }
+
+  .dark-theme .cart-count-top{ color:#c7d2fe; }
 
   /* Drawer head hidden (keeps spacing) */
-  .drawer-head{ visibility: hidden; }
+  .drawer-head{ visibility:hidden; }
 
   /* Variants (size + color) – hidden by default */
   .variants{
@@ -743,6 +924,7 @@
     margin-top:.1rem;
     font-size:.85rem;
   }
+
   .amz-item.show-variants .variants{ display:flex; }
 
   .variants label{
@@ -750,6 +932,7 @@
     flex-direction:column;
     gap:.12rem;
   }
+
   .v-label{
     font-weight:600;
     color:var(--muted);
@@ -757,6 +940,7 @@
     text-transform:uppercase;
     letter-spacing:.04em;
   }
+
   .variants select{
     border:1px solid var(--line);
     border-radius:999px;
@@ -765,49 +949,55 @@
     background:var(--card);
     color:var(--ink);
   }
+
   @media (max-width:480px){
     .variants{ gap:.25rem; }
   }
 
   /* ===== Variant warning toast ===== */
   .variant-toast{
-    position: fixed;
-    left: 50%;
-    bottom: 18px;
-    transform: translateX(-50%) translateY(16px);
-    z-index: 95;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
-    pointer-events: none;
+    position:fixed;
+    left:50%;
+    bottom:18px;
+    transform:translateX(-50%) translateY(16px);
+    z-index:95;
+    opacity:0;
+    visibility:hidden;
+    transition:opacity .2s ease, transform .2s ease, visibility .2s ease;
+    pointer-events:none;
   }
+
   .variant-toast.show{
-    opacity: 1;
-    visibility: visible;
-    transform: translateX(-50%) translateY(0);
-    pointer-events: auto;
+    opacity:1;
+    visibility:visible;
+    transform:translateX(-50%) translateY(0);
+    pointer-events:auto;
   }
+
   .variant-toast-inner{
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .5rem .8rem;
-    border-radius: 999px;
-    background: #111827;
-    color: #f9fafb;
-    box-shadow: var(--shadow);
-    font-size: .86rem;
+    display:inline-flex;
+    align-items:center;
+    gap:.4rem;
+    padding:.5rem .8rem;
+    border-radius:999px;
+    background:#111827;
+    color:#f9fafb;
+    box-shadow:var(--shadow);
+    font-size:.86rem;
   }
-  .variant-toast-icon{ font-size: 1rem; }
+
+  .variant-toast-icon{ font-size:1rem; }
+
   .variant-toast-close{
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font-size: .9rem;
-    padding: 0 .1rem;
+    border:0;
+    background:transparent;
+    color:inherit;
+    cursor:pointer;
+    font-size:.9rem;
+    padding:0 .1rem;
   }
-  .dark-theme .variant-toast-inner{ background: #0b1120; }
+
+  .dark-theme .variant-toast-inner{ background:#0b1120; }
 </style>
 
 <!-- ===== Page Script (CSP-safe) ===== -->
@@ -929,6 +1119,68 @@
   if (cartBtn) cartBtn.addEventListener('click', openDrawer);
   overlay.addEventListener('click', closeDrawer);
   drawerClose.addEventListener('click', closeDrawer);
+
+  /* ===== Ratings (real from DB, optional per-product API fetch) ===== */
+  function setStarsFill(ratingEl, avg){
+    const fill = ratingEl.querySelector('.stars-fill');
+    if (!fill) return;
+    const a = Math.max(0, Math.min(5, Number(avg || 0)));
+    const pct = (a / 5) * 100;
+    fill.style.width = pct.toFixed(2) + '%';
+  }
+
+  async function hydrateRatings(){
+    const nodes = $$('.rating[data-pid]');
+    if (!nodes.length) return;
+
+    // First pass: set from server-rendered values (p.avgRating, p.ratingsCount)
+    nodes.forEach(el => {
+      const avg = Number(el.getAttribute('data-avg') || 0);
+      setStarsFill(el, avg);
+    });
+
+    // OPTIONAL: If list route did not include avgRating/ratingsCount,
+    // we fetch per-product using your existing API (independent flow).
+    // This does NOT disturb other flows; it only updates rating UI.
+    const needFetch = nodes.filter(el => Number(el.getAttribute('data-count') || 0) <= 0);
+
+    if (!needFetch.length) return;
+
+    // small concurrency limit (safe)
+    const limit = 6;
+    let i = 0;
+
+    async function worker(){
+      while(i < needFetch.length){
+        const el = needFetch[i++];
+        const pid = el.getAttribute('data-pid');
+        if (!pid) continue;
+
+        try{
+          const data = await getJSON(`/api/products/${encodeURIComponent(pid)}/ratings?fresh=1&limit=0&page=1`);
+          if (!data || !data.ok) continue;
+
+          const avg = Number(data.product?.avgRating || 0);
+          const cnt = Number(data.product?.ratingsCount || 0);
+
+          el.setAttribute('data-avg', String(avg));
+          el.setAttribute('data-count', String(cnt));
+
+          const num = el.querySelector('.rating-num');
+          const cntEl = el.querySelector('.rating-count');
+
+          if (num) num.textContent = (cnt > 0) ? avg.toFixed(1) : '—';
+          if (cntEl) cntEl.textContent = String(cnt);
+
+          setStarsFill(el, avg);
+        } catch {
+          // ignore (do not break page)
+        }
+      }
+    }
+
+    await Promise.all(Array.from({length: Math.min(limit, needFetch.length)}, worker));
+  }
 
   /* Fetch helpers */
   async function getJSON(url){
@@ -1291,5 +1543,3 @@
   loadDeliveryOptions('');
 })();
 </script>
-
-

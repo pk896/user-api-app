@@ -8,8 +8,8 @@ const productSchema = new mongoose.Schema(
     customId: {
       type: String,
       required: true,
-      unique: true,           // uniqueness at schema level
-      index: true,            // explicit index for speed
+      unique: true, // uniqueness at schema level
+      index: true, // explicit index for speed
       trim: true,
     },
 
@@ -152,6 +152,29 @@ const productSchema = new mongoose.Schema(
       default: 0,
     }, // distinct orders count
 
+    // ==========================
+    // ⭐ Ratings / Reviews
+    // ==========================
+    /*ratings: {
+      type: [
+        new mongoose.Schema(
+          {
+            userId: { type: String, required: true, index: true },
+            stars: { type: Number, required: true, min: 1, max: 5 },
+            title: { type: String, trim: true, maxlength: 80, default: '' },
+            body: { type: String, trim: true, maxlength: 500, default: '' },
+            createdAt: { type: Date, default: Date.now },
+            updatedAt: { type: Date, default: Date.now },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+
+    avgRating: { type: Number, default: 0 },
+    ratingCount: { type: Number, default: 0 },*/
+
     // Owner business
     business: {
       type: mongoose.Schema.Types.ObjectId,
@@ -177,13 +200,12 @@ productSchema.virtual('inStock').get(function () {
 
 // Virtual for product type based on role
 productSchema.virtual('productType').get(function () {
-  return this.role
-    ? this.role.charAt(0).toUpperCase() + this.role.slice(1)
-    : 'General';
+  return this.role ? this.role.charAt(0).toUpperCase() + this.role.slice(1) : 'General';
 });
 
 // Virtuals for sale / popular (backwards compatibility with EJS that uses p.sale / p.popular)
-productSchema.virtual('sale')
+productSchema
+  .virtual('sale')
   .get(function () {
     return this.isOnSale;
   })
@@ -191,7 +213,8 @@ productSchema.virtual('sale')
     this.isOnSale = !!v;
   });
 
-productSchema.virtual('popular')
+productSchema
+  .virtual('popular')
   .get(function () {
     return this.isPopular;
   })
@@ -206,10 +229,7 @@ productSchema.pre('save', function (next) {
   const type = (this.type || '').toLowerCase();
 
   // We want variants for clothes + shoes (because your shop uses type to control size/color)
-  const wantsVariants =
-    role === 'clothes' ||
-    type === 'clothes' ||
-    type === 'shoes';
+  const wantsVariants = role === 'clothes' || type === 'clothes' || type === 'shoes';
 
   if (!wantsVariants) {
     return next();
@@ -233,19 +253,11 @@ productSchema.pre('save', function (next) {
 
   // Clean & dedupe
   if (this.colors && this.colors.length > 0) {
-    this.colors = [...new Set(
-      this.colors
-        .map(c => (c || '').toString().trim())
-        .filter(Boolean)
-    )];
+    this.colors = [...new Set(this.colors.map((c) => (c || '').toString().trim()).filter(Boolean))];
   }
 
   if (this.sizes && this.sizes.length > 0) {
-    this.sizes = [...new Set(
-      this.sizes
-        .map(s => (s || '').toString().trim())
-        .filter(Boolean)
-    )];
+    this.sizes = [...new Set(this.sizes.map((s) => (s || '').toString().trim()).filter(Boolean))];
   }
 
   next();
@@ -299,7 +311,7 @@ productSchema.methods.toFrontendJSON = function () {
     isNew: this.isNew,
     isOnSale: this.isOnSale,
     isPopular: this.isPopular,
-    sale: this.isOnSale,       // short flags for templates if needed
+    sale: this.isOnSale, // short flags for templates if needed
     popular: this.isPopular,
     soldCount: this.soldCount,
     // Include single fields for backward compatibility
@@ -325,10 +337,7 @@ productSchema.statics.findWithVariants = function () {
       { role: 'clothes' },
       { role: 'shoes' },
       {
-        $and: [
-          { sizes: { $exists: true, $ne: [] } },
-          { colors: { $exists: true, $ne: [] } },
-        ],
+        $and: [{ sizes: { $exists: true, $ne: [] } }, { colors: { $exists: true, $ne: [] } }],
       },
     ],
   });
@@ -344,7 +353,8 @@ productSchema.index({ category: 1, role: 1 });
 productSchema.index({ isNewItem: 1, isOnSale: 1, isPopular: 1 });
 
 // Virtual for backwards compatibility with code/templates that use product.isNew
-productSchema.virtual('isNew')
+productSchema
+  .virtual('isNew')
   .get(function () {
     return this.isNewItem;
   })
@@ -353,6 +363,3 @@ productSchema.virtual('isNew')
   });
 
 module.exports = mongoose.models.Product || mongoose.model('Product', productSchema);
-
-
-

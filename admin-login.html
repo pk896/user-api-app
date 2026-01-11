@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>🔐 Admin Login | Unicoporate.com</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.ico" />
+
+  <!-- 🌗 Theme CSS -->
+  <link rel="stylesheet" href="/css/light.css" />
+
+  <!-- 📊 Chart.js for analytics dashboards -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js"
+    nonce="RxVnTmY2SKvIHVrzhvTZAg=="
+    defer
+  ></script>
+
+  <!-- 🧩 Extra page-specific styles -->
+  
+</head>
+
+<body class="light-theme">
+
+  <!-- ✅ Modern Responsive Navbar -->
+  <!-- views/partials/navbar.ejs -->
+<nav class="pg-navbar theme-light">
+  <div class="pg-nav-inner">
+    <!-- Brand + context -->
+    <a href="/home" class="pg-brand" aria-label="Unicoporate.com Home">
+      <img
+        class="pg-brand-logo"
+        src="/images/branding/logo-unincorporate.png"
+        alt="Unicoporate.com"
+        width="28"
+        height="28"
+        loading="eager"
+        decoding="async"
+      />
+      <span class="pg-brand-text">Unicoporate.com</span>
+    </a>
+
+    <!-- Center: Shop link (always visible) -->
+    <div class="pg-nav-center">
+      <a href="/sales" class="pg-chip pg-chip-shop ">
+        🛒 Shop
+      </a>
+    </div>
+
+    <!-- Right: tiny actions + hamburger -->
+    <div class="pg-nav-right">
+      
+        <span class="pg-pill">
+          <span class="pg-pill-label">GUEST</span>
+        </span>
+      
+
+      <!-- Theme quick toggle (icon only) -->
+      <form method="POST" action="/theme-toggle" class="pg-theme-icon-form">
+        <button type="submit" class="pg-theme-icon-btn" aria-label="Toggle theme">
+          <span>🌙</span>
+        </button>
+      </form>
+
+      <!-- 3-line menu button (all screen sizes) -->
+      <button class="pg-nav-toggle" id="pgNavToggle" aria-label="Toggle navigation">
+        <span class="pg-bar"></span>
+        <span class="pg-bar"></span>
+        <span class="pg-bar"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Overlay -->
+  <div class="pg-nav-overlay" id="pgNavOverlay"></div>
+
+  <!-- Drawer -->
+  <aside class="pg-drawer" id="pgNavDrawer" aria-hidden="true">
+    <div class="pg-drawer-inner">
+      <!-- Top user summary -->
+      <div class="pg-drawer-header">
+        
+          <div class="pg-user-title">Welcome 👋</div>
+          <div class="pg-user-sub">Browse or sign in below</div>
+        
+      </div>
+
+      <nav class="pg-drawer-nav">
+        
+          <!-- GUEST MENU -->
+          <div class="pg-section">
+            <div class="pg-section-title">Sign In</div>
+            <a href="/users/login" class="pg-link">
+              <span class="pg-ico">🔑</span><span>User Login</span>
+            </a>
+            <a href="/users/signup" class="pg-link">
+              <span class="pg-ico">📝</span><span>User Sign Up</span>
+            </a>
+            <a href="/business/login" class="pg-link">
+              <span class="pg-ico">🏢</span><span>Business Login</span>
+            </a>
+            <a href="/business/signup" class="pg-link">
+              <span class="pg-ico">🏭</span><span>Business Sign Up</span>
+            </a>
+          </div>
+
+          <div class="pg-section">
+            <div class="pg-section-title">Browse</div>
+            <a href="/home" class="pg-link ">
+              <span class="pg-ico">🏠</span><span>Home</span>
+            </a>
+            <a href="/users/about" class="pg-link ">
+              <span class="pg-ico">ℹ️</span><span>About</span>
+            </a>
+          </div>
+        
+      </nav>
+
+      <!-- Theme toggle (full label) -->
+      <form method="POST" action="/theme-toggle" class="pg-footer-form">
+        <button type="submit" class="pg-btn-theme">
+          <span class="pg-ico">🌙</span>
+          <span>Dark mode</span>
+        </button>
+      </form>
+    </div>
+  </aside>
+</nav>
+
+<style nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+/* =============== ROOT TOKENS (compact & mobile-first) =============== */
+:root {
+  --pg-nav-height: 52px;
+  --pg-drawer-width: 270px;
+  --pg-radius: 999px;
+  --pg-radius-card: 12px;
+  --pg-primary: #2563eb;
+  --pg-primary-soft: rgba(37,99,235,.08);
+  --pg-danger: #dc2626;
+  --pg-bg: #ffffff;
+  --pg-bg-soft: #f9fafb;
+  --pg-text: #0f172a;
+  --pg-muted: #6b7280;
+  --pg-border: #e5e7eb;
+  --pg-shadow: 0 2px 8px rgba(15,23,42,.08);
+}
+
+.theme-dark {
+  --pg-bg: #020617;
+  --pg-bg-soft: #0b1120;
+  --pg-text: #e5e7eb;
+  --pg-muted: #9ca3af;
+  --pg-border: #334155;
+  --pg-shadow: 0 2px 12px rgba(15,23,42,.7);
+}
+
+/* =============== TOP NAVBAR =============== */
+.pg-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--pg-bg);
+  color: var(--pg-text);
+  box-shadow: var(--pg-shadow);
+}
+
+.pg-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--pg-nav-height);
+  padding: 0 .6rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Brand */
+.pg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  text-decoration: none;
+  color: var(--pg-text);
+  font-weight: 700;
+  font-size: .95rem;
+  white-space: nowrap;
+}
+
+.pg-brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 1px 6px rgba(15,23,42,.18);
+}
+
+.pg-brand-text {
+  display: inline-block;
+}
+
+/* Center chip (Shop) */
+.pg-nav-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 0 .3rem;
+}
+
+.pg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .25rem .8rem;
+  border-radius: var(--pg-radius);
+  border: 1px solid transparent;
+  font-size: .85rem;
+  text-decoration: none;
+  color: var(--pg-primary);
+  background: var(--pg-primary-soft);
+  font-weight: 600;
+}
+.pg-chip-active {
+  border-color: var(--pg-primary);
+}
+
+/* ✨ Magic Shop chip */
+.pg-chip-shop {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--pg-radius);
+  padding: .28rem 1.2rem;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(15,23,42,0.08);
+  box-shadow: 0 2px 8px rgba(15,23,42,0.18);
+  font-weight: 700;
+  letter-spacing: .02em;
+  transform: translateY(0);
+  transition:
+    background .25s ease,
+    color .25s ease,
+    box-shadow .25s ease,
+    transform .18s ease;
+}
+
+/* Shiny streak that sweeps across on hover */
+.pg-chip-shop::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255,255,255,0.9) 25%,
+    transparent 50%
+  );
+  transform: translateX(-170%);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform .55s ease-out,
+    opacity .25s ease-out;
+}
+
+/* Hover / focus: warm gradient, glow, tiny lift */
+.pg-chip-shop:hover,
+.pg-chip-shop:focus-visible {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #111827;
+  transform: translateY(-1px) scale(1.03);
+  box-shadow:
+    0 0 0 1px rgba(251,191,36,0.65),
+    0 12px 26px rgba(15,23,42,0.45);
+}
+
+/* Trigger the shine sweep */
+.pg-chip-shop:hover::after,
+.pg-chip-shop:focus-visible::after {
+  transform: translateX(170%);
+  opacity: 1;
+}
+
+/* Keep a soft glow when Shop is the active page */
+.pg-chip-shop.pg-chip-active {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #111827;
+  box-shadow:
+    0 0 0 1px rgba(251,191,36,0.7),
+    0 10px 22px rgba(15,23,42,0.4);
+}
+
+/* Dark theme tweaks so it still pops */
+.theme-dark .pg-chip-shop {
+  background: #020617;
+  color: #e5e7eb;
+  border-color: rgba(148,163,184,0.4);
+  box-shadow: 0 2px 10px rgba(15,23,42,0.85);
+}
+
+.theme-dark .pg-chip-shop:hover,
+.theme-dark .pg-chip-shop:focus-visible,
+.theme-dark .pg-chip-shop.pg-chip-active {
+  color: #020617;
+}
+
+/* --- Auto pulse version of the Shop chip --- */
+.pg-chip-shop.pg-chip-pulse {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #111827;
+  transform: translateY(-1px) scale(1.03);
+  box-shadow:
+    0 0 0 1px rgba(251,191,36,0.65),
+    0 12px 26px rgba(15,23,42,0.45);
+}
+
+/* make the shine streak run when pulsing */
+.pg-chip-shop.pg-chip-pulse::after {
+  opacity: 1;
+  animation: pg-chip-shine 0.8s ease-out;
+}
+
+/* dark theme text color when pulsing */
+.theme-dark .pg-chip-shop.pg-chip-pulse {
+  color: #020617;
+}
+
+/* keyframes for the shine sweep */
+@keyframes pg-chip-shine {
+  from {
+    transform: translateX(-170%);
+  }
+  to {
+    transform: translateX(170%);
+  }
+}
+
+/* Right side */
+.pg-nav-right {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+}
+
+/* Tiny role pill */
+.pg-pill {
+  border-radius: var(--pg-radius);
+  border: 1px solid var(--pg-border);
+  padding: .15rem .4rem;
+  font-size: .7rem;
+  text-transform: uppercase;
+}
+.pg-pill-label { letter-spacing: .04em; }
+
+/* Theme icon button */
+.pg-theme-icon-form { margin: 0; }
+.pg-theme-icon-btn {
+  border: none;
+  background: transparent;
+  padding: .2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* Hamburger – visible on all sizes */
+.pg-nav-toggle {
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+}
+.pg-bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 4px;
+  background: var(--pg-text);
+}
+
+/* =============== OVERLAY + DRAWER =============== */
+.pg-nav-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .25s ease;
+  z-index: 998;
+}
+
+.pg-nav-overlay.pg-show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.pg-drawer {
+  position: fixed;
+  top: 0;
+  right: -100%;
+  width: var(--pg-drawer-width);
+  max-width: 100%;
+  height: 100%;
+  background: var(--pg-bg);
+  box-shadow: -4px 0 12px rgba(15,23,42,.35);
+  transition: right .28s ease;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+}
+
+.pg-drawer.pg-open {
+  right: 0;
+}
+
+.pg-drawer-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: .9rem .9rem 1rem;
+  gap: 1rem;
+}
+
+/* Drawer header */
+.pg-drawer-header {
+  padding-bottom: .7rem;
+  border-bottom: 1px solid var(--pg-border);
+}
+.pg-user-title {
+  font-weight: 600;
+  font-size: .95rem;
+}
+.pg-user-sub {
+  font-size: .8rem;
+  color: var(--pg-muted);
+  margin-top: .1rem;
+}
+.pg-role {
+  font-weight: 600;
+}
+
+/* Drawer nav sections */
+.pg-drawer-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: .2rem;
+}
+
+.pg-section {
+  margin-top: .5rem;
+}
+.pg-section:first-child { margin-top: 0; }
+
+.pg-section-title {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--pg-muted);
+  margin-bottom: .2rem;
+}
+
+/* Links */
+.pg-link {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .55rem .45rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--pg-text);
+  font-size: .87rem;
+}
+.pg-link:hover {
+  background: var(--pg-bg-soft);
+}
+.pg-link-active {
+  background: var(--pg-primary-soft);
+  color: var(--pg-primary);
+  font-weight: 600;
+}
+.pg-ico {
+  width: 22px;
+  text-align: center;
+}
+
+/* Footer buttons */
+.pg-footer-form {
+  margin-top: .2rem;
+}
+.pg-btn-logout,
+.pg-btn-theme {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  justify-content: center;
+  border-radius: 999px;
+  padding: .6rem .9rem;
+  border: none;
+  cursor: pointer;
+  font-size: .87rem;
+  font-weight: 600;
+}
+.pg-btn-logout {
+  background: var(--pg-danger);
+  color: #fff;
+}
+.pg-btn-theme {
+  margin-top: .4rem;
+  background: var(--pg-bg-soft);
+  color: var(--pg-text);
+}
+
+/* =============== RESPONSIVE TWEAKS =============== */
+
+/* Very small devices (Hisense U50 Lite range & below) */
+@media (max-width: 520px) {
+  .pg-nav-inner {
+    padding: 0 .4rem;
+  }
+  
+  .pg-brand-text {
+    display: none; /* hide Unicoporate.com text on small screens */
+  }
+
+  .pg-chip {
+    padding-inline: .6rem;
+  }
+  .pg-drawer-inner {
+    padding-inline: .7rem;
+  }
+}
+
+/* Tablets and small laptops */
+@media (min-width: 768px) {
+  :root {
+    --pg-nav-height: 56px;
+    --pg-drawer-width: 290px;
+  }
+  .pg-nav-inner {
+    padding-inline: 1rem;
+  }
+}
+
+/* Wide desktops */
+@media (min-width: 1100px) {
+  .pg-nav-inner {
+    max-width: 1200px;
+  }
+}
+
+.pg-note-verify {
+  margin: .2rem .6rem .4rem;
+  font-size: .78rem;
+  color: var(--pg-muted);
+}
+</style>
+
+<script nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+  document.addEventListener('DOMContentLoaded', function () {
+    const toggle  = document.getElementById('pgNavToggle');
+    const drawer  = document.getElementById('pgNavDrawer');
+    const overlay = document.getElementById('pgNavOverlay');
+
+    if (!toggle || !drawer || !overlay) return;
+
+    const openDrawer = () => {
+      drawer.classList.add('pg-open');
+      overlay.classList.add('pg-show');
+      document.body.style.overflow = 'hidden';
+      drawer.setAttribute('aria-hidden', 'false');
+    };
+
+    const closeDrawer = () => {
+      drawer.classList.remove('pg-open');
+      overlay.classList.remove('pg-show');
+      document.body.style.overflow = '';
+      drawer.setAttribute('aria-hidden', 'true');
+    };
+
+    toggle.addEventListener('click', () => {
+      if (drawer.classList.contains('pg-open')) {
+        closeDrawer();
+      } else {
+        openDrawer();
+      }
+    });
+
+    overlay.addEventListener('click', closeDrawer);
+
+    drawer.addEventListener('click', (ev) => {
+      const target = ev.target.closest('a');
+      if (target) closeDrawer();
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 1024 && drawer.classList.contains('pg-open')) {
+        closeDrawer();
+      }
+    });
+
+    /* 🔥 Auto-pulse the Shop chip every 5 seconds */
+    const shopChip = document.querySelector('.pg-chip-shop');
+    if (shopChip) {
+      const runPulse = () => {
+        if (shopChip.classList.contains('pg-chip-pulse')) return;
+        shopChip.classList.add('pg-chip-pulse');
+        // remove after animation ends
+        setTimeout(() => {
+          shopChip.classList.remove('pg-chip-pulse');
+        }, 900);
+      };
+
+      // first pulse shortly after load
+      setTimeout(runPulse, 1500);
+      // then every 5 seconds
+      setInterval(runPulse, 5000);
+    }
+  });
+</script>
+
+
+  <!-- ✅ Global Flash Messages (now receives nonce) -->
+  <!-- views/partials/massage.ejs -->
+<div id="fm" class="fm-container">
+  
+
+  
+
+  
+
+  
+
+  
+</div>
+
+<style nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+  /* ===== COMPANY COLORS ===== */
+  .fm-container {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+  }
+
+  /* ===== MESSAGE CONTAINER ===== */
+  .fm-container {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+  }
+
+  /* ===== INDIVIDUAL MESSAGE ===== */
+  .fm {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: fmSlideIn 0.25s ease-out;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* ===== MESSAGE TYPES ===== */
+  .fm-success {
+    background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
+    color: white;
+  }
+
+  .fm-error {
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+    color: white;
+  }
+
+  .fm-info {
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: white;
+  }
+
+  .fm-warning {
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    color: white;
+  }
+
+  /* ===== MESSAGE ICON ===== */
+  .fm-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ===== MESSAGE TEXT ===== */
+  .fm-text {
+    flex: 1;
+    padding-right: 20px;
+    word-wrap: break-word;
+  }
+
+  /* ===== CLOSE BUTTON ===== */
+  .fm-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+  }
+
+  .fm-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fmSlideIn {
+    from {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes fmFadeOut {
+    to {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+  }
+
+  .fm.fm-exiting {
+    animation: fmFadeOut 0.2s ease-out forwards;
+  }
+
+  /* ===== DARK THEME ADJUSTMENTS ===== */
+  .dark-theme .fm {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .fm-container {
+      top: 8px;
+      right: 8px;
+      left: 8px;
+      width: auto;
+      max-width: none;
+    }
+    
+    .fm {
+      padding: 10px;
+      font-size: 12px;
+    }
+    
+    .fm-icon {
+      width: 14px;
+      height: 14px;
+    }
+    
+    .fm-close {
+      top: 6px;
+      right: 6px;
+      width: 18px;
+      height: 18px;
+      font-size: 16px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .fm-container {
+      width: 280px;
+    }
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .fm-close:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 1px;
+  }
+
+  /* ===== PROGRESS BAR (optional) ===== */
+  .fm-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 0 0 10px 10px;
+    transform-origin: left;
+    animation: fmProgress 8s linear forwards;
+  }
+
+  .fm-error .fm-progress {
+    animation: none;
+    display: none;
+  }
+
+  @keyframes fmProgress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+</style>
+
+<script nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+document.addEventListener("DOMContentLoaded", () => {
+  const container = document.getElementById('fm');
+  if (!container) return;
+
+  const messages = container.querySelectorAll('.fm');
+  
+  messages.forEach(message => {
+    const closeBtn = message.querySelector('.fm-close');
+    const isError = message.classList.contains('fm-error');
+    
+    // Add close functionality
+    closeBtn.addEventListener('click', () => {
+      dismissMessage(message);
+    });
+    
+    // Add click-to-dismiss (optional, can be commented out)
+    message.addEventListener('click', (e) => {
+      if (e.target !== closeBtn) {
+        dismissMessage(message);
+      }
+    });
+    
+    // Auto-dismiss for non-error messages
+    if (!isError) {
+      const duration = 8000; // 8 seconds
+      let dismissTimer = setTimeout(() => dismissMessage(message), duration);
+      
+      // Pause on hover
+      message.addEventListener('mouseenter', () => {
+        clearTimeout(dismissTimer);
+        
+        // Pause progress bar if exists
+        const progress = message.querySelector('.fm-progress');
+        if (progress) {
+          progress.style.animationPlayState = 'paused';
+        }
+      });
+      
+      // Resume on mouse leave
+      message.addEventListener('mouseleave', () => {
+        dismissTimer = setTimeout(() => dismissMessage(message), 3000);
+        
+        // Resume progress bar if exists
+        const progress = message.querySelector('.fm-progress');
+        if (progress) {
+          progress.style.animationPlayState = 'running';
+        }
+      });
+    }
+    
+    // Add progress bar for non-error messages (optional)
+    if (!isError) {
+      const progressBar = document.createElement('div');
+      progressBar.className = 'fm-progress';
+      message.appendChild(progressBar);
+    }
+    
+    // Haptic feedback on mobile
+    if ('vibrate' in navigator) {
+      message.addEventListener('click', () => {
+        navigator.vibrate(20);
+      });
+    }
+  });
+  
+  // Dismiss function with animation
+  function dismissMessage(message) {
+    if (message.classList.contains('fm-exiting')) return;
+    
+    message.classList.add('fm-exiting');
+    
+    setTimeout(() => {
+      message.remove();
+      
+      // Update container position if empty
+      if (container.children.length === 0) {
+        container.style.display = 'none';
+      }
+    }, 200);
+  }
+  
+  // Group messages by type (optional visual enhancement)
+  function groupMessages() {
+    const successMsgs = container.querySelectorAll('.fm-success');
+    const errorMsgs = container.querySelectorAll('.fm-error');
+    const infoMsgs = container.querySelectorAll('.fm-info');
+    const warningMsgs = container.querySelectorAll('.fm-warning');
+    
+    // Add grouping indicators (optional)
+    if (successMsgs.length > 1) addGroupIndicator(successMsgs, 'success');
+    if (errorMsgs.length > 1) addGroupIndicator(errorMsgs, 'error');
+    if (infoMsgs.length > 1) addGroupIndicator(infoMsgs, 'info');
+    if (warningMsgs.length > 1) addGroupIndicator(warningMsgs, 'warning');
+  }
+  
+  // Add group indicator (first message gets a badge)
+  function addGroupIndicator(messages, type) {
+    if (messages.length > 0) {
+      const firstMsg = messages[0];
+      const badge = document.createElement('span');
+      badge.className = 'fm-group-badge';
+      badge.textContent = `${messages.length}`;
+      badge.title = `${messages.length} ${type} messages`;
+      firstMsg.appendChild(badge);
+    }
+  }
+  
+  // Apply grouping
+  if (messages.length > 1) {
+    groupMessages();
+  }
+  
+  // Show container if there are messages
+  if (messages.length > 0) {
+    container.style.display = 'flex';
+  }
+});
+</script>
+
+<style nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+  /* Additional styles for grouping (optional) */
+  .fm-group-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: white;
+    color: var(--black);
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  
+  .fm-success .fm-group-badge {
+    background: white;
+    color: #16A34A;
+  }
+  
+  .fm-error .fm-group-badge {
+    background: white;
+    color: #DC2626;
+  }
+  
+  .fm-info .fm-group-badge {
+    background: white;
+    color: #1D4ED8;
+  }
+  
+  .fm-warning .fm-group-badge {
+    background: white;
+    color: #D97706;
+  }
+</style>
+
+  <!-- ✅ Main Page Content -->
+  <main class="page-content">
+    <!-- views/admin-login.ejs -->
+
+
+<section class="al-page is-light">
+  <div class="al-wrap">
+
+    <!-- Title -->
+    <header class="al-hero">
+      <div class="al-badge" aria-hidden="true">🛡️</div>
+      <div class="al-hero-text">
+        <h1 class="al-title">🔐 Admin Login</h1>
+        <p class="al-sub">
+          Secure admin access for <span class="al-brand">Unicoporate</span>. Please log in to continue.
+        </p>
+      </div>
+    </header>
+
+    <!-- ✅ Flash Messages (If your layout already renders flash, remove this block) -->
+    
+    
+    
+    
+
+    <!-- Admin Login Form -->
+    <form
+      action="/admin/login"
+      method="POST"
+      class="al-card"
+      autocomplete="on"
+      novalidate
+    >
+      <div class="al-card-head">
+        <div class="al-card-title">Admin Sign In</div>
+        <div class="al-palette" aria-hidden="true">
+          <span class="dot dot-p"></span>
+          <span class="dot dot-b"></span>
+          <span class="dot dot-g"></span>
+          <span class="dot dot-k"></span>
+        </div>
+      </div>
+
+      <div class="al-fields">
+        <div class="al-field">
+          <label for="username" class="al-label">👤 Username</label>
+          <input
+            type="text"
+            name="username"
+            id="username"
+            placeholder="e.g. admin or phakisi-admin"
+            required
+            autofocus
+            autocomplete="username"
+            inputmode="text"
+          />
+          <div class="al-hint">Use your admin username (case-sensitive if your server enforces it).</div>
+        </div>
+
+        <div class="al-field">
+          <label for="password" class="al-label">🔒 Password</label>
+          <div class="al-pass">
+            <input
+              type="password"
+              name="password"
+              id="password"
+              placeholder="Enter your admin password"
+              required
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              id="togglePassword"
+              class="al-toggle"
+              aria-label="Show password"
+              title="Show/Hide password"
+            >
+              👁️
+            </button>
+          </div>
+          <div class="al-hint">For your safety, avoid logging in on public devices.</div>
+        </div>
+
+        <button type="submit" class="al-btn al-btn-primary">Login</button>
+
+        
+
+        <div class="al-security">
+          <div class="al-sec-item">
+            <span class="al-sec-ic">🔒</span>
+            <span>Encrypted session</span>
+          </div>
+          <div class="al-sec-item">
+            <span class="al-sec-ic">🧾</span>
+            <span>Admin-only access</span>
+          </div>
+          <div class="al-sec-item">
+            <span class="al-sec-ic">⚡</span>
+            <span>Fast & secure</span>
+          </div>
+        </div>
+      </div>
+    </form>
+
+  </div>
+</section>
+
+<style nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+  /* ===== Brand palette (Purple dominant) ===== */
+  .al-page{
+    --b:#2563EB; /* trust */
+    --p:#7C3AED; /* innovation (dominant) */
+    --g:#22C55E; /* growth */
+    --k:#0F172A; /* premium */
+    --bg:#f8fafc;
+    --mut:#64748B;
+    --line:rgba(15,23,42,.12);
+    --shadow:0 16px 30px rgba(15,23,42,.12);
+    padding: .9rem 0;
+    min-height: calc(100vh - 2rem);
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.22) 0%, rgba(37,99,235,.10) 55%, rgba(34,197,94,.06) 100%),
+      linear-gradient(180deg, var(--bg), var(--bg));
+  }
+
+  .al-page.is-dark{
+    --bg:#0b1220;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(124,58,237,.24) 0%, rgba(37,99,235,.14) 55%, rgba(34,197,94,.08) 100%),
+      linear-gradient(180deg, #0b1220, #0b1220);
+  }
+
+  .al-wrap{max-width:480px;margin:0 auto;padding:0 .85rem}
+
+  /* ===== Hero ===== */
+  .al-hero{
+    display:flex;
+    gap:.75rem;
+    align-items:flex-start;
+    margin: .2rem 0 .75rem;
+    padding: .85rem;
+    border-radius:18px;
+    color:#fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+    box-shadow: var(--shadow);
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .al-badge{
+    width:44px;height:44px;border-radius:14px;
+    display:grid;place-items:center;
+    background: rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.22);
+    font-size:20px;
+    flex:0 0 auto;
+  }
+  .al-title{margin:0;font-size:1.15rem;font-weight:950;letter-spacing:.2px}
+  .al-sub{margin:.35rem 0 0;font-size:.88rem;font-weight:750;color:rgba(255,255,255,.92)}
+  .al-brand{font-weight:950}
+
+  /* ===== Flash ===== */
+  .al-flash{
+    margin:.55rem 0;
+    border-radius:16px;
+    padding:.65rem .75rem;
+    font-size:.9rem;
+    font-weight:850;
+    border:1px solid transparent;
+    background:#fff;
+    box-shadow: 0 10px 18px rgba(15,23,42,.06);
+    color:var(--k);
+  }
+  .al-ok{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25)}
+  .al-err{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.25)}
+  .al-info{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.22)}
+  .al-warn{background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.22)}
+
+  /* ===== Card ===== */
+  .al-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .al-page.is-dark .al-card{background:#0f172a;border-color:rgba(255,255,255,.10)}
+  .al-card-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:.75rem;
+    padding:.85rem .9rem;
+    background: rgba(124,58,237,.08);
+    border-bottom:1px solid rgba(15,23,42,.08);
+  }
+  .al-page.is-dark .al-card-head{
+    background: rgba(124,58,237,.14);
+    border-bottom-color: rgba(255,255,255,.10);
+  }
+  .al-card-title{font-size:1rem;font-weight:950;color:var(--k)}
+  .al-page.is-dark .al-card-title{color:#f1f5f9}
+
+  .al-palette{display:flex;gap:.4rem;align-items:center}
+  .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+  .dot-p{background:var(--p)} .dot-b{background:var(--b)} .dot-g{background:var(--g)} .dot-k{background:var(--k)}
+
+  .al-fields{padding:.9rem}
+  .al-field{margin-bottom:.75rem}
+  .al-label{display:block;margin:0 0 .35rem;font-size:.85rem;font-weight:950;color:var(--k)}
+  .al-page.is-dark .al-label{color:#e2e8f0}
+
+  input{
+    width:100%;
+    padding:.75rem .8rem;
+    border-radius:16px;
+    border:1px solid rgba(15,23,42,.14);
+    outline:none;
+    font-size:.92rem;
+    font-weight:800;
+    background:#fff;
+    color:var(--k);
+  }
+  input::placeholder{color:rgba(100,116,139,.95);font-weight:750}
+
+  .al-page.is-dark input{
+    background:#0b1220;
+    border-color: rgba(255,255,255,.14);
+    color:#f1f5f9;
+  }
+  .al-page.is-dark input::placeholder{color:rgba(148,163,184,.95)}
+
+  input:focus{
+    border-color: rgba(124,58,237,.55);
+    box-shadow: 0 0 0 4px rgba(124,58,237,.14);
+  }
+
+  .al-hint{
+    margin-top:.35rem;
+    font-size:.78rem;
+    font-weight:750;
+    color:var(--mut);
+  }
+  .al-page.is-dark .al-hint{color:rgba(148,163,184,.95)}
+
+  /* Password */
+  .al-pass{position:relative;display:flex;align-items:center}
+  .al-toggle{
+    position:absolute;
+    right:.45rem;
+    height:34px;
+    min-width:40px;
+    border-radius:12px;
+    border:1px solid rgba(15,23,42,.12);
+    background: rgba(15,23,42,.02);
+    cursor:pointer;
+    font-size:1rem;
+    display:grid;place-items:center;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .al-page.is-dark .al-toggle{
+    border-color: rgba(255,255,255,.14);
+    background: rgba(255,255,255,.06);
+    color:#e2e8f0;
+  }
+  .al-toggle:hover{transform: translateY(-1px)}
+
+  /* Button */
+  .al-btn{
+    width:100%;
+    border:none;
+    border-radius:16px;
+    padding:.8rem .9rem;
+    cursor:pointer;
+    font-weight:950;
+    font-size:.95rem;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .al-btn:hover{transform: translateY(-1px)}
+  .al-btn-primary{
+    color:#fff;
+    background: linear-gradient(135deg, var(--p), var(--b));
+    box-shadow: 0 14px 22px rgba(124,58,237,.18);
+  }
+
+  /* Back link */
+  .al-back{margin:.65rem 0 0;text-align:center}
+  .al-link{
+    color: var(--p);
+    font-weight:950;
+    text-decoration:none;
+  }
+  .al-link:hover{text-decoration:underline}
+
+  /* Security row */
+  .al-security{
+    margin-top:.85rem;
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .al-sec-item{
+    display:flex;
+    gap:.4rem;
+    align-items:center;
+    padding:.35rem .55rem;
+    border-radius:999px;
+    border:1px solid rgba(15,23,42,.10);
+    background: rgba(34,197,94,.06);
+    color: var(--k);
+    font-size:.78rem;
+    font-weight:850;
+  }
+  .al-page.is-dark .al-sec-item{
+    border-color: rgba(255,255,255,.12);
+    background: rgba(34,197,94,.10);
+    color:#e2e8f0;
+  }
+  .al-sec-ic{font-size:.95rem}
+
+  /* Hisense-friendly */
+  @media (max-width: 420px){
+    .al-wrap{padding:0 .65rem}
+    .al-hero{padding:.75rem}
+    .al-fields{padding:.8rem}
+    .al-title{font-size:1.05rem}
+  }
+</style>
+
+<script nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+  document.addEventListener("DOMContentLoaded", () => {
+    const toggleBtn = document.getElementById("togglePassword");
+    const passwordInput = document.getElementById("password");
+
+    if (toggleBtn && passwordInput) {
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = passwordInput.type === "password";
+        passwordInput.type = isHidden ? "text" : "password";
+        toggleBtn.textContent = isHidden ? "🙈" : "👁️";
+        toggleBtn.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+      });
+    }
+  });
+</script>
+
+  </main>
+
+  <!-- ✅ Footer (now receives nonce) -->
+  <!-- ✅ views/partials/footer.ejs -->
+<footer class="ft light-theme">
+  <!-- Main Footer Content -->
+  <div class="ft-main">
+    <!-- Brand & Copyright -->
+    <div class="ft-brand">
+      <a href="/home" class="ft-brand-link" aria-label="Unicoporate Home">
+        <img
+          class="ft-brand-logo"
+          src="/images/branding/logo-unincorporate.png"
+          alt="Unicoporate"
+          width="22"
+          height="22"
+          loading="lazy"
+          decoding="async"
+        />
+        <span>Unicoporate</span>
+      </a>
+      <p class="ft-copyright">
+        © 2026 Unicoporate. All rights reserved.
+      </p>
+    </div>
+
+    <!-- Quick Links -->
+    <nav class="ft-links">
+      <a href="/contact" class="ft-link">Contact</a>
+      <a href="/privacy" class="ft-link">Privacy</a>
+      <a href="/terms" class="ft-link">Terms</a>
+      <a href="/users/about" class="ft-link">About</a>
+    </nav>
+
+    <!-- Social Links -->
+    <div class="ft-social">
+      <a href="https://www.linkedin.com/company/phakisi-global" target="_blank" rel="noopener noreferrer" class="ft-social-link" aria-label="LinkedIn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" 
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+      </a>
+      <a href="https://github.com/pk896" target="_blank" rel="noopener noreferrer" class="ft-social-link" aria-label="GitHub">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22" 
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <a href="https://www.facebook.com/profile.php?id=100083397021296" target="_blank" rel="noopener noreferrer" class="ft-social-link" aria-label="Founder Facebook">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" 
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <a href="https://youtube.com/@PhakisiGlobal" target="_blank" rel="noopener noreferrer" class="ft-social-link" aria-label="YouTube">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M22.54 6.42a2.78 2.78 0 00-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 00-1.94 2A29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.94 2c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 001.94-2A29 29 0 0023 12a29 29 0 00-.46-5.58z" 
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9.75 15.02l5.75-3.27-5.75-3.27v6.54z" 
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+
+  <!-- Legal & Mission -->
+  <div class="ft-legal">
+    <div class="ft-legal-links">
+      <a href="/terms" class="ft-legal-link">Terms of Service</a>
+      <span class="ft-separator">•</span>
+      <a href="/privacy" class="ft-legal-link">Privacy Policy</a>
+      <span class="ft-separator">•</span>
+      <a href="/contact" class="ft-legal-link">Contact Us</a>
+    </div>
+    <p class="ft-mission">
+      Empowering businesses. Elevating humanity. 🌍 Building the civilization of tomorrow through innovation and unity.
+    </p>
+  </div>
+</footer>
+
+<style nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+  /* ===== COMPANY COLORS & VARIABLES ===== */
+  .ft {
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --green: #22C55E;
+    --black: #0F172A;
+    --radius: 8px;
+    --transition: all 0.2s ease;
+  }
+
+  /* ===== FOOTER CONTAINER ===== */
+  .ft {
+    background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%);
+    border-top: 1px solid #D1FAE5;
+    padding: 24px 16px 16px;
+    color: var(--black);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .dark-theme.ft {
+    background: linear-gradient(135deg, #0A1F0A 0%, #132813 100%);
+    border-top-color: #2D5A2D;
+    color: #E2E8F0;
+  }
+
+  /* ===== MAIN FOOTER CONTENT ===== */
+  .ft-main {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #D1FAE5;
+  }
+
+  .dark-theme .ft-main {
+    border-bottom-color: #2D5A2D;
+  }
+
+  @media (min-width: 640px) {
+    .ft-main {
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+    }
+  }
+
+  /* ===== BRAND SECTION ===== */
+  .ft-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ft-brand-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--black);
+    text-decoration: none;
+    transition: var(--transition);
+  }
+
+  .ft-brand-link:hover {
+    color: var(--blue);
+  }
+
+  .ft-brand-link svg {
+    color: var(--green);
+  }
+
+  .dark-theme .ft-brand-link {
+    color: #F1F5F9;
+  }
+
+  .ft-copyright {
+    margin: 0;
+    font-size: 12px;
+    color: #64748B;
+  }
+
+  .dark-theme .ft-copyright {
+    color: #94A3B8;
+  }
+
+  /* ===== QUICK LINKS ===== */
+  .ft-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  @media (min-width: 640px) {
+    .ft-links {
+      flex-direction: column;
+      gap: 8px;
+    }
+  }
+
+  .ft-link {
+    color: #64748B;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+    transition: var(--transition);
+  }
+
+  .ft-link:hover {
+    color: var(--blue);
+  }
+
+  .dark-theme .ft-link {
+    color: #94A3B8;
+  }
+
+  .dark-theme .ft-link:hover {
+    color: #60A5FA;
+  }
+
+  /* ===== SOCIAL LINKS ===== */
+  .ft-social {
+    display: flex;
+    gap: 12px;
+  }
+
+  .ft-social-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    border-radius: 50%;
+    color: #64748B;
+    text-decoration: none;
+    transition: var(--transition);
+  }
+
+  .ft-social-link:hover {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: white;
+    transform: translateY(-2px);
+  }
+
+  .dark-theme .ft-social-link {
+    background: #1A341A;
+    border-color: #2D5A2D;
+    color: #94A3B8;
+  }
+
+  .dark-theme .ft-social-link:hover {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: white;
+  }
+
+  /* ===== LEGAL SECTION ===== */
+  .ft-legal {
+    max-width: 1000px;
+    margin: 20px auto 0;
+    text-align: center;
+  }
+
+  .ft-legal-links {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .ft-legal-link {
+    color: var(--blue);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: var(--transition);
+  }
+
+  .ft-legal-link:hover {
+    text-decoration: underline;
+  }
+
+  .dark-theme .ft-legal-link {
+    color: #60A5FA;
+  }
+
+  .ft-separator {
+    color: #94A3B8;
+    font-size: 12px;
+  }
+
+  .ft-mission {
+    margin: 0;
+    font-size: 12px;
+    color: #64748B;
+    font-style: italic;
+    line-height: 1.5;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .dark-theme .ft-mission {
+    color: #94A3B8;
+  }
+
+  /* ===== COMPACT MOBILE DESIGN ===== */
+  @media (max-width: 360px) {
+    .ft {
+      padding: 20px 12px 12px;
+    }
+    
+    .ft-main {
+      gap: 20px;
+      padding-bottom: 16px;
+    }
+    
+    .ft-links {
+      gap: 12px;
+      justify-content: center;
+    }
+    
+    .ft-social {
+      justify-content: center;
+    }
+    
+    .ft-legal-links {
+      gap: 6px;
+    }
+    
+    .ft-mission {
+      font-size: 11px;
+    }
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .ft {
+    animation: fadeInUp 0.4s ease-out;
+  }
+
+  /* ===== ACCESSIBILITY ===== */
+  .ft-social-link:focus,
+  .ft-link:focus,
+  .ft-brand-link:focus,
+  .ft-legal-link:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  /* Footer brand logo */
+.ft-brand-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: contain;
+  box-shadow: 0 1px 6px rgba(15,23,42,.14);
+  flex: 0 0 auto;
+}
+
+/* Slightly bigger on wider screens */
+@media (min-width: 768px) {
+  .ft-brand-logo {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* Make sure it still looks good in dark theme */
+.dark-theme .ft-brand-logo {
+  box-shadow: 0 1px 10px rgba(0,0,0,.35);
+}
+</style>
+
+<script nonce="RxVnTmY2SKvIHVrzhvTZAg==" defer>
+document.addEventListener("DOMContentLoaded", () => {
+  // Add current year to copyright if needed
+  const copyrightElements = document.querySelectorAll('.ft-copyright');
+  copyrightElements.forEach(el => {
+    el.textContent = el.textContent.replace('YEAR', new Date().getFullYear());
+  });
+
+  // Add subtle animation to social icons on hover
+  const socialLinks = document.querySelectorAll('.ft-social-link');
+  socialLinks.forEach(link => {
+    link.addEventListener('mouseenter', () => {
+      const svg = link.querySelector('svg');
+      if (svg) {
+        svg.style.transform = 'scale(1.2)';
+        svg.style.transition = 'transform 0.2s ease';
+      }
+    });
+    
+    link.addEventListener('mouseleave', () => {
+      const svg = link.querySelector('svg');
+      if (svg) {
+        svg.style.transform = 'scale(1)';
+      }
+    });
+  });
+
+  // Track social link clicks for analytics (optional)
+  socialLinks.forEach(link => {
+    link.addEventListener('click', function(e) {
+      const platform = this.getAttribute('aria-label');
+      console.log(`Social link clicked: ${platform}`);
+      
+      // You can add analytics tracking here
+      // Example: gtag('event', 'social_click', { platform: platform });
+    });
+  });
+
+  // Add intersection observer for animation when footer comes into view
+  const footer = document.querySelector('.ft');
+  if (footer) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, {
+      threshold: 0.1
+    });
+
+    // Set initial state
+    footer.style.opacity = '0';
+    footer.style.transform = 'translateY(20px)';
+    footer.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+
+    observer.observe(footer);
+  }
+
+  // Theme switcher support (if your app has theme switching)
+  const themeToggle = document.querySelector('[data-theme-toggle]');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      // Reapply theme classes after theme change
+      setTimeout(() => {
+        const ft = document.querySelector('.ft');
+        if (document.body.classList.contains('dark-theme')) {
+          ft.classList.add('dark-theme');
+        } else {
+          ft.classList.remove('dark-theme');
+        }
+      }, 100);
+    });
+  }
+});
+</script>
+
+  <!-- 🧩 Page-specific scripts (ensure any added scripts use nonce in the route) -->
+  
+
+  <!-- 🛡️ CSP-safe inline setup -->
+  <script nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+    document.addEventListener("DOMContentLoaded", () => {
+      console.log("✅ Layout & Navbar loaded securely with CSP nonce");
+    });
+  </script>
+
+  <!-- 🎨 Layout Styles (now with nonce) -->
+  <style nonce="RxVnTmY2SKvIHVrzhvTZAg==">
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      background: var(--bg, #fff);
+      color: #111;
+      transition: background 0.3s, color 0.3s;
+    }
+    .dark-theme {
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    .page-content {
+      max-width: 1100px;
+      margin: 1.5rem auto;
+      padding: 0 1rem;
+      min-height: calc(100vh - 160px);
+    }
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.9rem;
+      color: #6b7280;
+      border-top: 1px solid rgba(0,0,0,0.08);
+    }
+    .dark-theme footer {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      color: #9ca3af;
+    }
+  </style>
+</body>
+</html>

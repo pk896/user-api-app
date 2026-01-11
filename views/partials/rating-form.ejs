@@ -1,9 +1,24 @@
+<!-- views/partials/rating-form.ejs -->
 <%
-// expects: productId, myRating (optional {stars,title,body}), NONCE
-const existing = myRating || {};
-const stars = existing.stars || 0;
+  // expects: productId, myRating (optional {stars,title,body}), nonce
+  const existing = myRating || {};
+  const stars = Number(existing.stars || 0);
+
+  // ✅ unique prefix so this partial can be reused without ID collisions
+  const uid = String(productId || 'p').replace(/[^a-zA-Z0-9_-]/g, '');
 %>
-<form class="rf" action="/ratings/product/<%= productId %>" method="post" novalidate>
+
+<!-- ✅ UPDATED: action path now includes /productRatings prefix -->
+<form
+  id="rf-<%= uid %>"
+  class="rf"
+  method="POST"
+  action="/productRatings/ratings/submit/<%= productId %>"
+  data-pid="<%= uid %>"
+>
+  <!-- ✅ IMPORTANT: keeps your redirect303 target stable -->
+  <input type="hidden" name="redirect" value="/products/view/<%= productId %>">
+
   <div class="rf-header">
     <h3 class="rf-title">Rate this product</h3>
     <% if (stars > 0) { %>
@@ -14,28 +29,38 @@ const stars = existing.stars || 0;
   <!-- Star Rating -->
   <div class="rf-stars-container">
     <span class="rf-stars-label">Your rating:</span>
+
     <div class="rf-stars" role="radiogroup" aria-label="Choose rating from 1 to 5 stars">
       <% for (let i = 5; i >= 1; i--) { %>
-        <input type="radio" 
-               id="star-<%= i %>" 
-               name="stars" 
-               value="<%= i %>" 
-               <%= (i === stars) ? 'checked' : '' %>
-               class="rf-star-input" />
-        <label for="star-<%= i %>" 
-               class="rf-star-label" 
-               title="<%= i %> star<%= i>1?'s':'' %>"
-               data-value="<%= i %>">
+        <input
+          type="radio"
+          id="star-<%= uid %>-<%= i %>"
+          name="stars"
+          value="<%= i %>"
+          <%= (i === stars) ? 'checked' : '' %>
+          class="rf-star-input"
+          required
+        />
+
+        <label
+          for="star-<%= uid %>-<%= i %>"
+          class="rf-star-label"
+          title="<%= i %> star<%= (i > 1 ? 's' : '') %>"
+          data-value="<%= i %>"
+        >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" 
-                  stroke="currentColor" 
-                  stroke-width="1.5"
-                  stroke-linejoin="round"/>
+            <path
+              d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            />
           </svg>
           <span class="rf-star-text"><%= i %></span>
         </label>
       <% } %>
-      <div class="rf-stars-preview">Select stars</div>
+
+      <div class="rf-stars-preview" aria-live="polite">Select stars</div>
     </div>
   </div>
 
@@ -44,25 +69,30 @@ const stars = existing.stars || 0;
     <div class="rf-field">
       <label class="rf-field-label">
         <span>Title (optional)</span>
-        <input type="text" 
-               name="title" 
-               maxlength="80" 
-               value="<%= existing.title || '' %>" 
-               placeholder="Short summary of your experience"
-               class="rf-input" />
-        <div class="rf-field-hint">Max 80 characters</div>
+        <input
+          type="text"
+          name="title"
+          maxlength="120"
+          value="<%= existing.title || '' %>"
+          placeholder="Short summary of your experience"
+          class="rf-input"
+          autocomplete="off"
+        />
+        <div class="rf-field-hint" data-kind="title">Max 120 characters</div>
       </label>
     </div>
 
     <div class="rf-field">
       <label class="rf-field-label">
         <span>Review (optional)</span>
-        <textarea name="body" 
-                  rows="3" 
-                  maxlength="500" 
-                  placeholder="Share your thoughts about this product..."
-                  class="rf-textarea"><%= existing.body || '' %></textarea>
-        <div class="rf-field-hint">Max 500 characters</div>
+        <textarea
+          name="body"
+          rows="3"
+          maxlength="2000"
+          placeholder="Share your thoughts about this product..."
+          class="rf-textarea"
+        ><%= existing.body || '' %></textarea>
+        <div class="rf-field-hint" data-kind="body">Max 2000 characters</div>
       </label>
     </div>
   </div>
@@ -76,7 +106,7 @@ const stars = existing.stars || 0;
   </button>
 </form>
 
-<style>
+<style nonce="<%= nonce %>">
   /* ===== COMPANY COLORS & VARIABLES ===== */
   .rf {
     --blue: #2563EB;
@@ -144,7 +174,13 @@ const stars = existing.stars || 0;
   }
 
   .rf-star-input {
-    display: none;
+    /* ✅ keep radios accessible to screen readers while hidden visually */
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
   }
 
   .rf-star-label {
@@ -167,13 +203,23 @@ const stars = existing.stars || 0;
     transition: var(--transition);
   }
 
-  .rf-star-input:checked + .rf-star-label svg,
-  .rf-star-label:hover svg,
-  .rf-star-label:hover ~ .rf-star-label svg {
+  /* ✅ checked star */
+  .rf-star-input:checked + .rf-star-label svg {
     color: #F59E0B;
+    fill: #F59E0B;
   }
 
-  .rf-star-input:checked + .rf-star-label svg {
+  /* ✅ hover: fill hovered + all to the left (works in modern browsers that support :has) */
+  .rf-stars:has(.rf-star-label:hover) .rf-star-label svg {
+    color: #E5E7EB;
+    fill: none;
+  }
+  .rf-stars:has(.rf-star-label:hover) .rf-star-label:hover svg {
+    color: #F59E0B;
+    fill: #F59E0B;
+  }
+  .rf-stars:has(.rf-star-label:hover) .rf-star-label:hover ~ .rf-star-label svg {
+    color: #F59E0B;
     fill: #F59E0B;
   }
 
@@ -289,18 +335,10 @@ const stars = existing.stars || 0;
     box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
   }
 
-  .dark-theme .rf-title {
-    color: #F1F5F9;
-  }
-
-  .dark-theme .rf-header {
-    border-bottom-color: #2D5A2D;
-  }
-
+  .dark-theme .rf-title { color: #F1F5F9; }
+  .dark-theme .rf-header { border-bottom-color: #2D5A2D; }
   .dark-theme .rf-stars-label,
-  .dark-theme .rf-field-label {
-    color: #E2E8F0;
-  }
+  .dark-theme .rf-field-label { color: #E2E8F0; }
 
   .dark-theme .rf-input,
   .dark-theme .rf-textarea {
@@ -320,49 +358,17 @@ const stars = existing.stars || 0;
     border-color: var(--blue);
   }
 
-  .dark-theme .rf-stars-preview {
-    color: #94A3B8;
-  }
-
-  .dark-theme .rf-field-hint {
-    color: #64748B;
-  }
+  .dark-theme .rf-stars-preview { color: #94A3B8; }
+  .dark-theme .rf-field-hint { color: #64748B; }
 
   /* ===== COMPACT MOBILE DESIGN ===== */
   @media (max-width: 360px) {
-    .rf {
-      padding: 12px;
-    }
-    
-    .rf-title {
-      font-size: 15px;
-    }
-    
-    .rf-star-label svg {
-      width: 20px;
-      height: 20px;
-    }
-    
-    .rf-input,
-    .rf-textarea {
-      padding: 8px;
-      font-size: 13px;
-    }
-    
-    .rf-textarea {
-      min-height: 70px;
-    }
-    
-    .rf-submit {
-      padding: 10px;
-      font-size: 13px;
-    }
-  }
-
-  @media (min-width: 361px) and (max-width: 720px) {
-    .rf {
-      padding: 16px;
-    }
+    .rf { padding: 12px; }
+    .rf-title { font-size: 15px; }
+    .rf-star-label svg { width: 20px; height: 20px; }
+    .rf-input, .rf-textarea { padding: 8px; font-size: 13px; }
+    .rf-textarea { min-height: 70px; }
+    .rf-submit { padding: 10px; font-size: 13px; }
   }
 
   /* ===== ACCESSIBILITY ===== */
@@ -375,139 +381,85 @@ const stars = existing.stars || 0;
     outline: 2px solid var(--blue);
     outline-offset: 2px;
   }
-
-  /* ===== ANIMATION ===== */
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .rf {
-    animation: fadeIn 0.3s ease-out;
-  }
 </style>
 
-<script nonce="<%= NONCE %>">
+<script nonce="<%= nonce %>">
 (function() {
-  const form = document.querySelector('.rf');
+  const form = document.getElementById('rf-<%= uid %>');
   if (!form) return;
 
-  // Star rating preview text
-  const stars = form.querySelectorAll('.rf-star-input');
+  const pid = "<%= uid %>";
+
+  const radios = Array.from(form.querySelectorAll('.rf-star-input'));
   const preview = form.querySelector('.rf-stars-preview');
-  const starLabels = form.querySelectorAll('.rf-star-label');
+  const labels = Array.from(form.querySelectorAll('.rf-star-label'));
 
   function updatePreview(value) {
     if (!preview) return;
-    const messages = [
-      'Select stars',
-      'Poor',
-      'Fair',
-      'Good',
-      'Very Good',
-      'Excellent'
-    ];
+    const messages = ['Select stars', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
     preview.textContent = messages[value] || messages[0];
-    
-    // Color preview based on rating
-    const colors = ['#64748B', '#EF4444', '#F97316', '#F59E0B', '#22C55E', '#16A34A'];
-    preview.style.color = colors[value] || colors[0];
   }
 
-  // Update preview on hover and selection
-  starLabels.forEach(label => {
-    const value = label.getAttribute('data-value');
-    
-    // Hover preview
-    label.addEventListener('mouseenter', () => {
-      updatePreview(parseInt(value));
-    });
-    
-    // Reset preview when leaving stars area
+  // Hover preview
+  labels.forEach((label) => {
+    const value = parseInt(label.getAttribute('data-value') || '0', 10);
+
+    label.addEventListener('mouseenter', () => updatePreview(value));
     label.addEventListener('mouseleave', () => {
       const checked = form.querySelector('.rf-star-input:checked');
-      updatePreview(checked ? parseInt(checked.value) : 0);
+      updatePreview(checked ? parseInt(checked.value, 10) : 0);
     });
   });
 
-  // Update on selection
-  stars.forEach(star => {
-    star.addEventListener('change', () => {
-      updatePreview(parseInt(star.value));
-      
-      // Add visual feedback
-      const label = form.querySelector(`label[for="star-${star.value}"]`);
+  // Selection preview + tiny bump
+  radios.forEach((radio) => {
+    radio.addEventListener('change', () => {
+      updatePreview(parseInt(radio.value, 10));
+      const label = form.querySelector(`label[for="star-${pid}-${radio.value}"]`);
       if (label) {
-        label.style.transform = 'scale(1.1)';
-        setTimeout(() => {
-          label.style.transform = '';
-        }, 200);
+        label.style.transform = 'scale(1.06)';
+        setTimeout(() => { label.style.transform = ''; }, 160);
       }
     });
   });
 
-  // Character counters
+  // Counters (match server limits)
   const titleInput = form.querySelector('input[name="title"]');
   const bodyTextarea = form.querySelector('textarea[name="body"]');
-  const titleHint = form.querySelector('.rf-field-hint');
-  const bodyHint = form.querySelectorAll('.rf-field-hint')[1];
+  const titleHint = form.querySelector('.rf-field-hint[data-kind="title"]');
+  const bodyHint = form.querySelector('.rf-field-hint[data-kind="body"]');
 
   function updateCounters() {
-    if (titleInput && titleHint) {
-      const count = titleInput.value.length;
-      titleHint.textContent = `${count}/80 characters`;
-    }
-    
-    if (bodyTextarea && bodyHint) {
-      const count = bodyTextarea.value.length;
-      bodyHint.textContent = `${count}/500 characters`;
-    }
+    if (titleInput && titleHint) titleHint.textContent = `${titleInput.value.length}/120`;
+    if (bodyTextarea && bodyHint) bodyHint.textContent = `${bodyTextarea.value.length}/2000`;
   }
-
-  if (titleInput) {
-    titleInput.addEventListener('input', updateCounters);
-  }
-  
-  if (bodyTextarea) {
-    bodyTextarea.addEventListener('input', updateCounters);
-  }
-
-  // Initialize counters
+  if (titleInput) titleInput.addEventListener('input', updateCounters);
+  if (bodyTextarea) bodyTextarea.addEventListener('input', updateCounters);
   updateCounters();
 
-  // Form submission feedback
-  form.addEventListener('submit', function(e) {
+  // Submit feedback
+  form.addEventListener('submit', function() {
     const submitBtn = this.querySelector('.rf-submit');
-    if (submitBtn && !submitBtn.classList.contains('submitting')) {
-      submitBtn.classList.add('submitting');
-      const originalHTML = submitBtn.innerHTML;
-      submitBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20"/>
-        </svg>
-        Saving...
-      `;
-      submitBtn.disabled = true;
-      
-      // Revert after 3 seconds (in case submission fails)
-      setTimeout(() => {
-        if (submitBtn.classList.contains('submitting')) {
-          submitBtn.classList.remove('submitting');
-          submitBtn.innerHTML = originalHTML;
-          submitBtn.disabled = false;
-        }
-      }, 3000);
-    }
+    if (!submitBtn || submitBtn.disabled) return;
+
+    submitBtn.disabled = true;
+    const original = submitBtn.innerHTML;
+    submitBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20"/>
+      </svg>
+      Saving...
+    `;
+
+    // fallback if navigation is blocked for any reason
+    setTimeout(() => {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = original;
+    }, 3000);
   });
 
-  // Initialize preview based on existing rating
-  const checkedStar = form.querySelector('.rf-star-input:checked');
-  updatePreview(checkedStar ? parseInt(checkedStar.value) : 0);
+  // init
+  const checked = form.querySelector('.rf-star-input:checked');
+  updatePreview(checked ? parseInt(checked.value, 10) : 0);
 })();
 </script>

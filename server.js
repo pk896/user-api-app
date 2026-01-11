@@ -35,9 +35,7 @@ async function initializeDatabase() {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       return await initializeDatabase();
     } else {
-      console.error(
-        '⚠️ Max retries reached. Starting server without database connection.',
-      );
+      console.error('⚠️ Max retries reached. Starting server without database connection.');
       console.error('⚠️ Database-dependent features will be unavailable.');
       return false;
     }
@@ -50,13 +48,8 @@ try {
   validateEnv();
   console.log('✅ Environment validation passed');
 } catch (err) {
-  console.error(
-    '⚠️ Environment validation failed:',
-    err && err.message,
-  );
-  console.error(
-    "⚠️ Continuing with invalid environment - some features may not work correctly",
-  );
+  console.error('⚠️ Environment validation failed:', err && err.message);
+  console.error('⚠️ Continuing with invalid environment - some features may not work correctly');
   // Don't throw, just log and continue
 }
 
@@ -237,11 +230,7 @@ app.use((req, res, next) => {
         ],
 
         // ✅ PayPal renders in iframes
-        frameSrc: [
-          "'self'",
-          'https://www.paypal.com',
-          'https://www.sandbox.paypal.com',
-        ],
+        frameSrc: ["'self'", 'https://www.paypal.com', 'https://www.sandbox.paypal.com'],
 
         // ✅ Good security hardening (won’t break your app)
         objectSrc: ["'none'"],
@@ -274,9 +263,7 @@ const limiter = rateLimit({
   legacyHeaders: false,
   handler: (req, res) => {
     console.warn(`⚠️ Rate limit exceeded for IP: ${req.ip}`);
-    res
-      .status(429)
-      .json({ success: false, message: 'Too many requests. Please try again later.' });
+    res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
   },
 });
 app.use('/business/login', limiter);
@@ -341,8 +328,7 @@ app.use((req, res, next) => {
   res.locals.business = req.session.business || null;
 
   res.locals.theme = req.session.theme || 'light';
-  res.locals.themeCss =
-    res.locals.theme === 'dark' ? '/css/dark.css' : '/css/main.css';
+  res.locals.themeCss = res.locals.theme === 'dark' ? '/css/dark.css' : '/css/main.css';
 
   // Add database status to locals for templates
   res.locals.dbAvailable = dbConnectionEstablished;
@@ -353,10 +339,7 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    Google OAuth Routes
 --------------------------------------- */
-app.get(
-  '/auth/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] }),
-);
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
 app.get(
   '/auth/google/callback',
@@ -430,6 +413,7 @@ app.use((req, res, next) => {
    Import and Register Routers
 --------------------------------------- */
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
+const productRatingsApiRoutes = require('./routes/productRatingsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
@@ -446,7 +430,7 @@ const matchesRoutes = require('./routes/matches');
 const notificationsRoutes = require('./routes/notifications');
 const wishlistRoutes = require('./routes/wishlist');
 const passwordResetRoutes = require('./routes/passwordReset');
-const productRatingsRoutes = require('./routes/productRatings');
+const ratingsRouter = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminOrdersApi = require('./routes/adminOrdersApi');
@@ -454,6 +438,11 @@ const adminPayoutsRoutes = require('./routes/adminPayouts');
 const ordersRoutes = require('./routes/orders');
 const debugDangerRoutes = require('./routes/debugDanger');
 app.use('/_danger', debugDangerRoutes);
+
+if (ratingsRouter) {
+  app.use('/productRatings', ratingsRouter);
+  console.log('✅ Ratings router mounted at /productRatings');
+}
 
 // API first
 app.use('/api/cart', cartRoutes);
@@ -463,6 +452,9 @@ app.use('/api', deliveryOptionsApi);
 
 // Admin API
 app.use('/api/admin', adminOrdersApi);
+
+// rating API
+app.use('/api', productRatingsApiRoutes);
 
 // Auth & identity
 app.use('/users', usersRouter);
@@ -475,8 +467,6 @@ app.use('/admin', adminBizVerifyRoutes);
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);
 app.use('/admin', adminPayoutsRoutes);
-
-
 
 // Commerce / catalog
 app.use('/products', productsRouter);
@@ -497,8 +487,9 @@ app.use('/notifications', notificationsRoutes);
 // Disable EJS caching in development
 app.set('view cache', false);
 
-// Ratings
-app.use(productRatingsRoutes);
+// Ratings)
+// app.use('productRatingsRoutes');
+//app.use('/', productRatingsRoutes);
 
 // Wishlist under /users
 app.use('/users', wishlistRoutes);
@@ -509,12 +500,6 @@ app.use('/users/password', passwordResetRoutes);
 app.use('/orders', ordersRoutes);
 // Tracking (separate namespace so it never conflicts)
 app.use('/orders/tracking', orderTrackingRoutes);
-
-// Dev mail test route
-app.use(require('./routes/dev-mail'));
-
-// Static / legal LAST
-app.use('/', staticPagesRoutes);
 
 /* ---------------------------------------
    Additional Routes
@@ -598,6 +583,9 @@ app.get('/_status/database', (req, res) => {
   });
 });
 
+// Static / legal LAST
+app.use('/', staticPagesRoutes);
+
 /* ---------------------------------------
    404 & 500 Error Handlers
 --------------------------------------- */
@@ -640,10 +628,7 @@ async function startServer() {
         req.path.includes('/orders') ||
         req.path.includes('/users/dashboard')
       ) {
-        req.flash(
-          'warning',
-          'Database is currently unavailable. Some features may not work.',
-        );
+        req.flash('warning', 'Database is currently unavailable. Some features may not work.');
       }
       next();
     });
@@ -664,5 +649,3 @@ startServer().catch((err) => {
   console.error('💀 Server cannot start due to critical error');
   // Still don't use process.exit - just log and let the process naturally end
 });
-
-
