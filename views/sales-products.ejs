@@ -173,15 +173,19 @@
               <a class="title" href="/products/view/<%= p.customId %>"><%= name %></a>
 
               <%
-                // ✅ Real rating from DB (already on product document)
-                const avg = Number(p.avgRating || 0);
-                const cnt = Number(p.ratingsCount || 0);
+                // ✅ Rating from DB (only "unknown" if fields are missing from the query)
+                const avg = (p.avgRating === undefined || p.avgRating === null) ? null : Number(p.avgRating || 0);
+                const cnt = (p.ratingsCount === undefined || p.ratingsCount === null) ? null : Number(p.ratingsCount || 0);
 
                 // If your list route doesn't include avgRating/ratingsCount yet, these will be 0,
                 // and JS (below) can optionally fetch them per product without breaking other flows.
               %>
 
-              <div class="rating" data-pid="<%= p.customId %>" data-avg="<%= avg %>" data-count="<%= cnt %>">
+                <div class="rating"
+                data-pid="<%= p.customId %>"
+                <%= (avg !== null) ? `data-avg="${avg}"` : '' %>
+                <%= (cnt !== null) ? `data-count="${cnt}"` : '' %>>
+
                 <span class="stars" aria-hidden="true">
                   <span class="stars-bg">★★★★★</span>
                   <span class="stars-fill">★★★★★</span>
@@ -1142,7 +1146,12 @@
     // OPTIONAL: If list route did not include avgRating/ratingsCount,
     // we fetch per-product using your existing API (independent flow).
     // This does NOT disturb other flows; it only updates rating UI.
-    const needFetch = nodes.filter(el => Number(el.getAttribute('data-count') || 0) <= 0);
+    const needFetch = nodes.filter(el => {
+      const hasAvg = el.hasAttribute('data-avg');
+      const hasCnt = el.hasAttribute('data-count');
+      // fetch only if attributes are missing (not if count is 0)
+      return !(hasAvg && hasCnt);
+    });
 
     if (!needFetch.length) return;
 
@@ -1541,5 +1550,6 @@
   applyFilters();
   refreshCart();
   loadDeliveryOptions('');
+  hydrateRatings(); // ✅ IMPORTANT: actually run it
 })();
 </script>
