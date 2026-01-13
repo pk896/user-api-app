@@ -441,7 +441,7 @@ app.use('/_danger', debugDangerRoutes);
 
 if (ratingsRouter) {
   app.use('/productRatings', ratingsRouter);
-  console.log('✅ Ratings router mounted at /productRatings');
+  // console.log('✅ Ratings router mounted at /productRatings');
 }
 
 // API first

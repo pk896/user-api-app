@@ -170,29 +170,57 @@ async function cheapestDelivery() {
 // ======================================================
 function computeTotalsFromSession(cart, delivery = 0) {
   const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
-  let sub = 0;
+
+  // Cart item prices are VAT-INCLUSIVE (gross)
+  // ✅ PayPal requires: item_total = sum(items.unit_amount * qty)
+  // So we must send NET unit_amount to PayPal and put VAT in tax_total.
+  const r = Number.isFinite(vatRate) ? vatRate : 0;
+
+  let netItemsTotal = 0;
+  let grossItemsTotal = 0;
 
   const ppItems = itemsArr.map((it, i) => {
-    const priceN = normalizeMoneyNumber(it.price ?? it.unitPrice);
+    const grossUnitRaw = normalizeMoneyNumber(it.price ?? it.unitPrice); // gross
     const qtyN = toQty(it.qty ?? it.quantity, 1);
 
-    const price = priceN === null ? 0 : priceN;
-    const name = (it.name || `Item ${i + 1}`).toString().slice(0, 127);
+    const grossUnit = grossUnitRaw === null ? 0 : +grossUnitRaw.toFixed(2);
 
-    sub += price * qtyN;
+    // NET per unit (rounded to 2dp for PayPal consistency)
+    const netUnit = r > 0 ? +(grossUnit / (1 + r)).toFixed(2) : grossUnit;
+
+    const lineNet = +(netUnit * qtyN).toFixed(2);
+    const lineGross = +(grossUnit * qtyN).toFixed(2);
+
+    netItemsTotal += lineNet;
+    grossItemsTotal += lineGross;
+
+    const name = (it.name || `Item ${i + 1}`).toString().slice(0, 127);
 
     return {
       name,
       quantity: String(qtyN),
-      unit_amount: { currency_code: upperCcy, value: toMoney2(price) },
+      unit_amount: { currency_code: upperCcy, value: toMoney2(netUnit) }, // ✅ NET
     };
   });
 
-  const vat = +(sub * vatRate).toFixed(2);
-  const del = +Number(delivery || 0).toFixed(2);
-  const grand = +(sub + vat + del).toFixed(2);
+  netItemsTotal = +netItemsTotal.toFixed(2);
+  grossItemsTotal = +grossItemsTotal.toFixed(2);
 
-  return { items: ppItems, subTotal: +sub.toFixed(2), vatTotal: vat, delivery: del, grandTotal: grand };
+  // VAT extracted as: gross - net (using the same rounded sums)
+  const vat = +(grossItemsTotal - netItemsTotal).toFixed(2);
+
+  const del = +Number(delivery || 0).toFixed(2);
+
+  // amount.value MUST equal item_total + tax_total + shipping
+  const grand = +(netItemsTotal + vat + del).toFixed(2);
+
+  return {
+    items: ppItems,
+    subTotal: netItemsTotal,     // ✅ NET (PayPal item_total)
+    vatTotal: vat,               // ✅ VAT (PayPal tax_total)
+    delivery: del,
+    grandTotal: grand,           // ✅ PayPal amount.value
+  };
 }
 
 // ======================================================
@@ -663,7 +691,7 @@ function buildReceiptLink(orderId) {
 // ======================================================
 // ✅ VIEWS
 // ======================================================
-router.get('/checkout', requireAnyAuth, async (req, res) => {
+router.get('/checkout', async (req, res) => {
   let shippingFlat = 0;
   try {
     const { dollars } = await cheapestDelivery();
@@ -696,7 +724,7 @@ router.get('/orders', requireAnyAuth, (req, res) => {
   });
 });
 
-router.get('/config', requireAnyAuth, (req, res) => {
+router.get('/config', (req, res) => {
   res.json({
     clientId: String(PAYPAL_CLIENT_ID || '').trim(),
     currency: upperCcy,
@@ -710,7 +738,7 @@ router.get('/config', requireAnyAuth, (req, res) => {
 // ======================================================
 // ✅ CREATE ORDER (PayPal)
 // ======================================================
-router.post('/create-order', requireAnyAuth, express.json(), async (req, res) => {
+router.post('/create-order', express.json(), async (req, res) => {
   try {
     const cart = req.session?.cart || { items: [] };
 
@@ -749,6 +777,7 @@ router.post('/create-order', requireAnyAuth, express.json(), async (req, res) =>
         quantity: qty,
         unitPrice: Number(unitPriceN.toFixed(2)),
         imageUrl: it.imageUrl || it.image || '',
+        variants: it.variants || {}, // ✅ add this line
       };
     });
 
@@ -859,7 +888,7 @@ router.post('/create-order', requireAnyAuth, express.json(), async (req, res) =>
 // ======================================================
 // ✅ CAPTURE ORDER (PayPal)
 // ======================================================
-router.post('/capture-order', requireAnyAuth, express.json(), async (req, res) => {
+router.post('/capture-order', express.json(), async (req, res) => {
   try {
     const orderID = safeStr(req.body?.orderID || req.query?.orderId, 128);
     if (!orderID) {
@@ -868,8 +897,17 @@ router.post('/capture-order', requireAnyAuth, express.json(), async (req, res) =
 
     const pending = req.session.pendingOrder || null;
 
-    // ✅ Prevent replay/cross-session capture when pending exists
-    if (pending?.id && String(pending.id) !== String(orderID)) {
+    // ✅ must have a pending session order (guest-safe & abuse-safe)
+    if (!pending?.id) {
+      return res.status(409).json({
+        ok: false,
+        code: 'NO_PENDING_ORDER',
+        message: 'No pending checkout found. Please restart checkout.',
+      });
+    }
+
+    // ✅ prevent cross-session capture
+    if (String(pending.id) !== String(orderID)) {
       return res.status(409).json({
         ok: false,
         code: 'ORDER_MISMATCH',
@@ -942,6 +980,7 @@ router.post('/capture-order', requireAnyAuth, express.json(), async (req, res) =
             quantity: toQty(it?.quantity, 1),
             price: { value: toMoney2(safeUnit), currency: upperCcy },
             imageUrl: it?.imageUrl || '',
+            variants: it?.variants || {}, // ✅ ADD THIS LINE
           };
         })
       : [];
@@ -1075,8 +1114,10 @@ router.post('/capture-order', requireAnyAuth, express.json(), async (req, res) =
     req.session.lastOrderSnapshot = {
       ...buildSessionSnapshot(orderID, pending),
       shipping: shippingAddress,
-      amount: finalAmount,
+      amount: { value: Number(normalizeMoneyNumber(finalAmount?.value) ?? pending?.grandTotal ?? 0) },
+      currency: String(finalAmount?.currency_code || pending?.currency || upperCcy).toUpperCase(),
     };
+
     req.session.cart = { items: [] };
     req.session.pendingOrder = null;
     await saveSession(req);
@@ -1126,7 +1167,7 @@ router.get('/order/:id', async (req, res) => {
   }
 });
 
-router.get('/thank-you', requireAnyAuth, (req, res) => {
+router.get('/thank-you', (req, res) => {
   const id = safeStr(req.query.orderId, 128);
   const snapId = req.session?.lastOrderSnapshot?.id;
 
@@ -1141,7 +1182,7 @@ router.get('/thank-you', requireAnyAuth, (req, res) => {
   });
 });
 
-router.get('/success', requireAnyAuth, (req, res) => {
+router.get('/success', (req, res) => {
   const qid = safeStr(req.query.id, 128);
   const snapId = req.session?.lastOrderSnapshot?.id;
 

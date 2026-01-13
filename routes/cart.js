@@ -10,6 +10,27 @@ const router = express.Router();
 function ensureCart(req) {
   if (!req.session.cart) {req.session.cart = { items: [] };}
   if (!Array.isArray(req.session.cart.items)) {req.session.cart.items = [];}
+
+  // ✅ Upgrade old cart items (stored as NET before) → convert to GROSS once
+  const r = vatRate(req);
+  req.session.cart.items = (req.session.cart.items || []).map((it) => {
+    if (!it) return it;
+
+    // If already upgraded, keep as-is
+    if (it.vatIncluded === true) return it;
+
+    const net = Number(it.priceExVat ?? it.price ?? 0);
+    const gross = round2(net * (1 + r));
+
+    return {
+      ...it,
+      price: gross,
+      priceExVat: net,
+      vatRate: r,
+      vatIncluded: true,
+    };
+  });
+
   return req.session.cart;
 }
 
@@ -33,15 +54,25 @@ function productUnitPriceNumber(p) {
   return Number(p.price || 0);
 }
 
-function normalizeCartItem(p, qty, variants = {}) {
+function normalizeCartItem(p, qty, variants = {}, req) {
+  const { net, gross, vatIncluded, vatRate: r } = priceGrossFromProduct(p, req);
+
   return {
     productId: String(p._id),
     customId: p.customId,
     name: p.name,
-    price: productUnitPriceNumber(p),
+
+    // ✅ Cart stores VAT-inclusive price (gross)
+    price: gross,
+
+    // Optional but useful for invoices/admin breakdowns later
+    priceExVat: net,
+    vatRate: r,
+    vatIncluded,
+
     imageUrl: p.imageUrl || p.image || '',
     quantity: Math.max(1, Math.floor(Number(qty || 1))),
-    variants: variants, // Add variants parameter
+    variants: variants,
   };
 }
 
@@ -65,6 +96,26 @@ function wantsJson(req) {
 
 function cartCount(items) {
   return (items || []).reduce((n, it) => n + Number(it.quantity || 1), 0);
+}
+
+/* ------------------------------------------------------------------
+ * VAT helpers (NET in DB, GROSS in cart)
+ * ------------------------------------------------------------------ */
+function vatRate(req) {
+  // Priority: env → default 15%
+  const r = Number(process.env.VAT_RATE || 0.15);
+  return Number.isFinite(r) ? r : 0.15;
+}
+
+function round2(n) {
+  return Math.round(Number(n || 0) * 100) / 100;
+}
+
+function priceGrossFromProduct(p, req) {
+  const net = productUnitPriceNumber(p); // ✅ product price in DB (excluding VAT)
+  const r = vatRate(req);
+  const gross = round2(net * (1 + r));
+  return { net, gross, vatIncluded: true, vatRate: r };
 }
 
 /* ------------------------------------------------------------------
@@ -213,7 +264,7 @@ router.get('/add', async (req, res) => {
       cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + qty;
     } else {
       // Create cart item with variants
-      const cartItem = normalizeCartItem(product, qty);
+      const cartItem = normalizeCartItem (product, qty, variantData, req);
       cartItem.variants = variantData; // Add variants to cart item
       cart.items.push(cartItem);
     }
@@ -332,7 +383,7 @@ router.post('/increase', express.json(), async (req, res) => {
     if (idx >= 0) {
       cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + 1;
     } else {
-      const cartItem = normalizeCartItem(product, 1, variants);
+      const cartItem = normalizeCartItem(product, 1, variants, req);
       cartItem.variants = variants;
       cart.items.push(cartItem);
     }
@@ -434,7 +485,7 @@ router.patch('/item/:id', express.json(), async (req, res) => {
       // Seed from DB if not present (nice UX)
       const product = await findProductByPid(id);
       if (!product) {return res.status(404).json({ message: 'Item not found.', items: cart.items });}
-      cart.items.push(normalizeCartItem(product, quantity));
+      cart.items.push(normalizeCartItem(product, quantity, {}, req)); 
     } else {
       cart.items[idx].quantity = Math.max(1, Math.floor(quantity));
     }

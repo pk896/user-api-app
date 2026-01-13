@@ -1,3 +1,4 @@
+<!--views/sales-products.ejs-->
 <% /* ------------------------------------------------------------
    Amazon-style Shop (mobile-first, Hisense U50 Lite friendly)
    Uses your real Delivery Options API for live shipping summary.
@@ -8,6 +9,11 @@
      • Product details: /products/view/:customId
    Expects locals: products, success, error, nonce, themeCss
 ------------------------------------------------------------- */ %>
+<%
+  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
+    ? Number(vatRate)
+    : 0.15;
+%>
 
 <!-- ✅ Flash Messages -->
 <% if (success && success.length) { %>
@@ -113,7 +119,8 @@
         <!-- Default GRID mode -->
         <ul id="list" class="amz-list grid-mode">
           <% products.forEach(p => {
-            const price     = Number(p.price || 0);
+            const priceNet  = Number(p.price || 0);  // seller input (excluding VAT)
+            const price     = priceNet * (1 + VAT);  // shopper price (including VAT)
             const inStock   = Number(p.stock || 0) > 0;
             const name      = String(p.name || '');
             const cat       = (p.category || '').toLowerCase();
@@ -202,6 +209,7 @@
 
               <div class="price-row">
                 <span class="price">R <%= price.toFixed(2) %></span>
+                <span class="muted vat">incl. VAT</span>
                 <span class="<%= inStock ? 'stock in' : 'stock out' %>">
                   <%= inStock ? 'In Stock' : 'Out of Stock' %>
                 </span>
@@ -310,92 +318,92 @@
 
 <style nonce="<%= nonce %>">
   :root{
-  --brand:#232f3e;
-  --brand2:#37475a;
-  --accent:#ff9900;
-  --card:#fff;
-  --ink:#111827;
-  --muted:#6b7280;
-  --line:#e5e7eb;
-  --shadow:0 6px 24px rgba(0,0,0,.08);
-}
+    --brand:#232f3e;
+    --brand2:#37475a;
+    --accent:#ff9900;
+    --card:#fff;
+    --ink:#111827;
+    --muted:#6b7280;
+    --line:#e5e7eb;
+    --shadow:0 6px 24px rgba(0,0,0,.08);
+  }
 
-.dark-theme{
-  --card:#0f172a;
-  --ink:#e5e7eb;
-  --muted:#9ca3af;
-  --line:#334155;
-  --brand:#111827;
-  --brand2:#1f2937;
-}
+  .dark-theme{
+    --card:#0f172a;
+    --ink:#e5e7eb;
+    --muted:#9ca3af;
+    --line:#334155;
+    --brand:#111827;
+    --brand2:#1f2937;
+  }
 
-/* === Cinematic Navy Backdrop (keeps your Amazon layout) === */
-.amz-wrap{
-  --brand:#0f1f35;   /* top bar */
-  --brand2:#1b2a41;  /* secondary */
-  --accent:#ffb703;  /* warm amber */
-  background:
-    radial-gradient(1000px 480px at 50% -10%, #1c2c4d 0%, rgba(12,22,38,.9) 48%, #0b1220 100%),
-    linear-gradient(180deg, #0b1220, #0b1220);
-  min-height:100dvh;
-  color:var(--ink);
-}
+  /* === Cinematic Navy Backdrop (keeps your Amazon layout) === */
+  .amz-wrap{
+    --brand:#0f1f35;   /* top bar */
+    --brand2:#1b2a41;  /* secondary */
+    --accent:#ffb703;  /* warm amber */
+    background:
+      radial-gradient(1000px 480px at 50% -10%, #1c2c4d 0%, rgba(12,22,38,.9) 48%, #0b1220 100%),
+      linear-gradient(180deg, #0b1220, #0b1220);
+    min-height:100dvh;
+    color:var(--ink);
+  }
 
-.amz-top{
-  display:grid;
-  grid-template-columns:140px 1fr auto;
-  gap:.6rem;
-  align-items:center;
-  padding:.5rem .6rem;
-  background:var(--brand);
-  color:#fff;
-  position:sticky;
-  top:0;
-  z-index:60;
-}
+  .amz-top{
+    display:grid;
+    grid-template-columns:140px 1fr auto;
+    gap:.6rem;
+    align-items:center;
+    padding:.5rem .6rem;
+    background:var(--brand);
+    color:#fff;
+    position:sticky;
+    top:0;
+    z-index:60;
+  }
 
-/* ===== Brand (logo + short text) ===== */
-.brand{
-  display:inline-flex;
-  align-items:center;
-  gap:.45rem;
-  color:#fff;
-  text-decoration:none;
-  font-weight:900;
-  line-height:1;
-  min-width:0; /* important for truncation */
-}
+  /* ===== Brand (logo + short text) ===== */
+  .brand{
+    display:inline-flex;
+    align-items:center;
+    gap:.45rem;
+    color:#fff;
+    text-decoration:none;
+    font-weight:900;
+    line-height:1;
+    min-width:0; /* important for truncation */
+  }
 
-.brand-logo{
-  width:26px;
-  height:26px;
-  border-radius:8px;
-  object-fit:contain;
-  flex:0 0 auto;
-  box-shadow:0 1px 6px rgba(0,0,0,.25);
-}
+  .brand-logo{
+    width:26px;
+    height:26px;
+    border-radius:8px;
+    object-fit:contain;
+    flex:0 0 auto;
+    box-shadow:0 1px 6px rgba(0,0,0,.25);
+  }
 
-.brand-text{
-  display:block;
-  min-width:0;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  font-size:.95rem;
-  letter-spacing:.01em;
-}
+  .brand-text{
+    display:block;
+    min-width:0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    font-size:.95rem;
+    letter-spacing:.01em;
+  }
 
-/* Phone */
-@media (max-width:480px){
-  .brand-logo{ width:24px; height:24px; }
-  .brand-text{ font-size:.88rem; }
-}
+  /* Phone */
+  @media (max-width:480px){
+    .brand-logo{ width:24px; height:24px; }
+    .brand-text{ font-size:.88rem; }
+  }
 
-/* Tablet / medium */
-@media (min-width:768px){
-  .brand-logo{ width:28px; height:28px; }
-  .brand-text{ font-size:1rem; }
-}
+  /* Tablet / medium */
+  @media (min-width:768px){
+    .brand-logo{ width:28px; height:28px; }
+    .brand-text{ font-size:1rem; }
+  }
 
   /* Desktop */
   @media (min-width:1024px){
@@ -659,12 +667,80 @@
     max-height:2.4em; /* 2 lines max */
   }
 
-  /* Override price-row inside card to flex layout */
+  /* ✅ Prevent overflow inside tight grid cards (tablet/desktop) */
+  .amz-item,
+  .amz-item .info{
+    min-width:0;
+  }
+
+  /* ✅ Price + VAT + Stock: ONE LINE on tablet/desktop */
   .info .price-row{
     display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:.5rem;
+    align-items:baseline;
+    gap:.32rem;
+    flex-wrap:nowrap;        /* ✅ keep single line by default */
+    min-width:0;
+  }
+
+  /* ✅ Small screens can still wrap */
+  @media (max-width:767px){
+    .info .price-row{ flex-wrap:wrap; }
+  }
+
+  /* ✅ Keep "R 218.50" together always */
+  .info .price-row .price{
+    white-space:nowrap;
+    line-height:1;
+    flex:0 0 auto;
+  }
+
+  /* ✅ VAT: small and allowed to shrink safely */
+  .info .price-row .vat{
+    white-space:nowrap;
+    line-height:1;
+    flex:0 1 auto;
+    min-width:0;
+    font-weight:800;
+    opacity:.9;
+  }
+
+  /* ✅ Stock: stays on the SAME LINE, smaller + can shrink safely */
+  .info .price-row .stock{
+    margin-left:auto;
+    text-align:right;
+    white-space:nowrap;
+    line-height:1;
+    flex:0 1 auto;           /* ✅ don't force a new line */
+    max-width:45%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+
+    font-size:.70rem;        /* ✅ smaller than VAT/price */
+    font-weight:900;
+    letter-spacing:.01em;
+  }
+
+  /* ✅ Tablet / medium: smaller text */
+ @media (min-width:768px) and (max-width:1023px){
+    .info .price-row{ gap:.28rem; }
+    .info .price-row .price{ font-size:1.00rem; }
+    .info .price-row .vat{ font-size:.68rem; }
+    .info .price-row .stock{ font-size:.68rem; }
+  }
+
+  /* ✅ Desktop: crisp + compact (no wrapping unless needed) */
+  @media (min-width:1024px){
+    .info .price-row{ gap:.32rem; }
+    .info .price-row .price{ font-size:1.02rem; }
+    .info .price-row .vat{ font-size:.70rem; }
+    .info .price-row .stock{ font-size:.70rem; }
+  }
+
+  /* VAT label (no inline styles) */
+  .vat{
+    font-size:.78rem;
+    font-weight:800;
+    white-space:nowrap;
   }
 
   /* ===== REAL RATING STARS (no inline style attributes) ===== */
@@ -703,7 +779,11 @@
 
   .dark-theme .rating .rating-num{ color:#E5E7EB; }
 
-  .price{ color:#B12704; font-weight:900; font-size:1.02rem; }
+  .price{white-space:nowrap;
+    color:#B12704;
+    font-weight:900; 
+    font-size:1.02rem; 
+  }
   .stock.in{ color:#16a34a; font-weight:700; }
   .stock.out{ color:#ef4444; font-weight:700; }
 
@@ -723,6 +803,14 @@
     align-items:center;
     justify-content:center;
     padding:.6rem 0;
+  }
+
+  /* ✅ When we scroll to #results, stop below sticky header/subnav */
+  #results{
+    scroll-margin-top: 120px;
+  }
+  @media (max-width:480px){
+    #results{ scroll-margin-top: 140px; }
   }
 
   .pg-btn{
@@ -891,7 +979,10 @@
 
     .amz-item{ grid-template-columns:1fr; padding:.5rem; gap:.45rem; }
     .title{ font-size:.92rem; }
-    .price{ font-size:.98rem; }
+    .price{
+      white-space:nowrap;
+      font-size:.98rem; 
+    }
 
     .mini-co{
       bottom:64px;
@@ -900,6 +991,68 @@
       border:1px solid rgba(148, 163, 184, 0.10);
       backdrop-filter:blur(2px);
       box-shadow:none;
+    }
+
+    @media (max-width:480px){
+      /* ✅ Make cards more compact */
+      .amz-list.grid-mode{ gap:.42rem; }
+
+      .amz-item{
+        padding:.42rem;
+        gap:.35rem;
+        border-radius:12px;
+      }
+
+      /* Slightly shorter image box (reduces tall cards) */
+      .imgbox{
+        aspect-ratio:4 / 5;
+        border-radius:12px;
+      }
+
+      /* tighter text blocks */
+      .info{ gap:.18rem; }
+      .title{ font-size:.88rem; max-height:2.2em; }
+
+      .rating{ font-size:.76rem; gap:.28rem; }
+      .rating .stars{ font-size:.84rem; }
+
+      /* ✅ Price row: put price first, then tiny VAT + tiny stock */
+      .info .price-row{
+        flex-wrap:wrap;
+        justify-content:flex-start;
+        gap:.12rem .45rem;
+        align-items:baseline;
+      }
+
+      .info .price-row .price{
+        flex:1 1 100%;        /* price on its own line */
+        font-size:.92rem;
+        line-height:1.05;
+      }
+
+      .info .price-row .vat{
+        font-size:.64rem;     /* VERY SMALL */
+        font-weight:900;
+        line-height:1.05;
+      }
+
+      .info .price-row .stock{
+        font-size:.64rem;     /* VERY SMALL */
+        font-weight:900;
+        line-height:1.05;
+        white-space:nowrap;
+      }
+
+      /* ✅ Smaller buttons (reduces card height) */
+      .amz-item .act{ gap:.35rem; margin-top:.05rem; }
+      .amz-item .act .btn{
+        padding:.28rem .55rem;
+        font-size:.82rem;
+        border-radius:999px;
+      }
+
+      /* Optional: slightly smaller tags */
+      .tag{ font-size:.66rem; padding:.12rem .38rem; }
     }
   }
 
@@ -1006,550 +1159,562 @@
 
 <!-- ===== Page Script (CSP-safe) ===== -->
 <script nonce="<%= nonce %>">
-(function(){
-  const $  = (s,c=document)=>c.querySelector(s);
-  const $$ = (s,c=document)=>Array.from(c.querySelectorAll(s));
+  (function(){
+    const $  = (s,c=document)=>c.querySelector(s);
+    const $$ = (s,c=document)=>Array.from(c.querySelectorAll(s));
 
-  /* Elements */
-  const list          = $('#list');
-  const resultMeta    = $('#resultMeta');
-  const sortSelect    = $('#sortSelect');
-  const filterToggle  = $('#filterToggle');
-  const viewToggle    = $('#viewToggle');
-  const sidebar       = $('#sidebar');
+    /* Elements */
+    const list          = $('#list');
+    const resultMeta    = $('#resultMeta');
+    const sortSelect    = $('#sortSelect');
+    const filterToggle  = $('#filterToggle');
+    const viewToggle    = $('#viewToggle');
+    const sidebar       = $('#sidebar');
 
-  const searchForm    = $('#searchForm');
-  const searchInput   = $('#searchInput');
-  const catSelect     = $('#catSelect');
-  const regionSelect  = $('#regionSelect');
-  const shipSummary   = $('#shipSummary');
+    const searchForm    = $('#searchForm');
+    const searchInput   = $('#searchInput');
+    const catSelect     = $('#catSelect');
+    const regionSelect  = $('#regionSelect');
+    const shipSummary   = $('#shipSummary');
 
-  const inStockOnly   = $('#inStockOnly');
-  const minPrice      = $('#minPrice');
-  const maxPrice      = $('#maxPrice');
-  const applyPriceBtn = $('#applyPrice');
-  const typeFilter    = $('#typeFilter');
+    const inStockOnly   = $('#inStockOnly');
+    const minPrice      = $('#minPrice');
+    const maxPrice      = $('#maxPrice');
+    const applyPriceBtn = $('#applyPrice');
+    const typeFilter    = $('#typeFilter');
 
-  const pager         = $('#pager');
-  const pgNow         = $('#pgNow');
-  const pgTotal       = $('#pgTotal');
+    const pager         = $('#pager');
+    const pgNow         = $('#pgNow');
+    const pgTotal       = $('#pgTotal');
 
-  const drawer        = $('#cartDrawer');
-  const overlay       = $('#drawerOverlay');
-  const drawerClose   = $('#drawerClose');
-  const cartBtn       = $('#cartBtn');
-  const cartList      = $('#cartList');
-  const cartSubtotal  = $('#cartSubtotal');
-  const cartCountTop  = $('#cartCountTop');
+    const drawer        = $('#cartDrawer');
+    const overlay       = $('#drawerOverlay');
+    const drawerClose   = $('#drawerClose');
+    const cartBtn       = $('#cartBtn');
+    const cartList      = $('#cartList');
+    const cartSubtotal  = $('#cartSubtotal');
+    const cartCountTop  = $('#cartCountTop');
 
-  const miniBar       = $('#miniCheckout');
-  const miniSubtotal  = $('#miniSubtotal');
-  const miniCount     = $('#miniCount');
+    const miniBar       = $('#miniCheckout');
+    const miniSubtotal  = $('#miniSubtotal');
+    const miniCount     = $('#miniCount');
 
-    const variantToast      = $('#variantToast');
-  const variantToastText  = $('#variantToastText');
-  const variantToastClose = $('#variantToastClose');
-  let   variantToastTimer = null;
+      const variantToast      = $('#variantToast');
+    const variantToastText  = $('#variantToastText');
+    const variantToastClose = $('#variantToastClose');
+    let   variantToastTimer = null;
 
-  function hideVariantToast(){
-    if (!variantToast) return;
-    variantToast.classList.remove('show');
-    // after transition, hide completely
-    setTimeout(()=>{
-      variantToast.setAttribute('hidden', 'true');
-    }, 220);
-  }
-
-  function showVariantToast(message){
-    if (!variantToast || !variantToastText){
-      // fallback (should rarely happen)
-      alert(message);
-      return;
+    function hideVariantToast(){
+      if (!variantToast) return;
+      variantToast.classList.remove('show');
+      // after transition, hide completely
+      setTimeout(()=>{
+        variantToast.setAttribute('hidden', 'true');
+      }, 220);
     }
-    variantToastText.textContent = message || 'Please choose size and color before adding to cart.';
-    variantToast.removeAttribute('hidden');
-    variantToast.classList.add('show');
 
-    if (variantToastTimer) clearTimeout(variantToastTimer);
-    variantToastTimer = setTimeout(hideVariantToast, 2500);
-  }
+    function showVariantToast(message){
+      if (!variantToast || !variantToastText){
+        // fallback (should rarely happen)
+        alert(message);
+        return;
+      }
+      variantToastText.textContent = message || 'Please choose size and color before adding to cart.';
+      variantToast.removeAttribute('hidden');
+      variantToast.classList.add('show');
 
-  if (variantToastClose){
-    variantToastClose.addEventListener('click',()=>{
       if (variantToastTimer) clearTimeout(variantToastTimer);
-      hideVariantToast();
-    });
-  }
+      variantToastTimer = setTimeout(hideVariantToast, 2500);
+    }
 
-  const PAGE = { size: 12, page: 1, pages: 1 };
-  const CARD = () => list ? Array.from(list.children) : [];
+    if (variantToastClose){
+      variantToastClose.addEventListener('click',()=>{
+        if (variantToastTimer) clearTimeout(variantToastTimer);
+        hideVariantToast();
+      });
+    }
 
-  /* Sidebar toggle (mobile) */
-  if (filterToggle) {
-    filterToggle.addEventListener('click', () => {
-      const showing = getComputedStyle(sidebar).display !== 'none';
-      sidebar.style.display = showing ? 'none' : 'block';
-      sidebar.style.position = showing ? '' : 'fixed';
-      if (!showing){
-        sidebar.style.top = '64px';
-        sidebar.style.left = '10px';
-        sidebar.style.right = '10px';
-        sidebar.style.zIndex = '65';
-        sidebar.style.maxHeight = '70vh';
-        sidebar.style.overflow = 'auto';
-        overlay.style.display = 'block';
-        overlay.addEventListener('click', hideFiltersOnce, { once:true });
-      }
-    });
-  }
-  function hideFiltersOnce(){ sidebar.style.display='none'; overlay.style.display='none'; }
+    const PAGE = { size: 12, page: 1, pages: 1 };
+    const CARD = () => list ? Array.from(list.children) : [];
 
-  /* List/Grid toggle (default is GRID, button offers List) */
-  if (viewToggle){
-    viewToggle.textContent = '☰ List';
-    viewToggle.setAttribute('aria-pressed', 'true'); // we are in grid by default
-    viewToggle.addEventListener('click', ()=>{
-      const grid = !list.classList.contains('grid-mode'); // toggle desired
-      list.classList.toggle('grid-mode', grid);
-      list.classList.toggle('list-mode', !grid);
-      viewToggle.textContent = grid ? '☰ List' : '▦ Grid';
-      viewToggle.setAttribute('aria-pressed', grid ? 'true' : 'false');
-    });
-  }
+    /* Sidebar toggle (mobile) */
+    if (filterToggle) {
+      filterToggle.addEventListener('click', () => {
+        const showing = getComputedStyle(sidebar).display !== 'none';
+        sidebar.style.display = showing ? 'none' : 'block';
+        sidebar.style.position = showing ? '' : 'fixed';
+        if (!showing){
+          sidebar.style.top = '64px';
+          sidebar.style.left = '10px';
+          sidebar.style.right = '10px';
+          sidebar.style.zIndex = '65';
+          sidebar.style.maxHeight = '70vh';
+          sidebar.style.overflow = 'auto';
+          overlay.style.display = 'block';
+          overlay.addEventListener('click', hideFiltersOnce, { once:true });
+        }
+      });
+    }
+    function hideFiltersOnce(){ sidebar.style.display='none'; overlay.style.display='none'; }
 
-  /* Drawer controls */
-  function openDrawer(){ overlay.style.display='block'; requestAnimationFrame(()=>drawer.classList.add('open')); refreshCart(); }
-  function closeDrawer(){ drawer.classList.remove('open'); setTimeout(()=>overlay.style.display='none', 280); }
-  if (cartBtn) cartBtn.addEventListener('click', openDrawer);
-  overlay.addEventListener('click', closeDrawer);
-  drawerClose.addEventListener('click', closeDrawer);
+    /* List/Grid toggle (default is GRID, button offers List) */
+    if (viewToggle){
+      viewToggle.textContent = '☰ List';
+      viewToggle.setAttribute('aria-pressed', 'true'); // we are in grid by default
+      viewToggle.addEventListener('click', ()=>{
+        const grid = !list.classList.contains('grid-mode'); // toggle desired
+        list.classList.toggle('grid-mode', grid);
+        list.classList.toggle('list-mode', !grid);
+        viewToggle.textContent = grid ? '☰ List' : '▦ Grid';
+        viewToggle.setAttribute('aria-pressed', grid ? 'true' : 'false');
+      });
+    }
 
-  /* ===== Ratings (real from DB, optional per-product API fetch) ===== */
-  function setStarsFill(ratingEl, avg){
-    const fill = ratingEl.querySelector('.stars-fill');
-    if (!fill) return;
-    const a = Math.max(0, Math.min(5, Number(avg || 0)));
-    const pct = (a / 5) * 100;
-    fill.style.width = pct.toFixed(2) + '%';
-  }
+    /* Drawer controls */
+    function openDrawer(){ overlay.style.display='block'; requestAnimationFrame(()=>drawer.classList.add('open')); refreshCart(); }
+    function closeDrawer(){ drawer.classList.remove('open'); setTimeout(()=>overlay.style.display='none', 280); }
+    if (cartBtn) cartBtn.addEventListener('click', openDrawer);
+    overlay.addEventListener('click', closeDrawer);
+    drawerClose.addEventListener('click', closeDrawer);
 
-  async function hydrateRatings(){
-    const nodes = $$('.rating[data-pid]');
-    if (!nodes.length) return;
+    /* ===== Ratings (real from DB, optional per-product API fetch) ===== */
+    function setStarsFill(ratingEl, avg){
+      const fill = ratingEl.querySelector('.stars-fill');
+      if (!fill) return;
+      const a = Math.max(0, Math.min(5, Number(avg || 0)));
+      const pct = (a / 5) * 100;
+      fill.style.width = pct.toFixed(2) + '%';
+    }
 
-    // First pass: set from server-rendered values (p.avgRating, p.ratingsCount)
-    nodes.forEach(el => {
-      const avg = Number(el.getAttribute('data-avg') || 0);
-      setStarsFill(el, avg);
-    });
+    async function hydrateRatings(){
+      const nodes = $$('.rating[data-pid]');
+      if (!nodes.length) return;
 
-    // OPTIONAL: If list route did not include avgRating/ratingsCount,
-    // we fetch per-product using your existing API (independent flow).
-    // This does NOT disturb other flows; it only updates rating UI.
-    const needFetch = nodes.filter(el => {
-      const hasAvg = el.hasAttribute('data-avg');
-      const hasCnt = el.hasAttribute('data-count');
-      // fetch only if attributes are missing (not if count is 0)
-      return !(hasAvg && hasCnt);
-    });
+      // First pass: set from server-rendered values (p.avgRating, p.ratingsCount)
+      nodes.forEach(el => {
+        const avg = Number(el.getAttribute('data-avg') || 0);
+        setStarsFill(el, avg);
+      });
 
-    if (!needFetch.length) return;
+      // OPTIONAL: If list route did not include avgRating/ratingsCount,
+      // we fetch per-product using your existing API (independent flow).
+      // This does NOT disturb other flows; it only updates rating UI.
+      const needFetch = nodes.filter(el => {
+        const hasAvg = el.hasAttribute('data-avg');
+        const hasCnt = el.hasAttribute('data-count');
+        // fetch only if attributes are missing (not if count is 0)
+        return !(hasAvg && hasCnt);
+      });
 
-    // small concurrency limit (safe)
-    const limit = 6;
-    let i = 0;
+      if (!needFetch.length) return;
 
-    async function worker(){
-      while(i < needFetch.length){
-        const el = needFetch[i++];
-        const pid = el.getAttribute('data-pid');
-        if (!pid) continue;
+      // small concurrency limit (safe)
+      const limit = 6;
+      let i = 0;
 
-        try{
-          const data = await getJSON(`/api/products/${encodeURIComponent(pid)}/ratings?fresh=1&limit=0&page=1`);
-          if (!data || !data.ok) continue;
+      async function worker(){
+        while(i < needFetch.length){
+          const el = needFetch[i++];
+          const pid = el.getAttribute('data-pid');
+          if (!pid) continue;
 
-          const avg = Number(data.product?.avgRating || 0);
-          const cnt = Number(data.product?.ratingsCount || 0);
+          try{
+            const data = await getJSON(`/api/products/${encodeURIComponent(pid)}/ratings?fresh=1&limit=0&page=1`);
+            if (!data || !data.ok) continue;
 
-          el.setAttribute('data-avg', String(avg));
-          el.setAttribute('data-count', String(cnt));
+            const avg = Number(data.product?.avgRating || 0);
+            const cnt = Number(data.product?.ratingsCount || 0);
 
-          const num = el.querySelector('.rating-num');
-          const cntEl = el.querySelector('.rating-count');
+            el.setAttribute('data-avg', String(avg));
+            el.setAttribute('data-count', String(cnt));
 
-          if (num) num.textContent = (cnt > 0) ? avg.toFixed(1) : '—';
-          if (cntEl) cntEl.textContent = String(cnt);
+            const num = el.querySelector('.rating-num');
+            const cntEl = el.querySelector('.rating-count');
 
-          setStarsFill(el, avg);
-        } catch {
-          // ignore (do not break page)
+            if (num) num.textContent = (cnt > 0) ? avg.toFixed(1) : '—';
+            if (cntEl) cntEl.textContent = String(cnt);
+
+            setStarsFill(el, avg);
+          } catch {
+            // ignore (do not break page)
+          }
         }
       }
+
+      await Promise.all(Array.from({length: Math.min(limit, needFetch.length)}, worker));
     }
 
-    await Promise.all(Array.from({length: Math.min(limit, needFetch.length)}, worker));
-  }
-
-  /* Fetch helpers */
-  async function getJSON(url){
-    try{
-      const r = await fetch(url, { credentials:'same-origin' });
-      if(!r.ok) return {};
-      const ct=r.headers.get('content-type')||'';
-      if(!ct.includes('application/json')) return {};
-      return await r.json();
-    }catch{
-      return {};
+    /* Fetch helpers */
+    async function getJSON(url){
+      try{
+        const r = await fetch(url, { credentials:'same-origin' });
+        if(!r.ok) return {};
+        const ct=r.headers.get('content-type')||'';
+        if(!ct.includes('application/json')) return {};
+        return await r.json();
+      }catch{
+        return {};
+      }
     }
-  }
-  async function fetchCart(){
-    let data = await getJSON('/api/cart');
-    if (!data || (!data.items && !Array.isArray(data))) data = await getJSON('/cart/items');
-    if (Array.isArray(data)) return { items: data };
-    return data || { items: [] };
-  }
-
-  function renderCart(items){
-    if (!items || !items.length){
-      cartList.innerHTML = '<p class="muted">Your cart is empty.</p>';
-      cartSubtotal.textContent = 'R 0.00';
-      cartCountTop.textContent = '0';
-      miniBar.hidden = true;
-      return;
+    async function fetchCart(){
+      let data = await getJSON('/api/cart');
+      if (!data || (!data.items && !Array.isArray(data))) data = await getJSON('/cart/items');
+      if (Array.isArray(data)) return { items: data };
+      return data || { items: [] };
     }
 
-    let subtotal = 0;
-    let count    = 0;
+    function renderCart(items){
+      if (!items || !items.length){
+        cartList.innerHTML = '<p class="muted">Your cart is empty.</p>';
+        cartSubtotal.textContent = 'R 0.00';
+        cartCountTop.textContent = '0';
+        miniBar.hidden = true;
+        return;
+      }
 
-    cartList.innerHTML = items.map(it=>{
-      const qty   = Number(it.quantity || it.qty || 1);
-      const price = Number(it.price || it.product?.price || 0);
-      const name  = it.name || it.product?.name || 'Item';
-      const image = it.imageUrl || it.product?.imageUrl || '';
+      let subtotal = 0;
+      let count    = 0;
 
-      const variants = it.variants || {};
-      const size  = variants.size  || it.size  || it.variantSize  || '';
-      const color = variants.color || it.color || it.variantColor || '';
+      cartList.innerHTML = items.map(it=>{
+        const qty   = Number(it.quantity || it.qty || 1);
+        const price = Number(it.price || it.product?.price || 0);
+        const name  = it.name || it.product?.name || 'Item';
+        const image = it.imageUrl || it.product?.imageUrl || '';
 
-      subtotal += price * qty;
-      count    += qty;
+        const variants = it.variants || {};
+        const size  = variants.size  || it.size  || it.variantSize  || '';
+        const color = variants.color || it.color || it.variantColor || '';
 
-      const metaParts = [];
-      metaParts.push(`R ${price.toFixed(2)} × ${qty}`);
-      if (size)  metaParts.push(`Size: ${size}`);
-      if (color) metaParts.push(`Color: ${color}`);
-      const meta = metaParts.join(' • ');
+        subtotal += price * qty;
+        count    += qty;
 
-      return `
-        <div class="drawer-item">
-          <img src="${image}" alt="${name}">
-          <div>
-            <div style="font-weight:800">${name}</div>
-            <div class="muted">${meta}</div>
+        const metaParts = [];
+        metaParts.push(`R ${price.toFixed(2)} × ${qty}`);
+        if (size)  metaParts.push(`Size: ${size}`);
+        if (color) metaParts.push(`Color: ${color}`);
+        const meta = metaParts.join(' • ');
+
+        return `
+          <div class="drawer-item">
+            <img src="${image}" alt="${name}">
+            <div>
+              <div style="font-weight:800">${name}</div>
+              <div class="muted">${meta}</div>
+            </div>
+            <span></span>
           </div>
-          <span></span>
-        </div>
-      `;
-    }).join('');
+        `;
+      }).join('');
 
-    cartSubtotal.textContent = 'R ' + subtotal.toFixed(2);
-    cartCountTop.textContent = String(count);
-    miniSubtotal.textContent = 'R ' + subtotal.toFixed(2);
-    miniCount.textContent = String(count);
-    miniBar.hidden = false;
-  }
+      cartSubtotal.textContent = 'R ' + subtotal.toFixed(2);
+      cartCountTop.textContent = String(count);
+      miniSubtotal.textContent = 'R ' + subtotal.toFixed(2);
+      miniCount.textContent = String(count);
+      miniBar.hidden = false;
+    }
 
-  async function refreshCart(){
-    const data = await fetchCart();
-    renderCart(data.items||[]);
-  }
+    async function refreshCart(){
+      const data = await fetchCart();
+      renderCart(data.items||[]);
+    }
 
-  /* Add to cart inline (handles clothes + shoes variants) */
-  function wireAddButtons(){
-    $$('.btn.add').forEach(btn=>{
-      btn.addEventListener('click', async (e)=>{
-        e.preventDefault();
-        if (btn.hasAttribute('aria-disabled')) return;
+    /* Add to cart inline (handles clothes + shoes variants) */
+    function wireAddButtons(){
+      $$('.btn.add').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          e.preventDefault();
+          if (btn.hasAttribute('aria-disabled')) return;
 
-        const pid      = btn.getAttribute('data-pid');
-        const original = btn.textContent;
+          const pid      = btn.getAttribute('data-pid');
+          const original = btn.textContent;
 
-        // Find the card
-        const card = btn.closest('.amz-item');
-        let size = '';
-        let color = '';
+          // Find the card
+          const card = btn.closest('.amz-item');
+          let size = '';
+          let color = '';
 
-        if (card) {
-          const type = (card.getAttribute('data-type') || '').toLowerCase();
-          const role = (card.getAttribute('data-role') || '').toLowerCase();
-          const isClothes = type === 'clothes' || role === 'clothes';
-          const isShoes   = type === 'shoes'   || role === 'shoes';
+          if (card) {
+            const type = (card.getAttribute('data-type') || '').toLowerCase();
+            const role = (card.getAttribute('data-role') || '').toLowerCase();
+            const isClothes = type === 'clothes' || role === 'clothes';
+            const isShoes   = type === 'shoes'   || role === 'shoes';
 
-          if (isClothes || isShoes) {
-            // 👉 FIRST click: just reveal the selectors and focus, do NOT add yet
-            if (!card.classList.contains('show-variants')) {
-              card.classList.add('show-variants');
+            if (isClothes || isShoes) {
+              // 👉 FIRST click: just reveal the selectors and focus, do NOT add yet
+              if (!card.classList.contains('show-variants')) {
+                card.classList.add('show-variants');
 
-              const sizeSelFirst = card.querySelector('.variant-size');
-              if (sizeSelFirst) sizeSelFirst.focus();
+                const sizeSelFirst = card.querySelector('.variant-size');
+                if (sizeSelFirst) sizeSelFirst.focus();
 
-              // stop here – user must choose options, then click Add again
-              return;
-            }
+                // stop here – user must choose options, then click Add again
+                return;
+              }
 
-            // 👉 After variants are visible, now we validate
-            const sizeSel  = card.querySelector('.variant-size');
-            const colorSel = card.querySelector('.variant-color');
+              // 👉 After variants are visible, now we validate
+              const sizeSel  = card.querySelector('.variant-size');
+              const colorSel = card.querySelector('.variant-color');
 
-            size  = sizeSel  ? sizeSel.value.trim()  : '';
-            color = colorSel ? colorSel.value.trim() : '';
+              size  = sizeSel  ? sizeSel.value.trim()  : '';
+              color = colorSel ? colorSel.value.trim() : '';
 
-            // Require BOTH size and color for clothes + shoes
-            if (!size || !color) {
-              showVariantToast('Please choose size and color before adding to cart.');
-              return;
-            }
-          }
-        }
-
-        try{
-          btn.textContent = '⏳ Adding…';
-          btn.setAttribute('aria-disabled','true');
-
-          const params = new URLSearchParams();
-          params.set('pid', pid);
-          params.set('json', '1');
-          if (size)  params.set('size', size);
-          if (color) params.set('color', color);
-
-          const r = await fetch(`/api/cart/add?${params.toString()}`, { credentials:'same-origin' });
-          if(!r.ok){
-            let m='Add failed';
-            try{
-              const j=await r.json();
-              if(j?.message) m=j.message;
-            }catch{}
-            throw new Error(m);
-          }
-
-          // ✅ Added successfully
-          btn.textContent = '✅ Added';
-
-          // 🔁 Reset and hide variants back to default
-          const cardAfter = btn.closest('.amz-item');
-          if (cardAfter) {
-            const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
-            const roleA = (cardAfter.getAttribute('data-role') || '').toLowerCase();
-            const isClothesA = typeA === 'clothes' || roleA === 'clothes';
-            const isShoesA   = typeA === 'shoes'   || roleA === 'shoes';
-
-            if (isClothesA || isShoesA) {
-              const sizeSelA  = cardAfter.querySelector('.variant-size');
-              const colorSelA = cardAfter.querySelector('.variant-color');
-
-              if (sizeSelA)  sizeSelA.value  = '';
-              if (colorSelA) colorSelA.value = '';
-
-              // hide the block again
-              cardAfter.classList.remove('show-variants');
+              // Require BOTH size and color for clothes + shoes
+              if (!size || !color) {
+                showVariantToast('Please choose size and color before adding to cart.');
+                return;
+              }
             }
           }
 
-          setTimeout(()=>{
+          try{
+            btn.textContent = '⏳ Adding…';
+            btn.setAttribute('aria-disabled','true');
+
+            const params = new URLSearchParams();
+            params.set('pid', pid);
+            params.set('json', '1');
+            if (size)  params.set('size', size);
+            if (color) params.set('color', color);
+
+            const r = await fetch(`/api/cart/add?${params.toString()}`, { credentials:'same-origin' });
+            if(!r.ok){
+              let m='Add failed';
+              try{
+                const j=await r.json();
+                if(j?.message) m=j.message;
+              }catch{}
+              throw new Error(m);
+            }
+
+            // ✅ Added successfully
+            btn.textContent = '✅ Added';
+
+            // 🔁 Reset and hide variants back to default
+            const cardAfter = btn.closest('.amz-item');
+            if (cardAfter) {
+              const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
+              const roleA = (cardAfter.getAttribute('data-role') || '').toLowerCase();
+              const isClothesA = typeA === 'clothes' || roleA === 'clothes';
+              const isShoesA   = typeA === 'shoes'   || roleA === 'shoes';
+
+              if (isClothesA || isShoesA) {
+                const sizeSelA  = cardAfter.querySelector('.variant-size');
+                const colorSelA = cardAfter.querySelector('.variant-color');
+
+                if (sizeSelA)  sizeSelA.value  = '';
+                if (colorSelA) colorSelA.value = '';
+
+                // hide the block again
+                cardAfter.classList.remove('show-variants');
+              }
+            }
+
+            setTimeout(()=>{
+              btn.textContent = original;
+              btn.removeAttribute('aria-disabled');
+            }, 900);
+
+            refreshCart();
+          }catch(err){
             btn.textContent = original;
             btn.removeAttribute('aria-disabled');
-          }, 900);
-
-          refreshCart();
-        }catch(err){
-          btn.textContent = original;
-          btn.removeAttribute('aria-disabled');
-          alert(err.message||'Could not add to cart.');
-        }
+            alert(err.message||'Could not add to cart.');
+          }
+        });
       });
-    });
-  }
-
-  /* ===== Delivery Options (live) ===== */
-  async function loadDeliveryOptions(region=''){
-    const qs = new URLSearchParams();
-    if (region) qs.set('region', region);
-    qs.set('sort','price'); qs.set('order','asc'); qs.set('limit','100');
-    const data = await getJSON(`/api/delivery-options?${qs.toString()}`);
-    const items = Array.isArray(data.options) ? data.options : [];
-
-    // Build regions list
-    const regions = Array.from(new Set(items.map(it=>it.region).filter(Boolean))).sort();
-    const current = regionSelect.value;
-    regionSelect.innerHTML = `<option value="">All regions</option>` +
-      regions.map(r=>`<option ${r===current?'selected':''} value="${r}">${r}</option>`).join('');
-
-    // Sidebar summary only (no per-card text)
-    if (items.length){
-      const cheapest = items.reduce((a,b)=> a.price < b.price ? a : b);
-      const fastest  = items.reduce((a,b)=> a.deliveryDays < b.deliveryDays ? a : b);
-      shipSummary.textContent = `From R ${cheapest.price.toFixed(2)} • as fast as ${fastest.deliveryDays} day(s)`;
-    } else {
-      shipSummary.textContent = 'No delivery options available';
     }
-  }
 
-  /* Search + Filters + Sort */
-  function normalize(s){ return String(s||'').toLowerCase().trim(); }
-  function flagsMatch(card, req){
-    try{
-      const f = JSON.parse(card.getAttribute('data-flags')||'{}');
-      if (req.isNew && !f.isNew) return false;
-      if (req.sale && !f.sale) return false;
-      if (req.popular && !f.popular) return false;
-      return true;
-    }catch{
-      return true;
+    /* ===== Delivery Options (live) ===== */
+    async function loadDeliveryOptions(region=''){
+      const qs = new URLSearchParams();
+      if (region) qs.set('region', region);
+      qs.set('sort','price'); qs.set('order','asc'); qs.set('limit','100');
+      const data = await getJSON(`/api/delivery-options?${qs.toString()}`);
+      const items = Array.isArray(data.options) ? data.options : [];
+
+      // Build regions list
+      const regions = Array.from(new Set(items.map(it=>it.region).filter(Boolean))).sort();
+      const current = regionSelect.value;
+      regionSelect.innerHTML = `<option value="">All regions</option>` +
+        regions.map(r=>`<option ${r===current?'selected':''} value="${r}">${r}</option>`).join('');
+
+      // Sidebar summary only (no per-card text)
+      if (items.length){
+        const cheapest = items.reduce((a,b)=> a.price < b.price ? a : b);
+        const fastest  = items.reduce((a,b)=> a.deliveryDays < b.deliveryDays ? a : b);
+        shipSummary.textContent = `From R ${cheapest.price.toFixed(2)} • as fast as ${fastest.deliveryDays} day(s)`;
+      } else {
+        shipSummary.textContent = 'No delivery options available';
+      }
     }
-  }
 
-  function applyFilters(){
-    const q     = normalize(searchInput.value);
-    const cat   = normalize(catSelect.value);
-    const tAttr = normalize(typeFilter.value);
-    const only  = !!inStockOnly?.checked;
-    const minP  = minPrice.value ? Number(minPrice.value) : -Infinity;
-    const maxP  = maxPrice.value ? Number(maxPrice.value) : Infinity;
+    /* Search + Filters + Sort */
+    function normalize(s){ return String(s||'').toLowerCase().trim(); }
+    function flagsMatch(card, req){
+      try{
+        const f = JSON.parse(card.getAttribute('data-flags')||'{}');
+        if (req.isNew && !f.isNew) return false;
+        if (req.sale && !f.sale) return false;
+        if (req.popular && !f.popular) return false;
+        return true;
+      }catch{
+        return true;
+      }
+    }
 
-    const reqFlags = {
-      isNew:  !!$$('input[data-attr="isNew"]', sidebar).find(i=>i.checked),
-      sale:   !!$$('input[data-attr="sale"]', sidebar).find(i=>i.checked),
-      popular:!!$$('input[data-attr="popular"]', sidebar).find(i=>i.checked),
-    };
+    function applyFilters(){
+      const q     = normalize(searchInput.value);
+      const cat   = normalize(catSelect.value);
+      const tAttr = normalize(typeFilter.value);
+      const only  = !!inStockOnly?.checked;
+      const minP  = minPrice.value ? Number(minPrice.value) : -Infinity;
+      const maxP  = maxPrice.value ? Number(maxPrice.value) : Infinity;
 
-    let visible = 0;
-    CARD().forEach(li=>{
-      const name  = normalize(li.getAttribute('data-name'));
-      const price = Number(li.getAttribute('data-price')||0);
-      const stock = li.getAttribute('data-stock') === '1';
-      const ccat  = normalize(li.getAttribute('data-category'));
-      const type  = normalize(li.getAttribute('data-type'));
+      const reqFlags = {
+        isNew:  !!$$('input[data-attr="isNew"]', sidebar).find(i=>i.checked),
+        sale:   !!$$('input[data-attr="sale"]', sidebar).find(i=>i.checked),
+        popular:!!$$('input[data-attr="popular"]', sidebar).find(i=>i.checked),
+      };
 
-      let show = true;
-      if (q && !name.includes(q)) show = false;
-      if (cat && ccat !== cat) show = false;
-      if (tAttr && !type.includes(tAttr)) show = false;
-      if (only && !stock) show = false;
-      if (!(price >= minP && price <= maxP)) show = false;
-      if (!flagsMatch(li, reqFlags)) show = false;
+      let visible = 0;
+      CARD().forEach(li=>{
+        const name  = normalize(li.getAttribute('data-name'));
+        const price = Number(li.getAttribute('data-price')||0);
+        const stock = li.getAttribute('data-stock') === '1';
+        const ccat  = normalize(li.getAttribute('data-category'));
+        const type  = normalize(li.getAttribute('data-type'));
 
-      li.style.display = show ? '' : 'none';
-      if (show) visible++;
-    });
+        let show = true;
+        if (q && !name.includes(q)) show = false;
+        if (cat && ccat !== cat) show = false;
+        if (tAttr && !type.includes(tAttr)) show = false;
+        if (only && !stock) show = false;
+        if (!(price >= minP && price <= maxP)) show = false;
+        if (!flagsMatch(li, reqFlags)) show = false;
 
-    // sort visible
-    const sort = sortSelect.value;
-    const items = CARD().filter(li=>li.style.display!=='none');
-    if (sort !== 'relevance'){
-      items.sort((a,b)=>{
-        const pa = Number(a.getAttribute('data-price')||0);
-        const pb = Number(b.getAttribute('data-price')||0);
-        const na = a.getAttribute('data-name')||'';
-        const nb = b.getAttribute('data-name')||'';
-        if (sort==='price-asc')  return pa - pb;
-        if (sort==='price-desc') return pb - pa;
-        if (sort==='name')       return na.localeCompare(nb);
-        if (sort==='new')        return 0; // server would handle createdAt
-        return 0;
+        li.style.display = show ? '' : 'none';
+        if (show) visible++;
       });
-      const frag = document.createDocumentFragment();
-      items.forEach(el=>frag.appendChild(el));
-      list.appendChild(frag);
-    }
 
-    // pagination (client)
-    PAGE.pages = Math.max(1, Math.ceil(visible / PAGE.size));
-    PAGE.page = Math.min(PAGE.page, PAGE.pages);
-    pager.hidden = PAGE.pages <= 1;
+      // sort visible
+      const sort = sortSelect.value;
+      const items = CARD().filter(li=>li.style.display!=='none');
+      if (sort !== 'relevance'){
+        items.sort((a,b)=>{
+          const pa = Number(a.getAttribute('data-price')||0);
+          const pb = Number(b.getAttribute('data-price')||0);
+          const na = a.getAttribute('data-name')||'';
+          const nb = b.getAttribute('data-name')||'';
+          if (sort==='price-asc')  return pa - pb;
+          if (sort==='price-desc') return pb - pa;
+          if (sort==='name')       return na.localeCompare(nb);
+          if (sort==='new')        return 0; // server would handle createdAt
+          return 0;
+        });
+        const frag = document.createDocumentFragment();
+        items.forEach(el=>frag.appendChild(el));
+        list.appendChild(frag);
+      }
 
-    renderPage();
-    resultMeta.textContent = `${visible} results`;
-  }
+      // pagination (client)
+      PAGE.pages = Math.max(1, Math.ceil(visible / PAGE.size));
+      PAGE.page = Math.min(PAGE.page, PAGE.pages);
+      pager.hidden = PAGE.pages <= 1;
 
-  function renderPage(){
-    const visible = CARD().filter(li=>li.style.display!=='none');
-    visible.forEach((li,i)=>{
-      const start = (PAGE.page-1)*PAGE.size;
-      const end   = start + PAGE.size - 1;
-      const ok = (i>=start && i<=end);
-      li.style.visibility = ok ? 'visible' : 'hidden';
-      li.style.position   = ok ? '' : 'absolute';
-      li.style.pointerEvents = ok ? '' : 'none';
-    });
-    pgNow && (pgNow.textContent = String(PAGE.page));
-    pgTotal && (pgTotal.textContent = String(PAGE.pages));
-  }
-
-  pager && pager.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.pg-btn'); 
-    if (!btn) return;
-
-    const dir  = Number(btn.getAttribute('data-dir') || 0);
-    const next = PAGE.page + dir;
-
-    if (next >= 1 && next <= PAGE.pages){
-      PAGE.page = next;
       renderPage();
-      // ❌ no more window.scrollTo here – stay where the user is
+      resultMeta.textContent = `${visible} results`;
     }
-  });
 
+    function renderPage(){
+      const visible = CARD().filter(li=>li.style.display!=='none');
+      visible.forEach((li,i)=>{
+        const start = (PAGE.page-1)*PAGE.size;
+        const end   = start + PAGE.size - 1;
+        const ok = (i>=start && i<=end);
+        li.style.visibility = ok ? 'visible' : 'hidden';
+        li.style.position   = ok ? '' : 'absolute';
+        li.style.pointerEvents = ok ? '' : 'none';
+      });
+      pgNow && (pgNow.textContent = String(PAGE.page));
+      pgTotal && (pgTotal.textContent = String(PAGE.pages));
+    }
 
-  // events
-  searchForm.addEventListener('submit', (e)=>{
-    e.preventDefault();
-    PAGE.page=1;
-    applyFilters();
-  });
+    function jumpToResultsTop(){
+      const el = document.getElementById('results');
+      if (!el) return;
 
-  [searchInput, catSelect, sortSelect, inStockOnly, typeFilter].forEach(el=>{
-    el?.addEventListener('input', ()=>{
+      // Sticky header + subnav space (tweak if you want)
+      const offset = 120;
+
+      const y = el.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+
+    pager && pager.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.pg-btn');
+      if (!btn) return;
+
+      const dir  = Number(btn.getAttribute('data-dir') || 0);
+      const next = PAGE.page + dir;
+
+      if (next >= 1 && next <= PAGE.pages){
+        PAGE.page = next;
+        renderPage();
+
+        // ✅ ALWAYS start next page from the top of the product grid
+        jumpToResultsTop();
+      }
+    });
+
+    // events
+    searchForm.addEventListener('submit', (e)=>{
+      e.preventDefault();
       PAGE.page=1;
       applyFilters();
     });
-    if (el && el.tagName==='SELECT') el.addEventListener('change', ()=>{
+
+    [searchInput, catSelect, sortSelect, inStockOnly, typeFilter].forEach(el=>{
+      el?.addEventListener('input', ()=>{
+        PAGE.page=1;
+        applyFilters();
+      });
+      if (el && el.tagName==='SELECT') el.addEventListener('change', ()=>{
+        PAGE.page=1;
+        applyFilters();
+      });
+    });
+
+    applyPriceBtn.addEventListener('click', ()=>{
       PAGE.page=1;
       applyFilters();
     });
-  });
 
-  applyPriceBtn.addEventListener('click', ()=>{
-    PAGE.page=1;
+    $$('input[data-attr]', sidebar).forEach(chk=>
+      chk.addEventListener('change', ()=>{
+        PAGE.page=1;
+        applyFilters();
+      })
+    );
+
+    // Region change → refresh summary only
+    regionSelect.addEventListener('change', ()=>{
+      loadDeliveryOptions(regionSelect.value);
+    });
+
+    // Prefill from URL ?q= & ?cat=
+    try{
+      const usp = new URLSearchParams(location.search);
+      const q0=usp.get('q');
+      const c0=usp.get('cat');
+      if (q0) searchInput.value=q0;
+      if (c0) catSelect.value=c0;
+    }catch{}
+
+    // Wire buttons & init
+    wireAddButtons();
     applyFilters();
-  });
-
-  $$('input[data-attr]', sidebar).forEach(chk=>
-    chk.addEventListener('change', ()=>{
-      PAGE.page=1;
-      applyFilters();
-    })
-  );
-
-  // Region change → refresh summary only
-  regionSelect.addEventListener('change', ()=>{
-    loadDeliveryOptions(regionSelect.value);
-  });
-
-  // Prefill from URL ?q= & ?cat=
-  try{
-    const usp = new URLSearchParams(location.search);
-    const q0=usp.get('q');
-    const c0=usp.get('cat');
-    if (q0) searchInput.value=q0;
-    if (c0) catSelect.value=c0;
-  }catch{}
-
-  // Wire buttons & init
-  wireAddButtons();
-  applyFilters();
-  refreshCart();
-  loadDeliveryOptions('');
-  hydrateRatings(); // ✅ IMPORTANT: actually run it
-})();
+    refreshCart();
+    loadDeliveryOptions('');
+    hydrateRatings(); // ✅ IMPORTANT: actually run it
+  })();
 </script>

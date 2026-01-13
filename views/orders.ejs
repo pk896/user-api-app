@@ -958,6 +958,28 @@
   @media (prefers-reduced-motion: reduce){
     *{ transition:none !important; animation:none !important; }
   }
+  .orders-page .variants-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+  margin-top:.55rem;
+}
+
+.orders-page .variant-chip{
+  font-size: .72rem;
+  font-weight: 950;
+  padding: .18rem .55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(124,58,237,.28);
+  background: rgba(124,58,237,.12);
+  color: rgba(226,232,240,.92);
+}
+
+.orders-page .variant-chip.more{
+  border-color: rgba(34,197,94,.25);
+  background: rgba(34,197,94,.10);
+}
+
 </style>
 
 <script nonce="<%= NONCE %>">
@@ -1085,6 +1107,17 @@
         .replaceAll("'", '&#039;');
     }
 
+    function variantSummary(item) {
+      const v = item?.variants || {};
+      const size = (v.size ?? item?.size ?? '').toString().trim();
+      const color = (v.color ?? item?.color ?? '').toString().trim();
+
+      if (!size && !color) return '';
+      if (size && color) return `Size ${size} • Color ${color}`;
+      if (size) return `Size ${size}`;
+      return `Color ${color}`;
+    }
+
     function createOrderCard(order) {
       const internalId = String(order.id || order._id || '').trim();
       const orderId = String(order.orderId || '').trim();
@@ -1103,6 +1136,17 @@
       const carrier = String(shipment.carrierLabel || shipment.carrier || '').trim();
 
       const items = Array.isArray(order.items) ? order.items : [];
+      const variantLines = items
+        .map(variantSummary)
+        .filter(Boolean);
+
+      const variantChips = variantLines
+        .slice(0, 3)
+        .map((t) => `<span class="variant-chip">${escapeHtml(t)}</span>`)
+        .join('');
+
+      const moreVariants = variantLines.length > 3 ? (variantLines.length - 3) : 0;
+
       const itemsHtml = items.slice(0, 5).map((item) => {
         const name = item?.name || '';
         const img = item?.imageUrl || '';
@@ -1184,15 +1228,23 @@
             </div>
           </div>
 
-          ${items.length > 0 ? `
-            <div class="order-items">
-              <div class="items-label">Items (${items.length})</div>
-              <div class="items-list">
-                ${itemsHtml}
-                ${items.length > 5 ? `<div class="item-preview placeholder">+${items.length - 5}</div>` : ''}
-              </div>
+         ${items.length > 0 ? `
+          <div class="order-items">
+            <div class="items-label">Items (${items.length})</div>
+
+            <div class="items-list">
+              ${itemsHtml}
+              ${items.length > 5 ? `<div class="item-preview placeholder">+${items.length - 5}</div>` : ''}
             </div>
-          ` : ''}
+
+            ${variantChips ? `
+              <div class="variants-row" aria-label="Selected variants">
+                ${variantChips}
+                ${moreVariants ? `<span class="variant-chip more">+${moreVariants} more</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
         </div>
       `;
     }

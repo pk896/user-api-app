@@ -264,7 +264,7 @@
           </div>
           <div class="co-item-price">
             <strong class="co-price-val"></strong>
-            <small>each</small>
+            <small>total</small>
           </div>
         </div>
       </div>
@@ -813,11 +813,24 @@
       }
 
       function calculateTotals(){
-        const subtotal = state.items.reduce((sum, it)=> sum + (Number(it.price)*Number(it.quantity)), 0);
-        const vat = subtotal * VAT_RATE;
-        const shipping = state.selectedDelivery ? Number(state.selectedDelivery.price || 0) : SHIPPING_FLAT;
-        const total = subtotal + vat + shipping;
-        return { subtotal, vat, shipping, total };
+        // ✅ item.price is VAT-INCLUSIVE (gross) from the cart
+        const itemsGross = state.items.reduce(
+          (sum, it) => sum + (Number(it.price) * Number(it.quantity)),
+          0
+        );
+
+        // Extract VAT portion from the gross total (NOT added on top)
+        const itemsNet = (VAT_RATE > 0) ? (itemsGross / (1 + VAT_RATE)) : itemsGross;
+        const vat = itemsGross - itemsNet;
+
+        const shipping = state.selectedDelivery
+          ? Number(state.selectedDelivery.price || 0)
+          : SHIPPING_FLAT;
+
+        // ✅ total payable = gross items + shipping (VAT already included)
+        const total = itemsGross + shipping;
+
+        return { subtotal: itemsGross, vat, shipping, total };
       }
 
       function updateSummary(){
@@ -878,7 +891,7 @@
               : Number(opt.price || 0);
 
             const op = document.createElement('option');
-            op.value = String(opt.id);
+            op.value = String(opt._id || opt.id);
             op.dataset.price = String(price);
             op.dataset.days  = String(opt.deliveryDays || 0);
             op.dataset.type  = String(opt.type || 'Standard');
@@ -1009,7 +1022,7 @@
         variantsEl.textContent = (item.variants && item.variants.label) ? item.variants.label : '';
 
         root.querySelector('.co-qty-val').textContent = String(item.quantity);
-        root.querySelector('.co-price-val').textContent = formatCurrency(item.price * item.quantity);
+        root.querySelector('.co-price-val').textContent = formatCurrency(item.price);
 
         const dec = root.querySelector('.co-dec');
         const inc = root.querySelector('.co-inc');

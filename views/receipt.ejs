@@ -26,11 +26,21 @@
       var name = it && it.name ? String(it.name) : 'Item';
       var qty  = Number((it && it.quantity != null) ? it.quantity : 1);
       var unit = (it && it.price && it.price.value != null)               ? Number(it.price.value)
-               : (it && it.unitPrice != null)                              ? Number(it.unitPrice)
-               : (it && it.unit_amount && it.unit_amount.value != null)    ? Number(it.unit_amount.value)
-               : (it && it.price != null)                                  ? Number(it.price)
-               : 0;
-      return { name: name, qty: qty, unit: unit, line: qty * unit };
+              : (it && it.unitPrice != null)                              ? Number(it.unitPrice)
+              : (it && it.unit_amount && it.unit_amount.value != null)    ? Number(it.unit_amount.value)
+              : (it && it.price != null)                                  ? Number(it.price)
+              : 0;
+
+      // ✅ Variants: prefer it.variants (your DB order items), fallback to common shapes
+      var v = (it && it.variants) ? it.variants : {};
+      var size  = (v && v.size  != null) ? String(v.size)  : (it && it.size  != null ? String(it.size)  : '');
+      var color = (v && v.color != null) ? String(v.color) : (it && it.color != null ? String(it.color) : '');
+
+      var badges = [];
+      if (size)  badges.push({ k: 'Size',  v: size });
+      if (color) badges.push({ k: 'Color', v: color });
+
+      return { name: name, qty: qty, unit: unit, line: qty * unit, badges: badges };
     }
 
     var src = null;
@@ -129,7 +139,17 @@
         <div class="rcpt-items-list">
           <% items.forEach(function(it, index){ %>
             <div class="rcpt-item <%= index === items.length - 1 ? 'last-item' : '' %>">
-              <div class="rcpt-item-name"><%= it.name %></div>
+              <div class="rcpt-item-name">
+                <%= it.name %>
+
+                <% if (it.badges && it.badges.length) { %>
+                  <div class="rcpt-item-badges">
+                    <% it.badges.forEach(function(b){ %>
+                      <span class="rcpt-badge"><%= b.k %>: <%= b.v %></span>
+                    <% }); %>
+                  </div>
+                <% } %>
+              </div>
               <div class="rcpt-item-details">
                 <span class="rcpt-item-qty"><%= it.qty %> × <%= money(it.unit) %></span>
                 <span class="rcpt-item-total"><%= money(it.line) %></span>
@@ -474,6 +494,23 @@
   .rcpt-item-total {
     font-weight: 600;
     color: var(--green);
+  }
+
+  .rcpt-item-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:6px;
+}
+
+  .rcpt-badge{
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(124,58,237,.28);
+    background: rgba(124,58,237,.12);
+    color: var(--text);
   }
 
   /* Totals */

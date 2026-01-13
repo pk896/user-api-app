@@ -111,6 +111,7 @@ router.get('/sales', async (req, res) => {
       success: req.flash('success'),
       error: req.flash('error'),
       nonce: res.locals.nonce,
+      vatRate: Number(process.env.VAT_RATE || 0.15), // ✅ I JUST ADDED THIS
     });
   } catch (err) {
     console.error('❌ Failed to load sales page:', err);

@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   // <-- changed from "/sales" to "/"
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const products = await Product.find().sort({ createdAt: -1 }).lean();
 
     const user = req.user || null;
     const business = req.session.business || null;
@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
       success: req.flash('success'),
       error: req.flash('error'),
       nonce: res.locals.nonce,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ Failed to load products:', err);

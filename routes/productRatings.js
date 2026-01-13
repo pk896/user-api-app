@@ -15,7 +15,7 @@ const { recalcProductRating } = require('../utils/ratingUtils');
 
 const router = express.Router();
 
-console.log('✅ LOADED productRatings.js from:', __filename);
+// console.log('✅ LOADED productRatings.js from:', __filename);
 
 router.use((req, _res, next) => {
   console.log(
