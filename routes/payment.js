@@ -582,12 +582,13 @@ function shapeOrderForClient(doc) {
   const items = Array.isArray(doc?.items)
     ? doc.items.map((it) => {
         const raw =
-          it?.price?.value ??
-          it?.price ??
-          it?.unitPrice ??
-          it?.unit_amount?.value ??
-          it?.unit_amount ??
-          0;
+        it?.priceGross?.value ??   // ✅ prefer gross for display
+        it?.price?.value ??
+        it?.price ??
+        it?.unitPrice ??
+        it?.unit_amount?.value ??
+        it?.unit_amount ??
+        0;
 
         const priceN = normalizeMoneyNumber(raw);
         return {
@@ -633,7 +634,7 @@ function buildSessionSnapshot(orderId, pending) {
     ? pending.itemsBrief.map((it) => ({
         name: it?.name || '',
         quantity: toQty(it?.quantity, 1),
-        price: { value: Number(normalizeMoneyNumber(it?.unitPrice) ?? 0) },
+        price: { value: Number(normalizeMoneyNumber(it?.unitPriceGross ?? it?.unitPrice) ?? 0) },
       }))
     : [];
 
@@ -771,13 +772,24 @@ router.post('/create-order', express.json(), async (req, res) => {
         );
       }
 
+      const grossUnit = Number(unitPriceN.toFixed(2));
+      const r = Number.isFinite(vatRate) ? vatRate : 0;
+      const netUnit = r > 0 ? Number((grossUnit / (1 + r)).toFixed(2)) : grossUnit;
+
       return {
         productId, // ✅ MUST be Product.customId (string)
         name: (it.name || it.title || `Item ${i + 1}`).toString().slice(0, 127),
         quantity: qty,
-        unitPrice: Number(unitPriceN.toFixed(2)),
+
+        // ✅ keep unitPrice for compatibility (still gross)
+        unitPrice: grossUnit,
+
+        // ✅ add these two (NEW)
+        unitPriceGross: grossUnit,
+        unitPriceNet: netUnit,
+
         imageUrl: it.imageUrl || it.image || '',
-        variants: it.variants || {}, // ✅ add this line
+        variants: it.variants || {},
       };
     });
 
@@ -972,15 +984,28 @@ router.post('/capture-order', express.json(), async (req, res) => {
 
     const itemsFromPending = Array.isArray(pending?.itemsBrief)
       ? pending.itemsBrief.map((it) => {
-          const unitPriceN = normalizeMoneyNumber(it?.unitPrice);
-          const safeUnit = unitPriceN === null ? 0 : Number(unitPriceN.toFixed(2));
+          const grossN = normalizeMoneyNumber(it?.unitPriceGross ?? it?.unitPrice);
+          const grossUnit = grossN === null ? 0 : Number(grossN.toFixed(2));
+
+          const netN = normalizeMoneyNumber(it?.unitPriceNet);
+          const r = Number.isFinite(vatRate) ? vatRate : 0;
+          const computedNet = r > 0 ? Number((grossUnit / (1 + r)).toFixed(2)) : grossUnit;
+          const netUnit = netN === null ? computedNet : Number(netN.toFixed(2));
+
           return {
             productId: String(it?.productId || '').trim(), // ✅ Product.customId
             name: it?.name || '',
             quantity: toQty(it?.quantity, 1),
-            price: { value: toMoney2(safeUnit), currency: upperCcy },
+
+            // ✅ IMPORTANT:
+            // price = NET (seller crediting will use this)
+            price: { value: toMoney2(netUnit), currency: upperCcy },
+
+            // ✅ keep gross for receipts/UI
+            priceGross: { value: toMoney2(grossUnit), currency: upperCcy },
+
             imageUrl: it?.imageUrl || '',
-            variants: it?.variants || {}, // ✅ ADD THIS LINE
+            variants: it?.variants || {},
           };
         })
       : [];
