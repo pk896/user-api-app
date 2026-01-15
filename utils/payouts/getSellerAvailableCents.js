@@ -11,7 +11,7 @@ function toObjectId(v) {
 
 function normCcy(v, fallback = 'USD') {
   const s = String(v ?? '').trim().toUpperCase();
-  return s || fallback; // always return a currency
+  return s || fallback;
 }
 
 async function getSellerAvailableCents(businessId, currency = 'USD') {
@@ -19,11 +19,27 @@ async function getSellerAvailableCents(businessId, currency = 'USD') {
   if (!bid) return 0;
 
   const ccy = normCcy(currency, 'USD');
+  const now = new Date();
 
-  // Keep it ledger-based and simple:
-  // + credits (EARNING / SELLER_CREDIT / etc.)
-  // - debits (REFUND_DEBIT / PAYOUT_DEBIT / etc.)
-  const match = { businessId: bid, currency: ccy };
+  // ✅ AVAILABLE = matured earnings + all debits/adjustments immediately
+  const match = {
+    businessId: bid,
+    currency: ccy,
+    $or: [
+      // ✅ EARNING counts only when matured
+      {
+        type: 'EARNING',
+        $or: [
+          { availableAt: { $exists: false } }, // old docs without the field
+          { availableAt: null },               // important if schema default is null
+          { availableAt: { $lte: now } },      // matured
+        ],
+      },
+
+      // ✅ all non-earnings apply immediately (refunds, payout debits, adjustments)
+      { type: { $ne: 'EARNING' } },
+    ],
+  };
 
   const agg = await SellerBalanceLedger.aggregate([
     { $match: match },
@@ -31,12 +47,7 @@ async function getSellerAvailableCents(businessId, currency = 'USD') {
   ]);
 
   const sum = Number(agg?.[0]?.sum || 0);
-
-  // ✅ never return negative available for payouts
   return Math.max(0, Math.trunc(sum));
 }
 
 module.exports = { getSellerAvailableCents };
-
-
-

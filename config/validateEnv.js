@@ -24,6 +24,10 @@ const REQUIRED_VARS = [
   "PUBLIC_BASE_URL",
   "SHIPPING_PREF",
   "SUPPORT_INBOX",
+  "BRAND_NAME",
+  "VAT_RATE",
+  "BASE_CURRENCY",
+  "PLATFORM_FEE_BPS"
 ];
 
 function validateEnv() {

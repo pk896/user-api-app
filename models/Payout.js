@@ -1,4 +1,6 @@
 // models/Payout.js
+'use strict';
+
 const mongoose = require('mongoose');
 
 const payoutItemSchema = new mongoose.Schema(
@@ -92,9 +94,21 @@ const payoutSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+/* =========================
+   Indexes
+   ========================= */
+
 // ✅ Useful indexes for admin pages + lookups
 payoutSchema.index({ createdAt: -1 });
-payoutSchema.index({ batchId: 1 }, { sparse: true });
+
+// ✅ Ensure a PayPal batchId is never reused inside the same mode (SANDBOX/LIVE)
+// (batchId can be null/empty before PayPal returns it, so sparse is needed)
+payoutSchema.index({ mode: 1, batchId: 1 }, { unique: true, sparse: true });
+
+// ✅ Status filtering
 payoutSchema.index({ status: 1, createdAt: -1 });
+
+// ✅ Optional helper: quick search by seller in embedded items (works fine)
+payoutSchema.index({ 'items.businessId': 1, createdAt: -1 });
 
 module.exports = mongoose.model('Payout', payoutSchema);

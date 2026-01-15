@@ -51,6 +51,7 @@ const userSchema = new Schema(
     passwordHash: {
       type: String,
       default: null,
+      select: false,
     },
 
     /**
@@ -68,8 +69,8 @@ const userSchema = new Schema(
     // Google OAuth ID (sub / profile.id)
     googleId: {
       type: String,
-      index: true,
       default: null,
+      index: { unique: true, sparse: true },
     },
 
     // Legacy / generic providerId if you used it elsewhere
@@ -89,6 +90,7 @@ const userSchema = new Schema(
       type: String,
       default: null,
       index: true,
+      select: false,
     },
     emailVerificationExpires: {
       type: Date,
@@ -100,6 +102,7 @@ const userSchema = new Schema(
       type: String,
       default: null,
       index: true,
+      select: false,
     },
     resetPasswordExpires: {
       type: Date,

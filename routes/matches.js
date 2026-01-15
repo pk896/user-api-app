@@ -31,7 +31,7 @@ async function sendBuyerEmail({ to, subject, text, html, replyTo }) {
     html: html || textToHtml(text || ''),
     // Optionally let buyers reply to supplier or support:
     // Prefer explicit replyTo if provided, otherwise fall back to SMTP_FROM
-    replyTo: replyTo || process.env.SMTP_FROM || 'Phakisi Global <phakisingxongxela@gmail.com>',
+    replyTo: replyTo || process.env.SMTP_FROM || 'Unicoporate <phakisingxongxela@gmail.com>',
   });
 }
 
@@ -344,7 +344,7 @@ Message: ${match.supplierMessage || '—'}`,
             supplier.email ||
             supplier.contactEmail ||
             process.env.SMTP_FROM ||
-            'support@phakisi.co.za',
+            'support@unicoporate.co.za',
         });
       } catch (e) {
         // Don’t block the flow on email failure; notification already created

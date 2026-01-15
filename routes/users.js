@@ -9,7 +9,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const { sendMail, _FROM } = require('../utils/mailer');
 const ResetToken = require('../models/ResetToken');
-
+const requireAdmin = require('../middleware/requireAdmin')
 
 // Optional wishlist model (if you have it)
 let Wishlist = null;
@@ -74,21 +74,28 @@ function ensureVerifiedUser(req, res, next) {
    - supports longer session for "remember me"
 ----------------------------------------------------- */
 function loginUserIntoSession(req, userDoc, remember, cb) {
-  const keepBusiness = req.session.business || null;
+  // Preserve important session namespaces before regenerate
+  const keep = {
+    business: req.session?.business || null,
+    cart: req.session?.cart || null,
+    returnTo: req.session?.returnTo || null,
+    theme: req.session?.theme || null,
+  };
 
   req.session.regenerate((err) => {
-    if (err) {
-      return cb(err);
-    }
+    if (err) return cb(err);
 
-    if (keepBusiness) {
-      req.session.business = keepBusiness;
-    }
+    // Restore preserved data
+    if (keep.business) req.session.business = keep.business;
+    if (keep.cart) req.session.cart = keep.cart;
+    if (keep.returnTo) req.session.returnTo = keep.returnTo;
+    if (keep.theme) req.session.theme = keep.theme;
 
     req.session.user = {
       _id: userDoc._id.toString(),
       name: userDoc.name,
       email: userDoc.email,
+      username: userDoc.username || null,          // ✅ add username to session
       createdAt: userDoc.createdAt,
       provider: userDoc.provider || 'local',
       isEmailVerified: !!userDoc.isEmailVerified,
@@ -100,7 +107,8 @@ function loginUserIntoSession(req, userDoc, remember, cb) {
       req.session.cookie.expires = false;
     }
 
-    cb(null);
+    // ✅ Force-save the session before redirect
+    req.session.save((saveErr) => cb(saveErr || null));
   });
 }
 
@@ -258,11 +266,11 @@ router.post('/signup', async (req, res) => {
 
     // ✉️ Send verification email (using your mailer)
     try {
-      const subject = 'Verify your Phakisi Global account';
+      const subject = 'Verify your Unicoporate account';
       const text = [
         `Hi ${cleanName || 'there'},`,
         '',
-        'Thank you for creating a Phakisi Global account.',
+        'Thank you for creating a Unicoporate account.',
         'Please confirm that this is your real email address by opening the link below:',
         '',
         verifyUrl,
@@ -274,7 +282,7 @@ router.post('/signup', async (req, res) => {
 
       const html = `
         <p>Hi ${cleanName || 'there'},</p>
-        <p>Thank you for creating a <strong>Phakisi Global</strong> account.</p>
+        <p>Thank you for creating a <strong>Unicoporate</strong> account.</p>
         <p>Please confirm that this is your real email address by clicking the button below:</p>
         <p style="margin:16px 0;">
           <a href="${verifyUrl}"
@@ -341,70 +349,82 @@ router.get('/login', (req, res) => {
 });
 
 // POST /users/login (LOCAL: username (but still supports email under the hood))
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 router.post('/login', async (req, res) => {
   try {
-    const { loginId, password, remember } = req.body || {};
-    const rawLogin = String(loginId || '').trim();
+    // ✅ Accept username from your form, but also accept old loginId just in case
+    const { username, loginId, password, remember } = req.body || {};
+    const rawLogin = String(username || loginId || '').trim();
     const pass = String(password || '');
 
     if (!rawLogin || !pass) {
-      console.warn('[LOGIN] missing creds', { rawLogin, passLen: pass.length });
       req.flash('error', 'Username and password are required.');
       return res.redirect('/users/login');
     }
 
     const isEmailFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawLogin);
-    const lookup = isEmailFormat
-      ? { email: rawLogin.toLowerCase() } // still supports login by email if someone tries
-      : {
-          $or: [
-            { username: rawLogin },
-            { email: rawLogin.toLowerCase() }, // extra safety
-          ],
-        };
+    const loginLower = rawLogin.toLowerCase();
 
-    const user = await User.findOne(lookup);
+    let user = null;
+
+    if (isEmailFormat) {
+      // email login (optional safety)
+      user = await User.findOne({ email: loginLower }).select('+passwordHash');
+    } else {
+      // ✅ username login (your requirement)
+      // 1) try exact match first (fast)
+      user = await User.findOne({ username: rawLogin }).select('+passwordHash');
+
+      // 2) fallback case-insensitive match (helps if someone signed up with CAPS)
+      if (!user) {
+        user = await User.findOne({
+          username: new RegExp(`^${escapeRegex(rawLogin)}$`, 'i'),
+        }).select('+passwordHash');
+      }
+
+      // 3) optional fallback: if someone typed an email into username box
+      if (!user) {
+        user = await User.findOne({ email: loginLower }).select('+passwordHash');
+      }
+    }
+
     if (!user) {
-      console.warn('[LOGIN] user not found:', rawLogin);
       req.flash('error', 'Invalid credentials.');
       return res.redirect('/users/login');
     }
 
-    // If this is a Google-only account (no password), redirect to Google login
+    // Google-only account (no password) must use Google login
     if (user.provider === 'google' && !user.passwordHash) {
-      console.warn('[LOGIN] Google-only account tried local login:', user._id.toString());
-      req.flash(
-        'error',
-        'This account uses Google sign-in. Please sign in with Google.',
-      );
+      req.flash('error', 'This account uses Google sign-in. Please sign in with Google.');
       return res.redirect('/users/login');
     }
 
     if (!user.passwordHash || typeof user.passwordHash !== 'string') {
-      console.warn('[LOGIN] missing passwordHash on user:', user._id.toString());
       req.flash('error', 'Invalid credentials.');
       return res.redirect('/users/login');
     }
 
     const ok = await bcrypt.compare(pass, user.passwordHash);
     if (!ok) {
-      console.warn('[LOGIN] bcrypt compare failed for:', user._id.toString());
       req.flash('error', 'Invalid credentials.');
       return res.redirect('/users/login');
     }
 
-    // Track lastLogin for professionalism
+    // Track lastLogin
     user.lastLogin = new Date();
     await user.save();
 
-        loginUserIntoSession(req, user, !!remember, (err) => {
+    loginUserIntoSession(req, user, !!remember, (err) => {
       if (err) {
-        console.error('[LOGIN] regenerate err', err);
-        req.flash('error', 'Login failed.');
+        console.error('[LOGIN] session error:', err);
+        req.flash('error', 'Login failed. Please try again.');
         return res.redirect('/users/login');
       }
 
-      // If email is not verified, always push them to verify page
+      // ✅ returnTo is preserved now
       let redirectTo = req.session.returnTo || '/users/dashboard';
       delete req.session.returnTo;
 
@@ -412,7 +432,6 @@ router.post('/login', async (req, res) => {
         redirectTo = '/users/verify-pending';
       }
 
-      console.log('[LOGIN] OK ->', redirectTo);
       req.flash(
         'success',
         user.isEmailVerified
@@ -421,7 +440,6 @@ router.post('/login', async (req, res) => {
       );
       return res.redirect(redirectTo);
     });
-
   } catch (err) {
     console.error('[LOGIN] error', err);
     req.flash('error', 'Login failed.');
@@ -555,7 +573,7 @@ router.post('/verify-email/resend', ensureUser, async (req, res) => {
       emailVerificationToken,
     )}`;
 
-    const subject = 'Verify your Phakisi Global account';
+    const subject = 'Verify your Unicoporate account';
     const text = [
       `Hi ${user.name || 'there'},`,
       '',
@@ -888,6 +906,143 @@ router.get('/payments', ensureVerifiedUser, async (req, res) => {
 });
 
 /* =======================================================
+   FORGOT USERNAME (EMAIL-BASED RECOVERY)
+   - Always responds the same to avoid account enumeration
+======================================================= */
+
+// GET /users/username/forgot
+router.get('/username/forgot', (req, res) => {
+  const { nonce = '' } = res.locals;
+
+  // prefill email if provided as query (?email=)
+  const email = String(req.query?.email || '').trim();
+
+  res.render('users-forgot-username', {
+    title: 'Recover Username',
+    active: 'users',
+    styles: pageStyles(nonce),
+    scripts: pageScripts(nonce),
+    user: req.session.user || null,
+    business: req.session.business || null,
+    messages: req.flash(),          // so your EJS can use messages.error/messages.success
+    email,
+    nonce,
+  });
+});
+
+// POST /users/username/forgot
+router.post('/username/forgot', async (req, res) => {
+  try {
+    const rawEmail = String(req.body?.email || '').toLowerCase().trim();
+
+    // basic validation (do NOT reveal if email exists)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      req.flash('error', 'Please enter a valid email address.');
+      return res.redirect(`/users/username/forgot?email=${encodeURIComponent(rawEmail)}`);
+    }
+
+    // look up user by email
+    const user = await User.findOne({ email: rawEmail })
+      .select('name email username provider')
+      .lean();
+
+    // If user exists AND has a username, email it.
+    // If user exists but no username (rare), email guidance.
+    if (user) {
+      const appName = 'Unicoporate';
+
+      let subject = `Your ${appName} username`;
+      let text = '';
+      let html = '';
+
+      if (user.username) {
+        text = [
+          `Hi ${user.name || 'there'},`,
+          '',
+          'You requested your username.',
+          `Username: ${user.username}`,
+          '',
+          'If you did not request this, you can ignore this email.',
+        ].join('\n');
+
+        html = `
+          <p>Hi ${user.name || 'there'},</p>
+          <p>You requested your username.</p>
+          <p style="font-size:16px;margin:12px 0;">
+            <strong>Username:</strong> <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">${user.username}</span>
+          </p>
+          <p style="font-size:12px;color:#64748b;">
+            If you did not request this, you can ignore this email.
+          </p>
+        `;
+      } else {
+        // fallback guidance
+        text = [
+          `Hi ${user.name || 'there'},`,
+          '',
+          'You requested your username.',
+          'This account may use a provider sign-in (e.g., Google) or your username is not set.',
+          'Try signing in using your email address in the username field, or use Google sign-in if you registered with Google.',
+          '',
+          'If you did not request this, you can ignore this email.',
+        ].join('\n');
+
+        html = `
+          <p>Hi ${user.name || 'there'},</p>
+          <p>You requested your username.</p>
+          <p>This account may use provider sign-in (e.g., Google) or a username is not set.</p>
+          <ul>
+            <li>Try signing in by typing your <strong>email</strong> in the username box.</li>
+            <li>If you registered with Google, use <strong>Google sign-in</strong>.</li>
+          </ul>
+          <p style="font-size:12px;color:#64748b;">
+            If you did not request this, you can ignore this email.
+          </p>
+        `;
+      }
+
+      console.log('[FORGOT USERNAME] about to send email to:', user.email);
+      console.log('[FORGOT USERNAME] subject:', subject);
+
+      // send email
+      try {
+        await sendMail({
+          to: user.email,
+          subject,
+          text,
+          html,
+        });
+      } catch (mailErr) {
+        console.error('[POST /users/username/forgot] email failed FULL:', mailErr);
+  console.error('[POST /users/username/forgot] email failed MSG:', mailErr?.message);
+  console.error('[POST /users/username/forgot] email failed RESPONSE:', mailErr?.response);
+  console.error('[POST /users/username/forgot] email failed BODY:', mailErr?.response?.body);
+  // still respond same (don’t reveal anything)
+        // console.error('[POST /users/username/forgot] email failed:', mailErr);
+        // still respond same (don’t reveal anything)
+      }
+    }
+
+    // Always show the same “sent” page
+    const { nonce = '' } = res.locals;
+    return res.render('users-forgot-username-sent', {
+      title: 'Check Your Email',
+      active: 'users',
+      styles: pageStyles(nonce),
+      scripts: pageScripts(nonce),
+      user: req.session.user || null,
+      business: req.session.business || null,
+      maskedEmail: maskEmail(rawEmail),
+      nonce,
+    });
+  } catch (err) {
+    console.error('[POST /users/username/forgot] error:', err);
+    // Still do not reveal anything
+    return res.redirect('/users/username/forgot');
+  }
+});
+
+/* =======================================================
    FORGOT PASSWORD (REQUEST RESET LINK)
 ======================================================= */
 
@@ -1113,7 +1268,7 @@ router.post('/change-password', ensureUser, async (req, res) => {
       return res.redirect('/users/change-password');
     }
 
-    const user = await User.findById(req.session.user._id);
+    const user = await User.findById(req.session.user._id).select('+passwordHash');
     if (!user) {
       req.flash('error', 'User not found.');
       return res.redirect('/users/change-password');
@@ -1303,7 +1458,7 @@ router.post('/profile/delete', ensureUser, async (req, res) => {
 router.get('/about', (req, res) => {
   const { nonce = '' } = res.locals;
   res.render('about', {
-    title: 'About Phakisi Global',
+    title: 'About Unicoporate',
     active: 'about',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
@@ -1312,62 +1467,23 @@ router.get('/about', (req, res) => {
   });
 });
 
-// ADD THIS TEST ROUTE - TEMPORARY
-/*router.get('/dashboard-test', ensureVerifiedUser, async (req, res) => {
-  const { _nonce = '' } = res.locals;
-  const uid = req.session.user._id;
-
-  try {
-    const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).limit(20).lean();
-    
-    // SIMPLE TEST - render a basic page without layout
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head><title>TEST Dashboard</title></head>
-    <body>
-      <h1>TEST DASHBOARD - NO CACHING</h1>
-      <div style="border: 5px solid green; padding: 20px; background: lightgreen;">
-        <h2>✅ TEST ROUTE LOADED</h2>
-        <p>Orders count: ${orders.length}</p>
-      </div>
-      
-      ${orders.map(o => `
-        <div style="border: 2px solid blue; margin: 10px; padding: 10px;">
-          <h3>Order: ${o._id}</h3>
-          <p>Amount object: ${JSON.stringify(o.amount)}</p>
-          <p style="color: red; font-size: 20px; font-weight: bold;">
-            DIRECT DISPLAY: ${o.amount?.currency || 'USD'} ${o.amount?.value || 'NO VALUE'}
-          </p>
-        </div>
-      `).join('')}
-    </body>
-    </html>
-    `;
-    
-    res.send(html);
-  } catch (error) {
-    res.send(`Error: ${error.message}`);
-  }
-});*/
-
 /* =======================================================
    DEV MAINTENANCE ROUTES – LIST + DELETE USERS BY EMAIL
    ⚠️ Disabled automatically in production
 ======================================================= */
 
-/*function requireDevMode(req, res, next) {
+function requireDevMode(req, res, next) {
   if (process.env.NODE_ENV === 'production') {
     return res.status(403).send('Dev maintenance routes are disabled in production.');
   }
   next();
-}*/
+}
 
 /**
  * GET /users/debug/accounts
  * List all user accounts (email, username, provider, verified, createdAt)
  */
-/*router.get('/debug/accounts', requireDevMode, async (req, res) => {
+router.get('/debug/accounts', requireAdmin, requireDevMode, async (req, res) => {
   try {
     const users = await User.find({})
       .select('email username name provider isEmailVerified createdAt lastLogin')
@@ -1386,8 +1502,39 @@ router.get('/about', (req, res) => {
       message: 'Failed to load users',
     });
   }
-});*/
+});
 
+// ✅ Visit in browser (DEV only)
+router.get('/debug/accounts/delete-email', requireAdmin, requireDevMode, (req, res) => {
+  const base = req.baseUrl || '/users'; // baseUrl will be "/users" if mounted like app.use('/users', router)
+
+  res.type('html').send(`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Delete user by email</title>
+      </head>
+      <body style="font-family:system-ui;padding:20px">
+        <h2>Delete user by email (DEV)</h2>
+
+        <form method="POST" action="${base}/debug/accounts/delete-email">
+          <input
+            name="email"
+            placeholder="someone@example.com"
+            style="padding:8px;width:320px"
+            required
+          />
+          <button type="submit" style="padding:8px 12px">Delete</button>
+        </form>
+
+        <p style="margin-top:12px;color:#555">
+          Tip: After you click Delete, you’ll see a JSON response (that’s fine).
+        </p>
+      </body>
+    </html>
+  `);
+});
 
 /**
  * POST /users/debug/accounts/delete-email
@@ -1395,7 +1542,7 @@ router.get('/about', (req, res) => {
  *
  * Body or query: { email: "someone@example.com" }
  */
-/*router.post('/debug/accounts/delete-email', requireDevMode, async (req, res) => {
+router.post('/debug/accounts/delete-email', requireAdmin, requireDevMode, async (req, res) => {
   try {
     const rawEmail = (req.body && req.body.email) || req.query.email || '';
     const email = String(rawEmail).trim().toLowerCase();
@@ -1422,6 +1569,26 @@ router.get('/about', (req, res) => {
       message: 'Failed to delete user account(s)',
     });
   }
-});*/
+});
+
+// http://localhost:3000/users/debug/email/test?to=YOUR_EMAIL@gmail.com
+router.get('/debug/email/test',requireAdmin, requireDevMode, async (req, res) => {
+  try {
+    const to = String(req.query.to || '').trim();
+    if (!to) return res.status(400).send('Use ?to=you@example.com');
+
+    await sendMail({
+      to,
+      subject: 'Test email from Unicoporate',
+      text: 'If you got this, sendMail works.',
+      html: '<p>If you got this, <b>sendMail</b> works.</p>',
+    });
+
+    return res.send('✅ Sent (check inbox/spam).');
+  } catch (err) {
+    console.error('[debug/email/test] failed:', err);
+    return res.status(500).send('❌ Failed. Check server logs.');
+  }
+});
 
 module.exports = router;

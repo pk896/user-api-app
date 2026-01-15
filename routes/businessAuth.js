@@ -182,7 +182,7 @@ async function sendBusinessVerificationEmail(business, token, req) {
   const verifyUrl = `${baseUrl}/business/verify-email/${encodeURIComponent(token)}`;
 
   const to = business.email;
-  const subject = '✅ Verify your business email - Phakisi Global';
+  const subject = '✅ Verify your business email - Unicoporate';
 
   const text = [
     `Hi ${business.name || 'there'},`,
@@ -1066,6 +1066,8 @@ router.post(
         isVerified: business.isVerified,
       };
 
+      req.session.businessId = business._id.toString();
+
       // If not verified: resend link + send to verify page
       if (!business.isVerified) {
         const now = new Date();
@@ -1098,23 +1100,41 @@ router.post(
           );
         }
 
-        return res.redirect('/business/verify-pending');
+        return req.session.save(() => res.redirect('/business/verify-pending'));
       }
 
       // Already verified
       req.flash('success', `✅ Welcome back, ${business.name}!`);
 
+      // ✅ decide redirect target FIRST
+      let redirectTo = '/business/login';
       switch (business.role) {
         case 'seller':
-          return res.redirect('/business/dashboards/seller-dashboard');
+          redirectTo = '/business/dashboards/seller-dashboard';
+          break;
         case 'supplier':
-          return res.redirect('/business/dashboards/supplier-dashboard');
+          redirectTo = '/business/dashboards/supplier-dashboard';
+          break;
         case 'buyer':
-          return res.redirect('/business/dashboards/buyer-dashboard');
+          redirectTo = '/business/dashboards/buyer-dashboard';
+          break;
         default:
           req.flash('error', 'Invalid business role.');
-          return res.redirect('/business/login');
+          redirectTo = '/business/login';
+          break;
       }
+
+      // ✅ CRITICAL: SAVE session before redirect so MongoStore persists it
+      return req.session.save((err2) => {
+        if (err2) {
+          console.error('❌ session save error:', err2);
+          req.flash('error', 'Login failed. Try again.');
+          return res.redirect('/business/login');
+        }
+
+        console.log('✅ Business session saved OK:', req.session.business);
+        return res.redirect(redirectTo);
+      });
     } catch (err) {
       console.error('❌ Login error:', err);
       req.flash('error', '❌ Login failed. Please try again later.');
@@ -1964,7 +1984,7 @@ router.get(
         .sort({ deliveryDays: 1, priceCents: 1 })
         .lean();
 
-      const supportInbox = process.env.SUPPORT_INBOX || 'support@phakisi-global.test';
+      const supportInbox = process.env.SUPPORT_INBOX || 'support@unicoporate.test';
       const mailerOk = !!(
         process.env.SENDGRID_API_KEY ||
         process.env.SMTP_HOST ||

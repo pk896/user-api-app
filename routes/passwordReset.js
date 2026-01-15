@@ -86,7 +86,7 @@ router.post('/forgot', forgotLimiter, async (req, res) => {
 
     // Attempt email, but do NOT block UX if it fails
     try {
-      const subject = 'Reset your Phakisi Global password';
+      const subject = 'Reset your Unicoporate password';
       const html = `
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
           <h2>Reset your password</h2>

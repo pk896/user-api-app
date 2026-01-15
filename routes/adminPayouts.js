@@ -178,7 +178,7 @@ async function runCreatePayoutBatch({
     paypalRes = await createPayoutBatch({
       senderBatchId,
       emailSubject: 'You have received a payout',
-      emailMessage: 'You have received a payout from Phakisi Global.',
+      emailMessage: 'You have received a payout from Unicoporate.com.',
       items: payItems.map((it) => ({
         receiver: normEmail(it.receiver),
         amount: toMoneyString(it.amountCents),

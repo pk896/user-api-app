@@ -52,28 +52,49 @@ try {
   Product = null;
 }
 
-// ======================================================
-// ✅ ENV
-// ======================================================
 const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
   PAYPAL_MODE = 'sandbox',
   BASE_CURRENCY = 'USD',
   VAT_RATE = '0.15',
-  BRAND_NAME = 'Phakisi Global',
+  BRAND_NAME = 'Unicoporate',
   SHIPPING_PREF = 'NO_SHIPPING',
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
 } = process.env;
 
+// ✅ Normalize + validate (so Render env changes are safe)
+const PAYPAL_MODE_N = (() => {
+  const m = String(PAYPAL_MODE || 'sandbox').trim().toLowerCase();
+  return m === 'live' ? 'live' : 'sandbox'; // fallback to sandbox on typos
+})();
+
 const PP_API =
-  String(PAYPAL_MODE).toLowerCase() === 'live'
+  PAYPAL_MODE_N === 'live'
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
 
-const upperCcy = String(BASE_CURRENCY || 'USD').toUpperCase();
-const vatRate = Number(VAT_RATE || 0);
-const PLATFORM_FEE_BPS = Number(process.env.PLATFORM_FEE_BPS || 1000);
+const upperCcy = (() => {
+  const c = String(BASE_CURRENCY || 'USD').trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(c) ? c : 'USD'; // fallback to USD if invalid
+})();
+
+const vatRate = (() => {
+  const n = Number(String(VAT_RATE || '0.15').trim());
+  if (!Number.isFinite(n)) return 0.15;
+  return Math.max(0, Math.min(1, n)); // clamp 0..1
+})();
+
+const BRAND_NAME_N = (() => {
+  const s = String(BRAND_NAME || 'Unicoporate').trim();
+  return s.slice(0, 127) || 'Unicoporate'; // PayPal brand_name length safety
+})();
+
+const PLATFORM_FEE_BPS = (() => {
+  const n = Number(process.env.PLATFORM_FEE_BPS || 1300); // default 13%
+  if (!Number.isFinite(n)) return 1300;
+  return Math.max(0, Math.min(5000, Math.round(n))); // clamp 0%..50% safety
+})();
 
 // ======================================================
 // ✅ AUTH helpers (everyone can buy; everyone sees ONLY own orders)
@@ -138,6 +159,37 @@ function saveSession(req) {
   });
 }
 
+function variantText(variants) {
+  const v = variants && typeof variants === 'object' ? variants : {};
+
+  const size = v.size ?? v.Size ?? v.s ?? null;
+  const color = v.color ?? v.Color ?? null;
+
+  const parts = [];
+  if (size) parts.push(`Size: ${String(size)}`);
+  if (color) parts.push(`Color: ${String(color)}`);
+
+  // Include other simple variant keys if they exist (optional)
+  for (const [k, val] of Object.entries(v)) {
+    if (!val) continue;
+    const key = String(k).toLowerCase();
+    if (key === 'size' || key === 'color') continue;
+    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+      parts.push(`${k}: ${String(val)}`);
+    }
+  }
+
+  return parts.join(', ').slice(0, 127);
+}
+
+function paypalNameWithVariants(baseName, variants) {
+  const base = String(baseName || 'Item').trim().slice(0, 127);
+  const vt = variantText(variants);
+  if (!vt) return base;
+  const combined = `${base} (${vt})`;
+  return combined.slice(0, 127); // PayPal name limit
+}
+
 // ======================================================
 // ✅ PayPal fetch timeout wrapper
 // ======================================================
@@ -196,8 +248,13 @@ function computeTotalsFromSession(cart, delivery = 0) {
 
     const name = (it.name || `Item ${i + 1}`).toString().slice(0, 127);
 
+    const description = safeStr(it.description || '', 127);
+const sku = safeStr(it.sku || '', 127);
+
     return {
       name,
+      ...(description ? { description } : {}),
+      ...(sku ? { sku } : {}),
       quantity: String(qtyN),
       unit_amount: { currency_code: upperCcy, value: toMoney2(netUnit) }, // ✅ NET
     };
@@ -412,7 +469,9 @@ async function reconcileRefundsForOrderDoc(orderDoc, captureId, { source = 'sync
           amount: amtVal ?? null,
           currency: ccy,
           allowWhenUnpaid: true,
-          platformFeeBps: PLATFORM_FEE_BPS,
+          platformFeeBps: Number.isFinite(orderDoc?.platformFeeBps)
+            ? orderDoc.platformFeeBps
+            : PLATFORM_FEE_BPS,
         });
         processed.push({ refundId, debited: true, result: rr });
       } catch (e) {
@@ -596,6 +655,12 @@ function shapeOrderForClient(doc) {
           quantity: toQty(it?.quantity, 1),
           price: { value: priceN === null ? 0 : Number(priceN) },
           imageUrl: it?.imageUrl || '',
+
+          // ✅ add back size/color (and anything else you stored)
+          variants: it?.variants || {},
+
+          // ✅ optional (only if you want to show gross separately later)
+          priceGross: it?.priceGross || null,
         };
       })
     : [];
@@ -635,6 +700,7 @@ function buildSessionSnapshot(orderId, pending) {
         name: it?.name || '',
         quantity: toQty(it?.quantity, 1),
         price: { value: Number(normalizeMoneyNumber(it?.unitPriceGross ?? it?.unitPrice) ?? 0) },
+        variants: it?.variants || {},
       }))
     : [];
 
@@ -707,7 +773,7 @@ router.get('/checkout', async (req, res) => {
     nonce: resNonce(req),
     paypalClientId: String(PAYPAL_CLIENT_ID || '').trim(),
     currency: upperCcy,
-    brandName: BRAND_NAME,
+    brandName: BRAND_NAME_N,
     vatRate,
     shippingFlat,
     success: req.flash?.('success') || [],
@@ -730,9 +796,9 @@ router.get('/config', (req, res) => {
     clientId: String(PAYPAL_CLIENT_ID || '').trim(),
     currency: upperCcy,
     intent: 'capture',
-    mode: PAYPAL_MODE,
+    mode: PAYPAL_MODE_N,
     baseCurrency: upperCcy,
-    brandName: BRAND_NAME,
+    brandName: BRAND_NAME_N,
   });
 });
 
@@ -824,9 +890,21 @@ router.post('/create-order', express.json(), async (req, res) => {
     }
 
     const deliveryDollars = Number(((opt.priceCents || 0) / 100).toFixed(2));
-
     const { items: ppItems, subTotal, vatTotal, delivery: del, grandTotal: grand } = computeTotalsFromSession(
-      { items: itemsBrief.map((x) => ({ name: x.name, price: x.unitPrice, quantity: x.quantity })) },
+      {
+        items: itemsBrief.map((x) => ({
+          // ✅ PayPal will SHOW this name (so we put variants here)
+          name: paypalNameWithVariants(x.name, x.variants),
+
+          // ✅ extra fields (PayPal may or may not show them)
+          description: variantText(x.variants),
+          sku: x.productId, // Product.customId
+
+          // ✅ used for totals
+          price: x.unitPrice,       // gross coming in (computeTotalsFromSession converts to NET)
+          quantity: x.quantity,
+        })),
+      },
       deliveryDollars
     );
 
@@ -849,7 +927,7 @@ router.post('/create-order', express.json(), async (req, res) => {
         },
       ],
       application_context: {
-        brand_name: BRAND_NAME,
+        brand_name: BRAND_NAME_N,
         user_action: 'PAY_NOW',
         shipping_preference: SHIPPING_PREF,
       },
@@ -1054,6 +1132,9 @@ router.post('/capture-order', express.json(), async (req, res) => {
           orderId: orderID,
           status: String(capture?.status || 'COMPLETED'),
           paymentStatus: paidLike ? 'paid' : (safeStr(capture?.status, 32).toLowerCase() || 'unknown'),
+
+          platformFeeBps: PLATFORM_FEE_BPS, // ✅ ADDED THIS
+
           paypal: { orderId: orderID, captureId: captureId || null },
 
           payer: {
@@ -1113,7 +1194,7 @@ router.post('/capture-order', express.json(), async (req, res) => {
           if (doc && typeof creditSellersFromOrder === 'function') {
             const paidStatus = String(capture?.status || doc.status || '').toUpperCase();
             if (paidStatus === 'COMPLETED' || paidStatus === 'PAID') {
-              const feeBps = Number.isFinite(PLATFORM_FEE_BPS) ? PLATFORM_FEE_BPS : 1000;
+              const feeBps = Number.isFinite(doc?.platformFeeBps) ? doc.platformFeeBps : PLATFORM_FEE_BPS;
               await creditSellersFromOrder(doc, { platformFeeBps: feeBps, onlyIfPaidLike: false });
             }
           }
@@ -1259,7 +1340,7 @@ router.get('/receipt/:id', async (req, res) => {
       themeCss: themeCssFrom(req),
       nonce: resNonce(req),
       order: doc,
-      brandName: BRAND_NAME,
+      brandName: BRAND_NAME_N,
       currency: doc?.amount?.currency || doc?.currency || upperCcy,
       publicMode: tokenOk && !loggedIn,
       shareLink: doc?.orderId ? buildReceiptLink(doc.orderId) : null,
@@ -1507,7 +1588,9 @@ router.post('/refund', requireAdmin, express.json(), async (req, res) => {
               amount: paypalRefundValue ?? refundedAmountStr,
               currency: refundedCurrencyStr,
               allowWhenUnpaid: true,
-              platformFeeBps: PLATFORM_FEE_BPS,
+              platformFeeBps: Number.isFinite(orderDoc?.platformFeeBps)
+                ? orderDoc.platformFeeBps
+                : PLATFORM_FEE_BPS,
             });
           } catch (e2) {
             ledger = { ok: false, error: e2?.message || String(e2) };

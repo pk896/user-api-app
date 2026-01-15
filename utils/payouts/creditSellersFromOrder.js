@@ -64,6 +64,12 @@ function isPaidLikeNormalized(order) {
   return false;
 }
 
+function payoutDelayMs() {
+  const daysRaw = Number(process.env.SELLER_PAYOUT_DELAY_DAYS ?? 3);
+  const days = Number.isFinite(daysRaw) ? Math.max(0, Math.min(30, Math.trunc(daysRaw))) : 3;
+  return days * 24 * 60 * 60 * 1000;
+}
+
 async function creditSellersFromOrder(order, opts = {}) {
   const {
     platformFeeBps = 1000, // 10%
@@ -85,7 +91,7 @@ async function creditSellersFromOrder(order, opts = {}) {
   if (!items.length) return { credited: 0, skipped: 'no-items' };
 
   // ✅ clamp fee bps (protect against bad config)
-  const feeBps = Math.max(0, Math.min(3000, Number(platformFeeBps || 0)));
+  const feeBps = Math.max(0, Math.min(5000, Number(platformFeeBps || 0)));
 
   // ✅ enforce single currency per order (safer)
   const currency = toUpper(order?.amount?.currency || 'USD');
@@ -155,7 +161,8 @@ async function creditSellersFromOrder(order, opts = {}) {
     agg.set(key, prev);
   }
 
-  const wanted = [];
+    const wanted = [];
+
   for (const row of agg.values()) {
     if (!row.netCents || row.netCents <= 0) continue;
 
@@ -166,6 +173,10 @@ async function creditSellersFromOrder(order, opts = {}) {
       type: 'EARNING',
       amountCents: Math.trunc(row.netCents),
       currency,
+
+      // ✅ pending window before it becomes "AVAILABLE"
+      availableAt: new Date(Date.now() + payoutDelayMs()),
+
       orderId: new mongoose.Types.ObjectId(orderId),
       note: `Net earnings for order ${order.orderId || String(orderId)} (${row.customId})`,
       meta: {

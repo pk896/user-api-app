@@ -51,9 +51,21 @@ const OrderItemSchema = new Schema(
     // NOTE: this is your Product.customId (string), not ObjectId
     productId: { type: String, index: true },
     name: { type: String, required: true },
-    price: MoneySchema, // unit price snapshot at time of order
+
+    // ✅ NET unit price snapshot (used for seller crediting)
+    price: MoneySchema,
+
+    // ✅ GROSS unit price snapshot (used for receipts/UI)
+    priceGross: MoneySchema,
+
     quantity: { type: Number, min: 1, default: 1 },
     imageUrl: String,
+
+    // ✅ NEW: store size/color/etc so receipt & admin views can show it
+    variants: {
+      size: { type: String, trim: true },
+      color: { type: String, trim: true },
+    },
   },
   { _id: false }
 );
@@ -179,6 +191,8 @@ const OrderSchema = new Schema(
 
     amount: MoneySchema, // captured total
     breakdown: BreakdownSchema,
+
+    platformFeeBps: { type: Number, default: 1000 }, // 10% default (basis points)
 
     fee: { type: String },
     net: { type: String },

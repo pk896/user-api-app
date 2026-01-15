@@ -5,6 +5,20 @@ const mongoose = require('mongoose');
 const SellerBalanceLedger = require('../../models/SellerBalanceLedger');
 const { moneyToCents } = require('../money');
 
+function getCapturedGrossCentsFromOrder(order) {
+  // Try common shapes first
+  const v =
+    order?.amount?.value ??
+    order?.amount?.amount ??
+    order?.total?.value ??
+    order?.total ??
+    order?.raw?.purchase_units?.[0]?.amount?.value ??
+    null;
+
+  const cents = moneyToCents(v);
+  return Number.isFinite(cents) && cents > 0 ? cents : null;
+}
+
 function toUpper(v, fallback = 'USD') {
   const s = String(v || '').trim().toUpperCase();
   return s || fallback;
@@ -25,11 +39,7 @@ function clampInt(n, min, max) {
   return Math.min(max, Math.max(min, Math.trunc(x)));
 }
 
-function grossToNetCents(grossCents, platformFeeBps) {
-  const bps = clampInt(platformFeeBps, 0, 10000);
-  const fee = Math.round((grossCents * bps) / 10000);
-  return grossCents - fee;
-}
+
 
 // If your crediting file uses a different type, add it here.
 // This ensures refund debits will ALWAYS find the credited rows.
@@ -65,7 +75,7 @@ async function debitSellersFromRefund(order, opts = {}) {
   );
 
   // ✅ clamp fee bps once (mirror credit file)
-  const feeBps = clampInt(platformFeeBps, 0, 3000);
+  const feeBps = clampInt(platformFeeBps, 0, 5000);
 
   // 1) Fetch seller CREDIT entries for this order (support different type names + orderId shapes)
   const earningsRaw = await SellerBalanceLedger.find({
@@ -113,10 +123,20 @@ async function debitSellersFromRefund(order, opts = {}) {
       return { debited: 0, skipped: 'bad-amount', currency: ccy };
     }
 
-    wantNetCents = grossToNetCents(grossRefundCents, feeBps);
+    // ✅ Ratio method: debit sellers based on how much of the total captured amount was refunded.
+    const capturedGrossCents = getCapturedGrossCentsFromOrder(order);
+
+    if (!capturedGrossCents) {
+      // Fallback: if we can't read captured amount, cap to totalNetCents (safe).
+      wantNetCents = Math.min(totalNetCents, grossRefundCents);
+    } else {
+      const ratio = grossRefundCents / capturedGrossCents;
+      const safeRatio = Math.max(0, Math.min(1, ratio));
+      wantNetCents = Math.round(totalNetCents * safeRatio);
+    }
 
     if (!Number.isFinite(wantNetCents) || wantNetCents <= 0) {
-      return { debited: 0, skipped: 'net-zero-after-fee', currency: ccy, feeBps };
+      return { debited: 0, skipped: 'net-zero-after-ratio', currency: ccy, feeBps };
     }
 
     if (wantNetCents > totalNetCents) wantNetCents = totalNetCents;

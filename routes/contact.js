@@ -14,7 +14,7 @@ function dashboardPathFor(b) {
 // GET /contact (form)
 router.get('/', (req, res) => {
   res.render('contact', {
-    title: 'Contact Phakisi Global',
+    title: 'Contact Unicoporate',
     nonce: res.locals.nonce,
     themeCss: res.locals.themeCss,
     // flashes come from global locals
@@ -53,17 +53,17 @@ router.post('/', (req, res) => {
       ? [
           sendMail({
             to: email,
-            subject: 'We received your message (Phakisi Support)',
+            subject: 'We received your message (Unicoporate Support)',
             text: `Hi ${name},
 
-Thanks for contacting Phakisi Support. Your message has been received.
+Thanks for contacting Unicoporate Support. Your message has been received.
 We’ll get back to you shortly.
 
-— Phakisi Support`,
+— Unicoporate Support`,
             html:
               `<p>Hi ${name},</p>` +
-              `<p>Thanks for contacting <strong>Phakisi Support</strong>. Your message has been received. We’ll get back to you shortly.</p>` +
-              `<p>— Phakisi Support</p>`,
+              `<p>Thanks for contacting <strong>Unicoporate Support</strong>. Your message has been received. We’ll get back to you shortly.</p>` +
+              `<p>— Unicoporate Support</p>`,
             replyTo: process.env.SUPPORT_INBOX || undefined,
           }),
         ]

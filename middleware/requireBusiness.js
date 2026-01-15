@@ -3,23 +3,34 @@ const chalk = require('chalk');
 
 module.exports = function requireBusiness(req, res, next) {
   try {
-    if (!req.session || !req.session.business) {
-      if (chalk?.yellow) {
-        console.log(chalk.yellow('🚫 No active business session'));
-      } else {
-        console.log('🚫 No active business session');
-      }
+    const s = req.session || {};
+
+    // ✅ accept either "business" object OR "businessId"
+    const businessObj = s.business;
+    const businessId = s.businessId || businessObj?._id || businessObj?.id;
+
+    if (!businessObj && !businessId) {
+      console.log(
+        chalk?.yellow ? chalk.yellow('🚫 No active business session') : '🚫 No active business session',
+      );
       req.flash('error', 'Please log in to continue.');
       return res.redirect('/business/login');
     }
 
-    if (chalk?.cyan) {
-      console.log(chalk.cyan(`✅ Authenticated business: ${req.session.business.name}`));
-    } else {
-      console.log(`✅ Authenticated business: ${req.session.business.name}`);
+    // ✅ normalize (so other code can always rely on these)
+    s.businessId = String(businessId || businessObj?._id || businessObj?.id);
+
+    if (!s.business) {
+      s.business = { _id: s.businessId, name: 'Business' };
     }
 
-    next();
+    console.log(
+      chalk?.cyan
+        ? chalk.cyan(`✅ Authenticated business: ${s.business?.name || s.businessId}`)
+        : `✅ Authenticated business: ${s.business?.name || s.businessId}`,
+    );
+
+    return next();
   } catch (err) {
     console.error('❌ requireBusiness middleware error:', err);
     req.flash('error', 'Authentication check failed.');

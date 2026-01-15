@@ -266,12 +266,63 @@ const limiter = rateLimit({
     res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
   },
 });
-app.use('/business/login', limiter);
 app.use('/business/signup', limiter);
 app.use('/users/login', limiter);
 app.use('/users/signup', limiter);
-app.use('/users/rendersignup', limiter);
 
+// 7b) Stricter limiter for account recovery + sensitive actions
+const sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: process.env.NODE_ENV === 'production' ? 10 : 100, // ✅ strict in prod
+  standardHeaders: true,
+  legacyHeaders: false,
+
+  // ✅ In Render you already set: app.set('trust proxy', 1);
+  // This makes req.ip correct behind the proxy.
+  keyGenerator: (req) => {
+    // add a little extra “stickiness” per endpoint
+    const ip = req.ip || 'noip';
+    const path = req.originalUrl || req.path || 'nop';
+    return `${ip}:${path}`;
+  },
+
+  handler: (req, res) => {
+    console.warn(`⚠️ Sensitive rate limit exceeded for IP: ${req.ip} on ${req.originalUrl}`);
+    // Return a generic message (don’t leak anything)
+    return res
+      .status(429)
+      .json({ success: false, message: 'Too many requests. Please try again later.' });
+  },
+});
+
+// Users: forgot username + password reset + profile/password changes
+app.use('/users/username/forgot', sensitiveLimiter);
+app.use('/users/password/forgot', sensitiveLimiter);
+app.use('/users/password/reset', sensitiveLimiter); // ✅ covers /users/password/reset/:token
+app.use('/users/change-password', sensitiveLimiter);
+app.use('/profile/edit', sensitiveLimiter);
+
+// Business: login is already covered by your normal limiter,
+// but change-email / profile / password reset are sensitive
+app.use('/business/login', sensitiveLimiter);
+app.use('/business/change-email', sensitiveLimiter);
+app.use('/business/profile/edit-bank', sensitiveLimiter);
+app.use('/profile/update-details', sensitiveLimiter)
+app.use('/business/profile', sensitiveLimiter);
+app.use('/business/password/forgot', sensitiveLimiter);
+app.use('/business/password/reset', sensitiveLimiter); // ✅ covers /business/password/reset/:token
+
+// admin routes ratelimiter protection
+app.use('/admin/login', sensitiveLimiter)
+app.use('/admin/payouts/create', sensitiveLimiter);
+app.use('/admin/payouts/sync-recent', sensitiveLimiter);
+app.use('/admin/payouts', sensitiveLimiter); // optional: protects list page too
+app.use('/api/admin/orders', sensitiveLimiter); // optional but solid
+
+// payment routes rate limiting protector
+app.use('/payment/refund', sensitiveLimiter);
+app.use('/payment/sync-refunds', sensitiveLimiter);
+app.use('/payment/reconcile-recent-refunds', sensitiveLimiter);
 /* ---------------------------------------
    Session Configuration (STABLE)
    ✅ MUST be mounted BEFORE passport.session() and before req.flash usage
@@ -337,10 +388,47 @@ app.use((req, res, next) => {
 });
 
 /* ---------------------------------------
-   Google OAuth Routes
+   Google OAuth Routes (FIXED)
 --------------------------------------- */
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
+// Start Google OAuth (save returnTo first)
+function safeReturnTo(input) {
+  if (!input) return null;
+
+  // allow only local paths like "/users/dashboard?x=1"
+  try {
+    const u = new URL(String(input), 'http://localhost'); // base just for parsing
+    const path = (u.pathname || '/') + (u.search || '') + (u.hash || '');
+    if (!path.startsWith('/')) return null;
+    if (path.startsWith('//')) return null;
+    return path;
+  } catch {
+    const s = String(input);
+    if (s.startsWith('/') && !s.startsWith('//')) return s;
+    return null;
+  }
+}
+
+app.get(
+  '/auth/google',
+  (req, res, next) => {
+    const rt =
+      safeReturnTo(req.query.returnTo) ||
+      safeReturnTo(req.get('referer')) ||
+      '/users/dashboard';
+
+    req.session.returnTo = rt;
+
+    // ✅ IMPORTANT: force-save before redirecting to Google
+    req.session.save((err) => {
+      if (err) console.warn('[auth/google] session save error:', err);
+      next();
+    });
+  },
+  passport.authenticate('google', { scope: ['profile', 'email'] }),
+);
+
+// Callback
 app.get(
   '/auth/google/callback',
   passport.authenticate('google', {
@@ -353,7 +441,13 @@ app.get(
       return res.redirect('/users/login');
     }
 
-    const keepBusiness = req.session?.business || null;
+    // Keep only safe session data across regenerate
+    const keep = {
+      business: req.session?.business || null,
+      cart: req.session?.cart || null,
+      theme: req.session?.theme || null,
+      returnTo: req.session?.returnTo || null,
+    };
 
     req.session.regenerate(async (err) => {
       if (err) {
@@ -362,19 +456,23 @@ app.get(
         return res.redirect('/users/login');
       }
 
-      if (keepBusiness) {
-        req.session.business = keepBusiness;
-      }
+      // Restore kept values
+      if (keep.business) req.session.business = keep.business;
+      if (keep.cart) req.session.cart = keep.cart;
+      if (keep.theme) req.session.theme = keep.theme;
 
+      // Set user session
       req.session.user = {
         _id: req.user._id.toString(),
         name: req.user.name,
         email: req.user.email,
+        username: req.user.username || null,
         createdAt: req.user.createdAt,
         provider: req.user.provider || 'google',
         isEmailVerified: !!req.user.isEmailVerified,
       };
 
+      // Optional: lastLogin update
       try {
         req.user.lastLogin = new Date();
         await req.user.save();
@@ -382,11 +480,14 @@ app.get(
         console.warn('[Google callback] lastLogin error:', e?.message);
       }
 
+      const redirectTo = keep.returnTo || '/users/dashboard';
+
+      // Clear returnTo after using it
+      delete req.session.returnTo;
+
       req.session.save(() => {
         req.flash('success', 'Logged in with Google.');
-        const redirectTo = req.session.returnTo || '/users/dashboard';
-        delete req.session.returnTo;
-        res.redirect(redirectTo);
+        return res.redirect(redirectTo);
       });
     });
   },
