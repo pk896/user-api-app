@@ -5,6 +5,8 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
+const { getShippoTracking } = require('../utils/shippo/getShippoTracking');
+
 let Order = null;
 try {
   Order = require('../models/Order');
@@ -12,9 +14,26 @@ try {
   Order = null;
 }
 
+const mongoose = require('mongoose');
+
+async function findOrderByParam(param, lean = false) {
+  const p = String(param || '').trim();
+
+  // If it's a valid ObjectId => lookup by _id
+  if (mongoose.isValidObjectId(p)) {
+    return lean ? Order.findById(p).lean() : Order.findById(p);
+  }
+
+  // Otherwise try lookup by your PayPal orderId field
+  // (this matches your Order schema field "orderId")
+  return lean
+    ? Order.findOne({ orderId: p }).lean()
+    : Order.findOne({ orderId: p });
+}
+
 /* ---------------------------------------
-   Courier API configuration (FIXED)
-   - No "this" usage (it was undefined)
+   Legacy Courier APIs (fallback)
+   NOTE: Kept for backward compatibility with old orders.
 --------------------------------------- */
 const COURIER_APIS = {
   COURIER_GUY: {
@@ -59,10 +78,7 @@ const COURIER_APIS = {
         const url = `${this.baseUrl}/tracking`;
         const response = await axios.post(
           url,
-          {
-            Shipments: [trackingNumber],
-            GetLastTrackingUpdateOnly: false,
-          },
+          { Shipments: [trackingNumber], GetLastTrackingUpdateOnly: false },
           { timeout: 15000 },
         );
         return response.data;
@@ -77,20 +93,49 @@ const COURIER_APIS = {
 /* ---------------------------------------
    Helpers
 --------------------------------------- */
-async function fetchLiveTracking(courier, trackingNumber) {
-  if (!courier || !trackingNumber) return null;
-  if (!COURIER_APIS[courier]) return null;
-
-  try {
-    const trackingData = await COURIER_APIS[courier].track(trackingNumber);
-    return parseTrackingData(courier, trackingData);
-  } catch (error) {
-    console.error(`Error fetching ${courier} tracking:`, error?.response?.data || error.message);
-    return null;
-  }
+function hasUser(req) {
+  return Boolean(req.session?.user || req.user);
 }
 
-function parseTrackingData(courier, data) {
+function hasBusiness(req) {
+  return Boolean(req.session?.business);
+}
+
+function isShippoCarrierToken(carrier) {
+  // Shippo carrier tokens are typically lowercase strings like:
+  // "ups", "usps", "fedex", "dhl_express"
+  const c = String(carrier || '').trim();
+  if (!c) return false;
+
+  // Do NOT treat legacy keys as Shippo
+  if (COURIER_APIS[c]) return false;
+
+  // Do NOT treat "OTHER" / "other" as Shippo
+  if (c.toLowerCase() === 'other') return false;
+
+  // Shippo tokens are lowercase and usually [a-z0-9_]
+  if (c !== c.toLowerCase()) return false;
+  if (!/^[a-z0-9_]+$/.test(c)) return false;
+
+  return true;
+}
+
+function mapStatus(courierStatus) {
+  if (!courierStatus) return 'UNKNOWN';
+
+  const status = courierStatus.toString().toLowerCase();
+
+  if (status.includes('delivered') || status.includes('completed')) return 'DELIVERED';
+  if (status.includes('out for delivery') || status.includes('on vehicle')) return 'OUT_FOR_DELIVERY';
+  if (status.includes('in transit') || status.includes('in transportation')) return 'IN_TRANSIT';
+  if (status.includes('picked up') || status.includes('collected')) return 'PICKED_UP';
+  if (status.includes('exception') || status.includes('delay')) return 'DELAYED';
+  if (status.includes('pending') || status.includes('processing')) return 'PROCESSING';
+
+  return 'UNKNOWN';
+}
+
+function parseLegacyTrackingData(courier, data) {
   const standardized = {
     status: 'UNKNOWN',
     events: [],
@@ -127,35 +172,79 @@ function parseTrackingData(courier, data) {
   return standardized;
 }
 
-function mapStatus(courierStatus) {
-  if (!courierStatus) return 'UNKNOWN';
+async function fetchLegacyLiveTracking(courier, trackingNumber) {
+  if (!courier || !trackingNumber) return null;
+  if (!COURIER_APIS[courier]) return null;
 
-  const status = courierStatus.toString().toLowerCase();
-
-  if (status.includes('delivered') || status.includes('completed')) return 'DELIVERED';
-  if (status.includes('out for delivery') || status.includes('on vehicle')) return 'OUT_FOR_DELIVERY';
-  if (status.includes('in transit') || status.includes('in transportation')) return 'IN_TRANSIT';
-  if (status.includes('picked up') || status.includes('collected')) return 'PICKED_UP';
-  if (status.includes('exception') || status.includes('delay')) return 'DELAYED';
-  if (status.includes('pending') || status.includes('processing')) return 'PROCESSING';
-
-  return 'UNKNOWN';
+  try {
+    const trackingData = await COURIER_APIS[courier].track(trackingNumber);
+    return parseLegacyTrackingData(courier, trackingData);
+  } catch (error) {
+    console.error(`Error fetching ${courier} tracking:`, error?.response?.data || error.message);
+    return null;
+  }
 }
 
-function hasUser(req) {
-  return Boolean(req.session?.user || req.user);
+/**
+ * ✅ Shippo-first: if carrier is a Shippo token => use Shippo
+ * else fallback to legacy couriers.
+ */
+async function fetchAnyLiveTracking({ carrier, trackingNumber }) {
+  const c = String(carrier || '').trim();
+  const t = String(trackingNumber || '').trim();
+  if (!c || !t) return null;
+
+  // Shippo path
+  if (isShippoCarrierToken(c)) {
+    try {
+      return await getShippoTracking(c, t);
+    } catch (e) {
+      console.error('Shippo tracking error:', e?.message || e);
+      return null;
+    }
+  }
+
+  // Legacy path
+  return await fetchLegacyLiveTracking(c, t);
 }
 
-function hasBusiness(req) {
-  return Boolean(req.session?.business);
+async function cacheLiveTracking(orderIdOrOrderIdField, liveTracking) {
+  if (!Order || !orderIdOrOrderIdField || !liveTracking) return;
+
+  // Find by _id OR by orderId, then update by real Mongo _id
+  const found = await findOrderByParam(orderIdOrOrderIdField, true).catch(() => null);
+  const realMongoId = found?._id ? String(found._id) : null;
+  if (!realMongoId) return;
+
+  const now = new Date();
+
+  // map to your fulfillment pipeline
+  let fulfillment = undefined;
+  if (liveTracking.status === 'DELIVERED') fulfillment = 'DELIVERED';
+  else if (liveTracking.status === 'IN_TRANSIT') fulfillment = 'IN_TRANSIT';
+  else if (liveTracking.status === 'PROCESSING') fulfillment = 'PENDING';
+  else if (liveTracking.status === 'DELAYED') fulfillment = 'EXCEPTION';
+  else fulfillment = undefined;
+
+  await Order.findByIdAndUpdate(realMongoId, {
+    // ✅ live cache
+    'shippingTracking.liveStatus': liveTracking.status,
+    'shippingTracking.liveEvents': liveTracking.events,
+    'shippingTracking.lastTrackingUpdate': now,
+    'shippingTracking.estimatedDelivery': liveTracking.estimatedDelivery,
+
+    // ✅ main status fields (what order history usually shows)
+    'shippingTracking.status': liveTracking.status,
+    ...(fulfillment ? { fulfillmentStatus: fulfillment } : {}),
+    ...(liveTracking.status === 'DELIVERED' ? { status: 'DELIVERED' } : {}),
+  }).catch(() => {});
 }
 
 /* ---------------------------------------
-   ROUTES
-   Mounted at: /orders/tracking
+   ROUTES (mounted at /orders/tracking)
 --------------------------------------- */
 
-// GET: view tracking with live data
+// GET: view tracking page
 router.get('/:orderId', async (req, res, next) => {
   try {
     if (!Order) {
@@ -171,15 +260,15 @@ router.get('/:orderId', async (req, res, next) => {
       return res.redirect('/users/login');
     }
 
-    const order = await Order.findById(req.params.orderId).lean();
+    const order = await findOrderByParam(req.params.orderId, true);
     if (!order) {
       req.flash('error', 'Order not found.');
       return res.redirect('/orders');
     }
 
-    // Users can only see their own orders
+    // Users can only see their own orders (keep your existing rule)
     if (userOk && order.userId && req.session?.user?._id) {
-      if (order.userId.toString() !== req.session.user._id.toString()) {
+      if (String(order.userId) !== String(req.session.user._id)) {
         req.flash('error', 'You are not allowed to view this order.');
         return res.redirect('/orders');
       }
@@ -187,20 +276,24 @@ router.get('/:orderId', async (req, res, next) => {
 
     let liveTracking = null;
 
-    if (order.shippingTracking?.trackingNumber && order.shippingTracking?.carrier) {
-      liveTracking = await fetchLiveTracking(
-        order.shippingTracking.carrier,
-        order.shippingTracking.trackingNumber,
-      );
+    const st = order.shippingTracking || {};
+    const trackingNumber = String(st.trackingNumber || '').trim();
 
-      // Cache live data (best-effort)
+    // ✅ IMPORTANT:
+    // - Shippo tracking needs the token like "usps"
+    // - PayPal needs the enum like "USPS"
+    const carrierToken = String(st.carrierToken || '').trim(); // "usps"
+    const carrierEnum = String(st.carrier || '').trim();       // "USPS"
+
+    // Use token first, else fallback
+    const carrierForTracking = carrierToken || carrierEnum;
+
+    if (trackingNumber && carrierForTracking) {
+      liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
+
       if (liveTracking) {
-        await Order.findByIdAndUpdate(req.params.orderId, {
-          'shippingTracking.liveStatus': liveTracking.status,
-          'shippingTracking.liveEvents': liveTracking.events,
-          'shippingTracking.lastTrackingUpdate': new Date(),
-          'shippingTracking.estimatedDelivery': liveTracking.estimatedDelivery,
-        }).catch(() => {});
+        // Cache your live tracking fields (what you already do)
+        await cacheLiveTracking(req.params.orderId, liveTracking);
       }
     }
 
@@ -222,6 +315,7 @@ router.get('/:orderId', async (req, res, next) => {
 });
 
 // POST: update tracking (business only)
+// IMPORTANT: EJS form action must post to /orders/tracking/:orderId
 router.post('/:orderId', async (req, res, next) => {
   try {
     if (!Order) {
@@ -234,13 +328,17 @@ router.post('/:orderId', async (req, res, next) => {
       return res.redirect('/users/login');
     }
 
-    const order = await Order.findById(req.params.orderId);
+    const order = await findOrderByParam(req.params.orderId, false);
     if (!order) {
       req.flash('error', 'Order not found.');
       return res.redirect('/orders');
     }
 
-    const { carrier, carrierLabel, trackingNumber, trackingUrl, status } = req.body;
+    const carrier = String(req.body?.carrier || '').trim(); // shippo token OR legacy enum OR OTHER
+    const carrierLabel = String(req.body?.carrierLabel || '').trim();
+    const trackingNumber = String(req.body?.trackingNumber || '').trim();
+    const trackingUrl = String(req.body?.trackingUrl || '').trim();
+    const status = String(req.body?.status || '').trim();
 
     order.shippingTracking = order.shippingTracking || {};
     order.shippingTracking.carrier = carrier || order.shippingTracking.carrier || 'OTHER';
@@ -249,9 +347,10 @@ router.post('/:orderId', async (req, res, next) => {
     order.shippingTracking.trackingUrl = trackingUrl || '';
     order.shippingTracking.status = status || order.shippingTracking.status || 'SHIPPED';
 
-    // Auto-fetch live tracking
-    if (trackingNumber && carrier && carrier !== 'OTHER') {
-      const liveTracking = await fetchLiveTracking(carrier, trackingNumber);
+    // Auto-fetch live tracking (Shippo-first when carrier is a Shippo token)
+    let liveTracking = null;
+    if (trackingNumber && carrier && carrier.toLowerCase() !== 'other') {
+      liveTracking = await fetchAnyLiveTracking({ carrier, trackingNumber });
       if (liveTracking) {
         order.shippingTracking.liveStatus = liveTracking.status;
         order.shippingTracking.liveEvents = liveTracking.events;
@@ -270,10 +369,7 @@ router.post('/:orderId', async (req, res, next) => {
 
     await order.save();
 
-    req.flash(
-      'success',
-      'Tracking updated.' + (order.shippingTracking.liveStatus ? ' Live tracking data fetched.' : ''),
-    );
+    req.flash('success', 'Tracking updated.' + (liveTracking ? ' Live tracking data fetched.' : ''));
 
     return res.redirect(`/orders/tracking/${order._id}`);
   } catch (err) {
@@ -281,30 +377,47 @@ router.post('/:orderId', async (req, res, next) => {
   }
 });
 
-// API: refresh tracking data (best for AJAX)
+// GET: refresh live tracking (AJAX)
 router.get('/:orderId/refresh', async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
 
-    const order = await Order.findById(req.params.orderId);
+    // ✅ protect refresh too (same rule as page)
+    const userOk = hasUser(req);
+    const businessOk = hasBusiness(req);
+    if (!userOk && !businessOk) {
+      return res.status(401).json({ ok: false, message: 'Please log in.' });
+    }
+
+    const order = await findOrderByParam(req.params.orderId, false);
     if (!order) return res.status(404).json({ ok: false, message: 'Order not found.' });
 
-    if (order.shippingTracking?.trackingNumber && order.shippingTracking?.carrier) {
-      const liveTracking = await fetchLiveTracking(
-        order.shippingTracking.carrier,
-        order.shippingTracking.trackingNumber,
-      );
-
-      if (liveTracking) {
-        order.shippingTracking.liveStatus = liveTracking.status;
-        order.shippingTracking.liveEvents = liveTracking.events;
-        order.shippingTracking.lastTrackingUpdate = new Date();
-        order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery;
-
-        await order.save();
-
-        return res.json({ ok: true, liveTracking });
+    // Users can only refresh their own orders
+    if (userOk && order.userId && req.session?.user?._id) {
+      if (String(order.userId) !== String(req.session.user._id)) {
+        return res.status(403).json({ ok: false, message: 'Not allowed.' });
       }
+    }
+
+    const st = order.shippingTracking || {};
+    const trackingNumber = String(st.trackingNumber || '').trim();
+    const carrier = String(st.carrier || '').trim();
+
+    if (!trackingNumber || !carrier) {
+      return res.json({ ok: false, message: 'No tracking details saved yet.' });
+    }
+
+    const liveTracking = await fetchAnyLiveTracking({ carrier, trackingNumber });
+
+    if (liveTracking) {
+      order.shippingTracking.liveStatus = liveTracking.status;
+      order.shippingTracking.liveEvents = liveTracking.events;
+      order.shippingTracking.lastTrackingUpdate = new Date();
+      order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery;
+
+      await order.save();
+
+      return res.json({ ok: true, liveTracking });
     }
 
     return res.json({ ok: false, message: 'Could not refresh tracking data' });

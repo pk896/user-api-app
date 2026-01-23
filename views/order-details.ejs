@@ -1,0 +1,205 @@
+<!-- views/order-details.ejs -->
+<%
+  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
+  const o = order || {};
+  const items = Array.isArray(o.items) ? o.items : [];
+  const money = (n) => {
+    const v = Number(n || 0);
+    return (Number.isFinite(v) ? v : 0).toFixed(2);
+  };
+  const ccy = String(o.currency || 'USD').toUpperCase();
+  const sym = (ccy === 'ZAR') ? 'R' : (ccy === 'USD') ? '$' : (ccy + ' ');
+  const fmtDate = (d) => {
+    try {
+      const x = new Date(d);
+      if (isNaN(x.getTime())) return '—';
+      return x.toLocaleString('en-ZA', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+    } catch { return '—'; }
+  };
+
+  const ship = o.shipping || {};
+  const track = o.shippingTracking || {};
+  const shipLine = [
+    ship.address_line_1 || ship.street1 || ship.line1,
+    ship.address_line_2 || ship.street2 || ship.line2,
+    ship.admin_area_2 || ship.city,
+    ship.admin_area_1 || ship.state,
+    ship.postal_code || ship.zip,
+    ship.country_code || ship.country,
+  ].filter(Boolean).join(', ');
+%>
+
+<main class="od">
+  <div class="od-head">
+    <div>
+      <h1>Order Details</h1>
+      <div class="muted">
+        Order: <span class="mono"><%= (String(o.orderId || o._id || '')).slice(-12) || '—' %></span>
+        • Placed: <%= fmtDate(o.createdAt) %>
+      </div>
+    </div>
+    <div class="od-actions">
+      <a class="btn outline" href="/payment/orders">← Back</a>
+      <% if (o.receiptLink) { %>
+        <a class="btn" href="<%= o.receiptLink %>">📄 Receipt</a>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="od-grid">
+    <section class="card">
+      <h2>Summary</h2>
+      <div class="rows">
+        <div class="row"><span>Status</span><b><%= o.status || 'Pending' %></b></div>
+        <div class="row"><span>Payment</span><b><%= o.paymentStatus || '—' %></b></div>
+        <div class="row"><span>Total</span><b><%= sym %><%= money(o.amount) %> <span class="muted"><%= ccy %></span></b></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Shipping</h2>
+      <div class="rows">
+        <div class="row"><span>Name</span><b><%= ship.name || '—' %></b></div>
+        <div class="row"><span>Phone</span><b><%= ship.phone || '—' %></b></div>
+        <div class="row"><span>Email</span><b><%= ship.email || '—' %></b></div>
+        <div class="row"><span>Address</span><b><%= shipLine || '—' %></b></div>
+      </div>
+    </section>
+
+    <section class="card" id="tracking">
+      <h2>Tracking</h2>
+      <div class="rows">
+        <div class="row"><span>Status</span><b><%= track.status || 'Pending' %></b></div>
+        <div class="row"><span>Carrier</span><b><%= track.carrierLabel || track.carrier || '—' %></b></div>
+        <div class="row"><span>Tracking #</span><b class="mono"><%= track.trackingNumber || '—' %></b></div>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <h2>Items (<%= items.length %>)</h2>
+
+      <% if (!items.length) { %>
+        <p class="muted">No items recorded for this order.</p>
+      <% } else { %>
+        <div class="items">
+          <% items.forEach((it) => { 
+              const v = it.variants || {};
+              const size = (v.size ?? it.size ?? '').toString().trim();
+              const color = (v.color ?? it.color ?? '').toString().trim();
+              const title = it.name || it.title || 'Item';
+              const qty = Number(it.qty || it.quantity || 1) || 1;
+              const price = Number(it.price || it.unitPrice || 0) || 0;
+              const img = it.imageUrl || it.image || '';
+          %>
+            <div class="item">
+              <div class="img">
+                <% if (img) { %>
+                  <img src="<%= img %>" alt="<%= title %>">
+                <% } else { %>
+                  <div class="ph"><%= (title[0] || '?').toUpperCase() %></div>
+                <% } %>
+              </div>
+              <div class="info">
+                <div class="name"><%= title %></div>
+                <div class="muted">
+                  Qty: <b><%= qty %></b>
+                  <% if (size) { %> • Size: <b><%= size %></b> <% } %>
+                  <% if (color) { %> • Color: <b><%= color %></b> <% } %>
+                </div>
+              </div>
+              <div class="price">
+                <b><%= sym %><%= money(price * qty) %></b>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </section>
+  </div>
+</main>
+
+<style nonce="<%= NONCE %>">
+  .od{
+    --blue:#2563EB; --purple:#7C3AED; --green:#22C55E; --black:#0F172A;
+    --bg0:#070A13; --bg1:#0B1022;
+    --line: rgba(148,163,184,.18);
+    --text: rgba(226,232,240,.96);
+    --muted: rgba(148,163,184,.92);
+    min-height:100vh;
+    padding:.9rem;
+    color:var(--text);
+    background:
+      radial-gradient(900px 420px at 18% -10%, rgba(124,58,237,.38), transparent 58%),
+      radial-gradient(900px 420px at 95% 0%, rgba(37,99,235,.26), transparent 55%),
+      radial-gradient(900px 420px at 70% 110%, rgba(34,197,94,.16), transparent 55%),
+      linear-gradient(180deg, var(--bg0), var(--bg1));
+  }
+  .muted{ color: var(--muted); }
+  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+  .od-head{
+    display:flex; gap:.8rem; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;
+    border:1px solid rgba(124,58,237,.22);
+    border-radius:18px;
+    padding:1rem;
+    background: linear-gradient(180deg, rgba(124,58,237,.14), rgba(15,23,42,.86));
+    box-shadow: 0 10px 22px rgba(2,6,23,.35);
+  }
+  .od-head h1{ margin:0; font-size:1.25rem; font-weight:950; }
+  .od-actions{ display:flex; gap:.55rem; flex-wrap:wrap; }
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:.45rem;
+    padding:.65rem 1rem;
+    border-radius:999px;
+    font-weight:900;
+    text-decoration:none;
+    color:#fff;
+    background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(37,99,235,.9));
+    border:1px solid rgba(124,58,237,.35);
+  }
+  .btn.outline{
+    background: rgba(2,6,23,.28);
+    border-color: rgba(148,163,184,.22);
+    color: rgba(226,232,240,.92);
+  }
+
+  .od-grid{
+    margin-top:.9rem;
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:.85rem;
+  }
+  .card{
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:1rem;
+    background: linear-gradient(180deg, rgba(17,26,46,.88), rgba(15,23,42,.88));
+    box-shadow: 0 10px 22px rgba(2,6,23,.28);
+  }
+  .card h2{ margin:0 0 .65rem 0; font-size:.95rem; font-weight:950; }
+  .rows{ display:flex; flex-direction:column; gap:.55rem; }
+  .row{ display:flex; justify-content:space-between; gap:.75rem; }
+  .wide{ grid-column: 1 / -1; }
+
+  .items{ display:flex; flex-direction:column; gap:.65rem; }
+  .item{
+    display:grid;
+    grid-template-columns: 52px 1fr auto;
+    gap:.7rem;
+    align-items:center;
+    border:1px solid rgba(148,163,184,.14);
+    border-radius:14px;
+    padding:.7rem;
+    background: rgba(2,6,23,.22);
+  }
+  .img{ width:52px; height:52px; border-radius:14px; overflow:hidden; border:1px solid rgba(148,163,184,.16); background: rgba(2,6,23,.22); }
+  .img img{ width:100%; height:100%; object-fit:cover; }
+  .ph{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:950; color: rgba(226,232,240,.92); background: rgba(148,163,184,.12); }
+  .name{ font-weight:950; }
+  .price{ text-align:right; white-space:nowrap; }
+
+  @media (min-width: 720px){
+    .od-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .wide{ grid-column: 1 / -1; }
+  }
+</style>

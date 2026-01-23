@@ -751,6 +751,41 @@
     flex-wrap: wrap;
   }
 
+  /* Customer/shipping details inside order card */
+  .orders-page .customer-block{
+    margin-top: .6rem;
+    padding: .65rem .7rem;
+    border-radius: var(--r-sm);
+    border: 1px solid rgba(124,58,237,.20);
+    background: rgba(124,58,237,.08);
+    display:flex;
+    flex-direction: column;
+    gap: .35rem;
+  }
+
+  .orders-page .customer-row{
+    display:flex;
+    gap:.6rem;
+    align-items:flex-start;
+  }
+
+  .orders-page .customer-row .k{
+    flex: 0 0 70px;
+    font-size: .72rem;
+    font-weight: 950;
+    letter-spacing: .10em;
+    text-transform: uppercase;
+    color: rgba(226,232,240,.82);
+  }
+
+  .orders-page .customer-row .v{
+    flex: 1;
+    min-width: 0;
+    font-size: .88rem;
+    color: rgba(226,232,240,.94);
+    word-break: break-word;
+  }
+
   .orders-page .tracking-number{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: .78rem;
@@ -933,6 +968,27 @@
   .orders-page .status-dot.delivered{ background: var(--green); }
   .orders-page .status-dot.refunded{ background:#F97316; }
 
+  /* Variants */
+  .orders-page .variants-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.35rem;
+    margin-top:.55rem;
+  }
+  .orders-page .variant-chip{
+    font-size: .72rem;
+    font-weight: 950;
+    padding: .18rem .55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(124,58,237,.28);
+    background: rgba(124,58,237,.12);
+    color: rgba(226,232,240,.92);
+  }
+  .orders-page .variant-chip.more{
+    border-color: rgba(34,197,94,.25);
+    background: rgba(34,197,94,.10);
+  }
+
   /* =========================================================
      Responsive (Hisense U50 Lite friendly)
      ========================================================= */
@@ -958,28 +1014,6 @@
   @media (prefers-reduced-motion: reduce){
     *{ transition:none !important; animation:none !important; }
   }
-  .orders-page .variants-row{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.35rem;
-  margin-top:.55rem;
-}
-
-.orders-page .variant-chip{
-  font-size: .72rem;
-  font-weight: 950;
-  padding: .18rem .55rem;
-  border-radius: 999px;
-  border: 1px solid rgba(124,58,237,.28);
-  background: rgba(124,58,237,.12);
-  color: rgba(226,232,240,.92);
-}
-
-.orders-page .variant-chip.more{
-  border-color: rgba(34,197,94,.25);
-  background: rgba(34,197,94,.10);
-}
-
 </style>
 
 <script nonce="<%= NONCE %>">
@@ -1107,6 +1141,28 @@
         .replaceAll("'", '&#039;');
     }
 
+    function pickStr(...vals) {
+      for (const v of vals) {
+        const s = String(v ?? '').trim();
+        if (s) return s;
+      }
+      return '';
+    }
+
+    function formatShipAddress(ship) {
+      const s = ship || {};
+      const parts = [
+        pickStr(s.address_line_1, s.street1, s.line1),
+        pickStr(s.address_line_2, s.street2, s.line2),
+        pickStr(s.admin_area_2, s.city),
+        pickStr(s.admin_area_1, s.state),
+        pickStr(s.postal_code, s.zip),
+        pickStr(s.country_code, s.country),
+      ].filter(Boolean);
+
+      return parts.join(', ');
+    }
+
     function variantSummary(item) {
       const v = item?.variants || {};
       const size = (v.size ?? item?.size ?? '').toString().trim();
@@ -1118,58 +1174,93 @@
       return `Color ${color}`;
     }
 
+    // ✅ ONLY ONE createOrderCard() — COMPLETE
     function createOrderCard(order) {
-      const internalId = String(order.id || order._id || '').trim();
-      const orderId = String(order.orderId || '').trim();
+      // ---------- helpers ----------
+      function extractObjectId(v) {
+        // supports: "696b...", ObjectId("696b..."), { $oid: "696b..." }-like strings
+        const s = String(v ?? '').trim();
+        const m = s.match(/[a-f\d]{24}/i);
+        return m ? m[0] : '';
+      }
 
-      const displayId = (orderId || internalId || '').slice(-8) || '—';
-      const date = formatDate(order.createdAt);
+      // ---------- ids ----------
+      const orderId = String(order?.orderId || '').trim(); // PayPal order id
+      const anyId = String(order?.id || '').trim();        // sometimes Mongo OR PayPal
+      const mongoId = extractObjectId(order?._id) || extractObjectId(anyId);
 
+      // ✅ Details MUST use Mongo ObjectId only (otherwise your route 404s)
+      const detailsHref = mongoId ? `/orderDetails/${encodeURIComponent(mongoId)}` : '';
+
+      // ✅ Tracking can use Mongo id first, otherwise fallback
+      const trackKey = mongoId || orderId || anyId;
+      const trackHref = trackKey ? `/orders/tracking/${encodeURIComponent(trackKey)}` : '';
+
+      // ---------- status + labels ----------
       const norm = normalizeStatus(order);
+      const label = statusLabel(norm, order?.status);
       const icon = statusIcon(norm);
-      const label = statusLabel(norm, order.status);
+      const date = formatDate(order?.createdAt);
 
-      const shipment = order.shippingTracking || {};
-      const shipmentStatusText = getShipmentStatus(shipment.status || '');
-      const shipmentIcon = getShipmentIcon(shipment.status || '');
-      const trackingNumber = String(shipment.trackingNumber || '').trim();
+      const displayId = (orderId || mongoId || anyId || '').slice(-12) || '—';
+
+      // ---------- shipping ----------
+      const shipment = order?.shippingTracking || {};
+      const shipmentStatusText = getShipmentStatus(shipment.status);
+      const shipmentIcon = getShipmentIcon(shipment.status);
       const carrier = String(shipment.carrierLabel || shipment.carrier || '').trim();
+      const trackingNumber = String(shipment.trackingNumber || '').trim();
 
-      const items = Array.isArray(order.items) ? order.items : [];
-      const variantLines = items
-        .map(variantSummary)
-        .filter(Boolean);
+      // ---------- customer ----------
+      const ship = order?.shipping || {};
+      const shipName = String(ship.name || '').trim();
+      const shipPhone = String(ship.phone || '').trim();
+      const shipEmail = String(ship.email || '').trim();
+      const shipAddr = formatShipAddress(ship);
 
-      const variantChips = variantLines
-        .slice(0, 3)
-        .map((t) => `<span class="variant-chip">${escapeHtml(t)}</span>`)
-        .join('');
+      // ---------- amount ----------
+      const amountObj = order?.amount || {};
+      const amountRaw =
+        (typeof amountObj === 'object' && amountObj !== null)
+          ? (amountObj.value ?? order.amount)
+          : amountObj;
 
-      const moreVariants = variantLines.length > 3 ? (variantLines.length - 3) : 0;
+      const currencyRaw =
+        (typeof amountObj === 'object' && amountObj !== null)
+          ? (amountObj.currency ?? order.currency)
+          : (order.currency ?? 'USD');
 
-      const itemsHtml = items.slice(0, 5).map((item) => {
-        const name = item?.name || '';
-        const img = item?.imageUrl || '';
-        if (img) {
-          return `<div class="item-preview"><img src="${escapeHtml(img)}" alt="${escapeHtml(name)}"></div>`;
-        }
-        return `<div class="item-preview placeholder">${escapeHtml((name.charAt(0) || '?').toUpperCase())}</div>`;
-      }).join('');
+      const amountNumber = toNum(amountRaw, 0);
+      const currency = String(currencyRaw || 'USD').toUpperCase();
 
-      // ✅ DO NOT CHANGE PATHS/LINKS
-      let receiptHref = '#';
+      // ---------- receipt ----------
+      let receiptHref = '';
       if (order?.receiptLink) receiptHref = String(order.receiptLink);
       else if (orderId) receiptHref = `/payment/receipt/${encodeURIComponent(orderId)}`;
-      else if (internalId) receiptHref = `/payment/receipt/${encodeURIComponent(internalId)}`;
+      else if (mongoId) receiptHref = `/payment/receipt/${encodeURIComponent(mongoId)}`;
 
-      const receiptDisabled = (receiptHref === '#');
+      const receiptDisabled = !receiptHref;
 
-      const trackHref = internalId ? `/orders/${encodeURIComponent(internalId)}/track` : '';
-      const detailsHref = internalId ? `/orders/${encodeURIComponent(internalId)}` : '';
+      // ---------- items previews ----------
+      const items = Array.isArray(order?.items) ? order.items : [];
+      const itemsTop = items.slice(0, 5);
 
-      const amountNumber = toNum(order.amount, 0);
-      const currency = String(order.currency || 'USD').toUpperCase();
+      const itemsHtml = itemsTop.map((it) => {
+        const title = String(it?.name || it?.title || 'Item');
+        const img = String(it?.imageUrl || it?.image || '');
+        if (img) {
+          return `<div class="item-preview"><img src="${escapeHtml(img)}" alt="${escapeHtml(title)}"></div>`;
+        }
+        return `<div class="item-preview placeholder">${escapeHtml((title[0] || '?').toUpperCase())}</div>`;
+      }).join('');
 
+      const variants = items.map((it) => variantSummary(it)).filter(Boolean);
+      const uniq = Array.from(new Set(variants));
+      const chips = uniq.slice(0, 4);
+      const moreVariants = Math.max(0, uniq.length - chips.length);
+      const variantChips = chips.map((t) => `<span class="variant-chip">${escapeHtml(t)}</span>`).join('');
+
+      // ---------- HTML ----------
       return `
         <div class="order-card ${escapeHtml(norm)}">
           <div class="order-header">
@@ -1194,6 +1285,15 @@
                   ${carrier ? `<span>• ${escapeHtml(carrier)}</span>` : ''}
                 </div>
 
+                ${(shipName || shipPhone || shipEmail || shipAddr) ? `
+                  <div class="customer-block" aria-label="Customer shipping details">
+                    ${shipName ? `<div class="customer-row"><span class="k">Name</span><span class="v">${escapeHtml(shipName)}</span></div>` : ''}
+                    ${shipPhone ? `<div class="customer-row"><span class="k">Phone</span><span class="v">${escapeHtml(shipPhone)}</span></div>` : ''}
+                    ${shipEmail ? `<div class="customer-row"><span class="k">Email</span><span class="v">${escapeHtml(shipEmail)}</span></div>` : ''}
+                    ${shipAddr ? `<div class="customer-row"><span class="k">Address</span><span class="v">${escapeHtml(shipAddr)}</span></div>` : ''}
+                  </div>
+                ` : ''}
+
                 ${trackingNumber ? `
                   <div class="shipping-info">
                     <span class="shipping-icon">#</span>
@@ -1205,9 +1305,9 @@
 
             <div class="order-actions">
               <a href="${escapeHtml(receiptHref)}"
-                 class="action-btn receipt"
-                 title="${receiptDisabled ? 'Receipt not available yet' : 'View receipt'}"
-                 ${receiptDisabled ? 'aria-disabled="true" onclick="return false;" style="opacity:.55;pointer-events:none;"' : ''}>
+                class="action-btn receipt"
+                title="${receiptDisabled ? 'Receipt not available yet' : 'View receipt'}"
+                ${receiptDisabled ? 'aria-disabled="true" onclick="return false;" style="opacity:.55;pointer-events:none;"' : ''}>
                 <span class="btn-icon" aria-hidden="true">📄</span>
                 Receipt
               </a>
@@ -1228,23 +1328,23 @@
             </div>
           </div>
 
-         ${items.length > 0 ? `
-          <div class="order-items">
-            <div class="items-label">Items (${items.length})</div>
+          ${items.length > 0 ? `
+            <div class="order-items">
+              <div class="items-label">Items (${items.length})</div>
 
-            <div class="items-list">
-              ${itemsHtml}
-              ${items.length > 5 ? `<div class="item-preview placeholder">+${items.length - 5}</div>` : ''}
-            </div>
-
-            ${variantChips ? `
-              <div class="variants-row" aria-label="Selected variants">
-                ${variantChips}
-                ${moreVariants ? `<span class="variant-chip more">+${moreVariants} more</span>` : ''}
+              <div class="items-list">
+                ${itemsHtml}
+                ${items.length > 5 ? `<div class="item-preview placeholder">+${items.length - 5}</div>` : ''}
               </div>
-            ` : ''}
-          </div>
-        ` : ''}
+
+              ${variantChips ? `
+                <div class="variants-row" aria-label="Selected variants">
+                  ${variantChips}
+                  ${moreVariants ? `<span class="variant-chip more">+${moreVariants} more</span>` : ''}
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
         </div>
       `;
     }
@@ -1324,6 +1424,26 @@
       set('count-cancelled', counts.cancelled);
     }
 
+    function getAmountNumber(order) {
+      const amountObj = order?.amount || {};
+      const raw =
+        (typeof amountObj === 'object' && amountObj !== null)
+          ? (amountObj.value ?? order.amount)
+          : amountObj;
+
+      return toNum(raw, 0);
+    }
+
+    function getCurrencyCode(order) {
+      const amountObj = order?.amount || {};
+      const raw =
+        (typeof amountObj === 'object' && amountObj !== null)
+          ? (amountObj.currency ?? order.currency)
+          : (order.currency ?? 'USD');
+
+      return String(raw || 'USD').toUpperCase();
+    }
+
     function applyFiltersAndSort() {
       let filtered = [...allOrders];
 
@@ -1354,8 +1474,8 @@
       filtered.sort((a, b) => {
         const dateA = new Date(a.createdAt || 0);
         const dateB = new Date(b.createdAt || 0);
-        const amountA = toNum(a.amount, 0);
-        const amountB = toNum(b.amount, 0);
+        const amountA = getAmountNumber(a);
+        const amountB = getAmountNumber(b);
 
         switch (currentSort) {
           case 'oldest': return dateA - dateB;
@@ -1382,13 +1502,26 @@
     }
 
     function exportToCSV() {
-      const headers = ['Order ID', 'Date', 'Status', 'Amount', 'Currency', 'Shipping Status', 'Tracking Number', 'Receipt'];
+      const headers = [
+        'Order ID', 'Date', 'Status', 'Amount', 'Currency',
+        'Shipping Status', 'Tracking Number',
+        'Customer Name', 'Customer Phone', 'Customer Email', 'Customer Address',
+        'Receipt'
+      ];
+
       const rows = filteredOrders.map((order) => {
         const shipment = order.shippingTracking || {};
         const norm = normalizeStatus(order);
 
         const internalId = String(order.id || order._id || '').trim();
         const orderId = String(order.orderId || '').trim();
+
+        const ship = order.shipping || {};
+        const shipName = String(ship.name || '').trim();
+        const shipPhone = String(ship.phone || '').trim();
+        const shipEmail = String(ship.email || '').trim();
+        const shipAddr = formatShipAddress(ship);
+
         let receiptHref = '';
         if (order?.receiptLink) receiptHref = String(order.receiptLink);
         else if (orderId) receiptHref = `/payment/receipt/${orderId}`;
@@ -1398,10 +1531,14 @@
           orderId || internalId || '',
           formatDate(order.createdAt),
           statusLabel(norm, order.status),
-          toNum(order.amount, 0).toFixed(2),
-          String(order.currency || 'USD').toUpperCase(),
+          getAmountNumber(order).toFixed(2),
+          getCurrencyCode(order),
           getShipmentStatus(shipment.status),
           shipment.trackingNumber || '',
+          shipName,
+          shipPhone,
+          shipEmail,
+          shipAddr,
           receiptHref || '',
         ];
       });
@@ -1437,7 +1574,6 @@
         if (allCb.checked) {
           otherCbs.forEach((cb) => (cb.checked = false));
         } else {
-          // never allow "no selection" — if user unchecks all, turn it back on
           const anyOtherChecked = otherCbs.some((cb) => cb.checked);
           if (!anyOtherChecked) allCb.checked = true;
         }

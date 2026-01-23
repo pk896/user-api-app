@@ -1,3 +1,4 @@
+<!--views/checkout.ej-->
 <%
   const CO_NONCE      = typeof nonce !== 'undefined' ? nonce : '';
   const CO_CLIENT_ID  = typeof paypalClientId !== 'undefined' ? paypalClientId : '';
@@ -118,6 +119,64 @@
               </div>
             </div>
           </div>
+
+          <!-- Shipping Address (collapsible) -->
+          <details id="ship-details" class="co-card co-card-purple co-collapse" aria-label="Shipping address" open style="margin-top:.75rem">
+            <summary class="co-card-h">
+              <div class="co-card-title">
+                <span class="co-icon" aria-hidden="true">📍</span>
+                <div class="co-collapse-title">
+                  <h2>Shipping Address</h2>
+                  <div id="ship-summary" class="co-collapse-summary">Not completed yet</div>
+                </div>
+              </div>
+
+              <div class="co-collapse-right">
+                <span class="co-pill">Required</span>
+                <span class="co-collapse-caret" aria-hidden="true">▼</span>
+              </div>
+            </summary>
+
+            <div class="co-card-b">
+              <div class="co-mini" id="ship-hint" aria-live="polite">
+                Please enter the address where you want the order delivered.
+              </div>
+
+              <label class="co-label" for="ship-name">Full name <span class="co-req">*</span></label>
+              <input id="ship-name" class="co-input" autocomplete="name" placeholder="Full name" />
+
+              <label class="co-label" for="ship-phone" style="margin-top:.6rem">Phone <span class="co-req">*</span></label>
+              <input id="ship-phone" class="co-input" autocomplete="tel" placeholder="+27..." />
+
+              <label class="co-label" for="ship-email" style="margin-top:.6rem">Email (optional)</label>
+              <input id="ship-email" class="co-input" autocomplete="email" placeholder="you@example.com" />
+
+              <label class="co-label" for="ship-line1" style="margin-top:.6rem">Address line 1 <span class="co-req">*</span></label>
+              <input id="ship-line1" class="co-input" autocomplete="address-line1" placeholder="Street number and street name" />
+
+              <label class="co-label" for="ship-line2" style="margin-top:.6rem">Address line 2 (optional)</label>
+              <input id="ship-line2" class="co-input" autocomplete="address-line2" placeholder="Apartment, suite, etc." />
+
+              <label class="co-label" for="ship-city" style="margin-top:.6rem">City <span class="co-req">*</span></label>
+              <input id="ship-city" class="co-input" autocomplete="address-level2" placeholder="City" />
+
+              <label class="co-label" for="ship-state" style="margin-top:.6rem">Province/State <span class="co-req">*</span></label>
+              <input id="ship-state" class="co-input" autocomplete="address-level1" placeholder="Gauteng, WC, etc." />
+
+              <label class="co-label" for="ship-zip" style="margin-top:.6rem">Postal code <span class="co-req">*</span></label>
+              <input id="ship-zip" class="co-input" autocomplete="postal-code" placeholder="0000" />
+
+              <label class="co-label" for="ship-country-search" style="margin-top:.6rem">Country <span class="co-req">*</span></label>
+              <input id="ship-country-search" class="co-input" autocomplete="off" placeholder="Type to search your country…" />
+
+              <div class="co-select" style="margin-top:.4rem">
+                <select id="ship-country" class="co-select-el" aria-label="Country"></select>
+                <span class="co-select-caret" aria-hidden="true">▼</span>
+              </div>
+
+              <div class="co-mini">Tip: start typing (e.g. “South”, “Uni”, “ZA”, “US”).</div>
+            </div>
+          </details>
 
           <!-- Optional note (UI only) -->
           <label for="delivery-note" class="co-label" style="margin-top:.8rem">
@@ -745,6 +804,36 @@
       .co-item{ grid-template-columns: 64px 1fr; }
       .co-item-img{ width:64px; height:64px; }
     }
+
+    /* ===== Collapsible shipping card ===== */
+    .co-collapse > summary{
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+    }
+    .co-collapse > summary::-webkit-details-marker{ display:none; }
+
+    .co-collapse-title h2{ margin:0; }
+    .co-collapse-title{ display:flex; flex-direction:column; gap:.1rem; }
+    .co-collapse-summary{
+      font-size:.78rem;
+      font-weight:850;
+      color: rgba(15,23,42,.65);
+    }
+
+    .co-collapse-right{
+      display:flex;
+      align-items:center;
+      gap:.55rem;
+    }
+
+    .co-collapse-caret{
+      display:inline-block;
+      transition: transform .18s ease;
+      opacity:.85;
+      font-weight:950;
+    }
+    .co-collapse[open] .co-collapse-caret{ transform: rotate(180deg); }
   </style>
 
   <script nonce="<%= CO_NONCE %>">
@@ -760,6 +849,20 @@
         deliveryType: document.getElementById('delivery-type'),
         deliveryEstimate: document.getElementById('delivery-estimate'),
         deliveryArea: document.getElementById('delivery-area'),
+
+        shipHint: document.getElementById('ship-hint'),
+        shipName: document.getElementById('ship-name'),
+        shipPhone: document.getElementById('ship-phone'),
+        shipEmail: document.getElementById('ship-email'),
+        shipLine1: document.getElementById('ship-line1'),
+        shipLine2: document.getElementById('ship-line2'),
+        shipCity: document.getElementById('ship-city'),
+        shipState: document.getElementById('ship-state'),
+        shipZip: document.getElementById('ship-zip'),
+        shipDetails: document.getElementById('ship-details'),
+        shipSummary: document.getElementById('ship-summary'),
+        shipCountry: document.getElementById('ship-country'),
+        shipCountrySearch: document.getElementById('ship-country-search'),
 
         sumSubtotal: document.getElementById('sum-subtotal'),
         sumVat: document.getElementById('sum-vat'),
@@ -785,11 +888,241 @@
       const CURRENCY = String(cfg.CURRENCY || 'USD');
       const SHIPPING_FLAT = Number(cfg.SHIPPING_FLAT || 0);
 
+      // ===== Hardcoded ISO-3166-1 alpha-2 (195 countries: 193 UN members + Vatican City + Palestine) =====
+      const COUNTRIES = [
+        { code:'AF', name:'Afghanistan' },
+        { code:'AL', name:'Albania' },
+        { code:'DZ', name:'Algeria' },
+        { code:'AD', name:'Andorra' },
+        { code:'AO', name:'Angola' },
+        { code:'AG', name:'Antigua and Barbuda' },
+        { code:'AR', name:'Argentina' },
+        { code:'AM', name:'Armenia' },
+        { code:'AU', name:'Australia' },
+        { code:'AT', name:'Austria' },
+        { code:'AZ', name:'Azerbaijan' },
+        { code:'BS', name:'Bahamas' },
+        { code:'BH', name:'Bahrain' },
+        { code:'BD', name:'Bangladesh' },
+        { code:'BB', name:'Barbados' },
+        { code:'BY', name:'Belarus' },
+        { code:'BE', name:'Belgium' },
+        { code:'BZ', name:'Belize' },
+        { code:'BJ', name:'Benin' },
+        { code:'BT', name:'Bhutan' },
+        { code:'BO', name:'Bolivia' },
+        { code:'BA', name:'Bosnia and Herzegovina' },
+        { code:'BW', name:'Botswana' },
+        { code:'BR', name:'Brazil' },
+        { code:'BN', name:'Brunei' },
+        { code:'BG', name:'Bulgaria' },
+        { code:'BF', name:'Burkina Faso' },
+        { code:'BI', name:'Burundi' },
+        { code:'CV', name:'Cabo Verde' },
+        { code:'KH', name:'Cambodia' },
+        { code:'CM', name:'Cameroon' },
+        { code:'CA', name:'Canada' },
+        { code:'CF', name:'Central African Republic' },
+        { code:'TD', name:'Chad' },
+        { code:'CL', name:'Chile' },
+        { code:'CN', name:'China' },
+        { code:'CO', name:'Colombia' },
+        { code:'KM', name:'Comoros' },
+        { code:'CG', name:'Congo (Congo-Brazzaville)' },
+        { code:'CD', name:'Congo (DRC)' },
+        { code:'CR', name:'Costa Rica' },
+        { code:'CI', name:"Cote d'Ivoire" },
+        { code:'HR', name:'Croatia' },
+        { code:'CU', name:'Cuba' },
+        { code:'CY', name:'Cyprus' },
+        { code:'CZ', name:'Czechia' },
+        { code:'DK', name:'Denmark' },
+        { code:'DJ', name:'Djibouti' },
+        { code:'DM', name:'Dominica' },
+        { code:'DO', name:'Dominican Republic' },
+        { code:'EC', name:'Ecuador' },
+        { code:'EG', name:'Egypt' },
+        { code:'SV', name:'El Salvador' },
+        { code:'GQ', name:'Equatorial Guinea' },
+        { code:'ER', name:'Eritrea' },
+        { code:'EE', name:'Estonia' },
+        { code:'SZ', name:'Eswatini' },
+        { code:'ET', name:'Ethiopia' },
+        { code:'FJ', name:'Fiji' },
+        { code:'FI', name:'Finland' },
+        { code:'FR', name:'France' },
+        { code:'GA', name:'Gabon' },
+        { code:'GM', name:'Gambia' },
+        { code:'GE', name:'Georgia' },
+        { code:'DE', name:'Germany' },
+        { code:'GH', name:'Ghana' },
+        { code:'GR', name:'Greece' },
+        { code:'GD', name:'Grenada' },
+        { code:'GT', name:'Guatemala' },
+        { code:'GN', name:'Guinea' },
+        { code:'GW', name:'Guinea-Bissau' },
+        { code:'GY', name:'Guyana' },
+        { code:'HT', name:'Haiti' },
+        { code:'HN', name:'Honduras' },
+        { code:'HU', name:'Hungary' },
+        { code:'IS', name:'Iceland' },
+        { code:'IN', name:'India' },
+        { code:'ID', name:'Indonesia' },
+        { code:'IR', name:'Iran' },
+        { code:'IQ', name:'Iraq' },
+        { code:'IE', name:'Ireland' },
+        { code:'IL', name:'Israel' },
+        { code:'IT', name:'Italy' },
+        { code:'JM', name:'Jamaica' },
+        { code:'JP', name:'Japan' },
+        { code:'JO', name:'Jordan' },
+        { code:'KZ', name:'Kazakhstan' },
+        { code:'KE', name:'Kenya' },
+        { code:'KI', name:'Kiribati' },
+        { code:'KW', name:'Kuwait' },
+        { code:'KG', name:'Kyrgyzstan' },
+        { code:'LA', name:'Laos' },
+        { code:'LV', name:'Latvia' },
+        { code:'LB', name:'Lebanon' },
+        { code:'LS', name:'Lesotho' },
+        { code:'LR', name:'Liberia' },
+        { code:'LY', name:'Libya' },
+        { code:'LI', name:'Liechtenstein' },
+        { code:'LT', name:'Lithuania' },
+        { code:'LU', name:'Luxembourg' },
+        { code:'MG', name:'Madagascar' },
+        { code:'MW', name:'Malawi' },
+        { code:'MY', name:'Malaysia' },
+        { code:'MV', name:'Maldives' },
+        { code:'ML', name:'Mali' },
+        { code:'MT', name:'Malta' },
+        { code:'MH', name:'Marshall Islands' },
+        { code:'MR', name:'Mauritania' },
+        { code:'MU', name:'Mauritius' },
+        { code:'MX', name:'Mexico' },
+        { code:'FM', name:'Micronesia' },
+        { code:'MD', name:'Moldova' },
+        { code:'MC', name:'Monaco' },
+        { code:'MN', name:'Mongolia' },
+        { code:'ME', name:'Montenegro' },
+        { code:'MA', name:'Morocco' },
+        { code:'MZ', name:'Mozambique' },
+        { code:'MM', name:'Myanmar' },
+        { code:'NA', name:'Namibia' },
+        { code:'NR', name:'Nauru' },
+        { code:'NP', name:'Nepal' },
+        { code:'NL', name:'Netherlands' },
+        { code:'NZ', name:'New Zealand' },
+        { code:'NI', name:'Nicaragua' },
+        { code:'NE', name:'Niger' },
+        { code:'NG', name:'Nigeria' },
+        { code:'KP', name:'North Korea' },
+        { code:'MK', name:'North Macedonia' },
+        { code:'NO', name:'Norway' },
+        { code:'OM', name:'Oman' },
+        { code:'PK', name:'Pakistan' },
+        { code:'PW', name:'Palau' },
+        { code:'PS', name:'Palestine' },
+        { code:'PA', name:'Panama' },
+        { code:'PG', name:'Papua New Guinea' },
+        { code:'PY', name:'Paraguay' },
+        { code:'PE', name:'Peru' },
+        { code:'PH', name:'Philippines' },
+        { code:'PL', name:'Poland' },
+        { code:'PT', name:'Portugal' },
+        { code:'QA', name:'Qatar' },
+        { code:'RO', name:'Romania' },
+        { code:'RU', name:'Russia' },
+        { code:'RW', name:'Rwanda' },
+        { code:'KN', name:'Saint Kitts and Nevis' },
+        { code:'LC', name:'Saint Lucia' },
+        { code:'VC', name:'Saint Vincent and the Grenadines' },
+        { code:'WS', name:'Samoa' },
+        { code:'SM', name:'San Marino' },
+        { code:'ST', name:'Sao Tome and Principe' },
+        { code:'SA', name:'Saudi Arabia' },
+        { code:'SN', name:'Senegal' },
+        { code:'RS', name:'Serbia' },
+        { code:'SC', name:'Seychelles' },
+        { code:'SL', name:'Sierra Leone' },
+        { code:'SG', name:'Singapore' },
+        { code:'SK', name:'Slovakia' },
+        { code:'SI', name:'Slovenia' },
+        { code:'SB', name:'Solomon Islands' },
+        { code:'SO', name:'Somalia' },
+        { code:'ZA', name:'South Africa' },
+        { code:'KR', name:'South Korea' },
+        { code:'SS', name:'South Sudan' },
+        { code:'ES', name:'Spain' },
+        { code:'LK', name:'Sri Lanka' },
+        { code:'SD', name:'Sudan' },
+        { code:'SR', name:'Suriname' },
+        { code:'SE', name:'Sweden' },
+        { code:'CH', name:'Switzerland' },
+        { code:'SY', name:'Syria' },
+        { code:'TJ', name:'Tajikistan' },
+        { code:'TZ', name:'Tanzania' },
+        { code:'TH', name:'Thailand' },
+        { code:'TL', name:'Timor-Leste' },
+        { code:'TG', name:'Togo' },
+        { code:'TO', name:'Tonga' },
+        { code:'TT', name:'Trinidad and Tobago' },
+        { code:'TN', name:'Tunisia' },
+        { code:'TR', name:'Turkey' },
+        { code:'TM', name:'Turkmenistan' },
+        { code:'TV', name:'Tuvalu' },
+        { code:'UG', name:'Uganda' },
+        { code:'UA', name:'Ukraine' },
+        { code:'AE', name:'United Arab Emirates' },
+        { code:'GB', name:'United Kingdom' },
+        { code:'US', name:'United States' },
+        { code:'UY', name:'Uruguay' },
+        { code:'UZ', name:'Uzbekistan' },
+        { code:'VU', name:'Vanuatu' },
+        { code:'VA', name:'Vatican City' },
+        { code:'VE', name:'Venezuela' },
+        { code:'VN', name:'Vietnam' },
+        { code:'YE', name:'Yemen' },
+        { code:'ZM', name:'Zambia' },
+        { code:'ZW', name:'Zimbabwe' }
+      ];
+
+      function buildCountrySelect(term = '', keepCode = 'ZA'){
+        if (!el.shipCountry) return;
+
+        const q = String(term || '').trim().toLowerCase();
+        const current = String(el.shipCountry.value || keepCode || 'ZA').toUpperCase();
+
+        const matches = !q
+          ? COUNTRIES
+          : COUNTRIES.filter(c =>
+              c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+            );
+
+        const list = matches.length ? matches : COUNTRIES;
+
+        el.shipCountry.innerHTML = '';
+        for (const c of list){
+          const opt = document.createElement('option');
+          opt.value = c.code;
+          opt.textContent = `${c.name} (${c.code})`;
+          if (c.code === current) opt.selected = true;
+          el.shipCountry.appendChild(opt);
+        }
+
+        // If current code is not in filtered list, select first item
+        if (!Array.from(el.shipCountry.options).some(o => o.value === current)){
+          el.shipCountry.selectedIndex = 0;
+        }
+      }
+
       const state = {
         items: [],
         deliveryOptions: [],
         selectedDelivery: null,
         deliveryReady: false,
+        shipTo: null,
+        addressReady: false,
         cartReady: false,
         paypalMounted: false,
       };
@@ -810,6 +1143,63 @@
         if (el.toast){
           el.toast._t = setTimeout(()=>{ el.toast.hidden = true; }, 2800);
         }
+      }
+
+      function readShipTo(){
+        const v = (x) => String(x || '').trim();
+
+        return {
+          name: v(el.shipName && el.shipName.value),
+          phone: v(el.shipPhone && el.shipPhone.value),
+          email: v(el.shipEmail && el.shipEmail.value),
+          street1: v(el.shipLine1 && el.shipLine1.value),
+          street2: v(el.shipLine2 && el.shipLine2.value),
+          city: v(el.shipCity && el.shipCity.value),
+          state: v(el.shipState && el.shipState.value),
+          zip: v(el.shipZip && el.shipZip.value),
+          country: v(el.shipCountry && el.shipCountry.value) || 'ZA',
+          is_residential: true
+        };
+      }
+
+      function validateShipTo(to){
+        if (!to.name) return { ok:false, message:'Enter full name.' };
+        if (!to.phone) return { ok:false, message:'Enter phone number.' };
+        if (!to.street1) return { ok:false, message:'Enter address line 1.' };
+        if (!to.city) return { ok:false, message:'Enter city.' };
+        if (!to.state) return { ok:false, message:'Enter province/state.' };
+        if (!to.zip) return { ok:false, message:'Enter postal code.' };
+        if (!to.country) return { ok:false, message:'Select country.' };
+        return { ok:true, message:'Shipping address OK.' };
+      }
+
+      function onAddressChange(){
+        const to = readShipTo();
+        const v = validateShipTo(to);
+
+        state.shipTo = to;
+        state.addressReady = v.ok;
+
+        // Update collapsible header summary + auto-collapse when valid
+        if (el.shipSummary){
+          if (v.ok){
+            const short = `${to.name} — ${to.city}, ${to.country}`;
+            el.shipSummary.textContent = short;
+          } else {
+            el.shipSummary.textContent = 'Not completed yet';
+          }
+        }
+
+        if (el.shipDetails){
+          // If valid, collapse it. If invalid, keep it open so user can fix.
+          el.shipDetails.open = !v.ok ? true : false;
+        }
+
+        if (el.shipHint){
+          el.shipHint.textContent = v.ok ? '✅ Shipping address OK.' : ('⚠️ ' + v.message);
+        }
+
+        maybeEnablePayment();
       }
 
       function calculateTotals(){
@@ -854,11 +1244,18 @@
       }
 
       function maybeEnablePayment(){
-        if (state.cartReady && state.deliveryReady && state.items.length > 0){
+        if (state.cartReady && state.deliveryReady && state.addressReady && state.items.length > 0){
           allowPayment();
           maybeMountPayPal();
         } else {
-          blockPayment();
+          const msg =
+            !state.items.length ? 'Your cart is empty.' :
+            !state.cartReady ? 'Loading cart…' :
+            !state.deliveryReady ? 'Loading delivery options…' :
+            !state.addressReady ? 'Please enter your shipping address.' :
+            'Waiting…';
+
+          blockPayment(msg);
         }
       }
 
@@ -1089,7 +1486,19 @@
 
           createOrder: async function(){
             try{
-              const body = { deliveryOptionId: state.selectedDelivery.id };
+               const body = {
+                deliveryOptionId: state.selectedDelivery.id,
+                shipTo: state.shipTo,
+                deliveryNote: (document.getElementById('delivery-note')?.value || '').trim(),
+                items: state.items.map(i => ({
+                  productId: i.productId,
+                  name: i.name,
+                  quantity: i.quantity,
+                  price: i.price,
+                  variants: { size: i.variants?.size || '', color: i.variants?.color || '' }
+                }))
+              };
+     
               const r = await fetch('/payment/create-order', {
                 method:'POST',
                 headers:{ 'Content-Type':'application/json' },
@@ -1140,8 +1549,25 @@
       }
 
       function init(){
+        // Build countries once at startup (default ZA)
+        buildCountrySelect('', 'ZA');
+
         // events
         el.deliverySelect.addEventListener('change', applyDeliverySelection);
+        ['input','change'].forEach(evt => {
+          [el.shipName, el.shipPhone, el.shipEmail, el.shipLine1, el.shipLine2, el.shipCity, el.shipState, el.shipZip, el.shipCountry]
+            .filter(Boolean)
+            .forEach(node => node.addEventListener(evt, onAddressChange));
+        });
+
+        if (el.shipCountrySearch){
+          el.shipCountrySearch.addEventListener('input', () => {
+            buildCountrySelect(el.shipCountrySearch.value, el.shipCountry?.value || 'ZA');
+          });
+        }
+
+        // run once at start
+        onAddressChange();
 
         // start
         blockPayment();

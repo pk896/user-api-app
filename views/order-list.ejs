@@ -1,6 +1,7 @@
 <!-- views/order-list.ejs -->
 <%
-  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
+  // ✅ FIX: avoid "Cannot access 'nonce' before initialization"
+  const NONCE = (typeof nonce !== 'undefined' && nonce) ? String(nonce) : '';
 %>
 
 <main class="orders-list-page">
@@ -213,7 +214,8 @@
   </section>
 </main>
 
-<style nonce="<%= NONCE %>">
+<!-- ✅ FIX: correct nonce attribute + correct quote closing -->
+<style<% if (NONCE) { %> nonce="<%= NONCE %>"<% } %>>
   /* =========================================================
      Phakisi / Unicoporate Brand Tokens (Purple dominant)
      Scoped to .orders-list-page ONLY (won't touch layout/nav/footer)
@@ -717,7 +719,7 @@
   }
 </style>
 
-<script nonce="<%= NONCE %>">
+<script<% if (NONCE) { %> nonce="<%= NONCE %>"<% } %>>
   (function () {
     const ordersWrap = document.getElementById('ordersWrap');
     const emptyState = document.getElementById('empty-state');
@@ -811,7 +813,7 @@
 
       // ✅ DO NOT CHANGE PATHS/LINKS
       const receiptHref = `/payment/receipt/${encodeURIComponent(orderId)}`;
-      const trackHref = `/orders/${encodeURIComponent(orderId)}/track`;
+      const trackHref = `/payment/orders/${encodeURIComponent(orderId)}/track`;
 
       const itemCount = Array.isArray(order.items) ? order.items.length : 0;
       const itemsText = itemCount === 1 ? '1 item' : `${itemCount} items`;
@@ -825,7 +827,7 @@
 
           <div class="order-meta">
             <div class="order-date">${date}</div>
-            ${itemCount > 0 ? `<div class="order-items">🧾 ${itemsText}</div>` : ``}
+            ${itemCount > 0 ? '<div class="order-items">🧾 ' + itemsText + '</div>' : ''}
           </div>
 
           <div class="order-right">

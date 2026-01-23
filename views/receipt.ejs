@@ -6,6 +6,46 @@
   // Resolve id across shapes
   var ORDER_ID = String(o.id || o.orderId || o.paypalOrderId || '').trim();
 
+  // Safe helpers
+  function pickStr(){
+    for (var i=0; i<arguments.length; i++){
+      var s = String(arguments[i] == null ? '' : arguments[i]).trim();
+      if (s) return s;
+    }
+    return '';
+  }
+
+  function safeHttpUrl(u){
+    var s = String(u == null ? '' : u).trim();
+    if (!s) return '';
+    // only allow http/https links (no javascript:)
+    if (s.indexOf('https://') === 0 || s.indexOf('http://') === 0) return s;
+    return '';
+  }
+
+  // Shipping/contact details (prefer o.shipping, fallback to payer fields)
+  var ship = o.shipping || {};
+  var shipName  = pickStr(ship.name);
+  var shipEmail = pickStr(ship.email, o.payer && o.payer.email);
+  var shipPhone = pickStr(ship.phone, o.payer && o.payer.phone);
+
+  // Support alternate field names just in case
+  var a1 = pickStr(ship.address_line_1, ship.street1, ship.line1);
+  var a2 = pickStr(ship.address_line_2, ship.street2, ship.line2);
+  var city = pickStr(ship.admin_area_2, ship.city);
+  var state = pickStr(ship.admin_area_1, ship.state);
+  var zip = pickStr(ship.postal_code, ship.zip);
+  var country = pickStr(ship.country_code, ship.country);
+
+  // Shipment/tracking + Shippo label (if present)
+  var tr = o.shippingTracking || {};
+  var shippo = o.shippo || {};
+
+  var trackingNumber = pickStr(tr.trackingNumber, shippo.tracking_number);
+  var trackingUrl = safeHttpUrl(pickStr(tr.trackingUrl, shippo.tracking_url_provider));
+  var labelUrl = safeHttpUrl(pickStr(tr.labelUrl, shippo.labelUrl, shippo.label_url));
+  var fulfillmentStatus = pickStr(o.fulfillmentStatus, tr.status, shippo.tracking_status);
+
   // Currency + formatter
   var C = String(o.currency || (o.amount && o.amount.currency_code) || 'USD').toUpperCase();
   var symMap = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' };
@@ -15,7 +55,7 @@
       if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
         return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: C, currencyDisplay: 'symbol' }).format(v);
       }
-    } catch(_) {}
+    } catch(e) {}
     return (symMap[C] || (C + ' ')) + v.toFixed(2);
   }
 
@@ -82,7 +122,9 @@
         dateStyle: 'medium',
         timeStyle: 'short'
       });
-    } catch { return String(d || ''); }
+    } catch (e) {
+      return String(d || '');
+    }
   }
 %>
 
@@ -215,21 +257,74 @@
         <% if (o.shipping) { %>
           <div class="rcpt-address">
             <div class="rcpt-address-label">Shipping Address</div>
-            <% if (o.shipping.name) { %>
-              <div class="rcpt-address-name"><%= o.shipping.name %></div>
+            <% if (shipName) { %>
+              <div class="rcpt-address-name"><%= shipName %></div>
             <% } %>
             <div class="rcpt-address-details">
-              <%= [o.shipping.address_line_1, o.shipping.address_line_2].filter(function(p){ return !!p; }).join(', ') %>
+              <%= [a1, a2].filter(function(p){ return !!p; }).join(', ') %>
               <br>
-              <%= [o.shipping.admin_area_2, o.shipping.admin_area_1, o.shipping.postal_code].filter(function(p){ return !!p; }).join(', ') %>
+              <%= [city, state, zip].filter(function(p){ return !!p; }).join(', ') %>
               <br>
-              <%= o.shipping.country_code || '' %>
+              <%= country || '' %>
+
+              <% if (shipEmail || shipPhone) { %>
+                <div class="rcpt-contact">
+                  <% if (shipEmail) { %>
+                    <div class="rcpt-contact-row">
+                      <span class="rcpt-contact-k">Email</span>
+                      <span class="rcpt-contact-v"><%= shipEmail %></span>
+                    </div>
+                  <% } %>
+                  <% if (shipPhone) { %>
+                    <div class="rcpt-contact-row">
+                      <span class="rcpt-contact-k">Phone</span>
+                      <span class="rcpt-contact-v"><%= shipPhone %></span>
+                    </div>
+                  <% } %>
+                </div>
+              <% } %>
             </div>
           </div>
         <% } %>
       </div>
     <% } %>
 
+    <% if (trackingNumber || trackingUrl || labelUrl || fulfillmentStatus) { %>
+      <div class="rcpt-card rcpt-shipment">
+        <h3 class="rcpt-section-title">Shipment & Tracking</h3>
+
+        <% if (fulfillmentStatus) { %>
+          <div class="rcpt-delivery-row">
+            <span class="rcpt-label">Fulfillment</span>
+            <span class="rcpt-value"><%= fulfillmentStatus %></span>
+          </div>
+        <% } %>
+
+        <% if (trackingNumber) { %>
+          <div class="rcpt-delivery-row">
+            <span class="rcpt-label">Tracking #</span>
+            <span class="rcpt-value rcpt-mono"><%= trackingNumber %></span>
+          </div>
+        <% } %>
+
+        <% if (trackingUrl) { %>
+          <div class="rcpt-link-row">
+            <a class="rcpt-link-btn rcpt-link-track" href="<%= trackingUrl %>" target="_blank" rel="noopener noreferrer">
+              Open Tracking
+            </a>
+          </div>
+        <% } %>
+
+        <% if (labelUrl) { %>
+          <div class="rcpt-link-row">
+            <a class="rcpt-link-btn rcpt-link-label" href="<%= labelUrl %>" target="_blank" rel="noopener noreferrer">
+              Download Shipping Label (PDF)
+            </a>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+  
     <!-- Footer Note -->
     <div class="rcpt-footer">
       <p class="rcpt-footer-note">
@@ -578,6 +673,82 @@
     font-size: var(--font-sm);
     color: var(--muted);
     line-height: 1.4;
+  }
+
+    /* Contact lines under shipping address */
+  .rcpt-contact{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    display: grid;
+    gap: 6px;
+  }
+
+  .rcpt-contact-row{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: var(--font-sm);
+  }
+
+  .rcpt-contact-k{
+    color: var(--muted);
+    font-weight: 600;
+    flex: 0 0 auto;
+  }
+
+  .rcpt-contact-v{
+    font-weight: 600;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  /* Shipment card */
+  .rcpt-shipment{
+    border-color: rgba(37,99,235,.35);
+    background: rgba(37,99,235,.04);
+  }
+
+  .rcpt-mono{
+    font-family: 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font-size: var(--font-sm);
+    color: var(--blue);
+    background: rgba(37, 99, 235, 0.10);
+    padding: 2px 6px;
+    border-radius: 6px;
+  }
+
+  .rcpt-link-row{
+    margin-top: 10px;
+    display:flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .rcpt-link-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding: 8px 12px;
+    border-radius: 10px;
+    text-decoration:none;
+    font-weight: 700;
+    font-size: var(--font-sm);
+    border: 1px solid transparent;
+    cursor:pointer;
+  }
+
+  .rcpt-link-track{
+    background: rgba(37,99,235,.12);
+    border-color: rgba(37,99,235,.35);
+    color: var(--blue);
+  }
+
+  .rcpt-link-label{
+    background: rgba(124,58,237,.12);
+    border-color: rgba(124,58,237,.35);
+    color: var(--purple);
   }
 
   /* Footer */

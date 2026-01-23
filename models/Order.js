@@ -85,8 +85,13 @@ const PayerSchema = new Schema(
 const ShippingAddressSchema = new Schema(
   {
     name: String,
+
+    // ✅ contact (so couriers can call)
+    phone: String,
+    email: String,
+
     address_line_1: String,
-    address_line_2: String, // ✅ you were capturing this in routes/payment.js
+    address_line_2: String,
     admin_area_2: String,
     admin_area_1: String,
     postal_code: String,
@@ -135,6 +140,20 @@ const ShippingTrackingSchema = new Schema(
     carrierLabel: String,
     trackingNumber: String,
     trackingUrl: String,
+    labelUrl: String,
+
+    // ✅ Shippo token like "usps", "ups" (used for Shippo tracking endpoint)
+    carrierToken: { type: String },
+
+    // ✅ Live tracking cache (Shippo / courier APIs)
+    liveStatus: { type: String },
+    liveEvents: { type: Array, default: [] },
+    lastTrackingUpdate: { type: Date },
+    estimatedDelivery: { type: Date },
+
+    // ✅ Optional: last provider update timestamp
+    lastUpdate: { type: Date },
+
     status: {
       type: String,
       enum: ['PENDING', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
@@ -186,8 +205,26 @@ const OrderSchema = new Schema(
     // PayPal shipping address snapshot
     shipping: ShippingAddressSchema,
 
+    // ✅ Fulfillment lifecycle (separate from PayPal payment status)
+    fulfillmentStatus: {
+      type: String,
+      enum: ['PENDING', 'PAID', 'PACKING', 'LABEL_CREATED', 'SHIPPED', 'DELIVERED', 'CANCELLED'],
+      default: 'PENDING',
+      index: true,
+    },
+
+    // ✅ Shippo ids + label (for API tracking + reprints)
+    shippo: {
+      shipmentId: { type: String, index: true },
+      transactionId: { type: String, index: true },
+      rateId: String,
+      labelUrl: String,
+      trackingStatus: String, // raw Shippo status if you want
+    },
+
     // Courier + tracking info
     shippingTracking: ShippingTrackingSchema,
+
 
     amount: MoneySchema, // captured total
     breakdown: BreakdownSchema,
@@ -235,6 +272,11 @@ OrderSchema.index({ businessBuyer: 1, createdAt: -1 });
 OrderSchema.index({ 'paypal.captureId': 1, createdAt: -1 });
 OrderSchema.index({ 'captures.captureId': 1, createdAt: -1 });
 OrderSchema.index({ 'refunds.refundId': 1, createdAt: -1 });
+
+// Shippo
+OrderSchema.index({ fulfillmentStatus: 1, createdAt: -1 });
+OrderSchema.index({ 'shippo.transactionId': 1, createdAt: -1 });
+OrderSchema.index({ 'shippo.shipmentId': 1, createdAt: -1 });
 
 // ---------- Statics / helpers ----------
 OrderSchema.statics.PAID_STATES = PAID_STATES;

@@ -1,50 +1,48 @@
+// routes/orders.js
 'use strict';
 
 const express = require('express');
 const router = express.Router();
 
-function getBusinessId(req) {
-  // Try common session shapes (adjust if yours differs)
-  return (
-    req.session?.businessId ||
-    req.session?.business?._id ||
-    req.session?.business?.id ||
-    null
-  );
-}
+const requireAnySession = require('../middleware/requireAnySession');
 
-function isUserLoggedIn(req) {
-  return Boolean(req.user || req.session?.userId || req.session?.user?._id);
-}
+// ✅ Orders page (works for BOTH user sessions and business sessions)
+// GET /orders
+router.get('/orders', requireAnySession, (req, res) => {
+  // Flash messages (safe)
+  const success = req.flash('success') || [];
+  const error = req.flash('error') || [];
 
-function isBusinessLoggedIn(req) {
-  return Boolean(getBusinessId(req));
-}
+  // Optional: expose who is logged in (your EJS can ignore this)
+  const user = req.session?.user || null;
+  const business = req.session?.business || null;
 
-// If you already have these middleware, use them.
-// Otherwise we do a safe fallback.
-let requireAnyAuth = (req, res, next) => {
-  if (isUserLoggedIn(req) || isBusinessLoggedIn(req)) return next();
-  return res.status(401).render('login', { error: ['Please login first.'] });
-};
-
-// Views:
-// - Normal users: render 'orders.ejs' (or whatever you use for buyers)
-// - Sellers/business: render 'order-list.ejs' (your JS-driven page)
-router.get('/', requireAnyAuth, (req, res) => {
-  if (isBusinessLoggedIn(req)) {
-    return res.render('order-list', {
-      nonce: res.locals.nonce,
-      success: req.flash?.('success') || [],
-      error: req.flash?.('error') || [],
-    });
-  }
-
-  // normal user orders page
   return res.render('orders', {
-    nonce: res.locals.nonce,
-    success: req.flash?.('success') || [],
-    error: req.flash?.('error') || [],
+    success,
+    error,
+    user,
+    business,
+    // nonce is usually already in res.locals from your CSP middleware,
+    // but passing it doesn't hurt.
+    nonce: res.locals?.nonce || '',
+  });
+});
+
+// (Optional) If you ALSO want your other design page reachable:
+// GET /orders/list  -> renders views/order-list.ejs
+router.get('/orders/list', requireAnySession, (req, res) => {
+  const success = req.flash('success') || [];
+  const error = req.flash('error') || [];
+
+  const user = req.session?.user || null;
+  const business = req.session?.business || null;
+
+  return res.render('order-list', {
+    success,
+    error,
+    user,
+    business,
+    nonce: res.locals?.nonce || '',
   });
 });
 

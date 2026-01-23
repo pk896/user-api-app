@@ -1,560 +1,220 @@
 <!-- views/404.ejs -->
 <%
-  // Page-only styles/scripts (CSP-safe with nonce)
-  // ✅ IMPORTANT: Use <%- ... %> when injecting CSS/JS strings so it does NOT HTML-escape.
+  // ✅ Safe nonce (no TDZ/variable shadowing)
+  const NONCE = (typeof nonce !== 'undefined' && nonce) ? String(nonce) : '';
 
+  // ✅ Keep styles inside a string (no broken EJS tags)
   const pageStyles = `
-  /* =========================
-     ✅ Unicoporate Brand Tokens
-     Purple dominant + Blue + Green + Black
-     ========================= */
   :root{
     --blue:#2563EB;
-    --blue-dark:#1d4ed8;
-
     --purple:#7C3AED;
-    --purple-dark:#6d28d9;
-
     --green:#22C55E;
-    --green-dark:#16a34a;
-
     --black:#0F172A;
 
-    --bg:#0b1220;
-    --card:rgba(255,255,255,.94);
-    --card-2:rgba(255,255,255,.90);
-    --ink:#0f172a;
-    --muted:#475569;
-    --line:rgba(15, 23, 42, .12);
-
-    --radius:18px;
-    --radius-sm:12px;
-
-    --shadow: 0 20px 55px rgba(0,0,0,.28);
-    --shadow-sm: 0 10px 28px rgba(0,0,0,.18);
-
-    --focus: 0 0 0 4px rgba(124,58,237,.18);
-
-    --trans: all .18s ease;
-  }
-
-  /* Dark theme compatibility (if your layout sets body.dark-theme) */
-  .dark-theme{
-    --card:rgba(15,23,42,.72);
-    --card-2:rgba(15,23,42,.64);
-    --ink:#e5e7eb;
-    --muted:#cbd5e1;
+    --bg0:#070A13;
+    --bg1:#0B1022;
+    --muted:#94A3B8;
     --line:rgba(148,163,184,.18);
+    --w:#FFFFFF;
+
+    --r-lg:18px;
+    --r-md:14px;
+    --r-sm:10px;
+
+    --shadow: 0 18px 55px rgba(2,6,23,.45);
   }
 
-  /* =========================
-     ✅ Page wrapper
-     ========================= */
   .nf-wrap{
-    min-height: calc(100dvh - 1px);
+    min-height: calc(100vh - 40px);
     padding: 1rem;
     display:flex;
     align-items:center;
     justify-content:center;
-    overflow:hidden;
-
     background:
-      radial-gradient(900px 500px at 20% 15%, rgba(124,58,237,.55) 0%, rgba(124,58,237,0) 60%),
-      radial-gradient(900px 500px at 85% 25%, rgba(37,99,235,.30) 0%, rgba(37,99,235,0) 60%),
-      radial-gradient(900px 550px at 50% 115%, rgba(34,197,94,.18) 0%, rgba(34,197,94,0) 60%),
-      linear-gradient(180deg, #070b14 0%, #0b1220 60%, #070b14 100%);
+      radial-gradient(900px 420px at 20% -10%, rgba(124,58,237,.38), transparent 58%),
+      radial-gradient(900px 420px at 95% 0%, rgba(37,99,235,.28), transparent 55%),
+      radial-gradient(900px 420px at 70% 105%, rgba(34,197,94,.18), transparent 55%),
+      linear-gradient(180deg, var(--bg0), var(--bg1));
+    color: var(--w);
   }
 
   .nf-card{
-    width: min(520px, 92vw);
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    width: min(720px, 100%);
+    border-radius: var(--r-lg);
+    border: 1px solid rgba(124,58,237,.22);
+    background: rgba(15,23,42,.72);
     box-shadow: var(--shadow);
-    position:relative;
     overflow:hidden;
+    position:relative;
   }
 
   .nf-card::before{
-    content:'';
-    position:absolute;
-    left:0; top:0; right:0;
-    height: 6px;
-    background: linear-gradient(90deg, var(--purple), var(--blue), var(--green));
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(500px 180px at 10% 0%, rgba(124,58,237,.22), transparent 60%);
+    pointer-events:none;
   }
 
-  .nf-inner{
-    padding: 1.25rem 1.1rem 1.1rem;
-    text-align:center;
-  }
-
-  /* =========================
-     ✅ Header
-     ========================= */
-  .nf-badge{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:.45rem;
-    padding:.35rem .6rem;
-    border-radius:999px;
-    border:1px solid var(--line);
-    background: linear-gradient(180deg, rgba(124,58,237,.10), rgba(124,58,237,.04));
-    color: var(--ink);
-    font-weight:900;
-    font-size:.82rem;
-    line-height:1.1;
-  }
-
-  .nf-code{
-    margin:.8rem 0 .3rem;
-    font-size: 4.1rem;
-    line-height:1;
-    letter-spacing:-.03em;
-    font-weight: 900;
-    background: linear-gradient(135deg, var(--purple), var(--blue));
-    -webkit-background-clip:text;
-    background-clip:text;
-    color: transparent;
+  .nf-top{
+    padding: 1.1rem 1.1rem .9rem;
+    border-bottom: 1px solid rgba(148,163,184,.14);
+    display:flex;
+    gap:1rem;
+    align-items:flex-start;
+    justify-content:space-between;
+    flex-wrap:wrap;
   }
 
   .nf-title{
-    margin:.15rem 0 .35rem;
-    font-size: 1.25rem;
-    font-weight: 900;
-    color: var(--ink);
-  }
-
-  .nf-desc{
-    margin: 0 auto;
-    max-width: 44ch;
-    color: var(--muted);
-    font-size: .95rem;
-    line-height: 1.55;
-  }
-
-  /* =========================
-     ✅ Illustration (compact)
-     ========================= */
-  .nf-illu{
-    margin: .95rem auto .75rem;
-    width: 170px;
-    height: 105px;
-    position: relative;
-  }
-
-  .nf-illu-base{
-    position:absolute;
-    left:50%; bottom:0;
-    transform: translateX(-50%);
-    width: 150px;
-    height: 76px;
-    border-radius: 16px;
-    border: 2px dashed var(--line);
-    background: linear-gradient(135deg, rgba(124,58,237,.11), rgba(37,99,235,.06));
-  }
-
-  .nf-illu-page{
-    position:absolute;
-    left:50%; top:0;
-    transform: translateX(-50%) rotate(12deg);
-    width: 100px;
-    height: 68px;
-    border-radius: 14px;
-    border: 1px solid var(--line);
-    background: var(--card-2);
-    box-shadow: var(--shadow-sm);
+    margin:0;
+    font-size: 1.35rem;
+    font-weight: 950;
     display:flex;
+    gap:.6rem;
     align-items:center;
-    justify-content:center;
-    font-weight: 900;
-    color: var(--purple);
+    letter-spacing:.2px;
   }
 
-  /* =========================
-     ✅ Search (dropdown + input)
-     ========================= */
-  .nf-search{
-    margin: .75rem 0 .35rem;
+  .nf-sub{
+    margin:.35rem 0 0 0;
+    color: rgba(226,232,240,.86);
+    font-size: .95rem;
+    line-height:1.3;
+  }
+
+  .nf-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:.4rem;
+    padding:.4rem .7rem;
+    border-radius:999px;
+    border: 1px solid rgba(37,99,235,.25);
+    background: rgba(2,6,23,.35);
+    color: rgba(226,232,240,.9);
+    font-weight: 900;
+    font-size:.78rem;
+  }
+
+  .nf-body{
+    padding: 1rem 1.1rem 1.1rem;
     display:grid;
+    gap: .9rem;
+  }
+
+  .nf-hint{
+    margin:0;
+    color: rgba(148,163,184,.95);
+    font-size: .92rem;
+  }
+
+  .nf-actions{
+    display:flex;
     gap:.55rem;
+    flex-wrap:wrap;
   }
 
-  .nf-search-row{
-    display:grid;
-    grid-template-columns: 120px 1fr 44px;
-    gap:.45rem;
-    align-items:center;
-  }
-
-  .nf-select,
-  .nf-input{
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: .72rem .75rem;
-    font: inherit;
-    background: rgba(255,255,255,.6);
-    color: var(--ink);
-    outline:none;
-    transition: var(--trans);
-    min-width:0;
-  }
-
-  .dark-theme .nf-select,
-  .dark-theme .nf-input{
-    background: rgba(15,23,42,.35);
-  }
-
-  .nf-input:focus,
-  .nf-select:focus{
-    border-color: rgba(124,58,237,.55);
-    box-shadow: var(--focus);
-  }
-
-  .nf-go{
-    border: 0;
-    border-radius: 12px;
-    cursor:pointer;
-    font-weight: 900;
-    background: var(--purple);
-    color: #fff;
-    transition: var(--trans);
-    height: 44px;
+  .btn{
     display:inline-flex;
     align-items:center;
     justify-content:center;
-  }
-
-  .nf-go:hover{ background: var(--purple-dark); transform: translateY(-1px); }
-
-  .nf-hint{
-    color: var(--muted);
-    font-size:.82rem;
-    margin:0;
-  }
-
-  /* =========================
-     ✅ Actions (buttons)
-     ========================= */
-  .nf-actions{
-    display:grid;
-    gap:.55rem;
-    margin: .9rem 0 .25rem;
-  }
-
-  .nf-btn{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:.55rem;
-    padding: .78rem 1rem;
-    border-radius: 14px;
-    text-decoration:none;
-    font-weight: 900;
-    font-size: .92rem;
-    cursor:pointer;
-    transition: var(--trans);
-    border: 1px solid transparent;
-    user-select:none;
-  }
-
-  .nf-btn:focus-visible{
-    outline:none;
-    box-shadow: var(--focus);
-  }
-
-  .nf-btn.primary{
-    background: var(--purple);
-    color:#fff;
-  }
-  .nf-btn.primary:hover{ background: var(--purple-dark); transform: translateY(-1px); }
-
-  .nf-btn.blue{
-    background: var(--blue);
-    color:#fff;
-  }
-  .nf-btn.blue:hover{ background: var(--blue-dark); transform: translateY(-1px); }
-
-  .nf-btn.outline{
-    background: transparent;
-    color: var(--ink);
-    border-color: var(--line);
-  }
-  .nf-btn.outline:hover{
-    border-color: rgba(124,58,237,.55);
-    background: rgba(124,58,237,.06);
-    transform: translateY(-1px);
-  }
-
-  .nf-btn.green{
-    background: var(--green);
-    color:#0b1220;
-  }
-  .nf-btn.green:hover{ background: var(--green-dark); color:#fff; transform: translateY(-1px); }
-
-  /* =========================
-     ✅ Quick links (chips)
-     ========================= */
-  .nf-links{
-    margin-top: .85rem;
-    display:flex;
-    flex-wrap:wrap;
-    justify-content:center;
-    gap:.5rem;
-  }
-
-  .nf-chip{
-    text-decoration:none;
-    font-weight: 800;
-    font-size:.8rem;
-    padding:.38rem .6rem;
+    gap:.45rem;
+    padding:.7rem 1rem;
     border-radius: 999px;
-    border: 1px solid var(--line);
-    color: var(--ink);
-    background: rgba(255,255,255,.55);
-    transition: var(--trans);
-  }
-
-  .dark-theme .nf-chip{ background: rgba(15,23,42,.28); }
-
-  .nf-chip:focus-visible{
-    outline:none;
-    box-shadow: var(--focus);
-  }
-
-  .nf-chip.purple:hover{ border-color: rgba(124,58,237,.55); background: rgba(124,58,237,.08); }
-  .nf-chip.blue:hover{ border-color: rgba(37,99,235,.55); background: rgba(37,99,235,.08); }
-  .nf-chip.green:hover{ border-color: rgba(34,197,94,.55); background: rgba(34,197,94,.08); }
-
-  /* =========================
-     ✅ Footer info (no inline styles)
-     ========================= */
-  .nf-foot{
-    margin-top: 1rem;
-    padding-top: .85rem;
-    border-top: 1px solid var(--line);
-    color: var(--muted);
-    font-size: .78rem;
-    line-height: 1.5;
-  }
-
-  .nf-foot a{
-    color: var(--blue);
+    border:1px solid transparent;
     text-decoration:none;
-    font-weight: 900;
-  }
-  .nf-foot a:hover{ text-decoration: underline; }
-
-  .nf-url{
-    margin-top:.35rem;
-    opacity:.9;
+    cursor:pointer;
+    font-weight:900;
+    font-size:.92rem;
+    user-select:none;
+    transition: transform .12s ease, filter .12s ease;
   }
 
-  .nf-url code{
-    display:inline-block;
-    padding:.22rem .45rem;
-    border-radius: 10px;
-    border: 1px solid var(--line);
-    background: rgba(15,23,42,.04);
-    color: var(--muted);
-    max-width: 100%;
-    overflow:hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle;
+  .btn-primary{
+    background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(37,99,235,.9));
+    border-color: rgba(124,58,237,.35);
+    color: var(--w);
+    box-shadow: 0 12px 22px rgba(124,58,237,.18);
+  }
+  .btn-primary:hover{ transform: translateY(-1px); filter: brightness(1.03); }
+
+  .btn-ghost{
+    background: rgba(2,6,23,.35);
+    border-color: rgba(148,163,184,.22);
+    color: rgba(226,232,240,.92);
+  }
+  .btn-ghost:hover{ transform: translateY(-1px); }
+
+  .nf-meta{
+    margin-top:.3rem;
+    padding-top:.8rem;
+    border-top: 1px dashed rgba(148,163,184,.18);
+    color: rgba(148,163,184,.9);
+    font-size: .82rem;
+    line-height:1.3;
   }
 
-  .dark-theme .nf-url code{
-    background: rgba(255,255,255,.06);
-    color:#cbd5e1;
+  code{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: .82rem;
+    color: rgba(226,232,240,.92);
   }
 
-  /* =========================
-     ✅ Mobile (Hisense U50 Lite ~360px)
-     ========================= */
-  @media (max-width: 480px){
-    .nf-inner{ padding: 1.05rem .9rem .9rem; }
-    .nf-code{ font-size: 3.6rem; }
-    .nf-title{ font-size: 1.15rem; }
-    .nf-desc{ font-size: .9rem; }
-
-    .nf-illu{ width: 150px; height: 96px; }
-    .nf-search-row{ grid-template-columns: 110px 1fr 42px; }
-    .nf-go{ height: 42px; }
-  }
-
-  @media (max-width: 360px){
-    .nf-code{ font-size: 3.25rem; }
-    .nf-search-row{ grid-template-columns: 1fr; }
-    .nf-go{ width: 100%; height: 44px; }
+  @media (max-width: 520px){
+    .nf-title{ font-size: 1.2rem; }
+    .btn{ width: 100%; }
+    .nf-actions{ flex-direction:column; }
   }
 
   @media (prefers-reduced-motion: reduce){
-    .nf-btn:hover{ transform:none; }
-    .nf-go:hover{ transform:none; }
+    *{ transition:none !important; animation:none !important; }
   }
   `;
 
-  const pageScripts = `
-  document.addEventListener('DOMContentLoaded', () => {
-    const scopeSel  = document.getElementById('nfScope');
-    const input     = document.getElementById('nfSearch');
-    const goBtn     = document.getElementById('nfGo');
-
-    const backBtn   = document.querySelector('[data-action="back"]');
-    const reportBtn = document.getElementById('nfReport');
-
-    function updatePlaceholder(){
-      const scope = (scopeSel && scopeSel.value) ? scopeSel.value : 'all';
-      if (!input) return;
-
-      if (scope === 'products') input.placeholder = 'Search products... (e.g., shoes, laptop)';
-      else if (scope === 'businesses') input.placeholder = 'Search businesses... (e.g., supplier, store name)';
-      else if (scope === 'help') input.placeholder = 'Search help... (e.g., payments, delivery)';
-      else input.placeholder = 'Search... (products, businesses, help)';
-    }
-
-    function performSearch(){
-      const q = (input && input.value) ? input.value.trim() : '';
-      if (!q){
-        input && input.focus();
-        return;
-      }
-
-      // ✅ Do NOT change your path: keep /search?q=
-      window.location.href = '/search?q=' + encodeURIComponent(q);
-    }
-
-    if (scopeSel) scopeSel.addEventListener('change', updatePlaceholder);
-
-    if (input) {
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          performSearch();
-        }
-      });
-    }
-
-    if (goBtn) {
-      goBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        performSearch();
-      });
-    }
-
-    if (backBtn) {
-      backBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (window.history.length > 1) window.history.back();
-        else window.location.href = '/';
-      });
-    }
-
-    if (reportBtn) {
-      reportBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const currentUrl = window.location.href;
-        const mailtoLink =
-          'mailto:support@unicoporate.com' +
-          '?subject=' + encodeURIComponent('404 Error Report') +
-          '&body=' + encodeURIComponent('I encountered a 404 error at: ' + currentUrl);
-
-        window.location.href = mailtoLink;
-      });
-    }
-
-    // Nice UX: focus input after page loads
-    setTimeout(() => { if (input) input.focus(); }, 250);
-
-    console.warn('404 Error - Page not found:', window.location.pathname);
-  });
-  `;
+  // Helpful values (optional)
+  const reqPath = (typeof path !== 'undefined' && path) ? String(path) : (typeof url !== 'undefined' && url ? String(url) : '');
+  const statusCode = (typeof status !== 'undefined' && status) ? String(status) : '404';
 %>
 
-<!-- ✅ Inject Styles (RAW) -->
-<style nonce="<%= nonce %>"><%- pageStyles %></style>
-
 <div class="nf-wrap">
-  <section class="nf-card" aria-label="404 - Page Not Found">
-    <div class="nf-inner">
-      <div class="nf-badge">🛡️ Unicoporate.com • Not Found</div>
+  <section class="nf-card" aria-label="Not found page">
+    <header class="nf-top">
+      <div>
+        <h1 class="nf-title"><span aria-hidden="true">🧭</span> Page not found</h1>
+        <p class="nf-sub">We couldn’t find the page you’re looking for.</p>
+      </div>
+      <div class="nf-badge" aria-label="HTTP status badge">
+        <span aria-hidden="true">⚠️</span> <%= statusCode %>
+      </div>
+    </header>
 
-      <div class="nf-code">404</div>
-      <h1 class="nf-title">Page Not Found</h1>
-      <p class="nf-desc">
-        The page you’re looking for doesn’t exist (or it was moved). Use search or go back safely.
+    <div class="nf-body">
+      <p class="nf-hint">
+        Try going back, or use one of the quick links below.
       </p>
 
-      <div class="nf-illu" aria-hidden="true">
-        <div class="nf-illu-page">404</div>
-        <div class="nf-illu-base"></div>
+      <div class="nf-actions" role="group" aria-label="404 actions">
+        <a class="btn btn-primary" href="/sales"><span aria-hidden="true">🛍️</span> Browse Products</a>
+        <a class="btn btn-ghost" href="/"><span aria-hidden="true">🏠</span> Home</a>
+        <a class="btn btn-ghost" href="/contact"><span aria-hidden="true">💬</span> Contact Support</a>
       </div>
 
-      <div class="nf-search" aria-label="Search the website">
-        <div class="nf-search-row">
-          <select id="nfScope" class="nf-select" aria-label="Search scope">
-            <option value="all">All</option>
-            <option value="products">Products</option>
-            <option value="businesses">Businesses</option>
-            <option value="help">Help</option>
-          </select>
-
-          <input
-            id="nfSearch"
-            class="nf-input"
-            type="search"
-            placeholder="Search... (products, businesses, help)"
-            aria-label="Search input"
-            autocomplete="off"
-          />
-
-          <button id="nfGo" class="nf-go" type="button" aria-label="Search">🔍</button>
-        </div>
-
-        <p class="nf-hint">Tip: try a product name, category, or “payments”.</p>
+      <div class="nf-meta">
+        <div>Requested path: <code><%= reqPath || '—' %></code></div>
+        <div>If this keeps happening, tell us what you clicked.</div>
       </div>
-
-      <div class="nf-actions">
-        <!-- ✅ DO NOT change paths/links -->
-        <a class="nf-btn primary" href="/">
-          🏠 Go to Homepage
-        </a>
-
-        <button class="nf-btn blue" type="button" data-action="back">
-          ↩️ Go Back
-        </button>
-
-        <a class="nf-btn green" href="/business/signup">
-          🚀 Start Your Business
-        </a>
-
-        <button id="nfReport" class="nf-btn outline" type="button">
-          📧 Report This Error
-        </button>
-      </div>
-
-      <nav class="nf-links" aria-label="Quick links">
-        <!-- ✅ DO NOT change paths/links -->
-        <a class="nf-chip purple" href="/about">About Us</a>
-        <a class="nf-chip blue" href="/contact">Contact Support</a>
-        <a class="nf-chip green" href="/privacy">Privacy Policy</a>
-        <a class="nf-chip purple" href="/terms">Terms of Service</a>
-      </nav>
-
-      <footer class="nf-foot">
-        <div>
-          © <%= new Date().getFullYear() %> Unicoporate.com.
-          Need help? <a href="/contact">Contact our support team</a>
-        </div>
-
-        <div class="nf-url">
-          Error URL:
-          <code><%= (typeof req !== 'undefined' && req && req.originalUrl) ? req.originalUrl : '' %></code>
-        </div>
-      </footer>
     </div>
   </section>
 </div>
 
-<!-- ✅ Inject Scripts (RAW) -->
-<script nonce="<%= nonce %>"><%- pageScripts %></script>
+<!-- ✅ CSP-safe style injection -->
+<style<% if (NONCE) { %> nonce="<%= NONCE %>"<% } %>><%- pageStyles %></style>
+
+<!-- ✅ Optional CSP-safe small script (not required, but safe) -->
+<script<% if (NONCE) { %> nonce="<%= NONCE %>"<% } %>>
+  (function(){
+    // No inline eval, no external calls - CSP-safe
+    // Just a tiny helper: focus first primary button for keyboard users
+    const btn = document.querySelector('.btn-primary');
+    if (btn) btn.focus({ preventScroll: true });
+  })();
+</script>

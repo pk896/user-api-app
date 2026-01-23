@@ -52,6 +52,13 @@ try {
   Product = null;
 }
 
+let createLabelForOrder = null;
+try {
+  ({ createLabelForOrder } = require('../utils/shippo/createLabelForOrder'));
+} catch {
+  createLabelForOrder = null;
+}
+
 const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
@@ -157,6 +164,84 @@ function saveSession(req) {
     if (req.session && typeof req.session.save === 'function') req.session.save(() => resolve());
     else resolve();
   });
+}
+
+function normalizeCountryCode(code) {
+  const c = String(code || '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(c) ? c : null;
+}
+
+function cleanAddrField(v, max = 100) {
+  const s = String(v || '').trim();
+  return s ? s.slice(0, max) : '';
+}
+
+function requireShippingAddressFromBody(req) {
+  // Accept:
+  // 1) req.body.shipping = PayPal-ish keys
+  // 2) req.body.shipTo   = your checkout.ejs keys
+  // 3) flat fields (fallback)
+  const b = req.body || {};
+
+  const s =
+    (b.shipping && typeof b.shipping === 'object' && b.shipping) ||
+    (b.shipTo && typeof b.shipTo === 'object' && b.shipTo) ||
+    b;
+
+  // shipTo fields:
+  //  name, phone, email, street1, street2, city, state, zip, country
+  // shipping fields:
+  //  fullName/name, address_line_1/line1, address_line_2/line2, admin_area_2/city, admin_area_1/state, postal_code/zip, country_code/countryCode
+
+  const fullName = cleanAddrField(s.fullName || s.name || s.full_name, 120);
+  const line1 = cleanAddrField(
+    s.address_line_1 || s.line1 || s.address1 || s.street1,
+    300
+  );
+  const line2 = cleanAddrField(
+    s.address_line_2 || s.line2 || s.address2 || s.street2,
+    300
+  );
+  const city = cleanAddrField(s.admin_area_2 || s.city, 120);
+  const state = cleanAddrField(s.admin_area_1 || s.state || s.province, 120);
+  const postalCode = cleanAddrField(s.postal_code || s.postalCode || s.zip, 60);
+
+  const countryCode = normalizeCountryCode(
+    s.country_code || s.countryCode || s.country
+  );
+
+  const phone = cleanAddrField(s.phone || '', 40); // required for couriers (Shippo)
+  const email = cleanAddrField(s.email || '', 140); // optional
+
+  // Required minimum for real shipping
+  const missing = [];
+  if (!fullName) missing.push('fullName/name');
+  if (!line1) missing.push('address_line_1/street1');
+  if (!city) missing.push('admin_area_2/city');
+  if (!state) missing.push('admin_area_1/state');
+  if (!postalCode) missing.push('postal_code/zip');
+  if (!countryCode) missing.push('country_code/country (2-letter like ZA)');
+  if (!phone) missing.push('phone');
+
+  if (missing.length) {
+    const err = new Error(`Missing shipping fields: ${missing.join(', ')}`);
+    err.code = 'SHIPPING_ADDRESS_INVALID';
+    throw err;
+  }
+
+  return {
+    fullName,
+    phone,
+    email: email || null,
+    address: {
+      address_line_1: line1,
+      address_line_2: line2 || '',
+      admin_area_2: city,
+      admin_area_1: state,
+      postal_code: postalCode,
+      country_code: countryCode,
+    },
+  };
 }
 
 function variantText(variants) {
@@ -308,6 +393,76 @@ async function getAccessToken() {
   _ppTokenCache.expiresAt = Date.now() + Math.max(30, Number(json.expires_in || 0)) * 1000;
 
   return _ppTokenCache.token;
+}
+
+async function pushTrackingToPayPal({ captureId, trackingNumber, carrier, status = 'SHIPPED' }) {
+  const token = await getAccessToken();
+
+  const payload = {
+    trackers: [
+      {
+        transaction_id: String(captureId),
+        tracking_number: String(trackingNumber),
+        status: String(status).toUpperCase(), // SHIPPED, DELIVERED etc.
+        carrier: String(carrier).toUpperCase(), // depends on PayPal carrier codes
+      },
+    ],
+  };
+
+  const res = await fetchWithTimeout(`${PP_API}/v1/shipping/trackers-batch`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`PayPal tracking attach failed (${res.status}): ${json?.message || JSON.stringify(json)}`);
+  }
+
+  return json;
+}
+
+async function createShipmentViaProvider({ orderDoc, shipping, _delivery}) {
+  const provider = String(process.env.SHIP_PROVIDER || '').trim().toLowerCase();
+  if (!provider) {
+    const err = new Error('SHIP_PROVIDER is not set (e.g. shippo).');
+    err.code = 'SHIP_PROVIDER_NOT_CONFIGURED';
+    throw err;
+  }
+
+  if (provider === 'shippo') {
+    if (typeof createLabelForOrder !== 'function') {
+      throw new Error('Shippo helper not found. Create utils/shippo/createLabelForOrder.js');
+    }
+
+    // Make sure the order has the final shipping saved (Shippo reads from orderDoc.shipping)
+    orderDoc.shipping = orderDoc.shipping || shipping || null;
+
+    // Buy label (cheapest rate)
+    const { shipment, chosenRate, transaction } = await createLabelForOrder(orderDoc, { chooseRate: 'cheapest' });
+
+    // Save Shippo fields on the order (your model supports these)
+    orderDoc.shippo = {
+      shipmentId: shipment?.object_id || null,
+      transactionId: transaction?.object_id || null,
+      rateId: chosenRate?.object_id || null,
+      labelUrl: transaction?.label_url || null,
+      trackingStatus: transaction?.tracking_status || null,
+    };
+
+    // Return normalized tracking info to your caller
+    return {
+      carrier: null, // IMPORTANT: PayPal carrier codes are strict; leave null unless you map providers
+      trackingNumber: transaction?.tracking_number || null,
+      trackingUrl: transaction?.tracking_url_provider || null,
+      labelUrl: transaction?.label_url || null,
+      status: 'SHIPPED',
+      shippedAt: new Date(),
+    };
+  }
+
+  throw new Error(`SHIP_PROVIDER="${provider}" not implemented.`);
 }
 
 // ======================================================
@@ -736,6 +891,40 @@ function buildSessionSnapshot(orderId, pending) {
 }
 
 // ======================================================
+// ✅ Seller helpers (used by /payment/my-orders seller view)
+// ======================================================
+function isSellerBusiness(req) {
+  const b = req.session?.business || {};
+  const role =
+    String(b.role || b.type || b.accountType || b.kind || '').trim().toLowerCase();
+  // treat seller + supplier as "can fulfill / see their items"
+  return role === 'seller' || role === 'supplier';
+}
+
+function pickItemProductId(it) {
+  // Your Order.items[].productId stores Product.customId (string)
+  return String(it?.productId || it?.customId || it?.pid || it?.sku || '').trim();
+}
+
+function itemLineTotal(it) {
+  // price might be {value,currency} OR string/number
+  const qty = toQty(it?.quantity ?? it?.qty, 1);
+
+  let unit =
+    it?.priceGross?.value ??
+    it?.price?.value ??
+    it?.price ??
+    it?.unitPrice ??
+    it?.unitPriceNet ??
+    0;
+
+  if (unit && typeof unit === 'object') unit = unit.value ?? unit.amount ?? 0;
+
+  const unitN = normalizeMoneyNumber(unit) ?? 0;
+  return +(unitN * qty).toFixed(2);
+}
+
+// ======================================================
 // ✅ Receipt token helpers (optional public share links)
 // ======================================================
 function makeReceiptToken(orderId) {
@@ -808,6 +997,18 @@ router.get('/config', (req, res) => {
 router.post('/create-order', express.json(), async (req, res) => {
   try {
     const cart = req.session?.cart || { items: [] };
+
+    // ✅ Always capture + validate shipping from checkout (needed for Shippo phone/email)
+    let shippingInput = null;
+    try {
+      shippingInput = requireShippingAddressFromBody(req);
+    } catch (e) {
+      return res.status(422).json({
+        ok: false,
+        code: e.code || 'SHIPPING_ADDRESS_INVALID',
+        message: e.message || 'Invalid shipping address.',
+      });
+    }
 
     if (!Array.isArray(cart.items) || cart.items.length === 0) {
       return res.status(422).json({ ok: false, code: 'CART_EMPTY', message: 'Cart is empty (server session).' });
@@ -924,6 +1125,14 @@ router.post('/create-order', express.json(), async (req, res) => {
           },
           items: ppItems,
           description: `Delivery: ${opt.name} (${opt.deliveryDays || 0} days)`,
+          ...(shippingInput
+            ? {
+                shipping: {
+                  name: { full_name: shippingInput.fullName },
+                  address: shippingInput.address,
+                },
+              }
+            : {}),
         },
       ],
       application_context: {
@@ -964,6 +1173,14 @@ router.post('/create-order', express.json(), async (req, res) => {
       vatTotal,
       grandTotal: grand,
       currency: upperCcy,
+      shippingInput: shippingInput
+        ? {
+            fullName: shippingInput.fullName,
+            phone: shippingInput.phone || null,
+            email: shippingInput.email || null,
+            address: shippingInput.address,
+          }
+        : null,
       createdAt: Date.now(),
     };
 
@@ -1036,8 +1253,15 @@ router.post('/capture-order', express.json(), async (req, res) => {
     const puShipping = pu.shipping || {};
     const puAddr = puShipping.address || {};
 
-    const shippingAddress = {
+    const pendingShip = pending?.shippingInput || null;
+    const shipPhone = pendingShip?.phone || null;
+    const shipEmail = pendingShip?.email || payer.email_address || null;
+
+    // 1) Prefer PayPal shipping (source of truth if present)
+    let shippingAddress = {
       name: puShipping.name?.full_name || puShipping.name?.name || payerFullName || 'No name provided',
+      phone: shipPhone,
+      email: shipEmail,
       address_line_1: puAddr.address_line_1 || puAddr.line1 || '',
       address_line_2: puAddr.address_line_2 || puAddr.line2 || '',
       admin_area_2: puAddr.admin_area_2 || puAddr.city || '',
@@ -1045,6 +1269,28 @@ router.post('/capture-order', express.json(), async (req, res) => {
       postal_code: puAddr.postal_code || '',
       country_code: puAddr.country_code || '',
     };
+
+    // 2) If PayPal didn't provide address, fall back to the session shippingInput you validated in create-order
+    const paypalMissing =
+      !shippingAddress.address_line_1 ||
+      !shippingAddress.admin_area_2 ||
+      !shippingAddress.admin_area_1 ||
+      !shippingAddress.postal_code ||
+      !shippingAddress.country_code;
+
+    if (paypalMissing && pendingShip?.address) {
+      shippingAddress = {
+        name: pendingShip.fullName || shippingAddress.name,
+        phone: shipPhone,
+        email: shipEmail,
+        address_line_1: pendingShip.address.address_line_1 || '',
+        address_line_2: pendingShip.address.address_line_2 || '',
+        admin_area_2: pendingShip.address.admin_area_2 || '',
+        admin_area_1: pendingShip.address.admin_area_1 || '',
+        postal_code: pendingShip.address.postal_code || '',
+        country_code: pendingShip.address.country_code || '',
+      };
+    }
 
     const finalAmount =
       cap0?.amount ||
@@ -1178,6 +1424,10 @@ router.post('/capture-order', express.json(), async (req, res) => {
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
+        // ✅ Payment succeeded, but fulfillment may still be pending
+        doc.fulfillmentStatus = doc.fulfillmentStatus || 'pending';
+        await doc.save();
+
         if (doc && captureEntry) {
           const already = Array.isArray(doc.captures)
             ? doc.captures.some((c) => String(c?.captureId || '') === String(captureId))
@@ -1211,6 +1461,50 @@ router.post('/capture-order', express.json(), async (req, res) => {
           }
         } catch (invErr) {
           console.warn('⚠️ Inventory decrement exception:', invErr?.message || String(invErr));
+        }
+
+        // ======================================================
+        // ✅ AUTO-FULFILL SHIPPING (CREATE SHIPMENT + TRACKING)
+        // ======================================================
+        try {
+          // Only attempt if we have an Order doc and a captureId
+          const paidStatus = String(capture?.status || doc?.status || '').toUpperCase();
+          if (doc && captureId && (paidStatus === 'COMPLETED' || paidStatus === 'PAID')) {
+            // Use PayPal-shown shipping address (source of truth)
+            const ship = shippingAddress;
+
+            // Create shipment via your provider (returns tracking)
+            const tracking = await createShipmentViaProvider({
+              orderDoc: doc,
+              shipping: ship,
+              delivery: doc.delivery || null,
+            });
+
+            // Save tracking on the order (fields you will add in Order model)
+            doc.shippingTracking = {
+              carrier: tracking.carrier || null,
+              trackingNumber: tracking.trackingNumber || null,
+              trackingUrl: tracking.trackingUrl || null,
+              labelUrl: tracking.labelUrl || null,
+              status: tracking.status || 'SHIPPED',
+              shippedAt: tracking.shippedAt || new Date(),
+            };
+            doc.fulfillmentStatus = 'shipped';
+            await doc.save();
+
+            // Push tracking to PayPal automatically
+            if (doc.shippingTracking?.trackingNumber && doc.shippingTracking?.carrier) {
+              await pushTrackingToPayPal({
+                captureId,
+                trackingNumber: doc.shippingTracking.trackingNumber,
+                carrier: doc.shippingTracking.carrier,
+                status: doc.shippingTracking.status || 'SHIPPED',
+              });
+            }
+          }
+        } catch (shipErr) {
+          console.warn('⚠️ Auto shipping failed (checkout continues):', shipErr?.message || String(shipErr));
+          // Do NOT fail checkout. Shipping can be retried by an admin job/route later.
         }
       }
     } catch (e) {
@@ -1364,10 +1658,180 @@ router.get('/cancel', (req, res) => {
 });
 
 // ======================================================
+// ✅ My Orders JSON
+// GET /payment/my-orders
+// - Buyer/User: returns purchases for current identity
+// - Seller/Supplier business: returns orders that CONTAIN seller items,
+//   but returns ONLY seller items + shipping + status.
+// ======================================================
+router.get('/my-orders', requireAnyAuth, async (req, res) => {
+  try {
+    if (!Order) return res.status(500).json({ ok: false, error: 'Order model not available.' });
+
+    const userId = getUserId(req);
+    const businessId = getBusinessId(req);
+
+    // ------------------------------------------------------
+    // ✅ SELLER MODE: "contains items belonging to seller"
+    // ------------------------------------------------------
+    if (businessId && isSellerBusiness(req)) {
+      if (!Product) {
+        return res.status(500).json({ ok: false, error: 'Product model not available (seller view).' });
+      }
+
+      // 1) Find all Product.customId owned by this business (try common field names)
+      const sellerProducts = await Product.find({
+        $or: [
+          { businessId },
+          { sellerId: businessId },
+          { seller: businessId },
+          { ownerBusiness: businessId },
+          { business: businessId },
+        ],
+      })
+        .select('customId')
+        .lean();
+
+      const sellerIds = sellerProducts
+        .map((p) => String(p?.customId || '').trim())
+        .filter(Boolean);
+
+      if (!sellerIds.length) {
+        return res.json({ ok: true, orders: [] });
+      }
+
+      // ⚠️ safety cap (avoid giant $in queries)
+      const cappedIds = sellerIds.slice(0, 5000);
+      const sellerIdSet = new Set(cappedIds);
+
+      // 2) Query orders that contain ANY of these productIds
+      const orders = await Order.find({ 'items.productId': { $in: cappedIds } })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .select(
+          'orderId paypalOrderId status paymentStatus fulfillmentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal'
+        )
+        .lean();
+
+      // 3) Return only seller items per order + shipping + status
+      const normalized = orders.map((o) => {
+        const orderId = o.orderId || o.paypalOrderId || (o._id ? String(o._id) : '');
+
+        const status = String(o.status || 'PROCESSING');
+        const paymentStatus = String(o.paymentStatus || '').toLowerCase();
+        const fulfillmentStatus = String(o.fulfillmentStatus || '').toLowerCase();
+
+        const currency =
+          (o.amount && (o.amount.currency ?? o.amount.currency_code ?? o.currency)) ??
+          o.currency ??
+          upperCcy;
+
+        const allItems = Array.isArray(o.items) ? o.items : [];
+        const sellerItems = allItems.filter((it) => sellerIdSet.has(pickItemProductId(it)));
+
+        // seller-only total (display helper)
+        const sellerAmount = +sellerItems.reduce((sum, it) => sum + itemLineTotal(it), 0).toFixed(2);
+
+        return {
+          id: o._id ? String(o._id) : orderId,
+          orderId,
+          status,
+          paymentStatus,
+          fulfillmentStatus,
+          createdAt: o.createdAt,
+          currency: String(currency || upperCcy).toUpperCase(),
+
+          // ✅ seller-only view:
+          amount: sellerAmount,
+          items: sellerItems,
+
+          // ✅ include shipping + tracking + refund summary
+          shipping: o.shipping || null,
+          shippingTracking: o.shippingTracking || {},
+          refundedTotal: o.refundedTotal ?? null,
+          refundsCount: Array.isArray(o.refunds) ? o.refunds.length : 0,
+
+          receiptLink: orderId ? buildReceiptLink(orderId) : null,
+        };
+      });
+
+      // Remove orders where sellerItems ended up empty (extra safety)
+      const filtered = normalized.filter((o) => Array.isArray(o.items) && o.items.length > 0);
+
+      return res.json({ ok: true, orders: filtered });
+    }
+
+    // ------------------------------------------------------
+    // ✅ BUYER/USER MODE: only purchases for this identity
+    // ------------------------------------------------------
+    let query = null;
+    if (businessId) query = { businessBuyer: businessId };
+    else if (userId) query = { userId };
+    else return res.status(401).json({ ok: false, error: 'Not logged in.' });
+
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .select(
+        'orderId paypalOrderId status paymentStatus fulfillmentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal'
+      )
+      .lean();
+
+    const normalized = orders.map((o) => {
+      const orderId = o.orderId || o.paypalOrderId || (o._id ? String(o._id) : '');
+
+      const status = String(o.status || 'PROCESSING');
+      const paymentStatus = String(o.paymentStatus || '').toLowerCase();
+      const fulfillmentStatus = String(o.fulfillmentStatus || '').toLowerCase();
+
+      let amountRaw =
+        (o.amount && (o.amount.value ?? o.amount)) ??
+        (o.total?.value ?? o.total) ??
+        (o.totalAmount?.value ?? o.totalAmount) ??
+        0;
+
+      if (amountRaw && typeof amountRaw === 'object') {
+        amountRaw = amountRaw.value ?? amountRaw.amount ?? 0;
+      }
+
+      const amountNum = Number(amountRaw);
+      const amount = Number.isFinite(amountNum) ? amountNum : 0;
+
+      const currency =
+        (o.amount && (o.amount.currency ?? o.amount.currency_code ?? o.currency)) ??
+        o.currency ??
+        upperCcy;
+
+      return {
+        id: o._id ? String(o._id) : orderId,
+        orderId,
+        status,
+        paymentStatus,
+        fulfillmentStatus,
+        createdAt: o.createdAt,
+        amount,
+        currency: String(currency || upperCcy).toUpperCase(),
+        items: Array.isArray(o.items) ? o.items : [],
+        shipping: o.shipping || null,
+        shippingTracking: o.shippingTracking || {},
+        refundedTotal: o.refundedTotal ?? null,
+        refundsCount: Array.isArray(o.refunds) ? o.refunds.length : 0,
+        receiptLink: orderId ? buildReceiptLink(orderId) : null,
+      };
+    });
+
+    return res.json({ ok: true, orders: normalized });
+  } catch (err) {
+    console.error('GET /payment/my-orders error:', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load orders.' });
+  }
+});
+
+// ======================================================
 // ✅ My Orders JSON (ONLY purchases for current identity)
 // GET /payment/my-orders
 // ======================================================
-router.get('/my-orders', requireAnyAuth, async (req, res) => {
+/*router.get('/my-orders', requireAnyAuth, async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, error: 'Order model not available.' });
 
@@ -1383,7 +1847,7 @@ router.get('/my-orders', requireAnyAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(200)
       .select(
-        'orderId paypalOrderId status paymentStatus createdAt amount total totalAmount currency items shippingTracking refunds refundedTotal'
+        'orderId paypalOrderId status paymentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal'
       )
       .lean();
 
@@ -1420,6 +1884,7 @@ router.get('/my-orders', requireAnyAuth, async (req, res) => {
         amount,
         currency: String(currency || upperCcy).toUpperCase(),
         items: Array.isArray(o.items) ? o.items : [],
+        shipping: o.shipping || null,              // ✅ ADD THIS
         shippingTracking: o.shippingTracking || {},
         refundedTotal: o.refundedTotal ?? null,
         refundsCount: Array.isArray(o.refunds) ? o.refunds.length : 0,
@@ -1432,7 +1897,7 @@ router.get('/my-orders', requireAnyAuth, async (req, res) => {
     console.error('GET /payment/my-orders error:', err);
     return res.status(500).json({ ok: false, error: 'Failed to load orders.' });
   }
-});
+});*/
 
 // ======================================================
 // 💸 Admin Refunds

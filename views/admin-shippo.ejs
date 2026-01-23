@@ -1,0 +1,1091 @@
+<!-- views/admin-shippo.ejs -->
+<%
+  const PAGE_NONCE = typeof nonce !== 'undefined' ? nonce : '';
+  const list = Array.isArray(orders) ? orders : [];
+
+  const money = (amt) => {
+    if (!amt) return '';
+    const v = amt.value ?? amt.amount ?? '';
+    const c = amt.currency ?? '';
+    return `${v} ${c}`.trim();
+  };
+%>
+
+<section class="admin-shippo-page">
+  <!-- Header -->
+  <header class="shippo-hero">
+    <div class="shippo-hero__left">
+      <div class="shippo-hero__title">
+        <div class="shippo-badge">🏷️</div>
+        <div>
+          <h1>Shippo Labels</h1>
+          <p class="muted">
+            Create labels for paid orders and automatically save tracking to the order.
+          </p>
+        </div>
+      </div>
+
+      <div class="shippo-controls">
+        <label class="field">
+          <span class="field__label">Search</span>
+          <input
+            class="input"
+            type="search"
+            id="shippoSearch"
+            placeholder="Search by OrderId, tracking number, carrier, status…"
+            autocomplete="off"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Fulfillment</span>
+          <select class="select" id="shippoFulfillment">
+            <option value="">All</option>
+            <option value="PENDING">PENDING</option>
+            <option value="PAID">PAID</option>
+            <option value="FULFILLED">FULFILLED</option>
+            <option value="SHIPPED">SHIPPED</option>
+            <option value="DELIVERED">DELIVERED</option>
+            <option value="CANCELLED">CANCELLED</option>
+          </select>
+        </label>
+
+        <div class="shippo-controls__actions">
+          <button type="button" class="btn btn-outline btn-sm" id="shippoClearFilters">
+            Clear
+          </button>
+          <a class="btn btn-outline" href="/admin">← Back to Admin</a>
+        </div>
+      </div>
+    </div>
+
+    <aside class="shippo-hero__right">
+      <div class="kpi kpi--purple">
+        <div class="kpi__label">Paid Orders</div>
+        <div class="kpi__value"><%= list.length %></div>
+        <div class="kpi__hint">Showing latest</div>
+      </div>
+
+      <div class="kpi kpi--blue">
+        <div class="kpi__label">Tip</div>
+        <div class="kpi__value kpi__value--small">View rates first</div>
+        <div class="kpi__hint">Then “Buy this” for best service</div>
+      </div>
+    </aside>
+  </header>
+
+  <!-- Flash messages (keep compatible with your layout flash system) -->
+  <% (success || []).forEach(msg => { %>
+    <div class="flash flash-success">✅ <%= msg %></div>
+  <% }) %>
+  <% (error || []).forEach(msg => { %>
+    <div class="flash flash-error">❌ <%= msg %></div>
+  <% }) %>
+
+  <!-- Main -->
+  <div class="panel">
+    <div class="panel__top">
+      <div class="panel__title">
+        <strong>Paid Orders</strong>
+        <span class="pill"><span id="shippoCount"><%= list.length %></span> showing</span>
+      </div>
+
+      <div class="panel__hint muted">
+        Mobile tip: rows become cards automatically.
+      </div>
+    </div>
+
+    <% if (!list.length) { %>
+      <div class="empty">
+        <div class="empty__icon">📦</div>
+        <div class="empty__title">No paid orders found yet</div>
+        <div class="empty__text muted">Once orders are paid, they will appear here for label creation.</div>
+      </div>
+    <% } else { %>
+      <div class="table-wrap" role="region" aria-label="Shippo orders table">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>OrderId</th>
+              <th>Total</th>
+              <th>Created</th>
+              <th>Fulfillment</th>
+              <th>Label</th>
+              <th>Tracking</th>
+              <th class="th-actions"></th>
+            </tr>
+          </thead>
+
+          <tbody id="shippoTbody">
+            <% list.forEach(o => {
+              const hasLabel = Boolean(o?.shippo?.labelUrl);
+              const rate = o?.shippo?.chosenRate || null;
+              const rateText = rate && rate.amount && rate.currency
+                ? `${rate.amount} ${rate.currency}${rate.provider ? ' • ' + rate.provider : ''}${rate.service ? ' • ' + rate.service : ''}${rate.estimatedDays != null ? ' • ~' + rate.estimatedDays + 'd' : ''}`
+                : '';
+
+              const trackNum = o?.shippingTracking?.trackingNumber || '';
+              const trackUrl = o?.shippingTracking?.trackingUrl || '';
+              const carrier =
+                o?.shippingTracking?.carrierLabel ||
+                o?.shippingTracking?.carrierToken ||
+                o?.shippingTracking?.carrier ||
+                '';
+
+              const fulfill =
+                o.fulfillmentStatus ||
+                o.shippingTracking?.status ||
+                o.status ||
+                'PENDING';
+
+              const createdText = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
+            %>
+              <tr
+                class="row"
+                data-orderid="<%= o.orderId %>"
+                data-fulfillment="<%= String(fulfill || '').toUpperCase() %>"
+              >
+                <td data-label="OrderId">
+                  <div class="mono"><%= o.orderId %></div>
+                  <div class="muted tiny">Mongo: <%= String(o._id).slice(-6) %></div>
+
+                  <div class="row-badges">
+                    <% if (hasLabel) { %>
+                      <span class="tag tag--green">Label saved</span>
+                    <% } else { %>
+                      <span class="tag tag--gray">No label</span>
+                    <% } %>
+
+                    <% if (trackNum) { %>
+                      <span class="tag tag--blue">Tracking saved</span>
+                    <% } %>
+                  </div>
+                </td>
+
+                <td data-label="Total">
+                  <div class="strong"><%= money(o.amount) %></div>
+                </td>
+
+                <td data-label="Created">
+                  <div class="muted"><%= createdText %></div>
+                </td>
+
+                <td data-label="Fulfillment">
+                  <span class="pill pill--solid"><%= fulfill %></span>
+                </td>
+
+                <td data-label="Label">
+                  <% if (hasLabel) { %>
+                    <div class="stack">
+                      <a class="btn btn-sm btn-primary" href="<%= o.shippo.labelUrl %>" target="_blank" rel="noopener">Open</a>
+                      <% if (rateText) { %>
+                        <div class="muted tiny">Rate: <%= rateText %></div>
+                      <% } %>
+                    </div>
+                  <% } else { %>
+                    <span class="muted">None</span>
+                  <% } %>
+                </td>
+
+                <td data-label="Tracking">
+                  <% if (trackNum) { %>
+                    <div class="stack">
+                      <div class="mono"><%= trackNum %></div>
+                      <div class="muted tiny">Carrier: <%= carrier %></div>
+                      <% if (trackUrl) { %>
+                        <a class="link tiny" href="<%= trackUrl %>" target="_blank" rel="noopener">Open tracking link</a>
+                      <% } %>
+                    </div>
+                  <% } else { %>
+                    <span class="muted">—</span>
+                  <% } %>
+                </td>
+
+                <td data-label="Actions" class="actions">
+                  <div class="actions__grid">
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm js-create"
+                      data-orderid="<%= o.orderId %>"
+                    >
+                      <%= hasLabel ? 'Re-use saved label' : 'Create label' %>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-sm js-rates"
+                      data-orderid="<%= o.orderId %>"
+                    >
+                      View rates
+                    </button>
+
+                    <a class="btn btn-outline btn-sm" href="/orders/tracking/<%= o._id %>">
+                      Track page
+                    </a>
+
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-sm js-fixaddr"
+                      data-orderid="<%= o.orderId %>"
+                    >
+                      Fix address
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr class="result-row" id="result-<%= o.orderId %>" style="display:none;">
+                <td colspan="7">
+                  <div class="result-box"></div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer-note">
+        <div class="footer-note__dot"></div>
+        <div class="muted">
+          If Shippo returns no rates, confirm carrier accounts are enabled and addresses are valid.
+        </div>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<style nonce="<%= PAGE_NONCE %>">
+/* =========================
+   Scoped: admin shippo page
+   Brand: Purple dominant
+   ========================= */
+.admin-shippo-page{
+  --blue:#2563EB;
+  --purple:#7C3AED;
+  --green:#22C55E;
+  --black:#0F172A;
+
+  --bg:#0b1020;
+  --panel:#0f1630;
+  --card:rgba(255,255,255,.95);
+  --card2:rgba(255,255,255,.92);
+  --ink:#0F172A;
+  --muted:#64748B;
+
+  --line:rgba(148,163,184,.35);
+  --line2:rgba(15,23,42,.12);
+
+  --r-xl:22px;
+  --r-lg:18px;
+  --r-md:14px;
+  --shadow: 0 18px 55px rgba(2,6,23,.35);
+
+  max-width: 1150px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.admin-shippo-page *{box-sizing:border-box}
+.admin-shippo-page .muted{color:var(--muted)}
+.admin-shippo-page .tiny{font-size:12px}
+.admin-shippo-page .mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.admin-shippo-page .strong{font-weight:950;color:var(--ink)}
+.admin-shippo-page h1{
+  margin:0;
+  font-size:20px;
+  line-height:1.15;
+  letter-spacing:-.01em;
+  color:#0b1020;
+}
+
+/* Hero */
+.shippo-hero{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:stretch;
+  margin-bottom:12px;
+}
+.shippo-hero__left{
+  flex: 1 1 620px;
+  background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(37,99,235,.10));
+  border: 1px solid rgba(124,58,237,.25);
+  border-radius: var(--r-xl);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.shippo-hero__right{
+  flex: 0 0 260px;
+  display:grid;
+  gap:10px;
+  align-content:stretch;
+}
+.shippo-hero__title{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+.shippo-badge{
+  width:42px;height:42px;border-radius:14px;
+  display:grid;place-items:center;
+  background: rgba(124,58,237,.18);
+  border: 1px solid rgba(124,58,237,.28);
+  font-size:18px;
+}
+
+.shippo-controls{
+  margin-top:12px;
+  display:grid;
+  grid-template-columns: 1.25fr .75fr auto;
+  gap:10px;
+  align-items:end;
+}
+.shippo-controls__actions{
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
+.field{display:grid;gap:6px}
+.field__label{
+  font-size:12px;
+  font-weight:900;
+  color: rgba(15,23,42,.85);
+  letter-spacing:.04em;
+  text-transform: uppercase;
+}
+.input,.select{
+  width:100%;
+  padding:10px 12px;
+  border-radius: 14px;
+  border:1px solid rgba(148,163,184,.55);
+  background: rgba(255,255,255,.96);
+  color: var(--ink);
+  outline:none;
+}
+.input:focus,.select:focus{
+  border-color: rgba(124,58,237,.55);
+  box-shadow: 0 0 0 4px rgba(124,58,237,.14);
+}
+
+/* KPIs */
+.kpi{
+  border-radius: var(--r-xl);
+  padding: 12px;
+  border:1px solid rgba(148,163,184,.45);
+  background: rgba(255,255,255,.92);
+  box-shadow: var(--shadow);
+}
+.kpi--purple{border-color: rgba(124,58,237,.28); background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(255,255,255,.92));}
+.kpi--blue{border-color: rgba(37,99,235,.25); background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(255,255,255,.92));}
+.kpi__label{font-size:12px;font-weight:950;letter-spacing:.04em;text-transform:uppercase;color:rgba(15,23,42,.75)}
+.kpi__value{font-size:22px;font-weight:1000;color:var(--black);margin-top:2px}
+.kpi__value--small{font-size:14px;font-weight:950}
+.kpi__hint{margin-top:6px;font-size:12px;color:rgba(15,23,42,.68)}
+
+/* Panel */
+.panel{
+  background: rgba(255,255,255,.92);
+  border:1px solid rgba(124,58,237,.18);
+  border-radius: var(--r-xl);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+.panel__top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.panel__title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.panel__hint{font-size:12px}
+
+/* Pills & tags */
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(124,58,237,.12);
+  border: 1px solid rgba(124,58,237,.25);
+  color: var(--purple);
+  font-weight: 950;
+  font-size: 12px;
+}
+.pill--solid{
+  background: rgba(15,23,42,.04);
+  border-color: rgba(15,23,42,.12);
+  color: var(--black);
+}
+.tag{
+  display:inline-flex;
+  align-items:center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 950;
+  border:1px solid transparent;
+}
+.tag--green{background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.25); color:#166534}
+.tag--blue{background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.25); color:#1d4ed8}
+.tag--gray{background: rgba(100,116,139,.10); border-color: rgba(100,116,139,.22); color:#334155}
+.row-badges{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+
+/* Table */
+.table-wrap{
+  overflow:auto;
+  border-radius: var(--r-lg);
+  border:1px solid rgba(148,163,184,.45);
+  background: rgba(255,255,255,.94);
+}
+.tbl{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width: 900px;
+}
+.tbl th,.tbl td{
+  padding: 10px;
+  border-bottom: 1px solid rgba(148,163,184,.30);
+  vertical-align: top;
+}
+.tbl thead th{
+  background: linear-gradient(180deg, rgba(124,58,237,.08), rgba(37,99,235,.05));
+  color: var(--black);
+  font-size: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.tbl tbody tr.row:hover td{background: rgba(124,58,237,.04)}
+.th-actions{width: 280px}
+
+/* Buttons */
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  text-decoration:none;
+  font-weight: 950;
+  font-size: 13px;
+  cursor:pointer;
+  user-select:none;
+  white-space:nowrap;
+}
+.btn-sm{padding:7px 10px;border-radius:12px;font-size:12px}
+.btn-primary{
+  background: linear-gradient(135deg, rgba(124,58,237,1), rgba(37,99,235,.95));
+  color:#fff;
+  border-color: rgba(124,58,237,.65);
+  box-shadow: 0 10px 22px rgba(124,58,237,.25);
+}
+.btn-outline{
+  background:#fff;
+  border-color: rgba(148,163,184,.65);
+  color: var(--black);
+}
+.btn:disabled{opacity:.65;cursor:not-allowed}
+.link{color: var(--blue); font-weight: 950; text-decoration:none}
+.link:hover{text-decoration:underline}
+
+/* Actions layout */
+.actions{white-space:nowrap}
+.actions__grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:8px;
+  align-items:start;
+}
+.stack{display:grid;gap:6px}
+
+/* Result area */
+.result-row td{background: rgba(124,58,237,.04)}
+.result-box{
+  display:grid;
+  gap:10px;
+  padding: 10px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(124,58,237,.18);
+  background: rgba(255,255,255,.95);
+}
+.result-head{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+}
+.result-title{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.alert{
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid;
+  background:#fff;
+}
+.alert--ok{border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.10); color:#166534; font-weight:950}
+.alert--bad{border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.10); color:#991B1B; font-weight:950}
+
+.codebox{
+  margin:0;
+  padding:10px;
+  border-radius: 14px;
+  border:1px solid rgba(148,163,184,.45);
+  background: rgba(248,250,252,1);
+  max-width:100%;
+  overflow:auto;
+  font-size:12px;
+}
+
+/* Address form */
+.addr-form{
+  display:grid;
+  gap:10px;
+  padding: 10px;
+  border-radius: var(--r-lg);
+  border: 1px dashed rgba(37,99,235,.30);
+  background: linear-gradient(135deg, rgba(37,99,235,.06), rgba(124,58,237,.06));
+}
+.addr-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+}
+.addr-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.help{
+  font-size:12px;
+  color: rgba(15,23,42,.65);
+}
+
+/* Flash */
+.flash{
+  padding:10px 12px;
+  border-radius: 14px;
+  margin: 10px 0;
+  border: 1px solid;
+  box-shadow: 0 10px 26px rgba(2,6,23,.10);
+}
+.flash-success{background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.25); color:#166534}
+.flash-error{background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.25); color:#991B1B}
+
+/* Empty */
+.empty{
+  padding: 18px;
+  border-radius: var(--r-xl);
+  border: 1px solid rgba(148,163,184,.45);
+  background: linear-gradient(135deg, rgba(124,58,237,.06), rgba(34,197,94,.04));
+  text-align:center;
+}
+.empty__icon{font-size:30px}
+.empty__title{font-weight:1000;color:var(--black);margin-top:6px}
+.empty__text{margin-top:6px}
+
+/* Footer note */
+.footer-note{
+  margin-top:12px;
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding: 12px;
+  border-radius: var(--r-xl);
+  border: 1px solid rgba(34,197,94,.20);
+  background: rgba(34,197,94,.06);
+}
+.footer-note__dot{
+  width:10px;height:10px;border-radius:999px;
+  background: var(--green);
+  margin-top:4px;
+}
+
+/* ===== Mobile transformation ===== */
+@media (max-width: 920px){
+  .shippo-hero__right{flex: 1 1 260px}
+  .shippo-controls{
+    grid-template-columns: 1fr 1fr;
+  }
+  .shippo-controls__actions{
+    grid-column: 1 / -1;
+    justify-content:flex-start;
+  }
+  .tbl{min-width: 760px}
+}
+@media (max-width: 640px){
+  .admin-shippo-page{padding: 10px}
+  .shippo-controls{grid-template-columns: 1fr}
+  .shippo-controls__actions{justify-content:space-between}
+  .shippo-hero__right{grid-template-columns: 1fr 1fr}
+  .kpi__value{font-size:18px}
+
+  /* Turn table into cards */
+  .table-wrap{border:none;background:transparent;overflow:visible}
+  .tbl{min-width:0}
+  .tbl thead{display:none}
+  .tbl, .tbl tbody, .tbl tr, .tbl td{display:block;width:100%}
+  .tbl tbody tr.row{
+    border: 1px solid rgba(124,58,237,.18);
+    border-radius: var(--r-xl);
+    background: rgba(255,255,255,.95);
+    margin-bottom: 10px;
+    overflow:hidden;
+    box-shadow: 0 14px 40px rgba(2,6,23,.12);
+  }
+  .tbl tbody tr.row td{
+    border-bottom: 1px solid rgba(148,163,184,.25);
+    padding: 10px 12px;
+  }
+  .tbl tbody tr.row td:last-child{border-bottom:none}
+  .tbl tbody tr.row td::before{
+    content: attr(data-label);
+    display:block;
+    font-size: 11px;
+    font-weight: 950;
+    letter-spacing:.05em;
+    text-transform: uppercase;
+    color: rgba(15,23,42,.62);
+    margin-bottom: 6px;
+  }
+  .actions{white-space:normal}
+  .actions__grid{
+    grid-template-columns: 1fr;
+  }
+  .btn{width:100%}
+  .btn-outline, .btn-primary{justify-content:center}
+  .result-row td{
+    border:none;
+    padding: 0;
+    background: transparent;
+  }
+  .result-box{margin-top:-6px}
+  .addr-grid{grid-template-columns: 1fr}
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  .btn{transition:none}
+}
+</style>
+
+<script nonce="<%= PAGE_NONCE %>">
+document.addEventListener('DOMContentLoaded', () => {
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  const searchInput = $('#shippoSearch');
+  const fulfillSelect = $('#shippoFulfillment');
+  const clearBtn = $('#shippoClearFilters');
+  const tbody = $('#shippoTbody');
+  const countEl = $('#shippoCount');
+
+  function norm(s){ return String(s || '').toLowerCase().trim(); }
+
+  function applyFilters(){
+    const q = norm(searchInput && searchInput.value);
+    const f = norm(fulfillSelect && fulfillSelect.value);
+
+    const rows = $$('tr.row', tbody);
+    let shown = 0;
+
+    rows.forEach(row => {
+      const orderId = row.getAttribute('data-orderid') || '';
+      const fulfill = row.getAttribute('data-fulfillment') || '';
+
+      const text = norm(row.textContent);
+      const okQ = !q || norm(orderId).includes(q) || text.includes(q);
+      const okF = !f || norm(fulfill) === f;
+
+      const show = okQ && okF;
+      row.style.display = show ? '' : 'none';
+
+      const resultRow = document.getElementById(`result-${orderId}`);
+      if (!show && resultRow) resultRow.style.display = 'none';
+
+      if (show) shown++;
+    });
+
+    if (countEl) countEl.textContent = String(shown);
+  }
+
+  if (searchInput) searchInput.addEventListener('input', applyFilters);
+  if (fulfillSelect) fulfillSelect.addEventListener('change', applyFilters);
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (searchInput) searchInput.value = '';
+    if (fulfillSelect) fulfillSelect.value = '';
+    applyFilters();
+  });
+
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  function showResult(orderId, html){
+    const row = document.getElementById(`result-${orderId}`);
+    const box = row ? row.querySelector('.result-box') : null;
+    if (!row || !box) return null;
+    row.style.display = '';
+    box.innerHTML = html;
+    return { row, box };
+  }
+
+  async function createLabel(orderId) {
+    const btn = document.querySelector(`.js-create[data-orderid="${orderId}"]`);
+    if (!btn) return;
+
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = 'Working…';
+
+    showResult(orderId, `<div class="alert">Calling Shippo…</div>`);
+
+    try {
+      const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok || !data.ok) {
+        const shippo = data.shippo || null;
+        const details = shippo
+          ? `<pre class="codebox">${escapeHtml(JSON.stringify(shippo, null, 2))}</pre>`
+          : '';
+
+        showResult(orderId, `
+          <div class="result-head">
+            <div class="result-title">
+              <span class="alert alert--bad">❌ ${escapeHtml(data.message || 'Shippo failed')}</span>
+              <span class="help">Fix address or check carrier accounts, then try again.</span>
+            </div>
+          </div>
+          ${details}
+        `);
+        return;
+      }
+
+      const labelUrl = data.labelUrl || '';
+      const trackingNumber = data.trackingNumber || '';
+      let trackingUrl = data.trackingUrl || '';
+      const carrierToken = (data.carrierToken || '').toLowerCase();
+
+      // ✅ Tracking URL fallback (works even when provider link is missing)
+      if (!trackingUrl && trackingNumber) {
+        if (carrierToken === 'usps') {
+          trackingUrl = `https://tools.usps.com/go/TrackConfirmAction_input?origTrackNum=${encodeURIComponent(trackingNumber)}`;
+        } else if (carrierToken === 'ups') {
+          trackingUrl = `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(trackingNumber)}`;
+        } else if (carrierToken === 'fedex') {
+          trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}`;
+        } else if (carrierToken === 'dhl') {
+          trackingUrl = `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${encodeURIComponent(trackingNumber)}`;
+        }
+      }
+
+      showResult(orderId, `
+        <div class="result-head">
+          <div class="result-title">
+            <span class="alert alert--ok">✅ Label created</span>
+            ${trackingNumber ? `<span class="mono">Tracking: ${escapeHtml(trackingNumber)}</span>` : ''}
+          </div>
+          <div class="result-title">
+            ${labelUrl ? `<a class="btn btn-sm btn-primary" href="${labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
+            ${(trackingUrl || trackingNumber) ? `
+              <a class="btn btn-sm btn-outline"
+                 href="${trackingUrl || `/orders/tracking/${encodeURIComponent(orderId)}`}"
+                 target="_blank" rel="noopener">Courier tracking</a>` : ''
+            }
+          </div>
+        </div>
+        <div class="help">Saved to the order. Refresh if you want to see it in the row.</div>
+      `);
+
+      btn.textContent = 'Done';
+    } catch (e) {
+      showResult(orderId, `<span class="alert alert--bad">❌ ${escapeHtml(e.message || 'Network error')}</span>`);
+    } finally {
+      btn.disabled = false;
+      if (btn.textContent === 'Working…') btn.textContent = oldText;
+    }
+  }
+
+  async function showRates(orderId) {
+    showResult(orderId, `<div class="alert">Loading rates…</div>`);
+
+    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/rates`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      showResult(orderId, `<span class="alert alert--bad">❌ ${escapeHtml(data.message || 'Failed to load rates')}</span>`);
+      return;
+    }
+
+    const rates = Array.isArray(data.rates) ? data.rates : [];
+    if (!rates.length) {
+      showResult(orderId, `<div class="alert">No rates returned for this order.</div>`);
+      return;
+    }
+
+    const rows = rates.map(rt => `
+      <tr>
+        <td><strong>${escapeHtml(rt.provider || '')}</strong></td>
+        <td>${escapeHtml(rt.service || '')}</td>
+        <td>${rt.estimatedDays != null ? `~${escapeHtml(rt.estimatedDays)} days` : escapeHtml(rt.durationTerms || '—')}</td>
+        <td><strong>${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}</strong></td>
+        <td class="rates-actions">
+          <button class="btn btn-sm btn-primary js-buy-rate"
+            data-orderid="${escapeHtml(orderId)}"
+            data-rateid="${escapeHtml(rt.id)}">
+            Buy this
+          </button>
+        </td>
+      </tr>
+    `).join('');
+
+    showResult(orderId, `
+      <div class="result-head">
+        <div class="result-title">
+          <strong>Available rates</strong>
+          <span class="help">Choose a rate to buy a label.</span>
+        </div>
+        <div class="result-title">
+          <button class="btn btn-sm btn-primary js-buy-cheapest" data-orderid="${escapeHtml(orderId)}">Buy cheapest</button>
+          <button class="btn btn-sm btn-outline js-buy-fastest" data-orderid="${escapeHtml(orderId)}">Buy fastest</button>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="border-radius:14px">
+        <table class="tbl" style="min-width:760px">
+          <thead>
+            <tr>
+              <th>Carrier</th>
+              <th>Service</th>
+              <th>ETA</th>
+              <th>Price</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `);
+  }
+
+  // Events
+  $$('.js-rates').forEach(btn => {
+    btn.addEventListener('click', () => showRates(btn.dataset.orderid));
+  });
+
+  $$('.js-create').forEach(btn => {
+    btn.addEventListener('click', () => createLabel(btn.dataset.orderid));
+  });
+
+  // Buy chosen rate
+  document.addEventListener('click', async (e) => {
+    const buyBtn = e.target.closest('.js-buy-rate');
+    if (!buyBtn) return;
+
+    const orderId = buyBtn.dataset.orderid;
+    const rateId = buyBtn.dataset.rateid;
+
+    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ rateId })
+    });
+
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      alert(`❌ ${data.message || 'Failed to buy label'}`);
+      return;
+    }
+
+    alert('✅ Label bought. Refreshing…');
+    location.reload();
+  });
+
+  // Buy cheapest / fastest presets
+  document.addEventListener('click', async (e) => {
+    const cheapest = e.target.closest('.js-buy-cheapest');
+    const fastest = e.target.closest('.js-buy-fastest');
+    const btn = cheapest || fastest;
+    if (!btn) return;
+
+    const orderId = btn.dataset.orderid;
+    const chooseRate = cheapest ? 'cheapest' : 'fastest';
+
+    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ chooseRate })
+    });
+
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      alert(`❌ ${data.message || 'Failed to buy label'}`);
+      return;
+    }
+
+    alert(`✅ Label bought (${chooseRate}). Refreshing…`);
+    location.reload();
+  });
+
+  // ✅ Fix address: inline form (no prompts)
+  $$('.js-fixaddr').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const orderId = btn.dataset.orderid;
+
+      const html = `
+        <div class="result-head">
+          <div class="result-title">
+            <strong>Fix address</strong>
+            <span class="help">Update the shipping address, then create label again.</span>
+          </div>
+          <div class="result-title">
+            <button type="button" class="btn btn-sm btn-outline js-close-result" data-orderid="${escapeHtml(orderId)}">Close</button>
+          </div>
+        </div>
+
+        <form class="addr-form js-addr-form" data-orderid="${escapeHtml(orderId)}">
+          <div class="addr-grid">
+            <label class="field">
+              <span class="field__label">Street 1</span>
+              <input class="input" name="street1" placeholder="e.g. 1 Market St" required />
+            </label>
+
+            <label class="field">
+              <span class="field__label">Street 2</span>
+              <input class="input" name="street2" placeholder="Apartment / Suite (optional)" />
+            </label>
+
+            <label class="field">
+              <span class="field__label">City</span>
+              <input class="input" name="city" placeholder="e.g. San Francisco" required />
+            </label>
+
+            <label class="field">
+              <span class="field__label">State</span>
+              <input class="input" name="state" placeholder="e.g. CA (2-letter)" required />
+            </label>
+
+            <label class="field">
+              <span class="field__label">ZIP</span>
+              <input class="input" name="zip" placeholder="e.g. 94107" required />
+            </label>
+
+            <label class="field">
+              <span class="field__label">Country</span>
+              <select class="select" name="country" required>
+                <option value="US" selected>US</option>
+                <option value="ZA">ZA</option>
+                <option value="GB">GB</option>
+                <option value="CA">CA</option>
+                <option value="AU">AU</option>
+                <option value="DE">DE</option>
+                <option value="FR">FR</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="addr-actions">
+            <button type="button" class="btn btn-outline js-fill-demo">Fill example</button>
+            <button type="submit" class="btn btn-primary">Save address</button>
+          </div>
+
+          <div class="help">Tip: For US, State should be 2 letters (e.g. CA). Country should be ISO code (e.g. US).</div>
+          <div class="js-addr-status"></div>
+        </form>
+      `;
+
+      showResult(orderId, html);
+    });
+  });
+
+  // Close result panel
+  document.addEventListener('click', (e) => {
+    const close = e.target.closest('.js-close-result');
+    if (!close) return;
+    const orderId = close.dataset.orderid;
+    const row = document.getElementById(`result-${orderId}`);
+    if (row) row.style.display = 'none';
+  });
+
+  // Fill demo values
+  document.addEventListener('click', (e) => {
+    const fill = e.target.closest('.js-fill-demo');
+    if (!fill) return;
+    const form = fill.closest('.js-addr-form');
+    if (!form) return;
+
+    form.street1.value = '1 Market St';
+    form.street2.value = '';
+    form.city.value = 'San Francisco';
+    form.state.value = 'CA';
+    form.zip.value = '94107';
+    form.country.value = 'US';
+  });
+
+  // Submit address update
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest('.js-addr-form');
+    if (!form) return;
+
+    e.preventDefault();
+    const orderId = form.dataset.orderid;
+    const statusBox = form.querySelector('.js-addr-status');
+
+    const payload = {
+      street1: form.street1.value.trim(),
+      street2: form.street2.value.trim(),
+      city: form.city.value.trim(),
+      state: form.state.value.trim(),
+      zip: form.zip.value.trim(),
+      country: String(form.country.value || 'US').toUpperCase()
+    };
+
+    if (statusBox) statusBox.innerHTML = `<div class="alert">Saving…</div>`;
+
+    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/update-address`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await r.json().catch(()=>({}));
+
+    if (!r.ok || !data.ok) {
+      if (statusBox) statusBox.innerHTML = `<div class="alert alert--bad">❌ ${escapeHtml(data.message || 'Could not update address')}</div>`;
+      return;
+    }
+
+    if (statusBox) statusBox.innerHTML = `<div class="alert alert--ok">✅ Address updated. Now click “Create label”.</div>`;
+  });
+
+  // Initialize count after render
+  applyFilters();
+});
+</script>

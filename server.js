@@ -516,6 +516,7 @@ app.use((req, res, next) => {
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const productRatingsApiRoutes = require('./routes/productRatingsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
+const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
@@ -536,8 +537,9 @@ const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminOrdersApi = require('./routes/adminOrdersApi');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
-const ordersRoutes = require('./routes/orders');
 const debugDangerRoutes = require('./routes/debugDanger');
+const ordersDetailsRoutes = require('./routes/orderDetails');
+const ordersRoutes = require('./routes/orders');
 app.use('/_danger', debugDangerRoutes);
 
 if (ratingsRouter) {
@@ -567,6 +569,7 @@ app.use('/admin', adminRoutes);
 app.use('/admin', adminBizVerifyRoutes);
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);
+app.use(adminShippoRoutes);
 app.use('/admin', adminPayoutsRoutes);
 
 // Commerce / catalog
@@ -597,10 +600,10 @@ app.use('/users', wishlistRoutes);
 
 // Password reset
 app.use('/users/password', passwordResetRoutes);
-// Orders list + details pages
-app.use('/orders', ordersRoutes);
 // Tracking (separate namespace so it never conflicts)
 app.use('/orders/tracking', orderTrackingRoutes);
+app.use('/orderDetails', ordersDetailsRoutes);
+app.use(ordersRoutes);
 
 /* ---------------------------------------
    Additional Routes
