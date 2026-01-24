@@ -61,7 +61,7 @@ function buildParcel() {
 
 function pickStr(...vals) {
   for (const v of vals) {
-    const s = (v === undefined || v === null) ? '' : String(v).trim();
+    const s = v === undefined || v === null ? '' : String(v).trim();
     if (s) return s;
   }
   return '';
@@ -90,7 +90,6 @@ function normalizePhoneE164(rawPhone, country2) {
 
   // UK basic (if ever used)
   if (cc === 'GB') {
-    // if starts with 0, drop it and add +44
     if (digits.length >= 10 && digits.startsWith('0')) return `+44${digits.slice(1)}`;
     if (digits.startsWith('44')) return `+${digits}`;
   }
@@ -115,23 +114,16 @@ function toNumber(v, fallback = 0) {
 function buildCustomsItemsFromOrder(order) {
   const items = Array.isArray(order?.items) ? order.items : [];
 
-  // Shippo requires at least 1 customs item for international
   const customsItems = items.map((it, idx) => {
     const name = String(it?.name || `Item ${idx + 1}`).slice(0, 50);
-
-    // quantity must be integer string
     const qty = Math.max(1, Math.floor(toNumber(it?.quantity, 1)));
 
-    // Use gross if you want (customs value), or net; just be consistent.
     const unitVal =
       toNumber(it?.priceGross?.value, NaN) ||
       toNumber(it?.price?.value, NaN) ||
       toNumber(it?.price, NaN) ||
       1;
 
-    // Very important: customs needs weight.
-    // If you don't store per-item weight yet, use a small default for testing.
-    // Later we can use product.weight from DB.
     const weight = 0.2; // kg default per item (testing)
 
     return {
@@ -142,13 +134,12 @@ function buildCustomsItemsFromOrder(order) {
       value_amount: String(unitVal.toFixed(2)),
       value_currency: (order?.amount?.currency || 'USD').toUpperCase(),
 
-      // Required-ish fields; safe defaults for testing
-      origin_country: (process.env.SHIPPO_FROM_COUNTRY || 'US').toUpperCase(),
+      // ✅ Use your FROM country (defaults to ZA, not US)
+      origin_country: String(process.env.SHIPPO_FROM_COUNTRY || 'ZA').toUpperCase(),
       tariff_number: '0000.00.00',
     };
   });
 
-  // If order has no items for some reason, create a safe fallback
   if (!customsItems.length) {
     customsItems.push({
       description: 'Merchandise',
@@ -157,7 +148,7 @@ function buildCustomsItemsFromOrder(order) {
       mass_unit: 'kg',
       value_amount: '1.00',
       value_currency: (order?.amount?.currency || 'USD').toUpperCase(),
-      origin_country: (process.env.SHIPPO_FROM_COUNTRY || 'US').toUpperCase(),
+      origin_country: String(process.env.SHIPPO_FROM_COUNTRY || 'ZA').toUpperCase(),
       tariff_number: '0000.00.00',
     });
   }
@@ -166,8 +157,6 @@ function buildCustomsItemsFromOrder(order) {
 }
 
 function readPaypalShipping(order) {
-  // common shapes seen in apps:
-  // order.paypal.purchase_units[0].shipping.address
   const pu = order?.paypal?.purchase_units?.[0] || null;
   const ship = pu?.shipping || null;
   const addr = ship?.address || null;
@@ -188,31 +177,21 @@ function mapOrderToShippoToAddress(order) {
       [order?.payer?.name?.given_name, order?.payer?.name?.surname].filter(Boolean).join(' ')
     ) || 'Customer';
 
-    const countryGuess =
-    pickUpper(s.country_code, s.country, ppAddr?.country_code) || 'US';
+  // ✅ Do NOT default to US. Default to your FROM country (ZA).
+  const countryGuess =
+    pickUpper(s.country_code, s.country, ppAddr?.country_code) ||
+    String(process.env.SHIPPO_FROM_COUNTRY || 'ZA').toUpperCase();
 
   const rawPhone =
-    pickStr(
-      s.phone,
-      order?.payer?.phone,
-      order?.payer?.phone_number,
-      order?.payer?.phone?.phone_number
-    ) || '';
+    pickStr(s.phone, order?.payer?.phone, order?.payer?.phone_number, order?.payer?.phone?.phone_number) || '';
 
   const phoneNorm = normalizePhoneE164(rawPhone, countryGuess);
 
-  // Shippo/USPS needs a valid phone for some services
-  // If you prefer to hard-fail instead of using fallback, see comment below.
-  const phone = phoneNorm || '+14155550123'; // safe fallback (dev/testing)
+  // Keep your safe fallback (still ok for dev/testing)
+  const phone = phoneNorm || '+14155550123';
 
-  const email =
-    pickStr(
-      s.email,
-      order?.payer?.email,
-      order?.payer?.email_address
-    ) || undefined;
+  const email = pickStr(s.email, order?.payer?.email, order?.payer?.email_address) || undefined;
 
-  // Prefer your saved shipping, else PayPal shipping address
   const street1 = pickStr(s.address_line_1, s.street1, s.line1, ppAddr?.address_line_1);
   const street2 = pickStr(s.address_line_2, s.street2, s.line2, ppAddr?.address_line_2) || undefined;
   const city = pickStr(s.admin_area_2, s.city, ppAddr?.admin_area_2);
@@ -242,16 +221,11 @@ function requireToFields(addressTo) {
   if (!addressTo.city) missing.push('city');
   if (!addressTo.country) missing.push('country');
 
-  // ✅ State/ZIP rules:
-  // - US: requires state + zip
-  // - Other countries: state is often optional; zip is usually required but not always.
-  //   We keep zip required for now because most Shippo rating needs it.
   if (country === 'US') {
     if (!addressTo.state) missing.push('state');
     if (!addressTo.zip) missing.push('zip');
   } else {
     if (!addressTo.zip) missing.push('zip');
-    // state is optional outside US
   }
 
   if (missing.length) {
@@ -264,7 +238,6 @@ function requireToFields(addressTo) {
 function normalizeAddressTo(addressTo) {
   const a = { ...addressTo };
 
-  // trim fields
   a.street1 = pickStr(a.street1);
   a.street2 = pickStr(a.street2) || undefined;
   a.city = pickStr(a.city);
@@ -272,10 +245,7 @@ function normalizeAddressTo(addressTo) {
   a.zip = pickStr(a.zip);
   a.country = pickUpper(a.country);
 
-  // If country is US, enforce 2-letter state + ZIP
   if (a.country === 'US') {
-    // common bad cases: "California" instead of "CA"
-    // You can extend this map if needed.
     const STATE_MAP = {
       CALIFORNIA: 'CA',
       NEWYORK: 'NY',
@@ -290,7 +260,6 @@ function normalizeAddressTo(addressTo) {
       if (mapped) a.state = mapped;
     }
 
-    // Basic ZIP sanity (5 digits or 5-4)
     const zipOk = /^\d{5}(-\d{4})?$/.test(a.zip);
     if (!zipOk) {
       const err = new Error(`Invalid US ZIP code saved on order: "${a.zip}"`);
@@ -316,19 +285,22 @@ async function pollTransactionUntilDone(tx, { attempts = 10, delayMs = 1200 } = 
     const st = String(cur?.status || cur?.object_status || '').toUpperCase();
 
     if (label) return cur;
-
-    // If ERROR, stop immediately
     if (st === 'ERROR' || st === 'FAILED') return cur;
-
-    // If we can’t poll, stop
     if (!cur?.object_id) return cur;
 
-    // Wait then poll
     await delay(delayMs);
     cur = await shippoFetch(`/transactions/${encodeURIComponent(cur.object_id)}/`, { method: 'GET' });
   }
 
   return cur;
+}
+
+function providerToShippoCarrierToken(providerName) {
+  const raw = String(providerName || '').trim().toLowerCase();
+  if (!raw) return null;
+
+  // "DHL Express" -> "dhl_express"
+  return raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = null } = {}) {
@@ -339,16 +311,14 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
   requireToFields(address_to);
   address_to = normalizeAddressTo(address_to);
 
-
   const parcel = buildParcel();
 
-    const isInternational =
+  const isInternational =
     String(address_from.country || '').toUpperCase() !== String(address_to.country || '').toUpperCase();
 
   let customs_declaration = undefined;
 
   if (isInternational) {
-    // 1) create customs items
     const customsItems = buildCustomsItemsFromOrder(order);
 
     const createdItems = [];
@@ -357,16 +327,15 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
       createdItems.push(item.object_id);
     }
 
-    // 2) create customs declaration
     const decl = await shippoFetch('/customs/declarations/', {
       method: 'POST',
       body: {
         contents_type: 'MERCHANDISE',
         non_delivery_option: 'RETURN',
         certify: true,
-        certify_signer: process.env.SHIPPO_CUSTOMS_SIGNER || (address_from.name || 'Sender'),
+        certify_signer: process.env.SHIPPO_CUSTOMS_SIGNER || address_from.name || 'Sender',
         items: createdItems,
-        eel_pfc: 'NOEEI_30_37_a', // safe for low-value / test; we can adjust later
+        eel_pfc: 'NOEEI_30_37_a',
         incoterm: 'DDU',
       },
     });
@@ -383,7 +352,6 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
       parcels: [parcel],
       async: false,
       metadata: `order:${order.orderId || order._id}`,
-
       ...(customs_declaration ? { customs_declaration } : {}),
     },
   });
@@ -399,16 +367,25 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
 
   // ✅ If admin selected a specific rateId, use it
   if (rateId) {
-    const found = rates.find(r => String(r.object_id) === String(rateId));
-    if (!found) {
-      const err = new Error('Selected rate not found for this shipment.');
-      err.shippo = { rateId, ratesCount: rates.length };
-      throw err;
-    }
-    chosen = found;
+    const found = rates.find((r) => String(r.object_id) === String(rateId));
+
+    // IMPORTANT:
+    // GET /rates created Shipment A and returned rate IDs for Shipment A.
+    // POST /create-label creates Shipment B again, so the selected rateId might not appear in Shipment B rates.
+    // Do NOT throw. Use rateId directly and let Shippo validate it.
+    chosen =
+      found ||
+      {
+        object_id: String(rateId),
+        provider: '',
+        servicelevel: { name: '', token: '' },
+        amount: '',
+        currency: '',
+        estimated_days: null,
+        duration_terms: '',
+      };
   } else if (chooseRate === 'fastest') {
-    // fastest: lowest estimated_days (fallback to cheapest)
-    const withEta = rates.filter(r => r.estimated_days != null);
+    const withEta = rates.filter((r) => r.estimated_days != null);
     chosen = (withEta.length ? withEta : rates)
       .slice()
       .sort((a, b) => {
@@ -418,7 +395,6 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
         return Number(a.amount) - Number(b.amount);
       })[0];
   } else {
-    // default cheapest
     chosen = rates.slice().sort((a, b) => Number(a.amount) - Number(b.amount))[0];
   }
 
@@ -448,21 +424,20 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
     throw err;
   }
 
-  // ✅ Build a carrier value that can match your Order enum (usually "USPS" / "UPS")
-  const providerName = String(chosen?.provider || '').trim(); // e.g. "USPS"
-  const carrierEnum =
-    providerName.toUpperCase() === 'USPS' ? 'USPS' :
-    providerName.toUpperCase() === 'UPS'  ? 'UPS'  :
-    null;
+  // ✅ No hardcoded USPS/UPS here. Admin route will enum-map safely.
+  const providerName = String(chosen?.provider || '').trim();
+  const carrierToken = providerToShippoCarrierToken(providerName);
 
   return {
     shipment,
     chosenRate: chosen,
     transaction: tx,
 
-    // ✅ extra fields for saving safely in Mongo
-    carrierEnum, // "USPS" / "UPS" / null
-    carrierToken: providerName ? providerName.toLowerCase() : null, // "usps" / "ups"
+    // Let adminShippo.js decide enum-safe value (don’t hardcode)
+    carrierEnum: null,
+
+    // Shippo tracking token for /tracks/{carrier}/{trackingNumber}
+    carrierToken,
   };
 }
 
@@ -496,7 +471,7 @@ async function getRatesForOrder(order) {
         contents_type: 'MERCHANDISE',
         non_delivery_option: 'RETURN',
         certify: true,
-        certify_signer: process.env.SHIPPO_CUSTOMS_SIGNER || (address_from.name || 'Sender'),
+        certify_signer: process.env.SHIPPO_CUSTOMS_SIGNER || address_from.name || 'Sender',
         items: createdItems,
         eel_pfc: 'NOEEI_30_37_a',
         incoterm: 'DDU',

@@ -75,10 +75,21 @@
   </header>
 
   <!-- Flash messages (keep compatible with your layout flash system) -->
-  <% (success || []).forEach(msg => { %>
+    <%
+    const toArray = (v) => {
+      if (!v) return [];
+      if (Array.isArray(v)) return v;
+      return [String(v)];
+    };
+    const successList = toArray(success);
+    const errorList = toArray(error);
+  %>
+
+  <% successList.forEach(msg => { %>
     <div class="flash flash-success">✅ <%= msg %></div>
   <% }) %>
-  <% (error || []).forEach(msg => { %>
+
+  <% errorList.forEach(msg => { %>
     <div class="flash flash-error">❌ <%= msg %></div>
   <% }) %>
 
@@ -126,10 +137,33 @@
 
               const trackNum = o?.shippingTracking?.trackingNumber || '';
               const trackUrl = o?.shippingTracking?.trackingUrl || '';
+
+              const inferFromUrl = (url) => {
+                const u = String(url || '').toLowerCase();
+                if (!u) return '';
+                if (u.includes('dhl')) return 'DHL';
+                if (u.includes('fedex')) return 'FEDEX';
+                if (u.includes('ups')) return 'UPS';
+                if (u.includes('usps') || u.includes('postal')) return 'USPS';
+                return '';
+              };
+
+              const label = (o?.shippingTracking?.carrierLabel && String(o.shippingTracking.carrierLabel).trim()) || '';
+
+              const tokenLabel =
+                (o?.shippingTracking?.carrierToken && String(o.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim()) ||
+                (o?.shippo?.carrier && String(o.shippo.carrier).replace(/_/g, ' ').toUpperCase().trim()) ||
+                '';
+
+              const bad = (s) => {
+                const n = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                return !n || n === 'UNKNOWN' || n === 'OTHER' || n === 'SHIPPO';
+              };
+
               const carrier =
-                o?.shippingTracking?.carrierLabel ||
-                o?.shippingTracking?.carrierToken ||
-                o?.shippingTracking?.carrier ||
+                (!bad(label) ? label : '') ||
+                inferFromUrl(trackUrl) ||
+                (!bad(tokenLabel) ? tokenLabel : '') ||
                 '';
 
               const fulfill =
@@ -191,7 +225,9 @@
                   <% if (trackNum) { %>
                     <div class="stack">
                       <div class="mono"><%= trackNum %></div>
-                      <div class="muted tiny">Carrier: <%= carrier %></div>
+                      <% if (carrier) { %>
+                        <div class="muted tiny">Carrier: <%= carrier %></div>
+                      <% } %>
                       <% if (trackUrl) { %>
                         <a class="link tiny" href="<%= trackUrl %>" target="_blank" rel="noopener">Open tracking link</a>
                       <% } %>
@@ -207,10 +243,11 @@
                       type="button"
                       class="btn btn-primary btn-sm js-create"
                       data-orderid="<%= o.orderId %>"
+                      data-has-label="<%= hasLabel ? '1' : '0' %>"
                     >
-                      <%= hasLabel ? 'Re-use saved label' : 'Create label' %>
+                      <%= hasLabel ? 'Re-use saved label' : 'Choose rate & buy' %>
                     </button>
-
+                    
                     <button
                       type="button"
                       class="btn btn-outline btn-sm js-rates"
@@ -685,8 +722,8 @@
 
 <script nonce="<%= PAGE_NONCE %>">
 document.addEventListener('DOMContentLoaded', () => {
-  const $ = (sel, root=document) => root.querySelector(sel);
-  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const $ = (sel, root=document) => (root ? root.querySelector(sel) : null);
+  const $$ = (sel, root=document) => (root ? Array.from(root.querySelectorAll(sel)) : []);
 
   const searchInput = $('#shippoSearch');
   const fulfillSelect = $('#shippoFulfillment');
@@ -696,7 +733,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function norm(s){ return String(s || '').toLowerCase().trim(); }
 
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  function showResult(orderId, html){
+    const row = document.getElementById(`result-${orderId}`);
+    const box = row ? row.querySelector('.result-box') : null;
+    if (!row || !box) return null;
+    row.style.display = '';
+    box.innerHTML = html;
+    return { row, box };
+  }
+
   function applyFilters(){
+    if (!tbody) return; // ✅ prevents crash when list is empty
     const q = norm(searchInput && searchInput.value);
     const f = norm(fulfillSelect && fulfillSelect.value);
 
@@ -731,105 +787,6 @@ document.addEventListener('DOMContentLoaded', () => {
     applyFilters();
   });
 
-  function escapeHtml(s) {
-    return String(s || '')
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#039;');
-  }
-
-  function showResult(orderId, html){
-    const row = document.getElementById(`result-${orderId}`);
-    const box = row ? row.querySelector('.result-box') : null;
-    if (!row || !box) return null;
-    row.style.display = '';
-    box.innerHTML = html;
-    return { row, box };
-  }
-
-  async function createLabel(orderId) {
-    const btn = document.querySelector(`.js-create[data-orderid="${orderId}"]`);
-    if (!btn) return;
-
-    btn.disabled = true;
-    const oldText = btn.textContent;
-    btn.textContent = 'Working…';
-
-    showResult(orderId, `<div class="alert">Calling Shippo…</div>`);
-
-    try {
-      const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
-        method: 'POST',
-        headers: { 'Accept': 'application/json' }
-      });
-
-      const data = await r.json().catch(() => ({}));
-
-      if (!r.ok || !data.ok) {
-        const shippo = data.shippo || null;
-        const details = shippo
-          ? `<pre class="codebox">${escapeHtml(JSON.stringify(shippo, null, 2))}</pre>`
-          : '';
-
-        showResult(orderId, `
-          <div class="result-head">
-            <div class="result-title">
-              <span class="alert alert--bad">❌ ${escapeHtml(data.message || 'Shippo failed')}</span>
-              <span class="help">Fix address or check carrier accounts, then try again.</span>
-            </div>
-          </div>
-          ${details}
-        `);
-        return;
-      }
-
-      const labelUrl = data.labelUrl || '';
-      const trackingNumber = data.trackingNumber || '';
-      let trackingUrl = data.trackingUrl || '';
-      const carrierToken = (data.carrierToken || '').toLowerCase();
-
-      // ✅ Tracking URL fallback (works even when provider link is missing)
-      if (!trackingUrl && trackingNumber) {
-        if (carrierToken === 'usps') {
-          trackingUrl = `https://tools.usps.com/go/TrackConfirmAction_input?origTrackNum=${encodeURIComponent(trackingNumber)}`;
-        } else if (carrierToken === 'ups') {
-          trackingUrl = `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(trackingNumber)}`;
-        } else if (carrierToken === 'fedex') {
-          trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}`;
-        } else if (carrierToken === 'dhl') {
-          trackingUrl = `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${encodeURIComponent(trackingNumber)}`;
-        }
-      }
-
-      showResult(orderId, `
-        <div class="result-head">
-          <div class="result-title">
-            <span class="alert alert--ok">✅ Label created</span>
-            ${trackingNumber ? `<span class="mono">Tracking: ${escapeHtml(trackingNumber)}</span>` : ''}
-          </div>
-          <div class="result-title">
-            ${labelUrl ? `<a class="btn btn-sm btn-primary" href="${labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
-            ${(trackingUrl || trackingNumber) ? `
-              <a class="btn btn-sm btn-outline"
-                 href="${trackingUrl || `/orders/tracking/${encodeURIComponent(orderId)}`}"
-                 target="_blank" rel="noopener">Courier tracking</a>` : ''
-            }
-          </div>
-        </div>
-        <div class="help">Saved to the order. Refresh if you want to see it in the row.</div>
-      `);
-
-      btn.textContent = 'Done';
-    } catch (e) {
-      showResult(orderId, `<span class="alert alert--bad">❌ ${escapeHtml(e.message || 'Network error')}</span>`);
-    } finally {
-      btn.disabled = false;
-      if (btn.textContent === 'Working…') btn.textContent = oldText;
-    }
-  }
-
   async function showRates(orderId) {
     showResult(orderId, `<div class="alert">Loading rates…</div>`);
 
@@ -850,21 +807,25 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const rows = rates.map(rt => `
-      <tr>
-        <td><strong>${escapeHtml(rt.provider || '')}</strong></td>
-        <td>${escapeHtml(rt.service || '')}</td>
-        <td>${rt.estimatedDays != null ? `~${escapeHtml(rt.estimatedDays)} days` : escapeHtml(rt.durationTerms || '—')}</td>
-        <td><strong>${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}</strong></td>
-        <td class="rates-actions">
-          <button class="btn btn-sm btn-primary js-buy-rate"
-            data-orderid="${escapeHtml(orderId)}"
-            data-rateid="${escapeHtml(rt.id)}">
-            Buy this
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    const rows = rates.map((rt) => {
+      const rateObjectId = rt.id || rt.object_id || rt.rateId || rt.objectId || '';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(rt.provider || '')}</strong></td>
+          <td>${escapeHtml(rt.service || '')}</td>
+          <td>${rt.estimatedDays != null ? `~${escapeHtml(rt.estimatedDays)} days` : escapeHtml(rt.durationTerms || '—')}</td>
+          <td><strong>${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}</strong></td>
+          <td class="rates-actions">
+            <button
+              type="button"
+              class="btn btn-sm btn-primary js-buy-rate"
+              data-orderid="${escapeHtml(orderId)}"
+              data-rateid="${escapeHtml(rateObjectId)}"
+            >Buy this</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
     showResult(orderId, `
       <div class="result-head">
@@ -895,66 +856,50 @@ document.addEventListener('DOMContentLoaded', () => {
     `);
   }
 
-  // Events
-  $$('.js-rates').forEach(btn => {
-    btn.addEventListener('click', () => showRates(btn.dataset.orderid));
-  });
+  async function createLabel(orderId) {
+    const btn = document.querySelector(`.js-create[data-orderid="${orderId}"]`);
+    const hasLabel = (btn && btn.dataset.hasLabel === '1');
 
-  $$('.js-create').forEach(btn => {
-    btn.addEventListener('click', () => createLabel(btn.dataset.orderid));
-  });
+    if (hasLabel) {
+      const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      });
 
-  // Buy chosen rate
-  document.addEventListener('click', async (e) => {
-    const buyBtn = e.target.closest('.js-buy-rate');
-    if (!buyBtn) return;
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) {
+        showResult(orderId, `<span class="alert alert--bad">❌ ${escapeHtml(data.message || 'Shippo failed')}</span>`);
+        return;
+      }
 
-    const orderId = buyBtn.dataset.orderid;
-    const rateId = buyBtn.dataset.rateid;
-
-    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ rateId })
-    });
-
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.ok) {
-      alert(`❌ ${data.message || 'Failed to buy label'}`);
+      showResult(orderId, `
+        <div class="result-head">
+          <div class="result-title">
+            <span class="alert alert--ok">✅ Re-used saved label</span>
+            ${data.trackingNumber ? `<span class="mono">Tracking: ${escapeHtml(data.trackingNumber)}</span>` : ''}
+          </div>
+          <div class="result-title">
+            ${data.labelUrl ? `<a class="btn btn-sm btn-primary" href="${data.labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
+            ${(data.trackingUrl || data.trackingNumber) ? `
+              <a class="btn btn-sm btn-outline"
+                href="${data.trackingUrl || '#'}"
+                target="_blank" rel="noopener">Courier tracking</a>` : ''
+            }
+          </div>
+        </div>
+        <div class="help">This label was already saved on the order.</div>
+      `);
       return;
     }
 
-    alert('✅ Label bought. Refreshing…');
-    location.reload();
-  });
+    await showRates(orderId);
+  }
 
-  // Buy cheapest / fastest presets
-  document.addEventListener('click', async (e) => {
-    const cheapest = e.target.closest('.js-buy-cheapest');
-    const fastest = e.target.closest('.js-buy-fastest');
-    const btn = cheapest || fastest;
-    if (!btn) return;
+  // Buttons on each row
+  $$('.js-rates').forEach(btn => btn.addEventListener('click', () => showRates(btn.dataset.orderid)));
+  $$('.js-create').forEach(btn => btn.addEventListener('click', () => createLabel(btn.dataset.orderid)));
 
-    const orderId = btn.dataset.orderid;
-    const chooseRate = cheapest ? 'cheapest' : 'fastest';
-
-    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ chooseRate })
-    });
-
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.ok) {
-      alert(`❌ ${data.message || 'Failed to buy label'}`);
-      return;
-    }
-
-    alert(`✅ Label bought (${chooseRate}). Refreshing…`);
-    location.reload();
-  });
-
-  // ✅ Fix address: inline form (no prompts)
+    // ✅ Fix address: inline form (no prompts)
   $$('.js-fixaddr').forEach(btn => {
     btn.addEventListener('click', async () => {
       const orderId = btn.dataset.orderid;
@@ -1025,6 +970,56 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Buy chosen rate
+  document.addEventListener('click', async (e) => {
+    const buyBtn = e.target.closest('.js-buy-rate');
+    if (!buyBtn) return;
+
+    const orderId = buyBtn.dataset.orderid;
+    const rateId = buyBtn.dataset.rateid;
+
+    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ rateId })
+    });
+
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      alert(`❌ ${data.message || 'Failed to buy label'}`);
+      return;
+    }
+
+    alert('✅ Label bought. Refreshing…');
+    window.location.assign(`/admin/shippo?t=${Date.now()}`);
+  });
+
+  // Buy cheapest / fastest presets
+  document.addEventListener('click', async (e) => {
+    const cheapest = e.target.closest('.js-buy-cheapest');
+    const fastest = e.target.closest('.js-buy-fastest');
+    const btn = cheapest || fastest;
+    if (!btn) return;
+
+    const orderId = btn.dataset.orderid;
+    const chooseRate = cheapest ? 'cheapest' : 'fastest';
+
+    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ chooseRate })
+    });
+
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      alert(`❌ ${data.message || 'Failed to buy label'}`);
+      return;
+    }
+
+    alert(`✅ Label bought (${chooseRate}). Refreshing…`);
+    window.location.assign(`/admin/shippo?t=${Date.now()}`);
+  });
+
   // Close result panel
   document.addEventListener('click', (e) => {
     const close = e.target.closest('.js-close-result');
@@ -1085,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statusBox) statusBox.innerHTML = `<div class="alert alert--ok">✅ Address updated. Now click “Create label”.</div>`;
   });
 
-  // Initialize count after render
+  // ✅ Only run filters if table exists
   applyFilters();
 });
 </script>

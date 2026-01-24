@@ -220,6 +220,21 @@ const OrderSchema = new Schema(
       rateId: String,
       labelUrl: String,
       trackingStatus: String, // raw Shippo status if you want
+
+      // ✅ Shippo carrier token like "usps", "ups" (your adminShippo saves this)
+      carrier: String,
+
+      // ✅ Persist chosen rate so admin page can show provider/service/price after refresh
+      chosenRate: {
+        provider: String,       // e.g. "USPS"
+        service: String,        // e.g. "Priority Mail International"
+        amount: String,         // e.g. "72.56"
+        currency: String,       // e.g. "USD"
+        estimatedDays: Number,  // e.g. 8
+        durationTerms: String,  // e.g. "~8 days"
+      },
+
+      lastRatesAt: Date,
     },
 
     // Courier + tracking info

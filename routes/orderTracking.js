@@ -101,6 +101,9 @@ function hasBusiness(req) {
   return Boolean(req.session?.business);
 }
 
+function hasAdmin(req) {
+  return Boolean(req.session?.admin);
+}
 function isShippoCarrierToken(carrier) {
   // Shippo carrier tokens are typically lowercase strings like:
   // "ups", "usps", "fedex", "dhl_express"
@@ -254,10 +257,13 @@ router.get('/:orderId', async (req, res, next) => {
 
     const userOk = hasUser(req);
     const businessOk = hasBusiness(req);
+    const adminOk = hasAdmin(req);
 
-    if (!userOk && !businessOk) {
+    if (!userOk && !businessOk && !adminOk) {
       req.flash('error', 'Please log in to view order tracking.');
-      return res.redirect('/users/login');
+      // If they were trying from admin area, send them to admin login, otherwise users login.
+      const backToAdmin = String(req.get('referer') || '').includes('/admin');
+      return res.redirect(backToAdmin ? '/admin/login' : '/users/login');
     }
 
     const order = await findOrderByParam(req.params.orderId, true);
@@ -266,8 +272,8 @@ router.get('/:orderId', async (req, res, next) => {
       return res.redirect('/orders');
     }
 
-    // Users can only see their own orders (keep your existing rule)
-    if (userOk && order.userId && req.session?.user?._id) {
+    // Users can only see their own orders (admins bypass)
+    if (!adminOk && userOk && order.userId && req.session?.user?._id) {
       if (String(order.userId) !== String(req.session.user._id)) {
         req.flash('error', 'You are not allowed to view this order.');
         return res.redirect('/orders');
@@ -306,6 +312,7 @@ router.get('/:orderId', async (req, res, next) => {
       liveTracking,
       isBusiness: businessOk,
       isUser: userOk,
+      isAdmin: adminOk,
       success: req.flash('success') || [],
       error: req.flash('error') || [],
     });
@@ -385,15 +392,17 @@ router.get('/:orderId/refresh', async (req, res) => {
     // ✅ protect refresh too (same rule as page)
     const userOk = hasUser(req);
     const businessOk = hasBusiness(req);
-    if (!userOk && !businessOk) {
+    const adminOk = hasAdmin(req);
+
+    if (!userOk && !businessOk && !adminOk) {
       return res.status(401).json({ ok: false, message: 'Please log in.' });
     }
 
     const order = await findOrderByParam(req.params.orderId, false);
     if (!order) return res.status(404).json({ ok: false, message: 'Order not found.' });
 
-    // Users can only refresh their own orders
-    if (userOk && order.userId && req.session?.user?._id) {
+    // Users can only refresh their own orders (admins bypass)
+    if (!adminOk && userOk && order.userId && req.session?.user?._id) {
       if (String(order.userId) !== String(req.session.user._id)) {
         return res.status(403).json({ ok: false, message: 'Not allowed.' });
       }

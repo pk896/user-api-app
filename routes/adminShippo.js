@@ -8,6 +8,16 @@ const Order = require('../models/Order');
 const { createLabelForOrder, getRatesForOrder } = require('../utils/shippo/createLabelForOrder');
 const { addTrackingToPaypalOrder } = require('../utils/paypal/addTrackingToPaypalOrder');
 
+function inferCarrierLabelFromUrl(url) {
+  const u = String(url || '').toLowerCase();
+  if (!u) return '';
+  if (u.includes('dhl')) return 'DHL';
+  if (u.includes('fedex')) return 'FEDEX';
+  if (u.includes('ups')) return 'UPS';
+  if (u.includes('usps') || u.includes('postal')) return 'USPS';
+  return '';
+}
+
 // ======================================================
 // ✅ Carrier enum-safe mapping (prevents Mongoose enum errors)
 // ======================================================
@@ -32,15 +42,24 @@ function mapShippoProviderToCarrierEnum(providerName, enumValues) {
     if (_normCarrier(ev) === want) return ev;
   }
 
+  
   // 2) Common synonyms (if your enum uses different naming)
   const synonyms = {
     USPS: ['USPS', 'US_POSTAL_SERVICE', 'USPOSTALSERVICE', 'POSTAL', 'POSTOFFICE'],
     UPS: ['UPS', 'UNITED_PARCEL_SERVICE', 'UNITEDPARCELSERVICE'],
     FEDEX: ['FEDEX', 'FEDERAL_EXPRESS', 'FEDERALEXPRESS'],
-    DHL: ['DHL', 'DHL_EXPRESS', 'DHLEXPRESS'],
+    DHL: ['DHL', 'DHL_EXPRESS', 'DHLEXPRESS', 'DHLWORLDWIDE', 'DHL_ECOMMERCE'],
   };
 
-  for (const cand of (synonyms[want] || [])) {
+  // If want is "DHLEXPRESS", still match the DHL synonym group
+  const synonymKey =
+    want.startsWith('DHL') ? 'DHL' :
+    want.startsWith('FEDEX') ? 'FEDEX' :
+    want.startsWith('UPS') ? 'UPS' :
+    want.startsWith('USPS') ? 'USPS' :
+    want;
+
+  for (const cand of (synonyms[synonymKey] || [])) {
     const c = _normCarrier(cand);
     for (const ev of enumValues) {
       if (_normCarrier(ev) === c) return ev;
@@ -131,6 +150,42 @@ router.get('/admin/shippo', requireAdmin, async (req, res) => {
       return ps === 'COMPLETED' || ps === 'PAID' || ps === 'CAPTURED';
     });
 
+    // ✅ Backfill carrierLabel for already-created labels (DHL/UPS/USPS/FEDEX)
+    // This fixes old orders where carrierLabel was never saved.
+    for (const o of paidLike) {
+      const hasLabel = !!(o?.shippo?.labelUrl);
+      const hasTracking = !!(o?.shippingTracking?.trackingNumber || o?.shippingTracking?.trackingUrl);
+      const missingLabel = !String(o?.shippingTracking?.carrierLabel || '').trim();
+
+      if (hasLabel && hasTracking && missingLabel) {
+        const rawProvider =
+          String(o?.shippo?.chosenRate?.provider || '').trim() ||
+          '';
+
+        const badProvider =
+          !rawProvider ||
+          ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+        const inferred =
+          inferCarrierLabelFromUrl(o?.shippingTracking?.trackingUrl) ||
+          (badProvider ? '' : rawProvider) ||
+          (o?.shippo?.carrier ? String(o.shippo.carrier).replace(/_/g, ' ').toUpperCase().trim() : '') ||
+          (o?.shippingTracking?.carrierToken ? String(o.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '');
+
+        if (inferred) {
+          // save to DB
+          await Order.updateOne(
+            { _id: o._id },
+            { $set: { 'shippingTracking.carrierLabel': inferred } }
+          );
+
+          // also update in-memory so the page shows it immediately without refresh
+          o.shippingTracking = o.shippingTracking || {};
+          o.shippingTracking.carrierLabel = inferred;
+        }
+      }
+    }
+
     return res.render('admin-shippo', {
       layout: 'layout',
       title: 'Shippo Labels',
@@ -162,10 +217,15 @@ router.get('/admin/orders/:orderId/shippo/rates', requireAdmin, async (req, res)
     }
 
     const { shipment, rates } = await getRatesForOrder(order);
+    order.shippo = order.shippo || {};
+    order.shippo.shipmentId = shipment?.object_id || null;
+    order.shippo.lastRatesAt = new Date();
+    await order.save();
 
     // Return a clean, UI-friendly list
     const cleanRates = rates.map(r => ({
       id: r.object_id,
+      object_id: r.object_id,
       provider: r.provider,
       service: r.servicelevel?.name || r.servicelevel?.token || '',
       amount: r.amount,
@@ -215,12 +275,12 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
     }
 
     // Create label via Shippo helper
-    let shipment, chosenRate, transaction, carrierEnum, carrierToken;
+    let shipment, chosenRate, transaction, carrierToken;
     try {
       const rateId = req.body?.rateId ? String(req.body.rateId) : null;
       const chooseRate = req.body?.chooseRate ? String(req.body.chooseRate) : 'cheapest';
 
-      ({ shipment, chosenRate, transaction, carrierEnum, carrierToken } =
+      ({ shipment, chosenRate, transaction, carrierToken } =
         await createLabelForOrder(order, { rateId, chooseRate })
       );
     } catch (e) {
@@ -305,20 +365,47 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
     const carrierEnums = getCarrierEnumValues(order);
     const safeCarrierEnum = mapShippoProviderToCarrierEnum(chosenRate?.provider, carrierEnums);
 
-    // Save enum-safe value if we found one, otherwise leave it unset (do NOT save invalid enum)
     if (safeCarrierEnum) {
       order.shippingTracking.carrier = safeCarrierEnum;
     } else {
-      // If your schema allows null/undefined, keep it empty rather than breaking the save
-      order.shippingTracking.carrier = undefined;
+      // ✅ Only set a fallback that actually exists in your enum
+      const fallbackEnum =
+        carrierEnums.find(v => _normCarrier(v) === 'OTHER') ||
+        carrierEnums.find(v => _normCarrier(v) === 'UNKNOWN') ||
+        carrierEnums.find(v => _normCarrier(v) === 'SHIPPO') ||
+        null;
+
+      if (fallbackEnum) order.shippingTracking.carrier = fallbackEnum;
+      else order.shippingTracking.carrier = undefined; // leave unset if no safe enum exists
     }
 
     // ✅ Keep Shippo token separately (lowercase "usps") for Shippo tracking endpoint usage
     order.shippingTracking.carrierToken = carrierToken || null;
 
-    // Human label
-    order.shippingTracking.carrierLabel =
-      String(chosenRate?.provider || '').trim() || order.shippingTracking.carrierLabel || '';
+    // ✅ Always store a human carrier label for UI + PayPal (NO "UNKNOWN")
+    // If Shippo sends provider "UNKNOWN/OTHER/SHIPPO", ignore it and infer from URL/token.
+    const rawProvider =
+      String(chosenRate?.provider || '').trim() ||
+      String(transaction?.provider || '').trim() ||
+      '';
+
+    const badProvider =
+      !rawProvider ||
+      ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+    const finalCarrierLabel =
+      (badProvider ? '' : rawProvider) ||
+      inferCarrierLabelFromUrl(order.shippingTracking.trackingUrl) ||
+      (carrierToken ? String(carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '') ||
+      '';
+
+
+    if (finalCarrierLabel) {
+      order.shippingTracking.carrierLabel = finalCarrierLabel;
+    } else {
+      // If we truly can't infer it, leave it empty (UI should just not show it)
+      order.shippingTracking.carrierLabel = undefined;
+    }
 
     // ✅ shippingTracking.status must match its enum
     const statusEnums = getTrackingStatusEnumValues(order);
@@ -353,17 +440,23 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
         null;
 
       // Only send to PayPal if we have what PayPal needs
+      const paypalCarrier =
+        (order.shippingTracking?.carrierLabel && String(order.shippingTracking.carrierLabel).trim()) ||
+        (chosenRate?.provider && String(chosenRate.provider).trim()) ||
+        (order.shippingTracking?.carrierToken && String(order.shippingTracking.carrierToken).trim()) ||
+        null;
+
       if (
         paypalOrderId &&
         captureId &&
         order.shippingTracking?.trackingNumber &&
-        order.shippingTracking?.carrier
+        paypalCarrier
       ) {
         await addTrackingToPaypalOrder({
           paypalOrderId,
           captureId,
           trackingNumber: order.shippingTracking.trackingNumber,
-          carrier: order.shippingTracking.carrier, // must be enum-safe like "USPS"
+          carrier: paypalCarrier,
           notifyPayer: true,
         });
       } else {
@@ -371,7 +464,7 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
           paypalOrderId: !!paypalOrderId,
           captureId: !!captureId,
           trackingNumber: !!order.shippingTracking?.trackingNumber,
-          carrier: !!order.shippingTracking?.carrier,
+          paypalCarrier: !!paypalCarrier,
         });
       }
     } catch (e) {
@@ -385,8 +478,9 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
       trackingUrl: transaction.tracking_url_provider,
       shipmentId: shipment.object_id,
       transactionId: transaction.object_id,
-      carrierEnum: carrierEnum || null,
-      carrierToken: carrierToken || null,
+      carrierEnum: order.shippingTracking?.carrier || null,
+      carrierToken: order.shippingTracking?.carrierToken || null,
+
     });
   } catch (e) {
     console.error('Shippo label error:', e);

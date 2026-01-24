@@ -17,7 +17,7 @@ function paypalBase() {
 
 async function getAccessToken() {
   const clientId = mustEnv('PAYPAL_CLIENT_ID');
-  const secret = mustEnv('PAYPAL_SECRET');
+  const secret = mustEnv('PAYPAL_CLIENT_SECRET');
 
   const auth = Buffer.from(`${clientId}:${secret}`).toString('base64');
 
