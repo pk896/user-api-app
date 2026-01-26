@@ -123,6 +123,48 @@ function isShippoCarrierToken(carrier) {
   return true;
 }
 
+function normalizeCarrierForSchema(rawCarrier) {
+  const raw = String(rawCarrier || '').trim();
+  if (!raw) return { carrierEnum: 'OTHER', carrierToken: '', carrierLabelAuto: '' };
+
+  const lower = raw.toLowerCase();
+  const upper = raw.toUpperCase();
+
+  // Shippo token -> enum mapping
+  const tokenToEnum = {
+    ups: 'UPS',
+    usps: 'USPS',
+    fedex: 'FEDEX',
+    dhl_express: 'DHL',
+    dhl: 'DHL',
+  };
+
+  // If user selected a Shippo token in the dropdown
+  if (tokenToEnum[lower]) {
+    const token = lower === 'dhl' ? 'dhl_express' : lower; // normalize
+    return { carrierEnum: tokenToEnum[lower], carrierToken: token, carrierLabelAuto: tokenToEnum[lower] };
+  }
+
+  // If they posted an enum already (USPS/UPS/FEDEX/DHL/OTHER)
+  if (['USPS', 'UPS', 'FEDEX', 'DHL', 'OTHER'].includes(upper)) {
+    // Optional: also set a token for Shippo integrated ones
+    const enumToToken = { USPS: 'usps', UPS: 'ups', FEDEX: 'fedex', DHL: 'dhl_express' };
+    return { carrierEnum: upper, carrierToken: enumToToken[upper] || '', carrierLabelAuto: upper };
+  }
+
+  // Legacy courier keys
+  if (COURIER_APIS[upper]) {
+    return { carrierEnum: upper, carrierToken: '', carrierLabelAuto: COURIER_APIS[upper].name || upper };
+  }
+
+  // Unknown -> store as OTHER (safe)
+  return { carrierEnum: 'OTHER', carrierToken: '', carrierLabelAuto: raw };
+}
+
+function isShippoTestKey() {
+  return String(process.env.SHIPPO_TOKEN || '').startsWith('shippo_test_');
+}
+
 function mapStatus(courierStatus) {
   if (!courierStatus) return 'UNKNOWN';
 
@@ -341,23 +383,52 @@ router.post('/:orderId', async (req, res, next) => {
       return res.redirect('/orders');
     }
 
-    const carrier = String(req.body?.carrier || '').trim(); // shippo token OR legacy enum OR OTHER
+    const rawCarrier = String(req.body?.carrier || '').trim(); // can be "usps" OR "USPS" OR "COURIER_GUY"
     const carrierLabel = String(req.body?.carrierLabel || '').trim();
     const trackingNumber = String(req.body?.trackingNumber || '').trim();
     const trackingUrl = String(req.body?.trackingUrl || '').trim();
     const status = String(req.body?.status || '').trim();
 
+    const normalized = normalizeCarrierForSchema(rawCarrier);
+
     order.shippingTracking = order.shippingTracking || {};
-    order.shippingTracking.carrier = carrier || order.shippingTracking.carrier || 'OTHER';
-    order.shippingTracking.carrierLabel = carrierLabel || order.shippingTracking.carrierLabel || '';
+
+    // ✅ Keep enum in .carrier (what your schema expects)
+    order.shippingTracking.carrier = normalized.carrierEnum || order.shippingTracking.carrier || 'OTHER';
+
+    // ✅ Keep Shippo token in .carrierToken (for Shippo tracking)
+    order.shippingTracking.carrierToken = normalized.carrierToken || order.shippingTracking.carrierToken || '';
+
+    // ✅ Label (user wins, else auto label)
+    order.shippingTracking.carrierLabel =
+      carrierLabel ||
+      normalized.carrierLabelAuto ||
+      order.shippingTracking.carrierLabel ||
+      '';
+
+    order.shippingTracking.trackingNumber = trackingNumber || '';
+    order.shippingTracking.trackingUrl = trackingUrl || '';
+    order.shippingTracking.status = status || order.shippingTracking.status || 'SHIPPED';
+
     order.shippingTracking.trackingNumber = trackingNumber || '';
     order.shippingTracking.trackingUrl = trackingUrl || '';
     order.shippingTracking.status = status || order.shippingTracking.status || 'SHIPPED';
 
     // Auto-fetch live tracking (Shippo-first when carrier is a Shippo token)
     let liveTracking = null;
-    if (trackingNumber && carrier && carrier.toLowerCase() !== 'other') {
-      liveTracking = await fetchAnyLiveTracking({ carrier, trackingNumber });
+
+    const carrierForTracking = String(
+      order.shippingTracking.carrierToken || order.shippingTracking.carrier || ''
+    ).trim();
+
+    if (trackingNumber && carrierForTracking && carrierForTracking.toLowerCase() !== 'other') {
+      // ✅ If using Shippo TEST key, don’t try to track USPS/UPS/etc (Shippo only allows "shippo" test carrier)
+      if (isShippoTestKey() && isShippoCarrierToken(carrierForTracking) && carrierForTracking !== 'shippo') {
+        liveTracking = null;
+      } else {
+        liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
+      }
+
       if (liveTracking) {
         order.shippingTracking.liveStatus = liveTracking.status;
         order.shippingTracking.liveEvents = liveTracking.events;
@@ -410,13 +481,17 @@ router.get('/:orderId/refresh', async (req, res) => {
 
     const st = order.shippingTracking || {};
     const trackingNumber = String(st.trackingNumber || '').trim();
-    const carrier = String(st.carrier || '').trim();
+    const carrierForTracking = String(st.carrierToken || st.carrier || '').trim();
 
-    if (!trackingNumber || !carrier) {
+    if (!trackingNumber || !carrierForTracking) {
       return res.json({ ok: false, message: 'No tracking details saved yet.' });
     }
 
-    const liveTracking = await fetchAnyLiveTracking({ carrier, trackingNumber });
+    if (isShippoTestKey() && isShippoCarrierToken(carrierForTracking) && carrierForTracking !== 'shippo') {
+      return res.json({ ok: false, message: 'Shippo test key cannot live-track USPS/UPS/FedEx/DHL. Use a live key or Shippo test tracking numbers.' });
+    }
+
+    const liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
 
     if (liveTracking) {
       order.shippingTracking.liveStatus = liveTracking.status;
