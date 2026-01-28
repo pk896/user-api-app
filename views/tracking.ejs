@@ -1,0 +1,280 @@
+<!--views/tracking-->
+<%
+  const PAGE_NONCE = typeof nonce !== 'undefined' ? nonce : '';
+  const BASE = (typeof baseUrl !== 'undefined' && baseUrl) ? baseUrl : '/orders';
+  const o = order || {};
+  const t = o.shippingTracking || {};
+  const events = Array.isArray(t.liveEvents) ? t.liveEvents : [];
+
+  const niceDate = (d) => {
+    try {
+      if (!d) return '';
+      return new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' });
+    } catch { return String(d || ''); }
+  };
+
+  const toArray = (v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    return [String(v)];
+  };
+
+  const successList = toArray(success);
+  const errorList = toArray(error);
+%>
+
+<section class="trk">
+  <header class="trk__head">
+    <div>
+      <h1>📦 Order Tracking</h1>
+      <div class="muted">OrderId: <span class="mono"><%= o.orderId || '—' %></span></div>
+      <div class="muted tiny">Created: <%= niceDate(o.createdAt) %></div>
+    </div>
+    <div class="trk__actions">
+      <a class="btn btn-outline" href="/admin/shippo">← Back</a>
+      <button class="btn btn-primary" type="button" id="btnRefresh">Refresh live tracking</button>
+    </div>
+  </header>
+
+  <% successList.forEach(msg => { %>
+    <div class="flash ok">✅ <%= msg %></div>
+  <% }) %>
+  <% errorList.forEach(msg => { %>
+    <div class="flash bad">❌ <%= msg %></div>
+  <% }) %>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Current tracking</h2>
+
+      <div class="row">
+        <div class="label">Carrier</div>
+        <div class="value">
+          <%= (t.carrierLabel || t.carrier || '—') %>
+          <% if (t.carrierToken) { %>
+            <span class="pill"><%= String(t.carrierToken).toUpperCase() %></span>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Tracking number</div>
+        <div class="value mono"><%= t.trackingNumber || '—' %></div>
+      </div>
+
+      <div class="row">
+        <div class="label">Status</div>
+        <div class="value"><span class="pill solid"><%= t.liveStatus || t.status || '—' %></span></div>
+      </div>
+
+      <div class="row">
+        <div class="label">Last update</div>
+        <div class="value muted"><%= niceDate(t.lastTrackingUpdate || t.lastUpdate) || '—' %></div>
+      </div>
+
+      <div class="row">
+        <div class="label">ETA</div>
+        <div class="value muted"><%= niceDate(t.estimatedDelivery) || '—' %></div>
+      </div>
+
+      <% if (isAdmin) { %>
+        <hr class="hr" />
+
+        <h2>Admin: set tracking</h2>
+
+        <form method="POST" action="<%= BASE %>/<%= o._id %>" class="form">
+          <label class="field">
+            <span>Carrier (Shippo token)</span>
+            <select name="carrier" class="select" required>
+              <option value="">Choose…</option>
+              <option value="usps" <%= t.carrierToken==='usps' ? 'selected' : '' %>>USPS</option>
+              <option value="ups" <%= t.carrierToken==='ups' ? 'selected' : '' %>>UPS</option>
+              <option value="fedex" <%= t.carrierToken==='fedex' ? 'selected' : '' %>>FedEx</option>
+              <option value="dhl_express" <%= t.carrierToken==='dhl_express' ? 'selected' : '' %>>DHL Express</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Tracking number</span>
+            <input name="trackingNumber" class="input" value="<%= t.trackingNumber || '' %>" placeholder="Enter tracking number" required />
+          </label>
+
+          <button class="btn btn-primary" type="submit">Save tracking</button>
+
+          <div class="help muted">
+            Important: We store token in <span class="mono">carrierToken</span> and label in <span class="mono">carrierLabel</span> (prevents enum errors).
+          </div>
+        </form>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <h2>Tracking events</h2>
+
+      <div id="liveMsg" class="muted tiny"></div>
+
+      <% if (!events.length) { %>
+        <div class="empty muted">No live events yet. Click “Refresh live tracking”.</div>
+      <% } else { %>
+        <div class="events" id="eventsBox">
+          <% events.slice().reverse().forEach(ev => { %>
+            <div class="ev">
+              <div class="ev__top">
+                <span class="pill"><%= ev.status || '—' %></span>
+                <span class="muted tiny"><%= niceDate(ev.date) %></span>
+              </div>
+              <div class="ev__mid"><%= ev.details || ev.rawStatus || '' %></div>
+              <% if (ev.location) { %>
+                <div class="muted tiny"><%= JSON.stringify(ev.location) %></div>
+              <% } %>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<style nonce="<%= PAGE_NONCE %>">
+.trk{
+  --blue:#2563EB;
+  --purple:#7C3AED;
+  --green:#22C55E;
+  --black:#0F172A;
+
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px;
+}
+.trk *{box-sizing:border-box}
+h1{margin:0;font-size:22px;color:var(--black)}
+h2{margin:0 0 10px;font-size:14px;color:var(--black);text-transform:uppercase;letter-spacing:.05em}
+.muted{color:#64748B}
+.tiny{font-size:12px}
+.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+
+.trk__head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(124,58,237,.18);
+  background: linear-gradient(135deg, rgba(124,58,237,.10), rgba(37,99,235,.06));
+  margin-bottom: 12px;
+}
+.trk__actions{display:flex;gap:10px;flex-wrap:wrap}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  gap:8px;padding:10px 12px;border-radius:14px;
+  border:1px solid transparent;font-weight:950;cursor:pointer;text-decoration:none;
+}
+.btn-primary{background:linear-gradient(135deg, rgba(124,58,237,1), rgba(37,99,235,.95));color:#fff}
+.btn-outline{background:#fff;border-color:rgba(148,163,184,.65);color:var(--black)}
+
+.flash{
+  padding:10px 12px;border-radius:14px;border:1px solid;margin: 10px 0;
+}
+.flash.ok{background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.25); color:#166534}
+.flash.bad{background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.25); color:#991B1B}
+
+.grid{
+  display:grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap:12px;
+}
+.card{
+  background:#fff;
+  border:1px solid rgba(148,163,184,.45);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.row{
+  display:grid;
+  grid-template-columns: 160px 1fr;
+  gap:10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(148,163,184,.22);
+}
+.row:last-child{border-bottom:none}
+.label{font-weight:950;color:rgba(15,23,42,.70);text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+.value{color:var(--black);font-weight:800}
+
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  padding: 4px 10px;border-radius:999px;
+  border:1px solid rgba(124,58,237,.25);
+  background: rgba(124,58,237,.10);
+  color: var(--purple);
+  font-size:12px;font-weight:950;
+}
+.pill.solid{
+  border-color: rgba(15,23,42,.12);
+  background: rgba(15,23,42,.04);
+  color: var(--black);
+}
+
+.hr{border:none;border-top:1px solid rgba(148,163,184,.25);margin:12px 0}
+
+.form{display:grid;gap:10px}
+.field{display:grid;gap:6px}
+.input,.select{
+  width:100%;padding:10px 12px;border-radius:14px;
+  border:1px solid rgba(148,163,184,.55);outline:none;
+}
+.input:focus,.select:focus{
+  border-color: rgba(124,58,237,.55);
+  box-shadow: 0 0 0 4px rgba(124,58,237,.14);
+}
+.help{font-size:12px}
+
+.events{display:grid;gap:10px}
+.ev{
+  border:1px solid rgba(148,163,184,.40);
+  border-radius:16px;
+  padding:10px;
+  background: rgba(248,250,252,1);
+}
+.ev__top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.ev__mid{margin-top:6px;color:var(--black);font-weight:750}
+.empty{padding:12px;border-radius:16px;border:1px dashed rgba(148,163,184,.55)}
+
+@media (max-width: 880px){
+  .grid{grid-template-columns:1fr}
+  .row{grid-template-columns:1fr}
+}
+</style>
+
+<script nonce="<%= PAGE_NONCE %>">
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btnRefresh');
+  const msg = document.getElementById('liveMsg');
+
+  async function refresh() {
+    if (msg) msg.textContent = 'Refreshing…';
+    btn && (btn.disabled = true);
+
+    const r = await fetch('<%= BASE %>/<%= o._id %>/refresh', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    const data = await r.json().catch(() => ({}));
+    btn && (btn.disabled = false);
+
+    if (!r.ok || !data.ok) {
+      if (msg) msg.textContent = '❌ ' + (data.message || 'Failed to refresh');
+      return;
+    }
+
+    if (msg) msg.textContent = '✅ Updated. Reloading…';
+    window.location.reload();
+  }
+
+  if (btn) btn.addEventListener('click', refresh);
+});
+</script>

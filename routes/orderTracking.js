@@ -264,11 +264,13 @@ async function cacheLiveTracking(orderIdOrOrderIdField, liveTracking) {
   const now = new Date();
 
   // map to your fulfillment pipeline
+  // ✅ map to your fulfillmentStatus enum (ONLY allowed values)
   let fulfillment = undefined;
+
   if (liveTracking.status === 'DELIVERED') fulfillment = 'DELIVERED';
-  else if (liveTracking.status === 'IN_TRANSIT') fulfillment = 'IN_TRANSIT';
-  else if (liveTracking.status === 'PROCESSING') fulfillment = 'PENDING';
-  else if (liveTracking.status === 'DELAYED') fulfillment = 'EXCEPTION';
+  else if (liveTracking.status === 'IN_TRANSIT') fulfillment = 'SHIPPED';
+  else if (liveTracking.status === 'PROCESSING') fulfillment = 'LABEL_CREATED';
+  else if (liveTracking.status === 'CANCELLED') fulfillment = 'CANCELLED';
   else fulfillment = undefined;
 
   await Order.findByIdAndUpdate(realMongoId, {
@@ -345,11 +347,12 @@ router.get('/:orderId', async (req, res, next) => {
       }
     }
 
-    return res.render('order-track', {
+    return res.render('tracking', {
       layout: 'layout',
       title: 'Track Order',
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseUrl: req.baseUrl,
       order,
       liveTracking,
       isBusiness: businessOk,
@@ -372,8 +375,8 @@ router.post('/:orderId', async (req, res, next) => {
       return res.redirect('/orders');
     }
 
-    if (!hasBusiness(req)) {
-      req.flash('error', 'Only business accounts can update tracking.');
+    if (!hasBusiness(req) && !hasAdmin(req)) {
+      req.flash('error', 'Only business or admin accounts can update tracking.');
       return res.redirect('/users/login');
     }
 
@@ -449,7 +452,7 @@ router.post('/:orderId', async (req, res, next) => {
 
     req.flash('success', 'Tracking updated.' + (liveTracking ? ' Live tracking data fetched.' : ''));
 
-    return res.redirect(`/orders/tracking/${order._id}`);
+    return res.redirect(`${req.baseUrl}/${order._id}`);
   } catch (err) {
     next(err);
   }

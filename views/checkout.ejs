@@ -1,11 +1,10 @@
-<!--views/checkout.ej-->
+<!--views/checkout.ejs-->
 <%
   const CO_NONCE      = typeof nonce !== 'undefined' ? nonce : '';
   const CO_CLIENT_ID  = typeof paypalClientId !== 'undefined' ? paypalClientId : '';
   const CO_CCY        = typeof currency !== 'undefined' ? currency : 'USD';
   const CO_BRAND      = typeof brandName !== 'undefined' ? brandName : 'Unicoporate.com';
   const CO_VAT        = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
-  const SHIPPING_FLAT = typeof shippingFlat !== 'undefined' ? Number(shippingFlat) : 0;
 %>
 
 <section class="co-page" aria-label="Checkout">
@@ -78,50 +77,14 @@
         </div>
 
         <div class="co-card-b">
-          <label for="delivery-select" class="co-label">
-            Select delivery method <span class="co-req">*</span>
-          </label>
-
-          <div class="co-select">
-            <select id="delivery-select" class="co-select-el" disabled aria-label="Delivery method">
-              <option value="">Loading options…</option>
-            </select>
-            <span class="co-select-caret" aria-hidden="true">▼</span>
-          </div>
-
-          <div id="delivery-hint" class="co-hint" aria-live="polite">
-            <span class="co-hint-ic" aria-hidden="true">⏱️</span>
-            <span>Loading delivery estimates…</span>
-          </div>
-
-          <div id="delivery-info" class="co-info" style="display:none" aria-label="Delivery details">
-            <div class="co-info-row">
-              <span class="co-info-ic" aria-hidden="true">📦</span>
-              <div>
-                <small>Delivery Type</small>
-                <strong id="delivery-type">—</strong>
-              </div>
-            </div>
-
-            <div class="co-info-row">
-              <span class="co-info-ic" aria-hidden="true">⏱️</span>
-              <div>
-                <small>Estimated Delivery</small>
-                <strong id="delivery-estimate">—</strong>
-              </div>
-            </div>
-
-            <div class="co-info-row">
-              <span class="co-info-ic" aria-hidden="true">📍</span>
-              <div>
-                <small>Delivery Area</small>
-                <strong id="delivery-area">—</strong>
-              </div>
-            </div>
-          </div>
 
           <!-- Shipping Address (collapsible) -->
-          <details id="ship-details" class="co-card co-card-purple co-collapse" aria-label="Shipping address" open style="margin-top:.75rem">
+          <details id="ship-details"
+            class="co-card co-card-purple co-collapse"
+            aria-label="Shipping address"
+            open
+            style="margin-bottom:.75rem">
+
             <summary class="co-card-h">
               <div class="co-card-title">
                 <span class="co-icon" aria-hidden="true">📍</span>
@@ -175,8 +138,62 @@
               </div>
 
               <div class="co-mini">Tip: start typing (e.g. “South”, “Uni”, “ZA”, “US”).</div>
+
+              <div class="co-form-actions">
+                <button type="button" id="ship-done" class="co-btn co-btn-blue">Done</button>
+                <button type="button" id="ship-edit" class="co-btn co-btn-ghost">Keep editing</button>
+              </div>
             </div>
           </details>
+
+          <label for="delivery-select" class="co-label">
+            Select shipping rate (live) <span class="co-req">*</span>
+          </label>
+
+          <div class="co-select">
+            <select id="delivery-select" class="co-select-el" disabled aria-label="Delivery method">
+              <option value="">Loading options…</option>
+            </select>
+            <span class="co-select-caret" aria-hidden="true">▼</span>
+          </div>
+
+          <div style="margin-top:.55rem; display:flex; gap:.55rem; flex-wrap:wrap;">
+            <button type="button" id="rates-retry" class="co-btn co-btn-ghost">Retry rates</button>
+            <small class="co-mini" id="rates-debug" style="margin:0;">&nbsp;</small>
+          </div>
+
+          <div id="delivery-hint" class="co-hint" aria-live="polite">
+            <span class="co-hint-ic" aria-hidden="true">⏱️</span>
+            <span>Loading delivery estimates…</span>
+          </div>
+
+          <div id="delivery-info" class="co-info" style="display:none" aria-label="Delivery details">
+            <div class="co-info-row">
+              <span class="co-info-ic" aria-hidden="true">📦</span>
+              <div>
+                <small>Delivery Type</small>
+                <strong id="delivery-type">—</strong>
+              </div>
+            </div>
+
+            <div class="co-info-row">
+              <span class="co-info-ic" aria-hidden="true">⏱️</span>
+              <div>
+                <small>Estimated Delivery</small>
+                <strong id="delivery-estimate">—</strong>
+              </div>
+            </div>
+
+            <div class="co-info-row">
+              <span class="co-info-ic" aria-hidden="true">📍</span>
+              <div>
+                <small>Delivery Area</small>
+                <strong id="delivery-area">—</strong>
+              </div>
+            </div>
+          </div>
+
+          
 
           <!-- Optional note (UI only) -->
           <label for="delivery-note" class="co-label" style="margin-top:.8rem">
@@ -335,7 +352,6 @@
     <%- JSON.stringify({
       VAT_RATE: Number(CO_VAT),
       CURRENCY: CO_CCY,
-      SHIPPING_FLAT: Number(SHIPPING_FLAT),
       BRAND_NAME: CO_BRAND
     }) %>
   </script>
@@ -532,6 +548,21 @@
     }
     .co-btn-blue{ background: var(--b); color:#fff; border-color: var(--b); }
     .co-btn-blue:hover{ filter:brightness(.95); transform: translateY(-1px); }
+
+    /* ===== Address actions ===== */
+    .co-form-actions{
+      display:flex;
+      gap:.55rem;
+      margin-top:.85rem;
+    }
+    .co-btn-ghost{
+      background:#fff;
+      color: var(--k);
+      border:1px solid rgba(15,23,42,.18);
+    }
+    .co-btn-ghost:hover{
+      background: rgba(15,23,42,.03);
+    }
 
     /* ===== Delivery UI ===== */
     .co-label{
@@ -843,6 +874,9 @@
         cartItems: document.getElementById('cart-items'),
         cartEmpty: document.getElementById('cart-empty'),
 
+        shipDone: document.getElementById('ship-done'),
+        shipEdit: document.getElementById('ship-edit'),
+
         deliverySelect: document.getElementById('delivery-select'),
         deliveryHint: document.getElementById('delivery-hint'),
         deliveryInfo: document.getElementById('delivery-info'),
@@ -863,6 +897,9 @@
         shipSummary: document.getElementById('ship-summary'),
         shipCountry: document.getElementById('ship-country'),
         shipCountrySearch: document.getElementById('ship-country-search'),
+
+        ratesRetry: document.getElementById('rates-retry'),
+        ratesDebug: document.getElementById('rates-debug'),
 
         sumSubtotal: document.getElementById('sum-subtotal'),
         sumVat: document.getElementById('sum-vat'),
@@ -886,7 +923,6 @@
 
       const VAT_RATE = Number(cfg.VAT_RATE || 0);
       const CURRENCY = String(cfg.CURRENCY || 'USD');
-      const SHIPPING_FLAT = Number(cfg.SHIPPING_FLAT || 0);
 
       // ===== Hardcoded ISO-3166-1 alpha-2 (195 countries: 193 UN members + Vatican City + Palestine) =====
       const COUNTRIES = [
@@ -1118,13 +1154,14 @@
 
       const state = {
         items: [],
-        deliveryOptions: [],
         selectedDelivery: null,
-        deliveryReady: false,
+        deliveryReady: false,     // ✅ means Shippo rates loaded + selection applied
         shipTo: null,
         addressReady: false,
         cartReady: false,
         paypalMounted: false,
+        shippoShipmentId: null,
+        quoteInFlight: false,
       };
 
       function formatCurrency(amount, currency = CURRENCY){
@@ -1144,6 +1181,24 @@
           el.toast._t = setTimeout(()=>{ el.toast.hidden = true; }, 2800);
         }
       }
+
+      window.addEventListener('error', (e) => {
+        const msg = (e?.error?.message || e?.message || 'Script error');
+        console.error('Global error:', e);
+        showToast(msg, 'error');
+        if (el.deliveryHint) {
+          el.deliveryHint.innerHTML = `<span class="co-hint-ic">❌</span><span>${msg}</span>`;
+        }
+      });
+
+      window.addEventListener('unhandledrejection', (e) => {
+        const msg = (e?.reason?.message || String(e?.reason || 'Promise error'));
+        console.error('Unhandled rejection:', e);
+        showToast(msg, 'error');
+        if (el.deliveryHint) {
+          el.deliveryHint.innerHTML = `<span class="co-hint-ic">❌</span><span>${msg}</span>`;
+        }
+      });
 
       function readShipTo(){
         const v = (x) => String(x || '').trim();
@@ -1190,14 +1245,15 @@
           }
         }
 
-        if (el.shipDetails){
-          // If valid, collapse it. If invalid, keep it open so user can fix.
-          el.shipDetails.open = !v.ok ? true : false;
-        }
-
         if (el.shipHint){
           el.shipHint.textContent = v.ok ? '✅ Shipping address OK.' : ('⚠️ ' + v.message);
         }
+
+        // ✅ Re-quote Shippo rates after user edits address (debounced)
+        clearTimeout(_shippoQuoteTimer);
+        _shippoQuoteTimer = setTimeout(() => {
+          if (state.addressReady && state.cartReady && state.items.length) loadDeliveryOptions();
+        }, 650);
 
         maybeEnablePayment();
       }
@@ -1213,9 +1269,10 @@
         const itemsNet = (VAT_RATE > 0) ? (itemsGross / (1 + VAT_RATE)) : itemsGross;
         const vat = itemsGross - itemsNet;
 
+        // ✅ Shippo-only: no fallback shipping
         const shipping = state.selectedDelivery
           ? Number(state.selectedDelivery.price || 0)
-          : SHIPPING_FLAT;
+          : 0;
 
         // ✅ total payable = gross items + shipping (VAT already included)
         const total = itemsGross + shipping;
@@ -1227,7 +1284,8 @@
         const t = calculateTotals();
         el.sumSubtotal.textContent = formatCurrency(t.subtotal);
         el.sumVat.textContent = formatCurrency(t.vat);
-        el.sumShipping.textContent = formatCurrency(t.shipping);
+        const shipCcy = state.selectedDelivery?.currency || CURRENCY;
+        el.sumShipping.textContent = formatCurrency(t.shipping, shipCcy);
         el.sumTotal.textContent = formatCurrency(t.total);
         el.vatRate.textContent = (VAT_RATE * 100).toFixed(0);
       }
@@ -1236,81 +1294,196 @@
         if (!el.payGuard) return;
         el.payGuard.style.display = 'flex';
         const p = el.payGuard.querySelector('p');
-        if (p) p.textContent = message || 'Waiting for cart & delivery options…';
+        if (p) p.textContent = message || 'Waiting for cart & Shippo rates…';
       }
       function allowPayment(){
         if (!el.payGuard) return;
         el.payGuard.style.display = 'none';
       }
 
+      let _ppRetryTimer = null;
+
       function maybeEnablePayment(){
-        if (state.cartReady && state.deliveryReady && state.addressReady && state.items.length > 0){
-          allowPayment();
-          maybeMountPayPal();
-        } else {
+        const ready =
+          state.cartReady &&
+          state.deliveryReady &&
+          state.addressReady &&
+          state.items.length > 0;
+
+        if (!ready){
           const msg =
             !state.items.length ? 'Your cart is empty.' :
             !state.cartReady ? 'Loading cart…' :
-            !state.deliveryReady ? 'Loading delivery options…' :
             !state.addressReady ? 'Please enter your shipping address.' :
+            !state.deliveryReady ? 'Loading Shippo rates…' :
             'Waiting…';
 
           blockPayment(msg);
+          return;
         }
+
+        // ✅ Don’t drop the guard until PayPal SDK exists
+        if (!window.paypal){
+          blockPayment('Loading PayPal…');
+
+          if (!_ppRetryTimer){
+            _ppRetryTimer = setInterval(() => {
+              if (window.paypal){
+                clearInterval(_ppRetryTimer);
+                _ppRetryTimer = null;
+                maybeEnablePayment(); // re-run now that SDK is ready
+              }
+            }, 300);
+
+            // safety stop after 10s
+            setTimeout(() => {
+              if (_ppRetryTimer){
+                clearInterval(_ppRetryTimer);
+                _ppRetryTimer = null;
+                blockPayment('PayPal failed to load. Please refresh the page.');
+              }
+            }, 10000);
+          }
+          return;
+        }
+
+        allowPayment();
+        maybeMountPayPal();
       }
 
+      let _shippoQuoteTimer = null;
+
       async function loadDeliveryOptions(){
+        // ✅ prevent duplicate overlapping calls
+        if (state.quoteInFlight) return;
+        state.quoteInFlight = true;
+        state.deliveryReady = false;
+
+        // UI: start loading
         el.deliverySelect.disabled = true;
-        el.deliveryHint.innerHTML = '<span class="co-hint-ic">⏱️</span><span>Loading delivery options…</span>';
+        el.deliverySelect.innerHTML = '<option value="">Loading options…</option>';
+        el.deliveryHint.innerHTML = '<span class="co-hint-ic">⏱️</span><span>Loading live Shippo rates…</span>';
+        el.deliveryInfo.style.display = 'none';
+        if (el.ratesDebug) el.ratesDebug.textContent = 'Requesting Shippo…';
 
-        try{
-          const r = await fetch("/api/delivery-options?active=1&sort=price&order=asc", {
-            headers: { "Accept":"application/json" },
-            credentials: 'same-origin'
+        // ✅ Hard timeout guard (works even if AbortController fails)
+        const HARD_TIMEOUT_MS = 20000;
+
+        function hardTimeout(promise, ms){
+          let t;
+          const timeout = new Promise((_, rej) => {
+            t = setTimeout(() => rej(new Error('TIMEOUT')), ms);
           });
-          if (!r.ok) throw new Error('Failed to load delivery options');
+          return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+        }
 
-          const data = await r.json();
-          const options = Array.isArray(data.options) ? data.options : [];
-          if (!options.length){
-            el.deliveryHint.innerHTML = '<span class="co-hint-ic">⚠️</span><span>No delivery options available</span>';
+        try {
+          if (!state.addressReady) {
+            el.deliveryHint.innerHTML = '<span class="co-hint-ic">📍</span><span>Enter your shipping address to load rates.</span>';
+            if (el.ratesDebug) el.ratesDebug.textContent = 'Address incomplete';
+            blockPayment('Please enter your shipping address.');
+            return;
+          }
+
+          if (!state.cartReady || !state.items.length) {
+            el.deliveryHint.innerHTML = '<span class="co-hint-ic">🛒</span><span>Loading your cart…</span>';
+            if (el.ratesDebug) el.ratesDebug.textContent = 'Cart not ready';
+            blockPayment('Loading cart…');
+            return;
+          }
+
+          // Always send the latest shipTo values
+          const body = { shipTo: readShipTo() };
+
+          // AbortController (nice-to-have) + hard timeout (must-have)
+          const ac = ('AbortController' in window) ? new AbortController() : null;
+          const abortTimer = ac ? setTimeout(() => { try { ac.abort(); } catch {} }, HARD_TIMEOUT_MS) : null;
+
+          const doFetch = async () => {
+            const r = await fetch('/payment/shippo/quote', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+              credentials:'same-origin',
+              body: JSON.stringify(body),
+              signal: ac ? ac.signal : undefined
+            });
+
+            // Read as text first (prevents “stuck” json parsing on weird responses)
+            const text = await r.text();
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch { data = { ok:false, message:'Invalid JSON from server', _raw:text }; }
+
+            return { r, data };
+          };
+
+          const { r, data } = await hardTimeout(doFetch(), HARD_TIMEOUT_MS + 500);
+
+          if (abortTimer) clearTimeout(abortTimer);
+
+          if (!r.ok || !data.ok || !data.shipmentId || !Array.isArray(data.rates)) {
+            throw new Error(data.message || `Failed to load Shippo rates (HTTP ${r.status})`);
+          }
+
+          state.shippoShipmentId = String(data.shipmentId);
+          const rates = data.rates;
+
+          if (!rates.length){
+            el.deliveryHint.innerHTML = '<span class="co-hint-ic">⚠️</span><span>No shipping rates available</span>';
+            if (el.ratesDebug) el.ratesDebug.textContent = 'No rates returned';
             state.deliveryReady = false;
-            blockPayment('No delivery options available.');
+            blockPayment('No shipping rates available.');
             return;
           }
 
           el.deliverySelect.innerHTML = '';
 
-          options.forEach(opt=>{
-            // Support both: priceCents OR price
-            const price = (typeof opt.priceCents === 'number')
-              ? (opt.priceCents / 100)
-              : Number(opt.price || 0);
+          rates.forEach((rt) => {
+            const price = Number(rt.amount || 0);
+            const days = (rt.days == null) ? 0 : Number(rt.days);
+            const provider = rt.provider || 'Carrier';
+            const service = rt.service || 'Service';
+            const rateCcy = String(rt.currency || CURRENCY).toUpperCase();
 
             const op = document.createElement('option');
-            op.value = String(opt._id || opt.id);
+            op.value = String(rt.rateId);
+
             op.dataset.price = String(price);
-            op.dataset.days  = String(opt.deliveryDays || 0);
-            op.dataset.type  = String(opt.type || 'Standard');
-            op.dataset.area  = String(opt.area || 'Nationwide');
-            op.textContent   = `${opt.name} — ${formatCurrency(price)}`;
+            op.dataset.days = String(days);
+            op.dataset.type = `${provider} ${service}`.trim();
+            op.dataset.area = `Shippo (${rateCcy})`;
+            op.dataset.currency = rateCcy;
+            op.dataset.shipmentId = state.shippoShipmentId;
+
+            op.textContent = `${provider} ${service} — ${formatCurrency(price, rateCcy)}${days ? ` (~${days}d)` : ''}`;
+
             el.deliverySelect.appendChild(op);
           });
 
           el.deliverySelect.disabled = false;
           el.deliverySelect.selectedIndex = 0;
 
-          state.deliveryOptions = options;
           state.deliveryReady = true;
-
           applyDeliverySelection();
+          if (el.ratesDebug) el.ratesDebug.textContent = data.cached ? 'Loaded (cached)' : 'Loaded';
           maybeEnablePayment();
 
-        } catch (err){
+        } catch (err) {
           console.error(err);
-          el.deliveryHint.innerHTML = '<span class="co-hint-ic">❌</span><span>Could not load delivery options</span>';
+
+          const msg =
+            (err?.message === 'TIMEOUT')
+              ? 'Shipping quote timed out. Please retry.'
+              : (err?.name === 'AbortError')
+                ? 'Shipping quote timed out. Please retry.'
+                : (err?.message || 'Could not load live Shippo rates');
+
+          el.deliveryHint.innerHTML = `<span class="co-hint-ic">❌</span><span>${msg}</span>`;
+          if (el.ratesDebug) el.ratesDebug.textContent = 'Failed';
           state.deliveryReady = false;
-          blockPayment('Could not load delivery options.');
+          blockPayment(msg);
+
+        } finally {
+          state.quoteInFlight = false;
         }
       }
 
@@ -1319,11 +1492,19 @@
         if (!opt) return;
 
         state.selectedDelivery = {
+          // ✅ For Shippo: opt.value = rateId
           id: opt.value,
           price: Number(opt.dataset.price || 0),
           days: Number(opt.dataset.days || 0),
           type: opt.dataset.type || 'Standard',
-          area: opt.dataset.area || 'Nationwide'
+          area: opt.dataset.area || 'Nationwide',
+
+          // ✅ NEW: keep currency on the selected delivery
+          currency: String(opt.dataset.currency || CURRENCY).toUpperCase(),
+
+          // ✅ Shippo linkage
+          shippoRateId: opt.value,
+          shippoShipmentId: opt.dataset.shipmentId || state.shippoShipmentId || null
         };
 
         el.deliveryType.textContent = state.selectedDelivery.type;
@@ -1374,6 +1555,13 @@
           state.cartReady = true;
           maybeEnablePayment();
 
+          // ✅ If address is already valid (autofill / user already typed), quote now
+          if (state.addressReady && state.items.length) {
+            loadDeliveryOptions();
+          } else {
+            // keep UI honest
+            el.deliveryHint.innerHTML = '<span class="co-hint-ic">📍</span><span>Enter your shipping address to load rates.</span>';
+          }
         } catch (err){
           console.error(err);
           el.cartState.innerHTML = '<span>⚠️ Could not load your cart. Refresh the page.</span>';
@@ -1419,7 +1607,10 @@
         variantsEl.textContent = (item.variants && item.variants.label) ? item.variants.label : '';
 
         root.querySelector('.co-qty-val').textContent = String(item.quantity);
-        root.querySelector('.co-price-val').textContent = formatCurrency(item.price);
+
+        // ✅ Show row TOTAL because UI says "total"
+        const rowTotal = Number(item.price || 0) * Number(item.quantity || 0);
+        root.querySelector('.co-price-val').textContent = formatCurrency(rowTotal);
 
         const dec = root.querySelector('.co-dec');
         const inc = root.querySelector('.co-inc');
@@ -1486,10 +1677,37 @@
 
           createOrder: async function(){
             try{
-               const body = {
-                deliveryOptionId: state.selectedDelivery.id,
-                shipTo: state.shipTo,
+              const shippoRateId = state.selectedDelivery?.shippoRateId || null;
+              const shippoShipmentId = state.selectedDelivery?.shippoShipmentId || null;
+
+              if (!shippoRateId || !shippoShipmentId) {
+                showToast('Please select a delivery rate again (rates expired).', 'warning');
+                await loadDeliveryOptions();
+                throw new Error('Missing Shippo rate/shipment.');
+              }
+
+              // Always re-read the latest address values right before creating the order
+              const shipToNow = readShipTo();
+              const v = validateShipTo(shipToNow);
+              if (!v.ok){
+                showToast(v.message || 'Please complete your shipping address.', 'warning');
+                if (el.shipDetails) el.shipDetails.open = true;
+                throw new Error('Shipping address invalid.');
+              }
+
+              const body = {
+                // ✅ Tell backend this is the Shippo flow
+                delivery: 'shippo',
+
+                // ✅ Shippo linkage (server validates this pair)
+                shippoRateId,
+                shippoShipmentId,
+
+                // ✅ Shipping address (server re-validates)
+                shipTo: shipToNow,
                 deliveryNote: (document.getElementById('delivery-note')?.value || '').trim(),
+
+                // Optional: keep if your backend still needs it right now
                 items: state.items.map(i => ({
                   productId: i.productId,
                   name: i.name,
@@ -1498,42 +1716,44 @@
                   variants: { size: i.variants?.size || '', color: i.variants?.color || '' }
                 }))
               };
-     
+
               const r = await fetch('/payment/create-order', {
                 method:'POST',
-                headers:{ 'Content-Type':'application/json' },
+                headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
                 credentials:'same-origin',
                 body: JSON.stringify(body)
               });
 
-              const data = await r.json();
+              const data = await r.json().catch(()=>({}));
               if (!r.ok || !data.id){
-                throw new Error(data.message || 'Failed to create order');
+                throw new Error(data.message || `Failed to create order (HTTP ${r.status})`);
               }
               return data.id;
 
             } catch (err){
-              showToast('Failed to create order: ' + (err.message || 'Error'), 'error');
+              showToast('Failed to create order: ' + (err?.message || 'Error'), 'error');
               throw err;
             }
           },
 
           onApprove: async function(data){
             try{
-              const r = await fetch(`/payment/capture-order?orderId=${encodeURIComponent(data.orderID)}`, {
-                method:'POST',
-                credentials:'same-origin'
+              const r = await fetch('/payment/capture-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ orderID: data.orderID })
               });
-              const result = await r.json();
+
+              const result = await r.json().catch(()=>({}));
               if (!r.ok){
-                throw new Error(result.message || 'Failed to capture payment');
+                throw new Error(result.message || `Failed to capture payment (HTTP ${r.status})`);
               }
 
               const orderId = result.orderId || data.orderID;
               window.location.href = `/payment/thank-you?orderId=${encodeURIComponent(orderId)}`;
-
             } catch (err){
-              showToast('Payment error: ' + (err.message || 'Error'), 'error');
+              showToast('Payment error: ' + (err?.message || 'Error'), 'error');
             }
           },
 
@@ -1547,15 +1767,27 @@
           }
         }).render('#paypal-buttons');
       }
-
+      
       function init(){
         // Build countries once at startup (default ZA)
         buildCountrySelect('', 'ZA');
 
         // events
         el.deliverySelect.addEventListener('change', applyDeliverySelection);
+        if (el.ratesRetry){
+          el.ratesRetry.addEventListener('click', async () => {
+            showToast('Retrying shipping rates…', 'info');
+            // force refresh
+            state.shippoShipmentId = null;
+            state.deliveryReady = false;
+            state.selectedDelivery = null;
+            updateSummary();
+            await loadDeliveryOptions();
+          });
+        }
+
         ['input','change'].forEach(evt => {
-          [el.shipName, el.shipPhone, el.shipEmail, el.shipLine1, el.shipLine2, el.shipCity, el.shipState, el.shipZip, el.shipCountry]
+          [el.shipName, el.shipPhone, el.shipEmail, el.shipLine1, el.shipLine2, el.shipCity, el.shipState, el.shipZip, el.shipCountry, el.shipCountrySearch]
             .filter(Boolean)
             .forEach(node => node.addEventListener(evt, onAddressChange));
         });
@@ -1566,13 +1798,39 @@
           });
         }
 
+        if (el.shipDone) el.shipDone.addEventListener('click', closeAddressIfValid);
+
+        if (el.shipEdit) {
+          el.shipEdit.addEventListener('click', () => {
+            if (el.shipDetails) el.shipDetails.open = true;
+          });
+        }
+
         // run once at start
         onAddressChange();
 
+        function closeAddressIfValid(){
+          // make sure latest values are read/validated
+          onAddressChange();
+
+          if (!state.addressReady){
+            // keep it open so user can fix
+            if (el.shipDetails) el.shipDetails.open = true;
+            showToast('Please complete the required address fields.', 'warning');
+            return;
+          }
+
+          // ✅ valid: collapse only when user clicks Done
+          if (el.shipDetails) el.shipDetails.open = false;
+          showToast('Address saved.', 'success');
+
+          // ✅ load rates immediately after "Done" (clean UX)
+          if (state.cartReady && state.items.length) loadDeliveryOptions();
+        }
+
         // start
         blockPayment();
-        loadDeliveryOptions();
-        loadCart();
+        loadCart(); // ✅ cart first; address events will quote when ready
       }
 
       // Your page already runs scripts after load, but safe:

@@ -123,20 +123,7 @@ const DeliverySnapshotSchema = new Schema(
 // --- Tracking ---
 const ShippingTrackingSchema = new Schema(
   {
-    carrier: {
-      type: String,
-      enum: [
-        'COURIER_GUY',
-        'FASTWAY',
-        'POSTNET',
-        'PAXI',
-        'ARAMEX_STORE_TO_DOOR',
-        'DSV',
-        'RAM',
-        'OTHER',
-      ],
-      default: 'OTHER',
-    },
+    carrier: { type: String, default: 'OTHER', trim: true },
     carrierLabel: String,
     trackingNumber: String,
     trackingUrl: String,

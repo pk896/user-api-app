@@ -5,8 +5,8 @@ const express = require('express');
 const router = express.Router();
 const { fetch } = require('undici');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 
-const DeliveryOption = require('../models/DeliveryOption');
 const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOrder');
 
 // ======================================================
@@ -52,13 +52,6 @@ try {
   Product = null;
 }
 
-let createLabelForOrder = null;
-try {
-  ({ createLabelForOrder } = require('../utils/shippo/createLabelForOrder'));
-} catch {
-  createLabelForOrder = null;
-}
-
 const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
@@ -66,9 +59,23 @@ const {
   BASE_CURRENCY = 'USD',
   VAT_RATE = '0.15',
   BRAND_NAME = 'Unicoporate',
-  SHIPPING_PREF = 'NO_SHIPPING',
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
 } = process.env;
+
+// ======================================================
+// ✅ Production switches
+// ======================================================
+// If true: capture-order will attempt to BUY a label automatically (real money in live)
+// In production, safest is FALSE and labels are created manually by admin/seller.
+const AUTO_BUY_LABELS = String(process.env.AUTO_BUY_LABELS || '').trim().toLowerCase() === 'true';
+
+// CSRF-ish protection for cookie sessions: allow only these site origins for JSON POSTs.
+// Example: WEB_ORIGINS="https://unicoporate.com,https://www.unicoporate.com"
+const WEB_ORIGINS = String(process.env.WEB_ORIGINS || '')
+  .split(',')
+  .map((s) => normalizeOrigin(s))
+  .filter(Boolean);
+
 
 // ✅ Normalize + validate (so Render env changes are safe)
 const PAYPAL_MODE_N = (() => {
@@ -104,6 +111,48 @@ const PLATFORM_FEE_BPS = (() => {
 })();
 
 // ======================================================
+// ✅ Origin protection for cookie-session JSON endpoints (anti-CSRF)
+// ======================================================
+function normalizeOrigin(s) {
+  return String(s || '').trim().replace(/\/$/, '').toLowerCase();
+}
+
+const ALLOWED_ORIGINS = WEB_ORIGINS.map(normalizeOrigin);
+
+function requireAllowedOriginJson(req, res, next) {
+  const method = String(req.method || '').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+
+  const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  if (!isProd) return next();
+
+  if (!ALLOWED_ORIGINS.length) {
+    return res.status(500).json({
+      ok: false,
+      code: 'WEB_ORIGINS_NOT_SET',
+      message: 'Server misconfiguration: WEB_ORIGINS must be set in production.',
+    });
+  }
+
+  const origin = normalizeOrigin(req.headers.origin);
+  const referer = normalizeOrigin(req.headers.referer);
+
+  if (!origin && !referer) {
+    return res.status(403).json({ ok: false, code: 'ORIGIN_MISSING', message: 'Missing Origin/Referer.' });
+  }
+
+  const ok =
+    (origin && ALLOWED_ORIGINS.includes(origin)) ||
+    (referer && ALLOWED_ORIGINS.some((o) => referer.startsWith(o)));
+
+  if (!ok) {
+    return res.status(403).json({ ok: false, code: 'ORIGIN_BLOCKED', message: 'Blocked request from untrusted origin.' });
+  }
+
+  return next();
+}
+
+// ======================================================
 // ✅ AUTH helpers (everyone can buy; everyone sees ONLY own orders)
 // ======================================================
 function getUserId(req) {
@@ -125,6 +174,22 @@ function requireAnyAuth(req, res, next) {
   return res.redirect('/users/login');
 }
 
+function requireAnyAuthJson(req, res, next) {
+  if (isAnyLoggedIn(req)) return next();
+  return res.status(401).json({ ok: false, code: 'AUTH_REQUIRED', message: 'Login required.' });
+}
+
+function cartSig(cart) {
+  const items = Array.isArray(cart?.items) ? cart.items : [];
+  const parts = items.map((it) => {
+    const id = String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim();
+    const qty = toQty(it?.qty ?? it?.quantity, 1);
+    return `${id}:${qty}`;
+  });
+  parts.sort();
+  return parts.join('|');
+}
+
 // ======================================================
 // ✅ Small helpers
 // ======================================================
@@ -137,12 +202,24 @@ function themeCssFrom(req) {
 function safeStr(v, max = 2000) {
   return String(v || '').trim().slice(0, max);
 }
+
 function normalizeMoneyNumber(v) {
   if (v === null || v === undefined || v === '') return null;
+
+  // ✅ handle { value, amount } objects
+  if (typeof v === 'object') {
+    const inner = v.value ?? v.amount ?? v.price ?? null;
+    if (inner === null || inner === undefined || inner === '') return null;
+    const n2 = Number(String(inner).trim());
+    return Number.isFinite(n2) ? n2 : null;
+  }
+
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+
   const n = Number(String(v).trim());
   return Number.isFinite(n) ? n : null;
 }
+
 function toMoney2(v, fallback = '0.00') {
   const n = normalizeMoneyNumber(v);
   if (n === null) return fallback;
@@ -166,6 +243,14 @@ function saveSession(req) {
   });
 }
 
+function asIdVariants(id) {
+  const s = String(id || '').trim();
+  const out = [];
+  if (s) out.push(s);
+  if (mongoose?.Types?.ObjectId?.isValid?.(s)) out.push(new mongoose.Types.ObjectId(s));
+  return out;
+}
+
 function normalizeCountryCode(code) {
   const c = String(code || '').trim().toUpperCase();
   return /^[A-Z]{2}$/.test(c) ? c : null;
@@ -174,6 +259,35 @@ function normalizeCountryCode(code) {
 function cleanAddrField(v, max = 100) {
   const s = String(v || '').trim();
   return s ? s.slice(0, max) : '';
+}
+
+function _normCmp(v) {
+  return String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+function shippoToFromShippingInput(shippingInput) {
+  // shippingInput is from requireShippingAddressFromBody()
+  return {
+    name: shippingInput.fullName,
+    phone: shippingInput.phone,
+    email: shippingInput.email,
+    street1: shippingInput.address.address_line_1,
+    street2: shippingInput.address.address_line_2 || '',
+    city: shippingInput.address.admin_area_2,
+    state: shippingInput.address.admin_area_1,
+    zip: shippingInput.address.postal_code,
+    country: shippingInput.address.country_code,
+  };
+}
+function sameShippoTo(a, b) {
+  if (!a || !b) return false;
+  return (
+    _normCmp(a.street1) === _normCmp(b.street1) &&
+    _normCmp(a.street2 || '') === _normCmp(b.street2 || '') &&
+    _normCmp(a.city) === _normCmp(b.city) &&
+    _normCmp(a.state) === _normCmp(b.state) &&
+    _normCmp(a.zip) === _normCmp(b.zip) &&
+    _normCmp(a.country) === _normCmp(b.country)
+  );
 }
 
 function requireShippingAddressFromBody(req) {
@@ -289,17 +403,232 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 }
 
 // ======================================================
-// ✅ Delivery helpers
+// ✅ Shippo (LIVE RATES) helpers
 // ======================================================
-async function cheapestDelivery() {
-  const opt = await DeliveryOption.findOne({ active: true })
-    .sort({ priceCents: 1, deliveryDays: 1, name: 1 })
-    .lean();
+const SHIPPO_API = 'https://api.goshippo.com';
+const SHIPPO_TOKEN = String(process.env.SHIPPO_TOKEN || '').trim();
 
-  if (!opt) return { opt: null, dollars: 0 };
+// Shippo can be slow to return rates (especially international). Make it configurable.
+const SHIPPO_TIMEOUT_MS = (() => {
+  const n = Number(String(process.env.SHIPPO_TIMEOUT_MS || '').trim());
+  return Number.isFinite(n) ? Math.max(5000, Math.min(120000, Math.floor(n))) : 45000; // default 45s
+})();
 
-  const dollars = Number(((opt.priceCents || 0) / 100).toFixed(2));
-  return { opt, dollars };
+function mustShippoToken() {
+  if (!SHIPPO_TOKEN) {
+    const err = new Error('SHIPPO_TOKEN is missing in .env');
+    err.code = 'SHIPPO_NOT_CONFIGURED';
+    throw err;
+  }
+}
+
+function shippoHeaders() {
+  mustShippoToken();
+  return {
+    Authorization: `ShippoToken ${SHIPPO_TOKEN}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+}
+
+function envStr(name, fallback = '') {
+  const v = String(process.env[name] || '').trim();
+  return v || fallback;
+}
+
+function envNum(name, fallback) {
+  const raw = String(process.env[name] || '').trim();
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// ✅ FROM address (your warehouse / sender address)
+function getShippoFromAddress() {
+  const country = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'US')) || 'US';
+
+  const from = {
+    name: envStr('SHIPPO_FROM_NAME', BRAND_NAME_N),
+    street1: envStr('SHIPPO_FROM_STREET1', ''),
+    street2: envStr('SHIPPO_FROM_STREET2', ''),
+    city: envStr('SHIPPO_FROM_CITY', ''),
+    state: envStr('SHIPPO_FROM_STATE', ''),
+    zip: envStr('SHIPPO_FROM_ZIP', ''),
+    country,
+    phone: envStr('SHIPPO_FROM_PHONE', ''),
+    email: envStr('SHIPPO_FROM_EMAIL', ''),
+  };
+
+  // minimal required for Shippo rating
+  const missing = [];
+  if (!from.street1) missing.push('SHIPPO_FROM_STREET1');
+  if (!from.city) missing.push('SHIPPO_FROM_CITY');
+  if (!from.state) missing.push('SHIPPO_FROM_STATE');
+  if (!from.zip) missing.push('SHIPPO_FROM_ZIP');
+  if (!from.country) missing.push('SHIPPO_FROM_COUNTRY');
+
+  if (missing.length) {
+    const err = new Error(`Missing Shippo FROM env vars: ${missing.join(', ')}`);
+    err.code = 'SHIPPO_FROM_ADDRESS_INCOMPLETE';
+    throw err;
+  }
+
+  return from;
+}
+
+// ✅ Very simple parcel (you can improve later with product weights/dims)
+function buildShippoParcelFromCart(cart) {
+  const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
+  const qtySum = itemsArr.reduce((sum, it) => sum + toQty(it?.qty ?? it?.quantity, 1), 0);
+
+  // Defaults (safe + predictable)
+  const massUnit = envStr('SHIPPO_PARCEL_MASS_UNIT', 'lb');         // lb | oz | kg | g
+  const distUnit = envStr('SHIPPO_PARCEL_DISTANCE_UNIT', 'in');    // in | cm | ft | m
+  const perItemWeight = envNum('SHIPPO_PARCEL_WEIGHT_PER_ITEM', 1); // 1 lb each default
+  const weight = Math.max(0.1, +(qtySum * perItemWeight).toFixed(2));
+
+  const length = envNum('SHIPPO_PARCEL_LENGTH', 10);
+  const width  = envNum('SHIPPO_PARCEL_WIDTH', 8);
+  const height = envNum('SHIPPO_PARCEL_HEIGHT', 4);
+
+  return {
+    length: String(length),
+    width: String(width),
+    height: String(height),
+    distance_unit: distUnit,
+    weight: String(weight),
+    mass_unit: massUnit,
+  };
+}
+
+async function shippoCreateShipment({ to, cart }) {
+  const from = getShippoFromAddress();
+  const parcel = buildShippoParcelFromCart(cart);
+
+  const payload = {
+    address_from: {
+      name: from.name,
+      street1: from.street1,
+      street2: from.street2,
+      city: from.city,
+      state: from.state,
+      zip: from.zip,
+      country: from.country,
+      phone: from.phone || undefined,
+      email: from.email || undefined,
+    },
+    address_to: {
+      name: to.name,
+      street1: to.street1,
+      street2: to.street2 || '',
+      city: to.city,
+      state: to.state,
+      zip: to.zip,
+      country: to.country,
+      phone: to.phone || undefined,
+      email: to.email || undefined,
+      is_residential: true,
+    },
+    parcels: [parcel],
+    async: false, // keep synchronous so we get rates immediately
+  };
+
+  const res = await fetchWithTimeout(
+    `${SHIPPO_API}/shipments/`,
+    {
+      method: 'POST',
+      headers: shippoHeaders(),
+      body: JSON.stringify(payload),
+    },
+    SHIPPO_TIMEOUT_MS
+  );
+
+  const json = await res.json().catch(() => ({}));
+
+  // Shippo sometimes returns 200 but object_status="ERROR"
+  const objStatus = String(json?.object_status || '').toUpperCase();
+  if (objStatus && objStatus !== 'SUCCESS') {
+    const msg =
+      (Array.isArray(json?.messages) && json.messages.length)
+        ? JSON.stringify(json.messages)
+        : (json?.detail || json?.message || 'Shippo shipment object_status=ERROR');
+    const err = new Error(`Shippo shipment error: ${msg}`);
+    err.code = 'SHIPPO_SHIPMENT_OBJECT_ERROR';
+    throw err;
+  }
+
+  if (!res.ok) {
+    const msg = json?.detail || json?.message || JSON.stringify(json);
+    const err = new Error(`Shippo shipment error (${res.status}): ${msg}`);
+    err.code = 'SHIPPO_SHIPMENT_FAILED';
+    throw err;
+  }
+
+  return json; // includes object_id + rates
+}
+
+function normalizeShippoRates(shipmentJson) {
+  const rates = Array.isArray(shipmentJson?.rates) ? shipmentJson.rates : [];
+
+  const out = rates
+    .map((r) => {
+      const amount = normalizeMoneyNumber(r?.amount);
+      const currency = String(r?.currency || '').toUpperCase() || upperCcy;
+
+      const days = normalizeMoneyNumber(r?.estimated_days);
+      const provider = String(r?.provider || '').trim();
+      const service = String(r?.servicelevel?.name || r?.servicelevel?.token || '').trim();
+
+      return {
+        rateId: r?.object_id ? String(r.object_id) : null,
+        amount: amount == null ? null : +amount.toFixed(2),
+        currency,
+        provider,
+        service,
+        days: days == null ? null : Math.max(0, Math.floor(days)),
+      };
+    })
+    .filter((x) => x.rateId && x.amount != null);
+
+  // cheapest first
+  out.sort((a, b) => (a.amount - b.amount));
+
+  return out;
+}
+
+async function shippoBuyLabelFromRate(rateId) {
+  const payload = {
+    rate: String(rateId),
+    label_file_type: envStr('SHIPPO_LABEL_FILE_TYPE', 'PDF'), // PDF | PNG | ZPLII | EPL2
+    async: false,
+  };
+
+  const res = await fetchWithTimeout(
+    `${SHIPPO_API}/transactions/`,
+    {
+      method: 'POST',
+      headers: shippoHeaders(),
+      body: JSON.stringify(payload),
+    },
+    SHIPPO_TIMEOUT_MS
+  );
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.detail || json?.message || JSON.stringify(json);
+    const err = new Error(`Shippo transaction error (${res.status}): ${msg}`);
+    err.code = 'SHIPPO_TRANSACTION_FAILED';
+    throw err;
+  }
+
+  // Shippo uses object_status: "SUCCESS" / "ERROR"
+  const status = String(json?.object_status || '').toUpperCase();
+  if (status !== 'SUCCESS') {
+    const err = new Error(`Shippo label buy failed: ${json?.messages ? JSON.stringify(json.messages) : 'Unknown'}`);
+    err.code = 'SHIPPO_LABEL_FAILED';
+    throw err;
+  }
+
+  return json;
 }
 
 // ======================================================
@@ -423,7 +752,9 @@ async function pushTrackingToPayPal({ captureId, trackingNumber, carrier, status
   return json;
 }
 
-async function createShipmentViaProvider({ orderDoc, shipping, _delivery}) {
+async function createShipmentViaProvider({ req, orderDoc, shipping }) {
+  void shipping;
+
   const provider = String(process.env.SHIP_PROVIDER || '').trim().toLowerCase();
   if (!provider) {
     const err = new Error('SHIP_PROVIDER is not set (e.g. shippo).');
@@ -432,31 +763,37 @@ async function createShipmentViaProvider({ orderDoc, shipping, _delivery}) {
   }
 
   if (provider === 'shippo') {
-    if (typeof createLabelForOrder !== 'function') {
-      throw new Error('Shippo helper not found. Create utils/shippo/createLabelForOrder.js');
+    // ✅ Read the selected rateId from the session pending order first
+    const wantedRateId =
+      req?.session?.pendingOrder?.shippo?.rateId ||
+      orderDoc?.shippo?.rateId ||
+      req?.session?.shippoQuote?.rates?.[0]?.rateId || // last-resort fallback
+      null;
+
+    if (!wantedRateId) {
+      const err = new Error('No Shippo rateId selected for this order.');
+      err.code = 'SHIPPO_RATE_MISSING';
+      throw err;
     }
 
-    // Make sure the order has the final shipping saved (Shippo reads from orderDoc.shipping)
-    orderDoc.shipping = orderDoc.shipping || shipping || null;
+    // ✅ Buy label directly from selected rateId
+    const tx = await shippoBuyLabelFromRate(wantedRateId);
 
-    // Buy label (cheapest rate)
-    const { shipment, chosenRate, transaction } = await createLabelForOrder(orderDoc, { chooseRate: 'cheapest' });
-
-    // Save Shippo fields on the order (your model supports these)
+    // ✅ Save Shippo metadata on the order (safe fields)
     orderDoc.shippo = {
-      shipmentId: shipment?.object_id || null,
-      transactionId: transaction?.object_id || null,
-      rateId: chosenRate?.object_id || null,
-      labelUrl: transaction?.label_url || null,
-      trackingStatus: transaction?.tracking_status || null,
+      shipmentId: tx?.shipment ? String(tx.shipment) : (orderDoc?.shippo?.shipmentId || null),
+      transactionId: tx?.object_id ? String(tx.object_id) : null,
+      rateId: wantedRateId,
+      labelUrl: tx?.label_url || null,
+      trackingStatus: tx?.tracking_status || null,
     };
 
-    // Return normalized tracking info to your caller
     return {
-      carrier: null, // IMPORTANT: PayPal carrier codes are strict; leave null unless you map providers
-      trackingNumber: transaction?.tracking_number || null,
-      trackingUrl: transaction?.tracking_url_provider || null,
-      labelUrl: transaction?.label_url || null,
+      // ✅ Keep carrier null to avoid enum crashes until we map it safely
+      carrier: null,
+      trackingNumber: tx?.tracking_number || null,
+      trackingUrl: tx?.tracking_url_provider || null,
+      labelUrl: tx?.label_url || null,
       status: 'SHIPPED',
       shippedAt: new Date(),
     };
@@ -948,14 +1285,6 @@ function buildReceiptLink(orderId) {
 // ✅ VIEWS
 // ======================================================
 router.get('/checkout', async (req, res) => {
-  let shippingFlat = 0;
-  try {
-    const { dollars } = await cheapestDelivery();
-    shippingFlat = dollars;
-  } catch {
-    // placeholding
-  }
-
   return res.render('checkout', {
     title: 'Checkout',
     themeCss: themeCssFrom(req),
@@ -964,7 +1293,10 @@ router.get('/checkout', async (req, res) => {
     currency: upperCcy,
     brandName: BRAND_NAME_N,
     vatRate,
-    shippingFlat,
+
+    // ✅ Shippo-only checkout (no delivery options)
+    shippoOnly: true,
+
     success: req.flash?.('success') || [],
     error: req.flash?.('error') || [],
   });
@@ -992,13 +1324,98 @@ router.get('/config', (req, res) => {
 });
 
 // ======================================================
-// ✅ CREATE ORDER (PayPal)
+// ✅ LIVE Shippo Rates (Quote) - used by checkout dropdown
+// POST /payment/shippo/quote
+// Body: { shipTo: { name, phone, email, street1, street2, city, state, zip, country } }
 // ======================================================
-router.post('/create-order', express.json(), async (req, res) => {
+router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (req, res) => {
+  try {
+    // Validate shipTo using your existing validator
+    const shipTo = requireShippingAddressFromBody(req); // returns PayPal-shaped keys
+    // Convert back to the checkout-style keys we need
+    const to = {
+      name: shipTo.fullName,
+      phone: shipTo.phone,
+      email: shipTo.email,
+      street1: shipTo.address.address_line_1,
+      street2: shipTo.address.address_line_2,
+      city: shipTo.address.admin_area_2,
+      state: shipTo.address.admin_area_1,
+      zip: shipTo.address.postal_code,
+      country: shipTo.address.country_code,
+    };
+
+    const cart = req.session?.cart || { items: [] };
+    const sig = cartSig(cart);
+    const q = req.session?.shippoQuote || null;
+
+    // ✅ 5 minute cache when cart+address match
+    const isFresh = q?.createdAt && (Date.now() - q.createdAt) < 5 * 60 * 1000;
+    if (
+      q &&
+      isFresh &&
+      q.cartSig === sig &&
+      q.to &&
+      sameShippoTo(q.to, to) &&
+      q.shipmentId &&
+      Array.isArray(q.rates) &&
+      q.rates.length
+    ) {
+      return res.json({ ok: true, shipmentId: q.shipmentId, rates: q.rates, cached: true });
+    }
+
+    if (!Array.isArray(cart.items) || cart.items.length === 0) {
+      return res.status(422).json({ ok: false, code: 'CART_EMPTY', message: 'Cart is empty.' });
+    }
+
+    const shipment = await shippoCreateShipment({ to, cart });
+    const shipmentId = shipment?.object_id ? String(shipment.object_id) : null;
+    const rates = normalizeShippoRates(shipment);
+
+    if (!shipmentId || !rates.length) {
+      return res.status(502).json({
+        ok: false,
+        code: 'NO_RATES',
+        message: 'Shippo returned no rates for this address/cart.',
+      });
+    }
+
+    // ✅ Store quote in session so user cannot fake prices/rateIds
+    req.session.shippoQuote = {
+      shipmentId,
+      rates,
+      to,
+      cartSig: sig,
+      createdAt: Date.now(),
+    };
+    await saveSession(req);
+
+    return res.json({ ok: true, shipmentId, rates });
+  } catch (err) {
+    console.error('POST /payment/shippo/quote error:', err?.message || err);
+
+        const isAbort =
+      err?.name === 'AbortError' ||
+      String(err?.message || '').toLowerCase().includes('aborted');
+
+    const code = err?.code || (isAbort ? 'SHIPPO_TIMEOUT' : 'SHIPPO_QUOTE_FAILED');
+
+    return res.status(isAbort ? 504 : 500).json({
+      ok: false,
+      code,
+      message: err?.message || (isAbort ? 'Shippo quote timed out.' : 'Failed to load Shippo rates.'),
+    }); 
+  }
+});
+
+// ======================================================
+// ✅ CREATE ORDER (PayPal) — SHIPPO ONLY (NO DeliveryOption, NO collect)
+// ======================================================
+router.post('/create-order', requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     const cart = req.session?.cart || { items: [] };
 
-    // ✅ Always capture + validate shipping from checkout (needed for Shippo phone/email)
+    // ✅ Shippo-only: shipping address is ALWAYS required
     let shippingInput = null;
     try {
       shippingInput = requireShippingAddressFromBody(req);
@@ -1011,9 +1428,14 @@ router.post('/create-order', express.json(), async (req, res) => {
     }
 
     if (!Array.isArray(cart.items) || cart.items.length === 0) {
-      return res.status(422).json({ ok: false, code: 'CART_EMPTY', message: 'Cart is empty (server session).' });
+      return res.status(422).json({
+        ok: false,
+        code: 'CART_EMPTY',
+        message: 'Cart is empty (server session).',
+      });
     }
 
+    // ✅ Build itemsBrief (keep your existing logic)
     const itemsBrief = cart.items.map((it, i) => {
       const qty = toQty(it.qty ?? it.quantity, 1);
       const unitPriceN = normalizeMoneyNumber(it.price ?? it.unitPrice);
@@ -1044,70 +1466,112 @@ router.post('/create-order', express.json(), async (req, res) => {
       const netUnit = r > 0 ? Number((grossUnit / (1 + r)).toFixed(2)) : grossUnit;
 
       return {
-        productId, // ✅ MUST be Product.customId (string)
+        productId,
         name: (it.name || it.title || `Item ${i + 1}`).toString().slice(0, 127),
         quantity: qty,
-
-        // ✅ keep unitPrice for compatibility (still gross)
-        unitPrice: grossUnit,
-
-        // ✅ add these two (NEW)
-        unitPriceGross: grossUnit,
-        unitPriceNet: netUnit,
-
+        unitPrice: grossUnit,        // gross
+        unitPriceGross: grossUnit,   // gross
+        unitPriceNet: netUnit,       // net
         imageUrl: it.imageUrl || it.image || '',
         variants: it.variants || {},
       };
     });
 
-    const providedId = safeStr(req.body?.deliveryOptionId, 64);
-    const simpleDelivery = safeStr(req.body?.delivery, 32).toLowerCase();
+    // ✅ Shippo selection must come from checkout
+    const shippoRateId = safeStr(req.body?.shippoRateId, 128);
+    const shippoShipmentId = safeStr(req.body?.shippoShipmentId, 128);
 
-    let opt = null;
-
-    if (simpleDelivery === 'collect') {
-      opt = { _id: null, name: 'Collect in store', deliveryDays: 0, priceCents: 0, active: true };
-    } else if (providedId) {
-      try {
-        const found = await DeliveryOption.findById(providedId).lean();
-        if (found && found.active) opt = found;
-      } catch {
-        // placeholding
-      }
-    }
-
-    if (!opt) {
-      opt = await DeliveryOption.findOne({ active: true })
-        .sort({ priceCents: 1, deliveryDays: 1, name: 1 })
-        .lean();
-    }
-
-    if (!opt) {
-      return res.status(404).json({
+    if (!shippoRateId || !shippoShipmentId) {
+      return res.status(422).json({
         ok: false,
-        code: 'NO_ACTIVE_DELIVERY',
-        message: 'No active delivery options available.',
+        code: 'SHIPPO_RATE_REQUIRED',
+        message: 'Please select a shipping rate (Shippo) before paying.',
       });
     }
 
-    const deliveryDollars = Number(((opt.priceCents || 0) / 100).toFixed(2));
-    const { items: ppItems, subTotal, vatTotal, delivery: del, grandTotal: grand } = computeTotalsFromSession(
+    // ✅ Validate against the session quote (prevents fake rateId/price)
+    const q = req.session?.shippoQuote || null;
+
+    const fresh = q?.createdAt && Date.now() - q.createdAt < 30 * 60 * 1000; // 30 min
+    const sameShipment = q?.shipmentId && String(q.shipmentId) === String(shippoShipmentId);
+
+    if (!q || !fresh || !sameShipment) {
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_QUOTE_EXPIRED',
+        message: 'Shipping quote expired. Please re-select your shipping rate.',
+      });
+    }
+
+    // ✅ Prevent address mismatch (quoted "to" must match current shipping input)
+    const toFromInput = shippoToFromShippingInput(shippingInput);
+    if (!sameShippoTo(q.to, toFromInput)) {
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_ADDRESS_CHANGED',
+        message: 'Shipping address changed after quoting. Please re-select your shipping rate.',
+      });
+    }
+
+    const rate = Array.isArray(q.rates)
+      ? q.rates.find((r) => String(r.rateId) === String(shippoRateId))
+      : null;
+
+    if (!rate) {
+      const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_RATE_NOT_FOUND',
+        message: 'Selected shipping rate not found. Please re-select.',
+        ...(isProd
+          ? {}
+          : {
+              debug: {
+                received: { shippoRateId, shippoShipmentId },
+                session: {
+                  shipmentId: q?.shipmentId || null,
+                  rateIds: Array.isArray(q?.rates) ? q.rates.map((x) => String(x.rateId)) : [],
+                },
+              },
+            }),
+      });
+    }
+
+    // ✅ This is the ONLY "delivery option" now (Shippo)
+    const shippoPicked = {
+      shipmentId: String(q.shipmentId),
+      rateId: String(rate.rateId),
+      provider: rate.provider || null,
+      service: rate.service || null,
+      days: rate.days ?? null,
+      amount: Number(rate.amount || 0),
+      currency: rate.currency || upperCcy,
+    };
+
+    // ✅ Use the rate amount as delivery/shipping
+    const deliveryDollars = Number((Number(rate.amount || 0)).toFixed(2));
+
+    const {
+      items: ppItems,
+      subTotal,
+      vatTotal,
+      delivery: del,
+      grandTotal: grand,
+    } = computeTotalsFromSession(
       {
         items: itemsBrief.map((x) => ({
-          // ✅ PayPal will SHOW this name (so we put variants here)
           name: paypalNameWithVariants(x.name, x.variants),
-
-          // ✅ extra fields (PayPal may or may not show them)
           description: variantText(x.variants),
-          sku: x.productId, // Product.customId
-
-          // ✅ used for totals
-          price: x.unitPrice,       // gross coming in (computeTotalsFromSession converts to NET)
+          sku: x.productId,
+          price: x.unitPrice, // gross input (computeTotalsFromSession converts to NET)
           quantity: x.quantity,
         })),
       },
       deliveryDollars
     );
+
+    // ✅ Shippo-only: PayPal must receive the shipping address
+    const shippingPref = 'SET_PROVIDED_ADDRESS';
 
     const orderBody = {
       intent: 'CAPTURE',
@@ -1124,21 +1588,17 @@ router.post('/create-order', express.json(), async (req, res) => {
             },
           },
           items: ppItems,
-          description: `Delivery: ${opt.name} (${opt.deliveryDays || 0} days)`,
-          ...(shippingInput
-            ? {
-                shipping: {
-                  name: { full_name: shippingInput.fullName },
-                  address: shippingInput.address,
-                },
-              }
-            : {}),
+          description: `Shipping: ${shippoPicked.provider || 'Carrier'} ${shippoPicked.service || 'Service'}`.trim(),
+          shipping: {
+            name: { full_name: shippingInput.fullName },
+            address: shippingInput.address,
+          },
         },
       ],
       application_context: {
         brand_name: BRAND_NAME_N,
         user_action: 'PAY_NOW',
-        shipping_preference: SHIPPING_PREF,
+        shipping_preference: shippingPref,
       },
     };
 
@@ -1162,25 +1622,38 @@ router.post('/create-order', express.json(), async (req, res) => {
       });
     }
 
+    // ✅ Persist what we need for capture-order + optional label buying
     req.session.pendingOrder = {
       id: data.id,
       itemsBrief,
-      deliveryOptionId: opt._id ? String(opt._id) : null,
-      deliveryName: opt.name,
-      deliveryDays: opt.deliveryDays || 0,
+
+      deliveryOptionId: null, // ✅ shippo-only
+      deliveryName: `Shippo: ${(shippoPicked.provider || 'Carrier')} ${(shippoPicked.service || 'Service')}`.trim(),
+      deliveryDays: shippoPicked.days ?? 0,
       deliveryPrice: del,
+
       subTotal,
       vatTotal,
       grandTotal: grand,
       currency: upperCcy,
-      shippingInput: shippingInput
-        ? {
-            fullName: shippingInput.fullName,
-            phone: shippingInput.phone || null,
-            email: shippingInput.email || null,
-            address: shippingInput.address,
-          }
-        : null,
+
+      shippo: {
+        shipmentId: shippoPicked.shipmentId,
+        rateId: shippoPicked.rateId,
+        provider: shippoPicked.provider || null,
+        service: shippoPicked.service || null,
+        days: shippoPicked.days ?? null,
+        amount: shippoPicked.amount ?? null,
+        currency: shippoPicked.currency || upperCcy,
+      },
+
+      shippingInput: {
+        fullName: shippingInput.fullName,
+        phone: shippingInput.phone || null,
+        email: shippingInput.email || null,
+        address: shippingInput.address,
+      },
+
       createdAt: Date.now(),
     };
 
@@ -1188,14 +1661,18 @@ router.post('/create-order', express.json(), async (req, res) => {
     return res.json({ ok: true, id: data.id });
   } catch (err) {
     console.error('create-order error:', err?.stack || err);
-    return res.status(500).json({ ok: false, code: 'SERVER_ERROR', message: err?.message || 'Server error creating order' });
+    return res.status(500).json({
+      ok: false,
+      code: 'SERVER_ERROR',
+      message: err?.message || 'Server error creating order',
+    });
   }
 });
 
 // ======================================================
 // ✅ CAPTURE ORDER (PayPal)
 // ======================================================
-router.post('/capture-order', express.json(), async (req, res) => {
+router.post('/capture-order', requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     const orderID = safeStr(req.body?.orderID || req.query?.orderId, 128);
     if (!orderID) {
@@ -1464,47 +1941,57 @@ router.post('/capture-order', express.json(), async (req, res) => {
         }
 
         // ======================================================
-        // ✅ AUTO-FULFILL SHIPPING (CREATE SHIPMENT + TRACKING)
+        // ✅ OPTIONAL: AUTO-FULFILL SHIPPING (CREATE LABEL + TRACKING)
+        // Production-safe default: OFF (AUTO_BUY_LABELS=false)
         // ======================================================
-        try {
-          // Only attempt if we have an Order doc and a captureId
-          const paidStatus = String(capture?.status || doc?.status || '').toUpperCase();
-          if (doc && captureId && (paidStatus === 'COMPLETED' || paidStatus === 'PAID')) {
-            // Use PayPal-shown shipping address (source of truth)
-            const ship = shippingAddress;
+        if (AUTO_BUY_LABELS) {
+          try {
+            const paidStatus = String(capture?.status || doc?.status || '').toUpperCase();
 
-            // Create shipment via your provider (returns tracking)
-            const tracking = await createShipmentViaProvider({
-              orderDoc: doc,
-              shipping: ship,
-              delivery: doc.delivery || null,
-            });
+            // Only attempt if:
+            // - paid
+            // - we have a doc
+            // - we have captureId
+            // - we haven't already attached tracking/label
+            const alreadyHasTracking =
+              !!doc?.shippingTracking?.trackingNumber ||
+              !!doc?.shippingTracking?.labelUrl ||
+              !!doc?.shippo?.transactionId ||
+              !!doc?.shippo?.labelUrl;
 
-            // Save tracking on the order (fields you will add in Order model)
-            doc.shippingTracking = {
-              carrier: tracking.carrier || null,
-              trackingNumber: tracking.trackingNumber || null,
-              trackingUrl: tracking.trackingUrl || null,
-              labelUrl: tracking.labelUrl || null,
-              status: tracking.status || 'SHIPPED',
-              shippedAt: tracking.shippedAt || new Date(),
-            };
-            doc.fulfillmentStatus = 'shipped';
-            await doc.save();
+            if (doc && captureId && (paidStatus === 'COMPLETED' || paidStatus === 'PAID') && !alreadyHasTracking) {
+              const ship = shippingAddress;
 
-            // Push tracking to PayPal automatically
-            if (doc.shippingTracking?.trackingNumber && doc.shippingTracking?.carrier) {
-              await pushTrackingToPayPal({
-                captureId,
-                trackingNumber: doc.shippingTracking.trackingNumber,
-                carrier: doc.shippingTracking.carrier,
-                status: doc.shippingTracking.status || 'SHIPPED',
+              const tracking = await createShipmentViaProvider({
+                req,
+                orderDoc: doc,
+                shipping: ship,
               });
+
+              doc.shippingTracking = {
+                carrier: tracking.carrier || null,
+                trackingNumber: tracking.trackingNumber || null,
+                trackingUrl: tracking.trackingUrl || null,
+                labelUrl: tracking.labelUrl || null,
+                status: tracking.status || 'SHIPPED',
+                shippedAt: tracking.shippedAt || new Date(),
+              };
+              doc.fulfillmentStatus = 'SHIPPED';
+              await doc.save();
+
+              // Push tracking to PayPal only if carrier exists
+              if (doc.shippingTracking?.trackingNumber && doc.shippingTracking?.carrier) {
+                await pushTrackingToPayPal({
+                  captureId,
+                  trackingNumber: doc.shippingTracking.trackingNumber,
+                  carrier: doc.shippingTracking.carrier,
+                  status: doc.shippingTracking.status || 'SHIPPED',
+                });
+              }
             }
+          } catch (shipErr) {
+            console.warn('⚠️ Auto shipping failed (checkout continues):', shipErr?.message || String(shipErr));
           }
-        } catch (shipErr) {
-          console.warn('⚠️ Auto shipping failed (checkout continues):', shipErr?.message || String(shipErr));
-          // Do NOT fail checkout. Shipping can be retried by an admin job/route later.
         }
       }
     } catch (e) {
@@ -1664,7 +2151,7 @@ router.get('/cancel', (req, res) => {
 // - Seller/Supplier business: returns orders that CONTAIN seller items,
 //   but returns ONLY seller items + shipping + status.
 // ======================================================
-router.get('/my-orders', requireAnyAuth, async (req, res) => {
+router.get('/my-orders', requireAnyAuthJson, async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, error: 'Order model not available.' });
 
@@ -1676,17 +2163,21 @@ router.get('/my-orders', requireAnyAuth, async (req, res) => {
     // ------------------------------------------------------
     if (businessId && isSellerBusiness(req)) {
       if (!Product) {
-        return res.status(500).json({ ok: false, error: 'Product model not available (seller view).' });
+        return res
+          .status(500)
+          .json({ ok: false, error: 'Product model not available (seller view).' });
       }
 
       // 1) Find all Product.customId owned by this business (try common field names)
+      const bizIds = asIdVariants(businessId);
+
       const sellerProducts = await Product.find({
         $or: [
-          { businessId },
-          { sellerId: businessId },
-          { seller: businessId },
-          { ownerBusiness: businessId },
-          { business: businessId },
+          { businessId: { $in: bizIds } },
+          { sellerId: { $in: bizIds } },
+          { seller: { $in: bizIds } },
+          { ownerBusiness: { $in: bizIds } },
+          { business: { $in: bizIds } },
         ],
       })
         .select('customId')
@@ -1730,7 +2221,9 @@ router.get('/my-orders', requireAnyAuth, async (req, res) => {
         const sellerItems = allItems.filter((it) => sellerIdSet.has(pickItemProductId(it)));
 
         // seller-only total (display helper)
-        const sellerAmount = +sellerItems.reduce((sum, it) => sum + itemLineTotal(it), 0).toFixed(2);
+        const sellerAmount = +sellerItems
+          .reduce((sum, it) => sum + itemLineTotal(it), 0)
+          .toFixed(2);
 
         return {
           id: o._id ? String(o._id) : orderId,
@@ -1828,78 +2321,6 @@ router.get('/my-orders', requireAnyAuth, async (req, res) => {
 });
 
 // ======================================================
-// ✅ My Orders JSON (ONLY purchases for current identity)
-// GET /payment/my-orders
-// ======================================================
-/*router.get('/my-orders', requireAnyAuth, async (req, res) => {
-  try {
-    if (!Order) return res.status(500).json({ ok: false, error: 'Order model not available.' });
-
-    const userId = getUserId(req);
-    const businessId = getBusinessId(req);
-
-    let query = null;
-    if (businessId) query = { businessBuyer: businessId };
-    else if (userId) query = { userId };
-    else return res.status(401).json({ ok: false, error: 'Not logged in.' });
-
-    const orders = await Order.find(query)
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .select(
-        'orderId paypalOrderId status paymentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal'
-      )
-      .lean();
-
-    const normalized = orders.map((o) => {
-      const orderId = o.orderId || o.paypalOrderId || (o._id ? String(o._id) : '');
-
-      const status = String(o.status || 'PROCESSING');
-      const paymentStatus = String(o.paymentStatus || '').toLowerCase();
-
-      let amountRaw =
-        (o.amount && (o.amount.value ?? o.amount)) ??
-        (o.total?.value ?? o.total) ??
-        (o.totalAmount?.value ?? o.totalAmount) ??
-        0;
-
-      if (amountRaw && typeof amountRaw === 'object') {
-        amountRaw = amountRaw.value ?? amountRaw.amount ?? 0;
-      }
-
-      const amountNum = Number(amountRaw);
-      const amount = Number.isFinite(amountNum) ? amountNum : 0;
-
-      const currency =
-        (o.amount && (o.amount.currency ?? o.amount.currency_code ?? o.currency)) ??
-        o.currency ??
-        upperCcy;
-
-      return {
-        id: o._id ? String(o._id) : orderId,
-        orderId,
-        status,
-        paymentStatus,
-        createdAt: o.createdAt,
-        amount,
-        currency: String(currency || upperCcy).toUpperCase(),
-        items: Array.isArray(o.items) ? o.items : [],
-        shipping: o.shipping || null,              // ✅ ADD THIS
-        shippingTracking: o.shippingTracking || {},
-        refundedTotal: o.refundedTotal ?? null,
-        refundsCount: Array.isArray(o.refunds) ? o.refunds.length : 0,
-        receiptLink: orderId ? buildReceiptLink(orderId) : null,
-      };
-    });
-
-    return res.json({ ok: true, orders: normalized });
-  } catch (err) {
-    console.error('GET /payment/my-orders error:', err);
-    return res.status(500).json({ ok: false, error: 'Failed to load orders.' });
-  }
-});*/
-
-// ======================================================
 // 💸 Admin Refunds
 // POST /payment/refund
 // ======================================================
@@ -1908,7 +2329,7 @@ function refundSoFarWouldExceed(captured, refundedSoFar, want) {
   return want > remaining + 0.00001;
 }
 
-router.post('/refund', requireAdmin, express.json(), async (req, res) => {
+router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     const captureId = safeStr(req.body?.captureId, 128);
     if (!captureId) return res.status(400).json({ success: false, message: 'captureId is required.' });
@@ -2086,7 +2507,7 @@ router.post('/refund', requireAdmin, express.json(), async (req, res) => {
 // ======================================================
 // 🔒 Manual sync routes (ADMIN ONLY)
 // ======================================================
-router.post('/sync-refunds', requireAdmin, express.json(), async (req, res) => {
+router.post('/sync-refunds', requireAdmin, requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     const captureId = safeStr(req.body?.captureId, 128);
     if (!captureId) return res.status(400).json({ ok: false, message: 'captureId is required.' });
@@ -2118,7 +2539,7 @@ router.post('/sync-refunds', requireAdmin, express.json(), async (req, res) => {
   }
 });
 
-router.post('/reconcile-recent-refunds', requireAdmin, express.json(), async (req, res) => {
+router.post('/reconcile-recent-refunds', requireAdmin, requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
 

@@ -35,14 +35,21 @@ async function shippoFetch(path) {
 function mapShippoStatus(s) {
   const status = String(s || '').toUpperCase();
 
-  // Shippo enum: UNKNOWN, PRE_TRANSIT, TRANSIT, DELIVERED, RETURNED, FAILURE :contentReference[oaicite:3]{index=3}
+  // ✅ Only return values your Order model allows:
+  // ['PENDING','PROCESSING','SHIPPED','IN_TRANSIT','DELIVERED','CANCELLED']
+
   if (status === 'DELIVERED') return 'DELIVERED';
   if (status === 'TRANSIT') return 'IN_TRANSIT';
   if (status === 'PRE_TRANSIT') return 'PROCESSING';
-  if (status === 'RETURNED') return 'RETURNED';
-  if (status === 'FAILURE') return 'DELAYED';
 
-  return 'UNKNOWN';
+  // Shippo can return: UNKNOWN, RETURNED, FAILURE
+  // ✅ Map them into allowed enum values
+  if (status === 'RETURNED') return 'CANCELLED';
+  if (status === 'FAILURE') return 'PROCESSING';
+  if (status === 'UNKNOWN') return 'PROCESSING';
+
+  // Safe fallback
+  return 'PROCESSING';
 }
 
 function normalizeShippoTrack(track) {
