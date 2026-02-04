@@ -62,21 +62,6 @@ const {
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
 } = process.env;
 
-// ======================================================
-// ✅ Production switches
-// ======================================================
-// If true: capture-order will attempt to BUY a label automatically (real money in live)
-// In production, safest is FALSE and labels are created manually by admin/seller.
-const AUTO_BUY_LABELS = String(process.env.AUTO_BUY_LABELS || '').trim().toLowerCase() === 'true';
-
-// CSRF-ish protection for cookie sessions: allow only these site origins for JSON POSTs.
-// Example: WEB_ORIGINS="https://unicoporate.com,https://www.unicoporate.com"
-const WEB_ORIGINS = String(process.env.WEB_ORIGINS || '')
-  .split(',')
-  .map((s) => normalizeOrigin(s))
-  .filter(Boolean);
-
-
 // ✅ Normalize + validate (so Render env changes are safe)
 const PAYPAL_MODE_N = (() => {
   const m = String(PAYPAL_MODE || 'sandbox').trim().toLowerCase();
@@ -117,7 +102,13 @@ function normalizeOrigin(s) {
   return String(s || '').trim().replace(/\/$/, '').toLowerCase();
 }
 
-const ALLOWED_ORIGINS = WEB_ORIGINS.map(normalizeOrigin);
+// ✅ Single source of truth: WEB_ORIGINS env
+// Example:
+// WEB_ORIGINS="https://unicoporate.com,https://www.unicoporate.com"
+const ALLOWED_ORIGINS = String(process.env.WEB_ORIGINS || '')
+  .split(',')
+  .map(normalizeOrigin)
+  .filter(Boolean);
 
 function requireAllowedOriginJson(req, res, next) {
   const method = String(req.method || '').toUpperCase();
@@ -134,11 +125,16 @@ function requireAllowedOriginJson(req, res, next) {
     });
   }
 
+  // ✅ Prefer Origin; fallback to Referer (some browsers/proxies strip Origin)
   const origin = normalizeOrigin(req.headers.origin);
   const referer = normalizeOrigin(req.headers.referer);
 
   if (!origin && !referer) {
-    return res.status(403).json({ ok: false, code: 'ORIGIN_MISSING', message: 'Missing Origin/Referer.' });
+    return res.status(403).json({
+      ok: false,
+      code: 'ORIGIN_MISSING',
+      message: 'Missing Origin/Referer.',
+    });
   }
 
   const ok =
@@ -146,7 +142,21 @@ function requireAllowedOriginJson(req, res, next) {
     (referer && ALLOWED_ORIGINS.some((o) => referer.startsWith(o)));
 
   if (!ok) {
-    return res.status(403).json({ ok: false, code: 'ORIGIN_BLOCKED', message: 'Blocked request from untrusted origin.' });
+    const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+    return res.status(403).json({
+      ok: false,
+      code: 'ORIGIN_BLOCKED',
+      message: 'Blocked request from untrusted origin.',
+      ...(isProd
+        ? {}
+        : {
+            debug: {
+              origin: req.headers.origin || null,
+              referer: req.headers.referer || null,
+              allowed: ALLOWED_ORIGINS,
+            },
+          }),
+    });
   }
 
   return next();
@@ -278,6 +288,7 @@ function shippoToFromShippingInput(shippingInput) {
     country: shippingInput.address.country_code,
   };
 }
+
 function sameShippoTo(a, b) {
   if (!a || !b) return false;
   return (
@@ -288,6 +299,38 @@ function sameShippoTo(a, b) {
     _normCmp(a.zip) === _normCmp(b.zip) &&
     _normCmp(a.country) === _normCmp(b.country)
   );
+}
+
+function _shippoToFromOrderShipping(orderShipping) {
+  const s = orderShipping || {};
+  return {
+    name: cleanAddrField(s.name || s.fullName || 'Customer', 120),
+    phone: cleanAddrField(s.phone || '', 40),
+    email: cleanAddrField(s.email || '', 140),
+    street1: cleanAddrField(s.address_line_1 || s.street1 || '', 300),
+    street2: cleanAddrField(s.address_line_2 || s.street2 || '', 300),
+    city: cleanAddrField(s.admin_area_2 || s.city || '', 120),
+    state: cleanAddrField(s.admin_area_1 || s.state || '', 120),
+    zip: cleanAddrField(s.postal_code || s.zip || '', 60),
+    country: normalizeCountryCode(s.country_code || s.country) || '',
+  };
+}
+
+function _cartFromOrderDoc(orderDoc) {
+  const items = Array.isArray(orderDoc?.items) ? orderDoc.items : [];
+  return {
+    items: items.map((it) => ({
+      name: it?.name || 'Item',
+      qty: toQty(it?.quantity ?? it?.qty, 1),
+      // use gross if available; else fall back
+      price:
+        it?.priceGross?.value ??
+        it?.price?.value ??
+        it?.price ??
+        it?.unitPrice ??
+        0,
+    })),
+  };
 }
 
 function requireShippingAddressFromBody(req) {
@@ -356,6 +399,12 @@ function requireShippingAddressFromBody(req) {
       country_code: countryCode,
     },
   };
+}
+
+function isInternationalShipment({ toCountry, fromCountry }) {
+  const a = String(toCountry || '').toUpperCase();
+  const b = String(fromCountry || '').toUpperCase();
+  return !!(a && b && a !== b);
 }
 
 function variantText(variants) {
@@ -444,7 +493,7 @@ function envNum(name, fallback) {
 
 // ✅ FROM address (your warehouse / sender address)
 function getShippoFromAddress() {
-  const country = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'US')) || 'US';
+  const country = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
 
   const from = {
     name: envStr('SHIPPO_FROM_NAME', BRAND_NAME_N),
@@ -500,8 +549,140 @@ function buildShippoParcelFromCart(cart) {
   };
 }
 
+async function shippoCreateCustomsDeclaration({ cart, toCountry }) {
+  // Shippo requires line items for customs
+  const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
+  const originCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
+
+  const currency = envStr('SHIPPO_CUSTOMS_CURRENCY', upperCcy);
+
+  const massUnit = envStr('SHIPPO_PARCEL_MASS_UNIT', 'lb');
+  const perItemWeight = envNum(
+    'SHIPPO_CUSTOMS_WEIGHT_PER_ITEM',
+    envNum('SHIPPO_PARCEL_WEIGHT_PER_ITEM', 1)
+  );
+
+  const contentsType = envStr('SHIPPO_CUSTOMS_CONTENTS_TYPE', 'MERCHANDISE');
+  const nonDelivery = envStr('SHIPPO_CUSTOMS_NON_DELIVERY', 'RETURN');
+  const incoterm = envStr('SHIPPO_CUSTOMS_INCOTERM', 'DDU');
+
+    // ✅ Optional customs metadata (used on commercial invoice / intl paperwork)
+  const hsDefaultRaw = envStr('SHIPPO_CUSTOMS_HS_CODE_DEFAULT', '');
+  const hsDefault = hsDefaultRaw ? String(hsDefaultRaw).trim().replace(/\s+/g, '') : '';
+
+  const exporterPrefix = envStr('SHIPPO_CUSTOMS_EXPORTER_REF_PREFIX', '');
+  const eelPfc = envStr('SHIPPO_CUSTOMS_EEL_PFC', '');
+
+  function clip(str, max) {
+    const s = String(str || '');
+    return s.length > max ? s.slice(0, max) : s;
+  }
+
+  // Keep short + traceable (Shippo accepts exporter_reference) 
+  const exporterRef = (() => {
+    const pref = clip(exporterPrefix ? exporterPrefix : 'UNIC', 4); // keep short
+    const dest = clip((toCountry ? String(toCountry).toUpperCase() : 'XX'), 2);
+    const ts = Math.floor(Date.now() / 1000); // seconds (shorter)
+    return clip(`${pref}-${dest}-${ts}`, 20); // ✅ ALWAYS <= 20 (DHL-safe)
+  })();
+
+  // ✅ REQUIRED BY SHIPPO: certify + signer
+  const signer =
+    envStr('SHIPPO_CUSTOMS_CERTIFY_SIGNER', '') ||
+    envStr('SHIPPO_FROM_NAME', BRAND_NAME_N) ||
+    BRAND_NAME_N;
+
+  const items = itemsArr.map((it, i) => {
+    const qty = toQty(it?.qty ?? it?.quantity, 1);
+
+    const name = String(it?.name || it?.title || `Item ${i + 1}`).slice(0, 50);
+    const unitVal = normalizeMoneyNumber(it?.price ?? it?.unitPrice) ?? 0;
+
+    // ✅ Shippo requires TOTAL value for the customs line item (qty included)
+    const totalVal = +(Number(unitVal) * qty).toFixed(2);
+
+    return {
+      description: name,
+      quantity: qty,
+
+      // ✅ net_weight is TOTAL weight for this line item (qty included)
+      net_weight: String(Math.max(0.1, +(qty * perItemWeight).toFixed(2))),
+      mass_unit: massUnit,
+
+      // ✅ value_amount is TOTAL value for this line item (qty included)
+      value_amount: String(Math.max(0, totalVal)),
+      value_currency: currency,
+
+      origin_country: originCountry,
+
+      ...(hsDefault ? { tariff_number: hsDefault.slice(0, 18) } : {}),
+    };
+  });
+
+    const payload = {
+    certify: true,
+    certify_signer: String(signer).slice(0, 100),
+
+    contents_type: contentsType,
+    non_delivery_option: nonDelivery,
+    incoterm,
+
+    // ✅ customs metadata 
+    exporter_reference: exporterRef,
+    ...(eelPfc ? { eel_pfc: String(eelPfc).trim() } : {}),
+
+    items,
+  };
+
+  const res = await fetchWithTimeout(
+    `${SHIPPO_API}/customs/declarations/`,
+    {
+      method: 'POST',
+      headers: shippoHeaders(),
+      body: JSON.stringify(payload),
+    },
+    SHIPPO_TIMEOUT_MS
+  );
+
+  const json = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const msg =
+      (Array.isArray(json?.messages) && json.messages.length)
+        ? JSON.stringify(json.messages)
+        : (json?.detail || json?.message || JSON.stringify(json));
+    const err = new Error(`Shippo customs declaration error (${res.status}): ${msg}`);
+    err.code = 'SHIPPO_CUSTOMS_FAILED';
+    throw err;
+  }
+
+  const status = String(json?.object_status || '').toUpperCase();
+  if (status && status !== 'SUCCESS') {
+    const msg =
+      (Array.isArray(json?.messages) && json.messages.length)
+        ? JSON.stringify(json.messages)
+        : (json?.detail || json?.message || JSON.stringify(json));
+    const err = new Error(`Shippo customs declaration object_status=${status}: ${msg}`);
+    err.code = 'SHIPPO_CUSTOMS_OBJECT_ERROR';
+    throw err;
+  }
+
+  const id = json?.object_id ? String(json.object_id) : null;
+  if (!id) throw new Error('Shippo customs declaration did not return object_id.');
+  return id;
+}
+
 async function shippoCreateShipment({ to, cart }) {
-  const from = getShippoFromAddress();
+   const from = getShippoFromAddress();
+
+  const intl = isInternationalShipment({ toCountry: to?.country, fromCountry: from?.country });
+
+  // ✅ Create customs once for international shipments
+  let customsDeclarationId = null;
+  if (intl) {
+    customsDeclarationId = await shippoCreateCustomsDeclaration({ cart, toCountry: to.country });
+  }
+
   const parcel = buildShippoParcelFromCart(cart);
 
   const payload = {
@@ -530,6 +711,7 @@ async function shippoCreateShipment({ to, cart }) {
     },
     parcels: [parcel],
     async: false, // keep synchronous so we get rates immediately
+    ...(customsDeclarationId ? { customs_declaration: customsDeclarationId } : {}),
   };
 
   const res = await fetchWithTimeout(
@@ -543,6 +725,10 @@ async function shippoCreateShipment({ to, cart }) {
   );
 
   const json = await res.json().catch(() => ({}));
+
+  console.log('[Shippo shipment] carrier_accounts=', Array.isArray(json?.carrier_accounts) ? json.carrier_accounts.length : null);
+  console.log('[Shippo shipment] rates=', Array.isArray(json?.rates) ? json.rates.length : null);
+  console.log('[Shippo shipment] messages=', json?.messages || null);
 
   // Shippo sometimes returns 200 but object_status="ERROR"
   const objStatus = String(json?.object_status || '').toUpperCase();
@@ -562,6 +748,9 @@ async function shippoCreateShipment({ to, cart }) {
     err.code = 'SHIPPO_SHIPMENT_FAILED';
     throw err;
   }
+
+  json._customsDeclarationId = customsDeclarationId || null;
+  json._isInternational = !!intl;
 
   return json; // includes object_id + rates
 }
@@ -593,42 +782,6 @@ function normalizeShippoRates(shipmentJson) {
   out.sort((a, b) => (a.amount - b.amount));
 
   return out;
-}
-
-async function shippoBuyLabelFromRate(rateId) {
-  const payload = {
-    rate: String(rateId),
-    label_file_type: envStr('SHIPPO_LABEL_FILE_TYPE', 'PDF'), // PDF | PNG | ZPLII | EPL2
-    async: false,
-  };
-
-  const res = await fetchWithTimeout(
-    `${SHIPPO_API}/transactions/`,
-    {
-      method: 'POST',
-      headers: shippoHeaders(),
-      body: JSON.stringify(payload),
-    },
-    SHIPPO_TIMEOUT_MS
-  );
-
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = json?.detail || json?.message || JSON.stringify(json);
-    const err = new Error(`Shippo transaction error (${res.status}): ${msg}`);
-    err.code = 'SHIPPO_TRANSACTION_FAILED';
-    throw err;
-  }
-
-  // Shippo uses object_status: "SUCCESS" / "ERROR"
-  const status = String(json?.object_status || '').toUpperCase();
-  if (status !== 'SUCCESS') {
-    const err = new Error(`Shippo label buy failed: ${json?.messages ? JSON.stringify(json.messages) : 'Unknown'}`);
-    err.code = 'SHIPPO_LABEL_FAILED';
-    throw err;
-  }
-
-  return json;
 }
 
 // ======================================================
@@ -722,84 +875,6 @@ async function getAccessToken() {
   _ppTokenCache.expiresAt = Date.now() + Math.max(30, Number(json.expires_in || 0)) * 1000;
 
   return _ppTokenCache.token;
-}
-
-async function pushTrackingToPayPal({ captureId, trackingNumber, carrier, status = 'SHIPPED' }) {
-  const token = await getAccessToken();
-
-  const payload = {
-    trackers: [
-      {
-        transaction_id: String(captureId),
-        tracking_number: String(trackingNumber),
-        status: String(status).toUpperCase(), // SHIPPED, DELIVERED etc.
-        carrier: String(carrier).toUpperCase(), // depends on PayPal carrier codes
-      },
-    ],
-  };
-
-  const res = await fetchWithTimeout(`${PP_API}/v1/shipping/trackers-batch`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(`PayPal tracking attach failed (${res.status}): ${json?.message || JSON.stringify(json)}`);
-  }
-
-  return json;
-}
-
-async function createShipmentViaProvider({ req, orderDoc, shipping }) {
-  void shipping;
-
-  const provider = String(process.env.SHIP_PROVIDER || '').trim().toLowerCase();
-  if (!provider) {
-    const err = new Error('SHIP_PROVIDER is not set (e.g. shippo).');
-    err.code = 'SHIP_PROVIDER_NOT_CONFIGURED';
-    throw err;
-  }
-
-  if (provider === 'shippo') {
-    // ✅ Read the selected rateId from the session pending order first
-    const wantedRateId =
-      req?.session?.pendingOrder?.shippo?.rateId ||
-      orderDoc?.shippo?.rateId ||
-      req?.session?.shippoQuote?.rates?.[0]?.rateId || // last-resort fallback
-      null;
-
-    if (!wantedRateId) {
-      const err = new Error('No Shippo rateId selected for this order.');
-      err.code = 'SHIPPO_RATE_MISSING';
-      throw err;
-    }
-
-    // ✅ Buy label directly from selected rateId
-    const tx = await shippoBuyLabelFromRate(wantedRateId);
-
-    // ✅ Save Shippo metadata on the order (safe fields)
-    orderDoc.shippo = {
-      shipmentId: tx?.shipment ? String(tx.shipment) : (orderDoc?.shippo?.shipmentId || null),
-      transactionId: tx?.object_id ? String(tx.object_id) : null,
-      rateId: wantedRateId,
-      labelUrl: tx?.label_url || null,
-      trackingStatus: tx?.tracking_status || null,
-    };
-
-    return {
-      // ✅ Keep carrier null to avoid enum crashes until we map it safely
-      carrier: null,
-      trackingNumber: tx?.tracking_number || null,
-      trackingUrl: tx?.tracking_url_provider || null,
-      labelUrl: tx?.label_url || null,
-      status: 'SHIPPED',
-      shippedAt: new Date(),
-    };
-  }
-
-  throw new Error(`SHIP_PROVIDER="${provider}" not implemented.`);
 }
 
 // ======================================================
@@ -1324,6 +1399,78 @@ router.get('/config', (req, res) => {
 });
 
 // ======================================================
+// ✅ Remember payer-selected Shippo rate (SESSION)
+// POST /payment/shippo/remember-rate
+// ======================================================
+router.post('/shippo/remember-rate', requireAllowedOriginJson, express.json(), async (req, res) => {
+  try {
+    const b = req.body || {};
+
+    const shipmentId = String(b.shippoShipmentId || '').trim();
+    const rateId     = String(b.shippoRateId || '').trim();
+
+    if (!shipmentId || !rateId) {
+      return res.status(400).json({
+        ok: false,
+        code: 'MISSING_FIELDS',
+        message: 'Missing shipmentId or rateId.',
+      });
+    }
+
+    // ✅ Validate against the CURRENT session quote (prevents stale/fake rate selection)
+    const q = req.session?.shippoQuote || null;
+
+    const fresh = q?.createdAt && (Date.now() - q.createdAt) < 30 * 60 * 1000; // 30 min
+    const sameShipment = q?.shipmentId && String(q.shipmentId) === String(shipmentId);
+
+    if (!q || !fresh || !sameShipment) {
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_QUOTE_EXPIRED',
+        message: 'Shipping quote expired. Please refresh rates and re-select.',
+      });
+    }
+
+    const exists =
+      Array.isArray(q.rates) &&
+      q.rates.some((r) => String(r.rateId) === String(rateId));
+
+    if (!exists) {
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_RATE_NOT_IN_QUOTE',
+        message: 'Selected rate is not part of the current quote. Please re-select.',
+      });
+    }
+
+    // ✅ Grab details from the quote (server-trusted)
+    const picked = q.rates.find((r) => String(r.rateId) === String(rateId)) || null;
+
+    req.session.shippoSelectedRate = {
+      shipmentId,
+      rateId,
+      provider: picked?.provider ? String(picked.provider).trim() : String(b.provider || '').trim(),
+      service:  picked?.service  ? String(picked.service).trim()  : String(b.service || '').trim(),
+      amount:   picked?.amount != null ? Number(picked.amount) : Number(b.amount || 0),
+      currency: picked?.currency ? String(picked.currency).toUpperCase() : String(b.currency || 'USD').toUpperCase(),
+      days:     picked?.days != null ? Number(picked.days) : Number(b.days || 0),
+      selectedAt: new Date().toISOString(),
+    };
+
+    await saveSession(req);
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('remember-rate error:', e);
+    return res.status(500).json({
+      ok: false,
+      code: 'SERVER_ERROR',
+      message: 'Server error remembering rate.',
+    });
+  }
+});
+
+// ======================================================
 // ✅ LIVE Shippo Rates (Quote) - used by checkout dropdown
 // POST /payment/shippo/quote
 // Body: { shipTo: { name, phone, email, street1, street2, city, state, zip, country } }
@@ -1368,9 +1515,33 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       return res.status(422).json({ ok: false, code: 'CART_EMPTY', message: 'Cart is empty.' });
     }
 
+    
     const shipment = await shippoCreateShipment({ to, cart });
+
     const shipmentId = shipment?.object_id ? String(shipment.object_id) : null;
     const rates = normalizeShippoRates(shipment);
+
+    if (!rates.length) {
+      console.error('Shippo NO_RATES debug:', {
+        shipmentId,
+        object_status: shipment?.object_status,
+        messages: shipment?.messages,
+        address_from: shipment?.address_from,
+        address_to: shipment?.address_to,
+        carrier_accounts: shipment?.carrier_accounts,
+        rates_raw_count: Array.isArray(shipment?.rates) ? shipment.rates.length : null,
+      });
+    }
+
+    // const shipmentId = shipment?.object_id ? String(shipment.object_id) : null;
+    // const rates = normalizeShippoRates(shipment);
+
+    const customsDeclarationId = shipment?._customsDeclarationId ? String(shipment._customsDeclarationId) : null;
+    const isInternational = !!shipment?._isInternational;
+
+    const fromCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
+
+    const toCountry = String(to.country || '').toUpperCase();
 
     if (!shipmentId || !rates.length) {
       return res.status(502).json({
@@ -1387,7 +1558,16 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       to,
       cartSig: sig,
       createdAt: Date.now(),
+
+      // ✅ persist intl metadata for later label buying
+      isInternational,
+      fromCountry,
+      toCountry,
+      customsDeclarationId,
     };
+
+    req.session.shippoSelectedRate = null; // ✅ clear stale selection when quote changes
+
     await saveSession(req);
 
     return res.json({ ok: true, shipmentId, rates });
@@ -1478,8 +1658,19 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     });
 
     // ✅ Shippo selection must come from checkout
-    const shippoRateId = safeStr(req.body?.shippoRateId, 128);
-    const shippoShipmentId = safeStr(req.body?.shippoShipmentId, 128);
+    let shippoRateId = safeStr(req.body?.shippoRateId, 128);
+    let shippoShipmentId = safeStr(req.body?.shippoShipmentId, 128);
+
+    // ✅ Fallback: if frontend forgot to send, use remember-rate session (if present)
+    if ((!shippoRateId || !shippoShipmentId) && req.session?.shippoSelectedRate) {
+      shippoRateId = shippoRateId || safeStr(req.session.shippoSelectedRate.rateId, 128);
+      shippoShipmentId = shippoShipmentId || safeStr(req.session.shippoSelectedRate.shipmentId, 128);
+    }
+
+    // ✅ Extra fallback: use current quote shipmentId as last resort (prevents missing shipmentId bugs)
+    if (!shippoShipmentId && req.session?.shippoQuote?.shipmentId) {
+      shippoShipmentId = safeStr(req.session.shippoQuote.shipmentId, 128);
+    }
 
     if (!shippoRateId || !shippoShipmentId) {
       return res.status(422).json({
@@ -1639,12 +1830,21 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
 
       shippo: {
         shipmentId: shippoPicked.shipmentId,
+        payerShipmentId: shippoPicked.shipmentId,
+        // ✅ keep both (backward compatible)
+        payerRateId: shippoPicked.rateId,
         rateId: shippoPicked.rateId,
         provider: shippoPicked.provider || null,
         service: shippoPicked.service || null,
         days: shippoPicked.days ?? null,
         amount: shippoPicked.amount ?? null,
         currency: shippoPicked.currency || upperCcy,
+
+        // ✅ bring customs/intl info from the session quote
+        isInternational: !!q?.isInternational,
+        fromCountry: q?.fromCountry ? String(q.fromCountry).toUpperCase() : null,
+        toCountry: q?.toCountry ? String(q.toCountry).toUpperCase() : null,
+        customsDeclarationId: q?.customsDeclarationId ? String(q.customsDeclarationId) : null,
       },
 
       shippingInput: {
@@ -1658,6 +1858,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     };
 
     await saveSession(req);
+
     return res.json({ ok: true, id: data.id });
   } catch (err) {
     console.error('create-order error:', err?.stack || err);
@@ -1902,8 +2103,101 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         );
 
         // ✅ Payment succeeded, but fulfillment may still be pending
-        doc.fulfillmentStatus = doc.fulfillmentStatus || 'pending';
+        // IMPORTANT: must match enum values (UPPERCASE)
+        if (!doc.fulfillmentStatus) {
+          doc.fulfillmentStatus = 'PENDING';
+        } else {
+          // normalize if something saved lowercase by mistake
+          const fs = String(doc.fulfillmentStatus || '').toUpperCase();
+          doc.fulfillmentStatus = fs || 'PENDING';
+        }
+
+        // Optional: if PayPal capture completed, you can mark fulfillment as PAID
+        // (keep this ONLY if you want that behavior)
+        // const paidLike = String(capture?.status || '').toUpperCase() === 'COMPLETED';
+        // if (paidLike) doc.fulfillmentStatus = 'PAID';
+
         await doc.save();
+
+        // ======================================================
+        // ✅ Persist Shippo payer-selected rateId for Admin Shippo
+        // DO NOT overwrite an existing purchased label/transaction
+        // ======================================================
+        try {
+          const pShippo = pending?.shippo || null;
+
+          if (doc && pShippo?.rateId && pShippo?.shipmentId) {
+            doc.shippo = doc.shippo || {};
+
+            // ✅ Always keep payer choice if we have it (even after purchase)
+            if (!doc.shippo.payerShipmentId && (pShippo.payerShipmentId || pShippo.shipmentId)) {
+              doc.shippo.payerShipmentId = String(pShippo.payerShipmentId || pShippo.shipmentId);
+            }
+            if (!doc.shippo.payerRateId && pShippo.rateId) {
+              doc.shippo.payerRateId = String(pShippo.rateId);
+            }
+
+            const alreadyPurchased =
+              !!doc.shippo.transactionId ||
+              !!doc.shippo.labelUrl ||
+              !!doc.shippo.trackingNumber;
+
+            // ✅ always persist customs/intl metadata if present (even if label already exists)
+            if (pShippo.customsDeclarationId && !doc.shippo.customsDeclarationId) {
+              doc.shippo.customsDeclarationId = String(pShippo.customsDeclarationId);
+            }
+            if (
+              typeof pShippo.isInternational === 'boolean' &&
+              typeof doc.shippo.isInternational !== 'boolean'
+            ) {
+              doc.shippo.isInternational = pShippo.isInternational;
+            }
+            if (pShippo.fromCountry && !doc.shippo.fromCountry) {
+              doc.shippo.fromCountry = String(pShippo.fromCountry).toUpperCase();
+            }
+            if (pShippo.toCountry && !doc.shippo.toCountry) {
+              doc.shippo.toCountry = String(pShippo.toCountry).toUpperCase();
+            }
+
+            if (!alreadyPurchased) {
+              // ✅ shipment used to generate rates at checkout
+              doc.shippo.shipmentId = String(pShippo.shipmentId);
+
+              // ✅ admin "payer choice" requires this
+              doc.shippo.payerShipmentId = String(pShippo.payerShipmentId || pShippo.shipmentId);
+
+              // ✅ store payer choice permanently
+              doc.shippo.payerRateId = String(pShippo.rateId);
+
+              // ✅ keep rateId for backwards compatibility / existing UI
+              doc.shippo.rateId = String(pShippo.rateId);
+
+              doc.shippo.createdAt = new Date();
+
+              doc.shippo.chosenRate = {
+                provider: pShippo.provider ? String(pShippo.provider).slice(0, 80) : null,
+                service: pShippo.service ? String(pShippo.service).slice(0, 120) : null,
+                amount:
+                  pShippo.amount != null && Number.isFinite(Number(pShippo.amount))
+                    ? String(Number(pShippo.amount).toFixed(2))
+                    : null,
+                currency: pShippo.currency ? String(pShippo.currency).toUpperCase() : upperCcy,
+                estimatedDays:
+                  pShippo.days != null && Number.isFinite(Number(pShippo.days))
+                    ? Math.max(0, Math.floor(Number(pShippo.days)))
+                    : null,
+                durationTerms:
+                  pShippo.days != null && Number.isFinite(Number(pShippo.days))
+                    ? `~${Math.max(0, Math.floor(Number(pShippo.days)))} days`
+                    : null,
+              };
+
+              await doc.save();
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not persist Shippo selection:', e?.message || String(e));
+        }
 
         if (doc && captureEntry) {
           const already = Array.isArray(doc.captures)
@@ -1939,60 +2233,6 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         } catch (invErr) {
           console.warn('⚠️ Inventory decrement exception:', invErr?.message || String(invErr));
         }
-
-        // ======================================================
-        // ✅ OPTIONAL: AUTO-FULFILL SHIPPING (CREATE LABEL + TRACKING)
-        // Production-safe default: OFF (AUTO_BUY_LABELS=false)
-        // ======================================================
-        if (AUTO_BUY_LABELS) {
-          try {
-            const paidStatus = String(capture?.status || doc?.status || '').toUpperCase();
-
-            // Only attempt if:
-            // - paid
-            // - we have a doc
-            // - we have captureId
-            // - we haven't already attached tracking/label
-            const alreadyHasTracking =
-              !!doc?.shippingTracking?.trackingNumber ||
-              !!doc?.shippingTracking?.labelUrl ||
-              !!doc?.shippo?.transactionId ||
-              !!doc?.shippo?.labelUrl;
-
-            if (doc && captureId && (paidStatus === 'COMPLETED' || paidStatus === 'PAID') && !alreadyHasTracking) {
-              const ship = shippingAddress;
-
-              const tracking = await createShipmentViaProvider({
-                req,
-                orderDoc: doc,
-                shipping: ship,
-              });
-
-              doc.shippingTracking = {
-                carrier: tracking.carrier || null,
-                trackingNumber: tracking.trackingNumber || null,
-                trackingUrl: tracking.trackingUrl || null,
-                labelUrl: tracking.labelUrl || null,
-                status: tracking.status || 'SHIPPED',
-                shippedAt: tracking.shippedAt || new Date(),
-              };
-              doc.fulfillmentStatus = 'SHIPPED';
-              await doc.save();
-
-              // Push tracking to PayPal only if carrier exists
-              if (doc.shippingTracking?.trackingNumber && doc.shippingTracking?.carrier) {
-                await pushTrackingToPayPal({
-                  captureId,
-                  trackingNumber: doc.shippingTracking.trackingNumber,
-                  carrier: doc.shippingTracking.carrier,
-                  status: doc.shippingTracking.status || 'SHIPPED',
-                });
-              }
-            }
-          } catch (shipErr) {
-            console.warn('⚠️ Auto shipping failed (checkout continues):', shipErr?.message || String(shipErr));
-          }
-        }
       }
     } catch (e) {
       console.error('❌ Failed to persist Order:', e?.message || e);
@@ -2007,6 +2247,8 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
     req.session.cart = { items: [] };
     req.session.pendingOrder = null;
+    req.session.shippoSelectedRate = null; // ✅ clear after successful payment
+    req.session.shippoQuote = null;        // optional: clear quote too
     await saveSession(req);
 
     return res.json({
@@ -2592,3 +2834,5 @@ router.post('/reconcile-recent-refunds', requireAdmin, requireAllowedOriginJson,
 // ======================================================
 router.computeTotalsFromSession = computeTotalsFromSession;
 module.exports = router;
+
+

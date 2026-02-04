@@ -12,27 +12,84 @@ function mustEnv(name) {
   return v;
 }
 
-async function shippoFetch(path, { method = 'GET', body } = {}) {
+async function shippoFetch(path, { method = 'GET', body, timeoutMs = 20000, retries = 2 } = {}) {
   const token = mustEnv('SHIPPO_TOKEN');
 
-  const r = await fetch(`${SHIPPO_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `ShippoToken ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // retry on gateway/timeouts + rate limits + transient server errors
+  const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const msg = data?.detail || data?.message || `Shippo error (${r.status})`;
-    const err = new Error(msg);
-    err.shippo = data;
-    throw err;
+  let lastErr = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const t = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const r = await fetch(`${SHIPPO_BASE}${path}`, {
+        method,
+        headers: {
+          Authorization: `ShippoToken ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      clearTimeout(t);
+
+      // 504 / 502 sometimes returns HTML, so DON'T do r.json() directly
+      const text = await r.text().catch(() => '');
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { raw: text };
+      }
+
+      if (!r.ok) {
+        const status = r.status;
+        const msg =
+          data?.detail ||
+          data?.message ||
+          (typeof data?.raw === 'string' && data.raw.trim() ? data.raw.slice(0, 160) : '') ||
+          `Shippo error (${status})`;
+
+        const err = new Error(msg);
+        err.status = status;
+        err.shippo = data;
+
+        // retry transient statuses
+        if (RETRY_STATUSES.has(status) && attempt < retries) {
+          const backoff = 600 * Math.pow(2, attempt); // 600ms, 1200ms, ...
+          await delay(backoff);
+          continue;
+        }
+
+        throw err;
+      }
+
+      return data;
+    } catch (e) {
+      clearTimeout(t);
+
+      // Abort/timeout -> retry
+      const isAbort =
+        e?.name === 'AbortError' ||
+        String(e?.message || '').toLowerCase().includes('aborted');
+
+      if ((isAbort || e?.status === 504) && attempt < retries) {
+        const backoff = 600 * Math.pow(2, attempt);
+        await delay(backoff);
+        lastErr = e;
+        continue;
+      }
+
+      throw e;
+    }
   }
-  return data;
+
+  throw lastErr || new Error('Shippo request failed after retries.');
 }
 
 function buildFromAddress() {
@@ -54,7 +111,12 @@ function buildParcel() {
     width: String(mustEnv('SHIPPO_PARCEL_WIDTH')),
     height: String(mustEnv('SHIPPO_PARCEL_HEIGHT')),
     distance_unit: String(mustEnv('SHIPPO_PARCEL_DISTANCE_UNIT')),
-    weight: String(mustEnv('SHIPPO_PARCEL_WEIGHT')),
+    // ✅ Use your existing env naming
+    weight: String(
+      process.env.SHIPPO_PARCEL_WEIGHT ||
+      process.env.SHIPPO_PARCEL_WEIGHT_PER_ITEM ||
+      '0.5'
+    ),
     mass_unit: String(mustEnv('SHIPPO_PARCEL_MASS_UNIT')),
   };
 }
@@ -104,56 +166,6 @@ function normalizePhoneE164(rawPhone, country2) {
   if (digits.length >= 10 && digits.length <= 15) return `+${digits}`;
 
   return ''; // invalid
-}
-
-function toNumber(v, fallback = 0) {
-  const n = Number(String(v ?? '').trim());
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function buildCustomsItemsFromOrder(order) {
-  const items = Array.isArray(order?.items) ? order.items : [];
-
-  const customsItems = items.map((it, idx) => {
-    const name = String(it?.name || `Item ${idx + 1}`).slice(0, 50);
-    const qty = Math.max(1, Math.floor(toNumber(it?.quantity, 1)));
-
-    const unitVal =
-      toNumber(it?.priceGross?.value, NaN) ||
-      toNumber(it?.price?.value, NaN) ||
-      toNumber(it?.price, NaN) ||
-      1;
-
-    const weight = 0.2; // kg default per item (testing)
-
-    return {
-      description: name,
-      quantity: String(qty),
-      net_weight: String(weight),
-      mass_unit: 'kg',
-      value_amount: String(unitVal.toFixed(2)),
-      value_currency: (order?.amount?.currency || 'USD').toUpperCase(),
-
-      // ✅ Use your FROM country (defaults to ZA, not US)
-      origin_country: String(process.env.SHIPPO_FROM_COUNTRY || 'ZA').toUpperCase(),
-      tariff_number: '0000.00.00',
-    };
-  });
-
-  if (!customsItems.length) {
-    customsItems.push({
-      description: 'Merchandise',
-      quantity: '1',
-      net_weight: '0.2',
-      mass_unit: 'kg',
-      value_amount: '1.00',
-      value_currency: (order?.amount?.currency || 'USD').toUpperCase(),
-      origin_country: String(process.env.SHIPPO_FROM_COUNTRY || 'ZA').toUpperCase(),
-      tariff_number: '0000.00.00',
-    });
-  }
-
-  return customsItems;
 }
 
 function readPaypalShipping(order) {
@@ -277,19 +289,36 @@ function normalizeAddressTo(addressTo) {
   return a;
 }
 
-async function pollTransactionUntilDone(tx, { attempts = 10, delayMs = 1200 } = {}) {
+async function pollTransactionUntilDone(tx, { attempts = 45, delayMs = 1400, maxDelayMs = 6500 } = {}) {
   let cur = tx;
 
   for (let i = 0; i < attempts; i++) {
     const label = cur?.label_url;
     const st = String(cur?.status || cur?.object_status || '').toUpperCase();
 
+    // ✅ Success: label ready
     if (label) return cur;
+
+    // ✅ If Shippo says SUCCESS but still no label_url, stop polling and return
+    if (st === 'SUCCESS') return cur;
+
+    // ✅ Hard stop: error states
     if (st === 'ERROR' || st === 'FAILED') return cur;
+
+    // ✅ Can't poll without an id
     if (!cur?.object_id) return cur;
 
-    await delay(delayMs);
-    cur = await shippoFetch(`/transactions/${encodeURIComponent(cur.object_id)}/`, { method: 'GET' });
+    // ✅ Many accounts return QUEUED / WAITING / VALIDATING first
+    // We'll keep polling a bit longer than before.
+    const wait = Math.min(maxDelayMs, delayMs + (i * 150)); // small ramp up
+    await delay(wait);
+
+    // Always re-fetch full transaction state
+    cur = await shippoFetch(`/transactions/${encodeURIComponent(cur.object_id)}/`, {
+      method: 'GET',
+      timeoutMs: 20000,
+      retries: 2,
+    });
   }
 
   return cur;
@@ -303,9 +332,244 @@ function providerToShippoCarrierToken(providerName) {
   return raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
-async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = null } = {}) {
+function pickSameAsSavedRate(rates, saved) {
+  if (!saved) return null;
+
+  const wantProv = String(saved.provider || '').trim().toLowerCase();
+  const wantSvc  = String(saved.service || '').trim().toLowerCase();
+
+  if (!wantProv && !wantSvc) return null;
+
+  // Try strong match: provider + servicelevel token/name
+  const strong = rates.find(r => {
+    const prov = String(r?.provider || '').trim().toLowerCase();
+    const token = String(r?.servicelevel?.token || '').trim().toLowerCase();
+    const name  = String(r?.servicelevel?.name || '').trim().toLowerCase();
+    const svcMatch = wantSvc && (token === wantSvc || name === wantSvc || name.includes(wantSvc) || token.includes(wantSvc));
+    const provMatch = wantProv && prov === wantProv;
+    return provMatch && svcMatch;
+  });
+  if (strong) return strong;
+
+  // If service doesn't match, still try provider-only
+  if (wantProv) {
+    const provOnly = rates.find(r => String(r?.provider || '').trim().toLowerCase() === wantProv);
+    if (provOnly) return provOnly;
+  }
+
+  return null;
+}
+
+// ======================================================
+// ✅ Poll shipment until rates are ready (prevents "rates: []" forever)
+// ======================================================
+async function pollShipmentUntilRates(shipmentId, { attempts = 18, delayMs = 900 } = {}) {
+  let last = null;
+
+  for (let i = 0; i < attempts; i++) {
+    const cur = await shippoFetch(`/shipments/${encodeURIComponent(String(shipmentId))}/`, {
+      method: 'GET',
+      timeoutMs: 20000,
+      retries: 1,
+    });
+
+    last = cur;
+
+    const st = String(cur?.object_status || cur?.status || '').toUpperCase();
+    const rates = Array.isArray(cur?.rates) ? cur.rates : [];
+
+    // ✅ Success: rates ready
+    if (rates.length) return { shipment: cur, rates };
+
+    // ✅ Hard stop: Shippo says shipment failed/error
+    if (st === 'ERROR' || st === 'FAILED') {
+      const err = new Error('Shippo shipment failed to produce rates.');
+      err.shippo = { shipment: cur };
+      throw err;
+    }
+
+    // Wait and try again
+    await delay(delayMs + i * 120);
+  }
+
+  // After attempts, still no rates
+  const err = new Error('Shippo rates are still not ready. Please retry.');
+  err.shippo = { shipment: last };
+  throw err;
+}
+
+async function getShipmentAndRatesOrThrow(shipmentId) {
+  if (!shipmentId) {
+    const err = new Error('Missing Shippo shipmentId for strict rate purchase.');
+    err.code = 'SHIPPO_MISSING_SHIPMENT_ID';
+    throw err;
+  }
+
+  let shipment = await shippoFetch(`/shipments/${encodeURIComponent(String(shipmentId))}/`, {
+    method: 'GET',
+    timeoutMs: 20000,
+    retries: 2,
+  });
+
+  // If rates are async/empty, poll until ready
+  if (shipment?.object_id && (!Array.isArray(shipment.rates) || shipment.rates.length === 0)) {
+    const polled = await pollShipmentUntilRates(shipment.object_id, { attempts: 18, delayMs: 900 });
+    shipment = polled.shipment;
+  }
+
+  const rates = Array.isArray(shipment?.rates) ? shipment.rates : [];
+  if (!rates.length) {
+    const err = new Error('Shippo shipment has no rates (still queued or failed).');
+    err.code = 'SHIPPO_NO_RATES_ON_SHIPMENT';
+    err.shippo = { shipment };
+    throw err;
+  }
+
+  return { shipment, rates };
+}
+
+async function createLabelForOrder(order, opts = {}) {
   if (!order) throw new Error('Order is required');
 
+  const strictRateId = !!opts.strictRateId;
+
+  let chooseRate = String(opts.chooseRate || 'cheapest');
+  let rateId = opts.rateId ? String(opts.rateId).trim() : null;
+
+  // ======================================================
+  // ✅ STRICT MODE: buy EXACT payer rateId from payerShipmentId ONLY
+  // ======================================================
+  if (strictRateId) {
+    if (!rateId) {
+      const err = new Error('Strict mode requires a rateId.');
+      err.code = 'SHIPPO_STRICT_MISSING_RATE_ID';
+      throw err;
+    }
+
+    const shipmentId =
+      String(opts.shipmentId || '').trim() ||
+      String(order?.shippo?.payerShipmentId || '').trim() ||
+      '';
+
+    if (!shipmentId) {
+      const err = new Error(
+        'Cannot buy exact payer rateId because payerShipmentId was not saved on the order.'
+      );
+      err.code = 'SHIPPO_PAYER_SHIPMENT_NOT_SAVED';
+      err.details = { orderId: order?.orderId || order?._id, rateId };
+      throw err;
+    }
+
+    // ✅ Load ORIGINAL shipment and confirm the exact rateId exists on it
+    const { shipment, rates } = await getShipmentAndRatesOrThrow(shipmentId);
+
+    const exact = rates.find((r) => String(r?.object_id || '').trim() === String(rateId).trim());
+    if (!exact) {
+      const err = new Error(
+        'Payer-selected rateId is not found on the payer shipment (expired or wrong shipment).'
+      );
+      err.code = 'SHIPPO_RATE_NOT_ON_PAYER_SHIPMENT';
+      err.shippo = {
+        payerShipmentId: shipment?.object_id || shipmentId,
+        attemptedRateId: rateId,
+        rateCount: rates.length,
+      };
+      throw err; // ✅ NO fallback
+    }
+
+    // ✅ Buy EXACT rateId
+    let tx = await shippoFetch('/transactions/', {
+      method: 'POST',
+      body: {
+        rate: exact.object_id,
+        label_file_type: process.env.SHIPPO_LABEL_FILE_TYPE || 'PDF',
+        async: true,
+        metadata: `order:${order.orderId || order._id}`,
+      },
+      timeoutMs: 20000,
+      retries: 2,
+    });
+
+    if (!tx?.label_url) tx = await pollTransactionUntilDone(tx);
+
+    if (!tx?.label_url) {
+      const status = tx?.status || tx?.object_status || 'UNKNOWN';
+      const messages = tx?.messages || tx?.validation_results || null;
+
+      const err = new Error('Shippo did not return a label_url.');
+      err.code = 'SHIPPO_NO_LABEL_URL';
+      err.shippo = {
+        status,
+        messages,
+        transaction: tx,
+        chosenRate: exact,
+        shipmentId: shipment?.object_id || shipmentId,
+      };
+      throw err;
+    }
+
+    const carrierToken =
+      providerToShippoCarrierToken(exact?.provider) ||
+      providerToShippoCarrierToken(tx?.provider) ||
+      null;
+
+    return {
+      shipment,
+      chosenRate: exact,
+      transaction: tx,
+      carrierEnum: null,
+      carrierToken,
+    };
+  }
+
+  // ======================================================
+  // ✅ NON-STRICT "direct rateId buy" (optional safe)
+  // If someone passes rateId without strictRateId, we just buy it.
+  // ======================================================
+  if (rateId) {
+    let tx = await shippoFetch('/transactions/', {
+      method: 'POST',
+      body: {
+        rate: rateId,
+        label_file_type: process.env.SHIPPO_LABEL_FILE_TYPE || 'PDF',
+        async: true,
+        metadata: `order:${order.orderId || order._id}`,
+      },
+      timeoutMs: 20000,
+      retries: 2,
+    });
+
+    if (!tx?.label_url) tx = await pollTransactionUntilDone(tx);
+
+    if (!tx?.label_url) {
+      const status = tx?.status || tx?.object_status || 'UNKNOWN';
+      const messages = tx?.messages || tx?.validation_results || null;
+
+      const err = new Error('Shippo did not return a label_url.');
+      err.code = 'SHIPPO_NO_LABEL_URL';
+      err.shippo = { status, messages, transaction: tx, rateId };
+      throw err;
+    }
+
+    // best-effort carrier token
+    const providerName =
+      String(opts?.savedRate?.provider || '').trim() ||
+      String(tx?.provider || '').trim();
+
+    const carrierToken = providerToShippoCarrierToken(providerName) || null;
+
+    return {
+      shipment: null,
+      chosenRate: { object_id: rateId, provider: providerName || null },
+      transaction: tx,
+      carrierEnum: null,
+      carrierToken,
+    };
+  }
+
+  // ======================================================
+  // ✅ Normal flow (no rateId): create shipment -> pick rate -> buy
+  // ======================================================
   const address_from = buildFromAddress();
   let address_to = mapOrderToShippoToAddress(order);
   requireToFields(address_to);
@@ -313,50 +577,88 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
 
   const parcel = buildParcel();
 
-  const isInternational =
-    String(address_from.country || '').toUpperCase() !== String(address_to.country || '').toUpperCase();
+  const fromC = String(address_from.country || '').toUpperCase();
+  const toC = String(address_to.country || '').toUpperCase();
+  const isInternational = !!fromC && !!toC && fromC !== toC;
 
-  let customs_declaration = undefined;
+    let customs_declaration = undefined;
 
   if (isInternational) {
-    const customsItems = buildCustomsItemsFromOrder(order);
+    customs_declaration = order?.shippo?.customsDeclarationId
+      ? String(order.shippo.customsDeclarationId).trim()
+      : '';
 
-    const createdItems = [];
-    for (const ci of customsItems) {
-      const item = await shippoFetch('/customs/items/', { method: 'POST', body: ci });
-      createdItems.push(item.object_id);
+    // ✅ IMPORTANT: do NOT create customs here. Payment.js must have saved it.
+    if (!customs_declaration) {
+      const err = new Error(
+        'International shipment is missing shippo.customsDeclarationId (must be created/saved in payment.js).'
+      );
+      err.code = 'SHIPPO_CUSTOMS_MISSING_ON_ORDER';
+      err.details = { orderId: order?.orderId || order?._id };
+      throw err;
     }
-
-    const decl = await shippoFetch('/customs/declarations/', {
-      method: 'POST',
-      body: {
-        contents_type: 'MERCHANDISE',
-        non_delivery_option: 'RETURN',
-        certify: true,
-        certify_signer: process.env.SHIPPO_CUSTOMS_SIGNER || address_from.name || 'Sender',
-        items: createdItems,
-        eel_pfc: 'NOEEI_30_37_a',
-        incoterm: 'DDU',
-      },
-    });
-
-    customs_declaration = decl.object_id;
   }
 
-  // 1) Shipment -> rates
-  const shipment = await shippoFetch('/shipments/', {
-    method: 'POST',
-    body: {
-      address_from,
-      address_to,
-      parcels: [parcel],
-      async: false,
-      metadata: `order:${order.orderId || order._id}`,
-      ...(customs_declaration ? { customs_declaration } : {}),
-    },
-  });
+  // ✅ Reuse existing shipment if possible
+  let shipment = null;
+  const existingShipmentId = order?.shippo?.shipmentId ? String(order.shippo.shipmentId).trim() : '';
 
-  const rates = Array.isArray(shipment.rates) ? shipment.rates : [];
+  if (existingShipmentId) {
+    try {
+      let existing = await shippoFetch(`/shipments/${encodeURIComponent(existingShipmentId)}/`, {
+        method: 'GET',
+        timeoutMs: 20000,
+        retries: 2,
+      });
+
+      if (existing?.object_id && (!Array.isArray(existing.rates) || existing.rates.length === 0)) {
+        const polled = await pollShipmentUntilRates(existing.object_id, { attempts: 18, delayMs: 900 });
+        existing = polled.shipment;
+      }
+
+      if (existing?.object_id && Array.isArray(existing.rates) && existing.rates.length) {
+        shipment = existing;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // ✅ Create new shipment if no reusable one
+  if (!shipment) {
+    shipment = await shippoFetch('/shipments/', {
+      method: 'POST',
+      body: {
+        address_from,
+        address_to,
+        parcels: [parcel],
+        async: true,
+        metadata: `order:${order.orderId || order._id}`,
+        ...(customs_declaration ? { customs_declaration } : {}),
+      },
+      timeoutMs: 20000,
+      retries: 2,
+    });
+
+    if (shipment?.object_id && (!Array.isArray(shipment.rates) || shipment.rates.length === 0)) {
+      const polled = await pollShipmentUntilRates(shipment.object_id);
+      shipment = polled.shipment;
+    }
+
+    // ✅ Cache shipment id for reuse
+    try {
+      const sid = shipment?.object_id ? String(shipment.object_id).trim() : '';
+      if (sid) {
+        order.shippo = order.shippo || {};
+        if (!order.shippo.shipmentId) order.shippo.shipmentId = sid;
+        if (typeof order.save === 'function') await order.save();
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  const rates = Array.isArray(shipment?.rates) ? shipment.rates : [];
   if (!rates.length) {
     const err = new Error('No Shippo rates returned (check carrier accounts + address).');
     err.shippo = { shipment };
@@ -365,25 +667,17 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
 
   let chosen = rates[0];
 
-  // ✅ If admin selected a specific rateId, use it
-  if (rateId) {
-    const found = rates.find((r) => String(r.object_id) === String(rateId));
+  if (chooseRate === 'payer') {
+    const payerRateId = order?.shippo?.payerRateId ? String(order.shippo.payerRateId).trim() : '';
+    const exact = payerRateId ? rates.find((r) => String(r?.object_id || '').trim() === payerRateId) : null;
 
-    // IMPORTANT:
-    // GET /rates created Shipment A and returned rate IDs for Shipment A.
-    // POST /create-label creates Shipment B again, so the selected rateId might not appear in Shipment B rates.
-    // Do NOT throw. Use rateId directly and let Shippo validate it.
-    chosen =
-      found ||
-      {
-        object_id: String(rateId),
-        provider: '',
-        servicelevel: { name: '', token: '' },
-        amount: '',
-        currency: '',
-        estimated_days: null,
-        duration_terms: '',
-      };
+    if (exact) {
+      chosen = exact;
+    } else {
+      const saved = opts?.savedRate || order?.shippo?.chosenRate || null;
+      const same = pickSameAsSavedRate(rates, saved);
+      chosen = same || rates.slice().sort((a, b) => Number(a.amount) - Number(b.amount))[0];
+    }
   } else if (chooseRate === 'fastest') {
     const withEta = rates.filter((r) => r.estimated_days != null);
     chosen = (withEta.length ? withEta : rates)
@@ -398,23 +692,20 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
     chosen = rates.slice().sort((a, b) => Number(a.amount) - Number(b.amount))[0];
   }
 
-  // 2) Buy label -> transaction
   let tx = await shippoFetch('/transactions/', {
     method: 'POST',
     body: {
       rate: chosen.object_id,
       label_file_type: process.env.SHIPPO_LABEL_FILE_TYPE || 'PDF',
-      async: false,
+      async: true,
       metadata: `order:${order.orderId || order._id}`,
     },
+    timeoutMs: 20000,
+    retries: 2,
   });
 
-  // 3) Poll if label_url isn’t ready yet
-  if (!tx?.label_url) {
-    tx = await pollTransactionUntilDone(tx);
-  }
+  if (!tx?.label_url) tx = await pollTransactionUntilDone(tx);
 
-  // 4) If still no label_url, throw detailed error
   if (!tx?.label_url) {
     const status = tx?.status || tx?.object_status || 'UNKNOWN';
     const messages = tx?.messages || tx?.validation_results || null;
@@ -424,7 +715,6 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
     throw err;
   }
 
-  // ✅ No hardcoded USPS/UPS here. Admin route will enum-map safely.
   const providerName = String(chosen?.provider || '').trim();
   const carrierToken = providerToShippoCarrierToken(providerName);
 
@@ -432,11 +722,7 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
     shipment,
     chosenRate: chosen,
     transaction: tx,
-
-    // Let adminShippo.js decide enum-safe value (don’t hardcode)
     carrierEnum: null,
-
-    // Shippo tracking token for /tracks/{carrier}/{trackingNumber}
     carrierToken,
   };
 }
@@ -444,6 +730,40 @@ async function createLabelForOrder(order, { chooseRate = 'cheapest', rateId = nu
 async function getRatesForOrder(order) {
   if (!order) throw new Error('Order is required');
 
+  // ✅ 1) Try reuse saved shipment first (FAST, matches payerRateId)
+  const savedShipmentId =
+    order?.shippo?.shipmentId ||
+    order?.shippo?.payerShipmentId ||
+    null;
+
+  if (savedShipmentId) {
+    try {
+      // Try shipment object
+      const existing = await shippoFetch(`/shipments/${encodeURIComponent(String(savedShipmentId))}/`, {
+        method: 'GET',
+        timeoutMs: 20000,
+        retries: 2,
+      });
+
+      let rates = Array.isArray(existing?.rates) ? existing.rates : [];
+
+      // ✅ If Shippo returns QUEUED with empty rates, poll shipment until rates appear
+      if (!rates.length && existing?.object_id) {
+        const polled = await pollShipmentUntilRates(existing.object_id, { attempts: 14, delayMs: 850 });
+        return { shipment: polled.shipment, rates: polled.rates, reused: true };
+      }
+
+      if (existing?.object_id && rates.length) {
+        return { shipment: existing, rates, reused: true };
+      }
+
+      // else fall through to rerate
+    } catch {
+      // saved shipment may be expired or Shippo may be temporarily failing; fallback below
+    }
+  }
+
+  // ✅ 2) Fallback: create a NEW shipment (rerate)
   const address_from = buildFromAddress();
   let address_to = mapOrderToShippoToAddress(order);
   requireToFields(address_to);
@@ -451,50 +771,52 @@ async function getRatesForOrder(order) {
 
   const parcel = buildParcel();
 
-  const isInternational =
-    String(address_from.country || '').toUpperCase() !== String(address_to.country || '').toUpperCase();
+  const fromC = String(address_from.country || '').toUpperCase();
+  const toC   = String(address_to.country || '').toUpperCase();
+
+  // Only international if BOTH are present and different
+  const isInternational = !!fromC && !!toC && fromC !== toC;
 
   let customs_declaration = undefined;
 
   if (isInternational) {
-    const customsItems = buildCustomsItemsFromOrder(order);
+    customs_declaration = order?.shippo?.customsDeclarationId
+      ? String(order.shippo.customsDeclarationId).trim()
+      : '';
 
-    const createdItems = [];
-    for (const ci of customsItems) {
-      const item = await shippoFetch('/customs/items/', { method: 'POST', body: ci });
-      createdItems.push(item.object_id);
+    // ✅ IMPORTANT: do NOT create customs here. Payment.js must have saved it.
+    if (!customs_declaration) {
+      const err = new Error(
+        'International shipment is missing shippo.customsDeclarationId (must be created/saved in payment.js).'
+      );
+      err.code = 'SHIPPO_CUSTOMS_MISSING_ON_ORDER';
+      err.details = { orderId: order?.orderId || order?._id };
+      throw err;
     }
-
-    const decl = await shippoFetch('/customs/declarations/', {
-      method: 'POST',
-      body: {
-        contents_type: 'MERCHANDISE',
-        non_delivery_option: 'RETURN',
-        certify: true,
-        certify_signer: process.env.SHIPPO_CUSTOMS_SIGNER || address_from.name || 'Sender',
-        items: createdItems,
-        eel_pfc: 'NOEEI_30_37_a',
-        incoterm: 'DDU',
-      },
-    });
-
-    customs_declaration = decl.object_id;
   }
 
-  const shipment = await shippoFetch('/shipments/', {
-    method: 'POST',
-    body: {
-      address_from,
-      address_to,
-      parcels: [parcel],
-      async: false,
-      metadata: `order:${order.orderId || order._id}`,
-      ...(customs_declaration ? { customs_declaration } : {}),
-    },
-  });
+  let shipment = await shippoFetch('/shipments/', {
+  method: 'POST',
+  body: {
+    address_from,
+    address_to,
+    parcels: [parcel],
+    async: true, // ✅ allow async rating
+    metadata: `order:${order.orderId || order._id}`,
+    ...(customs_declaration ? { customs_declaration } : {}),
+  },
+  timeoutMs: 20000,
+  retries: 2,
+});
 
-  const rates = Array.isArray(shipment.rates) ? shipment.rates : [];
-  return { shipment, rates };
+// ✅ Poll until rates exist (prevents infinite loader)
+if (shipment?.object_id && (!Array.isArray(shipment.rates) || shipment.rates.length === 0)) {
+  const polled = await pollShipmentUntilRates(shipment.object_id, { attempts: 16, delayMs: 900 });
+  shipment = polled.shipment;
+}
+
+const rates = Array.isArray(shipment.rates) ? shipment.rates : [];
+return { shipment, rates, reused: false };
 }
 
 module.exports = { createLabelForOrder, getRatesForOrder };

@@ -43,7 +43,8 @@
             <option value="">All</option>
             <option value="PENDING">PENDING</option>
             <option value="PAID">PAID</option>
-            <option value="FULFILLED">FULFILLED</option>
+            <option value="PACKING">PACKING</option>
+            <option value="LABEL_CREATED">LABEL_CREATED</option>
             <option value="SHIPPED">SHIPPED</option>
             <option value="DELIVERED">DELIVERED</option>
             <option value="CANCELLED">CANCELLED</option>
@@ -245,7 +246,7 @@
                       data-orderid="<%= o.orderId %>"
                       data-has-label="<%= hasLabel ? '1' : '0' %>"
                     >
-                      <%= hasLabel ? 'Re-use saved label' : 'Choose rate & buy' %>
+                      <%= hasLabel ? 'Re-use saved label' : 'Open rates' %>
                     </button>
                     
                     <button
@@ -792,7 +793,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/rates`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' }
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
     });
 
     const data = await r.json().catch(() => ({}));
@@ -802,26 +807,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const rates = Array.isArray(data.rates) ? data.rates : [];
+    const payerRateId = String(data.payerRateId || '').trim();
+    const payerHint = data.payerHint || {};
+    const payerRecorded = !!data.payerRecorded;
+    const payerInThisList = !!data.payerInThisList;
+
+    const norm2 = (s) => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
+
     if (!rates.length) {
       showResult(orderId, `<div class="alert">No rates returned for this order.</div>`);
       return;
     }
 
     const rows = rates.map((rt) => {
-      const rateObjectId = rt.id || rt.object_id || rt.rateId || rt.objectId || '';
+      const rateObjectIdRaw = rt.object_id || rt.id || rt.rateId || rt.objectId || '';
+      const rateObjectId = String(rateObjectIdRaw || '').trim();
+      const payerId = String(payerRateId || '').trim();
+      const hintMatch =
+        !payerId &&
+        (payerHint && (payerHint.provider || payerHint.service || payerHint.amount)) &&
+        (
+          (payerHint.provider && norm2(rt.provider) === norm2(payerHint.provider)) ||
+          (payerHint.service && norm2(rt.service) === norm2(payerHint.service))
+        ) &&
+        (
+          !payerHint.amount || String(rt.amount) === String(payerHint.amount)
+        );
+
+      const isPayer = (payerId && rateObjectId === payerId) || hintMatch;
+
       return `
-        <tr>
-          <td><strong>${escapeHtml(rt.provider || '')}</strong></td>
+        <tr ${isPayer ? 'style="outline:2px solid rgba(124,58,237,.45); border-radius:12px;"' : ''}>
+          <td>
+            <strong>${escapeHtml(rt.provider || '')}</strong>
+            ${isPayer ? `<div class="tag tag--green" style="margin-top:6px;">Payer chosen</div>` : ``}
+            <div class="muted tiny">RateId: <span class="mono">${escapeHtml(rateObjectId)}</span></div>
+          </td>
           <td>${escapeHtml(rt.service || '')}</td>
           <td>${rt.estimatedDays != null ? `~${escapeHtml(rt.estimatedDays)} days` : escapeHtml(rt.durationTerms || '—')}</td>
           <td><strong>${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}</strong></td>
           <td class="rates-actions">
             <button
               type="button"
-              class="btn btn-sm btn-primary js-buy-rate"
+              class="btn btn-sm ${isPayer ? 'btn-primary' : 'btn-outline'} js-buy-rate"
               data-orderid="${escapeHtml(orderId)}"
               data-rateid="${escapeHtml(rateObjectId)}"
-            >Buy this</button>
+            >${isPayer ? 'Buy payer choice' : 'Buy this'}</button>
           </td>
         </tr>
       `;
@@ -832,10 +863,21 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="result-title">
           <strong>Available rates</strong>
           <span class="help">Choose a rate to buy a label.</span>
+          <div class="muted tiny" style="margin-top:6px">
+            Payer rate recorded: <strong>${payerRecorded ? 'YES' : 'NO'}</strong>
+            ${payerRateId ? `• PayerRateId: <span class="mono">${escapeHtml(payerRateId)}</span>` : ''}
+            ${payerRecorded && !payerInThisList ? `• <span class="tag tag--gray">Payer not in this shipment list</span>` : ''}
+          </div>
         </div>
         <div class="result-title">
-          <button class="btn btn-sm btn-primary js-buy-cheapest" data-orderid="${escapeHtml(orderId)}">Buy cheapest</button>
-          <button class="btn btn-sm btn-outline js-buy-fastest" data-orderid="${escapeHtml(orderId)}">Buy fastest</button>
+          ${
+            (payerRecorded && payerInThisList)
+              ? `<span class="tag tag--green">Strict: payer rate only</span>`
+              : `
+                <button class="btn btn-sm btn-primary js-buy-cheapest" data-orderid="${escapeHtml(orderId)}">Buy cheapest</button>
+                <button class="btn btn-sm btn-outline js-buy-fastest" data-orderid="${escapeHtml(orderId)}">Buy fastest</button>
+              `
+          }
         </div>
       </div>
 
@@ -863,7 +905,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasLabel) {
       const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
         method: 'POST',
-        headers: { 'Accept': 'application/json' }
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
       });
 
       const data = await r.json().catch(() => ({}));
@@ -934,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             <label class="field">
               <span class="field__label">State</span>
-              <input class="input" name="state" placeholder="e.g. CA (2-letter)" required />
+              <input class="input" name="state" placeholder="State/Province (US: 2-letter, else optional)" />
             </label>
 
             <label class="field">
@@ -970,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Buy chosen rate
+     // Buy chosen rate
   document.addEventListener('click', async (e) => {
     const buyBtn = e.target.closest('.js-buy-rate');
     if (!buyBtn) return;
@@ -978,22 +1024,63 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderId = buyBtn.dataset.orderid;
     const rateId = buyBtn.dataset.rateid;
 
-    const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ rateId })
-    });
+    // UI feedback
+    buyBtn.disabled = true;
+    const oldText = buyBtn.textContent;
+    buyBtn.textContent = 'Buying…';
 
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.ok) {
-      alert(`❌ ${data.message || 'Failed to buy label'}`);
-      return;
+    try {
+      const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ rateId })
+      });
+
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok || !data.ok) {
+        const shippo = data.shippo || {};
+        const status = shippo.status ? `<div class="muted tiny">Status: <span class="mono">${escapeHtml(shippo.status)}</span></div>` : '';
+        const msgs = shippo.messages ? `<pre class="codebox">${escapeHtml(JSON.stringify(shippo.messages, null, 2))}</pre>` : '';
+        const txid = shippo.transactionId ? `<div class="muted tiny">TransactionId: <span class="mono">${escapeHtml(shippo.transactionId)}</span></div>` : '';
+        const rid  = shippo.rateId ? `<div class="muted tiny">RateId: <span class="mono">${escapeHtml(shippo.rateId)}</span></div>` : '';
+
+        showResult(orderId, `
+          <div class="alert alert--bad">❌ ${escapeHtml(data.message || 'Failed to buy label')}</div>
+          ${status}${txid}${rid}
+          ${msgs}
+        `);
+        return;
+      }
+
+      showResult(orderId, `
+        <div class="result-head">
+          <div class="result-title">
+            <span class="alert alert--ok">✅ Label bought</span>
+            ${data.trackingNumber ? `<span class="mono">Tracking: ${escapeHtml(data.trackingNumber)}</span>` : ''}
+          </div>
+          <div class="result-title">
+            ${data.labelUrl ? `<a class="btn btn-sm btn-primary" href="${data.labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
+            ${data.trackingUrl ? `<a class="btn btn-sm btn-outline" href="${data.trackingUrl}" target="_blank" rel="noopener">Courier tracking</a>` : ''}
+          </div>
+        </div>
+        <div class="help">Refreshing the page to show the saved label…</div>
+      `);
+
+      window.location.assign(`/admin/shippo?t=${Date.now()}`);
+    } catch (err) {
+      showResult(orderId, `<div class="alert alert--bad">❌ Network error: ${escapeHtml(err.message || 'Request failed')}</div>`);
+    } finally {
+      buyBtn.disabled = false;
+      buyBtn.textContent = oldText;
     }
-
-    alert('✅ Label bought. Refreshing…');
-    window.location.assign(`/admin/shippo?t=${Date.now()}`);
   });
-
+ 
   // Buy cheapest / fastest presets
   document.addEventListener('click', async (e) => {
     const cheapest = e.target.closest('.js-buy-cheapest');
@@ -1006,7 +1093,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
       body: JSON.stringify({ chooseRate })
     });
 
@@ -1066,6 +1158,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/update-address`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
       body: JSON.stringify(payload)
     });
@@ -1084,3 +1177,5 @@ document.addEventListener('DOMContentLoaded', () => {
   applyFilters();
 });
 </script>
+
+

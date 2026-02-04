@@ -352,7 +352,12 @@
     <%- JSON.stringify({
       VAT_RATE: Number(CO_VAT),
       CURRENCY: CO_CCY,
-      BRAND_NAME: CO_BRAND
+      BRAND_NAME: CO_BRAND,
+
+      // ✅ Default country for the dropdown + readShipTo fallback
+      DEFAULT_COUNTRY: (typeof defaultCountry !== 'undefined' && defaultCountry)
+        ? String(defaultCountry).toUpperCase()
+        : 'ZA'
     }) %>
   </script>
 
@@ -923,6 +928,7 @@
 
       const VAT_RATE = Number(cfg.VAT_RATE || 0);
       const CURRENCY = String(cfg.CURRENCY || 'USD');
+      const DEFAULT_COUNTRY = String(cfg.DEFAULT_COUNTRY || 'ZA').toUpperCase();
 
       // ===== Hardcoded ISO-3166-1 alpha-2 (195 countries: 193 UN members + Vatican City + Palestine) =====
       const COUNTRIES = [
@@ -1123,11 +1129,11 @@
         { code:'ZW', name:'Zimbabwe' }
       ];
 
-      function buildCountrySelect(term = '', keepCode = 'ZA'){
+      function buildCountrySelect(term = '', keepCode = DEFAULT_COUNTRY){
         if (!el.shipCountry) return;
 
         const q = String(term || '').trim().toLowerCase();
-        const current = String(el.shipCountry.value || keepCode || 'ZA').toUpperCase();
+        const current = String(el.shipCountry.value || keepCode || DEFAULT_COUNTRY).toUpperCase();
 
         const matches = !q
           ? COUNTRIES
@@ -1212,7 +1218,7 @@
           city: v(el.shipCity && el.shipCity.value),
           state: v(el.shipState && el.shipState.value),
           zip: v(el.shipZip && el.shipZip.value),
-          country: v(el.shipCountry && el.shipCountry.value) || 'ZA',
+          country: v(el.shipCountry && el.shipCountry.value) || DEFAULT_COUNTRY,
           is_residential: true
         };
       }
@@ -1487,6 +1493,33 @@
         }
       }
 
+      async function rememberSelectedRate(){
+        try {
+          const sd = state.selectedDelivery;
+          if (!sd?.shippoRateId || !sd?.shippoShipmentId) return;
+
+          const payload = {
+            shippoShipmentId: String(sd.shippoShipmentId),
+            shippoRateId: String(sd.shippoRateId),
+
+            // UI info (server will store it; server can also re-validate later)
+            provider: String(sd.type || ''),
+            amount: Number(sd.price || 0),
+            currency: String(sd.currency || CURRENCY).toUpperCase(),
+            days: Number(sd.days || 0),
+          };
+
+          await fetch('/payment/shippo/remember-rate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+          });
+        } catch (e) {
+          console.warn('rememberSelectedRate failed (non-fatal):', e?.message || e);
+        }
+      }
+
       function applyDeliverySelection(){
         const opt = el.deliverySelect.options[el.deliverySelect.selectedIndex];
         if (!opt) return;
@@ -1517,6 +1550,7 @@
         el.deliveryHint.innerHTML = '<span class="co-hint-ic">📦</span><span>Delivery selected</span>';
 
         updateSummary();
+        rememberSelectedRate(); // ✅ store payer’s selected Shippo rate for the server
         maybeEnablePayment();
       }
 
@@ -1717,6 +1751,8 @@
                 }))
               };
 
+              await rememberSelectedRate();
+
               const r = await fetch('/payment/create-order', {
                 method:'POST',
                 headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
@@ -1770,7 +1806,7 @@
       
       function init(){
         // Build countries once at startup (default ZA)
-        buildCountrySelect('', 'ZA');
+        buildCountrySelect('', DEFAULT_COUNTRY);
 
         // events
         el.deliverySelect.addEventListener('change', applyDeliverySelection);
@@ -1845,3 +1881,5 @@
     })();
   </script>
 </section>
+
+

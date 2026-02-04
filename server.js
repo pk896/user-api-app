@@ -738,6 +738,15 @@ async function startServer() {
     });
   }
 
+  // ✅ Shippo auto-buy loop (runs ONLY if SHIPPO_AUTO_BUY_ENABLED=true)
+  try {
+    const { startAutoBuyLoop } = require('./utils/shippo/autoBuyLabels');
+    startAutoBuyLoop();
+    console.log('✅ Shippo auto-buy loop initialized');
+  } catch (e) {
+    console.warn('⚠️ Shippo auto-buy loop not started:', e?.message);
+  }
+
   // Start the server
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);

@@ -204,7 +204,11 @@ const OrderSchema = new Schema(
     shippo: {
       shipmentId: { type: String, index: true },
       transactionId: { type: String, index: true },
+      payerShipmentId: { type: String, default: null },
       rateId: String,
+      // ✅ the payer-selected rateId (admin must buy THIS one)
+      payerRateId: { type: String, index: true },
+
       labelUrl: String,
       trackingStatus: String, // raw Shippo status if you want
 
@@ -220,6 +224,47 @@ const OrderSchema = new Schema(
         estimatedDays: Number,  // e.g. 8
         durationTerms: String,  // e.g. "~8 days"
       },
+
+      // ✅ customs declaration id (reused for international)
+      customsDeclarationId: { type: String, index: true },
+
+      // ✅ International metadata (used for label buying / audit)
+      isInternational: { type: Boolean, default: false },
+      fromCountry: { type: String, trim: true, uppercase: true }, // e.g. ZA
+      toCountry: { type: String, trim: true, uppercase: true },   // e.g. US
+
+      // ✅ When Shippo selection was persisted (optional but useful)
+      createdAt: Date,
+
+      // ✅ auto-buy bookkeeping (so we don’t spam / re-buy / re-try forever)
+      autoBuyEnabled: { type: Boolean, default: true },
+      autoBuyAttemptedAt: Date,
+      autoBuyStatus: {
+        type: String,
+        enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'SKIPPED'],
+        default: 'PENDING',
+      },
+
+      autoBuyLastError: String,
+      autoBuyLastSuccessAt: Date,
+
+      // ✅ Admin rates snapshot (saved by /admin/orders/:orderId/shippo/rates)
+      adminShipmentId: { type: String, index: true },
+      adminLastRatesAt: Date,
+      adminLastRatesShipmentId: String,
+
+      adminLastRates: [
+        {
+          object_id: String,
+          id: String,
+          provider: String,
+          service: String,
+          amount: String,
+          currency: String,
+          estimatedDays: Number,
+          durationTerms: String,
+        },
+      ],
 
       lastRatesAt: Date,
     },
@@ -284,8 +329,18 @@ OrderSchema.index({ 'shippo.shipmentId': 1, createdAt: -1 });
 OrderSchema.statics.PAID_STATES = PAID_STATES;
 
 OrderSchema.methods.isPaidLike = function isPaidLike() {
-  const up = String(this.status || '').trim().toUpperCase();
-  return PAID_STATES.includes(up);
+  const s = String(this.status || '').trim().toUpperCase();
+  const ps = String(this.paymentStatus || '').trim().toUpperCase();
+
+  // paid-like if either field indicates paid/completed
+  if (PAID_STATES.includes(s)) return true;
+  if (PAID_STATES.includes(ps)) return true;
+
+  // extra common variants (optional but helpful)
+  if (ps === 'CAPTURED') return true; // you use CAPTURED in adminShippo filter
+  if (s === 'CAPTURED') return true;
+
+  return false;
 };
 
 // ✅ Guard against OverwriteModelError in dev
