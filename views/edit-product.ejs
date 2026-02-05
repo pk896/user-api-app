@@ -81,6 +81,25 @@
         const prodType  = (product.type  || '').toLowerCase();
         const isShoes   = prodType === 'shoes' || prodRole === 'shoes';
         const isClothes = prodRole === 'clothes' || prodType === 'clothes';
+
+        // ---------------------------
+        // Shipping / package defaults (backwards compatible)
+        // ---------------------------
+        const ship = product.shipping || {};
+        const shipWeight = ship.weight || {};
+        const shipDims = ship.dimensions || {};
+
+        const shipWeightValue = (shipWeight.value ?? '');
+        const shipWeightUnit  = (shipWeight.unit  ?? 'kg');
+
+        const shipLength = (shipDims.length ?? '');
+        const shipWidth  = (shipDims.width  ?? '');
+        const shipHeight = (shipDims.height ?? '');
+        const shipDimUnit = (shipDims.unit ?? 'cm');
+
+        const packagingHint = (ship.packagingHint ?? '');
+        const shipSeparately = !!ship.shipSeparately;
+        const fragile = !!ship.fragile;
       %>
 
       <div class="edit-form-container">
@@ -353,6 +372,122 @@
                   <div class="form-hint">
                     Comma-separated list. For clothes this must not be empty.
                   </div>
+                </div>
+
+                <!-- ==========================
+                📦 Shipping (for accurate Shippo rates)
+                ========================== -->
+                <div class="form-group" style="grid-column: 1 / -1;">
+                  <label class="form-label">📦 Shipping & Package Info</label>
+                  <div class="form-hint">
+                    Optional now, but required for accurate shipping rates later. Enter ONE item (without box).
+                  </div>
+                </div>
+
+                <!-- Weight -->
+                <div class="form-group">
+                  <label class="form-label">Item Weight</label>
+                  <div style="display:flex; gap:10px; align-items:center;">
+                    <input
+                      type="number"
+                      name="shipWeightValue"
+                      step="0.001"
+                      min="0"
+                      placeholder="e.g., 0.50"
+                      value="<%= shipWeightValue %>"
+                      class="form-input"
+                    />
+                    <select name="shipWeightUnit" class="form-select" style="max-width: 120px;">
+                      <option value="kg" <%= shipWeightUnit === 'kg' ? 'selected' : '' %>>kg</option>
+                      <option value="g"  <%= shipWeightUnit === 'g'  ? 'selected' : '' %>>g</option>
+                      <option value="lb" <%= shipWeightUnit === 'lb' ? 'selected' : '' %>>lb</option>
+                      <option value="oz" <%= shipWeightUnit === 'oz' ? 'selected' : '' %>>oz</option>
+                    </select>
+                  </div>
+                  <div class="form-hint">Weight of ONE item (no box). Example: 0.5 kg</div>
+                </div>
+
+                <!-- Packaging hint -->
+                <div class="form-group">
+                  <label class="form-label">Packaging Hint (optional)</label>
+                  <input
+                    type="text"
+                    name="packagingHint"
+                    value="<%= packagingHint %>"
+                    placeholder="e.g., small-box / tube / fragile"
+                    class="form-input"
+                  />
+                  <div class="form-hint">Helps auto-packing later. Leave empty if unsure.</div>
+                </div>
+
+                <!-- Dimensions -->
+                <div class="form-group" style="grid-column: 1 / -1;">
+                  <label class="form-label">Item Dimensions (L × W × H)</label>
+                  <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:10px;">
+                    <input
+                      type="number"
+                      name="shipLength"
+                      step="0.1"
+                      min="0"
+                      placeholder="Length"
+                      value="<%= shipLength %>"
+                      class="form-input"
+                    />
+                    <input
+                      type="number"
+                      name="shipWidth"
+                      step="0.1"
+                      min="0"
+                      placeholder="Width"
+                      value="<%= shipWidth %>"
+                      class="form-input"
+                    />
+                    <input
+                      type="number"
+                      name="shipHeight"
+                      step="0.1"
+                      min="0"
+                      placeholder="Height"
+                      value="<%= shipHeight %>"
+                      class="form-input"
+                    />
+                    <select name="shipDimUnit" class="form-select" style="max-width: 110px;">
+                      <option value="cm" <%= shipDimUnit === 'cm' ? 'selected' : '' %>>cm</option>
+                      <option value="in" <%= shipDimUnit === 'in' ? 'selected' : '' %>>in</option>
+                    </select>
+                  </div>
+                  <div class="form-hint">Dimensions of ONE item (no box). Example: 30 × 20 × 10 cm</div>
+                </div>
+
+                <!-- Flags -->
+                <div class="form-group" style="grid-column: 1 / -1;">
+                  <label class="form-label">Shipping Flags</label>
+                  <div class="flags-row">
+                    <label class="flag">
+                      <input type="hidden" name="shipSeparately" value="0" />
+                      <input
+                        type="checkbox"
+                        name="shipSeparately"
+                        value="on"
+                        <%= shipSeparately ? 'checked' : '' %>
+                      />
+                      <span>Ship separately</span>
+                    </label>
+
+                    <label class="flag">
+                      <!-- hidden ensures "fragile" is always present even when unchecked -->
+                      <input type="hidden" name="fragile" value="0" />
+                      <input
+                        type="checkbox"
+                        name="fragile"
+                        value="on"
+                        <%= fragile ? 'checked' : '' %>
+                      />
+                      <span>Fragile</span>
+                    </label>
+
+                  </div>
+                  <div class="form-hint">Use if this product must be boxed alone or needs careful handling.</div>
                 </div>
 
                 <!-- STATUS FLAGS -->
@@ -630,6 +765,9 @@
     max-width: 1100px;
     margin: 0 auto;
     padding: 0.75rem; /* mobile tighter */
+
+    background: var(--bg);
+    border-radius: var(--radius-lg);
   }
 
   /* Prevent overflow on small phones */
@@ -1522,7 +1660,7 @@
     if (deleteBtn) {
       deleteBtn.addEventListener('click', () => {
         if (confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
-          window.location.href = `/products/<%= product.customId %>/delete`;
+          window.location.href = `/products/delete/<%= product.customId %>`;
         }
       });
     }
@@ -1545,7 +1683,7 @@
 
         if (!isValid) {
           e.preventDefault();
-          const firstBad = this.querySelector('[required]:not([value]), [required]:invalid') || this.querySelector('[required]');
+          const firstBad = this.querySelector('[required]:invalid') || this.querySelector('[required]');
           if (firstBad && firstBad.scrollIntoView) {
             firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }

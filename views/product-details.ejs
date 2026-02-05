@@ -9,6 +9,33 @@
   const desc = pd.description || '';
   const customId = pd.customId || '';
 
+  // ---- Shipping helpers (supports flat OR nested storage) ----
+  const pick = (a, b) => (a !== undefined && a !== null && a !== '' ? a : b);
+
+  const shipObj = (pd && typeof pd === 'object' && pd.shipping && typeof pd.shipping === 'object')
+    ? pd.shipping
+    : {};
+
+  const shipWeightValue = pick(pd.shipWeightValue, shipObj?.weight?.value);
+  const shipWeightUnit  = pick(pd.shipWeightUnit,  shipObj?.weight?.unit) || '';
+
+  const shipLength  = pick(pd.shipLength,  shipObj?.dimensions?.length);
+  const shipWidth   = pick(pd.shipWidth,   shipObj?.dimensions?.width);
+  const shipHeight  = pick(pd.shipHeight,  shipObj?.dimensions?.height);
+  const shipDimUnit = pick(pd.shipDimUnit, shipObj?.dimensions?.unit) || '';
+
+  const packagingHint = pick(pd.packagingHint, shipObj?.packagingHint) || '';
+
+  // booleans can come as true/false OR "on"/"1"/"true"
+  const boolish = (v) => (v === true || v === 'true' || v === '1' || v === 'on' || v === 1);
+
+  const shipSeparately = boolish(pick(pd.shipSeparately, shipObj?.shipSeparately));
+  const fragile        = boolish(pick(pd.fragile,        shipObj?.fragile));
+
+  const hasShipDims = (Number(shipLength) > 0 && Number(shipWidth) > 0 && Number(shipHeight) > 0);
+  const hasShipWeight = (Number(shipWeightValue) > 0);
+  const hasShipInfo = hasShipWeight || hasShipDims || packagingHint || shipSeparately || fragile;
+
   // Helper functions
   const getArray = (data) => {
     if (!data) return [];
@@ -186,6 +213,50 @@
             </div>
           <% } %>
         </div>
+
+        <% if (hasShipInfo) { %>
+          <div style="height: 10px;"></div>
+          <h3 class="card-title" style="margin-top: 6px;">📦 Shipping & Package</h3>
+
+          <div class="details-grid">
+            <% if (hasShipWeight) { %>
+              <div class="detail-item">
+                <span class="detail-label">Item Weight</span>
+                <span class="detail-value"><%= Number(shipWeightValue).toFixed(3) %><%= shipWeightUnit ? ` ${shipWeightUnit}` : '' %></span>
+              </div>
+            <% } %>
+
+            <% if (hasShipDims) { %>
+              <div class="detail-item">
+                <span class="detail-label">Item Dimensions</span>
+                <span class="detail-value">
+                  <%= Number(shipLength).toFixed(1) %> × <%= Number(shipWidth).toFixed(1) %> × <%= Number(shipHeight).toFixed(1) %><%= shipDimUnit ? ` ${shipDimUnit}` : '' %>
+                </span>
+              </div>
+            <% } %>
+
+            <% if (packagingHint) { %>
+              <div class="detail-item">
+                <span class="detail-label">Packaging Hint</span>
+                <span class="detail-value"><%= packagingHint %></span>
+              </div>
+            <% } %>
+
+            <% if (shipSeparately) { %>
+              <div class="detail-item">
+                <span class="detail-label">Ship Separately</span>
+                <span class="detail-value">Yes</span>
+              </div>
+            <% } %>
+
+            <% if (fragile) { %>
+              <div class="detail-item">
+                <span class="detail-label">Fragile</span>
+                <span class="detail-value">Yes</span>
+              </div>
+            <% } %>
+          </div>
+        <% } %>
       </div>
 
       <!-- Description -->

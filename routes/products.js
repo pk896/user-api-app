@@ -44,10 +44,9 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(png|jpe?g|webp|gif|bmp|svg\+xml)$/.test(file.mimetype);
-    if (!ok) {
-      return cb(new Error('Only image uploads are allowed'));
-    }
+    // ✅ safer: no svg
+    const ok = /^image\/(png|jpe?g|webp|gif|bmp)$/.test(file.mimetype);
+    if (!ok) return cb(new Error('Only PNG/JPG/WEBP/GIF/BMP images are allowed'));
     cb(null, true);
   },
 });
@@ -63,19 +62,27 @@ function randomKey(ext) {
   return `products/${uuidv4()}.${ext}`;
 }
 
-/*function safeRedirectPath(p) {
-  if (typeof p !== 'string') return null;
-  if (!p.startsWith('/')) return null;
-  if (p.startsWith('//')) return null;
-  return p;
-}*/
+/* ---------------------------------------------
+ * 📦 Shipping parsing helpers
+ * ------------------------------------------- */
+function numOrNull(v) {
+  if (v === undefined || v === null) return null;
+  const n = Number(String(v).trim());
+  if (!Number.isFinite(n)) return null;
+  if (n < 0) return null;
+  return n;
+}
 
-/*  router.get('/low-stock', requireBusiness, async (req, res) => {
-  console.log('[DEBUG] /low-stock route hit');
-  console.log('[DEBUG] req.session.business:', req.session.business);
-  console.log('[DEBUG] req.business:', req.business);
-  // ... rest of code
-});*/
+function pickEnum(v, allowed, fallback) {
+  const s = String(v || '').trim().toLowerCase();
+  return allowed.includes(s) ? s : fallback;
+}
+
+function checkboxOn(v) {
+  if (Array.isArray(v)) return v.includes('on') || v.includes('1') || v.includes(true);
+  const s = String(v || '').toLowerCase();
+  return s === 'on' || s === '1' || s === 'true' || s === 'yes';
+}
 
 /* ---------------------------------------------
  * 🧾 GET /products/add — show Add Product form
@@ -93,6 +100,7 @@ router.get(
       success: req.flash('success'),
       error: req.flash('error'),
       themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
     });
   },
 );
@@ -184,7 +192,7 @@ router.get('/low-stock', requireBusiness, async (req, res) => {
     console.error('❌ Low-stock page error:', err);
     req.flash('error', 'Could not load low-stock products.');
     // ✅ redirect to a real route, not /products
-    return res.redirect('/products/mine');
+    return res.redirect('/products/all');
   }
 });
 
@@ -246,13 +254,26 @@ router.post(
       // Prepare and save product
       const customId = req.body.id?.trim() || uuidv4();
 
+            // ---------- SHIPPING (optional for now; safe defaults) ----------
+      const shipWeightValue = numOrNull(req.body.shipWeightValue);
+      const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
+
+      const shipLen = numOrNull(req.body.shipLength);
+      const shipWid = numOrNull(req.body.shipWidth);
+      const shipHei = numOrNull(req.body.shipHeight);
+      const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
+
+      const shipSeparately = checkboxOn(req.body.shipSeparately);
+      const fragile = checkboxOn(req.body.fragile);
+      const packagingHint = (req.body.packagingHint || '').toString().trim();
+
       const product = new Product({
         customId,
         name: name.trim(),
         price: numericPrice,
         description: req.body.description?.trim(),
         imageUrl,
-        stock: req.body.stock ? Number(req.body.stock) : 0,
+        stock: Number.isFinite(Number(req.body.stock)) ? Number(req.body.stock) : 0,
         category: req.body.category?.trim(),
         color: req.body.color?.trim(),
         size: req.body.size?.trim(),
@@ -260,6 +281,21 @@ router.post(
         made: req.body.made?.trim(),
         manufacturer: req.body.manufacturer?.trim(),
         type: req.body.type?.trim(),
+
+        // ✅ NEW: shipping measurements
+        shipping: {
+          weight: { value: shipWeightValue, unit: shipWeightUnit },
+          dimensions: {
+            length: shipLen,
+            width: shipWid,
+            height: shipHei,
+            unit: shipDimUnit,
+          },
+          shipSeparately,
+          fragile,
+          packagingHint,
+        },
+
         business: business._id,
       });
 
@@ -297,6 +333,7 @@ router.get('/all', requireBusiness, async (req, res) => {
       success: req.flash('success'),
       error: req.flash('error'),
       themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
     });
   } catch (err) {
     console.error('❌ Failed to load products:', err);
@@ -354,96 +391,6 @@ router.get('/view/:id', async (req, res) => {
   }
 });
 
-// =======================================================
-// ⭐ POST: Create/Update rating for a product (public page)
-// POST /products/view/:id/ratings
-// =======================================================
-/*router.post('/view/:id/ratings', async (req, res) => {
-  try {
-    const customId = String(req.params.id || '').trim();
-    if (!customId) {
-      req.flash('error', '❌ Invalid product id.');
-      return res.redirect('/products/sales');
-    }
-
-    // You can decide who is allowed to rate:
-    // - If you only want logged-in users: enforce it here.
-    const userIdRaw =
-      (req.session?.user && (req.session.user._id || req.session.user.id)) ||
-      (req.session?.business && (req.session.business._id || req.session.business.id)) ||
-      null;
-
-    if (!userIdRaw) {
-      req.flash('error', 'Please log in to rate this product.');
-      return res.redirect(`/products/view/${customId}`);
-    }
-
-    const userId = req.session?.user
-      ? `u:${String(userIdRaw)}`
-      : `b:${String(userIdRaw)}`;
-
-    const stars = Number(req.body.stars || 0);
-    const title = typeof req.body.title === 'string' ? req.body.title.trim().slice(0, 80) : '';
-    const body = typeof req.body.body === 'string' ? req.body.body.trim().slice(0, 500) : '';
-
-    if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
-      req.flash('error', 'Please select a star rating (1 to 5).');
-      return res.redirect(`/products/view/${customId}`);
-    }
-
-    const product = await Product.findOne({ customId });
-    if (!product) {
-      req.flash('error', '❌ Product not found.');
-      return res.redirect('/products/sales');
-    }
-
-    // Ensure ratings array exists
-    if (!Array.isArray(product.ratings)) product.ratings = [];
-
-    // Upsert: one rating per userId
-    const existingIndex = product.ratings.findIndex((r) => String(r.userId) === userId);
-
-    const ratingDoc = {
-      userId, // ✅ save string
-      stars,
-      title,
-      body,
-      updatedAt: new Date(),
-    };
-
-    if (existingIndex >= 0) {
-      product.ratings[existingIndex] = {
-        ...product.ratings[existingIndex],
-        ...ratingDoc,
-      };
-    } else {
-      product.ratings.push({
-        ...ratingDoc,
-        createdAt: new Date(),
-      });
-    }
-
-    // Recalculate summary fields (optional but recommended)
-    const count = product.ratings.length;
-    const sum = product.ratings.reduce((acc, r) => acc + Number(r.stars || 0), 0);
-    const avg = count ? sum / count : 0;
-
-    product.ratingCount = count;
-    product.avgRating = Math.round(avg * 10) / 10; // 1 decimal
-
-    await product.save();
-
-    req.flash('success', '✅ Rating saved.');
-    const redirectTo = safeRedirectPath(req.body.redirect) || `/products/view/${customId}`;
-    return res.redirect(redirectTo);
-  } catch (err) {
-    console.error('❌ Rating save error:', err);
-    req.flash('error', '❌ Could not save rating.');
-    // fallback to product page
-    return res.redirect(`/products/view/${req.params.id}`);
-  }
-});*/
-
 /* ===========================================================
  * ✏️ GET: Edit Product (only own)
  * =========================================================== */
@@ -467,6 +414,7 @@ router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, async (req, re
       success: req.flash('success'),
       error: req.flash('error'),
       themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
     });
   } catch (err) {
     console.error('❌ Failed to load product for edit:', err);
@@ -571,6 +519,41 @@ router.post(
       product.isNew = !!req.body.isNew;
       product.isOnSale = !!req.body.isOnSale;
       product.isPopular = !!req.body.isPopular;
+
+            // ---------- SHIPPING (optional; safe) ----------
+      const shipWeightValue = numOrNull(req.body.shipWeightValue);
+      const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
+
+      const shipLen = numOrNull(req.body.shipLength);
+      const shipWid = numOrNull(req.body.shipWidth);
+      const shipHei = numOrNull(req.body.shipHeight);
+      const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
+
+      // checkboxes return "on" or undefined
+      const shipSeparately = checkboxOn(req.body.shipSeparately);
+      const fragile = checkboxOn(req.body.fragile);
+
+      const packagingHint = (req.body.packagingHint || '').toString().trim();
+
+      // Ensure object exists
+      if (!product.shipping) product.shipping = {};
+      if (!product.shipping.weight) product.shipping.weight = {};
+      if (!product.shipping.dimensions) product.shipping.dimensions = {};
+
+      // Only overwrite if fields are present in the form submission
+      // (If your edit form doesn’t include them yet, this won’t break anything.)
+      if (req.body.shipWeightValue !== undefined) product.shipping.weight.value = shipWeightValue;
+      if (req.body.shipWeightUnit !== undefined) product.shipping.weight.unit = shipWeightUnit;
+
+      if (req.body.shipLength !== undefined) product.shipping.dimensions.length = shipLen;
+      if (req.body.shipWidth !== undefined) product.shipping.dimensions.width = shipWid;
+      if (req.body.shipHeight !== undefined) product.shipping.dimensions.height = shipHei;
+      if (req.body.shipDimUnit !== undefined) product.shipping.dimensions.unit = shipDimUnit;
+
+      // With hidden inputs in the form, these keys are always present => can safely update
+      product.shipping.shipSeparately = shipSeparately;
+      product.shipping.fragile = fragile;
+      if (req.body.packagingHint !== undefined) product.shipping.packagingHint = packagingHint;
 
       // ---------- OPTIONAL NEW IMAGE ----------
       if (req.file) {
@@ -690,8 +673,18 @@ router.get('/:id', requireBusiness, requireVerifiedBusiness, async (req, res) =>
  * =========================================================== */
 router.use((err, req, res, _next) => {
   console.error('❌ Route error:', err.message);
+
   req.flash('error', err.message || 'Unexpected server error.');
-  res.redirect('/products/add');
+
+  // Redirect back to the page the user was on (edit/add), without breaking other flows
+  const back = req.get('referer');
+  if (back) return res.redirect(back);
+
+  // Fallbacks if no referer
+  if (String(req.originalUrl || '').includes('/edit/')) {
+    return res.redirect('/products/all');
+  }
+  return res.redirect('/products/add');
 });
 
 module.exports = router;

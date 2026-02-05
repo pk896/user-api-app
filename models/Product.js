@@ -2,6 +2,32 @@
 // const { mongoose } = require('../db');
 const mongoose = require('mongoose');
 
+// ==========================
+// 📦 Shipping / Physical data
+// ==========================
+const ProductShippingSchema = new mongoose.Schema(
+  {
+    weight: {
+      value: { type: Number, min: 0, default: null }, // numeric weight
+      unit: { type: String, enum: ['kg', 'g', 'lb', 'oz'], default: 'kg' },
+    },
+    dimensions: {
+      length: { type: Number, min: 0, default: null },
+      width: { type: Number, min: 0, default: null },
+      height: { type: Number, min: 0, default: null },
+      unit: { type: String, enum: ['cm', 'in'], default: 'cm' },
+    },
+
+    // Optional flags (safe defaults)
+    shipSeparately: { type: Boolean, default: false },
+    fragile: { type: Boolean, default: false },
+
+    // Optional future use: help your packing algorithm pick a packaging family
+    packagingHint: { type: String, trim: true, default: '' },
+  },
+  { _id: false },
+);
+
 const productSchema = new mongoose.Schema(
   {
     // Human-friendly id separate from _id
@@ -61,13 +87,18 @@ const productSchema = new mongoose.Schema(
       default: [],
       validate: {
         validator: function (v) {
-          // Only require sizes if product is clothing
-          if (this.role === 'clothes') {
-            return v && v.length > 0;
+          const role = (this.role || '').toLowerCase();
+          const type = (this.type || '').toLowerCase();
+
+          const needsVariants =
+            role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
+
+          if (needsVariants) {
+            return Array.isArray(v) && v.length > 0;
           }
           return true;
         },
-        message: 'Clothing products must have at least one size option',
+        message: 'Clothing/shoes products must have at least one size option',
       },
     },
 
@@ -77,13 +108,18 @@ const productSchema = new mongoose.Schema(
       default: [],
       validate: {
         validator: function (v) {
-          // Only require colors if product is clothing
-          if (this.role === 'clothes') {
-            return v && v.length > 0;
+          const role = (this.role || '').toLowerCase();
+          const type = (this.type || '').toLowerCase();
+
+          const needsVariants =
+            role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
+
+          if (needsVariants) {
+            return Array.isArray(v) && v.length > 0;
           }
           return true;
         },
-        message: 'Clothing products must have at least one color option',
+        message: 'Clothing/shoes products must have at least one color option',
       },
     },
 
@@ -153,27 +189,12 @@ const productSchema = new mongoose.Schema(
     }, // distinct orders count
 
     // ==========================
-    // ⭐ Ratings / Reviews
+    // 📦 Shipping measurements
     // ==========================
-    /*ratings: {
-      type: [
-        new mongoose.Schema(
-          {
-            userId: { type: String, required: true, index: true },
-            stars: { type: Number, required: true, min: 1, max: 5 },
-            title: { type: String, trim: true, maxlength: 80, default: '' },
-            body: { type: String, trim: true, maxlength: 500, default: '' },
-            createdAt: { type: Date, default: Date.now },
-            updatedAt: { type: Date, default: Date.now },
-          },
-          { _id: false },
-        ),
-      ],
-      default: [],
+    shipping: {
+      type: ProductShippingSchema,
+      default: () => ({}),
     },
-
-    avgRating: { type: Number, default: 0 },
-    ratingCount: { type: Number, default: 0 },*/
 
     // Owner business
     business: {
@@ -229,7 +250,8 @@ productSchema.pre('save', function (next) {
   const type = (this.type || '').toLowerCase();
 
   // We want variants for clothes + shoes (because your shop uses type to control size/color)
-  const wantsVariants = role === 'clothes' || type === 'clothes' || type === 'shoes';
+  const wantsVariants =
+    role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
 
   if (!wantsVariants) {
     return next();
@@ -268,7 +290,13 @@ productSchema.pre('save', function (next) {
 // Helper method to check if a specific variant is available
 productSchema.methods.isVariantAvailable = function (size, color) {
   // Only enforce for clothes / shoes; for others, just return stock > 0
-  if (this.role !== 'clothes' && this.role !== 'shoes') {
+  const role = (this.role || '').toLowerCase();
+  const type = (this.type || '').toLowerCase();
+
+  const needsVariants =
+    role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
+
+  if (!needsVariants) {
     return this.stock > 0;
   }
 
@@ -302,6 +330,10 @@ productSchema.methods.toFrontendJSON = function () {
     description: this.description,
     imageUrl: this.imageUrl,
     stock: this.stock,
+    
+    // Shipping measurements (used for Shippo packing/rates)
+    shipping: this.shipping || null,
+
     inStock: this.inStock,
     role: this.role,
     sizes: this.sizes,
