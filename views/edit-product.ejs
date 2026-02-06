@@ -380,21 +380,24 @@
                 <div class="form-group" style="grid-column: 1 / -1;">
                   <label class="form-label">📦 Shipping & Package Info</label>
                   <div class="form-hint">
-                    Optional now, but required for accurate shipping rates later. Enter ONE item (without box).
+                    <strong>Required.</strong> These measurements are used to calculate Shippo rates at checkout.
+                    Enter ONE item (without the shipping box).
                   </div>
                 </div>
 
                 <!-- Weight -->
                 <div class="form-group">
-                  <label class="form-label">Item Weight</label>
+                  <label class="form-label">Item Weight <span class="required">*</span></label>
                   <div style="display:flex; gap:10px; align-items:center;">
                     <input
                       type="number"
                       name="shipWeightValue"
                       step="0.001"
-                      min="0"
+                      min="0.1"
                       placeholder="e.g., 0.50"
+                      required
                       value="<%= shipWeightValue %>"
+                      required
                       class="form-input"
                     />
                     <select name="shipWeightUnit" class="form-select" style="max-width: 120px;">
@@ -422,7 +425,7 @@
 
                 <!-- Dimensions -->
                 <div class="form-group" style="grid-column: 1 / -1;">
-                  <label class="form-label">Item Dimensions (L × W × H)</label>
+                  <label class="form-label">Item Dimensions (L × W × H) <span class="required">*</span></label>
                   <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:10px;">
                     <input
                       type="number"
@@ -431,6 +434,7 @@
                       min="0"
                       placeholder="Length"
                       value="<%= shipLength %>"
+                      required
                       class="form-input"
                     />
                     <input
@@ -440,6 +444,7 @@
                       min="0"
                       placeholder="Width"
                       value="<%= shipWidth %>"
+                      required
                       class="form-input"
                     />
                     <input
@@ -449,6 +454,7 @@
                       min="0"
                       placeholder="Height"
                       value="<%= shipHeight %>"
+                      required
                       class="form-input"
                     />
                     <select name="shipDimUnit" class="form-select" style="max-width: 110px;">
@@ -1672,22 +1678,50 @@
         const requiredFields = this.querySelectorAll('[required]');
         let isValid = true;
 
+        // reset any previous borders
+        requiredFields.forEach(field => (field.style.borderColor = ''));
+
+        // 1) required non-empty
         requiredFields.forEach(field => {
-          if (!field.value.trim()) {
+          if (!String(field.value || '').trim()) {
             isValid = false;
             field.style.borderColor = '#EF4444';
-          } else {
-            field.style.borderColor = '';
           }
         });
 
+        // 2) shipping > 0 validation (prevents 0 / negative / NaN)
+        const w  = this.querySelector('input[name="shipWeightValue"]');
+        const l  = this.querySelector('input[name="shipLength"]');
+        const wi = this.querySelector('input[name="shipWidth"]');
+        const h  = this.querySelector('input[name="shipHeight"]');
+
+        const toNum = (el) => Number(String(el?.value || '').trim());
+        const bad = [];
+
+        if (!w  || !Number.isFinite(toNum(w))  || toNum(w)  <= 0) bad.push(w);
+        if (!l  || !Number.isFinite(toNum(l))  || toNum(l)  <= 0) bad.push(l);
+        if (!wi || !Number.isFinite(toNum(wi)) || toNum(wi) <= 0) bad.push(wi);
+        if (!h  || !Number.isFinite(toNum(h))  || toNum(h)  <= 0) bad.push(h);
+
+        bad.forEach((el) => {
+          if (el) el.style.borderColor = '#EF4444';
+        });
+
+        if (bad.length) isValid = false;
+
         if (!isValid) {
           e.preventDefault();
-          const firstBad = this.querySelector('[required]:invalid') || this.querySelector('[required]');
+
+          const firstBad =
+            this.querySelector('[required]:invalid') ||
+            bad.find(Boolean) ||
+            this.querySelector('[required]');
+
           if (firstBad && firstBad.scrollIntoView) {
             firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
-          alert('Please fill in all required fields marked with *');
+
+          alert('Shipping weight and dimensions are required and must be greater than 0.');
         }
       });
     }

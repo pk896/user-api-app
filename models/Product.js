@@ -8,21 +8,36 @@ const mongoose = require('mongoose');
 const ProductShippingSchema = new mongoose.Schema(
   {
     weight: {
-      value: { type: Number, min: 0, default: null }, // numeric weight
+      value: {
+        type: Number,
+        required: [true, 'Shipping weight is required'],
+        min: [0.001, 'Shipping weight must be greater than 0'],
+      },
       unit: { type: String, enum: ['kg', 'g', 'lb', 'oz'], default: 'kg' },
     },
+
     dimensions: {
-      length: { type: Number, min: 0, default: null },
-      width: { type: Number, min: 0, default: null },
-      height: { type: Number, min: 0, default: null },
+      length: {
+        type: Number,
+        required: [true, 'Shipping length is required'],
+        min: [0.001, 'Shipping length must be greater than 0'],
+      },
+      width: {
+        type: Number,
+        required: [true, 'Shipping width is required'],
+        min: [0.001, 'Shipping width must be greater than 0'],
+      },
+      height: {
+        type: Number,
+        required: [true, 'Shipping height is required'],
+        min: [0.001, 'Shipping height must be greater than 0'],
+      },
       unit: { type: String, enum: ['cm', 'in'], default: 'cm' },
     },
 
-    // Optional flags (safe defaults)
+    // keep these for later; only fragile is used for splitting right now
     shipSeparately: { type: Boolean, default: false },
     fragile: { type: Boolean, default: false },
-
-    // Optional future use: help your packing algorithm pick a packaging family
     packagingHint: { type: String, trim: true, default: '' },
   },
   { _id: false },

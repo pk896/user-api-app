@@ -485,12 +485,6 @@ function envStr(name, fallback = '') {
   return v || fallback;
 }
 
-function envNum(name, fallback) {
-  const raw = String(process.env[name] || '').trim();
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 // ✅ FROM address (your warehouse / sender address)
 function getShippoFromAddress() {
   const country = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
@@ -524,112 +518,262 @@ function getShippoFromAddress() {
   return from;
 }
 
-// ✅ Very simple parcel (you can improve later with product weights/dims)
-function buildShippoParcelFromCart(cart) {
-  const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
-  const qtySum = itemsArr.reduce((sum, it) => sum + toQty(it?.qty ?? it?.quantity, 1), 0);
+function kgFrom(value, unit) {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const u = String(unit || 'kg').toLowerCase();
+  if (u === 'kg') return v;
+  if (u === 'g') return v / 1000;
+  if (u === 'lb') return v * 0.45359237;
+  if (u === 'oz') return v * 0.028349523125;
+  return null;
+}
 
-  // Defaults (safe + predictable)
-  const massUnit = envStr('SHIPPO_PARCEL_MASS_UNIT', 'lb');         // lb | oz | kg | g
-  const distUnit = envStr('SHIPPO_PARCEL_DISTANCE_UNIT', 'in');    // in | cm | ft | m
-  const perItemWeight = envNum('SHIPPO_PARCEL_WEIGHT_PER_ITEM', 1); // 1 lb each default
-  const weight = Math.max(0.1, +(qtySum * perItemWeight).toFixed(2));
+function cmFrom(value, unit) {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const u = String(unit || 'cm').toLowerCase();
+  if (u === 'cm') return v;
+  if (u === 'in') return v * 2.54;
+  return null;
+}
 
-  const length = envNum('SHIPPO_PARCEL_LENGTH', 10);
-  const width  = envNum('SHIPPO_PARCEL_WIDTH', 8);
-  const height = envNum('SHIPPO_PARCEL_HEIGHT', 4);
+async function loadProductsForCart(cart) {
+  if (!Product) {
+    const err = new Error('Product model not available for shipping calculation.');
+    err.code = 'NO_PRODUCT_MODEL';
+    throw err;
+  }
+
+  const items = Array.isArray(cart?.items) ? cart.items : [];
+  const ids = items
+    .map((it) => String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim())
+    .filter(Boolean);
+
+  const unique = [...new Set(ids)];
+  if (!unique.length) return [];
+
+  // We only need shipping + name + customId
+  const prods = await Product.find({ customId: { $in: unique } })
+    .select('customId name shipping')
+    .lean();
+
+  // Map for fast lookup
+  const map = new Map(prods.map((p) => [String(p.customId), p]));
+  return items.map((it) => {
+    const id = String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim();
+    return { cartItem: it, product: map.get(id) || null, customId: id };
+  });
+}
+
+function validateCartProductsShippingOrThrow(pairs) {
+  const missingList = [];
+
+  for (const row of pairs) {
+    const p = row.product;
+    if (!p) {
+      missingList.push(`${row.customId || 'UNKNOWN'} (product not found)`);
+      continue;
+    }
+
+    const sh = p.shipping || {};
+    const wVal = sh?.weight?.value;
+    const wUnit = sh?.weight?.unit;
+
+    const d = sh?.dimensions || {};
+    const len = d.length;
+    const wid = d.width;
+    const hei = d.height;
+    const dUnit = d.unit;
+
+    const problems = [];
+    if (kgFrom(wVal, wUnit) === null) problems.push('weight');
+    if (cmFrom(len, dUnit) === null) problems.push('length');
+    if (cmFrom(wid, dUnit) === null) problems.push('width');
+    if (cmFrom(hei, dUnit) === null) problems.push('height');
+
+    if (problems.length) {
+      missingList.push(`${p.name || p.customId} (missing: ${problems.join(', ')})`);
+    }
+  }
+
+  if (missingList.length) {
+    const err = new Error(
+      `Shipping is unavailable because these products are missing shipping measurements: ${missingList.join(' | ')}`
+    );
+    err.code = 'PRODUCT_SHIPPING_MISSING';
+    throw err;
+  }
+}
+
+function buildCalculatedParcelFromProducts(rows, { onlyFragile } = {}) {
+  // rows: [{ cartItem, product }]
+  // We build ONE parcel from sum(weight) and a simple "stack" rule for dimensions:
+  // length = max(length), width = max(width), height = sum(height * qty)
+  let totalKg = 0;
+
+  let maxLenCm = 0;
+  let maxWidCm = 0;
+  let sumHeiCm = 0;
+
+  for (const row of rows) {
+    const p = row.product;
+    const sh = p.shipping || {};
+    const qty = toQty(row?.cartItem?.qty ?? row?.cartItem?.quantity, 1);
+
+    const isFragile = !!sh?.fragile;
+
+    if (onlyFragile === true && !isFragile) continue;
+    if (onlyFragile === false && isFragile) continue;
+
+    const kg = kgFrom(sh?.weight?.value, sh?.weight?.unit);
+    const d = sh?.dimensions || {};
+    const unit = d.unit;
+
+    const lenCm = cmFrom(d.length, unit);
+    const widCm = cmFrom(d.width, unit);
+    const heiCm = cmFrom(d.height, unit);
+
+    totalKg += kg * qty;
+
+    maxLenCm = Math.max(maxLenCm, lenCm);
+    maxWidCm = Math.max(maxWidCm, widCm);
+    sumHeiCm += heiCm * qty;
+  }
+
+  // Shippo expects strings + units
+  // Use cm/kg consistently
+  const safeKg = Math.max(0.001, Number(totalKg.toFixed(3)));
+  const safeLen = Math.max(0.1, Number(maxLenCm.toFixed(1)));
+  const safeWid = Math.max(0.1, Number(maxWidCm.toFixed(1)));
+  const safeHei = Math.max(0.1, Number(sumHeiCm.toFixed(1)));
 
   return {
-    length: String(length),
-    width: String(width),
-    height: String(height),
-    distance_unit: distUnit,
-    weight: String(weight),
-    mass_unit: massUnit,
+    length: String(safeLen),
+    width: String(safeWid),
+    height: String(safeHei),
+    distance_unit: 'cm',
+    weight: String(safeKg),
+    mass_unit: 'kg',
   };
 }
 
+async function buildShippoParcelsFromCart_Strict(cart) {
+  const pairs = await loadProductsForCart(cart);
+  validateCartProductsShippingOrThrow(pairs);
+
+  const hasFragile = pairs.some((r) => !!r?.product?.shipping?.fragile);
+
+  // ✅ Rule: ONE parcel by default
+  if (!hasFragile) {
+    return [buildCalculatedParcelFromProducts(pairs)];
+  }
+
+  // ✅ Rule: split ONLY when fragile exists
+  const fragileRows = pairs.filter((r) => !!r?.product?.shipping?.fragile);
+  const normalRows  = pairs.filter((r) => !r?.product?.shipping?.fragile);
+
+  const parcels = [];
+
+  // Only add a parcel if it actually has items
+  if (fragileRows.length) parcels.push(buildCalculatedParcelFromProducts(fragileRows));
+  if (normalRows.length) parcels.push(buildCalculatedParcelFromProducts(normalRows));
+
+  // Safety: should never be empty, but just in case
+  if (!parcels.length) {
+    return [buildCalculatedParcelFromProducts(pairs)];
+  }
+
+  return parcels;
+}
+
 async function shippoCreateCustomsDeclaration({ cart, toCountry }) {
-  // Shippo requires line items for customs
+  // ✅ Customs line items MUST be based on Product.shipping (not .env)
+  // ✅ We will:
+  // - load products for cart
+  // - enforce measurements exist (already strict)
+  // - compute net_weight per line = productKg * qty
+  // - compute value_amount per line = unitPrice * qty (from cart snapshot)
+
+  const pairs = await loadProductsForCart(cart);
+  validateCartProductsShippingOrThrow(pairs);
+
   const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
-  const originCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
+  if (!itemsArr.length) {
+    const err = new Error('Cart is empty; cannot create customs declaration.');
+    err.code = 'CART_EMPTY';
+    throw err;
+  }
 
-  const currency = envStr('SHIPPO_CUSTOMS_CURRENCY', upperCcy);
-
-  const massUnit = envStr('SHIPPO_PARCEL_MASS_UNIT', 'lb');
-  const perItemWeight = envNum(
-    'SHIPPO_CUSTOMS_WEIGHT_PER_ITEM',
-    envNum('SHIPPO_PARCEL_WEIGHT_PER_ITEM', 1)
-  );
-
-  const contentsType = envStr('SHIPPO_CUSTOMS_CONTENTS_TYPE', 'MERCHANDISE');
-  const nonDelivery = envStr('SHIPPO_CUSTOMS_NON_DELIVERY', 'RETURN');
-  const incoterm = envStr('SHIPPO_CUSTOMS_INCOTERM', 'DDU');
-
-    // ✅ Optional customs metadata (used on commercial invoice / intl paperwork)
-  const hsDefaultRaw = envStr('SHIPPO_CUSTOMS_HS_CODE_DEFAULT', '');
-  const hsDefault = hsDefaultRaw ? String(hsDefaultRaw).trim().replace(/\s+/g, '') : '';
-
-  const exporterPrefix = envStr('SHIPPO_CUSTOMS_EXPORTER_REF_PREFIX', '');
-  const eelPfc = envStr('SHIPPO_CUSTOMS_EEL_PFC', '');
+  const originCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA'; // ok to keep: this is the ship-from country
+  const currency = upperCcy; // ✅ keep consistent with your PayPal currency
+  const massUnit = 'kg';     // ✅ we calculate in kg
 
   function clip(str, max) {
     const s = String(str || '');
     return s.length > max ? s.slice(0, max) : s;
   }
 
-  // Keep short + traceable (Shippo accepts exporter_reference) 
+  // Keep short + traceable (Shippo accepts exporter_reference)
   const exporterRef = (() => {
-    const pref = clip(exporterPrefix ? exporterPrefix : 'UNIC', 4); // keep short
+    const pref = 'UNIC';
     const dest = clip((toCountry ? String(toCountry).toUpperCase() : 'XX'), 2);
-    const ts = Math.floor(Date.now() / 1000); // seconds (shorter)
-    return clip(`${pref}-${dest}-${ts}`, 20); // ✅ ALWAYS <= 20 (DHL-safe)
+    const ts = Math.floor(Date.now() / 1000);
+    return clip(`${pref}-${dest}-${ts}`, 20);
   })();
 
-  // ✅ REQUIRED BY SHIPPO: certify + signer
   const signer =
-    envStr('SHIPPO_CUSTOMS_CERTIFY_SIGNER', '') ||
     envStr('SHIPPO_FROM_NAME', BRAND_NAME_N) ||
     BRAND_NAME_N;
 
-  const items = itemsArr.map((it, i) => {
+  // Build customs items from pairs (product + cart qty)
+  const items = pairs.map((row, i) => {
+    const p = row.product;
+    const it = row.cartItem;
+
     const qty = toQty(it?.qty ?? it?.quantity, 1);
 
-    const name = String(it?.name || it?.title || `Item ${i + 1}`).slice(0, 50);
-    const unitVal = normalizeMoneyNumber(it?.price ?? it?.unitPrice) ?? 0;
+    // Prefer product name for customs description
+    const name = String(p?.name || it?.name || it?.title || `Item ${i + 1}`).slice(0, 50);
 
-    // ✅ Shippo requires TOTAL value for the customs line item (qty included)
+    // Unit value: use cart snapshot price (your cart is gross per unit)
+    const unitVal = normalizeMoneyNumber(it?.price ?? it?.unitPrice) ?? 0;
     const totalVal = +(Number(unitVal) * qty).toFixed(2);
+
+    // ✅ Weight from Product.shipping
+    const sh = p?.shipping || {};
+    const kgEach = kgFrom(sh?.weight?.value, sh?.weight?.unit);
+
+    // validateCartProductsShippingOrThrow already ensured kgEach is not null
+    const totalKg = +(kgEach * qty).toFixed(3);
 
     return {
       description: name,
       quantity: qty,
 
-      // ✅ net_weight is TOTAL weight for this line item (qty included)
-      net_weight: String(Math.max(0.1, +(qty * perItemWeight).toFixed(2))),
+      // ✅ Shippo requires TOTAL weight for this line item
+      net_weight: String(Math.max(0.001, totalKg)),
       mass_unit: massUnit,
 
-      // ✅ value_amount is TOTAL value for this line item (qty included)
+      // ✅ Shippo requires TOTAL value for this line item
       value_amount: String(Math.max(0, totalVal)),
       value_currency: currency,
 
       origin_country: originCountry,
-
-      ...(hsDefault ? { tariff_number: hsDefault.slice(0, 18) } : {}),
     };
   });
 
-    const payload = {
+  // ✅ Shippo requires certify + signer and a few basic customs fields
+  // We will NOT use .env for weights/hs defaults anymore.
+  const payload = {
     certify: true,
     certify_signer: String(signer).slice(0, 100),
 
-    contents_type: contentsType,
-    non_delivery_option: nonDelivery,
-    incoterm,
+    contents_type: 'MERCHANDISE',
+    non_delivery_option: 'RETURN',
+    incoterm: 'DDU',
 
-    // ✅ customs metadata 
     exporter_reference: exporterRef,
-    ...(eelPfc ? { eel_pfc: String(eelPfc).trim() } : {}),
 
     items,
   };
@@ -683,7 +827,7 @@ async function shippoCreateShipment({ to, cart }) {
     customsDeclarationId = await shippoCreateCustomsDeclaration({ cart, toCountry: to.country });
   }
 
-  const parcel = buildShippoParcelFromCart(cart);
+  const parcels = await buildShippoParcelsFromCart_Strict(cart);
 
   const payload = {
     address_from: {
@@ -709,7 +853,7 @@ async function shippoCreateShipment({ to, cart }) {
       email: to.email || undefined,
       is_residential: true,
     },
-    parcels: [parcel],
+    parcels,
     async: false, // keep synchronous so we get rates immediately
     ...(customsDeclarationId ? { customs_declaration: customsDeclarationId } : {}),
   };

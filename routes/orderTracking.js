@@ -16,6 +16,57 @@ try {
 
 const mongoose = require('mongoose');
 
+// ------------------------------------------------------
+// Enum-safe mapping (prevents ValidationError on enums)
+// ------------------------------------------------------
+function _norm(v) {
+  return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function getTrackingStatusEnumValues(orderDoc) {
+  const p =
+    orderDoc?.schema?.path('shippingTracking.status') ||
+    orderDoc?.constructor?.schema?.path('shippingTracking.status');
+  return Array.isArray(p?.enumValues) ? p.enumValues : [];
+}
+
+function getFulfillmentEnumValues(orderDoc) {
+  const p =
+    orderDoc?.schema?.path('fulfillmentStatus') ||
+    orderDoc?.constructor?.schema?.path('fulfillmentStatus');
+  return Array.isArray(p?.enumValues) ? p.enumValues : [];
+}
+
+function mapToEnum(desired, enumValues) {
+  const want = _norm(desired);
+  if (!want) return null;
+
+  // exact match by normalized
+  for (const ev of enumValues) {
+    if (_norm(ev) === want) return ev;
+  }
+
+  // safe fallbacks
+  const fallbackOrder = ['DELIVERED', 'IN_TRANSIT', 'SHIPPED', 'LABEL_CREATED', 'PROCESSING', 'PENDING', 'UNKNOWN'];
+  for (const fb of fallbackOrder) {
+    for (const ev of enumValues) {
+      if (_norm(ev) === _norm(fb)) return ev;
+    }
+  }
+
+  return null;
+}
+
+// map live tracking -> fulfillmentStatus (best effort)
+function liveStatusToFulfillment(liveStatus) {
+  const s = String(liveStatus || '').toUpperCase();
+  if (s === 'DELIVERED') return 'DELIVERED';
+  if (s === 'IN_TRANSIT') return 'SHIPPED';
+  if (s === 'PROCESSING') return 'LABEL_CREATED';
+  if (s === 'CANCELLED') return 'CANCELLED';
+  return null;
+}
+
 async function findOrderByParam(param, lean = false) {
   const p = String(param || '').trim();
 
@@ -263,28 +314,31 @@ async function cacheLiveTracking(orderIdOrOrderIdField, liveTracking) {
 
   const now = new Date();
 
-  // map to your fulfillment pipeline
-  // ✅ map to your fulfillmentStatus enum (ONLY allowed values)
-  let fulfillment = undefined;
+  // ✅ enum-safe mapping (prevents ValidationError)
+  const trackingEnums = getTrackingStatusEnumValues(Order);
+  const fulfillEnums  = getFulfillmentEnumValues(Order);
 
-  if (liveTracking.status === 'DELIVERED') fulfillment = 'DELIVERED';
-  else if (liveTracking.status === 'IN_TRANSIT') fulfillment = 'SHIPPED';
-  else if (liveTracking.status === 'PROCESSING') fulfillment = 'LABEL_CREATED';
-  else if (liveTracking.status === 'CANCELLED') fulfillment = 'CANCELLED';
-  else fulfillment = undefined;
+  const safeTrackingStatus =
+    mapToEnum(liveTracking.status, trackingEnums) || mapToEnum('UNKNOWN', trackingEnums);
 
-  await Order.findByIdAndUpdate(realMongoId, {
+  const fulfillmentWanted = liveStatusToFulfillment(liveTracking.status);
+  const safeFulfillment = fulfillmentWanted ? mapToEnum(fulfillmentWanted, fulfillEnums) : null;
+
+  const update = {
     // ✅ live cache
     'shippingTracking.liveStatus': liveTracking.status,
     'shippingTracking.liveEvents': liveTracking.events,
     'shippingTracking.lastTrackingUpdate': now,
     'shippingTracking.estimatedDelivery': liveTracking.estimatedDelivery,
 
-    // ✅ main status fields (what order history usually shows)
-    'shippingTracking.status': liveTracking.status,
-    ...(fulfillment ? { fulfillmentStatus: fulfillment } : {}),
-    ...(liveTracking.status === 'DELIVERED' ? { status: 'DELIVERED' } : {}),
-  }).catch(() => {});
+    // ✅ schema-safe status
+    'shippingTracking.status': safeTrackingStatus,
+  };
+
+  if (safeFulfillment) update.fulfillmentStatus = safeFulfillment;
+  if (String(liveTracking.status || '').toUpperCase() === 'DELIVERED') update.status = 'DELIVERED';
+
+  await Order.findByIdAndUpdate(realMongoId, update).catch(() => {});
 }
 
 /* ---------------------------------------
@@ -411,11 +465,9 @@ router.post('/:orderId', async (req, res, next) => {
 
     order.shippingTracking.trackingNumber = trackingNumber || '';
     order.shippingTracking.trackingUrl = trackingUrl || '';
-    order.shippingTracking.status = status || order.shippingTracking.status || 'SHIPPED';
-
-    order.shippingTracking.trackingNumber = trackingNumber || '';
-    order.shippingTracking.trackingUrl = trackingUrl || '';
-    order.shippingTracking.status = status || order.shippingTracking.status || 'SHIPPED';
+    const trackingEnums = getTrackingStatusEnumValues(order);
+    const safeStatus = mapToEnum(status || order.shippingTracking.status || 'SHIPPED', trackingEnums);
+    if (safeStatus) order.shippingTracking.status = safeStatus;
 
     // Auto-fetch live tracking (Shippo-first when carrier is a Shippo token)
     let liveTracking = null;

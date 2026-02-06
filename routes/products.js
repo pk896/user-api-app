@@ -67,9 +67,15 @@ function randomKey(ext) {
  * ------------------------------------------- */
 function numOrNull(v) {
   if (v === undefined || v === null) return null;
-  const n = Number(String(v).trim());
+  const raw = String(v).trim();
+  if (!raw) return null;
+
+  const n = Number(raw);
   if (!Number.isFinite(n)) return null;
-  if (n < 0) return null;
+
+  // ✅ hard reject 0 and negatives
+  if (n <= 0) return null;
+
   return n;
 }
 
@@ -82,6 +88,23 @@ function checkboxOn(v) {
   if (Array.isArray(v)) return v.includes('on') || v.includes('1') || v.includes(true);
   const s = String(v || '').toLowerCase();
   return s === 'on' || s === '1' || s === 'true' || s === 'yes';
+}
+
+function requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipHei }) {
+  const bad = [];
+
+  if (shipWeightValue === null) bad.push('weight (> 0)');
+  if (shipLen === null) bad.push('length (> 0)');
+  if (shipWid === null) bad.push('width (> 0)');
+  if (shipHei === null) bad.push('height (> 0)');
+
+  if (bad.length) {
+    const err = new Error(
+      `Shipping is required. Fix: ${bad.join(', ')}. Please enter per-item weight and dimensions (no box).`
+    );
+    err.code = 'PRODUCT_SHIPPING_MISSING';
+    throw err;
+  }
 }
 
 /* ---------------------------------------------
@@ -254,13 +277,16 @@ router.post(
       // Prepare and save product
       const customId = req.body.id?.trim() || uuidv4();
 
-            // ---------- SHIPPING (optional for now; safe defaults) ----------
+      // ---------- SHIPPING (REQUIRED) ----------    
       const shipWeightValue = numOrNull(req.body.shipWeightValue);
       const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
 
       const shipLen = numOrNull(req.body.shipLength);
       const shipWid = numOrNull(req.body.shipWidth);
       const shipHei = numOrNull(req.body.shipHeight);
+
+      requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipHei });
+
       const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
 
       const shipSeparately = checkboxOn(req.body.shipSeparately);
@@ -520,13 +546,16 @@ router.post(
       product.isOnSale = !!req.body.isOnSale;
       product.isPopular = !!req.body.isPopular;
 
-            // ---------- SHIPPING (optional; safe) ----------
+      // ---------- SHIPPING (REQUIRED) ----------      
       const shipWeightValue = numOrNull(req.body.shipWeightValue);
       const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
 
       const shipLen = numOrNull(req.body.shipLength);
       const shipWid = numOrNull(req.body.shipWidth);
       const shipHei = numOrNull(req.body.shipHeight);
+
+      requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipHei });
+
       const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
 
       // checkboxes return "on" or undefined
