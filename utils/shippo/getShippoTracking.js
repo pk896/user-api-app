@@ -11,31 +11,54 @@ function mustEnv(name) {
   return v;
 }
 
-async function shippoFetch(path) {
+// ✅ safer fetch: handles non-JSON error bodies + timeout
+async function shippoFetch(path, { timeoutMs = 15000 } = {}) {
   const token = mustEnv('SHIPPO_TOKEN');
 
-  const r = await fetch(`${SHIPPO_BASE}${path}`, {
-    method: 'GET',
-    headers: {
-      Authorization: `ShippoToken ${token}`,
-      Accept: 'application/json',
-    },
-  });
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
 
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const msg = data?.detail || data?.message || `Shippo error (${r.status})`;
-    const err = new Error(msg);
-    err.shippo = data;
-    throw err;
+  try {
+    const r = await fetch(`${SHIPPO_BASE}${path}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `ShippoToken ${token}`,
+        Accept: 'application/json',
+      },
+      signal: controller.signal,
+    });
+
+    const text = await r.text().catch(() => '');
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!r.ok) {
+      const msg =
+        data?.detail ||
+        data?.message ||
+        (typeof data?.raw === 'string' && data.raw.trim() ? data.raw.slice(0, 180) : '') ||
+        `Shippo error (${r.status})`;
+
+      const err = new Error(msg);
+      err.status = r.status;
+      err.shippo = data;
+      throw err;
+    }
+
+    return data;
+  } finally {
+    clearTimeout(t);
   }
-  return data;
 }
 
 function mapShippoStatus(s) {
   const status = String(s || '').toUpperCase();
 
-  // ✅ Only return values your Order model allows:
+  // ✅ Only return values allowed by your Order model:
   // ['PENDING','PROCESSING','SHIPPED','IN_TRANSIT','DELIVERED','CANCELLED']
 
   if (status === 'DELIVERED') return 'DELIVERED';
@@ -43,7 +66,6 @@ function mapShippoStatus(s) {
   if (status === 'PRE_TRANSIT') return 'PROCESSING';
 
   // Shippo can return: UNKNOWN, RETURNED, FAILURE
-  // ✅ Map them into allowed enum values
   if (status === 'RETURNED') return 'CANCELLED';
   if (status === 'FAILURE') return 'PROCESSING';
   if (status === 'UNKNOWN') return 'PROCESSING';
@@ -56,7 +78,14 @@ function normalizeShippoTrack(track) {
   const trackingStatus = track?.tracking_status || null;
   const history = Array.isArray(track?.tracking_history) ? track.tracking_history : [];
 
-  const events = history.map((ev) => ({
+  // ✅ Sort history by date so "latest" is actually latest
+  const historySorted = history.slice().sort((a, b) => {
+    const da = new Date(a?.status_date || a?.object_updated || a?.object_created || 0).getTime();
+    const db = new Date(b?.status_date || b?.object_updated || b?.object_created || 0).getTime();
+    return da - db;
+  });
+
+  const events = historySorted.map((ev) => ({
     status: mapShippoStatus(ev?.status),
     rawStatus: ev?.status || 'UNKNOWN',
     details: ev?.status_details || '',
@@ -64,24 +93,29 @@ function normalizeShippoTrack(track) {
     location: ev?.location || null,
   }));
 
-  const last = (history.length ? history[history.length - 1] : trackingStatus) || null;
+  const last = (historySorted.length ? historySorted[historySorted.length - 1] : trackingStatus) || null;
 
   return {
     status: mapShippoStatus(last?.status),
     events,
-    estimatedDelivery: track?.eta || null,          // Shippo "eta" :contentReference[oaicite:4]{index=4}
+    estimatedDelivery: track?.eta || null,
     lastUpdate: last?.status_date || last?.object_updated || new Date(),
-    raw: track, // keep original if you want to render more details
+    raw: track,
   };
 }
 
 // ✅ Main function you will call from your tracking route
 async function getShippoTracking(carrier, trackingNumber) {
-  if (!carrier) throw new Error('Missing Shippo carrier token (e.g. "usps").');
-  if (!trackingNumber) throw new Error('Missing tracking number.');
+  const c = String(carrier || '').trim();
+  const t = String(trackingNumber || '').trim();
 
-  // GET /tracks/{carrier}/{tracking_number} :contentReference[oaicite:5]{index=5}
-  const track = await shippoFetch(`/tracks/${encodeURIComponent(carrier)}/${encodeURIComponent(trackingNumber)}`);
+  if (!c) throw new Error('Missing Shippo carrier token (e.g. "usps").');
+  if (!t) throw new Error('Missing tracking number.');
+
+  const track = await shippoFetch(
+    `/tracks/${encodeURIComponent(c)}/${encodeURIComponent(t)}`
+  );
+
   return normalizeShippoTrack(track);
 }
 

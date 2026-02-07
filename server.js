@@ -601,7 +601,7 @@ app.use('/users', wishlistRoutes);
 // Password reset
 app.use('/users/password', passwordResetRoutes);
 // Tracking (separate namespace so it never conflicts)
-app.use('/orders', orderTrackingRoutes);
+app.use('/orders/tracking', orderTrackingRoutes);
 app.use('/orderDetails', ordersDetailsRoutes);
 app.use(ordersRoutes);
 

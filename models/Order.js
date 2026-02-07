@@ -253,6 +253,11 @@ const OrderSchema = new Schema(
       adminLastRatesAt: Date,
       adminLastRatesShipmentId: String,
 
+      // ✅ PayPal fulfillment tracking push bookkeeping
+      paypalTrackingPushedAt: Date,
+      paypalTrackingLastError: String,
+      paypalTrackingLastResponse: { type: Schema.Types.Mixed },
+
       adminLastRates: [
         {
           object_id: String,

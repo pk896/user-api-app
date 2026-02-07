@@ -1,3 +1,4 @@
+// utils/paypal/addTrackingToPaypalOrder.js
 'use strict';
 
 const { fetch } = require('undici');
@@ -30,28 +31,81 @@ async function getAccessToken() {
     body: 'grant_type=client_credentials',
   });
 
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error_description || 'PayPal token error');
+  const text = await r.text().catch(() => '');
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+
+  if (!r.ok) {
+    const msg =
+      data?.error_description ||
+      data?.message ||
+      data?.name ||
+      data?.error ||
+      data?.details?.[0]?.issue ||
+      (typeof data?.raw === 'string' && data.raw.trim() ? data.raw.slice(0, 200) : '') ||
+      'PayPal token error';
+    throw new Error(msg);
+  }
+
   return data.access_token;
 }
 
-// carrier must be PayPal-supported value like "USPS", "UPS", "FEDEX", "DHL" etc.
-async function addTrackingToPaypalOrder({ paypalOrderId, captureId, trackingNumber, carrier, notifyPayer = true }) {
-  if (!paypalOrderId) throw new Error('Missing paypalOrderId');
-  if (!captureId) throw new Error('Missing captureId');
+// Map your common carrier values -> PayPal carrier enum
+function normalizePaypalCarrier(raw) {
+  const v = String(raw || '').trim();
+
+  // shippo token -> paypal carrier
+  const lower = v.toLowerCase();
+  if (lower.includes('dhl')) return { carrier: 'DHL' };
+  if (lower.includes('fedex')) return { carrier: 'FEDEX' };
+  if (lower === 'ups' || lower.startsWith('ups ') || lower.startsWith('ups_') || lower.startsWith('ups-')) return { carrier: 'UPS' };
+  if (lower.includes('usps')) return { carrier: 'USPS' };
+
+  // already enum?
+  const upper = v.toUpperCase();
+  if (['DHL', 'FEDEX', 'UPS', 'USPS'].includes(upper)) return { carrier: upper };
+
+  // fallback: OTHER + carrier_name_other
+  if (v) return { carrier: 'OTHER', carrier_name_other: v };
+  return { carrier: 'OTHER', carrier_name_other: 'Other' };
+}
+
+/**
+ * ✅ Adds tracking to PayPal using Tracking API:
+ * POST /v1/shipping/trackers-batch
+ *
+ * NOTE: transactionId MUST be the PayPal transaction id (capture id). 
+ */
+async function addTrackingToPaypalOrder({
+  transactionId,          // capture id
+  trackingNumber,
+  carrier,                // "DHL" / "FEDEX" / "UPS" / "USPS" or "dhl_express" etc
+  status = 'SHIPPED',      // "SHIPPED" is the normal value. 
+}) {
+  if (!transactionId) throw new Error('Missing transactionId (capture id)');
   if (!trackingNumber) throw new Error('Missing trackingNumber');
   if (!carrier) throw new Error('Missing carrier');
 
   const token = await getAccessToken();
 
+  const c = normalizePaypalCarrier(carrier);
+
   const payload = {
-    capture_id: captureId,
-    tracking_number: trackingNumber,
-    carrier,
-    notify_payer: !!notifyPayer,
+    trackers: [
+      {
+        transaction_id: String(transactionId).trim(),
+        tracking_number: String(trackingNumber).trim(),
+        status: ['SHIPPED', 'DELIVERED', 'CANCELLED'].includes(String(status || '').trim().toUpperCase())
+          ? String(status).trim().toUpperCase()
+          : 'SHIPPED',
+
+        carrier: c.carrier,
+        ...(c.carrier === 'OTHER' ? { carrier_name_other: c.carrier_name_other } : {}),
+      },
+    ],
   };
 
-  const r = await fetch(`${paypalBase()}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/track`, {
+  const r = await fetch(`${paypalBase()}/v1/shipping/trackers-batch`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -60,10 +114,24 @@ async function addTrackingToPaypalOrder({ paypalOrderId, captureId, trackingNumb
     body: JSON.stringify(payload),
   });
 
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    throw new Error(data?.message || data?.name || 'PayPal add tracking failed');
+  const text = await r.text().catch(() => '');
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
   }
+
+  if (!r.ok) {
+    const msg =
+      data?.message ||
+      data?.name ||
+      data?.details?.[0]?.issue ||
+      (typeof data?.raw === 'string' && data.raw.trim() ? data.raw.slice(0, 200) : '') ||
+      'PayPal add tracking failed';
+    throw new Error(msg);
+  }
+
   return data;
 }
 

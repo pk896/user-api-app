@@ -1,10 +1,90 @@
 <!--views/tracking-->
 <%
   const PAGE_NONCE = typeof nonce !== 'undefined' ? nonce : '';
-  const BASE = (typeof baseUrl !== 'undefined' && baseUrl) ? baseUrl : '/orders';
+  const BASE = (typeof baseUrl !== 'undefined' && baseUrl) ? baseUrl : '/orders/tracking';
   const o = order || {};
   const t = o.shippingTracking || {};
   const events = Array.isArray(t.liveEvents) ? t.liveEvents : [];
+
+  // ----------------------------
+  // UI display helpers (no DB changes)
+  // ----------------------------
+  const prettyCarrier = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return '';
+    const m = {
+      usps: 'USPS',
+      ups: 'UPS',
+      fedex: 'FedEx',
+      dhl_express: 'DHL Express',
+      dhl: 'DHL',
+      shippo: 'Shippo (Test)',
+      COURIER_GUY: 'The Courier Guy',
+      FASTWAY: 'Fastway',
+      ARAMEX: 'Aramex',
+      OTHER: 'Other',
+    };
+    return m[s] || m[s.toUpperCase()] || s;
+  };
+
+  const prettyStatus = (v) => {
+    const s = String(v || '').trim().toUpperCase();
+    const m = {
+      PENDING: 'Pending',
+      PROCESSING: 'Processing',
+      LABEL_CREATED: 'Label created',
+      SHIPPED: 'Shipped',
+      IN_TRANSIT: 'In transit',
+      OUT_FOR_DELIVERY: 'Out for delivery',
+      DELIVERED: 'Delivered',
+      CANCELLED: 'Cancelled',
+      RETURNED: 'Returned',
+      FAILURE: 'Tracking error',
+      UNKNOWN: 'Unknown',
+    };
+    return m[s] || (s ? s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '—');
+  };
+
+  // small tag text for pills (keeps your nice UI)
+  const statusTag = (v) => String(prettyStatus(v) || '—');
+
+  // Return a CSS class name based on status (UI-only)
+  const statusClass = (v) => {
+    const s = String(v || '').trim().toUpperCase();
+
+    if (s === 'DELIVERED') return 'pill--ok';
+
+    if (s === 'OUT_FOR_DELIVERY') return 'pill--ship';
+    if (s === 'IN_TRANSIT') return 'pill--ship';
+    if (s === 'SHIPPED') return 'pill--ship';
+    if (s === 'LABEL_CREATED') return 'pill--ship';
+
+    if (s === 'CANCELLED') return 'pill--bad';
+    if (s === 'RETURNED') return 'pill--bad';
+    if (s === 'FAILURE') return 'pill--bad';
+
+    if (s === 'PROCESSING') return 'pill--muted';
+    if (s === 'PENDING') return 'pill--muted';
+    if (s === 'UNKNOWN') return 'pill--muted';
+
+    return 'pill--muted';
+  };
+
+  const eventDetails = (ev) => {
+    const d = String(ev?.details || '').trim();
+    const r = String(ev?.rawStatus || '').trim();
+    // Prefer details; fallback to raw status; fallback to pretty status
+    return d || r || prettyStatus(ev?.status);
+  };
+
+  const eventLocationLine = (loc) => {
+    if (!loc || typeof loc !== 'object') return '';
+    const city = String(loc?.city || '').trim();
+    const state = String(loc?.state || '').trim();
+    const country = String(loc?.country || loc?.country_code || '').trim();
+    const parts = [city, state, country].filter(Boolean);
+    return parts.join(', ');
+  };
 
   const niceDate = (d) => {
     try {
@@ -50,21 +130,34 @@
       <div class="row">
         <div class="label">Carrier</div>
         <div class="value">
-          <%= (t.carrierLabel || t.carrier || '—') %>
+          <%= (t.carrierLabel || prettyCarrier(t.carrier) || '—') %>
           <% if (t.carrierToken) { %>
-            <span class="pill"><%= String(t.carrierToken).toUpperCase() %></span>
+            <span class="pill"><%= prettyCarrier(t.carrierToken) %></span>
           <% } %>
         </div>
       </div>
 
-      <div class="row">
-        <div class="label">Tracking number</div>
-        <div class="value mono"><%= t.trackingNumber || '—' %></div>
-      </div>
+      <% if (t.trackingUrl) { %>
+        <div class="row">
+          <div class="label">Tracking link</div>
+          <div class="value">
+            <a class="link" href="<%= t.trackingUrl %>" target="_blank" rel="noopener noreferrer">
+              Open carrier tracking ↗
+            </a>
+          </div>
+        </div>
+      <% } %>
 
       <div class="row">
         <div class="label">Status</div>
-        <div class="value"><span class="pill solid"><%= t.liveStatus || t.status || '—' %></span></div>
+        <div class="value">
+          <span class="pill solid <%= statusClass(t.liveStatus || t.status) %>">
+            <%= statusTag(t.liveStatus || t.status) %>
+          </span>
+          <% if (t.status && t.liveStatus && String(t.status).toUpperCase() !== String(t.liveStatus).toUpperCase()) { %>
+            <span class="pill <%= statusClass(t.status) %>"><%= 'Saved: ' + statusTag(t.status) %></span>
+          <% } %>
+        </div>
       </div>
 
       <div class="row">
@@ -99,6 +192,16 @@
             <input name="trackingNumber" class="input" value="<%= t.trackingNumber || '' %>" placeholder="Enter tracking number" required />
           </label>
 
+          <label class="field">
+            <span>Carrier label (optional)</span>
+            <input name="carrierLabel" class="input" value="<%= t.carrierLabel || '' %>" placeholder="e.g. UPS, DHL, FedEx" />
+          </label>
+
+          <label class="field">
+            <span>Tracking URL (optional)</span>
+            <input name="trackingUrl" class="input" value="<%= t.trackingUrl || '' %>" placeholder="https://..." />
+          </label>
+
           <button class="btn btn-primary" type="submit">Save tracking</button>
 
           <div class="help muted">
@@ -120,11 +223,15 @@
           <% events.slice().reverse().forEach(ev => { %>
             <div class="ev">
               <div class="ev__top">
-                <span class="pill"><%= ev.status || '—' %></span>
+                <span class="pill <%= statusClass(ev.status) %>"><%= statusTag(ev.status) %></span>
                 <span class="muted tiny"><%= niceDate(ev.date) %></span>
               </div>
-              <div class="ev__mid"><%= ev.details || ev.rawStatus || '' %></div>
-              <% if (ev.location) { %>
+              <div class="ev__mid"><%= eventDetails(ev) %></div>
+
+              <% const locLine = eventLocationLine(ev.location); %>
+              <% if (locLine) { %>
+                <div class="muted tiny">📍 <%= locLine %></div>
+              <% } else if (ev.location) { %>
                 <div class="muted tiny"><%= JSON.stringify(ev.location) %></div>
               <% } %>
             </div>
@@ -218,6 +325,39 @@ h2{margin:0 0 10px;font-size:14px;color:var(--black);text-transform:uppercase;le
   color: var(--black);
 }
 
+/* -----------------------------
+   Status color variants
+------------------------------ */
+.pill--ok{
+  border-color: rgba(34,197,94,.35);
+  background: rgba(34,197,94,.12);
+  color: #166534;
+}
+
+.pill--ship{
+  border-color: rgba(124,58,237,.35);
+  background: rgba(124,58,237,.12);
+  color: var(--purple);
+}
+
+.pill--muted{
+  border-color: rgba(100,116,139,.35);
+  background: rgba(100,116,139,.10);
+  color: #334155;
+}
+
+.pill--bad{
+  border-color: rgba(239,68,68,.35);
+  background: rgba(239,68,68,.12);
+  color: #991B1B;
+}
+
+/* When it's the main "solid" status pill, make it pop slightly */
+.pill.solid.pill--ok{ background: rgba(34,197,94,.14); }
+.pill.solid.pill--ship{ background: rgba(124,58,237,.14); }
+.pill.solid.pill--muted{ background: rgba(100,116,139,.12); }
+.pill.solid.pill--bad{ background: rgba(239,68,68,.14); }
+
 .hr{border:none;border-top:1px solid rgba(148,163,184,.25);margin:12px 0}
 
 .form{display:grid;gap:10px}
@@ -247,6 +387,9 @@ h2{margin:0 0 10px;font-size:14px;color:var(--black);text-transform:uppercase;le
   .grid{grid-template-columns:1fr}
   .row{grid-template-columns:1fr}
 }
+
+.link{color:var(--blue);font-weight:900;text-decoration:none}
+.link:hover{text-decoration:underline}
 </style>
 
 <script nonce="<%= PAGE_NONCE %>">
@@ -258,12 +401,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (msg) msg.textContent = 'Refreshing…';
     btn && (btn.disabled = true);
 
-    const r = await fetch('<%= BASE %>/<%= o._id %>/refresh', {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
+    let r, data;
+    try {
+      r = await fetch('<%= BASE %>/<%= o._id %>/refresh', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      data = await r.json().catch(() => ({}));
+    } catch (e) {
+      btn && (btn.disabled = false);
+      if (msg) msg.textContent = '❌ Network error. Please try again.';
+      return;
+    }
 
-    const data = await r.json().catch(() => ({}));
     btn && (btn.disabled = false);
 
     if (!r.ok || !data.ok) {

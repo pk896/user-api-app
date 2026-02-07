@@ -47,7 +47,17 @@ function mapToEnum(desired, enumValues) {
   }
 
   // safe fallbacks
-  const fallbackOrder = ['DELIVERED', 'IN_TRANSIT', 'SHIPPED', 'LABEL_CREATED', 'PROCESSING', 'PENDING', 'UNKNOWN'];
+  const fallbackOrder = [
+    'DELIVERED',
+    'OUT_FOR_DELIVERY',
+    'IN_TRANSIT',
+    'SHIPPED',
+    'LABEL_CREATED',
+    'PROCESSING',
+    'PENDING',
+    'UNKNOWN',
+  ];
+
   for (const fb of fallbackOrder) {
     for (const ev of enumValues) {
       if (_norm(ev) === _norm(fb)) return ev;
@@ -61,6 +71,7 @@ function mapToEnum(desired, enumValues) {
 function liveStatusToFulfillment(liveStatus) {
   const s = String(liveStatus || '').toUpperCase();
   if (s === 'DELIVERED') return 'DELIVERED';
+  if (s === 'OUT_FOR_DELIVERY') return 'SHIPPED';
   if (s === 'IN_TRANSIT') return 'SHIPPED';
   if (s === 'PROCESSING') return 'LABEL_CREATED';
   if (s === 'CANCELLED') return 'CANCELLED';
@@ -161,8 +172,7 @@ function isShippoCarrierToken(carrier) {
   const c = String(carrier || '').trim();
   if (!c) return false;
 
-  // Do NOT treat legacy keys as Shippo
-  if (COURIER_APIS[c]) return false;
+  if (COURIER_APIS[String(c).toUpperCase()]) return false;
 
   // Do NOT treat "OTHER" / "other" as Shippo
   if (c.toLowerCase() === 'other') return false;
@@ -210,6 +220,21 @@ function normalizeCarrierForSchema(rawCarrier) {
 
   // Unknown -> store as OTHER (safe)
   return { carrierEnum: 'OTHER', carrierToken: '', carrierLabelAuto: raw };
+}
+
+// ------------------------------------------------------
+// If old orders only saved enum (e.g. "USPS") but not token ("usps"),
+// convert enum -> Shippo token so live tracking works.
+// ------------------------------------------------------
+function carrierEnumToShippoToken(carrierEnum) {
+  const upper = String(carrierEnum || '').trim().toUpperCase();
+  const map = {
+    USPS: 'usps',
+    UPS: 'ups',
+    FEDEX: 'fedex',
+    DHL: 'dhl_express',
+  };
+  return map[upper] || '';
 }
 
 function isShippoTestKey() {
@@ -383,14 +408,15 @@ router.get('/:orderId', async (req, res, next) => {
     const st = order.shippingTracking || {};
     const trackingNumber = String(st.trackingNumber || '').trim();
 
-    // ✅ IMPORTANT:
-    // - Shippo tracking needs the token like "usps"
-    // - PayPal needs the enum like "USPS"
     const carrierToken = String(st.carrierToken || '').trim(); // "usps"
-    const carrierEnum = String(st.carrier || '').trim();       // "USPS"
+    const carrierEnum  = String(st.carrier || '').trim();      // "USPS"
 
-    // Use token first, else fallback
-    const carrierForTracking = carrierToken || carrierEnum;
+    // ✅ Use Shippo token first; if missing, convert enum -> token (old orders)
+    const carrierForTracking =
+      carrierToken ||
+      carrierEnumToShippoToken(carrierEnum) ||
+      carrierEnum; // last fallback (legacy couriers might still use it)
+
 
     if (trackingNumber && carrierForTracking) {
       liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
@@ -536,7 +562,12 @@ router.get('/:orderId/refresh', async (req, res) => {
 
     const st = order.shippingTracking || {};
     const trackingNumber = String(st.trackingNumber || '').trim();
-    const carrierForTracking = String(st.carrierToken || st.carrier || '').trim();
+    const carrierForTracking = String(
+      st.carrierToken ||
+      carrierEnumToShippoToken(st.carrier) ||
+      st.carrier ||
+      ''
+    ).trim();
 
     if (!trackingNumber || !carrierForTracking) {
       return res.json({ ok: false, message: 'No tracking details saved yet.' });

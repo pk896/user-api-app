@@ -429,41 +429,60 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
     await order.save();
 
     // ======================================================
-    // ✅ Send tracking to PayPal (non-fatal)
+    // ✅ Send tracking to PayPal immediately after label purchase (non-fatal)
     // ======================================================
     try {
-      const paypalOrderId = order.orderId;
-
+      // ✅ Your schema stores captureId here
       const captureId =
-        order.paypal?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
-        order.paypal?.captureId ||
-        order.paypal?.capture?.id ||
-        null;
+        String(order?.paypal?.captureId || '').trim() ||
+        String(order?.captures?.[0]?.captureId || '').trim() ||
+        '';
 
-      const paypalCarrier =
-        (order.shippingTracking?.carrierLabel && String(order.shippingTracking.carrierLabel).trim()) ||
-        (rawProvider && String(rawProvider).trim()) ||
-        inferCarrierLabelFromUrl(order.shippingTracking?.trackingUrl) ||
-        null;
+      // ✅ tracking number from Shippo transaction
+      const trackingNumber = String(order?.shippingTracking?.trackingNumber || '').trim();
 
-      if (paypalOrderId && captureId && order.shippingTracking?.trackingNumber && paypalCarrier) {
-        await addTrackingToPaypalOrder({
-          paypalOrderId,
-          captureId,
-          trackingNumber: order.shippingTracking.trackingNumber,
-          carrier: paypalCarrier,
-          notifyPayer: true,
-        });
-      } else {
-        console.warn('⚠️ Skipping PayPal tracking update (missing fields):', {
-          paypalOrderId: !!paypalOrderId,
-          captureId: !!captureId,
-          trackingNumber: !!order.shippingTracking?.trackingNumber,
-          paypalCarrier: !!paypalCarrier,
-        });
-      }
+      // ✅ carrier best-effort: your util will normalize again, so pass a decent value
+      const carrierInput =
+      String(order?.shippingTracking?.carrierToken || '').trim() ||
+      String(order?.shippingTracking?.carrier || '').trim() ||
+      String(order?.shippingTracking?.carrierLabel || '').trim() ||
+      String(rawProvider || '').trim() ||
+      inferCarrierLabelFromUrl(order?.shippingTracking?.trackingUrl) ||
+      'OTHER';
+
+    if (captureId && trackingNumber) {
+      const paypalResp = await addTrackingToPaypalOrder({
+        transactionId: captureId,
+        trackingNumber,
+        carrier: carrierInput,
+        status: 'SHIPPED',
+      });
+
+      await Order.updateOne(
+        { _id: order._id },
+        {
+          $set: {
+            'shippo.paypalTrackingPushedAt': new Date(),
+            'shippo.paypalTrackingLastError': '',
+            'shippo.paypalTrackingLastResponse': paypalResp || null,
+          },
+        }
+      ).catch(() => {});
+    } else {
+      console.warn('⚠️ Skipping PayPal tracking update (missing fields):', {
+        captureId: !!captureId,
+        trackingNumber: !!trackingNumber,
+        carrierInput: !!carrierInput,
+      });
+    }
     } catch (e) {
       console.warn('⚠️ PayPal tracking update failed (non-fatal):', e.message);
+
+      // ✅ store last error (optional)
+        await Order.updateOne(
+          { _id: order._id },
+          { $set: { 'shippo.paypalTrackingLastError': String(e?.message || 'PayPal tracking error') } }
+        ).catch(() => {});
     }
 
     return res.json({
