@@ -6,6 +6,75 @@
   const t = o.shippingTracking || {};
   const events = Array.isArray(t.liveEvents) ? t.liveEvents : [];
 
+  function niceDate(d) {
+    try {
+      if (!d) return '';
+      return new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' });
+    } catch { return String(d || ''); }
+  }
+
+  const pickEventDate = (ev) => {
+    if (!ev) return null;
+    return (
+      ev.datetime ||
+      ev.date ||
+      ev.status_date ||
+      ev.event_datetime ||
+      ev.timestamp ||
+      ev.created_at ||
+      ev.updated_at ||
+      null
+    );
+  };
+
+  const eventsSorted = [...events].sort((a, b) => {
+    const da = new Date(pickEventDate(a) || 0).getTime();
+    const db = new Date(pickEventDate(b) || 0).getTime();
+    return db - da;
+  });
+
+  const lastUpdateRaw =
+  pickEventDate(eventsSorted[0]) ||
+  t.lastTrackingUpdate ||
+  t.lastUpdate ||
+  t.lastUpdatedAt ||
+  t.updatedAt ||
+  o.updatedAt ||
+  null;
+
+  const etaRaw =
+    t.eta ||
+    t.estimated_delivery ||
+    t.estimatedDelivery ||
+    t.expected_delivery_date ||
+    t.tracking_status?.eta ||
+    null;
+
+  const lastUpdateText = lastUpdateRaw ? niceDate(lastUpdateRaw) : '—';
+  const etaText = etaRaw ? niceDate(etaRaw) : '—';
+
+  // Fallback ETA (approx) from chosen shipping rate (if tracking ETA is missing)
+  const rateDays =
+    o?.shippo?.chosenRate?.estimatedDays ??
+    o?.shippo?.chosenRate?.estimated_days ??
+    null;
+
+  const labelDate =
+    o?.shippo?.labelPurchasedAt ||
+    o?.shippo?.transactionCreatedAt ||
+    o?.updatedAt ||
+    o?.createdAt ||
+    null;
+
+  const approxEtaRaw =
+    (!etaRaw && rateDays != null && labelDate)
+      ? new Date(new Date(labelDate).getTime() + (Number(rateDays) * 24 * 60 * 60 * 1000))
+      : null;
+
+  const etaFinalText = etaRaw
+    ? niceDate(etaRaw)
+    : (approxEtaRaw ? (niceDate(approxEtaRaw) + ' (approx)') : '—');
+
   // ----------------------------
   // UI display helpers (no DB changes)
   // ----------------------------
@@ -86,13 +155,6 @@
     return parts.join(', ');
   };
 
-  const niceDate = (d) => {
-    try {
-      if (!d) return '';
-      return new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' });
-    } catch { return String(d || ''); }
-  };
-
   const toArray = (v) => {
     if (!v) return [];
     if (Array.isArray(v)) return v;
@@ -162,12 +224,12 @@
 
       <div class="row">
         <div class="label">Last update</div>
-        <div class="value muted"><%= niceDate(t.lastTrackingUpdate || t.lastUpdate) || '—' %></div>
+        <div class="value muted"><%= lastUpdateText %></div>
       </div>
 
       <div class="row">
         <div class="label">ETA</div>
-        <div class="value muted"><%= niceDate(t.estimatedDelivery) || '—' %></div>
+        <div class="value muted"><%= etaFinalText %></div>
       </div>
 
       <% if (isAdmin) { %>
@@ -224,7 +286,7 @@
             <div class="ev">
               <div class="ev__top">
                 <span class="pill <%= statusClass(ev.status) %>"><%= statusTag(ev.status) %></span>
-                <span class="muted tiny"><%= niceDate(ev.date) %></span>
+                <span class="muted tiny"><%= niceDate(pickEventDate(ev) || ev.date) %></span>
               </div>
               <div class="ev__mid"><%= eventDetails(ev) %></div>
 

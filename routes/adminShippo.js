@@ -3,9 +3,10 @@
 
 const express = require('express');
 const router = express.Router();
+const { fetch } = require('undici');
 
 const Order = require('../models/Order');
-const { createLabelForOrder, getRatesForOrder } = require('../utils/shippo/createLabelForOrder');
+const { createLabelForOrder } = require('../utils/shippo/createLabelForOrder');
 const { addTrackingToPaypalOrder } = require('../utils/paypal/addTrackingToPaypalOrder');
 
 // ------------------------------------------------------
@@ -23,6 +24,88 @@ function inferCarrierLabelFromUrl(url) {
 
 function _normCarrier(v) {
   return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// ------------------------------------------------------
+// Shippo direct fetch helpers (NO parcel/customs building)
+// ------------------------------------------------------
+const SHIPPO_BASE = 'https://api.goshippo.com';
+function getShippoToken() {
+  return String(process.env.SHIPPO_TOKEN || '').trim();
+}
+
+function mustShippoToken() {
+  const tok = getShippoToken();
+  if (!tok) {
+    const err = new Error('SHIPPO_TOKEN is missing in .env');
+    err.code = 'SHIPPO_NOT_CONFIGURED';
+    throw err;
+  }
+  return tok;
+}
+
+function shippoHeaders() {
+  const tok = mustShippoToken();
+  return {
+    Authorization: `ShippoToken ${tok}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+}
+
+async function shippoGetJson(path, { timeoutMs = 20000 } = {}) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${SHIPPO_BASE}${path}`, {
+      method: 'GET',
+      headers: shippoHeaders(),
+      signal: ac.signal,
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = json?.detail || json?.message || JSON.stringify(json);
+      const err = new Error(`Shippo GET ${path} failed (${res.status}): ${msg}`);
+      err.code = 'SHIPPO_GET_FAILED';
+      err.shippo = json;
+      throw err;
+    }
+    return json;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Poll shipment until rates exist (Shippo can be slow)
+async function shippoPollShipmentRates(shipmentId, { tries = 10, delayMs = 1500 } = {}) {
+  const sid = String(shipmentId || '').trim();
+  if (!sid) throw new Error('Missing shipmentId for Shippo poll.');
+
+  for (let i = 0; i < tries; i++) {
+    const shipment = await shippoGetJson(`/shipments/${encodeURIComponent(sid)}/`, { timeoutMs: 25000 });
+    const rates = Array.isArray(shipment?.rates) ? shipment.rates : [];
+
+    // Shippo sometimes uses object_status to indicate readiness/errors
+    const st = String(shipment?.object_status || '').toUpperCase();
+    if (st === 'ERROR') {
+      const err = new Error(`Shippo shipment object_status=ERROR: ${JSON.stringify(shipment?.messages || [])}`);
+      err.code = 'SHIPPO_SHIPMENT_OBJECT_ERROR';
+      err.shippo = shipment;
+      throw err;
+    }
+
+    if (rates.length) return { shipment, rates };
+    await sleep(delayMs);
+  }
+
+  const last = await shippoGetJson(`/shipments/${encodeURIComponent(sid)}/`, { timeoutMs: 25000 });
+  return { shipment: last, rates: Array.isArray(last?.rates) ? last.rates : [] };
 }
 
 // ------------------------------------------------------
@@ -149,7 +232,22 @@ router.get('/admin/orders/:orderId/shippo/rates', requireAdmin, async (req, res)
       return res.status(400).json({ ok: false, message: 'Order is not paid-like yet' });
     }
 
-    const { shipment, rates } = await getRatesForOrder(order);
+    // ✅ STRICT: use payerShipmentId only (NO building parcels/customs)
+    const payerShipmentId = String(order?.shippo?.payerShipmentId || '').trim() || null;
+    const payerRateId = String(order?.shippo?.payerRateId || '').trim() || null;
+
+    if (!payerShipmentId) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Missing payerShipmentId on order. Cannot fetch rates without rebuilding shipments (blocked by policy).',
+        debug: { orderId: order.orderId },
+      });
+    }
+
+    const { shipment, rates } = await shippoPollShipmentRates(payerShipmentId, {
+      tries: 10,
+      delayMs: 1500,
+    });
 
     const cleanRates = (Array.isArray(rates) ? rates : [])
       .map((r) => ({
@@ -162,64 +260,29 @@ router.get('/admin/orders/:orderId/shippo/rates', requireAdmin, async (req, res)
         estimatedDays: r.estimated_days ?? null,
         durationTerms: r.duration_terms ?? '',
       }))
+      .filter((r) => r.object_id && r.amount != null)
       .sort((a, b) => Number(a.amount) - Number(b.amount));
 
-    const payerRateId =
-      String(
-        order?.shippo?.payerRateId ||
-          order?.shippo?.checkoutRateId ||
-          order?.shippo?.quoteRateId ||
-          ''
-      ).trim() || null;
+    const payerRecorded = !!payerRateId;
 
-    // ✅ “Hint” fields (best-effort) so UI can still mark payer choice even if rateId doesn't match
-    const payerHint = {
-      provider:
-        String(
-          order?.shippo?.payerRateProvider ||
-            order?.shippo?.checkoutProvider ||
-            order?.shippo?.quoteProvider ||
-            order?.shippo?.payerChosenRate?.provider ||
-            ''
-        ).trim() || null,
-      service:
-        String(
-          order?.shippo?.payerRateService ||
-            order?.shippo?.checkoutService ||
-            order?.shippo?.quoteService ||
-            order?.shippo?.payerChosenRate?.service ||
-            ''
-        ).trim() || null,
-      amount:
-        String(
-          order?.shippo?.payerRateAmount ||
-            order?.shippo?.checkoutAmount ||
-            order?.shippo?.quoteAmount ||
-            order?.shippo?.payerChosenRate?.amount ||
-            ''
-        ).trim() || null,
-      currency:
-        String(
-          order?.shippo?.payerRateCurrency ||
-            order?.shippo?.checkoutCurrency ||
-            order?.shippo?.quoteCurrency ||
-            order?.shippo?.payerChosenRate?.currency ||
-            ''
-        ).trim() || null,
-    };
-
-    const payerRecorded = !!payerRateId || !!payerHint.provider || !!payerHint.service || !!payerHint.amount;
     const payerInThisList = payerRateId
-      ? cleanRates.some(r => String(r?.object_id || r?.id || '').trim() === payerRateId)
+      ? cleanRates.some((r) => String(r?.object_id || '').trim() === payerRateId)
       : false;
 
     return res.json({
       ok: true,
-      shipmentId: shipment?.object_id || null,
+
+      // ✅ show payer shipment
+      shipmentId: shipment?.object_id || payerShipmentId,
+
+      // ✅ payer choice from order (trusted)
       payerRateId,
-      payerHint,
       payerRecorded,
       payerInThisList,
+
+      // ✅ no hints needed now (we rely on payerRateId)
+      payerHint: null,
+
       rates: cleanRates,
     });
   } catch (e) {
@@ -395,12 +458,7 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
     order.shippingTracking.trackingUrl = String(transaction?.tracking_url_provider || '').trim();
     order.shippingTracking.labelUrl = String(transaction?.label_url || '').trim();
 
-    const providerForCarrier =
-      String(chosenRate?.provider || '').trim() ||
-      inferCarrierLabelFromUrl(order.shippingTracking?.trackingUrl) ||
-      '';
-
-    order.shippingTracking.carrier = providerForCarrier ? _normCarrier(providerForCarrier) : 'OTHER';
+    // ✅ Do NOT write enum-unsafe carrier values
     order.shippingTracking.carrierToken = carrierToken || null;
 
     const rawProvider =
