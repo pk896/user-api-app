@@ -607,14 +607,14 @@ function validateCartProductsShippingOrThrow(pairs) {
 }
 
 function buildCalculatedParcelFromProducts(rows, { onlyFragile } = {}) {
-  // rows: [{ cartItem, product }]
-  // We build ONE parcel from sum(weight) and a simple "stack" rule for dimensions:
-  // length = max(length), width = max(width), height = sum(height * qty)
+  // Build ONE parcel:
+  // - weight = sum(weight * qty)
+  // - dimensions = MAX of each dimension (do NOT multiply dimensions by qty)
   let totalKg = 0;
 
   let maxLenCm = 0;
   let maxWidCm = 0;
-  let sumHeiCm = 0;
+  let maxHeiCm = 0;
 
   for (const row of rows) {
     const p = row.product;
@@ -626,7 +626,7 @@ function buildCalculatedParcelFromProducts(rows, { onlyFragile } = {}) {
     if (onlyFragile === true && !isFragile) continue;
     if (onlyFragile === false && isFragile) continue;
 
-    const kg = kgFrom(sh?.weight?.value, sh?.weight?.unit);
+    const kgEach = kgFrom(sh?.weight?.value, sh?.weight?.unit);
     const d = sh?.dimensions || {};
     const unit = d.unit;
 
@@ -634,19 +634,18 @@ function buildCalculatedParcelFromProducts(rows, { onlyFragile } = {}) {
     const widCm = cmFrom(d.width, unit);
     const heiCm = cmFrom(d.height, unit);
 
-    totalKg += kg * qty;
+    totalKg += kgEach * qty;
 
+    // ✅ dimensions should NOT be multiplied by qty
     maxLenCm = Math.max(maxLenCm, lenCm);
     maxWidCm = Math.max(maxWidCm, widCm);
-    sumHeiCm += heiCm * qty;
+    maxHeiCm = Math.max(maxHeiCm, heiCm);
   }
 
-  // Shippo expects strings + units
-  // Use cm/kg consistently
   const safeKg = Math.max(0.001, Number(totalKg.toFixed(3)));
   const safeLen = Math.max(0.1, Number(maxLenCm.toFixed(1)));
   const safeWid = Math.max(0.1, Number(maxWidCm.toFixed(1)));
-  const safeHei = Math.max(0.1, Number(sumHeiCm.toFixed(1)));
+  const safeHei = Math.max(0.1, Number(maxHeiCm.toFixed(1)));
 
   return {
     length: String(safeLen),
