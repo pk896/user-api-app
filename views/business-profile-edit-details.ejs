@@ -7,6 +7,38 @@
 <% const payoutsEnabled = typeof payouts.enabled === 'boolean' ? payouts.enabled : false %>
 <% const paypalEmail = payouts.paypalEmail || '' %>
 
+<%
+  // ------------------------------------------------------------
+  // ✅ Address safe defaults (prevents "street1 is not defined")
+  // ------------------------------------------------------------
+  const addrObj =
+    (b && typeof b.address === 'object' && b.address) ? b.address :
+    (b && typeof b.addressObj === 'object' && b.addressObj) ? b.addressObj :
+    (b && typeof b.pickupAddress === 'object' && b.pickupAddress) ? b.pickupAddress :
+    {};
+
+  const addrString = (b && typeof b.address === 'string') ? b.address : '';
+
+  const street1 = String(
+    addrObj.street1 || addrObj.line1 || b.street1 || b.addressLine1 || addrString || ''
+  ).trim();
+
+  const street2 = String(
+    addrObj.street2 || addrObj.line2 || b.street2 || b.addressLine2 || ''
+  ).trim();
+
+  const stateProv = String(
+    addrObj.state || addrObj.province || b.state || b.province || ''
+  ).trim();
+
+  const postalCode = String(
+    addrObj.postalCode || addrObj.zip || b.postalCode || b.zip || ''
+  ).trim();
+
+  const countryCode = String(
+    addrObj.countryCode || b.countryCode || ''
+  ).trim();
+%>
 
 <section class="business-edit-page">
   <div class="container">
@@ -70,6 +102,10 @@
 
     <!-- Main Form -->
     <form class="business-form" action="/business/profile/update-details" method="POST" autocomplete="on">
+
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% } %>
 
       <!-- Business Identity Section (Blue) -->
       <div class="form-section" style="border-color: #2563EB;">
@@ -179,8 +215,6 @@
               placeholder="paypal@email.com"
               autocomplete="email"
               inputmode="email"
-              <%= payoutsEnabled ? 'required' : '' %>
-              <%= payoutsEnabled ? '' : 'disabled' %>
               style="border-color: rgba(124, 58, 237, 0.3);"
             >
 
@@ -229,28 +263,64 @@
         </div>
 
         <div class="form-grid">
-          <div class="form-group">
-            <label for="country" style="color: #22C55E;">
+          <div class="form-group full-width">
+            <label style="color: #22C55E;">
               <span class="label-icon">🌍</span>
               Country *
             </label>
-            <select
-              id="country"
-              name="country"
-              required
-              style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);"
-            >
-              <option value="" <%= !b.country ? 'selected' : '' %>>Select your country</option>
-              <option value="South Africa" <%= b.country === 'South Africa' ? 'selected' : '' %>>South Africa</option>
-              <option value="Lesotho" <%= b.country === 'Lesotho' ? 'selected' : '' %>>Lesotho</option>
-              <option value="Eswatini" <%= b.country === 'Eswatini' ? 'selected' : '' %>>Eswatini</option>
-              <option value="Botswana" <%= b.country === 'Botswana' ? 'selected' : '' %>>Botswana</option>
-              <option value="Namibia" <%= b.country === 'Namibia' ? 'selected' : '' %>>Namibia</option>
-              <option value="Mozambique" <%= b.country === 'Mozambique' ? 'selected' : '' %>>Mozambique</option>
-              <option value="Zimbabwe" <%= b.country === 'Zimbabwe' ? 'selected' : '' %>>Zimbabwe</option>
-              <option value="Other" <%= (b.country && !['South Africa','Lesotho','Eswatini','Botswana','Namibia','Mozambique','Zimbabwe'].includes(b.country)) ? 'selected' : '' %>>Other Country</option>
-            </select>
-            <div class="field-hint" style="color: #22C55E;">Select primary operating country</div>
+
+            <div class="country-dropdown">
+              <div class="country-selected" id="countrySelected">
+                <span id="countrySelectedText">
+                  <%= b.country || 'Select your country' %>
+                </span>
+                <span class="country-arrow">▾</span>
+              </div>
+
+              <div class="country-menu" id="countryMenu">
+                <input
+                  type="text"
+                  id="countrySearch"
+                  placeholder="Search country..."
+                  autocomplete="off"
+                  class="country-search-input"
+                />
+
+                <div class="country-list">
+                  <% if (Array.isArray(COUNTRIES)) { %>
+                    <% COUNTRIES.forEach(function(c) { %>
+                      <div
+                        class="country-option <%= b.country === c.name ? 'active' : '' %>"
+                        data-value="<%= c.name %>"
+                        data-code="<%= c.code %>"
+                      >
+                        <%= c.name %>
+                      </div>
+                    <% }) %>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- Hidden REAL select (backend safe) -->
+              <select id="country" name="country" required style="display:none;">
+                <option value="">Select your country</option>
+                <% if (Array.isArray(COUNTRIES)) { %>
+                  <% COUNTRIES.forEach(function(c) { %>
+                    <option
+                      value="<%= c.name %>"
+                      data-code="<%= c.code %>"
+                      <%= b.country === c.name ? 'selected' : '' %>
+                    >
+                      <%= c.name %>
+                    </option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+
+            <div class="field-hint" style="color: #22C55E;">
+              Select primary operating country
+            </div>
           </div>
 
           <div class="form-group">
@@ -271,23 +341,78 @@
             <div class="field-hint" style="color: #22C55E;">City where business is located</div>
           </div>
 
+          <!-- ✅ Shippo-ready address fields -->
           <div class="form-group full-width">
-            <label for="address" style="color: #22C55E;">
+            <label for="street1" style="color: #22C55E;">
               <span class="label-icon">📍</span>
-              Full Address *
+              Street Address (Line 1) *
             </label>
             <input
               type="text"
-              id="address"
-              name="address"
-              value="<%= b.address || '' %>"
+              id="street1"
+              name="street1"
+              value="<%= street1 %>"
               required
-              placeholder="Enter street address, suburb, and postal code"
-              autocomplete="street-address"
+              placeholder="Street number + street name (e.g., 12 Main Road)"
+              autocomplete="address-line1"
               style="border-color: rgba(34, 197, 94, 0.3);"
             >
-            <div class="field-hint" style="color: #22C55E;">Physical business address for correspondence</div>
+            <div class="field-hint" style="color: #22C55E;">Required for Shippo pickup/shipping</div>
           </div>
+
+          <div class="form-group full-width">
+            <label for="street2" style="color: #22C55E;">
+              <span class="label-icon">🏘️</span>
+              Address Line 2 (optional)
+            </label>
+            <input
+              type="text"
+              id="street2"
+              name="street2"
+              value="<%= street2 %>"
+              placeholder="Suburb, unit, complex, floor (optional)"
+              autocomplete="address-line2"
+              style="border-color: rgba(34, 197, 94, 0.3);"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="state" style="color: #22C55E;">
+              <span class="label-icon">🗺️</span>
+              Province / State *
+            </label>
+            <input
+              type="text"
+              id="state"
+              name="state"
+              value="<%= stateProv || '' %>"
+              required
+              placeholder="e.g., Gauteng"
+              autocomplete="address-level1"
+              style="border-color: rgba(34, 197, 94, 0.3);"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="postalCode" style="color: #22C55E;">
+              <span class="label-icon">🏷️</span>
+              Postal Code *
+            </label>
+            <input
+              type="text"
+              id="postalCode"
+              name="postalCode"
+              value="<%= postalCode || '' %>"
+              required
+              placeholder="e.g., 2001"
+              autocomplete="postal-code"
+              inputmode="numeric"
+              style="border-color: rgba(34, 197, 94, 0.3);"
+            >
+          </div>
+
+          <!-- hidden Shippo country code (2-letter) -->
+          <input type="hidden" id="countryCode" name="countryCode" value="<%= countryCode %>">
         </div>
       </div>
 
@@ -367,11 +492,11 @@
     <div class="quick-links">
       <h3 class="links-title">Quick Actions</h3>
       <div class="links-grid">
-        <a href="/business/profile/edit" class="link-card" style="background: linear-gradient(135deg, #7C3AED, #8B5CF6);">
+        <a href="#" class="link-card" style="background: linear-gradient(135deg, #7C3AED, #8B5CF6);">
           <div class="link-icon">⚙️</div>
           <div class="link-content">
             <h4>Advanced Editor</h4>
-            <p>Full profile with all fields</p>
+            <p>key details only for privacy</p>
           </div>
           <div class="link-arrow">→</div>
         </a>
@@ -527,6 +652,65 @@
 
   .form-group { display: flex; flex-direction: column; }
   .form-group.full-width { grid-column: 1 / -1; }
+
+  /* Country Dropdown */
+  .country-dropdown {
+    position: relative;
+  }
+
+  .country-selected {
+    padding: 0.75rem 1rem;
+    border: 2px solid rgba(34, 197, 94, 0.3);
+    border-radius: 10px;
+    cursor: pointer;
+    background: rgba(34, 197, 94, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.875rem;
+  }
+
+  .country-dropdown.open .country-menu {
+    display: block;
+  }
+
+  .country-menu {
+    position: absolute;
+    top: 105%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+    display: none;
+    z-index: 50;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+  }
+
+  .country-search-input {
+    width: 100%;
+    padding: 0.6rem;
+    border: none;
+    border-bottom: 1px solid #E2E8F0;
+    outline: none;
+  }
+
+  .country-option {
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+
+  .country-option:hover {
+    background: rgba(124, 58, 237, 0.08);
+  }
+
+  .country-option.active {
+    background: rgba(124, 58, 237, 0.15);
+    font-weight: 600;
+  }
 
   label {
     display: flex;
@@ -692,33 +876,169 @@
 </style>
 
 <script nonce="<%= NONCE %>">
-  // Toggle label update + make PayPal email required only when payouts enabled
   (function () {
-    const toggles = document.querySelectorAll('.toggle');
-    toggles.forEach(t => {
-      const checkbox = t.querySelector('input[type="checkbox"][name="payoutsEnabled"]');
-      const text = t.querySelector('.toggle-text');
-      const paypal = document.getElementById('paypalEmail');
-      if (!checkbox || !text) return;
+    // -----------------------------
+    // 1) Keep hidden countryCode synced
+    // -----------------------------
+    const countrySelect = document.getElementById('country');
+    const countryCodeHidden = document.getElementById('countryCode');
+    
+    // -----------------------------
+    // 0) Custom Country Dropdown Logic
+    // -----------------------------
+    const dropdown = document.querySelector('.country-dropdown');
+    const selected = document.getElementById('countrySelected');
+    const selectedText = document.getElementById('countrySelectedText');
+    const menu = document.getElementById('countryMenu');
+    const searchInput = document.getElementById('countrySearch');
+    const options = document.querySelectorAll('.country-option');
 
-      const render = () => {
-        const on = checkbox.checked;
-        text.textContent = on ? (text.dataset.on || 'Enabled') : (text.dataset.off || 'Disabled');
-        if (paypal) {
-          if (on) {
-            paypal.removeAttribute('disabled');
-            paypal.setAttribute('required', 'required');
-          } else {
-            paypal.setAttribute('disabled', 'disabled');
-            paypal.removeAttribute('required');
-          }
+    if (dropdown && selected && menu) {
+
+      // Toggle dropdown open/close
+      selected.addEventListener('click', () => {
+        dropdown.classList.toggle('open');
+      });
+
+      // Click outside closes dropdown
+      document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) {
+          dropdown.classList.remove('open');
         }
-      };
+      });
 
-      checkbox.addEventListener('change', render);
-      render();
-    });
+      // Handle option click
+      options.forEach(opt => {
+        opt.addEventListener('click', () => {
+          const value = opt.dataset.value;
+          const code = opt.dataset.code;
+
+          // Update visible text
+          selectedText.textContent = value;
+
+          // Update hidden select
+          if (countrySelect) {
+            countrySelect.value = value;
+
+            // Update selected option manually
+            const realOptions = countrySelect.querySelectorAll('option');
+            realOptions.forEach(o => {
+              o.selected = (o.value === value);
+            });
+          }
+
+          // Update hidden countryCode
+          if (countryCodeHidden) {
+            countryCodeHidden.value = code || '';
+          }
+
+          // Update active class
+          options.forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+
+          dropdown.classList.remove('open');
+        });
+      });
+
+      // Search filter
+      if (searchInput) {
+        searchInput.addEventListener('input', () => {
+          const term = searchInput.value.toLowerCase().trim();
+
+          options.forEach(opt => {
+            const text = opt.textContent.toLowerCase();
+            opt.style.display = text.includes(term) ? 'block' : 'none';
+          });
+        });
+      }
+    }
+    
+    const syncCountryCode = () => {
+      if (!countrySelect || !countryCodeHidden) return;
+      const opt = countrySelect.options[countrySelect.selectedIndex];
+      const code = (opt && opt.dataset && opt.dataset.code) ? String(opt.dataset.code) : '';
+      countryCodeHidden.value = code.trim();
+    };
+
+    if (countrySelect && countryCodeHidden) {
+      countrySelect.addEventListener('change', syncCountryCode);
+      syncCountryCode(); // initial
+    }
+
+    // -----------------------------
+    // 2) PayPal toggle: require PayPal email ONLY when enabled
+    // -----------------------------
+    const paypal = document.getElementById('paypalEmail');
+    const payoutsCheckbox = document.querySelector('input[type="checkbox"][name="payoutsEnabled"][value="1"]');
+    const toggleText = document.querySelector('.toggle .toggle-text');
+
+    const renderPayouts = () => {
+      const on = !!(payoutsCheckbox && payoutsCheckbox.checked);
+
+      if (toggleText) {
+        toggleText.textContent = on ? (toggleText.dataset.on || 'Enabled') : (toggleText.dataset.off || 'Disabled');
+      }
+
+      if (paypal) {
+        // IMPORTANT:
+        // - do NOT disable paypal field (disabled inputs do NOT submit)
+        // - only require it when payouts is enabled
+        if (on) paypal.setAttribute('required', 'required');
+        else paypal.removeAttribute('required');
+      }
+    };
+
+    if (payoutsCheckbox) {
+      payoutsCheckbox.addEventListener('change', renderPayouts);
+      renderPayouts(); // initial
+    }
+
+    // -----------------------------
+    // 3) Debug: show which field blocks submit
+    // -----------------------------
+    const form = document.querySelector('form.business-form');
+    if (form) {
+      // On submit attempt, if something is invalid, show it clearly
+      form.addEventListener('submit', (e) => {
+        // browser validation
+        if (!form.checkValidity()) {
+          e.preventDefault();
+
+          // Find the first invalid element
+          const firstInvalid = form.querySelector(':invalid');
+          if (firstInvalid) {
+            // Make it obvious
+            firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstInvalid.focus({ preventScroll: true });
+
+            // Friendly label text if possible
+            const label = form.querySelector(`label[for="${firstInvalid.id}"]`);
+            const labelText = label ? label.textContent.trim() : (firstInvalid.name || firstInvalid.id || 'a field');
+
+            alert(`❌ Please fix: ${labelText}`);
+
+            console.log('BLOCKED SUBMIT (invalid field):', {
+              id: firstInvalid.id,
+              name: firstInvalid.name,
+              value: firstInvalid.value
+            });
+          } else {
+            alert('❌ Please fill all required fields.');
+            console.log('BLOCKED SUBMIT: form invalid but no :invalid found');
+          }
+
+          return;
+        }
+
+        // If valid, log what will be submitted (helps debug server-side)
+        const fd = new FormData(form);
+        console.log('✅ SUBMITTING update-details with:', Object.fromEntries(fd.entries()));
+      });
+
+      // Also log any invalid event
+      form.addEventListener('invalid', (e) => {
+        console.log('INVALID EVENT:', e.target.name || e.target.id, e.target.validationMessage);
+      }, true);
+    }
   })();
 </script>
-
-

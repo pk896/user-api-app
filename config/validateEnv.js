@@ -1,4 +1,5 @@
 // config/validateEnv.js
+'use strict';
 require("dotenv").config();
 
 const REQUIRED_VARS = [

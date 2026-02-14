@@ -1,4 +1,5 @@
 // routes/demands.js
+'use strict';
 const express = require('express');
 const router = express.Router();
 const requireBusiness = require('../middleware/requireBusiness');

@@ -1,4 +1,5 @@
 // routes/products.js
+'use strict';
 const express = require('express');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
@@ -8,6 +9,7 @@ const Product = require('../models/Product');
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 const requireOfficialNumberVerified = require('../middleware/requireOfficialNumberVerified');
+const Business = require('../models/Business');
 
 const router = express.Router();
 
@@ -116,7 +118,7 @@ router.get(
   requireVerifiedBusiness,
   requireOfficialNumberVerified,
   (req, res) => {
-    const business = req.session.business; // ✅ Get from session
+    const business = req.business || req.session.business; // ✅ prefer DB-loaded business
     res.render('add-product', {
       title: 'Add Product',
       business, // ✅ Pass it to EJS
@@ -153,7 +155,7 @@ router.get('/sales', async (req, res) => {
 
 router.get('/out-of-stock', requireBusiness, async (req, res) => {
   try {
-    const business = req.session.business;
+    const business = req.business || req.session.business;
     if (!business || !business._id) {
       req.flash('error', 'Session expired. Please log in again.');
       return res.redirect('/business/login');
@@ -185,8 +187,7 @@ router.get('/out-of-stock', requireBusiness, async (req, res) => {
 // LOW STOCK (<= 15, > 0)
 router.get('/low-stock', requireBusiness, async (req, res) => {
   try {
-    const business = req.session.business; // ✅ same as /out-of-stock
-
+    const business = req.business || req.session.business; // ✅ same as /out-of-stock
     if (!business || !business._id) {
       req.flash('error', 'Session expired. Please log in again.');
       return res.redirect('/business/login');
@@ -231,7 +232,7 @@ router.post(
   async (req, res) => {
     console.log('🟢 POST /products/add reached');
     try {
-      const business = req.session.business;
+      const business = req.business || req.session.business;
 
       if (!business || !business._id) {
         req.flash('error', 'Unauthorized. Please log in as a business.');
@@ -349,7 +350,7 @@ router.post(
  * =========================================================== */
 router.get('/all', requireBusiness, async (req, res) => {
   try {
-    const business = req.session.business;
+    const business = req.business || req.session.business;
     const products = await Product.find({ business: business._id }).sort({ createdAt: -1 }).lean();
 
     res.render('all-products', {
@@ -371,7 +372,7 @@ router.get('/all', requireBusiness, async (req, res) => {
 // Add near bottom of routes/products.js
 router.get('/stats/summary', requireBusiness, async (req, res) => {
   try {
-    const bizId = req.session.business._id;
+    const bizId = (req.business?._id) || (req.session.business?._id);
     const prods = await Product.find({ business: bizId })
       .select('name stock soldCount soldOrders')
       .lean();
@@ -422,7 +423,7 @@ router.get('/view/:id', async (req, res) => {
  * =========================================================== */
 router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
-    const business = req.session.business;
+    const business = req.business || req.session.business;
     const product = await Product.findOne({
       customId: req.params.id,
       business: business._id,
@@ -459,7 +460,7 @@ router.post(
   upload.single('imageFile'),
   async (req, res) => {
     try {
-      const business = req.session.business;
+      const business = req.business || req.session.business;
       const product = await Product.findOne({
         customId: req.params.id,
         business: business._id,
@@ -628,7 +629,7 @@ router.post(
  * =========================================================== */
 router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
-    const business = req.session.business;
+    const business = req.business || req.session.business;
     const product = await Product.findOneAndDelete({
       customId: req.params.id,
       business: business._id,
@@ -660,7 +661,7 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
 router.get('/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const customId = String(req.params.id || '').trim();
-    const business = req.session.business;
+    const business = req.business || req.session.business;
 
     if (!business || !business._id) {
       req.flash('error', '❌ Unauthorized. Please log in.');
@@ -714,6 +715,26 @@ router.use((err, req, res, _next) => {
     return res.redirect('/products/all');
   }
   return res.redirect('/products/add');
+});
+
+// TEMP: Cleanup orphan products (RUN ONCE)
+router.get('/admin/cleanup-orphans', async (req, res) => {
+  try {
+    const businesses = await Business.find({}).select('_id').lean();
+    const validIds = businesses.map(b => b._id);
+
+    const result = await Product.deleteMany({
+      business: { $nin: validIds }
+    });
+
+    return res.json({
+      ok: true,
+      deleted: result.deletedCount
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;

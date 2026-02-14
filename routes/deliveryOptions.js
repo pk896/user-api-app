@@ -1,4 +1,5 @@
 // routes/deliveryOptions.js
+'use strict';
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const DeliveryOption = require('../models/DeliveryOption');

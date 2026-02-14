@@ -1,4 +1,5 @@
 // config/db.js
+'use strict';
 const mongoose = require('mongoose');
 
 const { MONGO_URI, NODE_ENV = 'development' } = process.env;

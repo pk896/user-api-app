@@ -1,4 +1,5 @@
 // routes/users.js
+'use strict';
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');

@@ -1,3 +1,4 @@
+<!--views/business-profile.ejs-->
 <% const NONCE = (typeof nonce !== 'undefined' ? nonce : '') %>
 
 <% const b = business || {} %>
@@ -6,7 +7,35 @@
 
 <% const payouts = (b.payouts || {}) %>
 <% const ppEnabled = payouts.enabled === true %>
-<% const ppEmail = String(payouts.paypalEmailMasked || payouts.paypalEmail || '').trim() %>
+<% const ppEmail = String(payouts.paypalEmail || '').trim() %>
+
+<%
+  // UI-only mask for PayPal email (does NOT change DB)
+  function maskEmailUi(email) {
+    const s = String(email || '').trim();
+    const at = s.indexOf('@');
+    if (at <= 0) return s;
+
+    const name = s.slice(0, at);
+    const domain = s.slice(at + 1);
+    if (!name || !domain) return s;
+
+    const maskPart = (str) => {
+      const v = String(str || '');
+      if (v.length <= 1) return '*';
+      if (v.length === 2) return v[0] + '*';
+      return v[0] + '*'.repeat(Math.max(1, v.length - 2)) + v[v.length - 1];
+    };
+
+    const parts = domain.split('.');
+    const domName = parts[0] || '';
+    const domExt = parts.slice(1).join('.') || '';
+
+    return `${maskPart(name)}@${maskPart(domName)}${domExt ? '.' + domExt : ''}`;
+  }
+
+  const ppEmailMasked = ppEmail ? maskEmailUi(ppEmail) : '';
+%>
 
 <% const emailVerified = !!b.isVerified %>
 <% const numStatus = ((ver.status || 'pending') + '').toLowerCase() %>
@@ -107,14 +136,22 @@
           <span class="qa-txt">Edit Details</span>
           <span class="qa-go" aria-hidden="true">›</span>
         </a>
+
         <a class="qa qa-green" href="/business/profile/edit-bank">
           <span class="qa-ic" aria-hidden="true">💳</span>
           <span class="qa-txt">Bank Details</span>
           <span class="qa-go" aria-hidden="true">›</span>
         </a>
+
         <a class="qa qa-black" href="/business/change-password">
           <span class="qa-ic" aria-hidden="true">🔒</span>
-          <span class="qa-txt">Password</span>
+          <span class="qa-txt">Change Password</span>
+          <span class="qa-go" aria-hidden="true">›</span>
+        </a>
+
+        <a class="qa qa-red" href="/business/profile/delete">
+          <span class="qa-ic" aria-hidden="true">🗑️</span>
+          <span class="qa-txt">Delete Account</span>
           <span class="qa-go" aria-hidden="true">›</span>
         </a>
       </nav>
@@ -133,7 +170,7 @@
         </div>
 
         <div class="meter-bar" role="progressbar" aria-valuenow="<%= pctSafe %>" aria-valuemin="0" aria-valuemax="100">
-          <div class="meter-fill" style="width:<%= pctSafe %>%"></div>
+          <div class="meter-fill" style="width:<%= pctSafe %>%;"></div>
         </div>
 
         <div class="meter-checks" role="list" aria-label="Checklist">
@@ -193,7 +230,7 @@
           <div class="row">
             <span class="k">Member Since</span>
             <span class="v">
-              <%= b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-ZA', { year:'numeric', month:'short', day:'numeric' }) : '—' %>
+             <%= b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-ZA', { timeZone:'Africa/Johannesburg', year:'numeric', month:'short', day:'numeric' }) : '—' %> 
             </span>
           </div>
         </div>
@@ -318,7 +355,7 @@
 
           <div class="row">
             <span class="k">PayPal Email</span>
-            <span class="v wrap"><%= ppEmail ? ppEmail : '—' %></span>
+            <span class="v wrap"><%= ppEmail ? ppEmailMasked : '—' %></span>
           </div>
 
           <% if (!ppEmail) { %>
@@ -430,15 +467,6 @@
           </div>
           <div class="sec-go">›</div>
         </a>
-
-        <a href="/business/profile/edit" class="sec-item sec-blue">
-          <div class="sec-ic">⚙️</div>
-          <div class="sec-txt">
-            <h3>Full Profile Editor</h3>
-            <p>Advanced editor for all profile fields</p>
-          </div>
-          <div class="sec-go">›</div>
-        </a>
       </div>
 
       <!-- Danger zone -->
@@ -449,7 +477,9 @@
         </div>
 
         <div class="danger-actions">
-          <a href="/business/profile/edit" class="btn btn-danger">Manage Account Settings</a>
+          <a href="/business/profile/delete" class="btn btn-danger">
+            Manage Account Deletion
+          </a>
           <p class="note">Deleting your business account is permanent and cannot be recovered.</p>
         </div>
       </div>
@@ -562,7 +592,7 @@
   /* Quick actions */
   .bp-quick{
     display:grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 10px;
   }
@@ -601,6 +631,8 @@
   .qa-black{ border-color: rgba(15,23,42,.18); }
   .qa-black .qa-go{ color: rgba(15,23,42,.70); }
   .qa:hover{ transform: translateY(-1px); }
+  .qa-red{ border-color: rgba(220,38,38,.28); }
+  .qa-red .qa-go{ color: rgba(220,38,38,.85); }
 
   @media (max-width: 430px){
     .bp-quick{ grid-template-columns: 1fr; }
@@ -1109,3 +1141,4 @@
     .wrap-inline{ max-width: 160px; }
   }
 </style>
+

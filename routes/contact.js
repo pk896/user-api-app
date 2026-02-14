@@ -1,4 +1,5 @@
 // routes/contact.js
+'use strict';
 const express = require('express');
 const { sendMail } = require('../utils/mailer');
 const router = express.Router();

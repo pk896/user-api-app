@@ -1,4 +1,5 @@
 // routes/someRoute.js
+'use strict';
 const express = require('express');
 const { validationResult } = require('express-validator');
 const { urlField } = require('../middleware/validators');

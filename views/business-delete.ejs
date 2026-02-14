@@ -1,0 +1,148 @@
+<!-- views/business-delete.ejs -->
+<% const NONCE = (typeof nonce !== 'undefined' ? nonce : '') %>
+<% const b = business || {} %>
+
+<section class="delbiz" aria-label="Delete Business Account">
+  <div class="delbiz__card">
+    <header class="delbiz__head">
+      <div class="delbiz__badge" aria-hidden="true">⚠️</div>
+      <div>
+        <h1 class="delbiz__title">Delete Business Account</h1>
+        <p class="delbiz__sub">
+          This action is permanent. Your business account and related data will be removed.
+        </p>
+      </div>
+    </header>
+
+    <div class="delbiz__warning" role="alert">
+      <strong>Important:</strong>
+      <ul>
+        <li>This cannot be undone.</li>
+        <li>You will be logged out immediately.</li>
+        <li>If you have orders, ensure you’ve exported anything you need first.</li>
+      </ul>
+    </div>
+
+    <% const ERR = Array.isArray(error) ? error : (error ? [error] : []); %>
+    <% const OK  = Array.isArray(success) ? success : (success ? [success] : []); %>
+
+    <% if (ERR.length) { %>
+    <div class="delbiz__msg delbiz__msg--err" role="alert">
+        <%= ERR[0] %>
+        <div style="margin-top:8px;">
+        <a href="/products/all" class="delbiz__link">Go to My Products</a>
+        </div>
+    </div>
+
+    <script nonce="<%= NONCE %>">
+        alert("<%= String(ERR[0]).replace(/"/g, '\\"') %>");
+    </script>
+    <% } %>
+
+    <% if (OK.length) { %>
+    <div class="delbiz__msg delbiz__msg--ok" role="status">
+        <%= OK[0] %>
+    </div>
+    <% } %>
+
+    <!-- ✅ Backend expects: POST /business/profile/delete with body.password -->
+    <form id="deleteForm" class="delbiz__form" method="POST" action="/business/profile/delete">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% } %>
+
+      <label class="delbiz__field">
+        <span class="delbiz__label">Confirm your password</span>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          class="delbiz__input"
+          placeholder="Enter your password"
+          required
+          autocomplete="current-password"
+        />
+      </label>
+
+      <div class="delbiz__actions">
+        <a class="delbiz__btn delbiz__btn--ghost" href="/business/profile">Cancel</a>
+
+        <button
+          id="deleteBtn"
+          type="submit"
+          class="delbiz__btn delbiz__btn--danger"
+        >
+          Permanently Delete Account
+        </button>
+      </div>
+
+      <p class="delbiz__hint">
+        Business:
+        <span class="delbiz__mono"><%= String(b.name || b.email || 'your account') %></span>
+      </p>
+    </form>
+  </div>
+</section>
+
+<style nonce="<%= NONCE %>">
+  .delbiz{min-height:calc(100vh - 120px);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;background:linear-gradient(180deg,#0F172A 0%, #0b1220 100%);}
+  .delbiz__card{width:100%;max-width:520px;background:#0b1220;border:1px solid rgba(255,255,255,.08);border-radius:18px;box-shadow:0 12px 35px rgba(0,0,0,.35);padding:18px;}
+  .delbiz__head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px;}
+  .delbiz__badge{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.25);font-size:18px;}
+  .delbiz__title{margin:0;color:#fff;font-size:20px;line-height:1.2;}
+  .delbiz__sub{margin:6px 0 0;color:rgba(255,255,255,.72);font-size:13.5px;line-height:1.45;}
+  .delbiz__warning{margin:14px 0;padding:12px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.18);border-radius:14px;color:rgba(255,255,255,.86);font-size:13px;}
+  .delbiz__warning ul{margin:8px 0 0;padding-left:18px;}
+  .delbiz__warning li{margin:6px 0;}
+  .delbiz__form{margin-top:14px;display:flex;flex-direction:column;gap:12px;}
+  .delbiz__field{display:flex;flex-direction:column;gap:6px;}
+  .delbiz__label{color:rgba(255,255,255,.82);font-size:13px;}
+  .delbiz__input{width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0F172A;color:#fff;outline:none;}
+  .delbiz__input:focus{border-color:rgba(239,68,68,.35);box-shadow:0 0 0 4px rgba(239,68,68,.12);}
+  .delbiz__actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:6px;flex-wrap:wrap;}
+  .delbiz__btn{appearance:none;border:none;cursor:pointer;text-decoration:none;padding:10px 12px;border-radius:12px;font-weight:700;font-size:13px;display:inline-flex;align-items:center;justify-content:center;min-height:40px}
+  .delbiz__btn--ghost{background:transparent;color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.14);}
+  .delbiz__btn--ghost:hover{border-color:rgba(255,255,255,.22);}
+  .delbiz__btn--danger{background:#EF4444;color:#fff;}
+  .delbiz__btn--danger:hover{filter:brightness(1.05);}
+  .delbiz__btn[disabled]{opacity:.7;cursor:not-allowed;}
+  .delbiz__hint{margin:6px 0 0;color:rgba(255,255,255,.55);font-size:12.5px;}
+  .delbiz__mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;color:rgba(255,255,255,.75);}
+  .delbiz__msg{margin:12px 0;padding:12px;border-radius:14px;font-size:13px;border:1px solid rgba(255,255,255,.12)}
+  .delbiz__msg{margin:12px 0;padding:12px;border-radius:14px;font-size:13px;border:1px solid rgba(255,255,255,.12)}
+  .delbiz__msg{margin:12px 0;padding:12px;border-radius:14px;font-size:13px;border:1px solid rgba(255,255,255,.12)}
+  .delbiz__msg--err{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.22);color:rgba(255,255,255,.88)}
+  .delbiz__msg--ok{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.20);color:rgba(255,255,255,.88)}
+  .delbiz__link{color:#93c5fd;text-decoration:underline;font-weight:700}
+</style>
+
+<script nonce="<%= NONCE %>">
+  (function () {
+    const form = document.getElementById('deleteForm');
+    const btn = document.getElementById('deleteBtn');
+    const pw  = document.getElementById('password');
+
+    if (!form || !btn || !pw) return;
+
+    form.addEventListener('submit', function (e) {
+      const v = (pw.value || '').trim();
+      if (!v) {
+        e.preventDefault();
+        pw.focus();
+        return;
+      }
+
+      const ok = confirm(
+        '⚠️ FINAL WARNING:\n\nThis will permanently delete your business account.\nThis cannot be undone.\n\nDo you want to continue?'
+      );
+
+      if (!ok) {
+        e.preventDefault();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+    });
+  })();
+</script>

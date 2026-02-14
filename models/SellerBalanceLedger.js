@@ -1,4 +1,6 @@
 // models/SellerBalanceLedger.js
+'use strict';
+
 const mongoose = require('mongoose');
 
 const sellerBalanceLedgerSchema = new mongoose.Schema(

@@ -1,4 +1,6 @@
 // models/Business.js
+'use strict';
+
 const mongoose = require('mongoose');
 
 function isValidEmail(v) {
@@ -93,9 +95,24 @@ const businessSchema = new mongoose.Schema(
 
     phone: { type: String, required: [true, 'Phone number is required'], trim: true },
 
-    country: { type: String, required: [true, 'Country is required'], trim: true },
+    // ✅ Legacy fields (keep for compatibility with existing views/flows)
+    country: { type: String, required: [true, 'Country is required'], trim: true }, // we will store ISO2 here too
     city: { type: String, required: [true, 'City is required'], trim: true },
     address: { type: String, required: [true, 'Business address is required'], trim: true },
+
+    // ✅ Shippo-ready structured address fields
+    countryCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      minlength: 2,
+      maxlength: 2,
+      index: true,
+    },
+    state: { type: String, trim: true },          // province/state (required for US)
+    postalCode: { type: String, trim: true },     // Shippo zip
+    addressLine1: { type: String, trim: true },   // Shippo street1
+    addressLine2: { type: String, trim: true },   // Shippo street2
 
     representative: {
       fullName: { type: String, required: [true, 'Representative full name is required'], trim: true },

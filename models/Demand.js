@@ -1,4 +1,6 @@
 // models/Demand.js
+'use strict';
+
 //const { mongoose } = require('../db');
 const mongoose = require('mongoose');
 

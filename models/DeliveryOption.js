@@ -1,4 +1,6 @@
 // models/DeliveryOption.js
+'use strict';
+
 //const { mongoose } = require('../db'); // <-- use the shared instance
 const mongoose = require('mongoose');
 

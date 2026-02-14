@@ -1,5 +1,6 @@
 // models/Product.js
-// const { mongoose } = require('../db');
+'use strict';
+
 const mongoose = require('mongoose');
 
 // ==========================

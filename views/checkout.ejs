@@ -107,9 +107,8 @@
 
               <label class="co-label" for="ship-name">Full name <span class="co-req">*</span></label>
               <input id="ship-name" class="co-input" autocomplete="name" placeholder="Full name" />
-
               <label class="co-label" for="ship-phone" style="margin-top:.6rem">Phone <span class="co-req">*</span></label>
-              <input id="ship-phone" class="co-input" autocomplete="tel" placeholder="+27..." />
+              <input id="ship-phone" class="co-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="+27..." required />
 
               <label class="co-label" for="ship-email" style="margin-top:.6rem">Email (optional)</label>
               <input id="ship-email" class="co-input" autocomplete="email" placeholder="you@example.com" />
@@ -129,15 +128,32 @@
               <label class="co-label" for="ship-zip" style="margin-top:.6rem">Postal code <span class="co-req">*</span></label>
               <input id="ship-zip" class="co-input" autocomplete="postal-code" placeholder="0000" />
 
-              <label class="co-label" for="ship-country-search" style="margin-top:.6rem">Country <span class="co-req">*</span></label>
-              <input id="ship-country-search" class="co-input" autocomplete="off" placeholder="Type to search your country…" />
+              <label class="co-label" style="margin-top:.6rem">
+                Country <span class="co-req">*</span>
+              </label>
 
-              <div class="co-select" style="margin-top:.4rem">
-                <select id="ship-country" class="co-select-el" aria-label="Country"></select>
-                <span class="co-select-caret" aria-hidden="true">▼</span>
+              <div class="co-country-dropdown" id="coCountryDropdown">
+                <div class="co-country-selected" id="coCountrySelected" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="coCountrySelectedText">Select your country</span>
+                  <span class="co-country-arrow" aria-hidden="true">▾</span>
+                </div>
+
+                <div class="co-country-menu" id="coCountryMenu" role="listbox" aria-label="Country list">
+                  <input
+                    type="text"
+                    id="coCountrySearch"
+                    placeholder="Search country..."
+                    autocomplete="off"
+                    class="co-country-search-input"
+                  />
+                  <div class="co-country-list" id="coCountryList"></div>
+                </div>
+
+                <!-- ✅ REAL select kept for backend-safe + your existing JS reads its value -->
+                <select id="ship-country" class="co-select-el" aria-label="Country" style="display:none;"></select>
               </div>
 
-              <div class="co-mini">Tip: start typing (e.g. “South”, “Uni”, “ZA”, “US”).</div>
+              <div class="co-mini">Tip: search by name or code (e.g. “South”, “ZA”, “United”, “US”).</div>
 
               <div class="co-form-actions">
                 <button type="button" id="ship-done" class="co-btn co-btn-blue">Done</button>
@@ -354,10 +370,12 @@
       CURRENCY: CO_CCY,
       BRAND_NAME: CO_BRAND,
 
-      // ✅ Default country for the dropdown + readShipTo fallback
       DEFAULT_COUNTRY: (typeof defaultCountry !== 'undefined' && defaultCountry)
         ? String(defaultCountry).toUpperCase()
-        : 'ZA'
+        : 'ZA',
+
+      // ✅ from utils/countries.js (already sorted + includes flags)
+      COUNTRIES: (Array.isArray(locals?.COUNTRIES) ? locals.COUNTRIES : (Array.isArray(COUNTRIES) ? COUNTRIES : []))
     }) %>
   </script>
 
@@ -655,6 +673,79 @@
     }
     .co-mini{ margin-top:.35rem; font-size:.78rem; color: var(--mut); font-weight:700; }
 
+    /* ===== Smart Country Dropdown (Checkout) ===== */
+    .co-country-dropdown{
+      position: relative;
+    }
+
+    .co-country-selected{
+      padding: .7rem .85rem;
+      border:1px solid rgba(15,23,42,.14);
+      border-radius: 14px;
+      cursor: pointer;
+      background:#fff;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-weight:800;
+      color: var(--k);
+    }
+
+    .co-country-selected:focus{
+      outline:none;
+      border-color: rgba(124,58,237,.55);
+      box-shadow: 0 0 0 3px rgba(124,58,237,.14);
+    }
+
+    .co-country-dropdown.open .co-country-menu{
+      display:block;
+    }
+
+    .co-country-menu{
+      position:absolute;
+      top: calc(100% + .45rem);
+      left:0;
+      right:0;
+      background:#fff;
+      border:1px solid rgba(15,23,42,.14);
+      border-radius: 14px;
+      max-height: 280px;
+      overflow:hidden;
+      display:none;
+      z-index: 60;
+      box-shadow: 0 12px 26px rgba(15,23,42,.14);
+    }
+
+    .co-country-search-input{
+      width:100%;
+      padding:.65rem .75rem;
+      border:0;
+      border-bottom:1px solid rgba(15,23,42,.10);
+      outline:none;
+      font-weight:800;
+    }
+
+    .co-country-list{
+      max-height: 220px;
+      overflow:auto;
+    }
+
+    .co-country-option{
+      padding:.6rem .85rem;
+      cursor:pointer;
+      font-size:.9rem;
+      font-weight:800;
+      color: var(--k);
+    }
+
+    .co-country-option:hover{
+      background: rgba(124,58,237,.08);
+    }
+
+    .co-country-option.active{
+      background: rgba(124,58,237,.15);
+    }
+
     /* ===== Cart items ===== */
     .co-cart{ display:flex; flex-direction:column; gap:.65rem; }
     .co-item{
@@ -901,7 +992,12 @@
         shipDetails: document.getElementById('ship-details'),
         shipSummary: document.getElementById('ship-summary'),
         shipCountry: document.getElementById('ship-country'),
-        shipCountrySearch: document.getElementById('ship-country-search'),
+        coCountryDropdown: document.getElementById('coCountryDropdown'),
+        coCountrySelected: document.getElementById('coCountrySelected'),
+        coCountrySelectedText: document.getElementById('coCountrySelectedText'),
+        coCountryMenu: document.getElementById('coCountryMenu'),
+        coCountrySearch: document.getElementById('coCountrySearch'),
+        coCountryList: document.getElementById('coCountryList'),
 
         ratesRetry: document.getElementById('rates-retry'),
         ratesDebug: document.getElementById('rates-debug'),
@@ -930,231 +1026,122 @@
       const CURRENCY = String(cfg.CURRENCY || 'USD');
       const DEFAULT_COUNTRY = String(cfg.DEFAULT_COUNTRY || 'ZA').toUpperCase();
 
-      // ===== Hardcoded ISO-3166-1 alpha-2 (195 countries: 193 UN members + Vatican City + Palestine) =====
-      const COUNTRIES = [
-        { code:'AF', name:'Afghanistan' },
-        { code:'AL', name:'Albania' },
-        { code:'DZ', name:'Algeria' },
-        { code:'AD', name:'Andorra' },
-        { code:'AO', name:'Angola' },
-        { code:'AG', name:'Antigua and Barbuda' },
-        { code:'AR', name:'Argentina' },
-        { code:'AM', name:'Armenia' },
-        { code:'AU', name:'Australia' },
-        { code:'AT', name:'Austria' },
-        { code:'AZ', name:'Azerbaijan' },
-        { code:'BS', name:'Bahamas' },
-        { code:'BH', name:'Bahrain' },
-        { code:'BD', name:'Bangladesh' },
-        { code:'BB', name:'Barbados' },
-        { code:'BY', name:'Belarus' },
-        { code:'BE', name:'Belgium' },
-        { code:'BZ', name:'Belize' },
-        { code:'BJ', name:'Benin' },
-        { code:'BT', name:'Bhutan' },
-        { code:'BO', name:'Bolivia' },
-        { code:'BA', name:'Bosnia and Herzegovina' },
-        { code:'BW', name:'Botswana' },
-        { code:'BR', name:'Brazil' },
-        { code:'BN', name:'Brunei' },
-        { code:'BG', name:'Bulgaria' },
-        { code:'BF', name:'Burkina Faso' },
-        { code:'BI', name:'Burundi' },
-        { code:'CV', name:'Cabo Verde' },
-        { code:'KH', name:'Cambodia' },
-        { code:'CM', name:'Cameroon' },
-        { code:'CA', name:'Canada' },
-        { code:'CF', name:'Central African Republic' },
-        { code:'TD', name:'Chad' },
-        { code:'CL', name:'Chile' },
-        { code:'CN', name:'China' },
-        { code:'CO', name:'Colombia' },
-        { code:'KM', name:'Comoros' },
-        { code:'CG', name:'Congo (Congo-Brazzaville)' },
-        { code:'CD', name:'Congo (DRC)' },
-        { code:'CR', name:'Costa Rica' },
-        { code:'CI', name:"Cote d'Ivoire" },
-        { code:'HR', name:'Croatia' },
-        { code:'CU', name:'Cuba' },
-        { code:'CY', name:'Cyprus' },
-        { code:'CZ', name:'Czechia' },
-        { code:'DK', name:'Denmark' },
-        { code:'DJ', name:'Djibouti' },
-        { code:'DM', name:'Dominica' },
-        { code:'DO', name:'Dominican Republic' },
-        { code:'EC', name:'Ecuador' },
-        { code:'EG', name:'Egypt' },
-        { code:'SV', name:'El Salvador' },
-        { code:'GQ', name:'Equatorial Guinea' },
-        { code:'ER', name:'Eritrea' },
-        { code:'EE', name:'Estonia' },
-        { code:'SZ', name:'Eswatini' },
-        { code:'ET', name:'Ethiopia' },
-        { code:'FJ', name:'Fiji' },
-        { code:'FI', name:'Finland' },
-        { code:'FR', name:'France' },
-        { code:'GA', name:'Gabon' },
-        { code:'GM', name:'Gambia' },
-        { code:'GE', name:'Georgia' },
-        { code:'DE', name:'Germany' },
-        { code:'GH', name:'Ghana' },
-        { code:'GR', name:'Greece' },
-        { code:'GD', name:'Grenada' },
-        { code:'GT', name:'Guatemala' },
-        { code:'GN', name:'Guinea' },
-        { code:'GW', name:'Guinea-Bissau' },
-        { code:'GY', name:'Guyana' },
-        { code:'HT', name:'Haiti' },
-        { code:'HN', name:'Honduras' },
-        { code:'HU', name:'Hungary' },
-        { code:'IS', name:'Iceland' },
-        { code:'IN', name:'India' },
-        { code:'ID', name:'Indonesia' },
-        { code:'IR', name:'Iran' },
-        { code:'IQ', name:'Iraq' },
-        { code:'IE', name:'Ireland' },
-        { code:'IL', name:'Israel' },
-        { code:'IT', name:'Italy' },
-        { code:'JM', name:'Jamaica' },
-        { code:'JP', name:'Japan' },
-        { code:'JO', name:'Jordan' },
-        { code:'KZ', name:'Kazakhstan' },
-        { code:'KE', name:'Kenya' },
-        { code:'KI', name:'Kiribati' },
-        { code:'KW', name:'Kuwait' },
-        { code:'KG', name:'Kyrgyzstan' },
-        { code:'LA', name:'Laos' },
-        { code:'LV', name:'Latvia' },
-        { code:'LB', name:'Lebanon' },
-        { code:'LS', name:'Lesotho' },
-        { code:'LR', name:'Liberia' },
-        { code:'LY', name:'Libya' },
-        { code:'LI', name:'Liechtenstein' },
-        { code:'LT', name:'Lithuania' },
-        { code:'LU', name:'Luxembourg' },
-        { code:'MG', name:'Madagascar' },
-        { code:'MW', name:'Malawi' },
-        { code:'MY', name:'Malaysia' },
-        { code:'MV', name:'Maldives' },
-        { code:'ML', name:'Mali' },
-        { code:'MT', name:'Malta' },
-        { code:'MH', name:'Marshall Islands' },
-        { code:'MR', name:'Mauritania' },
-        { code:'MU', name:'Mauritius' },
-        { code:'MX', name:'Mexico' },
-        { code:'FM', name:'Micronesia' },
-        { code:'MD', name:'Moldova' },
-        { code:'MC', name:'Monaco' },
-        { code:'MN', name:'Mongolia' },
-        { code:'ME', name:'Montenegro' },
-        { code:'MA', name:'Morocco' },
-        { code:'MZ', name:'Mozambique' },
-        { code:'MM', name:'Myanmar' },
-        { code:'NA', name:'Namibia' },
-        { code:'NR', name:'Nauru' },
-        { code:'NP', name:'Nepal' },
-        { code:'NL', name:'Netherlands' },
-        { code:'NZ', name:'New Zealand' },
-        { code:'NI', name:'Nicaragua' },
-        { code:'NE', name:'Niger' },
-        { code:'NG', name:'Nigeria' },
-        { code:'KP', name:'North Korea' },
-        { code:'MK', name:'North Macedonia' },
-        { code:'NO', name:'Norway' },
-        { code:'OM', name:'Oman' },
-        { code:'PK', name:'Pakistan' },
-        { code:'PW', name:'Palau' },
-        { code:'PS', name:'Palestine' },
-        { code:'PA', name:'Panama' },
-        { code:'PG', name:'Papua New Guinea' },
-        { code:'PY', name:'Paraguay' },
-        { code:'PE', name:'Peru' },
-        { code:'PH', name:'Philippines' },
-        { code:'PL', name:'Poland' },
-        { code:'PT', name:'Portugal' },
-        { code:'QA', name:'Qatar' },
-        { code:'RO', name:'Romania' },
-        { code:'RU', name:'Russia' },
-        { code:'RW', name:'Rwanda' },
-        { code:'KN', name:'Saint Kitts and Nevis' },
-        { code:'LC', name:'Saint Lucia' },
-        { code:'VC', name:'Saint Vincent and the Grenadines' },
-        { code:'WS', name:'Samoa' },
-        { code:'SM', name:'San Marino' },
-        { code:'ST', name:'Sao Tome and Principe' },
-        { code:'SA', name:'Saudi Arabia' },
-        { code:'SN', name:'Senegal' },
-        { code:'RS', name:'Serbia' },
-        { code:'SC', name:'Seychelles' },
-        { code:'SL', name:'Sierra Leone' },
-        { code:'SG', name:'Singapore' },
-        { code:'SK', name:'Slovakia' },
-        { code:'SI', name:'Slovenia' },
-        { code:'SB', name:'Solomon Islands' },
-        { code:'SO', name:'Somalia' },
-        { code:'ZA', name:'South Africa' },
-        { code:'KR', name:'South Korea' },
-        { code:'SS', name:'South Sudan' },
-        { code:'ES', name:'Spain' },
-        { code:'LK', name:'Sri Lanka' },
-        { code:'SD', name:'Sudan' },
-        { code:'SR', name:'Suriname' },
-        { code:'SE', name:'Sweden' },
-        { code:'CH', name:'Switzerland' },
-        { code:'SY', name:'Syria' },
-        { code:'TJ', name:'Tajikistan' },
-        { code:'TZ', name:'Tanzania' },
-        { code:'TH', name:'Thailand' },
-        { code:'TL', name:'Timor-Leste' },
-        { code:'TG', name:'Togo' },
-        { code:'TO', name:'Tonga' },
-        { code:'TT', name:'Trinidad and Tobago' },
-        { code:'TN', name:'Tunisia' },
-        { code:'TR', name:'Turkey' },
-        { code:'TM', name:'Turkmenistan' },
-        { code:'TV', name:'Tuvalu' },
-        { code:'UG', name:'Uganda' },
-        { code:'UA', name:'Ukraine' },
-        { code:'AE', name:'United Arab Emirates' },
-        { code:'GB', name:'United Kingdom' },
-        { code:'US', name:'United States' },
-        { code:'UY', name:'Uruguay' },
-        { code:'UZ', name:'Uzbekistan' },
-        { code:'VU', name:'Vanuatu' },
-        { code:'VA', name:'Vatican City' },
-        { code:'VE', name:'Venezuela' },
-        { code:'VN', name:'Vietnam' },
-        { code:'YE', name:'Yemen' },
-        { code:'ZM', name:'Zambia' },
-        { code:'ZW', name:'Zimbabwe' }
-      ];
+      // ✅ countries from server (utils/countries.js)
+      const COUNTRIES = Array.isArray(cfg.COUNTRIES) ? cfg.COUNTRIES : [];
 
-      function buildCountrySelect(term = '', keepCode = DEFAULT_COUNTRY){
-        if (!el.shipCountry) return;
+      function buildSmartCountryDropdown(selectedCode = DEFAULT_COUNTRY){
+        if (!el.shipCountry || !el.coCountryDropdown || !el.coCountrySelected || !el.coCountryList) return;
 
-        const q = String(term || '').trim().toLowerCase();
-        const current = String(el.shipCountry.value || keepCode || DEFAULT_COUNTRY).toUpperCase();
+        const current = String(selectedCode || DEFAULT_COUNTRY).toUpperCase();
 
-        const matches = !q
-          ? COUNTRIES
-          : COUNTRIES.filter(c =>
-              c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
-            );
-
-        const list = matches.length ? matches : COUNTRIES;
-
+        // 1) Build hidden real select (codes)
         el.shipCountry.innerHTML = '';
-        for (const c of list){
+        for (const c of COUNTRIES){
           const opt = document.createElement('option');
-          opt.value = c.code;
-          opt.textContent = `${c.name} (${c.code})`;
-          if (c.code === current) opt.selected = true;
+          opt.value = String(c.code || '').toUpperCase(); // ✅ shipTo.country expects code (ZA, US)
+          opt.dataset.name = String(c.name || '');
+          opt.dataset.flag = String(c.flag || '');
+          opt.textContent = `${c.name || c.code} (${String(c.code || '').toUpperCase()})`;
           el.shipCountry.appendChild(opt);
         }
 
-        // If current code is not in filtered list, select first item
-        if (!Array.from(el.shipCountry.options).some(o => o.value === current)){
-          el.shipCountry.selectedIndex = 0;
+        // 2) Build visible menu options
+        el.coCountryList.innerHTML = '';
+        for (const c of COUNTRIES){
+          const div = document.createElement('div');
+          div.className = 'co-country-option';
+          div.dataset.value = String(c.code || '').toUpperCase();
+          div.dataset.name = String(c.name || '');
+          div.dataset.flag = String(c.flag || '');
+          div.textContent = `${c.flag ? (c.flag + ' ') : ''}${c.name} (${String(c.code || '').toUpperCase()})`;
+          if (String(c.code || '').toUpperCase() === current) div.classList.add('active');
+          el.coCountryList.appendChild(div);
+        }
+
+        // 3) Set initial selected text
+        setSmartCountrySelected(current, false);
+
+        // ---- Events (once) ----
+        if (el.coCountryDropdown._wired) return;
+        el.coCountryDropdown._wired = true;
+
+        const openDropdown = () => {
+          el.coCountryDropdown.classList.add('open');
+          el.coCountrySelected.setAttribute('aria-expanded', 'true');
+          if (el.coCountrySearch) {
+            el.coCountrySearch.value = '';
+            el.coCountrySearch.focus();
+          }
+          // show all options
+          el.coCountryList.querySelectorAll('.co-country-option').forEach(o => (o.style.display = 'block'));
+        };
+
+        const closeDropdown = () => {
+          el.coCountryDropdown.classList.remove('open');
+          el.coCountrySelected.setAttribute('aria-expanded', 'false');
+        };
+
+        el.coCountrySelected.addEventListener('click', () => {
+          const isOpen = el.coCountryDropdown.classList.contains('open');
+          if (isOpen) closeDropdown();
+          else openDropdown();
+        });
+
+        el.coCountrySelected.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            el.coCountrySelected.click();
+          }
+          if (e.key === 'Escape') closeDropdown();
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!el.coCountryDropdown.contains(e.target)) closeDropdown();
+        });
+
+        // Click option
+        el.coCountryList.addEventListener('click', (e) => {
+          const opt = e.target.closest('.co-country-option');
+          if (!opt) return;
+          setSmartCountrySelected(opt.dataset.value, true);
+          closeDropdown();
+        });
+
+        // Search filter
+        if (el.coCountrySearch){
+          el.coCountrySearch.addEventListener('input', () => {
+            const term = String(el.coCountrySearch.value || '').toLowerCase().trim();
+            el.coCountryList.querySelectorAll('.co-country-option').forEach(opt => {
+              const code = String(opt.dataset.value || '').toLowerCase();
+              const name = String(opt.dataset.name || '').toLowerCase();
+              const show = !term || code.includes(term) || name.includes(term);
+              opt.style.display = show ? 'block' : 'none';
+            });
+          });
+        }
+
+        function setSmartCountrySelected(codeUpper, triggerChange){
+          const code = String(codeUpper || DEFAULT_COUNTRY).toUpperCase();
+
+          // update hidden select value
+          el.shipCountry.value = code;
+
+          // update active class
+          el.coCountryList.querySelectorAll('.co-country-option').forEach(o => {
+            o.classList.toggle('active', String(o.dataset.value || '').toUpperCase() === code);
+          });
+
+          // update visible text
+          const match = COUNTRIES.find(c => String(c.code || '').toUpperCase() === code);
+          const name = match ? String(match.name || code) : code;
+          const flag = match ? String(match.flag || '') : '';
+          if (el.coCountrySelectedText){
+            el.coCountrySelectedText.textContent = `${flag ? (flag + ' ') : ''}${name} (${code})`;
+          }
+
+          if (triggerChange){
+            onAddressChange(); // ✅ this keeps your Shippo quote + PayPal gating flow
+          }
         }
       }
 
@@ -1244,7 +1231,9 @@
         // Update collapsible header summary + auto-collapse when valid
         if (el.shipSummary){
           if (v.ok){
-            const short = `${to.name} — ${to.city}, ${to.country}`;
+            const match = COUNTRIES.find(c => String(c.code || '').toUpperCase() === String(to.country || '').toUpperCase());
+            const countryNice = match ? match.name : to.country;
+            const short = `${to.name} — ${to.city}, ${countryNice}`;
             el.shipSummary.textContent = short;
           } else {
             el.shipSummary.textContent = 'Not completed yet';
@@ -1805,9 +1794,7 @@
       }
       
       function init(){
-        // Build countries once at startup (default ZA)
-        buildCountrySelect('', DEFAULT_COUNTRY);
-
+        buildSmartCountryDropdown(DEFAULT_COUNTRY);
         // events
         el.deliverySelect.addEventListener('change', applyDeliverySelection);
         if (el.ratesRetry){
@@ -1823,16 +1810,10 @@
         }
 
         ['input','change'].forEach(evt => {
-          [el.shipName, el.shipPhone, el.shipEmail, el.shipLine1, el.shipLine2, el.shipCity, el.shipState, el.shipZip, el.shipCountry, el.shipCountrySearch]
+          [el.shipName, el.shipPhone, el.shipEmail, el.shipLine1, el.shipLine2, el.shipCity, el.shipState, el.shipZip, el.shipCountry]
             .filter(Boolean)
             .forEach(node => node.addEventListener(evt, onAddressChange));
         });
-
-        if (el.shipCountrySearch){
-          el.shipCountrySearch.addEventListener('input', () => {
-            buildCountrySelect(el.shipCountrySearch.value, el.shipCountry?.value || 'ZA');
-          });
-        }
 
         if (el.shipDone) el.shipDone.addEventListener('click', closeAddressIfValid);
 

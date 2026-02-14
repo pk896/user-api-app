@@ -161,14 +161,17 @@
               }
             }
           %>
-          <li class="amz-item"
+            <li class="amz-item"
               data-name="<%- name %>"
               data-price="<%= price %>"
               data-stock="<%= inStock ? '1':'0' %>"
               data-category="<%- cat %>"
+              data-category-raw="<%- (p.category || '') %>"
               data-type="<%- type %>"
               data-role="<%- role %>"
+              data-bizid="<%- String(p.businessId || p.business?._id || p.sellerId || p.seller?._id || '') %>"
               data-flags='<%- JSON.stringify(flags) %>'>
+
             <a class="imgbox" href="/products/view/<%= p.customId %>" aria-label="Open <%= name %>">
               <img src="<%= p.imageUrl %>" alt="<%= name %>" loading="lazy" decoding="async" />
               <% if (p.isNew)   { %><span class="tag new">New</span><% } %>
@@ -295,6 +298,25 @@
       </button>
     </div>
   </div>
+
+  <!-- ===== Second-hand policy toast (popup) ===== -->
+<div id="policyToast" class="policy-toast" aria-live="polite" hidden>
+  <div class="policy-toast-inner">
+    <span class="policy-toast-icon">ℹ️</span>
+    <div class="policy-toast-text" id="policyToastText">
+      Second-hand orders must be from ONE business/location only.
+    </div>
+
+    <div class="policy-toast-actions">
+      <button type="button" class="policy-toast-btn danger" id="policyToastClearBtn">
+        Clear cart
+      </button>
+      <button type="button" class="policy-toast-btn" id="policyToastCloseBtn" aria-label="Dismiss">
+        ✕
+      </button>
+    </div>
+  </div>
+</div>
 </main>
 
 <!-- ===== Cart Drawer ===== -->
@@ -1155,6 +1177,67 @@
   }
 
   .dark-theme .variant-toast-inner{ background:#0b1120; }
+
+  /* ===== Second-hand policy toast (popup) ===== */
+  .policy-toast{
+    position:fixed;
+    left:50%;
+    bottom:64px;
+    transform:translateX(-50%) translateY(16px);
+    z-index:96;
+    opacity:0;
+    visibility:hidden;
+    transition:opacity .2s ease, transform .2s ease, visibility .2s ease;
+    pointer-events:none;
+  }
+
+  .policy-toast.show{
+    opacity:1;
+    visibility:visible;
+    transform:translateX(-50%) translateY(0);
+    pointer-events:auto;
+  }
+
+  .policy-toast-inner{
+    display:flex;
+    align-items:center;
+    gap:.55rem;
+    padding:.55rem .75rem;
+    border-radius:14px;
+    background:#0b1120;
+    color:#f9fafb;
+    box-shadow:var(--shadow);
+    width:min(760px, 94vw);
+  }
+
+  .policy-toast-icon{ font-size:1.05rem; }
+
+  .policy-toast-text{
+    font-weight:800;
+    font-size:.92rem;
+    line-height:1.25;
+    flex:1;
+  }
+
+  .policy-toast-actions{
+    display:flex;
+    gap:.4rem;
+    align-items:center;
+  }
+
+  .policy-toast-btn{
+    border:0;
+    border-radius:999px;
+    padding:.38rem .65rem;
+    font-weight:900;
+    cursor:pointer;
+    background:rgba(255,255,255,.12);
+    color:#fff;
+  }
+
+  .policy-toast-btn.danger{
+    background:#ef4444;
+  }
 </style>
 
 <!-- ===== Page Script (CSP-safe) ===== -->
@@ -1199,23 +1282,29 @@
     const miniSubtotal  = $('#miniSubtotal');
     const miniCount     = $('#miniCount');
 
-      const variantToast      = $('#variantToast');
+    const variantToast      = $('#variantToast');
     const variantToastText  = $('#variantToastText');
     const variantToastClose = $('#variantToastClose');
     let   variantToastTimer = null;
 
+    // Second-hand policy toast (popup)
+    const policyToast         = $('#policyToast');
+    const policyToastText     = $('#policyToastText');
+    const policyToastClearBtn = $('#policyToastClearBtn');
+    const policyToastCloseBtn = $('#policyToastCloseBtn');
+    let   policyToastTimer    = null;
+
+    const PAGE = { size: 12, page: 1, pages: 1 };
+    const CARD = () => list ? Array.from(list.children) : [];
+
     function hideVariantToast(){
       if (!variantToast) return;
       variantToast.classList.remove('show');
-      // after transition, hide completely
-      setTimeout(()=>{
-        variantToast.setAttribute('hidden', 'true');
-      }, 220);
+      setTimeout(()=>{ variantToast.setAttribute('hidden', 'true'); }, 220);
     }
 
     function showVariantToast(message){
       if (!variantToast || !variantToastText){
-        // fallback (should rarely happen)
         alert(message);
         return;
       }
@@ -1234,8 +1323,107 @@
       });
     }
 
-    const PAGE = { size: 12, page: 1, pages: 1 };
-    const CARD = () => list ? Array.from(list.children) : [];
+    function hidePolicyToast(){
+      if (!policyToast) return;
+      policyToast.classList.remove('show');
+      setTimeout(()=> policyToast.setAttribute('hidden','true'), 220);
+    }
+
+    function showPolicyToast(message, { showClear = true } = {}){
+      if (!policyToast || !policyToastText){
+        alert(message);
+        return;
+      }
+      policyToastText.textContent = message || 'Policy notice.';
+      policyToast.removeAttribute('hidden');
+      policyToast.classList.add('show');
+
+      if (policyToastClearBtn){
+        policyToastClearBtn.style.display = showClear ? '' : 'none';
+      }
+
+      if (policyToastTimer) clearTimeout(policyToastTimer);
+      policyToastTimer = setTimeout(hidePolicyToast, 3200);
+    }
+
+    policyToastCloseBtn?.addEventListener('click', ()=>{
+      if (policyToastTimer) clearTimeout(policyToastTimer);
+      hidePolicyToast();
+    });
+
+    // ------------------------------------------------------
+    // ✅ Second-hand lock state (client UX + filtering)
+    // Rule:
+    // - If cart has ANY second-hand items -> show ONLY second-hand categories AND ONLY from SAME business
+    // - No mixing with normal items
+    // ------------------------------------------------------
+    const SECONDHAND_CATS = new Set(['second-hand-clothes','uncategorized-second-hand-things']);
+    function isSecondhandCat(cat){
+      return SECONDHAND_CATS.has(String(cat||'').trim().toLowerCase());
+    }
+
+    // Returns: { mode: 'none' | 'secondhand', lockBizId: string }
+    function getCartLockState(items){
+      const arr = Array.isArray(items) ? items : [];
+      for (const it of arr){
+        const cat = String(it.category || it.product?.category || '').trim().toLowerCase();
+        if (!isSecondhandCat(cat)) continue;
+
+        const biz = String(
+          it.businessId ||
+          it.product?.businessId ||
+          it.sellerId ||
+          it.product?.sellerId ||
+          it.business?._id ||
+          it.product?.business?._id ||
+          ''
+        ).trim();
+
+        if (biz) return { mode:'secondhand', lockBizId: biz };
+        return { mode:'secondhand', lockBizId: '' }; // safer fallback
+      }
+      return { mode:'none', lockBizId:'' };
+    }
+
+    // Global lock state so applyFilters() can enforce it
+    const LOCK = { mode:'none', lockBizId:'' };
+
+    function enforceSecondhandLockOnCards(){
+      if (LOCK.mode !== 'secondhand') return;
+
+      CARD().forEach(li=>{
+        const cardBiz = String(li.getAttribute('data-bizid') || '').trim();
+        const cardCat = String(li.getAttribute('data-category') || '').trim().toLowerCase();
+
+        const okCat = isSecondhandCat(cardCat);
+        const okBiz = !LOCK.lockBizId ? true : (cardBiz && cardBiz === LOCK.lockBizId);
+
+        li.dataset.lockOk = (okCat && okBiz) ? '1' : '0';
+      });
+    }
+
+    // Popup must be the button → we transform the button itself briefly
+    function showButtonPolicyPopup(btn, message){
+      if (!btn) return;
+      const originalText = btn.textContent;
+      const originalBg = btn.style.background;
+      const originalBorder = btn.style.borderColor;
+      const originalColor = btn.style.color;
+
+      btn.textContent = message;
+      btn.style.background = '#ef4444';
+      btn.style.borderColor = '#ef4444';
+      btn.style.color = '#fff';
+      btn.setAttribute('aria-disabled','true');
+
+      setTimeout(()=>{
+        btn.textContent = originalText;
+        btn.style.background = originalBg;
+        btn.style.borderColor = originalBorder;
+        btn.style.color = originalColor;
+        btn.removeAttribute('aria-disabled');
+      }, 2600);
+    }
 
     /* Sidebar toggle (mobile) */
     if (filterToggle) {
@@ -1290,25 +1478,19 @@
       const nodes = $$('.rating[data-pid]');
       if (!nodes.length) return;
 
-      // First pass: set from server-rendered values (p.avgRating, p.ratingsCount)
       nodes.forEach(el => {
         const avg = Number(el.getAttribute('data-avg') || 0);
         setStarsFill(el, avg);
       });
 
-      // OPTIONAL: If list route did not include avgRating/ratingsCount,
-      // we fetch per-product using your existing API (independent flow).
-      // This does NOT disturb other flows; it only updates rating UI.
       const needFetch = nodes.filter(el => {
         const hasAvg = el.hasAttribute('data-avg');
         const hasCnt = el.hasAttribute('data-count');
-        // fetch only if attributes are missing (not if count is 0)
         return !(hasAvg && hasCnt);
       });
 
       if (!needFetch.length) return;
 
-      // small concurrency limit (safe)
       const limit = 6;
       let i = 0;
 
@@ -1335,9 +1517,7 @@
             if (cntEl) cntEl.textContent = String(cnt);
 
             setStarsFill(el, avg);
-          } catch {
-            // ignore (do not break page)
-          }
+          } catch {}
         }
       }
 
@@ -1356,9 +1536,10 @@
         return {};
       }
     }
+
     async function fetchCart(){
       let data = await getJSON('/api/cart');
-      if (!data || (!data.items && !Array.isArray(data))) data = await getJSON('/cart/items');
+      if (!data || (!data.items && !Array.isArray(data))) data = await getJSON('/api/cart/items');
       if (Array.isArray(data)) return { items: data };
       return data || { items: [] };
     }
@@ -1413,9 +1594,53 @@
       miniBar.hidden = false;
     }
 
+    async function clearCart(){
+      const r = await fetch('/api/cart/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!r.ok) throw new Error('Could not clear cart.');
+      return true;
+    }
+
+    policyToastClearBtn?.addEventListener('click', async ()=>{
+      try{
+        policyToastClearBtn.disabled = true;
+        policyToastClearBtn.textContent = 'Clearing…';
+        await clearCart();
+        await refreshCart();
+        PAGE.page = 1;
+        applyFilters();
+        showPolicyToast('Cart cleared. You can now shop any products.', { showClear:false });
+      }catch(e){
+        alert(e?.message || 'Could not clear cart.');
+      }finally{
+        if (policyToastClearBtn){
+          policyToastClearBtn.disabled = false;
+          policyToastClearBtn.textContent = 'Clear cart';
+        }
+      }
+    });
+
     async function refreshCart(){
       const data = await fetchCart();
-      renderCart(data.items||[]);
+      const items = data.items || [];
+      renderCart(items);
+
+      const state = getCartLockState(items);
+      LOCK.mode = state.mode;
+      LOCK.lockBizId = state.lockBizId;
+
+      enforceSecondhandLockOnCards();
+
+      if (LOCK.mode === 'secondhand'){
+        showPolicyToast(
+          'Second-hand cart locked: you can ONLY add second-hand items from the same business/location. Clear cart to shop other products or businesses.',
+          { showClear:true }
+        );
+      }
     }
 
     /* Add to cart inline (handles clothes + shoes variants) */
@@ -1428,7 +1653,6 @@
           const pid      = btn.getAttribute('data-pid');
           const original = btn.textContent;
 
-          // Find the card
           const card = btn.closest('.amz-item');
           let size = '';
           let color = '';
@@ -1440,29 +1664,53 @@
             const isShoes   = type === 'shoes'   || role === 'shoes';
 
             if (isClothes || isShoes) {
-              // 👉 FIRST click: just reveal the selectors and focus, do NOT add yet
               if (!card.classList.contains('show-variants')) {
                 card.classList.add('show-variants');
-
                 const sizeSelFirst = card.querySelector('.variant-size');
                 if (sizeSelFirst) sizeSelFirst.focus();
-
-                // stop here – user must choose options, then click Add again
                 return;
               }
 
-              // 👉 After variants are visible, now we validate
               const sizeSel  = card.querySelector('.variant-size');
               const colorSel = card.querySelector('.variant-color');
 
               size  = sizeSel  ? sizeSel.value.trim()  : '';
               color = colorSel ? colorSel.value.trim() : '';
 
-              // Require BOTH size and color for clothes + shoes
               if (!size || !color) {
                 showVariantToast('Please choose size and color before adding to cart.');
                 return;
               }
+            }
+          }
+
+          // ✅ Second-hand rule (client)
+          const cartData = await fetchCart();
+          const itemsNow = cartData.items || [];
+
+          const stateNow = getCartLockState(itemsNow); // secondhand lock if exists
+          const hasNormal = (Array.isArray(itemsNow) ? itemsNow : []).some(it=>{
+            const cat = String(it.category || it.product?.category || '').trim().toLowerCase();
+            return cat && !isSecondhandCat(cat);
+          });
+
+          const cardBiz = String(card?.getAttribute('data-bizid') || '').trim();
+          const cardCat = String(card?.getAttribute('data-category') || '').trim().toLowerCase();
+          const cardIsSecondhand = isSecondhandCat(cardCat);
+
+          if (stateNow.mode === 'secondhand'){
+            if (!cardIsSecondhand){
+              showPolicyToast('This cart is locked for second-hand items only. Clear cart to add normal products.', { showClear:true });
+              return;
+            }
+            if (stateNow.lockBizId && cardBiz && cardBiz !== stateNow.lockBizId){
+              showPolicyToast('Second-hand cart locked to one business/location. Clear cart to shop another business.', { showClear:true });
+              return;
+            }
+          } else {
+            if (hasNormal && cardIsSecondhand){
+              showPolicyToast('You already have normal items in cart. Clear cart to shop second-hand items (single business/location).', { showClear:true });
+              return;
             }
           }
 
@@ -1486,10 +1734,8 @@
               throw new Error(m);
             }
 
-            // ✅ Added successfully
             btn.textContent = '✅ Added';
 
-            // 🔁 Reset and hide variants back to default
             const cardAfter = btn.closest('.amz-item');
             if (cardAfter) {
               const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
@@ -1503,8 +1749,6 @@
 
                 if (sizeSelA)  sizeSelA.value  = '';
                 if (colorSelA) colorSelA.value = '';
-
-                // hide the block again
                 cardAfter.classList.remove('show-variants');
               }
             }
@@ -1514,11 +1758,20 @@
               btn.removeAttribute('aria-disabled');
             }, 900);
 
-            refreshCart();
+            await refreshCart();
+            PAGE.page = 1;
+            applyFilters();
           }catch(err){
             btn.textContent = original;
             btn.removeAttribute('aria-disabled');
-            alert(err.message||'Could not add to cart.');
+
+            // Prefer toast for policy-type errors, fallback to button popup
+            const msg = err?.message || 'Rejected.';
+            if (/second-hand|secondhand|business|location|clear your cart|locked/i.test(msg)){
+              showPolicyToast(msg, { showClear:true });
+            } else {
+              showButtonPolicyPopup(btn, msg);
+            }
           }
         });
       });
@@ -1532,13 +1785,11 @@
       const data = await getJSON(`/api/delivery-options?${qs.toString()}`);
       const items = Array.isArray(data.options) ? data.options : [];
 
-      // Build regions list
       const regions = Array.from(new Set(items.map(it=>it.region).filter(Boolean))).sort();
       const current = regionSelect.value;
       regionSelect.innerHTML = `<option value="">All regions</option>` +
         regions.map(r=>`<option ${r===current?'selected':''} value="${r}">${r}</option>`).join('');
 
-      // Sidebar summary only (no per-card text)
       if (items.length){
         const cheapest = items.reduce((a,b)=> a.price < b.price ? a : b);
         const fastest  = items.reduce((a,b)=> a.deliveryDays < b.deliveryDays ? a : b);
@@ -1592,11 +1843,15 @@
         if (!(price >= minP && price <= maxP)) show = false;
         if (!flagsMatch(li, reqFlags)) show = false;
 
+        // ✅ Second-hand lock enforcement (hard UI filter)
+        if (LOCK.mode === 'secondhand'){
+          if (li.dataset.lockOk !== '1') show = false;
+        }
+
         li.style.display = show ? '' : 'none';
         if (show) visible++;
       });
 
-      // sort visible
       const sort = sortSelect.value;
       const items = CARD().filter(li=>li.style.display!=='none');
       if (sort !== 'relevance'){
@@ -1608,7 +1863,7 @@
           if (sort==='price-asc')  return pa - pb;
           if (sort==='price-desc') return pb - pa;
           if (sort==='name')       return na.localeCompare(nb);
-          if (sort==='new')        return 0; // server would handle createdAt
+          if (sort==='new')        return 0;
           return 0;
         });
         const frag = document.createDocumentFragment();
@@ -1616,7 +1871,6 @@
         list.appendChild(frag);
       }
 
-      // pagination (client)
       PAGE.pages = Math.max(1, Math.ceil(visible / PAGE.size));
       PAGE.page = Math.min(PAGE.page, PAGE.pages);
       pager.hidden = PAGE.pages <= 1;
@@ -1642,10 +1896,7 @@
     function jumpToResultsTop(){
       const el = document.getElementById('results');
       if (!el) return;
-
-      // Sticky header + subnav space (tweak if you want)
       const offset = 120;
-
       const y = el.getBoundingClientRect().top + window.scrollY - offset;
       window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
     }
@@ -1660,8 +1911,6 @@
       if (next >= 1 && next <= PAGE.pages){
         PAGE.page = next;
         renderPage();
-
-        // ✅ ALWAYS start next page from the top of the product grid
         jumpToResultsTop();
       }
     });
@@ -1696,7 +1945,6 @@
       })
     );
 
-    // Region change → refresh summary only
     regionSelect.addEventListener('change', ()=>{
       loadDeliveryOptions(regionSelect.value);
     });
@@ -1715,6 +1963,6 @@
     applyFilters();
     refreshCart();
     loadDeliveryOptions('');
-    hydrateRatings(); // ✅ IMPORTANT: actually run it
+    hydrateRatings();
   })();
 </script>

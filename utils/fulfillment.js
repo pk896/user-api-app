@@ -1,5 +1,5 @@
 // utils/fulfillment.js
-
+'use strict';
 const mongoose = require('mongoose');
 
 let Order = null;

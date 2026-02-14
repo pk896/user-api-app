@@ -164,9 +164,15 @@ const corsOptions = {
 
 // PayPal Webhooks MUST use RAW body (before express.json)
 const paypalWebhooks = require('./routes/paypalWebhooks');
-
 // Accept any content-type to avoid charset/proxy issues
 app.use('/webhooks', express.raw({ type: '*/*' }), paypalWebhooks);
+
+const COUNTRIES = require('./utils/countries');
+
+app.use((req, res, next) => {
+  res.locals.COUNTRIES = COUNTRIES;
+  next();
+});
 
 /* ---------------------------------------
    ORDER OF MIDDLEWARE (CRITICAL)

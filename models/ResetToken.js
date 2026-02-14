@@ -1,4 +1,6 @@
 // models/ResetToken.js
+'use strict';
+
 const { mongoose } = require('mongoose');
 
 const resetTokenSchema = new mongoose.Schema(

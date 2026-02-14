@@ -1,4 +1,6 @@
 // routes/businessAuth.js
+'use strict';
+
 const express = require('express');
 const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
@@ -13,14 +15,7 @@ const BusinessResetToken = require('../models/BusinessResetToken');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 const { sendMail } = require('../utils/mailer');
 const mongoose = require('mongoose');
-
-
-let Order = null;
-try {
-  Order = require('../models/Order');
-} catch {
-  // Order model optional
-}
+const Order = require('../models/Order');
 
 const router = express.Router();
 
@@ -31,7 +26,7 @@ function normalizeEmail(email) {
 
 // Normalize PayPal email (same rules as normal email)
 function normalizePaypalEmail(v) {
-  return String(v || '').trim().toLowerCase();
+  return String(v || '').trim().replace(/\s+/g, '').toLowerCase();
 }
 
 // Loose but safe email check (good enough for PayPal email field)
@@ -89,7 +84,7 @@ function applyPaypalPayouts(businessDoc, paypalEmailRaw, payoutsEnabled) {
   // If empty: remove field for cleanliness
   if (!norm) {
     const changed = (prevEnabled !== false) || (prevEmail !== '');
-    delete businessDoc.payouts.paypalEmail;
+    businessDoc.payouts.paypalEmail = undefined;
     businessDoc.payouts.enabled = false;
     if (changed) businessDoc.payouts.updatedAt = new Date();
     return { ok: true, paypalEmail: null, enabled: false };
@@ -125,9 +120,22 @@ const LOW_STOCK_THRESHOLD = 10;
 // ✅ Helper: exclude refunded / canceled orders everywhere
 // -------------------------------------------------------
 function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
-  const PAID_STATES = Array.isArray(OrderModel?.PAID_STATES)
-    ? OrderModel.PAID_STATES
-    : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
+    const RAW_PAID = Array.isArray(OrderModel?.PAID_STATES)
+      ? OrderModel.PAID_STATES
+      : ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
+
+    // ✅ include common case variants (Mongo is case-sensitive)
+    const PAID_STATES = Array.from(
+      new Set(
+        RAW_PAID.flatMap((s) => {
+          const v = String(s || '').trim();
+          if (!v) return [];
+          const lower = v.toLowerCase();
+          const title = lower.charAt(0).toUpperCase() + lower.slice(1);
+          return [v, v.toUpperCase(), v.toLowerCase(), title];
+        })
+      )
+    );
 
   const CANCEL_STATES = ['Cancelled', 'Canceled', 'CANCELLED', 'CANCELED', 'VOIDED', 'Voided'];
 
@@ -141,8 +149,7 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
     'refund_pending',
   ];
 
-  return {
-    // paid-ish order states (can be overridden by extra.status if you pass a regex)
+  const base = {
     status: { $in: PAID_STATES },
 
     // ✅ hard excludes
@@ -150,16 +157,25 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
       { status: { $nin: [...CANCEL_STATES, ...REFUND_STATES] } },
       { paymentStatus: { $nin: REFUND_PAYMENT_STATUSES } },
 
-      // common fields (safe even if not in schema)
       { isRefunded: { $ne: true } },
       { refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED', 'COMPLETED'] } },
 
-      // ✅ IMPORTANT: exclude if refundedAt is set (exists + not null)
       { $or: [{ refundedAt: { $exists: false } }, { refundedAt: null }] },
     ],
-
-    ...extra,
   };
+
+  // ✅ Merge extra safely (append $and instead of overwriting)
+  const extraAnd = Array.isArray(extra.$and) ? extra.$and : [];
+  const { ...rest } = extra || {};
+
+  const merged = {
+    ...base,
+    ...rest,
+    $and: [...base.$and, ...extraAnd],
+  };
+
+  return merged;
+
 }
 
 // -------------------------------------------------------
@@ -174,6 +190,16 @@ function resolveBaseUrl(req) {
   return `${proto}://${req.get('host')}`;
 }
 
+function getBiz(req) {
+  // prefer DB-trusted object set by requireBusiness
+  return req.business || req.session?.business || null;
+}
+
+function getBizId(req) {
+  const b = getBiz(req);
+  return b?._id ? String(b._id) : '';
+}
+
 // -------------------------------------------------------
 // Helper: send business verification email (USES sendMail)
 // -------------------------------------------------------
@@ -185,7 +211,7 @@ async function sendBusinessVerificationEmail(business, token, req) {
   const subject = '✅ Verify your business email - Unicoporate';
 
   const text = [
-    `Hi ${business.name || 'there'},`,
+    `Hi ${escapeHtml(business.name || 'there')},`,
     '',
     'Please verify your business email to activate your dashboard:',
     verifyUrl,
@@ -197,7 +223,7 @@ async function sendBusinessVerificationEmail(business, token, req) {
   const html = `
     <div style="font-family:Arial,sans-serif;color:#0F172A;line-height:1.55">
       <h2 style="margin:0 0 8px;color:#7C3AED">Verify your email</h2>
-      <p>Hi <strong>${business.name || 'there'}</strong>,</p>
+      <p>Hi <strong>${escapeHtml(business.name || 'there')}</strong>,</p>
       <p>Please verify your business email to activate your dashboard.</p>
       <p style="margin:16px 0;">
         <a href="${verifyUrl}"
@@ -234,7 +260,7 @@ async function sendBusinessResetEmail(business, token, req) {
   const subject = 'Reset your business password';
 
   const text = [
-    `Hi ${business.name || 'there'},`,
+    `Hi ${escapeHtml(business.name || 'there')},`,
     '',
     'We received a request to reset the password for your business account.',
     'If you made this request, open the link below to set a new password:',
@@ -247,7 +273,7 @@ async function sendBusinessResetEmail(business, token, req) {
   const html = `
     <div style="font-family:Arial,sans-serif;color:#0F172A;line-height:1.55">
       <h2 style="margin:0 0 8px;color:#7C3AED">Reset your business password</h2>
-      <p>Hi <strong>${business.name || 'there'}</strong>,</p>
+      <p>Hi <strong>${escapeHtml(business.name || 'there')}</strong>,</p>
       <p>We received a request to reset the password for your business account.</p>
       <p style="margin:16px 0;">
         <a href="${resetUrl}"
@@ -280,16 +306,31 @@ async function sendBusinessResetEmail(business, token, req) {
 function maskEmail(email = '') {
   const [name, domain] = String(email).split('@');
   if (!name || !domain) return email;
+
   const maskedName =
     name.length <= 2
       ? name[0] + '*'
       : name[0] + '*'.repeat(Math.max(1, name.length - 2)) + name[name.length - 1];
-  const [domName, domExt] = domain.split('.');
+
+  const parts = domain.split('.');
+  const domName = parts[0] || '';
+  const domRest = parts.slice(1).join('.') || '';
+
   const maskedDomain =
-    domName[0] +
-    '*'.repeat(Math.max(1, domName.length - 2)) +
-    domName[domName.length - 1];
-  return `${maskedName}@${maskedDomain}.${domExt || ''}`;
+    domName.length <= 2
+      ? (domName[0] || '*') + '*'
+      : domName[0] + '*'.repeat(Math.max(1, domName.length - 2)) + domName[domName.length - 1];
+
+  return `${maskedName}@${maskedDomain}${domRest ? '.' + domRest : ''}`;
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // -------------------------------------------------------
@@ -481,7 +522,13 @@ router.get('/signup', redirectIfLoggedIn, (req, res) => {
  * -------------------------------------------------------- */
 router.get('/verify-pending', requireBusiness, async (req, res) => {
   try {
-    const business = await Business.findById(req.session.business._id).lean();
+    const bizId = getBizId(req);
+    if (!bizId) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const business = await Business.findById(bizId).lean();
     if (!business) {
       req.flash('error', 'Business not found. Please log in again.');
       return res.redirect('/business/login');
@@ -509,7 +556,7 @@ router.get('/verify-pending', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.post('/verify/resend', requireBusiness, async (req, res) => {
   try {
-    const bizId = req.session?.business?._id;
+    const bizId = getBizId(req);
     if (!bizId) {
       req.flash('error', 'Please log in again.');
       return res.redirect('/business/login');
@@ -618,7 +665,13 @@ router.get('/verify-email/:token', async (req, res) => {
  * -------------------------------------------------------- */
 router.get('/change-email', requireBusiness, async (req, res) => {
   try {
-    const business = await Business.findById(req.session.business._id).lean();
+    const bizId = getBizId(req);
+    if (!bizId) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const business = await Business.findById(bizId).lean();
     if (!business) {
       req.flash('error', 'Business not found. Please log in again.');
       return res.redirect('/business/login');
@@ -767,9 +820,37 @@ router.post(
 
     // Business contact/location
     body('phone').trim().notEmpty().withMessage('Phone number is required'),
-    body('country').trim().notEmpty().withMessage('Country is required'),
+    body('country').trim().notEmpty().withMessage('Country name is required'),
+
+    // Shippo-ready business address fields
+    body('countryCode')
+      .trim()
+      .notEmpty()
+      .withMessage('Country code is required')
+      .bail()
+      .isLength({ min: 2, max: 2 })
+      .withMessage('Country code must be 2 letters (ISO 2), e.g., ZA, US')
+      .bail()
+      .customSanitizer((v) => String(v || '').trim().toUpperCase()),
+
     body('city').trim().notEmpty().withMessage('City is required'),
-    body('address').trim().notEmpty().withMessage('Address is required'),
+
+    body('state')
+      .optional({ checkFalsy: true })
+      .trim()
+      .custom((v, { req }) => {
+        const cc = String(req.body.countryCode || '').trim().toUpperCase();
+        if (cc === 'US' && !String(v || '').trim()) {
+          throw new Error('State is required for US addresses');
+        }
+        return true;
+      }),
+
+    body('postalCode').trim().notEmpty().withMessage('Postal code is required'),
+
+    body('addressLine1').trim().notEmpty().withMessage('Street address (line 1) is required'),
+
+    body('addressLine2').optional({ checkFalsy: true }).trim(),
 
     // ✅ PayPal email optional but if provided must be valid
     body('paypalEmail')
@@ -793,19 +874,25 @@ router.post(
 
     // ✅ Authorized Representative (validator checks dotted name; pickField supports both dotted + nested)
     body('representative.fullName')
-      .trim()
-      .notEmpty()
-      .withMessage('Authorized representative full name is required'),
+      .custom((_, { req }) => {
+        const v = pickField(req.body, 'representative.fullName', '');
+        if (!v) throw new Error('Authorized representative full name is required');
+        return true;
+      }),
 
     body('representative.phone')
-      .trim()
-      .notEmpty()
-      .withMessage('Authorized representative cellphone number is required'),
+      .custom((_, { req }) => {
+        const v = pickField(req.body, 'representative.phone', '');
+        if (!v) throw new Error('Authorized representative cellphone number is required');
+        return true;
+      }),
 
     body('representative.idNumber')
-      .trim()
-      .notEmpty()
-      .withMessage('Authorized representative ID number is required'),
+      .custom((_, { req }) => {
+        const v = pickField(req.body, 'representative.idNumber', '');
+        if (!v) throw new Error('Authorized representative ID number is required');
+        return true;
+      }),
 
     // Terms agreement
     body('terms')
@@ -853,11 +940,12 @@ router.post(
         officialNumber,
         officialNumberType,
         phone,
-        country,
+        countryCode,
         city,
-        address,
-
-        paypalEmail,     // optional
+        state,
+        postalCode,
+        addressLine1,
+        addressLine2,
         payoutsEnabled,  // "1"/"0"/"on"
       } = req.body;
 
@@ -869,7 +957,16 @@ router.post(
       const emailNorm = normalizeEmail(email);
 
       // ✅ payouts toggle
-      const payoutsOn = String(payoutsEnabled || '0') === '1';
+      const peRaw = payoutsEnabled;
+      const payoutsOn = Array.isArray(peRaw)
+        ? peRaw.includes('1') || peRaw.includes('on') || peRaw.includes('true')
+        : ['1', 'on', 'true', 'yes'].includes(String(peRaw || '').trim().toLowerCase());
+
+      // ✅ paypalEmail may be missing if the input was disabled on the client
+      const paypalFromBodyExists = Object.prototype.hasOwnProperty.call(req.body || {}, 'paypalEmail');
+      const paypalEmailRaw = paypalFromBodyExists
+        ? String(req.body.paypalEmail || '').trim()
+        : '';
 
       // ✅ quick duplicate check (DB unique index is still the final authority)
       const existing = await Business.findOne({ email: emailNorm }).select('_id').lean();
@@ -887,7 +984,7 @@ router.post(
       const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
       // ✅ internal business id
-      const internalBusinessId = `BIZ${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const internalBusinessId = `BIZ-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
 
       const business = new Business({
         name: String(name || '').trim(),
@@ -901,9 +998,24 @@ router.post(
         officialNumberType: officialNumberType || 'OTHER',
 
         phone: String(phone || '').trim(),
-        country: String(country || '').trim(),
+
+        /**
+         * ✅ Shippo-ready structured fields
+         */
+        countryCode: String(countryCode || '').trim().toUpperCase(),
         city: String(city || '').trim(),
-        address: String(address || '').trim(),
+        state: String(state || '').trim(),
+        postalCode: String(postalCode || '').trim(),
+        addressLine1: String(addressLine1 || '').trim(),
+        addressLine2: String(addressLine2 || '').trim(),
+
+        /**
+         * ✅ Backwards-compatible legacy fields (do NOT break other parts of your app)
+         * - country: store ISO2 code
+         * - address: combine line1 + line2 for older screens that display business.address
+         */
+        country: String(req.body.country || '').trim(), // ✅ human readable (legacy)
+        address: `${String(addressLine1 || '').trim()}${addressLine2 ? `, ${String(addressLine2).trim()}` : ''}`, // ✅ legacy
 
         representative: {
           fullName: repFullName,
@@ -931,7 +1043,7 @@ router.post(
       });
 
       // ✅ The ONLY place we set payouts during signup:
-      const applied = applyPaypalPayouts(business, paypalEmail, payoutsOn);
+      const applied = applyPaypalPayouts(business, paypalEmailRaw, payoutsOn);
       if (!applied || applied.ok !== true) {
         const msg = applied?.error || 'Invalid PayPal email.';
         req.flash('error', msg);
@@ -1028,8 +1140,7 @@ router.post(
     body('password').notEmpty().withMessage('Password is required'),
   ],
   async (req, res) => {
-    console.log('✅ Business login attempt, session:', req.session);
-
+    console.log('✅ Business login attempt:', { hasSession: !!req.session, hasBiz: !!req.session?.business });
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       req.flash('error', 'Please fix the errors and try again.');
@@ -1070,6 +1181,18 @@ router.post(
 
       // If not verified: resend link + send to verify page
       if (!business.isVerified) {
+
+        const lastSent = business.verificationEmailSentAt
+          ? new Date(business.verificationEmailSentAt).getTime()
+          : 0;
+
+        const cooldownMs = 60 * 1000;
+        if (lastSent && Date.now() - lastSent < cooldownMs) {
+          const secs = Math.ceil((cooldownMs - (Date.now() - lastSent)) / 1000);
+          req.flash('warning', `Please wait ${secs}s before requesting another verification email.`);
+          return req.session.save(() => res.redirect('/business/verify-pending'));
+        }
+
         const now = new Date();
         let token = business.emailVerificationToken;
         const expired =
@@ -1153,7 +1276,12 @@ router.post(
  * -------------------------------------------------------- */
 router.get('/profile/edit-bank', requireBusiness, async (req, res) => {
   try {
-    const businessId = req.session?.business?._id;
+    const businessId = req.business?._id;
+
+    if (!businessId || !mongoose.isValidObjectId(businessId)) {
+      req.flash('error', 'Please log in again.');
+      return res.redirect('/business/login');
+    }
 
     const business = await Business.findById(businessId)
       .select('name email role bankDetails') // only what this page needs
@@ -1183,47 +1311,91 @@ router.get('/profile/edit-bank', requireBusiness, async (req, res) => {
 // POST /business/profile/update-bank
 router.post('/profile/update-bank', requireBusiness, async (req, res, next) => {
   try {
-    const bizId = req.session?.business?._id || req.session?.business?.id;
+    const bizId = req.business?._id;
     if (!bizId || !mongoose.isValidObjectId(bizId)) {
       req.flash('error', 'Please log in again.');
       return res.redirect('/business/login');
     }
 
-    // Accept BOTH: nested (bankDetails[...]) AND dotted (bankDetails.xxx)
-    const bd = req.body.bankDetails || {};
-    const pick = (key) =>
-      String(
+    // Accept ALL styles:
+    // 1) nested: bankDetails[bankName]
+    // 2) dotted: bankDetails.bankName
+    // 3) flat:   bankName
+    const bd = req.body?.bankDetails || {};
+
+    const pick = (key) => {
+      const v =
         bd?.[key] ??
         req.body?.[`bankDetails.${key}`] ??
-        ''
-      ).trim();
-
-    const update = {
-      'bankDetails.accountHolderName': pick('accountHolderName'),
-      'bankDetails.bankName': pick('bankName'),
-      'bankDetails.accountNumber': pick('accountNumber').replace(/\s+/g, ''),
-      'bankDetails.branchCode': pick('branchCode'),
-      'bankDetails.accountType': pick('accountType'),
-      'bankDetails.currency': pick('currency'),
-      'bankDetails.swiftCode': pick('swiftCode'),
-      'bankDetails.iban': pick('iban'),
-      'bankDetails.payoutMethod': pick('payoutMethod') || 'bank',
-      'bankDetails.updatedAt': new Date(),
+        req.body?.[key] ??
+        '';
+      return String(v ?? '').trim();
     };
 
-    // Optional: require bank payout fields when payoutMethod=bank
-    if (update['bankDetails.payoutMethod'] === 'bank') {
-      if (!update['bankDetails.accountHolderName'] || !update['bankDetails.accountNumber']) {
-        req.flash('error', 'Please enter Account Holder Name and Account Number.');
-        return res.redirect('/business/profile/edit-bank');
+    // Build $set only for non-empty values (prevents wiping saved data)
+    const set = {};
+    const setIf = (path, val) => {
+      if (val !== undefined && val !== null) {
+        const s = String(val).trim();
+        if (s !== '') set[path] = s;
+      }
+    };
+
+    // Pull submitted values
+    const payoutMethod = pick('payoutMethod') || 'bank';
+
+    const accountHolderName = pick('accountHolderName');
+    const bankName = pick('bankName');
+    const accountNumber = pick('accountNumber').replace(/\s+/g, '');
+    const branchCode = pick('branchCode');
+    const accountType = pick('accountType');
+    const currency = pick('currency');
+    const swiftCode = pick('swiftCode');
+    const iban = pick('iban');
+
+    // If payoutMethod=bank, require the basics IF they are trying to use bank payouts
+    // (This also prevents saving an invalid bank payout config.)
+    if (payoutMethod === 'bank') {
+      // If they submitted ANY bank field, enforce required basics
+      const submittedAnyBankField = Boolean(
+        accountHolderName ||
+          bankName ||
+          accountNumber ||
+          branchCode ||
+          accountType ||
+          currency ||
+          swiftCode ||
+          iban
+      );
+
+      if (submittedAnyBankField) {
+        if (!accountHolderName || !accountNumber) {
+          req.flash('error', 'Please enter Account Holder Name and Account Number.');
+          return res.redirect('/business/profile/edit-bank');
+        }
       }
     }
 
-    await Business.findByIdAndUpdate(
-      bizId,
-      { $set: update },
-      { new: true }
-    );
+    // Only set fields that are actually non-empty
+    setIf('bankDetails.payoutMethod', payoutMethod);
+    setIf('bankDetails.accountHolderName', accountHolderName);
+    setIf('bankDetails.bankName', bankName);
+    setIf('bankDetails.accountNumber', accountNumber);
+    setIf('bankDetails.branchCode', branchCode);
+    setIf('bankDetails.accountType', accountType);
+    setIf('bankDetails.currency', currency);
+    setIf('bankDetails.swiftCode', swiftCode);
+    setIf('bankDetails.iban', iban);
+
+    // If NOTHING to update, don’t touch DB
+    if (Object.keys(set).length === 0) {
+      req.flash('info', 'No changes detected.');
+      return res.redirect('/business/profile');
+    }
+
+    set['bankDetails.updatedAt'] = new Date();
+
+    await Business.findByIdAndUpdate(bizId, { $set: set }, { new: true });
 
     req.flash('success', '✅ Bank details updated.');
     return res.redirect('/business/profile');
@@ -1387,7 +1559,7 @@ router.get(
   requireVerifiedBusiness,
   async (req, res) => {
     try {
-      const sessionBusiness = req.session.business;
+      const sessionBusiness = getBiz(req);
       if (!sessionBusiness || !sessionBusiness._id) {
         req.flash('error', 'Session expired. Please log in again.');
         return res.redirect('/business/login');
@@ -1398,7 +1570,7 @@ router.get(
         return res.redirect('/business/dashboard');
       }
 
-      const sellerDoc = await Business.findById(sessionBusiness._id).lean();
+      const sellerDoc = await Business.findById(getBizId(req)).lean();
       if (!sellerDoc) {
         req.flash('error', 'Business not found. Please log in again.');
         return res.redirect('/business/login');
@@ -1410,11 +1582,11 @@ router.get(
         return res.redirect('/business/verify-pending');
       }
 
-      const OrderModel = require('../models/Order');
+      const OrderModel = Order;
 
       // 1) Products for this seller
       const products = await Product.find({ business: sessionBusiness._id })
-        .select('customId name price stock category imageUrl createdAt updatedAt')
+        .select('_id customId name price stock category imageUrl createdAt updatedAt')
         .sort({ updatedAt: -1, createdAt: -1 })
         .lean();
 
@@ -1430,19 +1602,33 @@ router.get(
 
       const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
 
-      // Map by customId / _id (for KPIs & matching order items)
+      // ----------------------------------------------------
+      // Build product key maps for order matching (customId + _id)
+      // ----------------------------------------------------
       const productsByKey = new Map();
       const sellerCustomIds = [];
+
       for (const p of products) {
+        // customId match
         if (p.customId) {
-          const key = String(p.customId);
-          sellerCustomIds.push(key);
-          productsByKey.set(key, p);
+          const k = String(p.customId).trim();
+          if (k) {
+            sellerCustomIds.push(k);
+            productsByKey.set(k, p);
+          }
         }
-        productsByKey.set(String(p._id), p);
+
+        // _id match
+        const oid = String(p._id || '').trim();
+        if (oid) {
+          sellerCustomIds.push(oid);
+          productsByKey.set(oid, p);
+        }
       }
 
-      const hasSellerProducts = sellerCustomIds.length > 0;
+      const sellerKeySet = new Set(sellerCustomIds);
+
+      const hasSellerProducts = sellerKeySet.size > 0;
 
       const idMatchOr = hasSellerProducts
         ? [
@@ -1459,10 +1645,7 @@ router.get(
       let recentOrders = [];
 
       if (OrderModel && hasSellerProducts) {
-        const baseOrderMatch = {
-          ...buildNonRefundedPaidMatch(OrderModel),
-          $or: idMatchOr,
-        };
+        const baseOrderMatch = buildNonRefundedPaidMatch(OrderModel, { $or: idMatchOr });
 
         const ordersAgg = await OrderModel.aggregate([
           { $match: baseOrderMatch },
@@ -1558,7 +1741,7 @@ router.get(
               item.productId || item.customId || item.pid || item.sku || '',
             ).trim();
 
-            if (!productId || !sellerCustomIds.includes(productId)) continue;
+            if (!productId || !sellerKeySet.has(productId)) continue;
 
             const quantity = Number(item.quantity || 1);
             if (!Number.isFinite(quantity) || quantity <= 0) continue;
@@ -1669,7 +1852,7 @@ router.get(
   requireVerifiedBusiness,
   async (req, res) => {
     try {
-      const sessionBusiness = req.session.business;
+      const sessionBusiness = getBiz(req);
       if (!sessionBusiness || !sessionBusiness._id) {
         req.flash('error', 'Session expired. Please log in again.');
         return res.redirect('/business/login');
@@ -1691,7 +1874,7 @@ router.get(
         return res.redirect('/business/verify-pending');
       }
 
-      const OrderModel = require('../models/Order');
+      const OrderModel = Order;
 
       // ✅ Helper: refunded/cancelled order detector (works even if fields don't exist)
       function isRefundedOrCancelledOrder(o) {
@@ -1789,7 +1972,7 @@ router.get(
           { 'items.sku': { $in: allProductIdentifiers } },
         ];
 
-        const baseOrderMatch = { $or: idMatchOr };
+        const baseOrderMatch = buildNonRefundedPaidMatch(OrderModel, { $or: idMatchOr });
 
         // ✅ Pull only minimal fields we need, then filter out refunded/cancelled orders in JS
         const rawForCounts = await OrderModel.find(baseOrderMatch)
@@ -2030,7 +2213,7 @@ router.get(
  * -------------------------------------------------------- */
 router.get('/api/supplier/kpis', requireBusiness, async (req, res) => {
   try {
-    const business = req.session.business;
+    const business = getBiz(req);
     if (!business || !business._id || business.role !== 'supplier') {
       return res.status(403).json({ ok: false, message: 'Suppliers only' });
     }
@@ -2048,7 +2231,7 @@ router.get('/api/supplier/kpis', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.get('/api/seller/kpis', requireBusiness, async (req, res) => {
   try {
-    const business = req.session.business;
+    const business = getBiz(req);
     if (!business || !business._id || business.role !== 'seller') {
       return res.status(403).json({ ok: false, message: 'Sellers only' });
     }
@@ -2078,8 +2261,7 @@ router.get('/api/seller/kpis', requireBusiness, async (req, res) => {
 
 router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
   try {
-    const sessionBusiness = req.session.business;
-
+    const sessionBusiness = getBiz(req);
     if (!sessionBusiness || !sessionBusiness._id) {
       req.flash('error', 'Session expired. Please log in again.');
       return res.redirect('/business/login');
@@ -2101,7 +2283,7 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
       return res.redirect('/business/verify-pending');
     }
 
-    const OrderModel = require('../models/Order');
+    const OrderModel = Order;
 
     // ----------------------------
     // Helpers (order + item)
@@ -2166,7 +2348,7 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
       status: { $nin: ['Cancelled', 'CANCELLED', 'Canceled', 'CANCELED', 'Voided', 'VOIDED'] },
       isRefunded: { $ne: true },
       refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED'] },
-      refundedAt: { $exists: false },
+      $or: [{ refundedAt: { $exists: false } }, { refundedAt: null }],
     };
 
     const totalOrders = await OrderModel.countDocuments(nonRefundedCancelMatch);
@@ -2298,7 +2480,7 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.get('/api/buyer/stats', requireBusiness, async (req, res) => {
   try {
-    const sessionBusiness = req.session.business;
+    const sessionBusiness = getBiz(req);
     if (!sessionBusiness?._id) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     if (sessionBusiness.role !== 'buyer') return res.status(403).json({ ok: false, error: 'Forbidden' });
 
@@ -2306,14 +2488,14 @@ router.get('/api/buyer/stats', requireBusiness, async (req, res) => {
     if (!business) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     if (!business.isVerified) return res.status(403).json({ ok: false, error: 'Unverified' });
 
-    const OrderModel = require('../models/Order');
+    const OrderModel = Order;
 
     const nonRefundedCancelMatch = {
       businessBuyer: business._id,
       status: { $nin: ['Cancelled', 'CANCELLED', 'Canceled', 'CANCELED', 'Voided', 'VOIDED'] },
       isRefunded: { $ne: true },
       refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED'] },
-      refundedAt: { $exists: false },
+      $or: [{ refundedAt: { $exists: false } }, { refundedAt: null }],
     };
 
     const totalOrders = await OrderModel.countDocuments(nonRefundedCancelMatch);
@@ -2365,7 +2547,11 @@ router.get('/api/buyer/stats', requireBusiness, async (req, res) => {
  * 🧭 GET: Universal Dashboard Redirector
  * -------------------------------------------------------- */
 router.get('/dashboard', requireBusiness, (req, res) => {
-  const { role } = req.session.business;
+  const { role } = getBiz(req) || {};
+  if (!role) {
+    req.flash('error', 'Please log in again.');
+    return res.redirect('/business/login');
+  }
 
   switch (role) {
     case 'seller':
@@ -2432,7 +2618,7 @@ router.post('/change-password', requireBusiness, async (req, res) => {
       return res.redirect('/business/change-password');
     }
 
-    const business = await Business.findById(req.session.business._id);
+    const business = await Business.findById(getBizId(req));
     if (!business) {
       req.flash('error', 'Business not found. Please log in again.');
       return res.redirect('/business/login');
@@ -2461,10 +2647,10 @@ router.post('/change-password', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.get('/profile', requireBusiness, async (req, res) => {
   try {
-    const bizId = req.session?.business?._id || req.session?.business?.id;
+    const bizId = req.business?._id;
 
-    if (!bizId) {
-      req.flash('error', 'Please log in to continue.');
+    if (!bizId || !mongoose.isValidObjectId(bizId)) {
+      req.flash('error', 'Please log in again.');
       return res.redirect('/business/login');
     }
 
@@ -2488,17 +2674,31 @@ router.get('/profile', requireBusiness, async (req, res) => {
 
     // ✅ Mask account number for display (profile page should not show full number)
     const bd = business.bankDetails || {};
-    const rawAcc = bd.accountNumber ? String(bd.accountNumber).replace(/\s+/g, '') : '';
-    const last4 = rawAcc.length >= 4 ? rawAcc.slice(-4) : '';
+
+    // Try multiple possible saved shapes (old/new)
+    const rawAcc = String(
+      bd.accountNumber || '' // preferred (unmasked)
+    ).replace(/\s+/g, '');
+
+    const maskedFromDb = String(bd.accountNumberMasked || '').trim();
+    const last4FromDb = String(bd.accountNumberLast4 || '').trim();
+
+    const last4 =
+      rawAcc.length >= 4
+        ? rawAcc.slice(-4)
+        : (last4FromDb ? last4FromDb.slice(-4) : '');
+
+    // If DB already has a masked value, keep it; otherwise generate it from last4
+    const finalMasked =
+      maskedFromDb
+        ? maskedFromDb
+        : (last4 ? `****${last4}` : '—');
 
     business.bankDetails = {
       ...bd,
-      accountNumberLast4: last4,
-      accountNumberMasked: last4 ? `****${last4}` : '****',
+      accountNumberLast4: last4 || (last4FromDb ? last4FromDb.slice(-4) : ''),
+      accountNumberMasked: finalMasked,
     };
-
-    // Optional hard safety: never send full accountNumber to the profile view
-    delete business.bankDetails.accountNumber;
 
     return res.render('business-profile', {
       title: 'Business Profile',
@@ -2514,345 +2714,13 @@ router.get('/profile', requireBusiness, async (req, res) => {
 });
 
 /* ----------------------------------------------------------
- * ✏️ Edit Profile (GET)  (UPDATED: includes payouts)
- * -------------------------------------------------------- */
-router.get('/profile/edit', requireBusiness, async (req, res) => {
-  try {
-    const bizId = req.session?.business?._id || req.session?.business?.id;
-    if (!bizId || !mongoose.isValidObjectId(bizId)) {
-      req.flash('error', 'Please log in again.');
-      return res.redirect('/business/login');
-    }
-
-    const business = await Business.findById(bizId)
-      .select([
-        'name email role phone country city address',
-        'officialNumber officialNumberType',
-        'representative',
-        'bankDetails',
-        // ✅ PayPal payouts
-        'payouts',
-        'verification isVerified createdAt',
-      ].join(' '))
-      .lean();
-
-    if (!business) {
-      req.flash('error', 'Business not found.');
-      return res.redirect('/business/login');
-    }
-
-    // ✅ Ensure payouts exists for EJS safety
-    business.payouts = business.payouts || { enabled: false, paypalEmail: '' };
-
-    return res.render('business-profile-edit', {
-      title: 'Edit Business Profile',
-      business,
-      themeCss: res.locals.themeCss,
-      nonce: res.locals.nonce,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ Edit profile page error:', err);
-    req.flash('error', 'Failed to load edit profile page.');
-    return res.redirect('/business/profile');
-  }
-});
-
-/* ----------------------------------------------------------
- * ✏️ Edit Profile (POST)  (FIXED: payoutsEnabled + paypalEmail)
- * -------------------------------------------------------- */
-router.post('/profile/edit', requireBusiness, async (req, res) => {
-  try {
-    const bizId = req.session?.business?._id || req.session?.business?.id;
-    if (!bizId || !mongoose.isValidObjectId(bizId)) {
-      req.flash('error', 'Please log in again.');
-      return res.redirect('/business/login');
-    }
-
-    const business = await Business.findById(bizId);
-    if (!business) {
-      req.flash('error', 'Business not found.');
-      return res.redirect('/business/login');
-    }
-
-    const {
-      // Account
-      email,
-
-      // ✅ PayPal payouts (from your form)
-      paypalEmail,
-      payoutsEnabled,
-
-      // Basic profile
-      name,
-      phone,
-      country,
-      city,
-      address,
-
-      // Official number
-      officialNumber,
-      officialNumberType,
-
-      // Authorized representative (nested)
-      representative = {},
-
-      // Bank details (nested)
-      bankDetails = {},
-
-      // Password change
-      currentPassword,
-      newPassword,
-      confirmPassword,
-    } = req.body || {};
-
-    const isNonEmptyStr = (v) => typeof v === 'string' && v.trim().length > 0;
-
-    // ------------------------------------------------
-    // Track changes we need after save
-    // ------------------------------------------------
-    const currentEmail = normalizeEmail(business.email);
-    const nextEmail =
-      email !== undefined ? normalizeEmail(email) : currentEmail;
-    const emailChanged =
-      email !== undefined && nextEmail && nextEmail !== currentEmail;
-
-    const currentOfficial = String(business.officialNumber || '').trim();
-    const nextOfficial =
-      officialNumber !== undefined
-        ? String(officialNumber || '').trim()
-        : currentOfficial;
-    const officialChanged =
-      officialNumber !== undefined && nextOfficial && nextOfficial !== currentOfficial;
-
-    // ------------------------------------------------
-    // Validate email (if provided)
-    // ------------------------------------------------
-    if (email !== undefined) {
-      if (!nextEmail) {
-        req.flash('error', 'Valid email is required.');
-        return res.redirect('/business/profile/edit');
-      }
-
-      if (emailChanged) {
-        const exists = await Business.findOne({
-          email: nextEmail,
-          _id: { $ne: business._id },
-        }).lean();
-
-        if (exists) {
-          req.flash('error', 'That email is already in use by another account.');
-          return res.redirect('/business/profile/edit');
-        }
-      }
-    }
-
-    // ------------------------------------------------
-    // ✅ PayPal payouts (FIXED)
-    // - convert payoutsEnabled to boolean once
-    // - let applyPaypalPayouts do validation + updating
-    // ------------------------------------------------
-    const payoutsOn = String(payoutsEnabled || '0') === '1';
-
-    const applied = applyPaypalPayouts(business, paypalEmail, payoutsOn);
-    if (!applied || applied.ok !== true) {
-      req.flash('error', applied?.error || 'Invalid PayPal payouts settings.');
-      return res.redirect('/business/profile/edit'); // ✅ correct redirect
-    }
-
-    // ------------------------------------------------
-    // Basic profile fields
-    // ------------------------------------------------
-    if (name !== undefined && isNonEmptyStr(name)) business.name = name.trim();
-    if (phone !== undefined && isNonEmptyStr(phone)) business.phone = phone.trim();
-    if (country !== undefined && isNonEmptyStr(country)) business.country = country.trim();
-    if (city !== undefined && isNonEmptyStr(city)) business.city = city.trim();
-    if (address !== undefined && isNonEmptyStr(address)) business.address = address.trim();
-
-    // ------------------------------------------------
-    // Official number fields (and reset verification on change)
-    // ------------------------------------------------
-    if (officialNumber !== undefined) {
-      if (!nextOfficial) {
-        req.flash('error', 'Business number is required.');
-        return res.redirect('/business/profile/edit');
-      }
-      business.officialNumber = nextOfficial;
-    }
-
-    if (officialNumberType !== undefined) {
-      const v = String(officialNumberType || '').trim();
-      const allowed = ['CIPC_REG', 'VAT', 'TIN', 'OTHER'];
-      if (v && !allowed.includes(v)) {
-        req.flash('error', 'Business number type is invalid.');
-        return res.redirect('/business/profile/edit');
-      }
-      if (v) business.officialNumberType = v;
-    }
-
-    if (officialChanged) {
-      business.verification = business.verification || {};
-      business.verification.status = 'pending';
-      business.verification.reason = undefined;
-      business.verification.updatedAt = new Date();
-    }
-
-    // ------------------------------------------------
-    // Authorized representative
-    // ------------------------------------------------
-    business.representative = business.representative || {};
-
-    if (representative.fullName !== undefined && isNonEmptyStr(representative.fullName)) {
-      business.representative.fullName = representative.fullName.trim();
-    }
-    if (representative.phone !== undefined && isNonEmptyStr(representative.phone)) {
-      business.representative.phone = representative.phone.trim();
-    }
-    if (representative.idNumber !== undefined && isNonEmptyStr(representative.idNumber)) {
-      business.representative.idNumber = representative.idNumber.trim();
-    }
-
-    // ------------------------------------------------
-    // Bank details (same behavior as yours)
-    // ------------------------------------------------
-    business.bankDetails = business.bankDetails || {};
-    let bankTouched = false;
-
-    const setBank = (key, val) => {
-      if (val !== undefined) {
-        const s = typeof val === 'string' ? val.trim() : val;
-        if (s !== '' && s !== null) {
-          business.bankDetails[key] = s;
-          bankTouched = true;
-        }
-      }
-    };
-
-    setBank('accountHolderName', bankDetails.accountHolderName);
-    setBank('bankName', bankDetails.bankName);
-    setBank('accountNumber', bankDetails.accountNumber);
-    setBank('branchCode', bankDetails.branchCode);
-    setBank('swiftCode', bankDetails.swiftCode);
-    setBank('iban', bankDetails.iban);
-    setBank('accountType', bankDetails.accountType);
-    setBank('currency', bankDetails.currency);
-
-    if (bankDetails.payoutMethod !== undefined) {
-      const pm = String(bankDetails.payoutMethod || '').trim();
-      const allowedPm = ['bank', 'paypal', 'payoneer', 'wise', 'other'];
-      if (pm && !allowedPm.includes(pm)) {
-        req.flash('error', 'Payout method is invalid.');
-        return res.redirect('/business/profile/edit');
-      }
-      if (pm) {
-        business.bankDetails.payoutMethod = pm;
-        bankTouched = true;
-      }
-    }
-
-    if (bankTouched) business.bankDetails.updatedAt = new Date();
-
-    // ------------------------------------------------
-    // Optional password change
-    // ------------------------------------------------
-    const wantsPwChange =
-      (newPassword && String(newPassword).trim().length) ||
-      (confirmPassword && String(confirmPassword).trim().length) ||
-      (currentPassword && String(currentPassword).trim().length);
-
-    if (wantsPwChange) {
-      if (!currentPassword || String(currentPassword).trim().length < 1) {
-        req.flash('error', 'Current password is required to change password.');
-        return res.redirect('/business/profile/edit');
-      }
-
-      const ok = await bcrypt.compare(String(currentPassword), business.password);
-      if (!ok) {
-        req.flash('error', 'Current password is incorrect.');
-        return res.redirect('/business/profile/edit');
-      }
-
-      if (!newPassword || String(newPassword).trim().length < 6) {
-        req.flash('error', 'New password must be at least 6 characters.');
-        return res.redirect('/business/profile/edit');
-      }
-
-      if (String(newPassword) !== String(confirmPassword || '')) {
-        req.flash('error', 'New password and confirm password do not match.');
-        return res.redirect('/business/profile/edit');
-      }
-
-      business.password = await bcrypt.hash(String(newPassword).trim(), 12);
-    }
-
-    // ------------------------------------------------
-    // ✅ Email change: set token, SAVE FIRST, THEN send mail
-    // ------------------------------------------------
-    let token = null;
-
-    if (emailChanged) {
-      business.email = nextEmail;
-      business.isVerified = false;
-      business.emailVerifiedAt = null;
-
-      token = crypto.randomBytes(32).toString('hex');
-      business.emailVerificationToken = token;
-      business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      business.verificationEmailSentAt = new Date();
-    }
-
-    // ✅ Save first so payouts + token are stored
-    await business.save();
-
-    // Keep session in sync (including payouts)
-    if (!req.session.business) req.session.business = {};
-    req.session.business._id = business._id;
-    req.session.business.name = business.name;
-    req.session.business.email = business.email;
-    req.session.business.isVerified = business.isVerified;
-    req.session.business.payouts = {
-      enabled: business.payouts?.enabled === true,
-      paypalEmail: business.payouts?.paypalEmail || '',
-    };
-
-    // ✅ Send mail after save
-    if (emailChanged) {
-      try {
-        await sendBusinessVerificationEmail(business, token, req);
-        req.flash('success', 'Email updated. Please verify your new email address.');
-      } catch (mailErr) {
-        console.error(
-          '❌ Failed to send verification email after email change:',
-          mailErr?.response?.body || mailErr?.message || mailErr
-        );
-        req.flash(
-          'warning',
-          'Email updated, but verification email could not be sent. Please use resend on the verification page.'
-        );
-      }
-      return res.redirect('/business/verify-pending');
-    }
-
-    req.flash('success', '✅ Profile updated successfully.');
-    return res.redirect('/business/profile');
-  } catch (err) {
-    console.error('❌ Profile update error:', err);
-    req.flash('error', '❌ Failed to update profile.');
-    return res.redirect('/business/profile');
-  }
-});
-
-/* ----------------------------------------------------------
  * ✏️ Edit Business Details ONLY (GET)
  * Renders: views/business-profile-edit-details.ejs
  * URL: /business/profile/edit-details
  * -------------------------------------------------------- */
 router.get('/profile/edit-details', requireBusiness, async (req, res) => {
   try {
-    const bizId = req.session?.business?._id || req.session?.business?.id;
+    const bizId = req.business?._id;
     if (!bizId || !mongoose.isValidObjectId(bizId)) {
       req.flash('error', 'Please log in again.');
       return res.redirect('/business/login');
@@ -2863,7 +2731,7 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
     const business = await Business.findById(bizId)
       .select(
         [
-          'name email role phone country city address',
+          'name email role phone country countryCode city state postalCode addressLine1 addressLine2 address',
           'officialNumber officialNumberType',
           'verification isVerified',
           'payouts',
@@ -2907,50 +2775,102 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.post('/profile/update-details', requireBusiness, async (req, res) => {
   try {
-    console.log('✅ HIT POST /business/profile/update-details');
-    console.log('BODY:', req.body);
-
-    const bizId = req.session?.business?._id || req.session?.business?.id;
-    if (!bizId || !mongoose.isValidObjectId(bizId)) {
-      req.flash('error', 'Please log in again.');
-      return res.redirect('/business/login');
+    const bizId = String(req.business?._id || '').trim();
+    if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
+      console.log('✅ HIT POST /business/profile/update-details');
+      console.log('BODY:', req.body);
     }
 
-    const existing = await Business.findById(bizId).select('email officialNumber payouts').lean();
-    if (!existing) {
+    // Load business doc (this is the single source of truth)
+    const business = await Business.findById(bizId).select(
+      [
+        'name email phone',
+        'country countryCode city state postalCode addressLine1 addressLine2 address',
+        'officialNumber officialNumberType',
+        'payouts verification isVerified',
+        'emailVerifiedAt emailVerificationToken emailVerificationExpires verificationEmailSentAt',
+      ].join(' ')
+    );
+
+    if (!business) {
       req.flash('error', 'Business not found. Please log in again.');
       return res.redirect('/business/login');
     }
 
-    // ---- Pick + sanitize (matches your EJS names) ----
-    const name = String(req.body?.name || '').trim();
+    // Use existing values from the loaded doc
+    const existingEmail = normalizeEmail(business.email);
+    const existingPaypalEmail = String(business?.payouts?.paypalEmail || '').trim();
 
-    const emailRaw = String(req.body?.email || '').trim();
+    // ---- Pick + sanitize (BODY first, fallback to DB so form can still save) ----
+    const name = String(req.body?.name ?? business.name ?? '').trim();
+
+    const emailRaw = String(req.body?.email ?? business.email ?? '').trim();
     const email = normalizeEmail(emailRaw);
 
-    const phone = String(req.body?.phone || '').trim();
-    const country = String(req.body?.country || '').trim();
-    const city = String(req.body?.city || '').trim();
-    const address = String(req.body?.address || '').trim();
+    const phone = String(req.body?.phone ?? business.phone ?? '').trim();
 
-    const officialNumber = String(req.body?.officialNumber || '').trim();
-    const officialNumberType = String(req.body?.officialNumberType || 'OTHER').trim();
+    // ✅ Human readable (legacy)
+    const country = String(req.body?.country ?? business.country ?? '').trim();
+
+    // ✅ Shippo-ready structured fields (fallback to DB values)
+    const countryCode = String(req.body?.countryCode ?? business.countryCode ?? '')
+      .trim()
+      .toUpperCase();
+
+    const city = String(req.body?.city ?? business.city ?? '').trim();
+    const state = String(req.body?.state ?? business.state ?? '').trim();
+    const postalCode = String(req.body?.postalCode ?? business.postalCode ?? '').trim();
+
+    // Accept BOTH naming styles:
+    // - new: addressLine1/addressLine2
+    // - EJS: street1/street2
+    const addressLine1 = String(
+      req.body?.addressLine1 ?? req.body?.street1 ?? business.addressLine1 ?? ''
+    ).trim();
+
+    const addressLine2 = String(
+      req.body?.addressLine2 ?? req.body?.street2 ?? business.addressLine2 ?? ''
+    ).trim();
+
+    // ✅ Legacy combined address
+    const address = `${addressLine1}${addressLine2 ? `, ${addressLine2}` : ''}`.trim();
+
+    const officialNumber = String(req.body?.officialNumber ?? business.officialNumber ?? '').trim();
+    const officialNumberType = String(req.body?.officialNumberType ?? business.officialNumberType ?? 'OTHER').trim();
 
     // payoutsEnabled comes as "0", "1", or ["0","1"]
     const peRaw = req.body?.payoutsEnabled;
     const payoutsOn = Array.isArray(peRaw)
-      ? peRaw.includes('1')
-      : String(peRaw || '0') === '1';
+      ? peRaw.includes('1') || peRaw.includes('on') || peRaw.includes('true')
+      : ['1', 'on', 'true', 'yes'].includes(String(peRaw || '').trim().toLowerCase());
 
     // paypalEmail may be missing when input is disabled
     const paypalFromBodyExists = Object.prototype.hasOwnProperty.call(req.body || {}, 'paypalEmail');
     const paypalEmailRaw = paypalFromBodyExists
       ? String(req.body.paypalEmail || '').trim()
-      : String(existing?.payouts?.paypalEmail || '').trim();
+      : existingPaypalEmail;
 
     // ---- Required field checks ----
-    if (!name || !email || !phone || !country || !city || !address || !officialNumber) {
+        // ✅ Required (Shippo-ready + legacy)
+    if (!name || !email || !phone || !country || !officialNumber) {
       req.flash('error', 'Please fill in all required fields.');
+      return res.redirect('/business/profile/edit-details');
+    }
+
+    // ✅ Shippo-ready required fields
+    if (!countryCode || countryCode.length !== 2) {
+      req.flash('error', 'Country code must be 2 letters (ISO 2), e.g., ZA, US.');
+      return res.redirect('/business/profile/edit-details');
+    }
+
+    if (!city || !postalCode || !addressLine1) {
+      req.flash('error', 'Please fill in your City, Postal Code, and Address Line 1.');
+      return res.redirect('/business/profile/edit-details');
+    }
+
+    // ✅ Same rule as /signup
+    if (countryCode === 'US' && !state) {
+      req.flash('error', 'State is required for US addresses.');
       return res.redirect('/business/profile/edit-details');
     }
 
@@ -2962,8 +2882,7 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
     }
 
     // ---- Email uniqueness if changed ----
-    const currentEmail = normalizeEmail(existing.email);
-    const emailChanged = email !== currentEmail;
+    const emailChanged = email !== existingEmail;
 
     if (emailChanged) {
       const exists = await Business.findOne({ email, _id: { $ne: bizId } }).lean();
@@ -2974,94 +2893,96 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
     }
 
     // ---- Official number change => reset verification status ----
-    const currentOfficial = String(existing.officialNumber || '').trim();
+    const currentOfficial = String(business.officialNumber || '').trim();
     const officialChanged = officialNumber !== currentOfficial;
 
-    // ---- Build payouts update (same rules as signup) ----
-    // IMPORTANT: when payoutsOn=true, paypalEmail MUST be a valid email
-    const paypalEmailNorm = String(paypalEmailRaw || '').trim().toLowerCase();
-
-    if (payoutsOn && !paypalEmailNorm) {
-      req.flash('error', 'PayPal payouts enabled, but PayPal email is missing.');
+    // ---- PayPal payouts: use the SAME helper as /signup ----
+    const applied = applyPaypalPayouts(business, paypalEmailRaw, payoutsOn);
+    if (!applied || applied.ok !== true) {
+      req.flash('error', applied?.error || 'Invalid PayPal payouts settings.');
       return res.redirect('/business/profile/edit-details');
     }
 
-    // This matches your schema validator (simple email)
-    if (paypalEmailNorm && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmailNorm)) {
-      req.flash('error', 'PayPal email must be a valid email address.');
-      return res.redirect('/business/profile/edit-details');
-    }
+    // ---- Apply allowed fields on the doc ----
+    business.name = name;
+    business.phone = phone;
 
-    // If payouts are OFF, we keep email (or you can clear it—your choice)
-    const payoutsUpdate = {
-      'payouts.enabled': payoutsOn,
-      'payouts.paypalEmail': payoutsOn ? paypalEmailNorm : paypalEmailNorm, // keep stored email even when disabled
-      'payouts.updatedAt': new Date(),
-    };
+    // ✅ Shippo-ready structured address (single source of truth for shipping)
+    business.countryCode = countryCode;
+    business.city = city;
+    business.state = state; // may be empty for non-US
+    business.postalCode = postalCode;
+    business.addressLine1 = addressLine1;
+    business.addressLine2 = addressLine2;
 
-    // ---- If email changed: require re-verify + set token ----
+    // ✅ Legacy fields (do NOT break other pages)
+    business.country = country; // human readable legacy
+    business.address = address; // combined legacy
+
+    business.officialNumber = officialNumber;
+    business.officialNumberType = officialNumberType;
+
+    // ---- If email changed: require re-verify + set token (DECLARE ONCE) ----
     let token = null;
-    const verifyUpdate = {};
     if (emailChanged) {
       token = crypto.randomBytes(32).toString('hex');
-      verifyUpdate.isVerified = false;
-      verifyUpdate.emailVerifiedAt = null;
-      verifyUpdate.emailVerificationToken = token;
-      verifyUpdate.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      verifyUpdate.verificationEmailSentAt = new Date();
+      business.email = email;
+
+      business.isVerified = false;
+      business.emailVerifiedAt = null;
+
+      business.emailVerificationToken = token;
+      business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      business.verificationEmailSentAt = new Date();
     }
 
-    // ---- ONLY update allowed fields ----
-    const update = {
-      $set: {
-        name,
-        email,
-        phone,
-        country,
-        city,
-        address,
-        officialNumber,
-        officialNumberType,
-        ...payoutsUpdate,
-        ...verifyUpdate,
-        ...(officialChanged
-          ? {
-              'verification.status': 'pending',
-              'verification.reason': '',
-              'verification.updatedAt': new Date(),
-            }
-          : {}),
-      },
-    };
-
-    const updated = await Business.findByIdAndUpdate(bizId, update, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!updated) {
-      req.flash('error', 'Business not found. Please log in again.');
-      return res.redirect('/business/login');
+    // ---- Official number change => reset verification status ----
+    if (officialChanged) {
+      business.verification = business.verification || {};
+      business.verification.status = 'pending';
+      business.verification.reason = '';
+      business.verification.updatedAt = new Date();
     }
+
+    // Save
+    await business.save();
 
     // ---- Keep session in sync ----
     if (!req.session.business) req.session.business = {};
-    req.session.business.name = updated.name;
-    req.session.business.email = updated.email;
-    req.session.business.isVerified = updated.isVerified;
+
+    req.session.business.name = business.name;
+    req.session.business.email = business.email;
+    req.session.business.phone = business.phone || '';
+    req.session.business.isVerified = business.isVerified;
     req.session.business.payouts = {
-      enabled: updated.payouts?.enabled === true,
-      paypalEmail: updated.payouts?.paypalEmail || '',
+      enabled: business.payouts?.enabled === true,
+      paypalEmail: business.payouts?.paypalEmail || '',
     };
+
+    // ✅ keep address fields in session too (prevents “old profile data” issues)
+    req.session.business.country = business.country || '';
+    req.session.business.countryCode = business.countryCode || '';
+    req.session.business.city = business.city || '';
+    req.session.business.state = business.state || '';
+    req.session.business.postalCode = business.postalCode || '';
+    req.session.business.addressLine1 = business.addressLine1 || '';
+    req.session.business.addressLine2 = business.addressLine2 || '';
+    req.session.business.address = business.address || '';
 
     // ---- If email changed, send verification mail ----
     if (emailChanged) {
       try {
-        await sendBusinessVerificationEmail(updated, token, req);
+        await sendBusinessVerificationEmail(business, token, req);
         req.flash('success', '✅ Details saved. Please verify your new email address.');
       } catch (mailErr) {
-        console.error('❌ send verification after email change failed:', mailErr?.response?.body || mailErr?.message || mailErr);
-        req.flash('warning', 'Details saved, but we could not send the verification email. Use “Resend verification”.');
+        console.error(
+          '❌ send verification after email change failed:',
+          mailErr?.response?.body || mailErr?.message || mailErr
+        );
+        req.flash(
+          'warning',
+          'Details saved, but we could not send the verification email. Use “Resend verification”.'
+        );
       }
       return res.redirect('/business/verify-pending');
     }
@@ -3080,22 +3001,34 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
  * -------------------------------------------------------- */
 router.get('/profile/delete', requireBusiness, async (req, res) => {
   try {
-    const business = await Business.findById(req.session.business._id).lean();
+    const bizId = getBizId(req);
+    if (!bizId) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const business = await Business.findById(bizId).lean();
     if (!business) {
       req.flash('error', 'Business not found.');
       return res.redirect('/business/login');
     }
 
-    res.render('delete-profile', {
-      title: 'Delete Profile',
+    return res.render('business-delete', {
+      title: 'Delete Business Account',
       business,
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      verificationToken: '',
+      csrfToken: req.csrfToken ? req.csrfToken() : '',
+
+      // ✅ so the page can show messages
+      success: req.flash('success'),
+      error: req.flash('error'),
     });
   } catch (err) {
     console.error('❌ Delete profile render error:', err);
     req.flash('error', 'Failed to load delete confirmation page.');
-    res.redirect('/business/profile');
+    return res.redirect('/business/profile');
   }
 });
 
@@ -3111,11 +3044,40 @@ router.post('/profile/delete', requireBusiness, async (req, res) => {
       return res.redirect('/business/login');
     }
 
+    // ✅ NEW: stop deletion if business still has products
+    const hasProducts = await Product.exists({ business: businessId });
+    if (hasProducts) {
+      req.flash(
+        'error',
+        'Deletion failed: your account still have products. If you really want to delete this account you must go to your dashboard delete its product first here: /products/all'
+      );
+      return res.redirect('/business/profile/delete');
+    }
+
+    const password = String(req.body.password || '').trim();
+    if (!password) {
+      req.flash('error', 'Please enter your password to confirm deletion.');
+      return res.redirect('/business/profile/delete');
+    }
+
+    // Load business + password hash (your schema might have select:false)
+    const business = await Business.findById(businessId).select('+password');
+    if (!business) {
+      req.flash('error', 'Business not found.');
+      return res.redirect('/business/login');
+    }
+
+    const bcrypt = require('bcrypt');
+    const ok = await bcrypt.compare(password, String(business.password || ''));
+    if (!ok) {
+      req.flash('error', 'Incorrect password. Deletion cancelled.');
+      return res.redirect('/business/profile/delete');
+    }
+
     await Business.findByIdAndDelete(businessId);
 
     const message = '✅ Business account deleted.';
 
-    // Regenerate session to clear old data and show flash on fresh session
     req.session.regenerate((err) => {
       if (err) {
         console.error('❌ Delete business session regenerate error:', err);
@@ -3129,7 +3091,7 @@ router.post('/profile/delete', requireBusiness, async (req, res) => {
   } catch (err) {
     console.error('❌ Delete business error:', err);
     req.flash('error', 'Failed to delete account.');
-    res.redirect('/business/profile');
+    return res.redirect('/business/profile');
   }
 });
 
@@ -3143,8 +3105,7 @@ router.get(
   requireVerifiedBusiness,
   async (req, res) => {
     try {
-      const sessionBusiness = req.session.business;
-
+      const sessionBusiness = getBiz(req);
       if (!sessionBusiness || !sessionBusiness._id) {
         req.flash('error', 'Business not found. Please log in again.');
         return res.redirect('/business/login');
@@ -3190,12 +3151,12 @@ router.get(
   requireVerifiedBusiness,
   async (req, res) => {
     try {
-      const sessionBusiness = req.session.business;
+      const sessionBusiness = getBiz(req);
       if (!sessionBusiness || !sessionBusiness._id) {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
 
-      const OrderModel = require('../models/Order');
+      const OrderModel = Order;
       if (!OrderModel) {
         return res.status(500).json({ success: false, message: 'Order model not available' });
       }
@@ -3541,8 +3502,5 @@ router.get('/_ping', (req, res) => res.send('business router OK'));
 
 
 module.exports = router;
-
-
-
 
 

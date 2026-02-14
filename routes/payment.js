@@ -52,6 +52,20 @@ try {
   Product = null;
 }
 
+let Business = null;
+try {
+  Business = require('../models/Business');
+} catch {
+  Business = null;
+}
+
+let buildShippoAddressFromBusiness = null;
+try {
+  ({ buildShippoAddressFromBusiness } = require('../utils/shippo/buildShippoAddressFromBusiness'));
+} catch {
+  buildShippoAddressFromBusiness = null;
+}
+
 const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
@@ -518,6 +532,83 @@ function getShippoFromAddress() {
   return from;
 }
 
+async function resolveShippoFromAddressForCart(cart) {
+  // Default: always use .env address
+  const envFrom = getShippoFromAddress();
+
+  const allowedCats = new Set(['second-hand-clothes', 'uncategorized-second-hand-things']);
+
+  // If we can't load Product/Business/helper, we cannot safely build seller FROM
+  if (!Product || !Business || typeof buildShippoAddressFromBusiness !== 'function') {
+    return envFrom; // do NOT disturb other flows
+  }
+
+  const items = Array.isArray(cart?.items) ? cart.items : [];
+  if (!items.length) return envFrom;
+
+  // Load products (we need category + business owner id)
+  const ids = items
+    .map((it) => String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim())
+    .filter(Boolean);
+
+  const unique = [...new Set(ids)];
+  if (!unique.length) return envFrom;
+
+  const prods = await Product.find({ customId: { $in: unique } })
+    .select('customId name category businessId sellerId seller ownerBusiness business')
+    .lean();
+
+  const map = new Map(prods.map((p) => [String(p.customId), p]));
+
+  // Build product rows in cart order
+  const rows = unique.map((cid) => ({ cid, product: map.get(cid) || null }));
+
+  // If any product missing OR any product not in those 2 categories => use env FROM
+  for (const r of rows) {
+    if (!r.product) return envFrom;
+
+    const catRaw = r.product.category;
+    const cat = String(catRaw || '').trim();
+    if (!allowedCats.has(cat)) return envFrom;
+  }
+
+  // At this point: ALL products are in allowed categories.
+  // Now ensure they all belong to the SAME seller business (otherwise one shipment can't have multiple FROMs).
+  const pickBizId = (p) =>
+    p.businessId || p.sellerId || p.seller || p.ownerBusiness || p.business || null;
+
+  const firstBizId = pickBizId(rows[0].product);
+  if (!firstBizId) {
+    const err = new Error(
+      'Second-hand order detected, but product is missing seller businessId. Cannot build FROM address.'
+    );
+    err.code = 'SELLER_BUSINESS_MISSING';
+    throw err;
+  }
+
+  for (const r of rows) {
+    const bid = pickBizId(r.product);
+    if (!bid || String(bid) !== String(firstBizId)) {
+      const err = new Error(
+        'Second-hand order contains products from different sellers. Cannot build one FROM address for one shipment.'
+      );
+      err.code = 'MIXED_SELLERS_NOT_SUPPORTED';
+      throw err;
+    }
+  }
+
+  // Load the seller business and build Shippo address
+  const biz = await Business.findById(firstBizId).lean();
+  if (!biz) {
+    const err = new Error('Seller business not found for second-hand order.');
+    err.code = 'SELLER_BUSINESS_NOT_FOUND';
+    throw err;
+  }
+
+  // This will throw ADDRESS_INCOMPLETE with your nice message if fields are missing
+  return buildShippoAddressFromBusiness(biz);
+}
+
 function kgFrom(value, unit) {
   const v = Number(value);
   if (!Number.isFinite(v) || v <= 0) return null;
@@ -816,7 +907,7 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }) {
 }
 
 async function shippoCreateShipment({ to, cart }) {
-   const from = getShippoFromAddress();
+  const from = await resolveShippoFromAddressForCart(cart); 
 
   const intl = isInternationalShipment({ toCountry: to?.country, fromCountry: from?.country });
 
@@ -1511,6 +1602,7 @@ router.get('/checkout', async (req, res) => {
     currency: upperCcy,
     brandName: BRAND_NAME_N,
     vatRate,
+    // COUNTRIES,
 
     // ✅ Shippo-only checkout (no delivery options)
     shippoOnly: true,
