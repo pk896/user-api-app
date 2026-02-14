@@ -266,19 +266,60 @@
             </div>
             <div class="form-hint">Used for payouts (only enabled if provided)</div>
           </div>
+
           <!-- Shippo-ready address fields -->
           <div class="form-group">
-            <label for="country" class="form-label">Country (Name) <span class="required">*</span></label>
-            <input
-              id="country"
-              type="text"
-              name="country"
-              placeholder="e.g., South Africa"
-              autocomplete="country-name"
-              required
-              class="form-input"
-              value="<%= errors && errors.find(e => e.param === 'country') ? '' : (locals.country || '') %>"
-            />
+            <label class="form-label">Country (Name) <span class="required">*</span></label>
+
+            <div class="country-dropdown" id="signupCountryDropdown">
+              <div class="country-selected" id="countrySelected">
+                <span id="countrySelectedText">
+                  <%= (errors && errors.find(e => e.param === 'country')) ? 'Select your country' : (locals.country || 'Select your country') %>
+                </span>
+                <span class="country-arrow">▾</span>
+              </div>
+
+              <div class="country-menu" id="countryMenu">
+                <input
+                  type="text"
+                  id="countrySearch"
+                  placeholder="Search country..."
+                  autocomplete="off"
+                  class="country-search-input"
+                />
+
+                <div class="country-list">
+                  <% if (Array.isArray(COUNTRIES)) { %>
+                    <% COUNTRIES.forEach(function(c) { %>
+                      <div
+                        class="country-option <%= (locals.country === c.name) ? 'active' : '' %>"
+                        data-value="<%= c.name %>"
+                        data-code="<%= c.code %>"
+                      >
+                        <%= c.name %>
+                      </div>
+                    <% }) %>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- Hidden REAL select (backend safe) -->
+              <select id="country" name="country" required style="display:none;">
+                <option value="">Select your country</option>
+                <% if (Array.isArray(COUNTRIES)) { %>
+                  <% COUNTRIES.forEach(function(c) { %>
+                    <option
+                      value="<%= c.name %>"
+                      data-code="<%= c.code %>"
+                      <%= (locals.country === c.name) ? 'selected' : '' %>
+                    >
+                      <%= c.name %>
+                    </option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+
             <div class="form-hint">This is for display/legacy screens (Shippo uses ISO2 below)</div>
           </div>
 
@@ -293,9 +334,10 @@
               required
               maxlength="2"
               class="form-input"
+              readonly
               value="<%= errors && errors.find(e => e.param === 'countryCode') ? '' : (locals.countryCode || '') %>"
             />
-            <div class="form-hint">Use the 2-letter code (South Africa = ZA)</div>
+            <div class="form-hint">Auto-filled from the dropdown</div>
           </div>
 
           <div class="form-group">
@@ -889,6 +931,77 @@
     padding-right: 2.5rem;
   }
 
+  /* ✅ Country Dropdown (same behavior as business-profile-edit-details.ejs) */
+  .country-dropdown { position: relative; }
+
+  .country-selected {
+    padding: 0.7rem 0.9rem;
+    border-radius: 0.75rem;
+    border: 1.6px solid #CBD5F5;
+    font-size: 0.9rem;
+    background: #FFFFFF;
+    color: var(--black);
+    outline: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .dark-theme .country-selected {
+    background: #020617;
+    border-color: #1E293B;
+    color: #E5E7EB;
+  }
+
+  .country-dropdown.open .country-menu { display: block; }
+
+  .country-menu {
+    position: absolute;
+    top: 105%;
+    left: 0;
+    right: 0;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    max-height: 260px;
+    overflow: hidden;
+    display: none;
+    z-index: 80;
+    box-shadow: 0 12px 24px rgba(15,23,42,0.12);
+  }
+
+  .dark-theme .country-menu {
+    background: #0B1220;
+    border-color: #1E293B;
+  }
+
+  .country-search-input {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: none;
+    border-bottom: 1px solid #E2E8F0;
+    outline: none;
+    background: transparent;
+    color: inherit;
+  }
+
+  .country-list { max-height: 210px; overflow: auto; }
+
+  .country-option {
+    padding: 0.6rem 0.85rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+
+  .country-option:hover { background: rgba(124, 58, 237, 0.08); }
+
+  .country-option.active {
+    background: rgba(124, 58, 237, 0.15);
+    font-weight: 600;
+  }
+
   /* Password */
   .password-container {
     position: relative;
@@ -1208,6 +1321,85 @@
   document.addEventListener("DOMContentLoaded", () => {
     console.log("✅ Business signup loaded with CSP nonce");
     
+    // -----------------------------
+    // ✅ Custom Country Dropdown Logic (syncs country + countryCode)
+    // -----------------------------
+    const countrySelect = document.getElementById('country');       // hidden select
+    const countryCodeInput = document.getElementById('countryCode'); // readonly input
+
+    const dropdown = document.getElementById('signupCountryDropdown');
+    const selected = document.getElementById('countrySelected');
+    const selectedText = document.getElementById('countrySelectedText');
+    const menu = document.getElementById('countryMenu');
+    const searchInput = document.getElementById('countrySearch');
+    const options = document.querySelectorAll('#signupCountryDropdown .country-option');
+
+    const syncCodeFromSelect = () => {
+      if (!countrySelect || !countryCodeInput) return;
+      const opt = countrySelect.options[countrySelect.selectedIndex];
+      const code = (opt && opt.dataset && opt.dataset.code) ? String(opt.dataset.code) : '';
+      countryCodeInput.value = code.trim();
+    };
+
+    if (dropdown && selected && menu) {
+      // Toggle open/close
+      selected.addEventListener('click', () => {
+        dropdown.classList.toggle('open');
+        if (dropdown.classList.contains('open') && searchInput) {
+          searchInput.value = '';
+          // reset filters
+          options.forEach(opt => (opt.style.display = 'block'));
+          setTimeout(() => searchInput.focus(), 0);
+        }
+      });
+
+      // Click outside closes
+      document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) dropdown.classList.remove('open');
+      });
+
+      // Option click
+      options.forEach(opt => {
+        opt.addEventListener('click', () => {
+          const value = opt.dataset.value || '';
+          const code = opt.dataset.code || '';
+
+          if (selectedText) selectedText.textContent = value;
+
+          if (countrySelect) {
+            countrySelect.value = value;
+            // mark selected option
+            Array.from(countrySelect.options).forEach(o => (o.selected = (o.value === value)));
+          }
+
+          if (countryCodeInput) countryCodeInput.value = String(code).trim();
+
+          // active UI
+          options.forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+
+          dropdown.classList.remove('open');
+        });
+      });
+
+      // Search filter
+      if (searchInput) {
+        searchInput.addEventListener('input', () => {
+          const term = searchInput.value.toLowerCase().trim();
+          options.forEach(opt => {
+            const text = (opt.textContent || '').toLowerCase();
+            opt.style.display = text.includes(term) ? 'block' : 'none';
+          });
+        });
+      }
+    }
+
+    // Initial sync (when page loads with locals.country already set)
+    if (countrySelect && countryCodeInput) {
+      syncCodeFromSelect();
+      countrySelect.addEventListener('change', syncCodeFromSelect);
+    }
+
     // Password strength indicator
     const passwordInput = document.getElementById('password');
     const strengthFill = document.getElementById('strengthFill');

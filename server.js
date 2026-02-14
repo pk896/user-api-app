@@ -168,9 +168,18 @@ const paypalWebhooks = require('./routes/paypalWebhooks');
 app.use('/webhooks', express.raw({ type: '*/*' }), paypalWebhooks);
 
 const COUNTRIES = require('./utils/countries');
+let { PRODUCT_TYPES, PRODUCT_TYPES_BY_CATEGORY } = require('./utils/productType');
+
+// ✅ If PRODUCT_TYPES_BY_CATEGORY is a Map, convert to a plain object for EJS/JSON
+if (PRODUCT_TYPES_BY_CATEGORY instanceof Map) {
+  PRODUCT_TYPES_BY_CATEGORY = Object.fromEntries(PRODUCT_TYPES_BY_CATEGORY.entries());
+}
 
 app.use((req, res, next) => {
+  // per-request locals (same style as COUNTRIES)
   res.locals.COUNTRIES = COUNTRIES;
+  res.locals.PRODUCT_TYPES = PRODUCT_TYPES;
+  res.locals.PRODUCT_TYPES_BY_CATEGORY = PRODUCT_TYPES_BY_CATEGORY;
   next();
 });
 

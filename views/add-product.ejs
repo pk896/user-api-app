@@ -106,7 +106,7 @@
             <div class="pf-field">
               <label class="pf-label">
                 <span>Category</span>
-                <select name="category" class="pf-input pf-select">
+                <select id="categorySelect" name="category" class="pf-input pf-select">
                   <option value="">Choose category</option>
                   <!-- values match the catSelect filter on the shop page -->
                   <option value="electronics">Electronics</option>
@@ -115,7 +115,7 @@
                   <option value="beauty">Beauty</option>
                   <option value="groceries">Groceries</option>
                   <option value="clothes">Clothes</option>
-                  <option value="second-hand-clothing">Second Hand Clothing</option>
+                  <option value="second-hand-clothes">Second Hand Clothing</option>
                   <option value="uncategorized-second-hand-things">Uncategorized Second Hand Things</option>
                 </select>
                 <div class="pf-hint">Used for filters on the shopping page.</div>
@@ -170,17 +170,52 @@
               </label>
             </div>
 
-            <!-- Made In -->
+            <!-- Made In (Custom searchable dropdown like business-profile-edit-details.ejs) -->
             <div class="pf-field">
               <label class="pf-label">
-                <span>Made In</span>
-                <input
-                  type="text"
-                  name="made"
-                  placeholder="e.g., South Africa"
-                  required
-                  class="pf-input"
-                />
+                <span>Made In <em>*</em></span>
+
+                <div class="pf-country-dropdown" id="madeDropdown">
+                  <div
+                    class="pf-country-selected"
+                    id="madeSelected"
+                    tabindex="0"
+                    role="button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                  >
+                    <span id="madeSelectedText">Select country</span>
+                    <span class="pf-country-arrow">▾</span>
+                  </div>
+
+                  <div class="pf-country-menu" id="madeMenu" role="listbox">
+                    <input
+                      type="text"
+                      id="madeSearch"
+                      placeholder="Search country..."
+                      autocomplete="off"
+                      class="pf-country-search-input"
+                    />
+
+                    <div class="pf-country-list" id="madeList">
+                      <% if (Array.isArray(COUNTRIES)) { %>
+                        <% COUNTRIES.forEach(function(c) { %>
+                          <div
+                            class="pf-country-option"
+                            data-value="<%= c.name %>"
+                            data-code="<%= c.code %>"
+                          ><%= c.name %></div>
+                        <% }) %>
+                      <% } %>
+                    </div>
+                  </div>
+
+                  <!-- ✅ backend-safe hidden inputs (these are what gets submitted) -->
+                  <input type="hidden" name="made" id="made" value="" required />
+                  <input type="hidden" name="madeCode" id="madeCode" value="" />
+                </div>
+
+                <div class="pf-hint">Search and select a country (e.g., South Africa, Nigeria, United States…)</div>
               </label>
             </div>
 
@@ -200,16 +235,20 @@
             <!-- Matching Type (product.type controls shoes/clothes behaviour) -->
             <div class="pf-field">
               <label class="pf-label">
-                <span>Matching Type</span>
-                <input
-                  type="text"
-                  name="type"
-                  placeholder="e.g., shoes, clothes, electronics, organic-juice"
-                  required
-                  class="pf-input"
-                />
+                <span>Matching Type <em>*</em></span>
+
+                <select id="typeSelect" name="type" class="pf-input pf-select" required>
+                  <option value="">Choose type</option>
+
+                  <% if (Array.isArray(PRODUCT_TYPES)) { %>
+                    <% PRODUCT_TYPES.forEach(function(t){ %>
+                      <option value="<%= t.value %>"><%= t.label %></option>
+                    <% }) %>
+                  <% } %>
+                </select>
+
                 <div class="pf-hint">
-                  Controls behaviour on the shop page (use <strong>shoes</strong> or <strong>clothes</strong> for size &amp; color variants).
+                  Use <strong>clothes</strong> or <strong>shoes</strong> to enable size + color variants on the shop page.
                 </div>
               </label>
             </div>
@@ -700,6 +739,118 @@
     color: var(--text-muted);
   }
 
+  /* ========= COUNTRY DROPDOWN (Made In) ========= */
+  .pf-country-dropdown {
+    position: relative;
+    width: 100%;
+  }
+
+  .pf-country-selected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 9px;
+    border-radius: 9px;
+    border: 1px solid var(--border-subtle);
+    background: #f9fafb;
+    color: #0f172a;
+    min-height: 36px;
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition);
+  }
+
+  .pf-shell.theme-dark .pf-country-selected {
+    background: #020617;
+    border-color: rgba(51, 65, 85, 0.9);
+    color: #E5E7EB;
+  }
+
+  .pf-country-selected:focus {
+    outline: none;
+    border-color: #2563EB;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.45);
+  }
+
+  .pf-shell.theme-dark .pf-country-selected:focus {
+    border-color: #7C3AED;
+    box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.7);
+  }
+
+  .pf-country-arrow {
+    opacity: 0.8;
+    font-size: 12px;
+  }
+
+  .pf-country-menu {
+    display: none;              /* ✅ closed by default */
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    background: rgba(248, 250, 252, 0.98);
+    overflow: hidden;
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.35);
+  }
+
+  .pf-shell.theme-dark .pf-country-menu {
+    background: rgba(2, 6, 23, 0.98);
+    border-color: rgba(51, 65, 85, 0.9);
+  }
+
+  .pf-country-dropdown.open .pf-country-menu {
+    display: block;             /* ✅ opens when JS adds .open */
+  }
+
+  .pf-country-search-input {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.5);
+    padding: 10px 10px;
+    font-size: 13px;
+    outline: none;
+    background: transparent;
+    color: inherit;
+  }
+
+  .pf-shell.theme-dark .pf-country-search-input {
+    border-bottom-color: rgba(51, 65, 85, 0.9);
+    color: #E5E7EB;
+  }
+
+  .pf-country-list {
+    max-height: 220px;
+    overflow: auto;
+  }
+
+  .pf-country-option {
+    padding: 9px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .pf-country-option:hover {
+    background: rgba(37, 99, 235, 0.12);
+  }
+
+  .pf-shell.theme-dark .pf-country-option:hover {
+    background: rgba(124, 58, 237, 0.18);
+  }
+
+  .pf-country-option.active {
+    background: rgba(37, 99, 235, 0.18);
+    font-weight: 700;
+  }
+
+  .pf-shell.theme-dark .pf-country-option.active {
+    background: rgba(124, 58, 237, 0.25);
+  }
+
   /* ========= IMAGE UPLOAD ========= */
   .pf-image-section {
     margin-bottom: 18px;
@@ -955,141 +1106,328 @@
 </style>
 
 <script nonce="<%= nonce %>">
-document.addEventListener("DOMContentLoaded", () => {
-  // Image preview
-  const imageInput = document.getElementById("imageFile");
-  const previewWrapper = document.getElementById("previewWrapper");
-  const previewImg = document.getElementById("imagePreview");
-  const form = document.getElementById("addProductForm");
+  document.addEventListener("DOMContentLoaded", () => {
 
-  if (imageInput) {
-    imageInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        // file size limit 5MB
-        if (file.size > 5 * 1024 * 1024) {
-          showToast("Image size must be less than 5MB", "error");
-          imageInput.value = "";
-          return;
+    // =============================
+    // Made In (custom searchable dropdown)
+    // =============================
+    const madeDropdown = document.getElementById('madeDropdown');
+    const madeSelected = document.getElementById('madeSelected');
+    const madeSelectedText = document.getElementById('madeSelectedText');
+    const madeMenu = document.getElementById('madeMenu');
+    const madeSearch = document.getElementById('madeSearch');
+    const madeList = document.getElementById('madeList');
+
+    const madeHidden = document.getElementById('made');      // hidden required input (submits)
+    const madeCode = document.getElementById('madeCode');    // hidden ISO code (submits)
+
+    if (madeDropdown && madeSelected && madeMenu && madeHidden) {
+      const getOptions = () => Array.from(madeDropdown.querySelectorAll('.pf-country-option'));
+
+      const open = () => {
+        madeDropdown.classList.add('open');
+        madeSelected.setAttribute('aria-expanded', 'true');
+
+        if (madeSearch) {
+          madeSearch.value = '';
+          madeSearch.focus();
         }
 
-        // file type
-        const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-        if (!validTypes.includes(file.type)) {
-          showToast("Only JPG, PNG, GIF or WebP images are allowed", "error");
-          imageInput.value = "";
-          return;
-        }
+        // show all options on open
+        getOptions().forEach(opt => (opt.style.display = 'block'));
+      };
 
-        const url = URL.createObjectURL(file);
-        previewImg.src = url;
-        previewWrapper.style.display = "block";
+      const close = () => {
+        madeDropdown.classList.remove('open');
+        madeSelected.setAttribute('aria-expanded', 'false');
+      };
+
+      // toggle open/close
+      madeSelected.addEventListener('click', () => {
+        madeDropdown.classList.contains('open') ? close() : open();
+      });
+
+      // keyboard open/close
+      madeSelected.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          madeDropdown.classList.contains('open') ? close() : open();
+        }
+        if (e.key === 'Escape') close();
+      });
+
+      // click outside closes
+      document.addEventListener('click', (e) => {
+        if (!madeDropdown.contains(e.target)) close();
+      });
+
+      // option click -> set hidden inputs
+      getOptions().forEach(opt => {
+        opt.addEventListener('click', () => {
+          const value = String(opt.dataset.value || '').trim();
+          const code = String(opt.dataset.code || '').trim();
+
+          madeSelectedText.textContent = value || 'Select country';
+          madeHidden.value = value;
+
+          if (madeCode) madeCode.value = code;
+
+          getOptions().forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+
+          close();
+        });
+      });
+
+      // search filter
+      if (madeSearch) {
+        madeSearch.addEventListener('input', () => {
+          const term = String(madeSearch.value || '').toLowerCase().trim();
+          getOptions().forEach(opt => {
+            const text = String(opt.textContent || '').toLowerCase();
+            opt.style.display = text.includes(term) ? 'block' : 'none';
+          });
+        });
       }
+    }
+
+    // =============================
+    // Product Type filtering by Category (uses PRODUCT_TYPES_BY_CATEGORY)
+    // =============================
+    const categorySelect = document.getElementById('categorySelect');
+    const typeSelect = document.getElementById('typeSelect');
+
+    // Server-provided map: { electronics: ['phone','laptop',...], fashion: [...], ... }
+    const TYPES_BY_CAT = <%- JSON.stringify(PRODUCT_TYPES_BY_CATEGORY || {}) %>;
+
+    // ✅ All type objects from server: [{value,label},...]
+    const allTypeOptions = <%- JSON.stringify(PRODUCT_TYPES || []) %>;
+
+    // Fast lookup: value -> full object
+    const TYPE_INDEX = Object.create(null);
+    (allTypeOptions || []).forEach(t => {
+      const v = String(t?.value || '').trim();
+      if (v) TYPE_INDEX[v] = { value: v, label: String(t?.label || v) };
     });
-  }
 
-  // remove image
-  window.removeImage = function () {
-    if (imageInput) imageInput.value = "";
-    previewWrapper.style.display = "none";
-  };
+    // Convert list of strings OR objects into [{value,label}, ...]
+    function normalizeTypeList(list) {
+      const out = [];
+      (Array.isArray(list) ? list : []).forEach(item => {
+        // already object?
+        if (item && typeof item === 'object') {
+          const v = String(item.value || '').trim();
+          if (!v) return;
+          out.push({ value: v, label: String(item.label || v) });
+          return;
+        }
 
-  // toast
-  function showToast(message, type = "success") {
-    const container = document.getElementById("toast-container");
-    if (!container) return;
+        // string value -> find label from TYPE_INDEX
+        const v = String(item || '').trim();
+        if (!v) return;
+        const found = TYPE_INDEX[v];
+        if (found) out.push(found);
+        else out.push({ value: v, label: v }); // fallback label
+      });
 
-    const toast = document.createElement("div");
-    toast.className = "pf-toast" + (type === "error" ? " pf-toast-error" : "");
-    toast.textContent = message;
-    container.appendChild(toast);
+      return out;
+    }
 
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      toast.style.transform = "translate(-50%, 18px)";
-      setTimeout(() => toast.remove(), 260);
-    }, 3800);
-  }
+    function setTypeOptions(list, keepValue = '') {
+      if (!typeSelect) return;
 
-  // server-side messages (flash)
-  const successMsg = "<%= (success && success.length > 0) ? success : '' %>";
-  const errorMsg = "<%= (error && error.length > 0) ? error : '' %>";
-  if (successMsg) showToast(successMsg);
-  if (errorMsg) showToast(errorMsg, "error");
+      // remember current selection if caller didn't pass one
+      const current = keepValue || String(typeSelect.value || '');
 
-  // loading state on submit
-  if (form) {
-    form.addEventListener("submit", (e) => {
-      // ✅ Shipping required check (toast-friendly)
-      const w = form.querySelector('input[name="shipWeightValue"]');
-      const l = form.querySelector('input[name="shipLength"]');
-      const wi = form.querySelector('input[name="shipWidth"]');
-      const h = form.querySelector('input[name="shipHeight"]');
+      // reset select
+      typeSelect.innerHTML = '';
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = 'Choose type';
+      typeSelect.appendChild(ph);
 
-      const missing = [];
-      const num = (el) => (el ? Number(String(el.value || "").trim()) : NaN);
+      // add new options
+      (Array.isArray(list) ? list : []).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = String(t.value || '');
+        opt.textContent = String(t.label || t.value || '');
+        typeSelect.appendChild(opt);
+      });
 
-      if (!w || !Number.isFinite(num(w)) || num(w) <= 0) missing.push("weight");
-      if (!l || !Number.isFinite(num(l)) || num(l) <= 0) missing.push("length");
-      if (!wi || !Number.isFinite(num(wi)) || num(wi) <= 0) missing.push("width");
-      if (!h || !Number.isFinite(num(h)) || num(h) <= 0) missing.push("height");
+      // restore selection if still valid
+      if (current) {
+        const exists = Array.from(typeSelect.options).some(o => o.value === current);
+        typeSelect.value = exists ? current : '';
+      }
+    }
 
-      if (missing.length) {
-        e.preventDefault();
-        showToast(`Shipping is required. Missing: ${missing.join(", ")}.`, "error");
+    function applyTypeFilter() {
+      if (!categorySelect || !typeSelect) return;
+
+      const cat = String(categorySelect.value || '').trim().toLowerCase();
+
+      if (cat && Array.isArray(TYPES_BY_CAT[cat]) && TYPES_BY_CAT[cat].length) {
+        setTypeOptions(normalizeTypeList(TYPES_BY_CAT[cat]));
         return;
       }
 
-      // existing loading state
-      const submitBtn = form.querySelector(".pf-btn-primary");
-      form.classList.add("pf-submitting");
-      if (submitBtn) submitBtn.disabled = true;
+      // no category chosen or no mapping -> show all types
+      setTypeOptions(normalizeTypeList(allTypeOptions));
+    }
+
+    if (categorySelect && typeSelect) {
+      categorySelect.addEventListener('change', () => {
+        // clear selection, then rebuild options
+        typeSelect.value = '';
+        applyTypeFilter();
+      });
+      // initial filter on page load (in case category is pre-filled)
+      applyTypeFilter();
+    }
+
+    // Image preview
+    const imageInput = document.getElementById("imageFile");
+    const previewWrapper = document.getElementById("previewWrapper");
+    const previewImg = document.getElementById("imagePreview");
+    const form = document.getElementById("addProductForm");
+
+    if (imageInput) {
+      imageInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          // file size limit 5MB
+          if (file.size > 5 * 1024 * 1024) {
+            showToast("Image size must be less than 5MB", "error");
+            imageInput.value = "";
+            return;
+          }
+
+          // file type
+          const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+          if (!validTypes.includes(file.type)) {
+            showToast("Only JPG, PNG, GIF or WebP images are allowed", "error");
+            imageInput.value = "";
+            return;
+          }
+
+          const url = URL.createObjectURL(file);
+          previewImg.src = url;
+          previewWrapper.style.display = "block";
+        }
+      });
+    }
+
+    // remove image
+    window.removeImage = function () {
+      if (imageInput) imageInput.value = "";
+      previewWrapper.style.display = "none";
+    };
+
+    // toast
+    function showToast(message, type = "success") {
+      const container = document.getElementById("toast-container");
+      if (!container) return;
+
+      const toast = document.createElement("div");
+      toast.className = "pf-toast" + (type === "error" ? " pf-toast-error" : "");
+      toast.textContent = message;
+      container.appendChild(toast);
 
       setTimeout(() => {
-        form.classList.remove("pf-submitting");
-        if (submitBtn) submitBtn.disabled = false;
-      }, 10000);
-    });
-  }
+        toast.style.opacity = "0";
+        toast.style.transform = "translate(-50%, 18px)";
+        setTimeout(() => toast.remove(), 260);
+      }, 3800);
+    }
 
-  // description counter
-  const descriptionField = document.querySelector('textarea[name="description"]');
-  if (descriptionField) {
-    const hint = descriptionField.parentNode.querySelector(".pf-hint");
-    descriptionField.addEventListener("input", () => {
-      const length = descriptionField.value.length;
-      if (hint) {
-        hint.textContent = `${length}/500 characters`;
-        if (length > 500) {
-          hint.style.color = "#EF4444";
-        } else if (length > 450) {
-          hint.style.color = "#F59E0B";
-        } else {
-          hint.style.color = "";
+    // server-side messages (flash)
+    const successMsg = "<%= (success && success.length > 0) ? success : '' %>";
+    const errorMsg = "<%= (error && error.length > 0) ? error : '' %>";
+    if (successMsg) showToast(successMsg);
+    if (errorMsg) showToast(errorMsg, "error");
+
+    // loading state on submit
+    if (form) {
+      form.addEventListener("submit", (e) => {
+
+        // ✅ Made In required check (because it is hidden now)
+        const madeVal = String((document.getElementById('made')?.value || '')).trim();
+        if (!madeVal) {
+          e.preventDefault();
+          showToast("Made In is required. Please select a country.", "error");
+          return;
         }
-      }
-    });
-    descriptionField.dispatchEvent(new Event("input"));
-  }
 
-  // product ID auto-format (name="id")
-  const productIdField = document.querySelector('input[name="id"]');
-  if (productIdField) {
-    productIdField.addEventListener("input", (e) => {
-      let value = e.target.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
-      e.target.value = value;
-    });
-  }
+        // ✅ Shipping required check (toast-friendly)
+        const w = form.querySelector('input[name="shipWeightValue"]');
+        const l = form.querySelector('input[name="shipLength"]');
+        const wi = form.querySelector('input[name="shipWidth"]');
+        const h = form.querySelector('input[name="shipHeight"]');
 
-  // price formatting
-  const priceField = document.querySelector('input[name="price"]');
-  if (priceField) {
-    priceField.addEventListener("blur", (e) => {
-      const num = parseFloat(e.target.value);
-      if (!Number.isNaN(num)) {
-        e.target.value = num.toFixed(2);
-      }
-    });
-  }
-});
+        const missing = [];
+        const num = (el) => (el ? Number(String(el.value || "").trim()) : NaN);
+
+        if (!w || !Number.isFinite(num(w)) || num(w) <= 0) missing.push("weight");
+        if (!l || !Number.isFinite(num(l)) || num(l) <= 0) missing.push("length");
+        if (!wi || !Number.isFinite(num(wi)) || num(wi) <= 0) missing.push("width");
+        if (!h || !Number.isFinite(num(h)) || num(h) <= 0) missing.push("height");
+
+        if (missing.length) {
+          e.preventDefault();
+          showToast(`Shipping is required. Missing: ${missing.join(", ")}.`, "error");
+          return;
+        }
+
+        // existing loading state
+        const submitBtn = form.querySelector(".pf-btn-primary");
+        form.classList.add("pf-submitting");
+        if (submitBtn) submitBtn.disabled = true;
+
+        setTimeout(() => {
+          form.classList.remove("pf-submitting");
+          if (submitBtn) submitBtn.disabled = false;
+        }, 10000);
+      });
+    }
+
+    // description counter
+    const descriptionField = document.querySelector('textarea[name="description"]');
+    if (descriptionField) {
+      const hint = descriptionField.parentNode.querySelector(".pf-hint");
+      descriptionField.addEventListener("input", () => {
+        const length = descriptionField.value.length;
+        if (hint) {
+          hint.textContent = `${length}/500 characters`;
+          if (length > 500) {
+            hint.style.color = "#EF4444";
+          } else if (length > 450) {
+            hint.style.color = "#F59E0B";
+          } else {
+            hint.style.color = "";
+          }
+        }
+      });
+      descriptionField.dispatchEvent(new Event("input"));
+    }
+
+    // product ID auto-format (name="id")
+    const productIdField = document.querySelector('input[name="id"]');
+    if (productIdField) {
+      productIdField.addEventListener("input", (e) => {
+        let value = e.target.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
+        e.target.value = value;
+      });
+    }
+
+    // price formatting
+    const priceField = document.querySelector('input[name="price"]');
+    if (priceField) {
+      priceField.addEventListener("blur", (e) => {
+        const num = parseFloat(e.target.value);
+        if (!Number.isNaN(num)) {
+          e.target.value = num.toFixed(2);
+        }
+      });
+    }
+  });
 </script>
