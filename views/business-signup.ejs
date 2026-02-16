@@ -273,8 +273,11 @@
 
             <div class="country-dropdown" id="signupCountryDropdown">
               <div class="country-selected" id="countrySelected">
-                <span id="countrySelectedText">
-                  <%= (errors && errors.find(e => e.param === 'country')) ? 'Select your country' : (locals.country || 'Select your country') %>
+                <span class="country-selected-left">
+                  <img id="countrySelectedFlagImg" class="country-flag-img" alt="" aria-hidden="true" />
+                  <span id="countrySelectedText">
+                    <%= (errors && errors.find(e => e.param === 'country')) ? 'Select your country' : (locals.country || 'Select your country') %>
+                  </span>
                 </span>
                 <span class="country-arrow">▾</span>
               </div>
@@ -296,7 +299,13 @@
                         data-value="<%= c.name %>"
                         data-code="<%= c.code %>"
                       >
-                        <%= c.name %>
+                        <img
+                          class="country-flag-img"
+                          src="https://flagcdn.com/20x15/<%= String(c.code || '').toLowerCase() %>.png"
+                          alt=""
+                          loading="lazy"
+                        />
+                        <span class="country-name"><%= c.name %></span>
                       </div>
                     <% }) %>
                   <% } %>
@@ -465,7 +474,7 @@
   </div>
 </div>
 
-<style>
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>>
   .signup-page {
     --blue: #2563EB;
     --purple: #7C3AED;
@@ -993,6 +1002,30 @@
     padding: 0.6rem 0.85rem;
     cursor: pointer;
     font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .country-selected-left{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .country-flag-img{
+    width: 18px;
+    height: 13px;
+    border-radius: 3px;
+    object-fit: cover;
+    flex: 0 0 auto;
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+  }
+
+  .country-name{
+    display: inline-block;
+    min-width: 0;
   }
 
   .country-option:hover { background: rgba(124, 58, 237, 0.08); }
@@ -1330,15 +1363,28 @@
     const dropdown = document.getElementById('signupCountryDropdown');
     const selected = document.getElementById('countrySelected');
     const selectedText = document.getElementById('countrySelectedText');
+    const selectedFlagImg = document.getElementById('countrySelectedFlagImg');
     const menu = document.getElementById('countryMenu');
     const searchInput = document.getElementById('countrySearch');
     const options = document.querySelectorAll('#signupCountryDropdown .country-option');
+
+    const setSelectedFlag = (code) => {
+      if (!selectedFlagImg) return;
+      const c = String(code || '').trim().toLowerCase();
+      if (!c) {
+        selectedFlagImg.removeAttribute('src');
+        return;
+      }
+      selectedFlagImg.src = `https://flagcdn.com/20x15/${c}.png`;
+    };
 
     const syncCodeFromSelect = () => {
       if (!countrySelect || !countryCodeInput) return;
       const opt = countrySelect.options[countrySelect.selectedIndex];
       const code = (opt && opt.dataset && opt.dataset.code) ? String(opt.dataset.code) : '';
-      countryCodeInput.value = code.trim();
+      const clean = code.trim();
+      countryCodeInput.value = clean;
+      setSelectedFlag(clean);
     };
 
     if (dropdown && selected && menu) {
@@ -1372,7 +1418,9 @@
             Array.from(countrySelect.options).forEach(o => (o.selected = (o.value === value)));
           }
 
-          if (countryCodeInput) countryCodeInput.value = String(code).trim();
+          const clean = String(code).trim();
+          if (countryCodeInput) countryCodeInput.value = clean;
+          setSelectedFlag(clean);
 
           // active UI
           options.forEach(o => o.classList.remove('active'));

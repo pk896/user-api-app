@@ -32,17 +32,25 @@
     </a>
     
     <form id="searchForm" class="amz-search" role="search" action="javascript:void(0)">
+      <%
+        // ✅ Categories come ONLY from res.locals (server.js)
+        // server.js sets: res.locals.CATEGORIES = CATEGORIES;
+        const __CATS = (typeof CATEGORIES !== 'undefined' && Array.isArray(CATEGORIES))
+          ? CATEGORIES
+          : [];
+      %>
+
       <select id="catSelect" aria-label="Category">
         <option value="">All</option>
-        <option value="electronics">Electronics</option>
-        <option value="fashion">Fashion</option>
-        <option value="home">Home</option>
-        <option value="beauty">Beauty</option>
-        <option value="groceries">Groceries</option>
-        <option value="clothes">Clothes</option>
-        <option value="second-hand-clothes">Second Hand Clothes</option>
-        <option value="uncategorized-second-hand-things">Uncategorized Second Hand Things</option>
+        <% __CATS.forEach(c => { 
+            const vv = String(c?.value || '').trim();
+            if (!vv) return;
+            const ll = String(c?.label || vv).trim();
+        %>
+          <option value="<%- vv %>"><%= ll %></option>
+        <% }) %>
       </select>
+
       <input id="searchInput" type="search" placeholder="Search Phakisi" aria-label="Search products" autocomplete="off" />
       <button id="searchBtn" type="submit" class="amz-search-btn">🔍</button>
     </form>
@@ -124,12 +132,14 @@
             const inStock   = Number(p.stock || 0) > 0;
             const name      = String(p.name || '');
             const cat       = (p.category || '').toLowerCase();
-            const type      = (p.type || '').toLowerCase();
-            const role      = (p.role || '').toLowerCase();
-            const isClothes = role === 'clothes' || type === 'clothes';
-            const isShoes   = role === 'shoes'   || type === 'shoes';
+            const type      = (p.type || '').toLowerCase(); // keep if you still want type filter
 
-            const flags     = { isNew: !!p.isNew, sale: !!p.sale, popular: !!p.popular };
+            // ✅ Role removed — decide variants by CATEGORY (and allow type fallback if you want)
+            const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
+            const isShoes   = (cat === 'shoes' || type === 'shoes');
+
+            // ✅ Your Product fields are isOnSale / isPopular (not sale/popular)
+            const flags     = { isNew: !!p.isNew, sale: !!p.isOnSale, popular: !!p.isPopular };
 
             // Size options
             let sizeOptions = [];
@@ -168,15 +178,14 @@
               data-category="<%- cat %>"
               data-category-raw="<%- (p.category || '') %>"
               data-type="<%- type %>"
-              data-role="<%- role %>"
               data-bizid="<%- String(p.businessId || p.business?._id || p.sellerId || p.seller?._id || '') %>"
               data-flags='<%- JSON.stringify(flags) %>'>
 
             <a class="imgbox" href="/products/view/<%= p.customId %>" aria-label="Open <%= name %>">
               <img src="<%= p.imageUrl %>" alt="<%= name %>" loading="lazy" decoding="async" />
-              <% if (p.isNew)   { %><span class="tag new">New</span><% } %>
-              <% if (p.sale)    { %><span class="tag sale">Deal</span><% } %>
-              <% if (p.popular) { %><span class="tag hot">Top</span><% } %>
+              <% if (p.isNew)      { %><span class="tag new">New</span><% } %>
+              <% if (p.isOnSale)   { %><span class="tag sale">Deal</span><% } %>
+              <% if (p.isPopular)  { %><span class="tag hot">Top</span><% } %>
             </a>
 
             <div class="info">
@@ -1659,9 +1668,10 @@
 
           if (card) {
             const type = (card.getAttribute('data-type') || '').toLowerCase();
-            const role = (card.getAttribute('data-role') || '').toLowerCase();
-            const isClothes = type === 'clothes' || role === 'clothes';
-            const isShoes   = type === 'shoes'   || role === 'shoes';
+            const cat  = (card.getAttribute('data-category') || '').toLowerCase();
+
+            const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
+            const isShoes   = (cat === 'shoes' || type === 'shoes');
 
             if (isClothes || isShoes) {
               if (!card.classList.contains('show-variants')) {
@@ -1739,9 +1749,10 @@
             const cardAfter = btn.closest('.amz-item');
             if (cardAfter) {
               const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
-              const roleA = (cardAfter.getAttribute('data-role') || '').toLowerCase();
-              const isClothesA = typeA === 'clothes' || roleA === 'clothes';
-              const isShoesA   = typeA === 'shoes'   || roleA === 'shoes';
+              const catA  = (cardAfter.getAttribute('data-category') || '').toLowerCase();
+
+              const isClothesA = (catA === 'clothes' || catA === 'second-hand-clothes' || typeA === 'clothes');
+              const isShoesA   = (catA === 'shoes' || typeA === 'shoes');
 
               if (isClothesA || isShoesA) {
                 const sizeSelA  = cardAfter.querySelector('.variant-size');
@@ -1767,11 +1778,7 @@
 
             // Prefer toast for policy-type errors, fallback to button popup
             const msg = err?.message || 'Rejected.';
-            if (/second-hand|secondhand|business|location|clear your cart|locked/i.test(msg)){
-              showPolicyToast(msg, { showClear:true });
-            } else {
-              showButtonPolicyPopup(btn, msg);
-            }
+            showPolicyToast(msg, { showClear: /second-hand|secondhand|business|location|clear|locked/i.test(msg) });
           }
         });
       });

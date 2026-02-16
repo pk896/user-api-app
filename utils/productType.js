@@ -53,14 +53,68 @@ const PRODUCT_TYPES = Object.freeze([
  * (Useful later if you want to auto-filter dropdown based on category)
  */
 const PRODUCT_TYPES_BY_CATEGORY = Object.freeze({
+  // Electronics
   electronics: ['phone', 'laptop', 'tv', 'speaker', 'headphones', 'gaming'],
+  computers: ['laptop', 'accessory'],
+  phones: ['phone', 'headphones', 'accessory'],
+  gaming: ['gaming', 'accessory', 'headphones', 'speaker'],
+
+  // Home / living
+  'home-kitchen': ['kitchen', 'appliance', 'decor'],
+  furniture: ['furniture', 'decor'],
+  appliances: ['appliance'],
+  'garden-outdoor': ['decor', 'accessory'],
+  'tools-hardware': ['accessory'],
+  household: ['decor'],
+
+  // Beauty / health
+  'beauty-personal-care': ['skincare', 'haircare', 'makeup'],
+  'health-wellness': ['skincare'],
+
+  // Fashion
   fashion: ['clothes', 'shoes', 'accessory', 'bag', 'jewelry'],
-  home: ['furniture', 'kitchen', 'appliance', 'decor'],
-  beauty: ['skincare', 'haircare', 'makeup'],
-  groceries: ['beverage', 'snack', 'food'],
   clothes: ['clothes'],
-  'second-hand-clothes': ['clothes', 'shoes'],
-  'uncategorized-second-hand-things': ['secondhand-item', 'phone', 'laptop', 'tv', 'accessory', 'bag', 'furniture', 'appliance'],
+  shoes: ['shoes'],
+  'jewelry-watches': ['jewelry'],
+
+  // Family / lifestyle
+  'baby-kids': ['clothes', 'accessory'],
+  'toys-games': ['gaming', 'accessory'],
+  'sports-outdoors': ['accessory', 'bag'],
+  pets: ['accessory'],
+
+  // Food
+  groceries: ['beverage', 'snack', 'food'],
+
+  // Books / office / creative
+  books: ['accessory'],
+  stationery: ['accessory'],
+  'arts-crafts': ['accessory'],
+  music: ['accessory'],
+
+  // Auto / business
+  automotive: ['accessory'],
+  industrial: ['accessory'],
+
+  // Fallback
+  other: ['accessory', 'secondhand-item'],
+
+  // ✅ Second-hand (keep exact keys)
+  'second-hand-clothes': ['clothes', 'shoes', 'accessory', 'bag'],
+  'uncategorized-second-hand-things': [
+    'secondhand-item',
+    'phone',
+    'laptop',
+    'tv',
+    'speaker',
+    'headphones',
+    'gaming',
+    'accessory',
+    'bag',
+    'furniture',
+    'appliance',
+    'decor',
+  ],
 });
 
 // Helper: get full objects from a list of values

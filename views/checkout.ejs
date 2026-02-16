@@ -374,8 +374,8 @@
         ? String(defaultCountry).toUpperCase()
         : 'ZA',
 
-      // ✅ from utils/countries.js (already sorted + includes flags)
-      COUNTRIES: (Array.isArray(locals?.COUNTRIES) ? locals.COUNTRIES : (Array.isArray(COUNTRIES) ? COUNTRIES : []))
+      // ✅ from utils/countries.js (already sorted)
+      COUNTRIES: (Array.isArray(COUNTRIES) ? COUNTRIES : [])
     }) %>
   </script>
 
@@ -738,6 +738,32 @@
       color: var(--k);
     }
 
+    .co-country-option{
+      display:flex;
+      align-items:center;
+      gap:.55rem;
+    }
+
+    .co-country-text{
+      display:inline-block;
+    }
+
+    .co-flag{
+      width:20px;
+      height:15px;
+      border-radius:3px;
+      border:1px solid rgba(15,23,42,.10);
+      background:#fff;
+      flex:0 0 auto;
+    }
+
+    /* Selected line: make flag + text align nicely */
+    #coCountrySelectedText{
+      display:flex;
+      align-items:center;
+      gap:.55rem;
+    }
+
     .co-country-option:hover{
       background: rgba(124,58,237,.08);
     }
@@ -1034,34 +1060,67 @@
 
         const current = String(selectedCode || DEFAULT_COUNTRY).toUpperCase();
 
-        // 1) Build hidden real select (codes)
+        // If server didn't provide countries, fail gracefully
+        if (!Array.isArray(COUNTRIES) || !COUNTRIES.length){
+          // still keep hidden select with ZA so backend reads something
+          el.shipCountry.innerHTML = `<option value="${current}">${current}</option>`;
+          if (el.coCountrySelectedText) el.coCountrySelectedText.textContent = `Select your country (${current})`;
+          return;
+        }
+
+        const flagUrl = (code) => {
+          const cc = String(code || '').trim().toLowerCase();
+          return cc && cc.length === 2 ? `https://flagcdn.com/20x15/${cc}.png` : '';
+        };
+
+        // 1) Build hidden REAL select (codes)
         el.shipCountry.innerHTML = '';
         for (const c of COUNTRIES){
+          const code = String(c.code || '').toUpperCase();
+          const name = String(c.name || '').trim();
+
+          if (!code || code.length !== 2 || !name) continue;
+
           const opt = document.createElement('option');
-          opt.value = String(c.code || '').toUpperCase(); // ✅ shipTo.country expects code (ZA, US)
-          opt.dataset.name = String(c.name || '');
-          opt.dataset.flag = String(c.flag || '');
-          opt.textContent = `${c.name || c.code} (${String(c.code || '').toUpperCase()})`;
+          opt.value = code;                 // ZA, US, etc
+          opt.dataset.name = name;
+          opt.textContent = `${name} (${code})`;
           el.shipCountry.appendChild(opt);
         }
 
-        // 2) Build visible menu options
+        // 2) Build visible menu options (with flag images)
         el.coCountryList.innerHTML = '';
         for (const c of COUNTRIES){
+          const code = String(c.code || '').toUpperCase();
+          const name = String(c.name || '').trim();
+          if (!code || code.length !== 2 || !name) continue;
+
           const div = document.createElement('div');
           div.className = 'co-country-option';
-          div.dataset.value = String(c.code || '').toUpperCase();
-          div.dataset.name = String(c.name || '');
-          div.dataset.flag = String(c.flag || '');
-          div.textContent = `${c.flag ? (c.flag + ' ') : ''}${c.name} (${String(c.code || '').toUpperCase()})`;
-          if (String(c.code || '').toUpperCase() === current) div.classList.add('active');
+          div.dataset.value = code;
+          div.dataset.name = name;
+
+          const img = document.createElement('img');
+          img.className = 'co-flag';
+          img.alt = `${code} flag`;
+          img.loading = 'lazy';
+          img.src = flagUrl(code);
+
+          const textWrap = document.createElement('span');
+          textWrap.className = 'co-country-text';
+          textWrap.textContent = `${name} (${code})`;
+
+          div.appendChild(img);
+          div.appendChild(textWrap);
+
+          if (code === current) div.classList.add('active');
           el.coCountryList.appendChild(div);
         }
 
-        // 3) Set initial selected text
+        // 3) Set initial selected display
         setSmartCountrySelected(current, false);
 
-        // ---- Events (once) ----
+        // ---- Events (wire once) ----
         if (el.coCountryDropdown._wired) return;
         el.coCountryDropdown._wired = true;
 
@@ -1072,8 +1131,7 @@
             el.coCountrySearch.value = '';
             el.coCountrySearch.focus();
           }
-          // show all options
-          el.coCountryList.querySelectorAll('.co-country-option').forEach(o => (o.style.display = 'block'));
+          el.coCountryList.querySelectorAll('.co-country-option').forEach(o => (o.style.display = 'flex'));
         };
 
         const closeDropdown = () => {
@@ -1107,7 +1165,7 @@
           closeDropdown();
         });
 
-        // Search filter
+        // Search filter (supports name/code search)
         if (el.coCountrySearch){
           el.coCountrySearch.addEventListener('input', () => {
             const term = String(el.coCountrySearch.value || '').toLowerCase().trim();
@@ -1115,7 +1173,7 @@
               const code = String(opt.dataset.value || '').toLowerCase();
               const name = String(opt.dataset.name || '').toLowerCase();
               const show = !term || code.includes(term) || name.includes(term);
-              opt.style.display = show ? 'block' : 'none';
+              opt.style.display = show ? 'flex' : 'none';
             });
           });
         }
@@ -1131,16 +1189,29 @@
             o.classList.toggle('active', String(o.dataset.value || '').toUpperCase() === code);
           });
 
-          // update visible text
+          // update visible selected "button" area (flag + text)
           const match = COUNTRIES.find(c => String(c.code || '').toUpperCase() === code);
           const name = match ? String(match.name || code) : code;
-          const flag = match ? String(match.flag || '') : '';
+
           if (el.coCountrySelectedText){
-            el.coCountrySelectedText.textContent = `${flag ? (flag + ' ') : ''}${name} (${code})`;
+            // wipe and rebuild selected display inside the text span
+            el.coCountrySelectedText.innerHTML = '';
+
+            const img = document.createElement('img');
+            img.className = 'co-flag';
+            img.alt = `${code} flag`;
+            img.loading = 'lazy';
+            img.src = flagUrl(code);
+
+            const txt = document.createElement('span');
+            txt.textContent = `${name} (${code})`;
+
+            el.coCountrySelectedText.appendChild(img);
+            el.coCountrySelectedText.appendChild(txt);
           }
 
           if (triggerChange){
-            onAddressChange(); // ✅ this keeps your Shippo quote + PayPal gating flow
+            onAddressChange(); // ✅ keeps Shippo quote + PayPal gating flow
           }
         }
       }

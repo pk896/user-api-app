@@ -165,6 +165,13 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    madeCode: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: '',
+      index: true,
+    },
     manufacturer: {
       type: String,
       trim: true,
@@ -346,6 +353,9 @@ productSchema.methods.toFrontendJSON = function () {
     description: this.description,
     imageUrl: this.imageUrl,
     stock: this.stock,
+    made: this.made,
+    madeCode: this.madeCode,
+
     
     // Shipping measurements (used for Shippo packing/rates)
     shipping: this.shipping || null,

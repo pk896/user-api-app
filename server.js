@@ -168,6 +168,7 @@ const paypalWebhooks = require('./routes/paypalWebhooks');
 app.use('/webhooks', express.raw({ type: '*/*' }), paypalWebhooks);
 
 const COUNTRIES = require('./utils/countries');
+const { CATEGORIES } = require('./utils/category');
 let { PRODUCT_TYPES, PRODUCT_TYPES_BY_CATEGORY } = require('./utils/productType');
 
 // ✅ If PRODUCT_TYPES_BY_CATEGORY is a Map, convert to a plain object for EJS/JSON
@@ -178,6 +179,8 @@ if (PRODUCT_TYPES_BY_CATEGORY instanceof Map) {
 app.use((req, res, next) => {
   // per-request locals (same style as COUNTRIES)
   res.locals.COUNTRIES = COUNTRIES;
+  res.locals.CATEGORIES = CATEGORIES;
+
   res.locals.PRODUCT_TYPES = PRODUCT_TYPES;
   res.locals.PRODUCT_TYPES_BY_CATEGORY = PRODUCT_TYPES_BY_CATEGORY;
   next();
@@ -230,6 +233,7 @@ app.use((req, res, next) => {
           'https://www.paypalobjects.com',
           'https://www.paypal.com',
           'https://www.sandbox.paypal.com',
+          'https://flagcdn.com',
         ],
 
         // ✅ XHR/fetch/websocket

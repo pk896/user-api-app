@@ -102,22 +102,21 @@
               </label>
             </div>
 
-            <!-- Category (DROPDOWN, matches sales-products categories) -->
+            <!-- Category (DROPDOWN) -->
             <div class="pf-field">
               <label class="pf-label">
                 <span>Category</span>
+
                 <select id="categorySelect" name="category" class="pf-input pf-select">
                   <option value="">Choose category</option>
-                  <!-- values match the catSelect filter on the shop page -->
-                  <option value="electronics">Electronics</option>
-                  <option value="fashion">Fashion</option>
-                  <option value="home">Home</option>
-                  <option value="beauty">Beauty</option>
-                  <option value="groceries">Groceries</option>
-                  <option value="clothes">Clothes</option>
-                  <option value="second-hand-clothes">Second Hand Clothing</option>
-                  <option value="uncategorized-second-hand-things">Uncategorized Second Hand Things</option>
+
+                  <% if (Array.isArray(CATEGORIES)) { %>
+                    <% CATEGORIES.forEach(function(c){ %>
+                      <option value="<%= c.value %>"><%= c.label %></option>
+                    <% }) %>
+                  <% } %>
                 </select>
+
                 <div class="pf-hint">Used for filters on the shopping page.</div>
               </label>
             </div>
@@ -184,7 +183,10 @@
                     aria-haspopup="listbox"
                     aria-expanded="false"
                   >
-                    <span id="madeSelectedText">Select country</span>
+                    <span class="pf-country-selected-left">
+                      <img id="madeSelectedFlagImg" class="pf-flag-img" alt="" aria-hidden="true" />
+                      <span id="madeSelectedText">Select country</span>
+                    </span>
                     <span class="pf-country-arrow">▾</span>
                   </div>
 
@@ -198,13 +200,24 @@
                     />
 
                     <div class="pf-country-list" id="madeList">
-                      <% if (Array.isArray(COUNTRIES)) { %>
+                     <% if (Array.isArray(COUNTRIES)) { %>
                         <% COUNTRIES.forEach(function(c) { %>
                           <div
                             class="pf-country-option"
                             data-value="<%= c.name %>"
                             data-code="<%= c.code %>"
-                          ><%= c.name %></div>
+                            data-flag="<%= c.flag %>"
+                            data-search="<%= String(c.name || '').toLowerCase() %>"
+                            role="option"
+                          >
+                           <img
+                              class="pf-flag-img"
+                              src="https://flagcdn.com/20x15/<%= String(c.code || '').toLowerCase() %>.png"
+                              alt=""
+                              loading="lazy"
+                            />
+                            <span class="pf-country-name"><%= c.name %></span>
+                          </div>
                         <% }) %>
                       <% } %>
                     </div>
@@ -834,6 +847,12 @@
     transition: var(--transition);
   }
 
+  .pf-country-option{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
   .pf-country-option:hover {
     background: rgba(37, 99, 235, 0.12);
   }
@@ -849,6 +868,38 @@
 
   .pf-shell.theme-dark .pf-country-option.active {
     background: rgba(124, 58, 237, 0.25);
+  }
+
+  .pf-country-selected-left{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-width:0;
+  }
+
+  .pf-flag{
+    width: 1.4em;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    line-height: 1;
+    font-size: 15px;
+    font-family: "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",system-ui,sans-serif;
+  }
+
+  .pf-flag-img{
+    width: 18px;
+    height: 13px;
+    border-radius: 3px;
+    object-fit: cover;
+    flex: 0 0 auto;
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+  }
+
+  .pf-country-name{
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* ========= IMAGE UPLOAD ========= */
@@ -1114,9 +1165,9 @@
     const madeDropdown = document.getElementById('madeDropdown');
     const madeSelected = document.getElementById('madeSelected');
     const madeSelectedText = document.getElementById('madeSelectedText');
+    const madeSelectedFlagImg = document.getElementById('madeSelectedFlagImg');
     const madeMenu = document.getElementById('madeMenu');
     const madeSearch = document.getElementById('madeSearch');
-    const madeList = document.getElementById('madeList');
 
     const madeHidden = document.getElementById('made');      // hidden required input (submits)
     const madeCode = document.getElementById('madeCode');    // hidden ISO code (submits)
@@ -1134,7 +1185,7 @@
         }
 
         // show all options on open
-        getOptions().forEach(opt => (opt.style.display = 'block'));
+        getOptions().forEach(opt => (opt.style.display = 'flex'));
       };
 
       const close = () => {
@@ -1161,15 +1212,21 @@
         if (!madeDropdown.contains(e.target)) close();
       });
 
-      // option click -> set hidden inputs
       getOptions().forEach(opt => {
         opt.addEventListener('click', () => {
           const value = String(opt.dataset.value || '').trim();
-          const code = String(opt.dataset.code || '').trim();
-
+          const code  = String(opt.dataset.code || '').trim();
           madeSelectedText.textContent = value || 'Select country';
-          madeHidden.value = value;
 
+          if (madeSelectedFlagImg) {
+            if (code) {
+              madeSelectedFlagImg.src = `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
+            } else {
+              madeSelectedFlagImg.removeAttribute('src');
+            }
+          }
+
+          madeHidden.value = value;
           if (madeCode) madeCode.value = code;
 
           getOptions().forEach(o => o.classList.remove('active'));
@@ -1184,8 +1241,8 @@
         madeSearch.addEventListener('input', () => {
           const term = String(madeSearch.value || '').toLowerCase().trim();
           getOptions().forEach(opt => {
-            const text = String(opt.textContent || '').toLowerCase();
-            opt.style.display = text.includes(term) ? 'block' : 'none';
+            const hay = String(opt.dataset.search || opt.textContent || '').toLowerCase();
+            opt.style.display = hay.includes(term) ? 'flex' : 'none';
           });
         });
       }

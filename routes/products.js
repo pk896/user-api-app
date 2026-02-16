@@ -306,10 +306,15 @@ router.post(
         size: req.body.size?.trim(),
         quality: req.body.quality?.trim(),
         made: req.body.made?.trim(),
+        madeCode: (req.body.madeCode || '').trim(),
         manufacturer: req.body.manufacturer?.trim(),
-        type: req.body.type?.trim(),
 
-        // ✅ NEW: shipping measurements
+
+        // ✅ status flags (match your edit route + virtual isNew)
+        isNew: !!req.body.isNew,
+        isOnSale: !!req.body.isOnSale,
+        isPopular: !!req.body.isPopular,
+
         shipping: {
           weight: { value: shipWeightValue, unit: shipWeightUnit },
           dimensions: {
@@ -479,6 +484,7 @@ router.post(
         'size',
         'quality',
         'made',
+        'madeCode',
         'manufacturer',
         'type',
       ];
@@ -509,13 +515,6 @@ router.post(
         product.description = req.body.description.trim();
       }
 
-      // ---------- ROLE (ENUM) ----------
-      if (typeof req.body.role === 'string' && req.body.role.trim()) {
-        product.role = req.body.role.trim();
-      } else {
-        // if empty, leave existing role as-is
-      }
-
       // ---------- VARIANT ARRAYS ----------
       function parseListField(value) {
         if (!value || typeof value !== 'string') return [];
@@ -543,9 +542,9 @@ router.post(
 
       // ---------- STATUS FLAGS ----------
       // Checkbox => value "on", or undefined if unchecked
-      product.isNew = !!req.body.isNew;
-      product.isOnSale = !!req.body.isOnSale;
-      product.isPopular = !!req.body.isPopular;
+      product.isNew = checkboxOn(req.body.isNew);       // virtual -> isNewItem
+      product.isOnSale = checkboxOn(req.body.isOnSale);
+      product.isPopular = checkboxOn(req.body.isPopular);
 
       // ---------- SHIPPING (REQUIRED) ----------      
       const shipWeightValue = numOrNull(req.body.shipWeightValue);
