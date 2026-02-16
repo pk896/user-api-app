@@ -1,837 +1,862 @@
 <!--views/edit-product.ejs-->
+
+<%
+// Keep everything router-dependent exactly the same.
+%>
+
 <div class="edit-product-page">
-  <!-- Page Header -->
-  <div class="page-header">
-    <div class="header-content">
-      <div class="header-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="26" height="26">
-          <path fill="currentColor" d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
-        </svg>
-      </div>
+  <!-- FULL-WIDTH ESCAPE WRAPPER (fixes squeezed center on mobile) -->
+  <div class="ep-fullbleed">
+    <div class="ep-wrap <%= (themeCss && themeCss.includes('dark')) ? 'dark-theme' : 'light-theme' %>">
 
-      <div class="header-text">
-        <h1 class="page-title">Edit Product</h1>
-        <p class="page-subtitle">Update your product information and images</p>
-      </div>
-    </div>
-
-    <a href="/products/all" class="back-button" aria-label="Back to all products">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
-      </svg>
-      <span>All Products</span>
-    </a>
-  </div>
-
-  <!-- Flash Messages (kept as-is; styled only) -->
-  <div class="flash-container">
-    <% if (success && success.length > 0) { %>
-      <div class="flash flash-success" role="status" aria-live="polite">
-        <svg class="flash-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-        </svg>
-        <div class="flash-content">
-          <strong>Success</strong>
-          <p><%= success %></p>
-        </div>
-      </div>
-    <% } %>
-
-    <% if (error && error.length > 0) { %>
-      <div class="flash flash-error" role="alert" aria-live="assertive">
-        <svg class="flash-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-        </svg>
-        <div class="flash-content">
-          <strong>Error</strong>
-          <p><%= error %></p>
-        </div>
-      </div>
-    <% } %>
-  </div>
-
-  <div class="page-content <%= (themeCss && themeCss.includes('dark')) ? 'dark-theme' : 'light-theme' %>">
-    <% if (business) { %>
-      <%
-        // ✅ Role removed: we only use product.type now
-        const prodType  = (product.type  || '').toLowerCase();
-        const isShoes   = prodType === 'shoes';
-        const isClothes = prodType === 'clothes';
-
-        // ---------------------------
-        // Shipping / package defaults (backwards compatible)
-        // ---------------------------
-        const ship = product.shipping || {};
-        const shipWeight = ship.weight || {};
-        const shipDims = ship.dimensions || {};
-
-        const shipWeightValue = (shipWeight.value ?? '');
-        const shipWeightUnit  = (shipWeight.unit  ?? 'kg');
-
-        const shipLength = (shipDims.length ?? '');
-        const shipWidth  = (shipDims.width  ?? '');
-        const shipHeight = (shipDims.height ?? '');
-        const shipDimUnit = (shipDims.unit ?? 'cm');
-
-        const packagingHint = (ship.packagingHint ?? '');
-        const shipSeparately = !!ship.shipSeparately;
-        const fragile = !!ship.fragile;
-      %>
-
-      <div class="edit-form-container">
-        <div class="form-tabs" role="tablist" aria-label="Edit product tabs">
-          <button type="button" class="tab active" data-tab="basic" role="tab" aria-selected="true">Basic</button>
-          <button type="button" class="tab" data-tab="details" role="tab" aria-selected="false">Details</button>
-          <button type="button" class="tab" data-tab="media" role="tab" aria-selected="false">Media</button>
-        </div>
-
-        <form
-          id="editProductForm"
-          action="/products/edit/<%= product.customId %>"
-          method="POST"
-          enctype="multipart/form-data"
-          class="product-form"
-          novalidate
-        >
-          <!-- Basic Info Tab -->
-          <div class="tab-content active" id="basic-tab" role="tabpanel">
-            <div class="form-section section-purple">
-              <div class="section-header">
-                <div class="sec-badge sec-purple" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18">
-                    <path fill="currentColor" d="M4 6h16v2H4zm0 4h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/>
-                  </svg>
-                </div>
-                <div>
-                  <h3>Product Information</h3>
-                  <p class="sec-sub">Core product fields shown on your shop card.</p>
-                </div>
-              </div>
-
-              <div class="form-grid">
-                <div class="form-group">
-                  <label for="name" class="form-label">
-                    Product Name <span class="required">*</span>
-                  </label>
-                  <input
-                    id="name"
-                    type="text"
-                    name="name"
-                    value="<%= product.name %>"
-                    required
-                    class="form-input"
-                    placeholder="e.g., Cooling Chair"
-                    autocomplete="off"
-                  />
-                  <div class="form-hint">Tip: short, clear, searchable.</div>
-                </div>
-
-                <div class="form-group">
-                  <label for="price" class="form-label">
-                    Price ($) <span class="required">*</span>
-                  </label>
-                  <div class="input-with-icon">
-                    <span class="currency-icon" aria-hidden="true">$</span>
-                    <input
-                      id="price"
-                      type="number"
-                      name="price"
-                      step="0.01"
-                      min="0.01"
-                      value="<%= product.price %>"
-                      required
-                      class="form-input"
-                      placeholder="e.g., 199.99"
-                      inputmode="decimal"
-                    />
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label for="stock" class="form-label">Stock Quantity</label>
-                  <input
-                    id="stock"
-                    type="number"
-                    name="stock"
-                    min="0"
-                    value="<%= product.stock %>"
-                    class="form-input"
-                    placeholder="e.g., 25"
-                    inputmode="numeric"
-                  />
-                  <div class="form-hint">Use 0 for out of stock.</div>
-                </div>
-
-                <div class="form-group">
-                  <label for="categorySelect" class="form-label">Category</label>
-
-                  <%
-                    const currentCat = String(product.category || '').trim().toLowerCase();
-                  %>
-
-                  <select id="categorySelect" name="category" class="form-select">
-                    <option value="">Choose category</option>
-
-                    <% if (Array.isArray(CATEGORIES)) { %>
-                      <% CATEGORIES.forEach(function(c){ %>
-                        <option
-                          value="<%= c.value %>"
-                          <%= String(c.value || '').toLowerCase() === currentCat ? 'selected' : '' %>
-                        ><%= c.label %></option>
-                      <% }) %>
-                    <% } %>
-                  </select>
-
-                  <div class="form-hint">Used for filters on the shopping page.</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="form-section section-blue">
-              <div class="section-header">
-                <div class="sec-badge sec-blue" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18">
-                    <path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-                  </svg>
-                </div>
-                <div>
-                  <h3>Description</h3>
-                  <p class="sec-sub">Explain features, benefits, and specs for customers.</p>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="description" class="form-label">Product Description</label>
-                <textarea
-                  id="description"
-                  name="description"
-                  rows="6"
-                  class="form-textarea"
-                  placeholder="e.g., Comfortable chair with cooling design, durable material, perfect for office use..."
-                ><%= product.description || '' %></textarea>
-
-                <div class="row-split">
-                  <div class="form-hint">Keep it clear and helpful.</div>
-                  <div class="char-counter"><span id="charCount">0</span> / 2000</div>
-                </div>
-              </div>
-            </div>
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="header-content">
+          <div class="header-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26">
+              <path fill="currentColor" d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-  .86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
+            </svg>
           </div>
 
-          <!-- Details Tab -->
-          <div class="tab-content" id="details-tab" role="tabpanel">
-            <div class="form-section section-black">
-              <div class="section-header">
-                <div class="sec-badge sec-black" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18">
-                    <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-                  </svg>
-                </div>
-                <div>
-                  <h3>Product Specifications</h3>
-                  <p class="sec-sub">Type, origin, variants, quality, and shipping info.</p>
-                </div>
-              </div>
+          <div class="header-text">
+            <h1 class="page-title">Edit Product</h1>
+            <p class="page-subtitle">Update your product information and images</p>
+          </div>
+        </div>
 
-              <div class="form-grid">
-                <!-- MATCHING TYPE (string, used in demands etc.) -->
-                <div class="form-group">
-                  <label for="typeSelect" class="form-label">Product Type <span class="required">*</span></label>
+        <a href="/products/all" class="back-button" aria-label="Back to all products">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+          <span>All Products</span>
+        </a>
+      </div>
 
-                  <select id="typeSelect" name="type" class="form-select" required>
-                    <option value="">Choose type</option>
+      <!-- Flash Messages (kept as-is; styled only) -->
+      <div class="flash-container">
+        <% if (success && success.length > 0) { %>
+          <div class="flash flash-success" role="status" aria-live="polite">
+            <svg class="flash-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <div class="flash-content">
+              <strong>Success</strong>
+              <p><%= success %></p>
+            </div>
+          </div>
+        <% } %>
 
-                    <% if (Array.isArray(PRODUCT_TYPES)) { %>
-                      <% PRODUCT_TYPES.forEach(function(t){ %>
-                        <option
-                          value="<%= t.value %>"
-                          <%= String(product.type || '').toLowerCase() === String(t.value || '').toLowerCase() ? 'selected' : '' %>
-                        ><%= t.label %></option>
-                      <% }) %>
-                    <% } %>
-                  </select>
+        <% if (error && error.length > 0) { %>
+          <div class="flash flash-error" role="alert" aria-live="assertive">
+            <svg class="flash-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+            <div class="flash-content">
+              <strong>Error</strong>
+              <p><%= error %></p>
+            </div>
+          </div>
+        <% } %>
+      </div>
 
-                  <div class="form-hint">
-                    Used to match demands. Use <strong>clothes</strong> or <strong>shoes</strong> to enable size + color variants.
+      <% if (business) { %>
+        <%
+          // ✅ Role removed: we only use product.type now
+          const prodType  = (product.type  || '').toLowerCase();
+          const isShoes   = prodType === 'shoes';
+          const isClothes = prodType === 'clothes';
+
+          // ---------------------------
+          // Shipping / package defaults (backwards compatible)
+          // ---------------------------
+          const ship = product.shipping || {};
+          const shipWeight = ship.weight || {};
+          const shipDims = ship.dimensions || {};
+
+          const shipWeightValue = (shipWeight.value ?? '');
+          const shipWeightUnit  = (shipWeight.unit  ?? 'kg');
+
+          const shipLength = (shipDims.length ?? '');
+          const shipWidth  = (shipDims.width  ?? '');
+          const shipHeight = (shipDims.height ?? '');
+          const shipDimUnit = (shipDims.unit ?? 'cm');
+
+          const packagingHint = (ship.packagingHint ?? '');
+          const shipSeparately = !!ship.shipSeparately;
+          const fragile = !!ship.fragile;
+        %>
+
+        <!-- FORM CARD (full width on mobile, no squeezed center) -->
+        <div class="edit-form-container">
+
+          <!-- Tabs -->
+          <div class="form-tabs" role="tablist" aria-label="Edit product tabs">
+            <button type="button" class="tab active" data-tab="basic" role="tab" aria-selected="true">Basic</button>
+            <button type="button" class="tab" data-tab="details" role="tab" aria-selected="false">Details</button>
+            <button type="button" class="tab" data-tab="media" role="tab" aria-selected="false">Media</button>
+          </div>
+
+          <form
+            id="editProductForm"
+            action="/products/edit/<%= product.customId %>"
+            method="POST"
+            enctype="multipart/form-data"
+            class="product-form"
+            novalidate
+          >
+
+            <!-- Basic Info Tab -->
+            <div class="tab-content active" id="basic-tab" role="tabpanel">
+              <div class="form-section section-purple">
+                <div class="section-header">
+                  <div class="sec-badge sec-purple" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18">
+                      <path fill="currentColor" d="M4 6h16v2H4zm0 4h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>Product Information</h3>
+                    <p class="sec-sub">Core product fields shown on your shop card.</p>
                   </div>
                 </div>
 
-                <!-- MANUFACTURER -->
-                <div class="form-group">
-                  <label for="manufacturer" class="form-label">Manufacturer</label>
-                  <input
-                    id="manufacturer"
-                    type="text"
-                    name="manufacturer"
-                    value="<%= product.manufacturer || '' %>"
-                    class="form-input"
-                    placeholder="e.g., Samsung, Nike, Ikea"
-                  />
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="name" class="form-label">
+                      Product Name <span class="required">*</span>
+                    </label>
+                    <input
+                      id="name"
+                      type="text"
+                      name="name"
+                      value="<%= product.name %>"
+                      required
+                      class="form-input"
+                      placeholder="e.g., Cooling Chair"
+                      autocomplete="off"
+                    />
+                    <div class="form-hint">Tip: short, clear, searchable.</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="price" class="form-label">
+                      Price ($) <span class="required">*</span>
+                    </label>
+                    <div class="input-with-icon">
+                      <span class="currency-icon" aria-hidden="true">$</span>
+                      <input
+                        id="price"
+                        type="number"
+                        name="price"
+                        step="0.01"
+                        min="0.01"
+                        value="<%= product.price %>"
+                        required
+                        class="form-input"
+                        placeholder="e.g., 199.99"
+                        inputmode="decimal"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="stock" class="form-label">Stock Quantity</label>
+                    <input
+                      id="stock"
+                      type="number"
+                      name="stock"
+                      min="0"
+                      value="<%= product.stock %>"
+                      class="form-input"
+                      placeholder="e.g., 25"
+                      inputmode="numeric"
+                    />
+                    <div class="form-hint">Use 0 for out of stock.</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="categorySelect" class="form-label">Category</label>
+
+                    <%
+                      const currentCat = String(product.category || '').trim().toLowerCase();
+                    %>
+
+                    <select id="categorySelect" name="category" class="form-select">
+                      <option value="">Choose category</option>
+
+                      <% if (Array.isArray(CATEGORIES)) { %>
+                        <% CATEGORIES.forEach(function(c){ %>
+                          <option
+                            value="<%= c.value %>"
+                            <%= String(c.value || '').toLowerCase() === currentCat ? 'selected' : '' %>
+                          ><%= c.label %></option>
+                        <% }) %>
+                      <% } %>
+                    </select>
+
+                    <div class="form-hint">Used for filters on the shopping page.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-section section-blue">
+                <div class="section-header">
+                  <div class="sec-badge sec-blue" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18">
+                      <path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>Description</h3>
+                    <p class="sec-sub">Explain features, benefits, and specs for customers.</p>
+                  </div>
                 </div>
 
-                <!-- MADE IN (Custom searchable dropdown with flags) -->
-                <div class="form-group ep-full">
-                  <label class="form-label">
-                    Made In <span class="required">*</span>
-                  </label>
+                <div class="form-group">
+                  <label for="description" class="form-label">Product Description</label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    rows="6"
+                    class="form-textarea"
+                    placeholder="e.g., Comfortable chair with cooling design, durable material, perfect for office use..."
+                  ><%= product.description || '' %></textarea>
 
-                  <div class="ep-country-dropdown" id="madeDropdown">
-                    <div
-                      class="ep-country-selected"
-                      id="madeSelected"
-                      tabindex="0"
-                      role="button"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                    >
-                      <span class="ep-country-selected-left">
-                        <img id="madeSelectedFlagImg" class="ep-flag-img" alt="" aria-hidden="true" />
-                        <span id="madeSelectedText"><%= (product.made || 'Select country') %></span>
-                      </span>
-                      <span class="ep-country-arrow">▾</span>
+                  <div class="row-split">
+                    <div class="form-hint">Keep it clear and helpful.</div>
+                    <div class="char-counter"><span id="charCount">0</span> / 2000</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Details Tab -->
+            <div class="tab-content" id="details-tab" role="tabpanel">
+              <div class="form-section section-black">
+                <div class="section-header">
+                  <div class="sec-badge sec-black" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18">
+                      <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>Product Specifications</h3>
+                    <p class="sec-sub">Type, origin, variants, quality, and shipping info.</p>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <!-- MATCHING TYPE (string, used in demands etc.) -->
+                  <div class="form-group">
+                    <label for="typeSelect" class="form-label">Product Type <span class="required">*</span></label>
+
+                    <select id="typeSelect" name="type" class="form-select" required>
+                      <option value="">Choose type</option>
+
+                      <% if (Array.isArray(PRODUCT_TYPES)) { %>
+                        <% PRODUCT_TYPES.forEach(function(t){ %>
+                          <option
+                            value="<%= t.value %>"
+                            <%= String(product.type || '').toLowerCase() === String(t.value || '').toLowerCase() ? 'selected' : '' %>
+                          ><%= t.label %></option>
+                        <% }) %>
+                      <% } %>
+                    </select>
+
+                    <div class="form-hint">
+                      Used to match demands. Use <strong>clothes</strong> or <strong>shoes</strong> to enable size + color variants.
+                    </div>
+                  </div>
+
+                  <!-- MANUFACTURER -->
+                  <div class="form-group">
+                    <label for="manufacturer" class="form-label">Manufacturer</label>
+                    <input
+                      id="manufacturer"
+                      type="text"
+                      name="manufacturer"
+                      value="<%= product.manufacturer || '' %>"
+                      class="form-input"
+                      placeholder="e.g., Samsung, Nike, Ikea"
+                    />
+                  </div>
+
+                  <!-- MADE IN (Custom searchable dropdown with flags) -->
+                  <div class="form-group ep-full">
+                    <label class="form-label">
+                      Made In <span class="required">*</span>
+                    </label>
+
+                    <div class="ep-country-dropdown" id="madeDropdown">
+                      <div
+                        class="ep-country-selected"
+                        id="madeSelected"
+                        tabindex="0"
+                        role="button"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                      >
+                        <span class="ep-country-selected-left">
+                          <img id="madeSelectedFlagImg" class="ep-flag-img" alt="" aria-hidden="true" />
+                          <span id="madeSelectedText"><%= (product.made || 'Select country') %></span>
+                        </span>
+                        <span class="ep-country-arrow">▾</span>
+                      </div>
+
+                      <div class="ep-country-menu" id="madeMenu" role="listbox">
+                        <input
+                          type="text"
+                          id="madeSearch"
+                          placeholder="Search country..."
+                          autocomplete="off"
+                          class="ep-country-search-input"
+                        />
+
+                        <div class="ep-country-list" id="madeList">
+                          <% if (Array.isArray(COUNTRIES)) { %>
+                            <% COUNTRIES.forEach(function(c) { %>
+                              <div
+                                class="ep-country-option"
+                                data-value="<%= c.name %>"
+                                data-code="<%= c.code %>"
+                                data-flag="<%= c.flag %>"
+                                data-search="<%= String(c.name || '').toLowerCase() %>"
+                                role="option"
+                              >
+                                <img
+                                  class="ep-flag-img"
+                                  src="https://flagcdn.com/20x15/<%= String(c.code || '').toLowerCase() %>.png"
+                                  alt=""
+                                  loading="lazy"
+                                />
+                                <span class="ep-country-name"><%= c.name %></span>
+                              </div>
+                            <% }) %>
+                          <% } %>
+                        </div>
+                      </div>
+
+                      <!-- ✅ backend-safe hidden inputs -->
+                      <input
+                        type="hidden"
+                        name="made"
+                        id="made"
+                        value="<%= product.made || '' %>"
+                        required
+                      />
+                      <input
+                        type="hidden"
+                        name="madeCode"
+                        id="madeCode"
+                        value="<%= (product && product.madeCode) ? product.madeCode : '' %>"
+                      />
                     </div>
 
-                    <div class="ep-country-menu" id="madeMenu" role="listbox">
-                      <input
-                        type="text"
-                        id="madeSearch"
-                        placeholder="Search country..."
-                        autocomplete="off"
-                        class="ep-country-search-input"
-                      />
+                    <div class="form-hint">
+                      Select country of origin (required).
+                    </div>
+                  </div>
 
-                      <div class="ep-country-list" id="madeList">
-                        <% if (Array.isArray(COUNTRIES)) { %>
-                          <% COUNTRIES.forEach(function(c) { %>
-                            <div
-                              class="ep-country-option"
-                              data-value="<%= c.name %>"
-                              data-code="<%= c.code %>"
-                              data-flag="<%= c.flag %>"
-                              data-search="<%= String(c.name || '').toLowerCase() %>"
-                              role="option"
-                            >
-                              <img
-                                class="ep-flag-img"
-                                src="https://flagcdn.com/20x15/<%= String(c.code || '').toLowerCase() %>.png"
-                                alt=""
-                                loading="lazy"
-                              />
-                              <span class="ep-country-name"><%= c.name %></span>
-                            </div>
-                          <% }) %>
-                        <% } %>
+                  <!-- SINGLE COLOR -->
+                  <div class="form-group">
+                    <label for="color" class="form-label">Default Color</label>
+                    <input
+                      id="color"
+                      type="text"
+                      name="color"
+                      value="<%= product.color || '' %>"
+                      class="form-input"
+                      placeholder="e.g., Black"
+                    />
+                    <div class="form-hint">Used for non-clothing or default variant.</div>
+                  </div>
+
+                  <!-- SINGLE SIZE -->
+                  <div class="form-group">
+                    <label for="size" class="form-label">Default Size</label>
+                    <input
+                      id="size"
+                      type="text"
+                      name="size"
+                      value="<%= product.size || '' %>"
+                      class="form-input"
+                      placeholder="e.g., M, 42, 10x5x2 cm"
+                    />
+                    <div class="form-hint">Used for non-clothing or default variant.</div>
+                  </div>
+
+                  <!-- QUALITY -->
+                  <div class="form-group">
+                    <label for="quality" class="form-label">Quality Grade</label>
+                    <select id="quality" name="quality" class="form-select">
+                      <option value="">Select quality...</option>
+                      <option value="Premium"  <%= product.quality === 'Premium'  ? 'selected' : '' %>>Premium</option>
+                      <option value="Standard" <%= product.quality === 'Standard' ? 'selected' : '' %>>Standard</option>
+                      <option value="Economy"  <%= product.quality === 'Economy'  ? 'selected' : '' %>>Economy</option>
+                      <option value="Wholesale"<%= product.quality === 'Wholesale'? 'selected' : '' %>>Wholesale</option>
+                    </select>
+                    <div class="form-hint">Helps customers compare products.</div>
+                  </div>
+
+                  <!-- VARIANT SIZES ARRAY -->
+                  <div class="form-group">
+                    <label for="sizes" class="form-label">
+                      <%= isShoes ? 'Shoe sizes' : (isClothes ? 'Clothing sizes' : 'Sizes (array)') %>
+                    </label>
+                    <input
+                      id="sizes"
+                      type="text"
+                      name="sizes"
+                      value="<%= (product.sizes && product.sizes.length ? product.sizes.join(', ') : '') %>"
+                      class="form-input"
+                      placeholder="<%= isShoes
+                        ? 'e.g., 3, 4, 5, 6, 7'
+                        : (isClothes ? 'e.g., XS, S, M, L, XL' : 'Comma-separated sizes') %>"
+                    />
+                    <div class="form-hint">
+                      <%= isShoes
+                        ? 'Comma-separated shoe sizes for shop dropdown.'
+                        : (isClothes
+                          ? 'Comma-separated clothing sizes (should not be empty for clothes).'
+                          : 'Comma-separated list of sizes/dimensions.') %>
+                    </div>
+                  </div>
+
+                  <!-- VARIANT COLORS ARRAY -->
+                  <div class="form-group">
+                    <label for="colors" class="form-label">Colors (array)</label>
+                    <input
+                      id="colors"
+                      type="text"
+                      name="colors"
+                      value="<%= (product.colors && product.colors.length ? product.colors.join(', ') : '') %>"
+                      class="form-input"
+                      placeholder="e.g., Red, Blue, Black"
+                    />
+                    <div class="form-hint">Comma-separated list (required for clothes).</div>
+                  </div>
+
+                  <!-- Shipping -->
+                  <div class="form-group ep-full">
+                    <div class="ship-head">
+                      <div class="ship-title">
+                        <span class="ship-pill">📦 Shipping</span>
+                        <strong>Package info for Shippo rates</strong>
+                      </div>
+                      <div class="ship-note">Required. One item only (no box).</div>
+                    </div>
+                  </div>
+
+                  <!-- Weight -->
+                  <div class="form-group">
+                    <label class="form-label">Item Weight <span class="required">*</span></label>
+                    <div class="inline-2">
+                      <input
+                        type="number"
+                        name="shipWeightValue"
+                        step="0.001"
+                        min="0.1"
+                        placeholder="e.g., 0.50"
+                        value="<%= shipWeightValue %>"
+                        required
+                        class="form-input"
+                      />
+                      <select name="shipWeightUnit" class="form-select">
+                        <option value="kg" <%= shipWeightUnit === 'kg' ? 'selected' : '' %>>kg</option>
+                        <option value="g"  <%= shipWeightUnit === 'g'  ? 'selected' : '' %>>g</option>
+                        <option value="lb" <%= shipWeightUnit === 'lb' ? 'selected' : '' %>>lb</option>
+                        <option value="oz" <%= shipWeightUnit === 'oz' ? 'selected' : '' %>>oz</option>
+                      </select>
+                    </div>
+                    <div class="form-hint">Example: 0.5 kg</div>
+                  </div>
+
+                  <!-- Packaging hint -->
+                  <div class="form-group">
+                    <label class="form-label">Packaging Hint</label>
+                    <input
+                      type="text"
+                      name="packagingHint"
+                      value="<%= packagingHint %>"
+                      placeholder="e.g., small-box / tube / fragile"
+                      class="form-input"
+                    />
+                    <div class="form-hint">Optional. Leave empty if unsure.</div>
+                  </div>
+
+                  <!-- Dimensions -->
+                  <div class="form-group ep-full">
+                    <label class="form-label">Item Dimensions (L × W × H) <span class="required">*</span></label>
+                    <div class="dims-grid">
+                      <input
+                        type="number"
+                        name="shipLength"
+                        step="0.1"
+                        min="0"
+                        placeholder="Length"
+                        value="<%= shipLength %>"
+                        required
+                        class="form-input"
+                      />
+                      <input
+                        type="number"
+                        name="shipWidth"
+                        step="0.1"
+                        min="0"
+                        placeholder="Width"
+                        value="<%= shipWidth %>"
+                        required
+                        class="form-input"
+                      />
+                      <input
+                        type="number"
+                        name="shipHeight"
+                        step="0.1"
+                        min="0"
+                        placeholder="Height"
+                        value="<%= shipHeight %>"
+                        required
+                        class="form-input"
+                      />
+                      <select name="shipDimUnit" class="form-select">
+                        <option value="cm" <%= shipDimUnit === 'cm' ? 'selected' : '' %>>cm</option>
+                        <option value="in" <%= shipDimUnit === 'in' ? 'selected' : '' %>>in</option>
+                      </select>
+                    </div>
+                    <div class="form-hint">Example: 30 × 20 × 10 cm</div>
+                  </div>
+
+                  <!-- Flags -->
+                  <div class="form-group ep-full">
+                    <label class="form-label">Shipping Flags</label>
+                    <div class="flags-row">
+                      <label class="flag">
+                        <input type="hidden" name="shipSeparately" value="0" />
+                        <input
+                          type="checkbox"
+                          name="shipSeparately"
+                          value="on"
+                          <%= shipSeparately ? 'checked' : '' %>
+                        />
+                        <span>Ship separately</span>
+                      </label>
+
+                      <label class="flag">
+                        <input type="hidden" name="fragile" value="0" />
+                        <input
+                          type="checkbox"
+                          name="fragile"
+                          value="on"
+                          <%= fragile ? 'checked' : '' %>
+                        />
+                        <span>Fragile</span>
+                      </label>
+                    </div>
+                    <div class="form-hint">Use when item must be boxed alone or needs careful handling.</div>
+                  </div>
+
+                  <!-- STATUS FLAGS -->
+                  <div class="form-group ep-full">
+                    <label class="form-label">Status Flags</label>
+                    <div class="flags-row">
+                      <label class="flag">
+                        <input type="checkbox" name="isNew" <%= product.isNew ? 'checked' : '' %> />
+                        <span>New</span>
+                      </label>
+                      <label class="flag">
+                        <input type="checkbox" name="isOnSale" <%= product.isOnSale ? 'checked' : '' %> />
+                        <span>On sale</span>
+                      </label>
+                      <label class="flag">
+                        <input type="checkbox" name="isPopular" <%= product.isPopular ? 'checked' : '' %> />
+                        <span>Popular</span>
+                      </label>
+                    </div>
+                    <div class="form-hint">Used for badges and filters in the shop.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Media Tab -->
+            <div class="tab-content" id="media-tab" role="tabpanel">
+              <div class="form-section section-green">
+                <div class="section-header">
+                  <div class="sec-badge sec-green" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18">
+                      <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>Product Images</h3>
+                    <p class="sec-sub">Current image + upload a new one (optional).</p>
+                  </div>
+                </div>
+
+                <div class="media-grid">
+                  <div class="current-image-card">
+                    <div class="image-card-header">
+                      <h4>Current Image</h4>
+                      <span class="image-status">Active</span>
+                    </div>
+                    <img
+                      src="<%= product.imageUrl %>"
+                      alt="Current image for <%= product.name %>"
+                      class="current-image-preview"
+                      loading="lazy"
+                    />
+                    <div class="image-info">
+                      <span class="muted">Shown to customers</span>
+                      <span class="pill pill-blue">Display</span>
+                    </div>
+                  </div>
+
+                  <div class="upload-image-card">
+                    <div class="image-card-header">
+                      <h4>Upload New</h4>
+                      <span class="image-optional">Optional</span>
+                    </div>
+
+                    <div class="upload-area" id="uploadArea" tabindex="0" role="button" aria-label="Upload a new product image">
+                      <svg class="upload-icon" viewBox="0 0 24 24" width="46" height="46" aria-hidden="true">
+                        <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                      </svg>
+                      <p class="upload-text">Tap to upload</p>
+                      <p class="upload-subtext">PNG/JPG • Max 5MB</p>
+                      <input
+                        id="imageFile"
+                        type="file"
+                        name="imageFile"
+                        accept="image/*"
+                        class="file-input"
+                      />
+                    </div>
+
+                    <div id="newImagePreviewWrapper" class="image-preview-wrapper" style="display:none;">
+                      <div class="preview-header">
+                        <h4>New Preview</h4>
+                        <button type="button" class="remove-preview" id="removePreview" aria-label="Remove new image preview">
+                          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                            <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                          </svg>
+                        </button>
+                      </div>
+
+                      <img id="newImagePreview" class="new-image-preview" alt="New image preview" />
+                      <div class="preview-info">
+                        <span id="fileName"></span>
+                        <span id="fileSize"></span>
                       </div>
                     </div>
-
-                    <!-- ✅ backend-safe hidden inputs -->
-                    <input
-                      type="hidden"
-                      name="made"
-                      id="made"
-                      value="<%= product.made || '' %>"
-                      required
-                    />
-                    <input
-                      type="hidden"
-                      name="madeCode"
-                      id="madeCode"
-                      value="<%= (product && product.madeCode) ? product.madeCode : '' %>"
-                    />
-                  </div>
-
-                  <div class="form-hint">
-                    Select country of origin (required).
                   </div>
                 </div>
 
-                <!-- SINGLE COLOR -->
-                <div class="form-group">
-                  <label for="color" class="form-label">Default Color</label>
-                  <input
-                    id="color"
-                    type="text"
-                    name="color"
-                    value="<%= product.color || '' %>"
-                    class="form-input"
-                    placeholder="e.g., Black"
-                  />
-                  <div class="form-hint">Used for non-clothing or default variant.</div>
-                </div>
-
-                <!-- SINGLE SIZE -->
-                <div class="form-group">
-                  <label for="size" class="form-label">Default Size</label>
-                  <input
-                    id="size"
-                    type="text"
-                    name="size"
-                    value="<%= product.size || '' %>"
-                    class="form-input"
-                    placeholder="e.g., M, 42, 10x5x2 cm"
-                  />
-                  <div class="form-hint">Used for non-clothing or default variant.</div>
-                </div>
-
-                <!-- QUALITY -->
-                <div class="form-group">
-                  <label for="quality" class="form-label">Quality Grade</label>
-                  <select id="quality" name="quality" class="form-select">
-                    <option value="">Select quality...</option>
-                    <option value="Premium"  <%= product.quality === 'Premium'  ? 'selected' : '' %>>Premium</option>
-                    <option value="Standard" <%= product.quality === 'Standard' ? 'selected' : '' %>>Standard</option>
-                    <option value="Economy"  <%= product.quality === 'Economy'  ? 'selected' : '' %>>Economy</option>
-                    <option value="Wholesale"<%= product.quality === 'Wholesale'? 'selected' : '' %>>Wholesale</option>
-                  </select>
-                  <div class="form-hint">Helps customers compare products.</div>
-                </div>
-
-                <!-- VARIANT SIZES ARRAY -->
-                <div class="form-group">
-                  <label for="sizes" class="form-label">
-                    <%= isShoes ? 'Shoe sizes' : (isClothes ? 'Clothing sizes' : 'Sizes (array)') %>
-                  </label>
-                  <input
-                    id="sizes"
-                    type="text"
-                    name="sizes"
-                    value="<%= (product.sizes && product.sizes.length ? product.sizes.join(', ') : '') %>"
-                    class="form-input"
-                    placeholder="<%= isShoes
-                      ? 'e.g., 3, 4, 5, 6, 7'
-                      : (isClothes ? 'e.g., XS, S, M, L, XL' : 'Comma-separated sizes') %>"
-                  />
-                  <div class="form-hint">
-                    <%= isShoes
-                      ? 'Comma-separated shoe sizes for shop dropdown.'
-                      : (isClothes
-                        ? 'Comma-separated clothing sizes (should not be empty for clothes).'
-                        : 'Comma-separated list of sizes/dimensions.') %>
-                  </div>
-                </div>
-
-                <!-- VARIANT COLORS ARRAY -->
-                <div class="form-group">
-                  <label for="colors" class="form-label">Colors (array)</label>
-                  <input
-                    id="colors"
-                    type="text"
-                    name="colors"
-                    value="<%= (product.colors && product.colors.length ? product.colors.join(', ') : '') %>"
-                    class="form-input"
-                    placeholder="e.g., Red, Blue, Black"
-                  />
-                  <div class="form-hint">Comma-separated list (required for clothes).</div>
-                </div>
-
-                <!-- Shipping -->
-                <div class="form-group ep-full">
-                  <div class="ship-head">
-                    <div class="ship-title">
-                      <span class="ship-pill">📦 Shipping</span>
-                      <strong>Package info for Shippo rates</strong>
-                    </div>
-                    <div class="ship-note">Required. One item only (no box).</div>
-                  </div>
-                </div>
-
-                <!-- Weight -->
-                <div class="form-group">
-                  <label class="form-label">Item Weight <span class="required">*</span></label>
-                  <div class="inline-2">
-                    <input
-                      type="number"
-                      name="shipWeightValue"
-                      step="0.001"
-                      min="0.1"
-                      placeholder="e.g., 0.50"
-                      value="<%= shipWeightValue %>"
-                      required
-                      class="form-input"
-                    />
-                    <select name="shipWeightUnit" class="form-select">
-                      <option value="kg" <%= shipWeightUnit === 'kg' ? 'selected' : '' %>>kg</option>
-                      <option value="g"  <%= shipWeightUnit === 'g'  ? 'selected' : '' %>>g</option>
-                      <option value="lb" <%= shipWeightUnit === 'lb' ? 'selected' : '' %>>lb</option>
-                      <option value="oz" <%= shipWeightUnit === 'oz' ? 'selected' : '' %>>oz</option>
-                    </select>
-                  </div>
-                  <div class="form-hint">Example: 0.5 kg</div>
-                </div>
-
-                <!-- Packaging hint -->
-                <div class="form-group">
-                  <label class="form-label">Packaging Hint</label>
-                  <input
-                    type="text"
-                    name="packagingHint"
-                    value="<%= packagingHint %>"
-                    placeholder="e.g., small-box / tube / fragile"
-                    class="form-input"
-                  />
-                  <div class="form-hint">Optional. Leave empty if unsure.</div>
-                </div>
-
-                <!-- Dimensions -->
-                <div class="form-group ep-full">
-                  <label class="form-label">Item Dimensions (L × W × H) <span class="required">*</span></label>
-                  <div class="dims-grid">
-                    <input
-                      type="number"
-                      name="shipLength"
-                      step="0.1"
-                      min="0"
-                      placeholder="Length"
-                      value="<%= shipLength %>"
-                      required
-                      class="form-input"
-                    />
-                    <input
-                      type="number"
-                      name="shipWidth"
-                      step="0.1"
-                      min="0"
-                      placeholder="Width"
-                      value="<%= shipWidth %>"
-                      required
-                      class="form-input"
-                    />
-                    <input
-                      type="number"
-                      name="shipHeight"
-                      step="0.1"
-                      min="0"
-                      placeholder="Height"
-                      value="<%= shipHeight %>"
-                      required
-                      class="form-input"
-                    />
-                    <select name="shipDimUnit" class="form-select">
-                      <option value="cm" <%= shipDimUnit === 'cm' ? 'selected' : '' %>>cm</option>
-                      <option value="in" <%= shipDimUnit === 'in' ? 'selected' : '' %>>in</option>
-                    </select>
-                  </div>
-                  <div class="form-hint">Example: 30 × 20 × 10 cm</div>
-                </div>
-
-                <!-- Flags -->
-                <div class="form-group ep-full">
-                  <label class="form-label">Shipping Flags</label>
-                  <div class="flags-row">
-                    <label class="flag">
-                      <input type="hidden" name="shipSeparately" value="0" />
-                      <input
-                        type="checkbox"
-                        name="shipSeparately"
-                        value="on"
-                        <%= shipSeparately ? 'checked' : '' %>
-                      />
-                      <span>Ship separately</span>
-                    </label>
-
-                    <label class="flag">
-                      <input type="hidden" name="fragile" value="0" />
-                      <input
-                        type="checkbox"
-                        name="fragile"
-                        value="on"
-                        <%= fragile ? 'checked' : '' %>
-                      />
-                      <span>Fragile</span>
-                    </label>
-                  </div>
-                  <div class="form-hint">Use when item must be boxed alone or needs careful handling.</div>
-                </div>
-
-                <!-- STATUS FLAGS -->
-                <div class="form-group ep-full">
-                  <label class="form-label">Status Flags</label>
-                  <div class="flags-row">
-                    <label class="flag">
-                      <input type="checkbox" name="isNew" <%= product.isNew ? 'checked' : '' %> />
-                      <span>New</span>
-                    </label>
-                    <label class="flag">
-                      <input type="checkbox" name="isOnSale" <%= product.isOnSale ? 'checked' : '' %> />
-                      <span>On sale</span>
-                    </label>
-                    <label class="flag">
-                      <input type="checkbox" name="isPopular" <%= product.isPopular ? 'checked' : '' %> />
-                      <span>Popular</span>
-                    </label>
-                  </div>
-                  <div class="form-hint">Used for badges and filters in the shop.</div>
+                <div class="media-note">
+                  <span class="pill pill-green">Tip</span>
+                  Use a clear product photo with a clean background for better conversions.
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Media Tab -->
-          <div class="tab-content" id="media-tab" role="tabpanel">
-            <div class="form-section section-green">
-              <div class="section-header">
-                <div class="sec-badge sec-green" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18">
-                    <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+            <!-- Form Actions -->
+            <div class="form-actions">
+              <div class="action-buttons">
+                <button type="submit" class="btn btn-primary">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
                   </svg>
-                </div>
-                <div>
-                  <h3>Product Images</h3>
-                  <p class="sec-sub">Current image + upload a new one (optional).</p>
-                </div>
+                  Save Changes
+                </button>
+
+                <a href="/products/view/<%= product.customId %>" class="btn btn-secondary">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  View Details
+                </a>
+
+                <button type="button" class="btn btn-danger" id="deleteProduct">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                  </svg>
+                  Delete
+                </button>
               </div>
 
-              <div class="media-grid">
-                <div class="current-image-card">
-                  <div class="image-card-header">
-                    <h4>Current Image</h4>
-                    <span class="image-status">Active</span>
-                  </div>
-                  <img
-                    src="<%= product.imageUrl %>"
-                    alt="Current image for <%= product.name %>"
-                    class="current-image-preview"
-                    loading="lazy"
-                  />
-                  <div class="image-info">
-                    <span class="muted">Shown to customers</span>
-                    <span class="pill pill-blue">Display</span>
-                  </div>
-                </div>
-
-                <div class="upload-image-card">
-                  <div class="image-card-header">
-                    <h4>Upload New</h4>
-                    <span class="image-optional">Optional</span>
-                  </div>
-
-                  <div class="upload-area" id="uploadArea" tabindex="0" role="button" aria-label="Upload a new product image">
-                    <svg class="upload-icon" viewBox="0 0 24 24" width="46" height="46" aria-hidden="true">
-                      <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
-                    </svg>
-                    <p class="upload-text">Tap to upload</p>
-                    <p class="upload-subtext">PNG/JPG • Max 5MB</p>
-                    <input
-                      id="imageFile"
-                      type="file"
-                      name="imageFile"
-                      accept="image/*"
-                      class="file-input"
-                    />
-                  </div>
-
-                  <div id="newImagePreviewWrapper" class="image-preview-wrapper" style="display:none;">
-                    <div class="preview-header">
-                      <h4>New Preview</h4>
-                      <button type="button" class="remove-preview" id="removePreview" aria-label="Remove new image preview">
-                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                          <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                      </button>
-                    </div>
-
-                    <img id="newImagePreview" class="new-image-preview" alt="New image preview" />
-                    <div class="preview-info">
-                      <span id="fileName"></span>
-                      <span id="fileSize"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="media-note">
-                <span class="pill pill-green">Tip</span>
-                Use a clear product photo with a clean background for better conversions.
+              <div class="form-note">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                Fields marked with <span class="required">*</span> are required
               </div>
             </div>
+
+          </form>
+        </div>
+
+      <% } else { %>
+        <!-- No business session -->
+        <div class="auth-required-card">
+          <div class="auth-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="48" height="48">
+              <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+            </svg>
           </div>
-
-          <!-- Form Actions -->
-          <div class="form-actions">
-            <div class="action-buttons">
-              <button type="submit" class="btn btn-primary">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-                </svg>
-                Save Changes
-              </button>
-
-              <a href="/products/view/<%= product.customId %>" class="btn btn-secondary">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                </svg>
-                View Details
-              </a>
-
-              <button type="button" class="btn btn-danger" id="deleteProduct">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                </svg>
-                Delete
-              </button>
-            </div>
-
-            <div class="form-note">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+          <h3>Authentication Required</h3>
+          <p>You must be logged in with a business account to edit products.</p>
+          <div class="auth-actions">
+            <a href="/business/login" class="btn btn-primary">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path fill="currentColor" d="M10 17v-3H3v-4h7V7l5 5-5 5z"/>
               </svg>
-              Fields marked with <span class="required">*</span> are required
-            </div>
+              Business Login
+            </a>
+            <a href="/business/register" class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+              Register Business
+            </a>
           </div>
-        </form>
-      </div>
-
-    <% } else { %>
-      <!-- No business session -->
-      <div class="auth-required-card">
-        <div class="auth-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="48" height="48">
-            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-          </svg>
         </div>
-        <h3>Authentication Required</h3>
-        <p>You must be logged in with a business account to edit products.</p>
-        <div class="auth-actions">
-          <a href="/business/login" class="btn btn-primary">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="currentColor" d="M10 17v-3H3v-4h7V7l5 5-5 5z"/>
-            </svg>
-            Business Login
-          </a>
-          <a href="/business/register" class="btn btn-secondary">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            Register Business
-          </a>
-        </div>
-      </div>
 
-      <!-- BUYER: Read-only view -->
-      <div class="view-only-container">
-        <div class="product-view-card">
-          <div class="product-header">
-            <h2 class="product-title"><%= product.name %></h2>
-            <div class="product-price">
-              <span class="currency">$</span>
-              <span class="amount"><%= Number(product.price).toFixed(2) %></span>
+        <!-- BUYER: Read-only view (kept same ids/vars as your original) -->
+        <div class="view-only-container">
+          <div class="product-view-card">
+            <div class="product-header">
+              <h2 class="product-title"><%= product.name %></h2>
+              <div class="product-price">
+                <span class="currency">$</span>
+                <span class="amount"><%= Number(product.price).toFixed(2) %></span>
+              </div>
             </div>
-          </div>
 
-          <div class="product-content">
-            <div class="product-media">
-              <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
-              <div class="stock-status <%= product.stock > 0 ? 'in-stock' : 'out-of-stock' %>">
-                <% if (product.stock > 0) { %>
-                  <svg class="status-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                  </svg>
-                  <span>In Stock: <strong><%= product.stock %></strong></span>
-                <% } else { %>
-                  <svg class="status-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                    <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                  </svg>
-                  <span>Out of Stock</span>
+            <div class="product-content">
+              <div class="product-media">
+                <img src="<%= product.imageUrl %>" alt="<%= product.name %>" class="product-image" />
+                <div class="stock-status <%= product.stock > 0 ? 'in-stock' : 'out-of-stock' %>">
+                  <% if (product.stock > 0) { %>
+                    <svg class="status-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                    <span>In Stock: <strong><%= product.stock %></strong></span>
+                  <% } else { %>
+                    <svg class="status-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                    </svg>
+                    <span>Out of Stock</span>
+                  <% } %>
+                </div>
+              </div>
+
+              <div class="product-details">
+                <div class="details-section">
+                  <h3>Product Details</h3>
+                  <div class="details-grid">
+                    <% if (product.category) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Category</span>
+                        <span class="detail-value"><%= product.category %></span>
+                      </div>
+                    <% } %>
+                    <% if (product.type) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Type</span>
+                        <span class="detail-value"><%= product.type %></span>
+                      </div>
+                    <% } %>
+                    <% if (product.color) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Color</span>
+                        <span class="detail-value"><%= product.color %></span>
+                      </div>
+                    <% } %>
+                    <% if (product.size) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Size</span>
+                        <span class="detail-value"><%= product.size %></span>
+                      </div>
+                    <% } %>
+                    <% if (product.quality) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Quality</span>
+                        <span class="detail-value"><%= product.quality %></span>
+                      </div>
+                    <% } %>
+                    <% if (product.made) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Made In</span>
+                        <span class="detail-value"><%= product.made %></span>
+                      </div>
+                    <% } %>
+                    <% if (product.manufacturer) { %>
+                      <div class="detail-item">
+                        <span class="detail-label">Manufacturer</span>
+                        <span class="detail-value"><%= product.manufacturer %></span>
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+
+                <% if (product.description) { %>
+                  <div class="description-section">
+                    <h3>Description</h3>
+                    <div class="description-content">
+                      <%= product.description %>
+                    </div>
+                  </div>
                 <% } %>
               </div>
             </div>
 
-            <div class="product-details">
-              <div class="details-section">
-                <h3>Product Details</h3>
-                <div class="details-grid">
-                  <% if (product.category) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Category</span>
-                      <span class="detail-value"><%= product.category %></span>
-                    </div>
-                  <% } %>
-                  <% if (product.type) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Type</span>
-                      <span class="detail-value"><%= product.type %></span>
-                    </div>
-                  <% } %>
-                  <% if (product.color) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Color</span>
-                      <span class="detail-value"><%= product.color %></span>
-                    </div>
-                  <% } %>
-                  <% if (product.size) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Size</span>
-                      <span class="detail-value"><%= product.size %></span>
-                    </div>
-                  <% } %>
-                  <% if (product.quality) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Quality</span>
-                      <span class="detail-value"><%= product.quality %></span>
-                    </div>
-                  <% } %>
-                  <% if (product.made) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Made In</span>
-                      <span class="detail-value"><%= product.made %></span>
-                    </div>
-                  <% } %>
-                  <% if (product.manufacturer) { %>
-                    <div class="detail-item">
-                      <span class="detail-label">Manufacturer</span>
-                      <span class="detail-value"><%= product.manufacturer %></span>
-                    </div>
-                  <% } %>
-                </div>
-              </div>
-
-              <% if (product.description) { %>
-                <div class="description-section">
-                  <h3>Description</h3>
-                  <div class="description-content">
-                    <%= product.description %>
-                  </div>
-                </div>
+            <div class="product-actions">
+              <a href="/products/all" class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Back to Products
+              </a>
+              <% if (product.stock > 0) { %>
+                <a href="/api/cart/add?pid=<%= product.customId %>" class="btn btn-primary">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
+                  </svg>
+                  Add to Cart
+                </a>
+              <% } else { %>
+                <button class="btn btn-disabled" disabled>
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  </svg>
+                  Out of Stock
+                </button>
               <% } %>
             </div>
           </div>
-
-          <div class="product-actions">
-            <a href="/products/all" class="btn btn-secondary">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
-              </svg>
-              Back to Products
-            </a>
-            <% if (product.stock > 0) { %>
-              <a href="/api/cart/add?pid=<%= product.customId %>" class="btn btn-primary">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
-                </svg>
-                Add to Cart
-              </a>
-            <% } else { %>
-              <button class="btn btn-disabled" disabled>
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                </svg>
-                Out of Stock
-              </button>
-            <% } %>
-          </div>
         </div>
-      </div>
-    <% } %>
+      <% } %>
+
+    </div>
   </div>
 </div>
 
 <style nonce="<%= nonce %>">
   /* ==========================================================
-     Unicoporate – Edit Product (Mobile First / No Cutoffs)
-     Dominant Purple: #7C3AED
+     Unicoporate – Edit Product (TRUE Mobile Full-Width Fix)
+     Key fix: full-bleed wrapper breaks out of parent containers.
      ========================================================== */
 
-  .edit-product-page{
+  .edit-product-page,
+  .edit-product-page * { box-sizing:border-box; }
+
+  /* Full-bleed escape: prevents squeezed center column on mobile */
+  .ep-fullbleed{
+    width:100vw;
+    margin-left:calc(50% - 50vw);
+    margin-right:calc(50% - 50vw);
+  }
+
+  .ep-wrap{
     --pg-purple:#7C3AED;
     --pg-blue:#2563EB;
     --pg-green:#22C55E;
@@ -843,37 +868,36 @@
     --line:#E2E8F0;
 
     --r-lg:18px;
-    --r-md:14px;
-    --r-sm:12px;
-
     --shadow:0 12px 34px rgba(2,6,23,.12);
     --shadow-soft:0 8px 22px rgba(2,6,23,.08);
 
-    width:100%;
-    max-width:980px;
-    margin:0 auto;
-    padding:12px 12px 16px;
+    background:var(--bg);
+    padding:12px;
   }
 
-  /* no overflow cutoffs on phones */
-  .edit-product-page,
-  .edit-product-page * { box-sizing:border-box; }
-  .edit-product-page img{ max-width:100%; height:auto; display:block; }
-
-  .edit-product-page .dark-theme{
+  .ep-wrap.dark-theme{
     --bg:#0B1220;
     --card:rgba(15,23,42,.82);
     --muted:#94A3B8;
     --line:rgba(148,163,184,.18);
   }
 
+  .ep-wrap img{ max-width:100%; height:auto; display:block; }
+
+  /* Keep content readable on big screens, but ALWAYS full width on phones */
+  .ep-wrap{
+    display:block;
+  }
+
   /* Header */
   .page-header{
+    max-width:1040px;
+    margin:0 auto;
     display:grid;
     grid-template-columns:1fr;
     gap:10px;
-    padding:10px 10px 12px;
-    border-radius:var(--r-lg);
+    padding:12px;
+    border-radius:18px;
     background:
       radial-gradient(900px 240px at 0% 0%, rgba(124,58,237,.16), transparent 60%),
       radial-gradient(900px 240px at 100% 0%, rgba(37,99,235,.12), transparent 60%),
@@ -890,7 +914,7 @@
     box-shadow:0 14px 28px rgba(124,58,237,.22);
     flex:0 0 auto;
   }
-  .header-text{ min-width:0; }
+
   .page-title{
     margin:0; font-size:1.12rem; font-weight:950; letter-spacing:-.02em;
     color:var(--pg-black);
@@ -919,12 +943,13 @@
     color:var(--pg-purple);
     background:rgba(124,58,237,.10);
     border:1px solid rgba(124,58,237,.18);
-    transition:transform .12s ease, background .12s ease, border-color .12s ease;
   }
-  .back-button:hover{ transform:translateY(-1px); background:rgba(124,58,237,.14); border-color:rgba(124,58,237,.28); }
 
   /* Flash */
-  .flash-container{ margin:12px 0; }
+  .flash-container{
+    max-width:1040px;
+    margin:12px auto 0;
+  }
   .flash{
     display:flex; gap:10px;
     padding:12px;
@@ -940,17 +965,22 @@
   .flash-error{ border-left:5px solid #EF4444; }
   .flash-error .flash-icon{ color:#EF4444; }
 
-  /* Main container */
+  /* Form card */
   .edit-form-container{
+    max-width:1040px;
+    margin:12px auto 0;
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:var(--r-lg);
+    border-radius:18px;
     overflow:hidden;
     box-shadow:var(--shadow);
   }
 
-  /* Tabs: chip-scroll (no cutoff) */
+  /* Tabs */
   .form-tabs{
+    position:sticky;
+    top:0;
+    z-index:20;
     display:flex;
     gap:8px;
     padding:10px;
@@ -959,8 +989,6 @@
     background:rgba(124,58,237,.06);
     border-bottom:1px solid rgba(124,58,237,.18);
   }
-  .form-tabs::-webkit-scrollbar{ height:6px; }
-  .form-tabs::-webkit-scrollbar-thumb{ background:rgba(124,58,237,.22); border-radius:999px; }
 
   .tab{
     flex:0 0 auto;
@@ -972,10 +1000,8 @@
     font-size:.92rem;
     cursor:pointer;
     white-space:nowrap;
-    transition:transform .12s ease, background .12s ease;
   }
   .dark-theme .tab{ background:rgba(15,23,42,.55); color:#E2E8F0; }
-  .tab:hover{ transform:translateY(-1px); }
   .tab.active{
     background:linear-gradient(135deg,var(--pg-purple),var(--pg-blue));
     color:#fff;
@@ -990,7 +1016,7 @@
   .form-section{
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:var(--r-lg);
+    border-radius:18px;
     padding:12px;
     box-shadow:var(--shadow-soft);
     position:relative;
@@ -1048,7 +1074,7 @@
   .sec-black{ background:rgba(15,23,42,.08); border-color:rgba(15,23,42,.18); color:var(--pg-black); }
   .dark-theme .sec-black{ background:rgba(148,163,184,.10); border-color:rgba(148,163,184,.18); color:#E2E8F0; }
 
-  /* Grid: 1 column mobile, 2 columns tablet+ */
+  /* Grid */
   .form-grid{
     display:grid;
     grid-template-columns:1fr;
@@ -1056,7 +1082,7 @@
   }
   .ep-full{ grid-column:1 / -1; }
 
-  /* Labels + fields */
+  /* Fields */
   .form-label{
     display:block;
     font-size:.92rem;
@@ -1077,7 +1103,6 @@
     background:#fff;
     color:var(--pg-black);
     font-size:1rem;
-    transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease;
   }
   .dark-theme .form-input,
   .dark-theme .form-textarea,
@@ -1093,7 +1118,6 @@
     outline:none;
     border-color:rgba(124,58,237,.72);
     box-shadow:0 0 0 4px rgba(124,58,237,.14);
-    transform:translateY(-1px);
   }
 
   .form-select{
@@ -1120,7 +1144,6 @@
     flex-wrap:wrap;
     margin-top:6px;
   }
-
   .char-counter{ color:var(--muted); font-size:.85rem; font-weight:800; }
 
   .input-with-icon{ position:relative; }
@@ -1133,7 +1156,7 @@
   .dark-theme .currency-icon{ color:rgba(241,245,249,.70); }
   .input-with-icon .form-input{ padding-left:26px; }
 
-  /* Shipping layout helpers */
+  /* Shipping */
   .inline-2{ display:grid; grid-template-columns:1fr 130px; gap:10px; align-items:center; }
   .dims-grid{
     display:grid;
@@ -1162,7 +1185,6 @@
     font-weight:950;
     width:max-content;
   }
-  .ship-title{ display:flex; flex-direction:column; gap:6px; }
   .ship-title strong{ font-weight:980; color:var(--pg-black); }
   .dark-theme .ship-title strong{ color:#F1F5F9; }
   .ship-note{ color:var(--muted); font-size:.88rem; }
@@ -1184,18 +1206,6 @@
   .dark-theme .flag{ color:#E2E8F0; border-color:rgba(148,163,184,.18); background:rgba(148,163,184,.10); }
   .flag input{ width:16px; height:16px; accent-color:var(--pg-purple); }
 
-  /* Pills */
-  .pill{
-    display:inline-flex;
-    padding:4px 10px;
-    border-radius:999px;
-    font-weight:950;
-    font-size:.78rem;
-    border:1px solid transparent;
-  }
-  .pill-blue{ background:rgba(37,99,235,.10); color:var(--pg-blue); border-color:rgba(37,99,235,.18); }
-  .pill-green{ background:rgba(34,197,94,.12); color:#166534; border-color:rgba(34,197,94,.22); }
-
   /* Made In dropdown */
   .ep-country-dropdown{ position:relative; width:100%; }
   .ep-country-selected{
@@ -1210,25 +1220,13 @@
     min-height:46px;
     cursor:pointer;
     user-select:none;
-    transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease;
   }
   .dark-theme .ep-country-selected{
     background:rgba(2,6,23,.25);
     border-color:rgba(148,163,184,.22);
     color:#F1F5F9;
   }
-  .ep-country-selected:focus{
-    outline:none;
-    border-color:rgba(124,58,237,.72);
-    box-shadow:0 0 0 4px rgba(124,58,237,.14);
-    transform:translateY(-1px);
-  }
-  .ep-country-selected-left{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    min-width:0;
-  }
+  .ep-country-selected-left{ display:flex; align-items:center; gap:10px; min-width:0; }
   .ep-flag-img{
     width:18px; height:13px;
     border-radius:4px;
@@ -1236,11 +1234,7 @@
     flex:0 0 auto;
     box-shadow:0 0 0 1px rgba(148,163,184,.35);
   }
-  .ep-country-name{
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-  }
+  .ep-country-name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ep-country-arrow{ font-weight:950; font-size:12px; opacity:.85; }
 
   .ep-country-menu{
@@ -1281,7 +1275,6 @@
     display:flex;
     align-items:center;
     gap:10px;
-    transition:background .12s ease;
   }
   .ep-country-option:hover{ background:rgba(124,58,237,.12); }
   .dark-theme .ep-country-option:hover{ background:rgba(124,58,237,.20); }
@@ -1296,7 +1289,7 @@
   .current-image-card,
   .upload-image-card{
     background:rgba(124,58,237,.04);
-    border-radius:var(--r-lg);
+    border-radius:18px;
     padding:12px;
     border:1px solid rgba(124,58,237,.16);
   }
@@ -1333,7 +1326,6 @@
     font-weight:950;
   }
 
-  /* No fixed cut-off height: responsive aspect */
   .current-image-preview,
   .new-image-preview{
     width:100%;
@@ -1362,30 +1354,22 @@
 
   .upload-area{
     border:2px dashed rgba(124,58,237,.35);
-    border-radius:var(--r-lg);
+    border-radius:18px;
     padding:16px 12px;
     text-align:center;
     position:relative;
     cursor:pointer;
     background:rgba(124,58,237,.05);
-    transition:transform .12s ease, border-color .12s ease, background .12s ease;
     outline:none;
     min-height:120px;
     display:grid;
     place-items:center;
     gap:6px;
   }
-  .upload-area:hover,
-  .upload-area:focus{
-    border-color:rgba(124,58,237,.70);
-    background:rgba(124,58,237,.08);
-    transform:translateY(-1px);
-  }
   .upload-icon{ color:rgba(124,58,237,.55); }
   .upload-text{ margin:0; font-weight:980; color:var(--pg-black); }
   .dark-theme .upload-text{ color:#F1F5F9; }
   .upload-subtext{ margin:0; font-size:.88rem; color:var(--muted); }
-
   .file-input{ position:absolute; inset:0; opacity:0; cursor:pointer; }
 
   .preview-header{
@@ -1405,9 +1389,7 @@
     border-radius:14px;
     display:grid; place-items:center;
     cursor:pointer;
-    transition:transform .12s ease, background .12s ease;
   }
-  .remove-preview:hover{ background:rgba(239,68,68,.18); transform:translateY(-1px); }
   .remove-preview svg{ color:#EF4444; }
 
   .preview-info{
@@ -1419,6 +1401,17 @@
     color:var(--muted);
     word-break:break-word;
   }
+
+  .pill{
+    display:inline-flex;
+    padding:4px 10px;
+    border-radius:999px;
+    font-weight:950;
+    font-size:.78rem;
+    border:1px solid transparent;
+  }
+  .pill-blue{ background:rgba(37,99,235,.10); color:var(--pg-blue); border-color:rgba(37,99,235,.18); }
+  .pill-green{ background:rgba(34,197,94,.12); color:#166534; border-color:rgba(34,197,94,.22); }
 
   .media-note{
     margin-top:12px;
@@ -1463,31 +1456,23 @@
     border:1px solid transparent;
     cursor:pointer;
     text-decoration:none;
-    transition:transform .12s ease, filter .12s ease, background .12s ease, border-color .12s ease;
     user-select:none;
   }
-
   .btn-primary{
     background:linear-gradient(135deg,var(--pg-purple),var(--pg-blue));
     color:#fff;
     box-shadow:0 14px 30px rgba(124,58,237,.22);
   }
-  .btn-primary:hover{ transform:translateY(-1px); filter:brightness(1.02); }
-
   .btn-secondary{
     background:rgba(37,99,235,.10);
     color:var(--pg-blue);
     border-color:rgba(37,99,235,.22);
   }
-  .btn-secondary:hover{ background:rgba(37,99,235,.14); transform:translateY(-1px); }
-
   .btn-danger{
     background:rgba(239,68,68,.10);
     color:#EF4444;
     border-color:rgba(239,68,68,.22);
   }
-  .btn-danger:hover{ background:rgba(239,68,68,.14); transform:translateY(-1px); }
-
   .btn-disabled{
     background:rgba(148,163,184,.22);
     color:rgba(100,116,139,1);
@@ -1505,11 +1490,11 @@
   .form-note svg{ color:var(--pg-purple); margin-top:2px; }
 
   /* Buyer view */
-  .view-only-container{ max-width:980px; margin:0 auto; }
+  .view-only-container{ max-width:1040px; margin:12px auto 0; }
   .product-view-card{
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:var(--r-lg);
+    border-radius:18px;
     box-shadow:var(--shadow);
     padding:12px;
   }
@@ -1528,12 +1513,7 @@
   .currency,.amount{ color:var(--pg-green); font-weight:980; }
   .amount{ font-size:1.5rem; }
 
-  .product-content{
-    display:grid;
-    grid-template-columns:1fr;
-    gap:12px;
-  }
-
+  .product-content{ display:grid; grid-template-columns:1fr; gap:12px; }
   .product-image{
     width:100%;
     aspect-ratio: 16 / 12;
@@ -1556,21 +1536,7 @@
   .in-stock{ background:rgba(34,197,94,.12); color:#166534; border:1px solid rgba(34,197,94,.22); }
   .out-of-stock{ background:rgba(239,68,68,.10); color:#991B1B; border:1px solid rgba(239,68,68,.22); }
 
-  .details-section h3,
-  .description-section h3{
-    margin:0 0 8px;
-    font-size:1.02rem;
-    font-weight:980;
-    color:var(--pg-black);
-  }
-  .dark-theme .details-section h3,
-  .dark-theme .description-section h3{ color:#F1F5F9; }
-
-  .details-grid{
-    display:grid;
-    grid-template-columns:1fr;
-    gap:10px;
-  }
+  .details-grid{ display:grid; grid-template-columns:1fr; gap:10px; }
   .detail-item{
     display:flex;
     justify-content:space-between;
@@ -1599,14 +1565,14 @@
 
   /* Auth card */
   .auth-required-card{
+    max-width:520px;
+    margin:12px auto;
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:var(--r-lg);
+    border-radius:18px;
     padding:16px;
     text-align:center;
     box-shadow:var(--shadow);
-    max-width:520px;
-    margin:12px auto;
   }
   .auth-icon{
     width:70px;height:70px;border-radius:20px;
@@ -1616,12 +1582,8 @@
     border:1px solid rgba(124,58,237,.18);
     color:var(--pg-purple);
   }
-  .auth-required-card h3{ margin:0 0 8px; font-weight:980; color:var(--pg-black); }
-  .dark-theme .auth-required-card h3{ color:#F1F5F9; }
-  .auth-required-card p{ margin:0 0 12px; color:var(--muted); }
   .auth-actions{ display:grid; gap:10px; }
 
-  /* Responsive enhancements */
   @media (min-width:520px){
     .details-grid{ grid-template-columns:repeat(2, 1fr); }
     .dims-grid{ grid-template-columns:1fr 1fr 1fr 110px; }
@@ -1631,6 +1593,7 @@
   @media (min-width:720px){
     .page-header{ grid-template-columns:1fr auto; align-items:center; }
     .back-button{ width:auto; }
+
     .tab-content{ padding:16px; }
     .form-section{ padding:16px; }
     .form-grid{ grid-template-columns:repeat(2, 1fr); }
@@ -1639,13 +1602,9 @@
     .product-actions{ grid-template-columns:1fr 1fr; }
     .product-content{ grid-template-columns:320px 1fr; }
   }
-
-  @media (prefers-reduced-motion: reduce){
-    .tab,.btn,.back-button,.upload-area,.form-input,.form-select,.form-textarea{ transition:none !important; }
-  }
 </style>
 
-<!-- Secure Inline Script -->
+<!-- Secure Inline Script (UNCHANGED) -->
 <script nonce="<%= nonce %>">
   document.addEventListener("DOMContentLoaded", () => {
     console.log("✏️ Edit Product page loaded securely with CSP nonce ✅");
@@ -1683,12 +1642,10 @@
         madeSelected.setAttribute('aria-expanded', 'false');
       };
 
-      // toggle open/close
       madeSelected.addEventListener('click', () => {
         madeDropdown.classList.contains('open') ? close() : open();
       });
 
-      // keyboard open/close
       madeSelected.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -1697,12 +1654,10 @@
         if (e.key === 'Escape') close();
       });
 
-      // click outside closes
       document.addEventListener('click', (e) => {
         if (!madeDropdown.contains(e.target)) close();
       });
 
-      // select option
       getOptions().forEach(opt => {
         opt.addEventListener('click', () => {
           const value = String(opt.dataset.value || '').trim();
@@ -1725,7 +1680,6 @@
         });
       });
 
-      // search filter
       if (madeSearch) {
         madeSearch.addEventListener('input', () => {
           const term = String(madeSearch.value || '').toLowerCase().trim();
@@ -1736,7 +1690,6 @@
         });
       }
 
-      // ✅ preselect on load (from existing product.made)
       (function initMade() {
         const currentName = String(madeHidden.value || '').trim();
         const currentCode = String(madeCode?.value || '').trim().toLowerCase();
@@ -1778,14 +1731,11 @@
       tab.addEventListener('click', () => {
         const tabId = tab.getAttribute('data-tab');
 
-        // Update active tab
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
 
-        // aria-selected
         tabs.forEach(t => t.setAttribute('aria-selected', t.classList.contains('active') ? 'true' : 'false'));
 
-        // Show corresponding content
         tabContents.forEach(content => {
           content.classList.remove('active');
           if (content.id === `${tabId}-tab`) {
@@ -1801,13 +1751,9 @@
     const categorySelect = document.getElementById('categorySelect');
     const typeSelect = document.getElementById('typeSelect');
 
-    // Map from server: { electronics: ['phone','laptop',...], fashion: [...], ... }
     const TYPES_BY_CAT = <%- JSON.stringify(PRODUCT_TYPES_BY_CATEGORY || {}) %>;
-
-    // All type objects from server: [{value,label},...]
     const allTypeOptions = <%- JSON.stringify(PRODUCT_TYPES || []) %>;
 
-    // value -> {value,label}
     const TYPE_INDEX = Object.create(null);
     (allTypeOptions || []).forEach(t => {
       const v = String(t?.value || '').trim();
@@ -2049,7 +1995,6 @@
         if (!h  || !Number.isFinite(toNum(h))  || toNum(h)  <= 0) bad.push(h);
 
         bad.forEach((el) => { if (el) el.style.borderColor = '#EF4444'; });
-
         if (bad.length) isValid = false;
 
         if (!isValid) {
