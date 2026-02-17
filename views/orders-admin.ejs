@@ -767,9 +767,20 @@ document.addEventListener('DOMContentLoaded', function() {
       elements.tableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Loading orders...</td></tr>';
       elements.mobileCards.innerHTML = '<div class="text-muted">Loading orders...</div>';
       
-      const response = await fetch('/api/admin/orders?limit=50');
-      const data = await response.json();
-      
+      const response = await fetch('/api/admin/orders?limit=50', {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+      });
+
+      // ✅ handle non-JSON (like HTML redirect from requireAdmin)
+      const text = await response.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch { data = { ok: false, message: text.slice(0, 160) || 'Non-JSON response' }; }
+
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP ${response.status}`);
+      }
+
       if (data.ok) {
         orders = data.orders || [];
         renderOrders();
@@ -813,8 +824,7 @@ document.addEventListener('DOMContentLoaded', function() {
           order.orderId,
           order.captureId,
           order.payerEmail,
-          order.payerName?.given_name,
-          order.payerName?.surname
+          order.payerName
         ].filter(Boolean).map(f => f.toLowerCase());
         
         if (!searchFields.some(f => f.includes(searchTerm))) {
@@ -861,14 +871,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (filteredOrders.length === 0) {
       elements.tableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-muted" style="text-align: center; padding: 40px;">
+          <td colspan="6" class="text-muted" style="text-align:center; padding:40px;">
             No orders found
           </td>
         </tr>
       `;
       return;
     }
-    
+
     elements.tableBody.innerHTML = filteredOrders.map(order => {
       const status = order.status?.toLowerCase() || 'pending';
       const statusClass = status === 'completed' || status === 'captured' || status === 'approved' 
@@ -881,7 +891,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <td><code>${order.orderId}</code></td>
           <td><span class="status-badge ${statusClass}">${order.status}</span></td>
           <td>
-            ${order.payerName ? `${order.payerName.given_name || ''} ${order.payerName.surname || ''}`.trim() : 'N/A'}<br>
+            ${order.payerName ? String(order.payerName) : 'N/A'}<br>
             <small class="text-muted">${order.payerEmail || ''}</small>
           </td>
           <td><strong>${order.currency} ${parseFloat(order.amount).toFixed(2)}</strong></td>
@@ -927,7 +937,7 @@ document.addEventListener('DOMContentLoaded', function() {
           
           <div style="margin-bottom: 12px;">
             <div style="font-weight: 600; margin-bottom: 4px;">
-              ${order.payerName ? `${order.payerName.given_name || ''} ${order.payerName.surname || ''}`.trim() : 'Customer'}
+              ${order.payerName ? String(order.payerName) : 'Customer'}
             </div>
             <div class="text-muted" style="font-size: 12px;">${order.payerEmail || ''}</div>
           </div>
@@ -1013,12 +1023,26 @@ document.addEventListener('DOMContentLoaded', function() {
             if (confirmed) {
               const amount = document.getElementById('refundAmount').value;
               try {
-                const response = await fetch(`/api/admin/orders/${orderId}/refund`, {
+                const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/refund`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                  },
                   body: JSON.stringify(amount ? { amount: parseFloat(amount) } : {})
                 });
-                const data = await response.json();
+
+                // ✅ safe parse
+                const text = await response.text();
+                let data = {};
+                try { data = JSON.parse(text); } catch { data = { ok: false, message: text.slice(0, 160) || 'Non-JSON response' }; }
+
+                if (!response.ok || !data.ok) {
+                  throw new Error(data.message || `Refund failed (HTTP ${response.status})`);
+                }
+
                 if (data.ok) {
                   showAlert('success', 'Refund processed successfully');
                   loadOrders();
@@ -1041,12 +1065,25 @@ document.addEventListener('DOMContentLoaded', function() {
           async (confirmed) => {
             if (confirmed) {
               try {
-                const response = await fetch(`/api/admin/orders/${orderId}/cancel`, {
+                const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                  },
                   body: JSON.stringify({ reason: 'Admin cancelled' })
                 });
-                const data = await response.json();
+
+                const text = await response.text();
+                let data = {};
+                try { data = JSON.parse(text); } catch { data = { ok: false, message: text.slice(0, 160) || 'Non-JSON response' }; }
+
+                if (!response.ok || !data.ok) {
+                  throw new Error(data.message || `Cancel failed (HTTP ${response.status})`);
+                }
+
                 if (data.ok) {
                   showAlert('success', 'Order cancelled successfully');
                   loadOrders();
@@ -1070,10 +1107,20 @@ document.addEventListener('DOMContentLoaded', function() {
           async (confirmed) => {
             if (confirmed) {
               try {
-                const response = await fetch(`/api/admin/orders/${orderId}`, {
-                  method: 'DELETE'
+                const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, {
+                  method: 'DELETE',
+                  credentials: 'same-origin',
+                  headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
                 });
-                const data = await response.json();
+
+                const text = await response.text();
+                let data = {};
+                try { data = JSON.parse(text); } catch { data = { ok: false, message: text.slice(0, 160) || 'Non-JSON response' }; }
+
+                if (!response.ok || !data.ok) {
+                  throw new Error(data.message || `Delete failed (HTTP ${response.status})`);
+                }
+
                 if (data.ok) {
                   showAlert('success', 'Order deleted successfully');
                   loadOrders();
@@ -1091,3 +1138,4 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
+

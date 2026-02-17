@@ -129,7 +129,7 @@
           </thead>
 
           <tbody id="shippoTbody">
-            <% list.forEach(o => {
+            <% list.forEach((o, idx) => {
               const hasLabel = Boolean(o?.shippo?.labelUrl);
               const rate = o?.shippo?.chosenRate || null;
               const rateText = rate && rate.amount && rate.currency
@@ -176,7 +176,7 @@
               const createdText = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
             %>
               <tr
-                class="row"
+                class="row row-alt-<%= (idx % 4) %>"
                 data-orderid="<%= o.orderId %>"
                 data-fulfillment="<%= String(fulfill || '').toUpperCase() %>"
               >
@@ -496,6 +496,57 @@
   border:1px solid rgba(148,163,184,.45);
   background: rgba(255,255,255,.94);
 }
+/* ==========================================
+   ✅ Per-order row coloring (desktop/table)
+   Each ORDER gets its own “quality” background
+   so actions are clearly grouped to that order.
+========================================== */
+
+/* Make sure cells don’t fight the row background */
+.tbl tbody tr.row td{
+  background: transparent;
+}
+
+/* Premium row backgrounds (4-cycle) */
+.tbl tbody tr.row.row-alt-0 td{
+  background: linear-gradient(90deg, rgba(124,58,237,.14), rgba(255,255,255,.92));
+}
+.tbl tbody tr.row.row-alt-1 td{
+  background: linear-gradient(90deg, rgba(37,99,235,.12), rgba(255,255,255,.92));
+}
+.tbl tbody tr.row.row-alt-2 td{
+  background: linear-gradient(90deg, rgba(34,197,94,.10), rgba(255,255,255,.92));
+}
+.tbl tbody tr.row.row-alt-3 td{
+  background: linear-gradient(90deg, rgba(15,23,42,.06), rgba(255,255,255,.94));
+}
+
+/* Strong row “grouping” edges */
+.tbl tbody tr.row td{
+  border-top: 2px solid rgba(148,163,184,.22);
+  border-bottom: 2px solid rgba(148,163,184,.22);
+}
+
+/* Left + right “frame” so you can SEE where the order starts/ends */
+.tbl tbody tr.row td:first-child{
+  border-left: 6px solid rgba(124,58,237,.45);
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+}
+.tbl tbody tr.row.row-alt-1 td:first-child{ border-left-color: rgba(37,99,235,.45); }
+.tbl tbody tr.row.row-alt-2 td:first-child{ border-left-color: rgba(34,197,94,.45); }
+.tbl tbody tr.row.row-alt-3 td:first-child{ border-left-color: rgba(15,23,42,.28); }
+
+.tbl tbody tr.row td:last-child{
+  border-right: 3px solid rgba(148,163,184,.25);
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+}
+
+/* Hover: keep it subtle (don’t kill the row colors) */
+.tbl tbody tr.row:hover td{
+  filter: brightness(0.99);
+}
 .tbl{
   width:100%;
   border-collapse:separate;
@@ -700,11 +751,20 @@
   .tbl tbody tr.row{
     border: 1px solid rgba(124,58,237,.18);
     border-radius: var(--r-xl);
-    background: rgba(255,255,255,.95);
+    background: transparent; /* background comes from the td gradients below */
     margin-bottom: 10px;
     overflow:hidden;
     box-shadow: 0 14px 40px rgba(2,6,23,.12);
   }
+  /* Mobile: make the whole card use the order color */
+  .tbl tbody tr.row.row-alt-0{ background: linear-gradient(180deg, rgba(124,58,237,.12), rgba(255,255,255,.95)); }
+  .tbl tbody tr.row.row-alt-1{ background: linear-gradient(180deg, rgba(37,99,235,.10), rgba(255,255,255,.95)); }
+  .tbl tbody tr.row.row-alt-2{ background: linear-gradient(180deg, rgba(34,197,94,.09), rgba(255,255,255,.95)); }
+  .tbl tbody tr.row.row-alt-3{ background: linear-gradient(180deg, rgba(15,23,42,.06), rgba(255,255,255,.96)); }
+
+  /* Mobile: stop td backgrounds from double-layering */
+  .tbl tbody tr.row td{ background: transparent; }
+
   .tbl tbody tr.row td{
   border-bottom: 1px solid rgba(148,163,184,.25);
     padding: 10px 12px;

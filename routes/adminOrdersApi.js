@@ -3,11 +3,19 @@
 
 const express = require('express');
 const { fetch } = require('undici');
+const mongoose = require('mongoose');
 
 // -------------------- Model --------------------
 let Order = null;
 try { Order = require('../models/Order'); } catch {
   Order = null;
+}
+
+let debitSellersFromRefund = null;
+try {
+  ({ debitSellersFromRefund } = require('../utils/payouts/debitSellersFromRefund'));
+} catch {
+  // optional (don’t crash other flows)
 }
 
 // -------------------- Admin guard (PROD SAFE) --------------------
@@ -26,7 +34,6 @@ try {
 }
 
 const router = express.Router();
-router.use(express.json());
 
 // ✅ lock ALL admin orders API
 router.use(requireAdmin);
@@ -47,6 +54,21 @@ const PP_API =
 const upperCcy = String(BASE_CURRENCY || 'USD').toUpperCase();
 
 // -------------------- helpers --------------------
+function buildOrderLookupOr(orderId) {
+  const ors = [
+    { orderId },
+    { paypalOrderId: orderId },
+    { 'paypal.orderId': orderId },
+  ];
+
+  // ✅ only query _id if it’s a real ObjectId
+  if (mongoose.isValidObjectId(orderId)) {
+    ors.push({ _id: orderId });
+  }
+
+  return ors;
+}
+
 function moneyToNumber(m) {
   if (!m) return 0;
   if (typeof m === 'number') return m;
@@ -67,6 +89,11 @@ function safeStr(v, max = 255) {
 }
 
 async function getAccessToken() {
+
+  if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
+    throw new Error('Missing PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET in environment.');
+  }
+
   const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
 
   const res = await fetch(`${PP_API}/v1/oauth2/token`, {
@@ -87,9 +114,10 @@ function getCaptureIdFromOrder(doc) {
     doc?.captureId ||
     doc?.capture?.captureId ||
     doc?.capture?.id ||
+    doc?.paypal?.captureId ||
+    doc?.captures?.[0]?.captureId ||
     doc?.raw?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
     doc?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
-    doc?.paypal?.captureId ||
     null
   );
 }
@@ -150,7 +178,7 @@ router.get('/orders', async (req, res) => {
         orderId: o.orderId || o.paypalOrderId || o._id?.toString(),
         status: o.status || o.state || '—',
         payerName: o.payer?.name ? `${o.payer?.name?.given || ''} ${o.payer?.name?.surname || ''}`.trim() : (o.payerName || ''),
-        payerEmail: o.payer?.email || o.payerEmail || o.payer?.email_address || '',
+        payerEmail: o.payer?.email_address || o.payerEmail || o.payer?.email || '',
         amount: Number.isFinite(amount) ? amount : 0,
         currency: String(currency || upperCcy).toUpperCase(),
         captureId,
@@ -173,7 +201,7 @@ router.post('/orders/:orderId/cancel', async (req, res) => {
     const { orderId } = req.params;
 
     const doc = await Order.findOne({
-      $or: [{ orderId }, { paypalOrderId: orderId }, { _id: orderId }],
+      $or: buildOrderLookupOr(orderId),
     });
 
     if (!doc) return res.status(404).json({ ok: false, message: 'Order not found.' });
@@ -205,7 +233,7 @@ router.post('/orders/:orderId/refund', async (req, res) => {
     const orderId = String(req.params.orderId || '').trim();
 
     const doc = await Order.findOne({
-      $or: [{ orderId }, { paypalOrderId: orderId }, { _id: orderId }],
+      $or: buildOrderLookupOr(orderId),
     });
 
     if (!doc) return res.status(404).json({ ok: false, message: 'Order not found.' });
@@ -271,15 +299,23 @@ router.post('/orders/:orderId/refund', async (req, res) => {
     try {
       doc.refunds = Array.isArray(doc.refunds) ? doc.refunds : [];
       doc.refunds.push({
-        refundId: refundJson.id || null,
-        captureId,
-        status: refundJson.status || null,
-        amount: {
-          value: refundJson?.amount?.value ?? (finalRefundAmount != null ? String(Number(finalRefundAmount).toFixed(2)) : null),
-          currency: refundJson?.amount?.currency_code ?? currency,
-        },
+        refundId: refundJson?.id || null,
+        status: refundJson?.status || null,
+
+        // ✅ match your schema (String fields)
+        amount: String(
+          refundJson?.amount?.value ??
+          (finalRefundAmount != null ? Number(finalRefundAmount).toFixed(2) : '')
+        ).trim(),
+
+        currency: String(
+          refundJson?.amount?.currency_code ?? currency
+        ).trim().toUpperCase(),
+
         createdAt: new Date(),
-        raw: refundJson,
+
+        // ✅ keep extra info using existing field
+        source: `admin:capture:${captureId}`,
       });
 
       const newRefundedSoFar = sumRefundedFromOrder(doc);
@@ -295,10 +331,87 @@ router.post('/orders/:orderId/refund', async (req, res) => {
       console.warn('Refund succeeded in PayPal but DB save failed:', e?.message || e);
     }
 
-    return res.json({ ok: true, refund: refundJson });
+    // -------------------- DEBIT SELLERS (optional) --------------------
+    // Only run if the helper exists (so we don’t break other flows)
+    let debitResult = null;
+
+    if (typeof debitSellersFromRefund === 'function') {
+      try {
+        // Use the SAME refund amount you saved (finalRefundAmount is the admin-selected one)
+        const debAmountRaw =
+          finalRefundAmount != null
+            ? normalizeMoneyNumber(finalRefundAmount)
+            : normalizeMoneyNumber(refundJson?.amount?.value);
+
+        // keep 2 decimals like PayPal
+        const debAmount =
+          (typeof debAmountRaw === 'number' && Number.isFinite(debAmountRaw))
+            ? Number(debAmountRaw.toFixed(2))
+            : null;
+
+        debitResult = await debitSellersFromRefund(doc, {
+          refundId: refundJson?.id || null,
+
+          // gross refund amount (used to calculate ratio vs captured gross)
+          amount: Number.isFinite(debAmount) ? debAmount : null,
+
+          currency: String(refundJson?.amount?.currency_code || currency).toUpperCase(),
+
+          // ✅ IMPORTANT: do not block if order.isPaidLike() is false
+          allowWhenUnpaid: true,
+
+          // optional: matches your env
+          platformFeeBps: Number(process.env.PLATFORM_FEE_BPS || 1000),
+        });
+        console.log('[adminOrdersApi:refund] debitResult:', debitResult);
+      } catch (e) {
+        console.warn('[adminOrdersApi:refund] debitSellersFromRefund failed:', e?.message || e);
+        // do NOT fail the refund response — refund already happened at PayPal
+      }
+    }
+
+    return res.json({ ok: true, refund: refundJson, debit: debitResult });
+
   } catch (err) {
     console.error('[adminOrdersApi:refund] error:', err?.stack || err);
-    return res.status(500).json({ ok: false, message: 'Server error refunding payment.' });
+
+    // ✅ show real error in DEV only
+    const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+    const msg = (err && err.message) ? err.message : 'Server error refunding payment.';
+
+    return res.status(500).json({
+      ok: false,
+      message: isProd ? 'Server error refunding payment.' : msg,
+    });
+  }
+});
+
+// -------------------- DELETE (DB only) --------------------
+// DELETE /api/admin/orders/:orderId
+router.delete('/orders/:orderId', async (req, res) => {
+  try {
+    if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
+
+    const orderId = String(req.params.orderId || '').trim();
+
+    const doc = await Order.findOne({
+      $or: buildOrderLookupOr(orderId),
+    });
+
+    if (!doc) return res.status(404).json({ ok: false, message: 'Order not found.' });
+
+    // Safety: don’t allow deleting delivered orders
+    const st = String(doc.status || '').toLowerCase();
+    if (st === 'delivered') {
+      return res.status(400).json({ ok: false, message: 'Delivered orders cannot be deleted.' });
+    }
+
+    await Order.deleteOne({ _id: doc._id });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[adminOrdersApi:delete] error:', err);
+    return res.status(500).json({ ok: false, message: 'Delete failed.' });
   }
 });
 
