@@ -211,11 +211,25 @@
 
                 <td data-label="Label">
                   <% if (hasLabel) { %>
-                    <div class="stack">
-                      <a class="btn btn-sm btn-primary" href="<%= o.shippo.labelUrl %>" target="_blank" rel="noopener">Open</a>
+                    <div class="stack label-wrap">
+                      <div class="label-actions">
+                        <a class="btn btn-sm btn-primary"
+                          href="<%= o.shippo.labelUrl %>"
+                          target="_blank"
+                          rel="noopener">Open</a>
+
+                        <button type="button"
+                                class="btn btn-sm btn-outline js-copy-label"
+                                data-url="<%= o.shippo.labelUrl %>">
+                          Copy
+                        </button>
+                      </div>
+
                       <% if (rateText) { %>
-                        <div class="muted tiny">Rate: <%= rateText %></div>
+                        <div class="muted tiny wrap-anywhere">Rate: <%= rateText %></div>
                       <% } %>
+
+                      <div class="muted tiny js-copy-status" style="display:none;"></div>
                     </div>
                   <% } else { %>
                     <span class="muted">None</span>
@@ -543,7 +557,7 @@
   gap:8px;
   align-items:start;
 }
-.stack{display:grid;gap:6px}
+.stack{display:grid;gap:6px;min-width:0}
 
 /* Result area */
 .result-row td{background: rgba(124,58,237,.04)}
@@ -673,7 +687,13 @@
   .kpi__value{font-size:18px}
 
   /* Turn table into cards */
-  .table-wrap{border:none;background:transparent;overflow:visible}
+  .table-wrap{
+    border:none;
+    background:transparent;
+    overflow: hidden;     /* ✅ stop sideways scroll */
+    max-width: 100%;
+  }
+
   .tbl{min-width:0}
   .tbl thead{display:none}
   .tbl, .tbl tbody, .tbl tr, .tbl td{display:block;width:100%}
@@ -686,9 +706,14 @@
     box-shadow: 0 14px 40px rgba(2,6,23,.12);
   }
   .tbl tbody tr.row td{
-    border-bottom: 1px solid rgba(148,163,184,.25);
+  border-bottom: 1px solid rgba(148,163,184,.25);
     padding: 10px 12px;
+    min-width: 0;          /* ✅ important */
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
+
   .tbl tbody tr.row td:last-child{border-bottom:none}
   .tbl tbody tr.row td::before{
     content: attr(data-label);
@@ -718,6 +743,123 @@
 /* Reduce motion */
 @media (prefers-reduced-motion: reduce){
   .btn{transition:none}
+}
+
+/* =========================
+   ✅ Rates (mobile friendly)
+   ========================= */
+.rates-wrap{
+  display:grid;
+  gap:10px;
+  max-width:100%;
+}
+
+.rates-grid{
+  display:grid;
+  gap:10px;
+}
+
+.rate-card{
+  max-width:100%;
+  border: 1px solid rgba(124,58,237,.18);
+  border-radius: var(--r-lg);
+  background: rgba(255,255,255,.96);
+  padding: 10px;
+  box-shadow: 0 12px 30px rgba(2,6,23,.08);
+}
+
+.rate-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.rate-title{
+  display:grid;
+  gap:4px;
+  min-width: 0;
+}
+
+.rate-title strong{
+  color: var(--black);
+  font-size: 14px;
+  font-weight: 1000;
+}
+
+.rate-meta{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.rate-meta .chip{
+  display:inline-flex;
+  align-items:center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 950;
+  border:1px solid rgba(148,163,184,.45);
+  background:#fff;
+  color: rgba(15,23,42,.82);
+}
+
+.rate-meta .chip--purple{
+  border-color: rgba(124,58,237,.25);
+  background: rgba(124,58,237,.10);
+  color: var(--purple);
+}
+
+.rate-price{
+  font-weight: 1000;
+  color: var(--black);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.rate-actions{
+  margin-top:10px;
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.rate-actions .btn{
+  flex: 1 1 160px;
+}
+
+/* Prevent long IDs from stretching */
+.wrap-anywhere{
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+
+@media (max-width: 640px){
+  .rate-actions .btn{
+    width:100%;
+    flex: 1 1 auto;
+  }
+}
+
+/* ✅ Labels: prevent long content from stretching cards */
+.label-wrap{max-width:100%}
+.label-wrap .btn{max-width:100%}
+
+.label-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.label-actions .btn{
+  width:auto;
+}
+@media (max-width: 640px){
+  .label-actions .btn{
+    width:100%;
+  }
 }
 </style>
 
@@ -819,56 +961,21 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const rows = rates.map((rt) => {
-      const rateObjectIdRaw = rt.object_id || rt.id || rt.rateId || rt.objectId || '';
-      const rateObjectId = String(rateObjectIdRaw || '').trim();
-      const payerId = String(payerRateId || '').trim();
-      const hintMatch =
-        !payerId &&
-        (payerHint && (payerHint.provider || payerHint.service || payerHint.amount)) &&
-        (
-          (payerHint.provider && norm2(rt.provider) === norm2(payerHint.provider)) ||
-          (payerHint.service && norm2(rt.service) === norm2(payerHint.service))
-        ) &&
-        (
-          !payerHint.amount || String(rt.amount) === String(payerHint.amount)
-        );
-
-      const isPayer = (payerId && rateObjectId === payerId) || hintMatch;
-
-      return `
-        <tr ${isPayer ? 'style="outline:2px solid rgba(124,58,237,.45); border-radius:12px;"' : ''}>
-          <td>
-            <strong>${escapeHtml(rt.provider || '')}</strong>
-            ${isPayer ? `<div class="tag tag--green" style="margin-top:6px;">Payer chosen</div>` : ``}
-            <div class="muted tiny">RateId: <span class="mono">${escapeHtml(rateObjectId)}</span></div>
-          </td>
-          <td>${escapeHtml(rt.service || '')}</td>
-          <td>${rt.estimatedDays != null ? `~${escapeHtml(rt.estimatedDays)} days` : escapeHtml(rt.durationTerms || '—')}</td>
-          <td><strong>${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}</strong></td>
-          <td class="rates-actions">
-            <button
-              type="button"
-              class="btn btn-sm ${isPayer ? 'btn-primary' : 'btn-outline'} js-buy-rate"
-              data-orderid="${escapeHtml(orderId)}"
-              data-rateid="${escapeHtml(rateObjectId)}"
-            >${isPayer ? 'Buy payer choice' : 'Buy this'}</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    
 
     showResult(orderId, `
       <div class="result-head">
         <div class="result-title">
           <strong>Available rates</strong>
           <span class="help">Choose a rate to buy a label.</span>
+
           <div class="muted tiny" style="margin-top:6px">
             Payer rate recorded: <strong>${payerRecorded ? 'YES' : 'NO'}</strong>
-            ${payerRateId ? `• PayerRateId: <span class="mono">${escapeHtml(payerRateId)}</span>` : ''}
+            ${payerRateId ? `• PayerRateId: <span class="mono wrap-anywhere">${escapeHtml(payerRateId)}</span>` : ''}
             ${payerRecorded && !payerInThisList ? `• <span class="tag tag--gray">Payer not in this shipment list</span>` : ''}
           </div>
         </div>
+
         <div class="result-title">
           ${
             (payerRecorded && payerInThisList)
@@ -878,22 +985,67 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="btn btn-sm btn-outline js-buy-fastest" data-orderid="${escapeHtml(orderId)}">Buy fastest</button>
               `
           }
+          <button type="button" class="btn btn-sm btn-outline js-close-result" data-orderid="${escapeHtml(orderId)}">Close</button>
         </div>
       </div>
 
-      <div class="table-wrap" style="border-radius:14px">
-        <table class="tbl" style="min-width:760px">
-          <thead>
-            <tr>
-              <th>Carrier</th>
-              <th>Service</th>
-              <th>ETA</th>
-              <th>Price</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+      <div class="rates-wrap">
+        <div class="rates-grid">
+          ${
+            rates.map((rt) => {
+              const rateObjectIdRaw = rt.object_id || rt.id || rt.rateId || rt.objectId || '';
+              const rateObjectId = String(rateObjectIdRaw || '').trim();
+              const payerId = String(payerRateId || '').trim();
+
+              const hintMatch =
+                !payerId &&
+                (payerHint && (payerHint.provider || payerHint.service || payerHint.amount)) &&
+                (
+                  (payerHint.provider && norm2(rt.provider) === norm2(payerHint.provider)) ||
+                  (payerHint.service && norm2(rt.service) === norm2(payerHint.service))
+                ) &&
+                (
+                  !payerHint.amount || String(rt.amount) === String(payerHint.amount)
+                );
+
+              const isPayer = (payerId && rateObjectId === payerId) || hintMatch;
+
+              const etaText =
+                (rt.estimatedDays != null)
+                  ? `~${escapeHtml(rt.estimatedDays)} days`
+                  : escapeHtml(rt.durationTerms || '—');
+
+              return `
+                <div class="rate-card" ${isPayer ? 'style="outline:2px solid rgba(124,58,237,.45);"' : ''}>
+                  <div class="rate-top">
+                    <div class="rate-title">
+                      <strong>${escapeHtml(rt.provider || 'Carrier')}</strong>
+                      <div class="rate-meta">
+                        <span class="chip chip--purple">${escapeHtml(rt.service || 'Service')}</span>
+                        <span class="chip">ETA: ${etaText}</span>
+                        ${isPayer ? `<span class="chip chip--purple">Payer chosen</span>` : ``}
+                      </div>
+                      <div class="muted tiny">RateId: <span class="mono wrap-anywhere">${escapeHtml(rateObjectId)}</span></div>
+                    </div>
+
+                    <div class="rate-price">
+                      ${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}
+                    </div>
+                  </div>
+
+                  <div class="rate-actions">
+                    <button
+                      type="button"
+                      class="btn btn-sm ${isPayer ? 'btn-primary' : 'btn-outline'} js-buy-rate"
+                      data-orderid="${escapeHtml(orderId)}"
+                      data-rateid="${escapeHtml(rateObjectId)}"
+                    >${isPayer ? 'Buy payer choice' : 'Buy this'}</button>
+                  </div>
+                </div>
+              `;
+            }).join('')
+          }
+        </div>
       </div>
     `);
   }
@@ -1173,9 +1325,49 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statusBox) statusBox.innerHTML = `<div class="alert alert--ok">✅ Address updated. Now click “Create label”.</div>`;
   });
 
+  // ✅ Copy label URL button (for the "Copy" button in the Label column)
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.js-copy-label');
+    if (!btn) return;
+
+    const url = String(btn.dataset.url || '').trim();
+    if (!url) return;
+
+    const original = btn.textContent;
+
+    // helper: flip to "Copied" briefly, then back
+    const flashCopied = () => {
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = original; }, 900);
+    };
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        flashCopied();
+        return;
+      }
+
+      // fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+
+      flashCopied();
+    } catch (err) {
+      // optional: quick failure feedback (still clean)
+      btn.textContent = 'Failed';
+      setTimeout(() => { btn.textContent = original; }, 900);
+    }
+  });
+
   // ✅ Only run filters if table exists
   applyFilters();
 });
 </script>
-
 
