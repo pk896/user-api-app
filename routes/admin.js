@@ -242,6 +242,7 @@ router.get('/orders', requireAdmin, (req, res) => {
       error: req.flash('error'),
       info: req.flash('info'),
       warning: req.flash('warning'),
+      ppActivityBase: process.env.PP_ACTIVITY_BASE || ''
     });
   } catch (err) {
     console.error('❌ Error loading orders management page:', err);
