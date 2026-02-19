@@ -1191,7 +1191,7 @@
   .policy-toast{
     position:fixed;
     left:50%;
-    bottom:64px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
     transform:translateX(-50%) translateY(16px);
     z-index:96;
     opacity:0;
@@ -1209,39 +1209,45 @@
 
   .policy-toast-inner{
     display:flex;
-    align-items:center;
-    gap:.55rem;
-    padding:.55rem .75rem;
-    border-radius:14px;
+    align-items:flex-start;
+    gap:.45rem;
+    padding:.42rem .55rem;        /* ✅ smaller */
+    border-radius:12px;           /* ✅ slightly smaller */
     background:#0b1120;
     color:#f9fafb;
     box-shadow:var(--shadow);
-    width:min(760px, 94vw);
+    width:min(520px, 92vw);       /* ✅ narrower */
   }
 
-  .policy-toast-icon{ font-size:1.05rem; }
+  .policy-toast-icon{
+    font-size:.95rem;             /* ✅ smaller icon */
+    margin-top:.05rem;
+  }
 
   .policy-toast-text{
     font-weight:800;
-    font-size:.92rem;
-    line-height:1.25;
+    font-size:.84rem;             /* ✅ smaller text */
+    line-height:1.2;
     flex:1;
   }
 
   .policy-toast-actions{
     display:flex;
-    gap:.4rem;
+    gap:.3rem;
     align-items:center;
+    flex:0 0 auto;
   }
 
   .policy-toast-btn{
     border:0;
     border-radius:999px;
-    padding:.38rem .65rem;
+    padding:.28rem .5rem;         /* ✅ smaller buttons */
     font-weight:900;
     cursor:pointer;
     background:rgba(255,255,255,.12);
     color:#fff;
+    font-size:.78rem;             /* ✅ smaller button text */
+    line-height:1;
   }
 
   .policy-toast-btn.danger{
@@ -1351,14 +1357,14 @@
         policyToastClearBtn.style.display = showClear ? '' : 'none';
       }
 
-      if (policyToastTimer) clearTimeout(policyToastTimer);
-      policyToastTimer = setTimeout(hidePolicyToast, 3200);
+      // ✅ IMPORTANT: do NOT auto-hide. User must click ✕ (or Clear cart).
+      if (policyToastTimer) {
+        clearTimeout(policyToastTimer);
+        policyToastTimer = null;
+      }
     }
 
-    policyToastCloseBtn?.addEventListener('click', ()=>{
-      if (policyToastTimer) clearTimeout(policyToastTimer);
-      hidePolicyToast();
-    });
+    policyToastCloseBtn?.addEventListener('click', hidePolicyToast);
 
     // ------------------------------------------------------
     // ✅ Second-hand lock state (client UX + filtering)
@@ -1398,9 +1404,15 @@
     const LOCK = { mode:'none', lockBizId:'' };
 
     function enforceSecondhandLockOnCards(){
-      if (LOCK.mode !== 'secondhand') return;
+      const cards = CARD();
 
-      CARD().forEach(li=>{
+      // If NOT locked, mark everything as allowed (prevents stale lockOk after clear cart)
+      if (LOCK.mode !== 'secondhand'){
+        cards.forEach(li => { li.dataset.lockOk = '1'; });
+        return;
+      }
+
+      cards.forEach(li=>{
         const cardBiz = String(li.getAttribute('data-bizid') || '').trim();
         const cardCat = String(li.getAttribute('data-category') || '').trim().toLowerCase();
 
@@ -1643,6 +1655,7 @@
       LOCK.lockBizId = state.lockBizId;
 
       enforceSecondhandLockOnCards();
+      applyFilters(); // ✅ IMPORTANT: hide non-allowed products after refresh/load
 
       if (LOCK.mode === 'secondhand'){
         showPolicyToast(
