@@ -5,6 +5,10 @@ const mongoose = require('mongoose');
 const SellerBalanceLedger = require('../../models/SellerBalanceLedger');
 const { moneyToCents } = require('../money');
 
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 function getCapturedGrossCentsFromOrder(order) {
   // Try common shapes first
   const v =
@@ -19,9 +23,9 @@ function getCapturedGrossCentsFromOrder(order) {
   return Number.isFinite(cents) && cents > 0 ? cents : null;
 }
 
-function toUpper(v, fallback = 'USD') {
+function toUpper(v, fallback = null) {
   const s = String(v || '').trim().toUpperCase();
-  return s || fallback;
+  return s || (fallback || getBaseCurrency());
 }
 
 function safeId(v) {
@@ -39,7 +43,12 @@ function clampInt(n, min, max) {
   return Math.min(max, Math.max(min, Math.trunc(x)));
 }
 
-
+function isDupKey(err) {
+  return !!(
+    err &&
+    (err.code === 11000 || String(err.message || '').includes('E11000'))
+  );
+}
 
 // If your crediting file uses a different type, add it here.
 // This ensures refund debits will ALWAYS find the credited rows.
@@ -64,6 +73,11 @@ async function debitSellersFromRefund(order, opts = {}) {
   const orderId = safeId(order._id);
   if (!orderId) return { debited: 0, skipped: 'missing-order-_id' };
 
+  const refundIdStr = String(refundId || '').trim();
+  if (!refundIdStr) {
+    return { debited: 0, skipped: 'missing-refundId' };
+  }
+
   const orderObjId = new mongoose.Types.ObjectId(orderId);
 
   const ccy = toUpper(
@@ -71,7 +85,7 @@ async function debitSellersFromRefund(order, opts = {}) {
       order?.amount?.currency ||
       order?.breakdown?.currency ||
       order?.capture?.amount?.currency ||
-      'USD'
+      getBaseCurrency()
   );
 
   // ✅ clamp fee bps once (mirror credit file)
@@ -82,7 +96,7 @@ async function debitSellersFromRefund(order, opts = {}) {
     type: { $in: CREDIT_TYPES },
     $or: [
       { orderId: orderObjId }, // ✅ if orderId stored as ObjectId (most common)
-      { orderId: orderId },    // ✅ if stored as string (defensive)
+      { orderId: orderId }, // ✅ if stored as string (defensive)
     ],
   })
     .select('businessId amountCents currency meta orderId type')
@@ -156,7 +170,7 @@ async function debitSellersFromRefund(order, opts = {}) {
   sellers.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 
   // ✅ Idempotency: existing debits for this refund/order/currency
-  const refundKeyPrefix = `refunddebit:${String(orderId)}:${String(refundId || 'noRefundId')}:`;
+  const refundKeyPrefix = `refunddebit:${String(orderId)}:${refundIdStr}:`;
 
   const existingDebits = await SellerBalanceLedger.find({
     type: 'REFUND_DEBIT',
@@ -182,8 +196,6 @@ async function debitSellersFromRefund(order, opts = {}) {
   }
 
   let remaining = wantNetCents;
-  let created = 0;
-
   for (const alreadyDebited of existingBySeller.values()) {
     remaining -= Math.max(0, Number(alreadyDebited || 0));
   }
@@ -208,6 +220,10 @@ async function debitSellersFromRefund(order, opts = {}) {
     return -1;
   }
 
+  // ✅ Build rows first (deterministic allocation), then write via bulk upsert (race-safe)
+  const plannedRows = [];
+  let plannedDebitedCents = 0;
+
   for (let i = 0; i < sellers.length; i++) {
     const [businessId, sellerNetCents] = sellers[i];
     if (sellerNetCents <= 0) continue;
@@ -216,7 +232,7 @@ async function debitSellersFromRefund(order, opts = {}) {
     if (existingBySeller.has(businessId)) continue;
 
     const lastIndex = lastAllocatableIndex();
-    const isLastAllocatable = (i === lastIndex);
+    const isLastAllocatable = i === lastIndex;
 
     let sellerDebit = 0;
     if (isLastAllocatable) {
@@ -229,55 +245,94 @@ async function debitSellersFromRefund(order, opts = {}) {
 
     if (sellerDebit <= 0) continue;
 
-    const uniqueKey =
-      `refunddebit:${String(orderId)}:${String(refundId || 'noRefundId')}` +
-      `:${businessId}:${ccy}:${wantNetCents}`;
+    // ✅ IMPORTANT: uniqueKey must be stable for THIS refund+seller
+    // Do NOT include wantNetCents (that can vary if a caller retries badly)
+    const uniqueKey = `refunddebit:${String(orderId)}:${refundIdStr}:${businessId}:${ccy}`;
 
-    try {
-      await SellerBalanceLedger.create({
-        businessId,
+    plannedRows.push({
+      businessId: new mongoose.Types.ObjectId(businessId),
+      type: 'REFUND_DEBIT',
+      amountCents: -Math.abs(sellerDebit),
+      currency: ccy,
+      orderId: orderObjId,
+      note: `Refund debit (net) for order ${order.orderId || orderId} (${refundIdStr})`,
+      meta: {
+        uniqueKey,
+        refundId: refundIdStr,
+        platformFeeBps: feeBps,
+        requestedNetRefundCents: wantNetCents,
+        sellerNetCents,
+        totalNetCents,
+      },
+    });
+
+    plannedDebitedCents += sellerDebit;
+    remaining -= sellerDebit;
+
+    if (remaining <= 0) break;
+  }
+
+  if (!plannedRows.length) {
+    return {
+      debited: 0,
+      currency: ccy,
+      debitedCents: 0,
+      requestedNetCents: wantNetCents,
+      skipped: 'nothing-to-write',
+      feeBps,
+    };
+  }
+
+  const ops = plannedRows.map((row) => ({
+    updateOne: {
+      filter: {
+        businessId: row.businessId,
         type: 'REFUND_DEBIT',
-        amountCents: -Math.abs(sellerDebit),
-        currency: ccy,
-        orderId: orderObjId, // ✅ store as ObjectId consistently
-        note: `Refund debit (net) for order ${order.orderId || orderId} (${refundId || 'refund'})`,
-        meta: {
-          uniqueKey,
-          refundId: refundId || null,
-          platformFeeBps: feeBps,
-          requestedNetRefundCents: wantNetCents,
-          sellerNetCents,
-          totalNetCents,
+        orderId: row.orderId,
+        'meta.uniqueKey': row.meta.uniqueKey,
+      },
+      update: {
+        $setOnInsert: {
+          amountCents: row.amountCents,
+          currency: row.currency,
+          note: row.note,
+          meta: row.meta,
         },
-      });
+      },
+      upsert: true,
+    },
+  }));
 
-      created += 1;
-      remaining -= sellerDebit;
+  let upsertedCount = 0;
 
-      if (remaining <= 0) break;
-    } catch (e) {
-      const msg = String(e?.message || '');
-      if (msg.includes('E11000')) {
-        // Treat as already created; move on.
-        existingBySeller.set(businessId, sellerDebit);
-        remaining -= sellerDebit;
-        if (remaining <= 0) break;
-        continue;
-      }
-      throw e;
-    }
+  try {
+    const wr = await SellerBalanceLedger.bulkWrite(ops, { ordered: false });
+    upsertedCount = Number(wr?.upsertedCount || 0);
+  } catch (e) {
+    // ✅ Another request may have inserted same rows first (race): treat as idempotent success
+    if (!isDupKey(e)) throw e;
+    upsertedCount = 0;
+  }
+
+  // If duplicates/race happened, rows already exist. That's OK.
+  if (!upsertedCount) {
+    return {
+      debited: 0,
+      currency: ccy,
+      debitedCents: 0,
+      requestedNetCents: wantNetCents,
+      skipped: 'all-already-debited',
+      feeBps,
+    };
   }
 
   return {
-    debited: created,
+    debited: upsertedCount,
     currency: ccy,
-    debitedCents: wantNetCents - Math.max(0, remaining),
+    debitedCents: plannedDebitedCents,
     requestedNetCents: wantNetCents,
     feeBps,
   };
 }
 
 module.exports = { debitSellersFromRefund };
-
-
-

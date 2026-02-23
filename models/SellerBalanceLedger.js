@@ -8,7 +8,13 @@ const sellerBalanceLedgerSchema = new mongoose.Schema(
     businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
     type: { type: String, enum: ['EARNING', 'REFUND_DEBIT', 'ADJUSTMENT', 'PAYOUT_DEBIT'], required: true },
     amountCents: { type: Number, required: true }, // + for earning, - for debits
-    currency: { type: String, default: 'USD', trim: true, uppercase: true, index: true },
+    currency: {
+      type: String,
+      default: () => String(process.env.BASE_CURRENCY || 'USD').trim().toUpperCase(),
+      trim: true,
+      uppercase: true,
+      index: true,
+    },
 
     // ✅ NEW: when this ledger row becomes withdrawable
     // Use it mainly for EARNING rows.

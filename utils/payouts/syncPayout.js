@@ -6,6 +6,10 @@ const Payout = require('../../models/Payout');
 const SellerBalanceLedger = require('../../models/SellerBalanceLedger');
 const { getPayoutBatch } = require('./createPaypalPayoutBatch');
 
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 function toMoneyString(cents) {
   return (Math.round(Number(cents || 0)) / 100).toFixed(2);
 }
@@ -27,6 +31,13 @@ function mapBatchStatus(batchStatus) {
   if (v === 'SUCCESS') return 'COMPLETED';
   if (v === 'DENIED' || v === 'FAILED') return 'FAILED';
   return 'PROCESSING';
+}
+
+function isDupKey(err) {
+  return !!(
+    err &&
+    (err.code === 11000 || String(err.message || '').includes('E11000'))
+  );
 }
 
 async function runSyncPayoutById(payoutId) {
@@ -62,10 +73,20 @@ async function runSyncPayoutById(payoutId) {
     const errMsg =
       String(ri?.errors?.message || ri?.errors?.name || '').trim();
 
-    const normalized = { senderItemId, receiver, value, currency, payoutItemId, txStatus, errMsg };
+    const normalized = {
+      senderItemId,
+      receiver,
+      value,
+      currency,
+      payoutItemId,
+      txStatus,
+      errMsg,
+    };
 
     if (senderItemId) bySenderItem.set(senderItemId, normalized);
-    byFallbackKey.set(`${receiver}|${currency}|${value}`, normalized);
+    if (receiver && currency && value) {
+      byFallbackKey.set(`${receiver}|${currency}|${value}`, normalized);
+    }
   }
 
   const updates = [];
@@ -74,7 +95,7 @@ async function runSyncPayoutById(payoutId) {
   for (const local of payout.items || []) {
     const receiver = String(local.receiver || '').toLowerCase().trim();
     const value = toMoneyString(local.amountCents);
-    const currency = String(local.currency || payout.currency || 'USD').toUpperCase().trim();
+    const currency = String(local.currency || payout.currency || getBaseCurrency()).toUpperCase().trim();
 
     const senderItemIdGuess = `${payout._id}-${String(local.businessId)}`;
 
@@ -137,31 +158,62 @@ async function runSyncPayoutById(payoutId) {
   );
 
   let credited = 0;
-  for (const cb of creditBacks) {
-    const exists = await SellerBalanceLedger.findOne({
-      payoutId: payout._id,
-      type: 'ADJUSTMENT',
-      'meta.uniqueKey': cb.uniqueKey,
-    })
-      .select('_id')
-      .lean();
 
-    if (exists) continue;
-
-    await SellerBalanceLedger.create({
-      businessId: cb.businessId,
+  // ✅ Race-safe idempotent credit-backs (failed payout items)
+  const creditRows = creditBacks
+    .map((cb) => ({
+      businessId: new mongoose.Types.ObjectId(String(cb.businessId)),
       type: 'ADJUSTMENT',
-      amountCents: cb.amountCents,
-      currency: cb.currency,
+      amountCents: Math.abs(Number(cb.amountCents || 0)),
+      currency: String(cb.currency || payout.currency || getBaseCurrency()).toUpperCase(),
       payoutId: payout._id,
+      orderId: payout._id, // ✅ intentional: matches your unique index shape
       note: cb.note,
       meta: cb.meta,
-    });
+    }))
+    .filter((r) => r.amountCents > 0);
 
-    credited += 1;
+  if (creditRows.length) {
+    const creditOps = creditRows.map((row) => ({
+      updateOne: {
+        filter: {
+          businessId: row.businessId,
+          type: 'ADJUSTMENT',
+          orderId: row.orderId,
+          'meta.uniqueKey': row.meta.uniqueKey,
+        },
+        update: {
+          $setOnInsert: {
+            amountCents: row.amountCents,
+            currency: row.currency,
+            payoutId: row.payoutId,
+            note: row.note,
+            meta: row.meta,
+          },
+        },
+        upsert: true,
+      },
+    }));
+
+    let upsertedCount = 0;
+    try {
+      const wr = await SellerBalanceLedger.bulkWrite(creditOps, { ordered: false });
+      upsertedCount = Number(wr?.upsertedCount || 0);
+    } catch (e) {
+      // ✅ Duplicate races are harmless (another sync inserted first)
+      if (!isDupKey(e)) throw e;
+      upsertedCount = 0;
+    }
+
+    credited = upsertedCount;
   }
 
-  return { ok: true, payoutId: String(payout._id), status: newPayoutStatus, creditedBackCount: credited };
+  return {
+    ok: true,
+    payoutId: String(payout._id),
+    status: newPayoutStatus,
+    creditedBackCount: credited,
+  };
 }
 
 module.exports = { runSyncPayoutById };

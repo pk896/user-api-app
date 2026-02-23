@@ -554,7 +554,7 @@ const passwordResetRoutes = require('./routes/passwordReset');
 const ratingsRouter = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
-const adminOrdersApi = require('./routes/adminOrdersApi');
+// const adminOrdersApi = require('./routes/adminOrdersApi');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
 const debugDangerRoutes = require('./routes/debugDanger');
 const ordersDetailsRoutes = require('./routes/orderDetails');
@@ -573,7 +573,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api', deliveryOptionsApi);
 
 // Admin API
-app.use('/api/admin', adminOrdersApi);
+ //app.use('/api/admin', adminOrdersApi);
 
 // rating API
 app.use('/api', productRatingsApiRoutes);

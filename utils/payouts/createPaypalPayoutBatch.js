@@ -14,6 +14,10 @@ const PP_API =
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
 
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 function mustEnv(name, v) {
   const s = String(v || '').trim();
   if (!s) throw new Error(`Missing env: ${name}`);
@@ -113,7 +117,7 @@ async function createPayoutBatch({
 
   const normalizedItems = items.map((it, idx) => {
     const receiver = String(it?.receiver || '').trim().toLowerCase();
-    const currency = String(it?.currency || 'USD').toUpperCase().trim() || 'USD';
+    const currency = String(it?.currency || getBaseCurrency()).toUpperCase().trim() || getBaseCurrency();
     const note = clampStr(it?.note || '', 255);
     const senderItemId = clampStr(it?.senderItemId || '', 127);
 
@@ -155,7 +159,11 @@ async function createPayoutBatch({
 
   const text = await res.text();
   const json = (() => {
-    try { return JSON.parse(text || '{}'); } catch { return {}; }
+    try {
+      return JSON.parse(text || '{}');
+    } catch {
+      return {};
+    }
   })();
 
   if (!res.ok) {
@@ -179,7 +187,11 @@ async function getPayoutBatch(payoutBatchId) {
 
   const text = await res.text();
   const json = (() => {
-    try { return JSON.parse(text || '{}'); } catch { return {}; }
+    try {
+      return JSON.parse(text || '{}');
+    } catch {
+      return {};
+    }
   })();
 
   if (!res.ok) {

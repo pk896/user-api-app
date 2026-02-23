@@ -10,9 +10,9 @@ const Payout = require('../models/Payout');
 const SellerBalanceLedger = require('../models/SellerBalanceLedger');
 
 const { getSellerAvailableCents } = require('../utils/payouts/getSellerAvailableCents');
+const { runSyncPayoutById } = require('../utils/payouts/syncPayout');
 const {
   createPayoutBatch,
-  getPayoutBatch,
   getPayPalBase,
 } = require('../utils/payouts/createPaypalPayoutBatch');
 
@@ -22,6 +22,17 @@ const router = express.Router();
  * Helpers
  * --------------------------- */
 
+function isDupKey(err) {
+  return !!(
+    err &&
+    (err.code === 11000 || String(err.message || '').includes('E11000'))
+  );
+}
+
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 function toMoneyString(cents) {
   // cents can be number/string, allow 0, but always return "0.00"
   const n = Number(cents || 0);
@@ -29,34 +40,14 @@ function toMoneyString(cents) {
   return (Math.round(safe) / 100).toFixed(2);
 }
 
-function normalizeTxStatus(s) {
-  const v = String(s || '').trim().toUpperCase();
-  return v || 'PENDING';
-}
-
-function mapToItemStatus(txStatus) {
-  const v = normalizeTxStatus(txStatus);
-  if (v === 'SUCCESS') return 'SENT';
-  if (v === 'FAILED' || v === 'RETURNED' || v === 'BLOCKED') return 'FAILED';
-  return 'PENDING';
-}
-
-function mapBatchStatus(batchStatus) {
-  const v = String(batchStatus || '').trim().toUpperCase();
-  if (v === 'SUCCESS') return 'COMPLETED';
-  if (v === 'DENIED' || v === 'FAILED') return 'FAILED';
-  return 'PROCESSING';
-}
-
-// ✅ keep nonce consistent with your CSP setup
 function resNonce(req) {
   return req?.res?.locals?.nonce || '';
 }
 
-// ✅ mask paypal email for admin UI (still don’t print raw email everywhere)
 function maskEmail(email = '') {
   const [name, domain] = String(email || '').split('@');
   if (!name || !domain) return email;
+
   const maskedName =
     name.length <= 2
       ? name[0] + '*'
@@ -106,12 +97,13 @@ function requireCronSecret(req, res, next) {
 
 async function runCreatePayoutBatch({
   createdByAdminId = null,
-  currency = 'USD',
+  currency = null,
   minCents = 0,
   note = 'Seller payout',
   senderBatchPrefix = 'payout',
 }) {
-  const cur = String(currency || 'USD').toUpperCase().trim() || 'USD';
+  const baseCurrency = getBaseCurrency();
+  const cur = String(currency || baseCurrency).toUpperCase().trim() || baseCurrency;
   const min = Math.max(0, Number(minCents || 0));
   const noteClean = String(note || 'Seller payout').trim() || 'Seller payout';
 
@@ -126,7 +118,7 @@ async function runCreatePayoutBatch({
   const payItems = [];
   let totalCents = 0;
 
-  // ✅ sequential is okay for small seller counts; for large, optimize later
+  // Sequential is okay for small seller counts; optimize later if needed.
   for (const s of sellers) {
     const available = await getSellerAvailableCents(s._id, cur);
     if (available >= min && available > 0) {
@@ -154,25 +146,41 @@ async function runCreatePayoutBatch({
   const mode = String(process.env.PAYPAL_MODE || 'sandbox').toUpperCase();
   const senderBatchId = `${senderBatchPrefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
-  const payoutDoc = await Payout.create({
-    createdByAdminId,
-    mode,
-    senderBatchId,
-    currency: cur,
-    totalCents,
-    status: 'CREATED',
-    note: noteClean,
-    items: payItems.map((it) => ({
-      businessId: it.businessId,
-      receiver: it.receiver,
-      amountCents: it.amountCents,
-      currency: it.currency,
-      status: 'PENDING',
-    })),
-    meta: { paypalBase: getPayPalBase() },
-  });
+  // One active creation per currency
+  const runKey = `RUNLOCK:${cur}`;
 
-  // ✅ Create PayPal batch (if this fails, mark the payout FAILED)
+  let payoutDoc;
+  try {
+    payoutDoc = await Payout.create({
+      createdByAdminId,
+      mode,
+      senderBatchId,
+      runKey,
+      currency: cur,
+      totalCents,
+      status: 'CREATED',
+      note: noteClean,
+      items: payItems.map((it) => ({
+        businessId: it.businessId,
+        receiver: it.receiver,
+        amountCents: it.amountCents,
+        currency: it.currency,
+        status: 'PENDING',
+      })),
+      meta: { paypalBase: getPayPalBase() },
+    });
+  } catch (e) {
+    if (isDupKey(e)) {
+      return {
+        ok: false,
+        error: 'payout-run-already-in-progress',
+        message: `Another payout run is already starting for ${cur}. Please wait and refresh.`,
+      };
+    }
+    throw e;
+  }
+
+  // Create PayPal batch (if this fails, mark payout FAILED + release lock)
   let paypalRes = null;
   try {
     paypalRes = await createPayoutBatch({
@@ -195,6 +203,7 @@ async function runCreatePayoutBatch({
           status: 'FAILED',
           meta: { ...(payoutDoc.meta || {}), createError: String(e?.message || e) },
         },
+        $unset: { runKey: 1 },
       }
     );
     throw e;
@@ -204,44 +213,59 @@ async function runCreatePayoutBatch({
 
   await Payout.updateOne(
     { _id: payoutDoc._id },
-    { $set: { batchId, status: 'PROCESSING' } }
+    {
+      $set: { batchId, status: 'PROCESSING' },
+      $unset: { runKey: 1 },
+    }
   );
 
-  // ✅ IMPORTANT FIX:
-  // Your SellerBalanceLedger unique index is:
-  // { businessId, type, orderId, meta.uniqueKey } unique sparse
-  // For payouts, orderId is NULL => multiple PAYOUT_DEBIT rows for same seller WOULD CONFLICT
-  // if meta.uniqueKey is the same OR missing.
-  //
-  // ✅ So: we MUST include BOTH:
-  // - payoutId: payoutDoc._id (for querying)
-  // - orderId: payoutDoc._id (to satisfy uniqueness and avoid conflicts when orderId is null)
-  //
-  // This keeps idempotency per payout batch + seller.
-  for (const it of payItems) {
-    const uniqueKey = `payoutdebit:${String(payoutDoc._id)}:${String(it.businessId)}:${cur}`;
+  // Race-safe idempotent payout debits (no findOne+create)
+  const debitRows = payItems
+    .map((it) => {
+      const businessObjId = new mongoose.Types.ObjectId(String(it.businessId));
+      const uniqueKey = `payoutdebit:${String(payoutDoc._id)}:${String(it.businessId)}:${cur}`;
 
-    const exists = await SellerBalanceLedger.findOne({
-      businessId: it.businessId,
-      type: 'PAYOUT_DEBIT',
-      orderId: payoutDoc._id, // ✅ critical (see note above)
-      'meta.uniqueKey': uniqueKey,
+      return {
+        businessId: businessObjId,
+        type: 'PAYOUT_DEBIT',
+        amountCents: -Math.abs(Number(it.amountCents || 0)),
+        currency: cur,
+        payoutId: payoutDoc._id,
+        orderId: payoutDoc._id, // intentional: matches your unique index shape
+        note: `Payout initiated: ${batchId || senderBatchId}`,
+        meta: { senderBatchId, batchId, uniqueKey },
+      };
     })
-      .select('_id')
-      .lean();
+    .filter((r) => r.amountCents < 0);
 
-    if (exists) continue;
+  if (debitRows.length) {
+    const debitOps = debitRows.map((row) => ({
+      updateOne: {
+        filter: {
+          businessId: row.businessId,
+          type: 'PAYOUT_DEBIT',
+          orderId: row.orderId,
+          'meta.uniqueKey': row.meta.uniqueKey,
+        },
+        update: {
+          $setOnInsert: {
+            amountCents: row.amountCents,
+            currency: row.currency,
+            payoutId: row.payoutId,
+            note: row.note,
+            meta: row.meta,
+          },
+        },
+        upsert: true,
+      },
+    }));
 
-    await SellerBalanceLedger.create({
-      businessId: it.businessId,
-      type: 'PAYOUT_DEBIT',
-      amountCents: -Math.abs(it.amountCents),
-      currency: cur,
-      payoutId: payoutDoc._id,
-      orderId: payoutDoc._id, // ✅ critical (see note above)
-      note: `Payout initiated: ${batchId || senderBatchId}`,
-      meta: { senderBatchId, batchId, uniqueKey },
-    });
+    try {
+      await SellerBalanceLedger.bulkWrite(debitOps, { ordered: false });
+    } catch (e) {
+      // harmless duplicate races
+      if (!isDupKey(e)) throw e;
+    }
   }
 
   return {
@@ -250,160 +274,6 @@ async function runCreatePayoutBatch({
     batchId,
     count: payItems.length,
     totalCents,
-  };
-}
-
-async function runSyncPayoutById(payoutId) {
-  if (!mongoose.isValidObjectId(payoutId)) {
-    return { ok: false, error: 'invalid-payout-id' };
-  }
-
-  const payout = await Payout.findById(payoutId).lean();
-  if (!payout) return { ok: false, error: 'payout-not-found' };
-  if (!payout.batchId) return { ok: false, error: 'no-batchId' };
-
-  const batch = await getPayoutBatch(payout.batchId);
-
-  const batchStatus = batch?.batch_header?.batch_status;
-  const newPayoutStatus = mapBatchStatus(batchStatus);
-
-  const remoteItems = Array.isArray(batch?.items) ? batch.items : [];
-
-  const bySenderItem = new Map();
-  const byFallbackKey = new Map();
-
-  for (const ri of remoteItems) {
-    const senderItemId = String(ri?.payout_item?.sender_item_id || '').trim();
-    const receiver = normEmail(ri?.payout_item?.receiver);
-    const value = String(ri?.payout_item?.amount?.value || '').trim();
-    const currency = String(ri?.payout_item?.amount?.currency || '').toUpperCase().trim();
-
-    const payoutItemId =
-      String(ri?.payout_item_id || ri?.payout_item?.payout_item_id || '').trim();
-
-    const txStatus =
-      String(ri?.transaction_status || ri?.payout_item?.transaction_status || '').trim();
-
-    const errMsg =
-      String(ri?.errors?.message || ri?.errors?.name || '').trim();
-
-    const normalized = {
-      senderItemId,
-      receiver,
-      value,
-      currency,
-      payoutItemId,
-      txStatus,
-      errMsg,
-    };
-
-    if (senderItemId) bySenderItem.set(senderItemId, normalized);
-    if (receiver && currency && value) byFallbackKey.set(`${receiver}|${currency}|${value}`, normalized);
-  }
-
-  const updates = [];
-  const creditBacks = [];
-
-  for (const local of payout.items || []) {
-    const receiver = normEmail(local.receiver);
-    const value = toMoneyString(local.amountCents);
-    const currency = String(local.currency || payout.currency || 'USD').toUpperCase().trim();
-
-    const senderItemIdGuess = `${payout._id}-${String(local.businessId)}`;
-
-    const remote =
-      bySenderItem.get(senderItemIdGuess) ||
-      byFallbackKey.get(`${receiver}|${currency}|${value}`);
-
-    const txStatus = remote?.txStatus || 'PENDING';
-    const nextStatus = mapToItemStatus(txStatus);
-
-    const paypalItemId = String(remote?.payoutItemId || local.paypalItemId || '').trim();
-    const error = String(remote?.errMsg || local.error || '').trim();
-
-    updates.push({
-      businessId: local.businessId,
-      receiver: local.receiver,
-      amountCents: local.amountCents,
-      currency: local.currency,
-      status: nextStatus,
-      paypalItemId,
-      error,
-    });
-
-    if (nextStatus === 'FAILED') {
-      const uniqueKey = `creditback:${String(payout._id)}:${String(local.businessId)}:${paypalItemId || receiver}|${value}|${currency}`;
-
-      creditBacks.push({
-        businessId: local.businessId,
-        currency,
-        amountCents: Math.abs(local.amountCents),
-        uniqueKey,
-        note: `Auto credit-back for failed payout (${payout.batchId})`,
-        meta: {
-          creditBackForPayout: true,
-          uniqueKey,
-          batchId: payout.batchId,
-          paypalItemId,
-          receiver,
-          value,
-          currency,
-          txStatus: normalizeTxStatus(txStatus),
-        },
-      });
-    }
-  }
-
-  await Payout.updateOne(
-    { _id: payout._id },
-    {
-      $set: {
-        status: newPayoutStatus,
-        items: updates,
-        meta: {
-          ...(payout.meta || {}),
-          lastSyncAt: new Date(),
-          batchStatus: String(batchStatus || ''),
-        },
-      },
-    }
-  );
-
-  let credited = 0;
-  for (const cb of creditBacks) {
-    // ✅ IMPORTANT FIX (same uniqueness issue):
-    // ADJUSTMENT rows could also conflict if orderId is null.
-    // We will store orderId=payout._id for payout-related adjustments as well.
-    const exists = await SellerBalanceLedger.findOne({
-      payoutId: payout._id,
-      type: 'ADJUSTMENT',
-      orderId: payout._id, // ✅ critical
-      'meta.uniqueKey': cb.uniqueKey,
-    })
-      .select('_id')
-      .lean();
-
-    if (exists) continue;
-
-    await SellerBalanceLedger.create({
-      businessId: cb.businessId,
-      type: 'ADJUSTMENT',
-      amountCents: cb.amountCents,
-      currency: cb.currency,
-      payoutId: payout._id,
-      orderId: payout._id, // ✅ critical
-      note: cb.note,
-      meta: cb.meta,
-    });
-
-    credited += 1;
-  }
-
-  return {
-    ok: true,
-    payoutId: String(payout._id),
-    status: newPayoutStatus,
-    creditedBackCount: credited,
   };
 }
 
@@ -430,8 +300,9 @@ router.get('/payouts', requireAdmin, async (req, res) => {
       }
     }
 
-    // ✅ PREVIEW: show sellers and how much is available
-    const currencyPreview = String(req.query.currency || 'USD').toUpperCase().trim() || 'USD';
+    const baseCurrency = getBaseCurrency();
+    const currencyPreview =
+      String(req.query.currency || baseCurrency).toUpperCase().trim() || baseCurrency;
 
     const sellers = await Business.find({ role: 'seller' })
       .select('_id name payouts.enabled payouts.paypalEmail')
@@ -449,6 +320,16 @@ router.get('/payouts', requireAdmin, async (req, res) => {
       let availableCents = 0;
       if (enabled && hasPaypal) {
         availableCents = await getSellerAvailableCents(s._id, currencyPreview);
+
+        console.log('[admin/payouts preview seller]', {
+          sellerName: s.name,
+          businessId: String(s._id),
+          enabled,
+          hasPaypal,
+          paypalEmail: paypalEmail ? '[set]' : '[missing]',
+          currencyPreview,
+          availableCents,
+        });
       }
 
       const eligible = enabled && hasPaypal && availableCents > 0;
@@ -500,15 +381,20 @@ router.get('/payouts', requireAdmin, async (req, res) => {
 
 /**
  * POST /admin/payouts/create (manual admin click)
- * ✅ Now supports autoSync checkbox from UI.
+ * Supports autoSync checkbox from UI.
  */
 router.post('/payouts/create', requireAdmin, async (req, res) => {
   try {
-    const currency = String(req.body.currency || 'USD').toUpperCase();
+    const baseCurrency = getBaseCurrency();
+    const currency = String(req.body.currency || baseCurrency).toUpperCase().trim() || baseCurrency;
     const minCents = Math.max(0, Number(req.body.minCents || 0));
     const note = String(req.body.note || 'Seller payout').trim();
     const autoSyncRaw = String(req.body.autoSync || '').trim().toLowerCase();
-    const autoSync = autoSyncRaw === '1' || autoSyncRaw === 'true' || autoSyncRaw === 'yes' || autoSyncRaw === 'on';
+    const autoSync =
+      autoSyncRaw === '1' ||
+      autoSyncRaw === 'true' ||
+      autoSyncRaw === 'yes' ||
+      autoSyncRaw === 'on';
 
     const out = await runCreatePayoutBatch({
       createdByAdminId: safeObjectId(req.session?.admin?._id) || null,
@@ -518,12 +404,17 @@ router.post('/payouts/create', requireAdmin, async (req, res) => {
       senderBatchPrefix: 'payout',
     });
 
+    if (!out.ok && out.error === 'payout-run-already-in-progress') {
+      req.flash('warning', out.message || 'Another payout run is already in progress.');
+      return res.redirect('/admin/payouts');
+    }
+
     if (out.ok && out.skippedReason === 'no-eligible-sellers') {
       req.flash('info', 'No sellers are eligible for payout yet.');
       return res.redirect('/admin/payouts');
     }
 
-    // ✅ Best-effort immediate sync
+    // Best-effort immediate sync
     if (autoSync && out.payoutId) {
       try {
         await runSyncPayoutById(out.payoutId);
@@ -563,7 +454,7 @@ router.post('/payouts/:id/sync', requireAdmin, async (req, res) => {
 });
 
 /**
- * ✅ Admin-only helper: sync recent batches (no cron secret)
+ * Admin-only helper: sync recent batches (no cron secret)
  * POST /admin/payouts/sync-recent
  */
 router.post('/payouts/sync-recent', requireAdmin, async (req, res) => {

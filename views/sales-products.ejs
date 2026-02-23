@@ -215,7 +215,7 @@
                 </span>
 
                 <span class="count">
-                  (<span class="rating-count"><%= cnt %></span>)
+                  (<span class="rating-count"><%= (cnt ?? 0) %></span>)
                 </span>
               </div>
 
@@ -962,6 +962,10 @@
     border-radius:.6rem;
   }
 
+  .drawer-item-name{
+    font-weight:800;
+  }
+
   .drawer-foot{
     padding:.8rem;
     border-top:1px solid var(--line);
@@ -1028,68 +1032,63 @@
       backdrop-filter:blur(2px);
       box-shadow:none;
     }
+  }
 
-    @media (max-width:480px){
-      /* ✅ Make cards more compact */
-      .amz-list.grid-mode{ gap:.42rem; }
+  /* Extra compact mobile card tuning (top-level media block) */
+  @media (max-width:480px){
+    .amz-list.grid-mode{ gap:.42rem; }
 
-      .amz-item{
-        padding:.42rem;
-        gap:.35rem;
-        border-radius:12px;
-      }
-
-      /* Slightly shorter image box (reduces tall cards) */
-      .imgbox{
-        aspect-ratio:4 / 5;
-        border-radius:12px;
-      }
-
-      /* tighter text blocks */
-      .info{ gap:.18rem; }
-      .title{ font-size:.88rem; max-height:2.2em; }
-
-      .rating{ font-size:.76rem; gap:.28rem; }
-      .rating .stars{ font-size:.84rem; }
-
-      /* ✅ Price row: put price first, then tiny VAT + tiny stock */
-      .info .price-row{
-        flex-wrap:wrap;
-        justify-content:flex-start;
-        gap:.12rem .45rem;
-        align-items:baseline;
-      }
-
-      .info .price-row .price{
-        flex:1 1 100%;        /* price on its own line */
-        font-size:.92rem;
-        line-height:1.05;
-      }
-
-      .info .price-row .vat{
-        font-size:.64rem;     /* VERY SMALL */
-        font-weight:900;
-        line-height:1.05;
-      }
-
-      .info .price-row .stock{
-        font-size:.64rem;     /* VERY SMALL */
-        font-weight:900;
-        line-height:1.05;
-        white-space:nowrap;
-      }
-
-      /* ✅ Smaller buttons (reduces card height) */
-      .amz-item .act{ gap:.35rem; margin-top:.05rem; }
-      .amz-item .act .btn{
-        padding:.28rem .55rem;
-        font-size:.82rem;
-        border-radius:999px;
-      }
-
-      /* Optional: slightly smaller tags */
-      .tag{ font-size:.66rem; padding:.12rem .38rem; }
+    .amz-item{
+      padding:.42rem;
+      gap:.35rem;
+      border-radius:12px;
     }
+
+    .imgbox{
+      aspect-ratio:4 / 5;
+      border-radius:12px;
+    }
+
+    .info{ gap:.18rem; }
+    .title{ font-size:.88rem; max-height:2.2em; }
+
+    .rating{ font-size:.76rem; gap:.28rem; }
+    .rating .stars{ font-size:.84rem; }
+
+    .info .price-row{
+      flex-wrap:wrap;
+      justify-content:flex-start;
+      gap:.12rem .45rem;
+      align-items:baseline;
+    }
+
+    .info .price-row .price{
+      flex:1 1 100%;
+      font-size:.92rem;
+      line-height:1.05;
+    }
+
+    .info .price-row .vat{
+      font-size:.64rem;
+      font-weight:900;
+      line-height:1.05;
+    }
+
+    .info .price-row .stock{
+      font-size:.64rem;
+      font-weight:900;
+      line-height:1.05;
+      white-space:nowrap;
+    }
+
+    .amz-item .act{ gap:.35rem; margin-top:.05rem; }
+    .amz-item .act .btn{
+      padding:.28rem .55rem;
+      font-size:.82rem;
+      border-radius:999px;
+    }
+
+    .tag{ font-size:.66rem; padding:.12rem .38rem; }
   }
 
   /* Cart count: navy by default, white on hover */
@@ -1317,6 +1316,15 @@
     const PAGE = { size: 12, page: 1, pages: 1 };
     const CARD = () => list ? Array.from(list.children) : [];
 
+    function esc(s){
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function hideVariantToast(){
       if (!variantToast) return;
       variantToast.classList.remove('show');
@@ -1408,6 +1416,9 @@
     // Global lock state so applyFilters() can enforce it
     const LOCK = { mode:'none', lockBizId:'' };
 
+    // ✅ Prevent stale async cart responses from repainting "ghost" values
+    let CART_REFRESH_SEQ = 0;
+
     function enforceSecondhandLockOnCards(){
       const cards = CARD();
 
@@ -1428,49 +1439,37 @@
       });
     }
 
-    // Popup must be the button → we transform the button itself briefly
-    function showButtonPolicyPopup(btn, message){
-      if (!btn) return;
-      const originalText = btn.textContent;
-      const originalBg = btn.style.background;
-      const originalBorder = btn.style.borderColor;
-      const originalColor = btn.style.color;
-
-      btn.textContent = message;
-      btn.style.background = '#ef4444';
-      btn.style.borderColor = '#ef4444';
-      btn.style.color = '#fff';
-      btn.setAttribute('aria-disabled','true');
-
-      setTimeout(()=>{
-        btn.textContent = originalText;
-        btn.style.background = originalBg;
-        btn.style.borderColor = originalBorder;
-        btn.style.color = originalColor;
-        btn.removeAttribute('aria-disabled');
-      }, 2600);
+    /* Sidebar toggle (mobile) */
+    function hideFiltersOnce(){
+      sidebar.style.display = 'none';
+      // only hide overlay if drawer is not open
+      if (!drawer.classList.contains('open')) {
+        overlay.style.display = 'none';
+      }
     }
 
-    /* Sidebar toggle (mobile) */
     if (filterToggle) {
       filterToggle.addEventListener('click', () => {
         const showing = getComputedStyle(sidebar).display !== 'none';
-        sidebar.style.display = showing ? 'none' : 'block';
-        sidebar.style.position = showing ? '' : 'fixed';
-        if (!showing){
-          sidebar.style.top = '64px';
-          sidebar.style.left = '10px';
-          sidebar.style.right = '10px';
-          sidebar.style.zIndex = '65';
-          sidebar.style.maxHeight = '70vh';
-          sidebar.style.overflow = 'auto';
-          overlay.style.display = 'block';
-          overlay.addEventListener('click', hideFiltersOnce, { once:true });
+
+        if (showing) {
+          hideFiltersOnce();
+          return;
         }
+
+        sidebar.style.display = 'block';
+        sidebar.style.position = 'fixed';
+        sidebar.style.top = '64px';
+        sidebar.style.left = '10px';
+        sidebar.style.right = '10px';
+        sidebar.style.zIndex = '65';
+        sidebar.style.maxHeight = '70vh';
+        sidebar.style.overflow = 'auto';
+
+        overlay.style.display = 'block';
       });
     }
-    function hideFiltersOnce(){ sidebar.style.display='none'; overlay.style.display='none'; }
-
+    
     /* List/Grid toggle (default is GRID, button offers List) */
     if (viewToggle){
       viewToggle.textContent = '☰ List';
@@ -1486,7 +1485,22 @@
 
     /* Drawer controls */
     function openDrawer(){ overlay.style.display='block'; requestAnimationFrame(()=>drawer.classList.add('open')); refreshCart(); }
-    function closeDrawer(){ drawer.classList.remove('open'); setTimeout(()=>overlay.style.display='none', 280); }
+    function closeDrawer(){
+      drawer.classList.remove('open');
+
+      // also hide mobile filters if open
+      if (sidebar && getComputedStyle(sidebar).display !== 'none' && window.innerWidth <= 480) {
+        sidebar.style.display = 'none';
+      }
+
+      setTimeout(()=>{
+        // only hide overlay when neither drawer nor mobile filters are open
+        const drawerOpen = drawer.classList.contains('open');
+        const filtersOpen = sidebar && getComputedStyle(sidebar).display !== 'none' && window.innerWidth <= 480;
+        if (!drawerOpen && !filtersOpen) overlay.style.display = 'none';
+      }, 280);
+    }
+
     if (cartBtn) cartBtn.addEventListener('click', openDrawer);
     overlay.addEventListener('click', closeDrawer);
     drawerClose.addEventListener('click', closeDrawer);
@@ -1565,9 +1579,18 @@
 
     async function fetchCart(){
       let data = await getJSON('/api/cart');
-      if (!data || (!data.items && !Array.isArray(data))) data = await getJSON('/api/cart/items');
+
+      // /api/cart => { items: [...] }
+      if (data && Array.isArray(data.items)) {
+        return { items: data.items };
+      }
+
+      // fallback legacy /api/cart/items => [...]
+      data = await getJSON('/api/cart/items');
       if (Array.isArray(data)) return { items: data };
-      return data || { items: [] };
+
+      // fallback safe
+      return { items: [] };
     }
 
     function renderCart(items){
@@ -1608,9 +1631,9 @@
 
         return `
           <div class="drawer-item">
-            <img src="${image}" alt="${name}">
+            <img src="${esc(image)}" alt="${esc(name)}">
             <div>
-              <div style="font-weight:800">${name}</div>
+              <div class="drawer-item-name">${esc(name)}</div>
               <div class="muted">${meta}</div>
             </div>
             <span></span>
@@ -1656,8 +1679,16 @@
     });
 
     async function refreshCart(){
+      // ✅ Mark this call as the newest refresh
+      const seq = ++CART_REFRESH_SEQ;
+
       const data = await fetchCart();
-      const items = data.items || [];
+
+      // ✅ If a newer refresh started while this one was waiting, ignore this stale result
+      if (seq !== CART_REFRESH_SEQ) return;
+
+      const items = Array.isArray(data?.items) ? data.items : [];
+
       renderCart(items);
 
       const state = getCartLockState(items);
@@ -1672,9 +1703,12 @@
           'Second-hand cart locked: you can ONLY add second-hand items from the same business/location. Clear cart to shop other products or businesses.',
           { showClear:true }
         );
+      } else {
+        // ✅ hide stale policy toast after cart becomes normal/empty
+        hidePolicyToast();
       }
     }
-
+    
     /* Add to cart inline (handles clothes + shoes variants) */
     function wireAddButtons(){
       $$('.btn.add').forEach(btn=>{

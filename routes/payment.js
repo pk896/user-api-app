@@ -8,6 +8,15 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOrder');
+const { convertMoneyAmount, FX_PROVIDER } = require('../utils/fx/getFxRate');
+const { resolveShippoFromAddressForCart } = require('../utils/payment/resolveShippoFromAddressForCart');
+const { shippoCreateCustomsDeclaration } = require('../utils/payment/shippoCreateCustomsDeclaration');
+const {
+  kgFrom,
+  loadProductsForCart,
+  validateCartProductsShippingOrThrow,
+  buildShippoParcelsFromCart_Strict,
+} = require('../utils/payment/buildShippoParcelsFromCart');
 
 // ======================================================
 // ✅ Admin guard (PROD SAFE)
@@ -70,7 +79,7 @@ const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
   PAYPAL_MODE = 'sandbox',
-  BASE_CURRENCY = 'USD',
+  BASE_CURRENCY,
   VAT_RATE = '0.15',
   BRAND_NAME = 'Unicoporate',
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
@@ -499,6 +508,45 @@ function envStr(name, fallback = '') {
   return v || fallback;
 }
 
+function getShippoEelPfc() {
+  // Default commonly works for low-value exports; override in .env if needed
+  // Example .env:
+  // SHIPPO_EEL_PFC=NOEEI_30_37_a
+  return envStr('SHIPPO_EEL_PFC', 'NOEEI_30_37_a');
+}
+
+function isBenignShippoMessage(m) {
+  const src = String(m?.source || '').toLowerCase();
+  const code = String(m?.code || '').trim();
+  const text = String(m?.text || '').toLowerCase();
+
+  // ✅ UPS reference-rate warning (not fatal)
+  if (src === 'ups' && code === '110971') return true;
+
+  // ✅ Known Shippo carrier capability warning (not fatal)
+  if (
+    src === 'shippo' &&
+    text.includes("doesn't support one or more shipment options")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function splitShippoMessages(messages) {
+  const arr = Array.isArray(messages) ? messages : [];
+  const benign = [];
+  const important = [];
+
+  for (const m of arr) {
+    if (isBenignShippoMessage(m)) benign.push(m);
+    else important.push(m);
+  }
+
+  return { benign, important };
+}
+
 // ✅ FROM address (your warehouse / sender address)
 function getShippoFromAddress() {
   const country = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
@@ -532,392 +580,49 @@ function getShippoFromAddress() {
   return from;
 }
 
-async function resolveShippoFromAddressForCart(cart) {
-  // Default: always use .env address
-  const envFrom = getShippoFromAddress();
-
-  const allowedCats = new Set(['second-hand-clothes', 'uncategorized-second-hand-things']);
-
-  // If we can't load Product/Business/helper, we cannot safely build seller FROM
-  if (!Product || !Business || typeof buildShippoAddressFromBusiness !== 'function') {
-    return envFrom; // do NOT disturb other flows
-  }
-
-  const items = Array.isArray(cart?.items) ? cart.items : [];
-  if (!items.length) return envFrom;
-
-  // Load products (we need category + business owner id)
-  const ids = items
-    .map((it) => String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim())
-    .filter(Boolean);
-
-  const unique = [...new Set(ids)];
-  if (!unique.length) return envFrom;
-
-  const prods = await Product.find({ customId: { $in: unique } })
-    .select('customId name category businessId sellerId seller ownerBusiness business')
-    .lean();
-
-  const map = new Map(prods.map((p) => [String(p.customId), p]));
-
-  // Build product rows in cart order
-  const rows = unique.map((cid) => ({ cid, product: map.get(cid) || null }));
-
-  // If any product missing OR any product not in those 2 categories => use env FROM
-  for (const r of rows) {
-    if (!r.product) return envFrom;
-
-    const catRaw = r.product.category;
-    const cat = String(catRaw || '').trim();
-    if (!allowedCats.has(cat)) return envFrom;
-  }
-
-  // At this point: ALL products are in allowed categories.
-  // Now ensure they all belong to the SAME seller business (otherwise one shipment can't have multiple FROMs).
-  const pickBizId = (p) =>
-    p.businessId || p.sellerId || p.seller || p.ownerBusiness || p.business || null;
-
-  const firstBizId = pickBizId(rows[0].product);
-  if (!firstBizId) {
-    const err = new Error(
-      'Second-hand order detected, but product is missing seller businessId. Cannot build FROM address.'
-    );
-    err.code = 'SELLER_BUSINESS_MISSING';
-    throw err;
-  }
-
-  for (const r of rows) {
-    const bid = pickBizId(r.product);
-    if (!bid || String(bid) !== String(firstBizId)) {
-      const err = new Error(
-        'Second-hand order contains products from different sellers. Cannot build one FROM address for one shipment.'
-      );
-      err.code = 'MIXED_SELLERS_NOT_SUPPORTED';
-      throw err;
-    }
-  }
-
-  // Load the seller business and build Shippo address
-  const biz = await Business.findById(firstBizId).lean();
-  if (!biz) {
-    const err = new Error('Seller business not found for second-hand order.');
-    err.code = 'SELLER_BUSINESS_NOT_FOUND';
-    throw err;
-  }
-
-  // This will throw ADDRESS_INCOMPLETE with your nice message if fields are missing
-  return buildShippoAddressFromBusiness(biz);
-}
-
-function kgFrom(value, unit) {
-  const v = Number(value);
-  if (!Number.isFinite(v) || v <= 0) return null;
-  const u = String(unit || 'kg').toLowerCase();
-  if (u === 'kg') return v;
-  if (u === 'g') return v / 1000;
-  if (u === 'lb') return v * 0.45359237;
-  if (u === 'oz') return v * 0.028349523125;
-  return null;
-}
-
-function cmFrom(value, unit) {
-  const v = Number(value);
-  if (!Number.isFinite(v) || v <= 0) return null;
-  const u = String(unit || 'cm').toLowerCase();
-  if (u === 'cm') return v;
-  if (u === 'in') return v * 2.54;
-  return null;
-}
-
-async function loadProductsForCart(cart) {
-  if (!Product) {
-    const err = new Error('Product model not available for shipping calculation.');
-    err.code = 'NO_PRODUCT_MODEL';
-    throw err;
-  }
-
-  const items = Array.isArray(cart?.items) ? cart.items : [];
-  const ids = items
-    .map((it) => String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim())
-    .filter(Boolean);
-
-  const unique = [...new Set(ids)];
-  if (!unique.length) return [];
-
-  // We only need shipping + name + customId
-  const prods = await Product.find({ customId: { $in: unique } })
-    .select('customId name shipping')
-    .lean();
-
-  // Map for fast lookup
-  const map = new Map(prods.map((p) => [String(p.customId), p]));
-  return items.map((it) => {
-    const id = String(it?.customId || it?.productId || it?.pid || it?.sku || '').trim();
-    return { cartItem: it, product: map.get(id) || null, customId: id };
-  });
-}
-
-function validateCartProductsShippingOrThrow(pairs) {
-  const missingList = [];
-
-  for (const row of pairs) {
-    const p = row.product;
-    if (!p) {
-      missingList.push(`${row.customId || 'UNKNOWN'} (product not found)`);
-      continue;
-    }
-
-    const sh = p.shipping || {};
-    const wVal = sh?.weight?.value;
-    const wUnit = sh?.weight?.unit;
-
-    const d = sh?.dimensions || {};
-    const len = d.length;
-    const wid = d.width;
-    const hei = d.height;
-    const dUnit = d.unit;
-
-    const problems = [];
-    if (kgFrom(wVal, wUnit) === null) problems.push('weight');
-    if (cmFrom(len, dUnit) === null) problems.push('length');
-    if (cmFrom(wid, dUnit) === null) problems.push('width');
-    if (cmFrom(hei, dUnit) === null) problems.push('height');
-
-    if (problems.length) {
-      missingList.push(`${p.name || p.customId} (missing: ${problems.join(', ')})`);
-    }
-  }
-
-  if (missingList.length) {
-    const err = new Error(
-      `Shipping is unavailable because these products are missing shipping measurements: ${missingList.join(' | ')}`
-    );
-    err.code = 'PRODUCT_SHIPPING_MISSING';
-    throw err;
-  }
-}
-
-function buildCalculatedParcelFromProducts(rows, { onlyFragile } = {}) {
-  // Build ONE parcel:
-  // - weight = sum(weight * qty)
-  // - dimensions = MAX of each dimension (do NOT multiply dimensions by qty)
-  let totalKg = 0;
-
-  let maxLenCm = 0;
-  let maxWidCm = 0;
-  let maxHeiCm = 0;
-
-  for (const row of rows) {
-    const p = row.product;
-    const sh = p.shipping || {};
-    const qty = toQty(row?.cartItem?.qty ?? row?.cartItem?.quantity, 1);
-
-    const isFragile = !!sh?.fragile;
-
-    if (onlyFragile === true && !isFragile) continue;
-    if (onlyFragile === false && isFragile) continue;
-
-    const kgEach = kgFrom(sh?.weight?.value, sh?.weight?.unit);
-    const d = sh?.dimensions || {};
-    const unit = d.unit;
-
-    const lenCm = cmFrom(d.length, unit);
-    const widCm = cmFrom(d.width, unit);
-    const heiCm = cmFrom(d.height, unit);
-
-    totalKg += kgEach * qty;
-
-    // ✅ dimensions should NOT be multiplied by qty
-    maxLenCm = Math.max(maxLenCm, lenCm);
-    maxWidCm = Math.max(maxWidCm, widCm);
-    maxHeiCm = Math.max(maxHeiCm, heiCm);
-  }
-
-  const safeKg = Math.max(0.001, Number(totalKg.toFixed(3)));
-  const safeLen = Math.max(0.1, Number(maxLenCm.toFixed(1)));
-  const safeWid = Math.max(0.1, Number(maxWidCm.toFixed(1)));
-  const safeHei = Math.max(0.1, Number(maxHeiCm.toFixed(1)));
-
-  return {
-    length: String(safeLen),
-    width: String(safeWid),
-    height: String(safeHei),
-    distance_unit: 'cm',
-    weight: String(safeKg),
-    mass_unit: 'kg',
-  };
-}
-
-async function buildShippoParcelsFromCart_Strict(cart) {
-  const pairs = await loadProductsForCart(cart);
-  validateCartProductsShippingOrThrow(pairs);
-
-  const hasFragile = pairs.some((r) => !!r?.product?.shipping?.fragile);
-
-  // ✅ Rule: ONE parcel by default
-  if (!hasFragile) {
-    return [buildCalculatedParcelFromProducts(pairs)];
-  }
-
-  // ✅ Rule: split ONLY when fragile exists
-  const fragileRows = pairs.filter((r) => !!r?.product?.shipping?.fragile);
-  const normalRows  = pairs.filter((r) => !r?.product?.shipping?.fragile);
-
-  const parcels = [];
-
-  // Only add a parcel if it actually has items
-  if (fragileRows.length) parcels.push(buildCalculatedParcelFromProducts(fragileRows));
-  if (normalRows.length) parcels.push(buildCalculatedParcelFromProducts(normalRows));
-
-  // Safety: should never be empty, but just in case
-  if (!parcels.length) {
-    return [buildCalculatedParcelFromProducts(pairs)];
-  }
-
-  return parcels;
-}
-
-async function shippoCreateCustomsDeclaration({ cart, toCountry }) {
-  // ✅ Customs line items MUST be based on Product.shipping (not .env)
-  // ✅ We will:
-  // - load products for cart
-  // - enforce measurements exist (already strict)
-  // - compute net_weight per line = productKg * qty
-  // - compute value_amount per line = unitPrice * qty (from cart snapshot)
-
-  const pairs = await loadProductsForCart(cart);
-  validateCartProductsShippingOrThrow(pairs);
-
-  const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
-  if (!itemsArr.length) {
-    const err = new Error('Cart is empty; cannot create customs declaration.');
-    err.code = 'CART_EMPTY';
-    throw err;
-  }
-
-  const originCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA'; // ok to keep: this is the ship-from country
-  const currency = upperCcy; // ✅ keep consistent with your PayPal currency
-  const massUnit = 'kg';     // ✅ we calculate in kg
-
-  function clip(str, max) {
-    const s = String(str || '');
-    return s.length > max ? s.slice(0, max) : s;
-  }
-
-  // Keep short + traceable (Shippo accepts exporter_reference)
-  const exporterRef = (() => {
-    const pref = 'UNIC';
-    const dest = clip((toCountry ? String(toCountry).toUpperCase() : 'XX'), 2);
-    const ts = Math.floor(Date.now() / 1000);
-    return clip(`${pref}-${dest}-${ts}`, 20);
-  })();
-
-  const signer =
-    envStr('SHIPPO_FROM_NAME', BRAND_NAME_N) ||
-    BRAND_NAME_N;
-
-  // Build customs items from pairs (product + cart qty)
-  const items = pairs.map((row, i) => {
-    const p = row.product;
-    const it = row.cartItem;
-
-    const qty = toQty(it?.qty ?? it?.quantity, 1);
-
-    // Prefer product name for customs description
-    const name = String(p?.name || it?.name || it?.title || `Item ${i + 1}`).slice(0, 50);
-
-    // Unit value: use cart snapshot price (your cart is gross per unit)
-    const unitVal = normalizeMoneyNumber(it?.price ?? it?.unitPrice) ?? 0;
-    const totalVal = +(Number(unitVal) * qty).toFixed(2);
-
-    // ✅ Weight from Product.shipping
-    const sh = p?.shipping || {};
-    const kgEach = kgFrom(sh?.weight?.value, sh?.weight?.unit);
-
-    // validateCartProductsShippingOrThrow already ensured kgEach is not null
-    const totalKg = +(kgEach * qty).toFixed(3);
-
-    return {
-      description: name,
-      quantity: qty,
-
-      // ✅ Shippo requires TOTAL weight for this line item
-      net_weight: String(Math.max(0.001, totalKg)),
-      mass_unit: massUnit,
-
-      // ✅ Shippo requires TOTAL value for this line item
-      value_amount: String(Math.max(0, totalVal)),
-      value_currency: currency,
-
-      origin_country: originCountry,
-    };
-  });
-
-  // ✅ Shippo requires certify + signer and a few basic customs fields
-  // We will NOT use .env for weights/hs defaults anymore.
-  const payload = {
-    certify: true,
-    certify_signer: String(signer).slice(0, 100),
-
-    contents_type: 'MERCHANDISE',
-    non_delivery_option: 'RETURN',
-    incoterm: 'DDU',
-
-    exporter_reference: exporterRef,
-
-    items,
-  };
-
-  const res = await fetchWithTimeout(
-    `${SHIPPO_API}/customs/declarations/`,
-    {
-      method: 'POST',
-      headers: shippoHeaders(),
-      body: JSON.stringify(payload),
-    },
-    SHIPPO_TIMEOUT_MS
-  );
-
-  const json = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const msg =
-      (Array.isArray(json?.messages) && json.messages.length)
-        ? JSON.stringify(json.messages)
-        : (json?.detail || json?.message || JSON.stringify(json));
-    const err = new Error(`Shippo customs declaration error (${res.status}): ${msg}`);
-    err.code = 'SHIPPO_CUSTOMS_FAILED';
-    throw err;
-  }
-
-  const status = String(json?.object_status || '').toUpperCase();
-  if (status && status !== 'SUCCESS') {
-    const msg =
-      (Array.isArray(json?.messages) && json.messages.length)
-        ? JSON.stringify(json.messages)
-        : (json?.detail || json?.message || JSON.stringify(json));
-    const err = new Error(`Shippo customs declaration object_status=${status}: ${msg}`);
-    err.code = 'SHIPPO_CUSTOMS_OBJECT_ERROR';
-    throw err;
-  }
-
-  const id = json?.object_id ? String(json.object_id) : null;
-  if (!id) throw new Error('Shippo customs declaration did not return object_id.');
-  return id;
-}
-
 async function shippoCreateShipment({ to, cart }) {
-  const from = await resolveShippoFromAddressForCart(cart); 
+  const from = await resolveShippoFromAddressForCart(cart, {
+    Product,
+    Business,
+    buildShippoAddressFromBusiness,
+    getShippoFromAddress,
+  });
+
+  console.log('[Shippo FROM selected]', {
+    name: from?.name,
+    city: from?.city,
+    state: from?.state,
+    country: from?.country,
+    street1: from?.street1,
+  });
 
   const intl = isInternationalShipment({ toCountry: to?.country, fromCountry: from?.country });
 
   // ✅ Create customs once for international shipments
   let customsDeclarationId = null;
   if (intl) {
-    customsDeclarationId = await shippoCreateCustomsDeclaration({ cart, toCountry: to.country });
+   customsDeclarationId = await shippoCreateCustomsDeclaration(
+      { cart, toCountry: to.country },
+      {
+        loadProductsForCart,
+        validateCartProductsShippingOrThrow,
+        normalizeCountryCode,
+        envStr,
+        upperCcy,
+        BRAND_NAME_N,
+        toQty,
+        normalizeMoneyNumber,
+        kgFrom,
+        getShippoEelPfc,
+        fetchWithTimeout,
+        SHIPPO_API,
+        shippoHeaders,
+        SHIPPO_TIMEOUT_MS,
+      }
+    );
   }
 
-  const parcels = await buildShippoParcelsFromCart_Strict(cart);
+  const parcels = await buildShippoParcelsFromCart_Strict(cart, { Product });
 
   const payload = {
     address_from: {
@@ -960,9 +665,24 @@ async function shippoCreateShipment({ to, cart }) {
 
   const json = await res.json().catch(() => ({}));
 
-  console.log('[Shippo shipment] carrier_accounts=', Array.isArray(json?.carrier_accounts) ? json.carrier_accounts.length : null);
-  console.log('[Shippo shipment] rates=', Array.isArray(json?.rates) ? json.rates.length : null);
-  console.log('[Shippo shipment] messages=', json?.messages || null);
+  const _msgSplit = splitShippoMessages(json?.messages);
+
+  console.log(
+    '[Shippo shipment] carrier_accounts=',
+    Array.isArray(json?.carrier_accounts) ? json.carrier_accounts.length : null
+  );
+  console.log(
+    '[Shippo shipment] rates=',
+    Array.isArray(json?.rates) ? json.rates.length : null
+  );
+
+  // ✅ Log only important messages loudly; benign ones as warnings (non-fatal)
+  if (_msgSplit.benign.length) {
+    console.warn('[Shippo shipment] benign warnings=', _msgSplit.benign);
+  }
+  if (_msgSplit.important.length) {
+    console.warn('[Shippo shipment] important messages=', _msgSplit.important);
+  }
 
   // Shippo sometimes returns 200 but object_status="ERROR"
   const objStatus = String(json?.object_status || '').toUpperCase();
@@ -989,32 +709,74 @@ async function shippoCreateShipment({ to, cart }) {
   return json; // includes object_id + rates
 }
 
-function normalizeShippoRates(shipmentJson) {
+async function normalizeShippoRates(shipmentJson, { targetCurrency = upperCcy } = {}) {
   const rates = Array.isArray(shipmentJson?.rates) ? shipmentJson.rates : [];
+  const out = [];
 
-  const out = rates
-    .map((r) => {
-      const amount = normalizeMoneyNumber(r?.amount);
-      const currency = String(r?.currency || '').toUpperCase() || upperCcy;
+  for (const r of rates) {
+    const rawAmount = normalizeMoneyNumber(r?.amount);
+    const rateCurrency = String(r?.currency || '').toUpperCase() || upperCcy;
 
-      const days = normalizeMoneyNumber(r?.estimated_days);
-      const provider = String(r?.provider || '').trim();
-      const service = String(r?.servicelevel?.name || r?.servicelevel?.token || '').trim();
+    const days = normalizeMoneyNumber(r?.estimated_days);
+    const provider = String(r?.provider || '').trim();
 
-      return {
-        rateId: r?.object_id ? String(r.object_id) : null,
-        amount: amount == null ? null : +amount.toFixed(2),
-        currency,
-        provider,
-        service,
-        days: days == null ? null : Math.max(0, Math.floor(days)),
-      };
-    })
-    .filter((x) => x.rateId && x.amount != null);
+    // ✅ Optional: exclude Correos rates if that account keeps warning / not suitable for your flow
+    if (String(provider).toLowerCase() === 'correos') {
+      continue;
+    }
 
-  // cheapest first
-  out.sort((a, b) => (a.amount - b.amount));
+    const service = String(r?.servicelevel?.name || r?.servicelevel?.token || '').trim();
+    const rateId = r?.object_id ? String(r.object_id) : null;
 
+    if (!rateId || rawAmount == null) continue;
+
+    let finalAmount = +rawAmount.toFixed(2);
+    let finalCurrency = rateCurrency;
+    let fxMeta = null;
+
+    // ✅ Force shipping currency to match checkout currency
+    if (finalCurrency !== String(targetCurrency).toUpperCase()) {
+      try {
+        const conv = await convertMoneyAmount(finalAmount, finalCurrency, targetCurrency);
+        finalAmount = conv.value;
+        finalCurrency = conv.currency;
+        fxMeta = conv.fx;
+      } catch (e) {
+        // Skip this rate if conversion unavailable (safe behavior)
+        console.warn('[Shippo rate skipped: currency mismatch]', {
+          rateId,
+          from: finalCurrency,
+          to: targetCurrency,
+          reason: e?.message || String(e),
+        });
+        continue;
+      }
+    }
+
+    // ✅ PASTE IT HERE
+    if (fxMeta) {
+      console.log('[Shippo FX converted]', {
+        rateId,
+        from: rateCurrency,
+        to: finalCurrency,
+        original: rawAmount,
+        converted: finalAmount,
+        provider: fxMeta.provider,
+      });
+    }
+
+    out.push({
+      rateId,
+      amount: finalAmount,
+      currency: finalCurrency,
+      provider,
+      service,
+      days: days == null ? null : Math.max(0, Math.floor(days)),
+      ...(fxMeta ? { fx: fxMeta } : {}),
+    });
+  }
+
+  out.sort((a, b) => a.amount - b.amount);
   return out;
 }
 
@@ -1687,7 +1449,10 @@ router.post('/shippo/remember-rate', requireAllowedOriginJson, express.json(), a
       provider: picked?.provider ? String(picked.provider).trim() : String(b.provider || '').trim(),
       service:  picked?.service  ? String(picked.service).trim()  : String(b.service || '').trim(),
       amount:   picked?.amount != null ? Number(picked.amount) : Number(b.amount || 0),
-      currency: picked?.currency ? String(picked.currency).toUpperCase() : String(b.currency || 'USD').toUpperCase(),
+      currency: picked?.currency
+        ? String(picked.currency).toUpperCase()
+        : String(b.currency || upperCcy).toUpperCase(),
+        
       days:     picked?.days != null ? Number(picked.days) : Number(b.days || 0),
       selectedAt: new Date().toISOString(),
     };
@@ -1737,6 +1502,7 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       q &&
       isFresh &&
       q.cartSig === sig &&
+      q.currency === upperCcy &&
       q.to &&
       sameShippoTo(q.to, to) &&
       q.shipmentId &&
@@ -1754,11 +1520,12 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
     const shipment = await shippoCreateShipment({ to, cart });
 
     const shipmentId = shipment?.object_id ? String(shipment.object_id) : null;
-    const rates = normalizeShippoRates(shipment);
+    const rates = await normalizeShippoRates(shipment, { targetCurrency: upperCcy });
 
     if (!rates.length) {
       console.error('Shippo NO_RATES debug:', {
         shipmentId,
+        fxProvider: FX_PROVIDER,
         object_status: shipment?.object_status,
         messages: shipment?.messages,
         address_from: shipment?.address_from,
@@ -1767,9 +1534,6 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
         rates_raw_count: Array.isArray(shipment?.rates) ? shipment.rates.length : null,
       });
     }
-
-    // const shipmentId = shipment?.object_id ? String(shipment.object_id) : null;
-    // const rates = normalizeShippoRates(shipment);
 
     const customsDeclarationId = shipment?._customsDeclarationId ? String(shipment._customsDeclarationId) : null;
     const isInternational = !!shipment?._isInternational;
@@ -1792,6 +1556,7 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       rates,
       to,
       cartSig: sig,
+      currency: upperCcy,
       createdAt: Date.now(),
 
       // ✅ persist intl metadata for later label buying
@@ -1809,17 +1574,37 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
   } catch (err) {
     console.error('POST /payment/shippo/quote error:', err?.message || err);
 
-        const isAbort =
+    const msg = String(err?.message || '');
+    const isAbort =
       err?.name === 'AbortError' ||
-      String(err?.message || '').toLowerCase().includes('aborted');
+      msg.toLowerCase().includes('aborted');
 
     const code = err?.code || (isAbort ? 'SHIPPO_TIMEOUT' : 'SHIPPO_QUOTE_FAILED');
 
+    if (code === 'PRODUCT_SHIPPING_MISSING') {
+      return res.status(422).json({ ok: false, code, message: msg });
+    }
+    if (code === 'SHIPPING_ADDRESS_INVALID') {
+      return res.status(422).json({ ok: false, code, message: msg });
+    }
+    if (code === 'MIXED_SELLERS_NOT_SUPPORTED') {
+      return res.status(422).json({ ok: false, code, message: msg });
+    }
+    if (code === 'SHIPPO_FROM_ADDRESS_INCOMPLETE' || code === 'SHIPPO_NOT_CONFIGURED') {
+      return res.status(500).json({
+        ok: false,
+        code,
+        message: 'Shipping is temporarily unavailable.',
+      });
+    }
+
     return res.status(isAbort ? 504 : 500).json({
       ok: false,
-      code,
-      message: err?.message || (isAbort ? 'Shippo quote timed out.' : 'Failed to load Shippo rates.'),
-    }); 
+      code: isAbort ? 'SHIPPO_TIMEOUT' : code,
+      message: isAbort
+        ? 'Shipping quotes are taking too long right now. Please try again.'
+        : (msg || 'Failed to load shipping rates.'),
+    });
   }
 });
 
@@ -1943,6 +1728,16 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       ? q.rates.find((r) => String(r.rateId) === String(shippoRateId))
       : null;
 
+    // ✅ Currency safety: shipping rate MUST match checkout currency
+    const rateCurrency = String(rate?.currency || '').toUpperCase();
+    if (!rateCurrency || rateCurrency !== upperCcy) {
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_RATE_CURRENCY_MISMATCH',
+        message: `Selected shipping rate currency (${rateCurrency || 'UNKNOWN'}) does not match checkout currency (${upperCcy}). Please refresh shipping rates.`,
+      });
+    }
+
     if (!rate) {
       const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
       return res.status(409).json({
@@ -2028,15 +1823,42 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       },
     };
 
+    const ppRequestId = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({
+          cartSig: cartSig(cart),
+          shippoShipmentId,
+          shippoRateId,
+          addr: shippingInput.address,
+          user: getUserId(req) || getBusinessId(req) || req.sessionID || 'guest',
+        })
+      )
+      .digest('hex')
+      .slice(0, 64);
+
     const token = await getAccessToken();
 
-    const ppRes = await fetchWithTimeout(`${PP_API}/v2/checkout/orders`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderBody),
-    });
+    const ppRes = await fetchWithTimeout(
+      `${PP_API}/v2/checkout/orders`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'PayPal-Request-Id': ppRequestId,
+        },
+        body: JSON.stringify(orderBody),
+      },
+      15000
+    );
 
     const data = await ppRes.json().catch(() => ({}));
+
+    const paypalCreateDebugId = ppRes.headers.get('paypal-debug-id') || null;
+    if (paypalCreateDebugId) {
+      console.log('[PayPal create debug id]', paypalCreateDebugId);
+    }
 
     if (!ppRes.ok) {
       console.error('PayPal create error:', ppRes.status, data);
@@ -2051,6 +1873,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     // ✅ Persist what we need for capture-order + optional label buying
     req.session.pendingOrder = {
       id: data.id,
+      cartSig: cartSig(cart),
       itemsBrief,
 
       deliveryOptionId: null, // ✅ shippo-only
@@ -2062,6 +1885,12 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       vatTotal,
       grandTotal: grand,
       currency: upperCcy,
+
+      quoteFingerprint: {
+        cartSig: q.cartSig,
+        quotedAt: q.createdAt,
+        to: q.to,
+      },
 
       shippo: {
         shipmentId: shippoPicked.shipmentId,
@@ -2451,7 +2280,13 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
             const paidStatus = String(capture?.status || doc.status || '').toUpperCase();
             if (paidStatus === 'COMPLETED' || paidStatus === 'PAID') {
               const feeBps = Number.isFinite(doc?.platformFeeBps) ? doc.platformFeeBps : PLATFORM_FEE_BPS;
-              await creditSellersFromOrder(doc, { platformFeeBps: feeBps, onlyIfPaidLike: false });
+              // await creditSellersFromOrder(doc, { platformFeeBps: feeBps, onlyIfPaidLike: false });
+
+              const creditResult = await creditSellersFromOrder(doc, {
+                platformFeeBps: feeBps,
+                onlyIfPaidLike: false,
+              });
+              console.log('[creditSellersFromOrder result]', creditResult);
             }
           }
         } catch (e) {
@@ -3061,6 +2896,30 @@ router.post('/reconcile-recent-refunds', requireAdmin, requireAllowedOriginJson,
   } catch (err) {
     console.error('reconcile-recent-refunds error:', err?.stack || err);
     return res.status(500).json({ ok: false, message: err?.message || 'Server error reconciling refunds.' });
+  }
+});
+
+router.get('/fx-test', requireAdmin, async (req, res) => {
+  try {
+    const from = String(req.query.from || 'USD').toUpperCase();
+    const to = String(req.query.to || upperCcy).toUpperCase();
+    const amount = Number(req.query.amount || 1);
+
+    const conv = await convertMoneyAmount(amount, from, to);
+
+    return res.json({
+      ok: true,
+      fxProvider: FX_PROVIDER,
+      input: { amount, from, to },
+      output: conv,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      fxProvider: FX_PROVIDER,
+      error: e?.message || String(e),
+      code: e?.code || 'FX_TEST_FAILED',
+    });
   }
 });
 

@@ -89,6 +89,12 @@ const payoutSchema = new mongoose.Schema(
 
     items: { type: [payoutItemSchema], default: [] },
     note: { type: String, trim: true },
+
+    runKey: {
+      type: String,
+      trim: true,
+    },
+    
     meta: { type: Object, default: {} },
   },
   { timestamps: true }
@@ -96,7 +102,8 @@ const payoutSchema = new mongoose.Schema(
 
 /* =========================
    Indexes
-   ========================= */
+========================= */
+payoutSchema.index({ runKey: 1 }, { unique: true, sparse: true });
 
 // ✅ Useful indexes for admin pages + lookups
 payoutSchema.index({ createdAt: -1 });
@@ -111,4 +118,5 @@ payoutSchema.index({ status: 1, createdAt: -1 });
 // ✅ Optional helper: quick search by seller in embedded items (works fine)
 payoutSchema.index({ 'items.businessId': 1, createdAt: -1 });
 
-module.exports = mongoose.model('Payout', payoutSchema);
+module.exports = mongoose.models.Payout || mongoose.model('Payout', payoutSchema);
+

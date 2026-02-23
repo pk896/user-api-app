@@ -13,30 +13,36 @@ try {
 
 const { moneyToCents } = require('../money');
 
-function toUpper(v, fallback = 'USD') {
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
+function toUpper(v, fallback = null) {
   const s = String(v || '').trim().toUpperCase();
-  return s || fallback;
+  return s || (fallback || getBaseCurrency());
 }
 
 function safeId(v) {
-  const id = String(v?._id || v || '').trim();
+  // supports raw ObjectId, string, or populated object {_id}
+  const raw = v?._id || v;
+  const id = String(raw || '').trim();
   return mongoose.isValidObjectId(id) ? id : null;
 }
 
-// ✅ NEW: ObjectId helper (important for ledger consistency)
 function toObjectId(v) {
   const id = safeId(v);
   return id ? new mongoose.Types.ObjectId(id) : null;
 }
 
 function getProductOwnerBusinessId(p) {
+  // ✅ support both direct IDs and populated objects
   const candidates = [
-    p.business,
-    p.businessId,
-    p.seller,
-    p.sellerId,
-    p.ownerBusiness,
-    p.ownerBusinessId,
+    p?.business?._id, p?.business,
+    p?.businessId?._id, p?.businessId,
+    p?.seller?._id, p?.seller,
+    p?.sellerId?._id, p?.sellerId,
+    p?.ownerBusiness?._id, p?.ownerBusiness,
+    p?.ownerBusinessId?._id, p?.ownerBusinessId,
   ];
 
   for (const c of candidates) {
@@ -65,9 +71,42 @@ function isPaidLikeNormalized(order) {
 }
 
 function payoutDelayMs() {
-  const daysRaw = Number(process.env.SELLER_PAYOUT_DELAY_DAYS ?? 3);
+  const daysRaw = Number(process.env.SELLER_PAYOUT_DELAY_DAYS ?? 2);
   const days = Number.isFinite(daysRaw) ? Math.max(0, Math.min(30, Math.trunc(daysRaw))) : 3;
   return days * 24 * 60 * 60 * 1000;
+}
+
+function normalizeItemCurrency(item, fallbackOrderCurrency) {
+  // ✅ tolerate missing item currency; default to order currency (or BASE_CURRENCY)
+  const raw =
+    item?.price?.currency ??
+    item?.currency ??
+    item?.amount?.currency ??
+    fallbackOrderCurrency;
+
+  return toUpper(raw, fallbackOrderCurrency || getBaseCurrency());
+}
+
+function getItemUnitCents(item) {
+  // ✅ support multiple item shapes
+  const raw =
+    item?.price?.value ??
+    item?.price?.amount ??
+    item?.unitPrice?.value ??
+    item?.unitPrice ??
+    item?.amount?.value ??
+    item?.amount ??
+    item?.price;
+
+  const cents = moneyToCents(raw);
+  return Number.isFinite(cents) ? cents : NaN;
+}
+
+function isDupKey(err) {
+  return !!(
+    err &&
+    (err.code === 11000 || String(err.message || '').includes('E11000'))
+  );
 }
 
 async function creditSellersFromOrder(order, opts = {}) {
@@ -90,38 +129,73 @@ async function creditSellersFromOrder(order, opts = {}) {
   const items = Array.isArray(order.items) ? order.items : [];
   if (!items.length) return { credited: 0, skipped: 'no-items' };
 
-  // ✅ clamp fee bps (protect against bad config)
   const feeBps = Math.max(0, Math.min(5000, Number(platformFeeBps || 0)));
 
-  // ✅ enforce single currency per order (safer)
-  const currency = toUpper(order?.amount?.currency || 'USD');
+  // ✅ Choose a safe order currency fallback
+  const orderCurrency = toUpper(
+    order?.amount?.currency ||
+    order?.breakdown?.currency ||
+    order?.capture?.amount?.currency ||
+    getBaseCurrency()
+  );
+
+  // ✅ Build both customId and ObjectId candidate sets from order items
+  const customIds = new Set();
+  const objectIds = [];
 
   for (const item of items) {
-    const itemCcy = toUpper(item?.price?.currency || currency);
-    if (itemCcy !== currency) {
-      return { credited: 0, skipped: `mixed-currency:${currency}:${itemCcy}` };
-    }
+    const rawPid = item?.productId?._id || item?.productId || item?.product || item?.product?._id;
+    const pidStr = String(rawPid || '').trim();
+    if (!pidStr) continue;
+
+    // If it looks like ObjectId, keep it for _id lookup too
+    if (mongoose.isValidObjectId(pidStr)) objectIds.push(new mongoose.Types.ObjectId(pidStr));
+
+    // Also keep raw string for customId lookup
+    customIds.add(pidStr);
   }
 
-  const productIds = [
-    ...new Set(items.map((i) => String(i.productId || '').trim()).filter(Boolean)),
-  ];
-  if (!productIds.length) return { credited: 0, skipped: 'no-productIds' };
+  if (!customIds.size && !objectIds.length) {
+    return { credited: 0, skipped: 'no-productIds' };
+  }
 
-  const products = await Product.find({ customId: { $in: productIds } })
-    .select('customId business businessId seller sellerId ownerBusiness ownerBusinessId')
+  // ✅ Find products by customId OR _id (important)
+  const products = await Product.find({
+    $or: [
+      { customId: { $in: [...customIds] } },
+      ...(objectIds.length ? [{ _id: { $in: objectIds } }] : []),
+    ],
+  })
+    .select('_id customId business businessId seller sellerId ownerBusiness ownerBusinessId')
     .lean();
 
-  const byCustomId = new Map(products.map((p) => [String(p.customId), p]));
+  if (!products.length) {
+    return {
+      credited: 0,
+      skipped: 'products-not-found',
+      debug: { customIdsCount: customIds.size, objectIdsCount: objectIds.length },
+    };
+  }
 
-  // ✅ Aggregate per seller + productCustomId to avoid duplicate uniqueKey under-crediting
+  // Map by both customId and _id
+  const byKey = new Map();
+  for (const p of products) {
+    if (p?.customId) byKey.set(String(p.customId), p);
+    if (p?._id) byKey.set(String(p._id), p);
+  }
+
+  // ✅ Aggregate by seller + product (professional split)
   const agg = new Map();
 
-  for (const item of items) {
-    const customId = String(item.productId || '').trim();
-    if (!customId) continue;
+  // currency guard (collect stats instead of hard-failing whole order immediately)
+  let mixedCurrencyDetected = false;
 
-    const product = byCustomId.get(customId);
+  for (const item of items) {
+    const rawPid = item?.productId?._id || item?.productId || item?.product || item?.product?._id;
+    const pidKey = String(rawPid || '').trim();
+    if (!pidKey) continue;
+
+    const product = byKey.get(pidKey);
     if (!product) continue;
 
     const sellerBusinessIdStr = getProductOwnerBusinessId(product);
@@ -131,8 +205,15 @@ async function creditSellersFromOrder(order, opts = {}) {
     const qtyRaw = Number(item.quantity != null ? item.quantity : 1);
     const qty = Number.isFinite(qtyRaw) ? Math.max(1, Math.trunc(qtyRaw)) : 1;
 
-    const unitCents = moneyToCents(item?.price?.value);
+    const unitCents = getItemUnitCents(item);
     if (!Number.isFinite(unitCents) || unitCents <= 0) continue;
+
+    const itemCurrency = normalizeItemCurrency(item, orderCurrency);
+    if (itemCurrency !== orderCurrency) {
+      mixedCurrencyDetected = true;
+      // ✅ skip only bad line item, not whole order
+      continue;
+    }
 
     const grossCents = unitCents * qty;
     if (!Number.isFinite(grossCents) || grossCents <= 0) continue;
@@ -141,12 +222,13 @@ async function creditSellersFromOrder(order, opts = {}) {
     const netCents = grossCents - feeCents;
     if (!Number.isFinite(netCents) || netCents <= 0) continue;
 
-    const key = `${String(sellerBusinessObjId)}:${customId}`;
+    const productKey = String(product.customId || product._id);
+    const key = `${String(sellerBusinessObjId)}:${productKey}`;
 
     const prev = agg.get(key) || {
       sellerBusinessObjId,
       sellerBusinessIdStr: String(sellerBusinessIdStr),
-      customId,
+      productKey,
       qty: 0,
       grossCents: 0,
       feeCents: 0,
@@ -161,27 +243,24 @@ async function creditSellersFromOrder(order, opts = {}) {
     agg.set(key, prev);
   }
 
-    const wanted = [];
+  const wanted = [];
 
   for (const row of agg.values()) {
     if (!row.netCents || row.netCents <= 0) continue;
 
-    const uniqueKey = `earn:${String(orderId)}:${row.customId}:${row.sellerBusinessIdStr}`;
+    const uniqueKey = `earn:${String(orderId)}:${row.productKey}:${row.sellerBusinessIdStr}`;
 
     wanted.push({
       businessId: row.sellerBusinessObjId,
       type: 'EARNING',
       amountCents: Math.trunc(row.netCents),
-      currency,
-
-      // ✅ pending window before it becomes "AVAILABLE"
+      currency: orderCurrency,
       availableAt: new Date(Date.now() + payoutDelayMs()),
-
       orderId: new mongoose.Types.ObjectId(orderId),
-      note: `Net earnings for order ${order.orderId || String(orderId)} (${row.customId})`,
+      note: `Net earnings for order ${order.orderId || String(orderId)} (${row.productKey})`,
       meta: {
         uniqueKey,
-        productCustomId: row.customId,
+        productCustomId: row.productKey,
         qty: row.qty,
         grossCents: Math.trunc(row.grossCents),
         feeCents: Math.trunc(row.feeCents),
@@ -190,33 +269,75 @@ async function creditSellersFromOrder(order, opts = {}) {
     });
   }
 
-  if (!wanted.length) return { credited: 0, skipped: 'no-creditable-items' };
+  if (!wanted.length) {
+    return {
+      credited: 0,
+      skipped: 'no-creditable-items',
+      debug: {
+        mixedCurrencyDetected,
+        itemsCount: items.length,
+        productsFound: products.length,
+      },
+    };
+  }
 
-  const keys = wanted.map((w) => w.meta.uniqueKey);
-  const existing = await SellerBalanceLedger.find({
-    type: 'EARNING',
-    orderId: new mongoose.Types.ObjectId(orderId),
-    'meta.uniqueKey': { $in: keys },
-  })
-    .select('meta.uniqueKey')
-    .lean();
+  // ✅ Idempotent write path (race-safe):
+  // Use upserts keyed by businessId + type + orderId + meta.uniqueKey
+  // so duplicate calls cannot create duplicate earnings.
+  const ops = wanted.map((w) => ({
+    updateOne: {
+      filter: {
+        businessId: w.businessId,
+        type: 'EARNING',
+        orderId: w.orderId,
+        'meta.uniqueKey': w.meta.uniqueKey,
+      },
+      update: {
+        $setOnInsert: {
+          amountCents: w.amountCents,
+          currency: w.currency,
+          availableAt: w.availableAt,
+          note: w.note,
+          meta: {
+            ...w.meta,
+            orderPublicId: String(order.orderId || orderId),
+          },
+        },
+      },
+      upsert: true,
+    },
+  }));
 
-  const existingKeys = new Set(existing.map((e) => String(e?.meta?.uniqueKey || '')));
-  const toCreate = wanted.filter((w) => !existingKeys.has(w.meta.uniqueKey));
-
-  if (!toCreate.length) return { credited: 0, skipped: 'all-already-credited' };
+  let upsertedCount = 0;
 
   try {
-    await SellerBalanceLedger.insertMany(toCreate, { ordered: false });
+    const wr = await SellerBalanceLedger.bulkWrite(ops, { ordered: false });
+    upsertedCount = Number(wr?.upsertedCount || 0);
   } catch (e) {
-    const msg = String(e?.message || '');
-    if (!msg.includes('E11000')) throw e;
+    // ✅ If another request inserted the same row first, treat as idempotent success
+    if (!isDupKey(e)) throw e;
+
+    // In duplicate-race cases, some rows may already have been inserted.
+    // We count this as 0 newly credited because duplicates are harmless and expected.
+    upsertedCount = 0;
+  }
+
+  if (!upsertedCount) {
+    return {
+      credited: 0,
+      skipped: 'all-already-credited',
+      debug: { wanted: wanted.length },
+      currency: orderCurrency,
+      feeBps,
+      mixedCurrencyDetected,
+    };
   }
 
   return {
-    credited: toCreate.length,
-    currency,
+    credited: upsertedCount,
+    currency: orderCurrency,
     feeBps,
+    mixedCurrencyDetected,
   };
 }
 

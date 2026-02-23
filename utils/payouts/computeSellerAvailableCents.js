@@ -25,9 +25,30 @@ async function fallbackCompute(businessId, currency = null) {
   const bid = toObjectId(businessId);
   if (!bid) return 0;
 
-  const match = { businessId: bid };
-  const ccy = normCcy(currency);
-  if (ccy) match.currency = ccy;
+  const ccy =
+    normCcy(currency) ||
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD';
+
+  const now = new Date();
+
+  // ✅ Same logic as getSellerAvailableCents:
+  // matured EARNING + debits/adjustments
+  const match = {
+    businessId: bid,
+    currency: ccy,
+    $or: [
+      {
+        type: 'EARNING',
+        $or: [
+          { availableAt: { $exists: false } },
+          { availableAt: null },
+          { availableAt: { $lte: now } },
+        ],
+      },
+      { type: { $in: ['REFUND_DEBIT', 'PAYOUT_DEBIT', 'ADJUSTMENT'] } },
+    ],
+  };
 
   const rows = await SellerBalanceLedger.aggregate([
     { $match: match },
@@ -35,12 +56,15 @@ async function fallbackCompute(businessId, currency = null) {
   ]);
 
   const n = Number(rows?.[0]?.sum || 0);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
 }
 
 async function computeSellerAvailableCents(businessId, opts = {}) {
-  // ✅ Always default to USD so we NEVER sum different currencies together
-  const currency = normCcy(opts?.currency) || 'USD';
+  // ✅ Use requested currency, else BASE_CURRENCY, else USD fallback
+  const currency =
+    normCcy(opts?.currency) ||
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD';
 
   // Prefer the dedicated function if present
   try {
@@ -53,7 +77,6 @@ async function computeSellerAvailableCents(businessId, opts = {}) {
     // fall back
   }
 
-  // ✅ fallback uses the same currency default (USD)
   return fallbackCompute(businessId, currency);
 }
 

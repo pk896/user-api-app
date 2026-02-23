@@ -9,40 +9,41 @@ function toObjectId(v) {
   return mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
-function normCcy(v, fallback = 'USD') {
-  const s = String(v ?? '').trim().toUpperCase();
-  return s || fallback;
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 }
 
-async function getSellerAvailableCents(businessId, currency = 'USD') {
+function normCcy(v, fallback = null) {
+  const s = String(v ?? '').trim().toUpperCase();
+  return s || fallback || getBaseCurrency();
+}
+
+async function getSellerAvailableCents(businessId, currency = null) {
   const bid = toObjectId(businessId);
   if (!bid) return 0;
 
-  const ccy = normCcy(currency, 'USD');
+  const ccy = normCcy(currency);
   const now = new Date();
 
-  // ✅ AVAILABLE = matured earnings + all debits/adjustments immediately
-  const match = {
+  // ✅ AVAILABLE = matured earnings + debits/adjustments
+  const availableMatch = {
     businessId: bid,
     currency: ccy,
     $or: [
-      // ✅ EARNING counts only when matured
       {
         type: 'EARNING',
         $or: [
-          { availableAt: { $exists: false } }, // old docs without the field
-          { availableAt: null },               // important if schema default is null
-          { availableAt: { $lte: now } },      // matured
+          { availableAt: { $exists: false } },
+          { availableAt: null },
+          { availableAt: { $lte: now } },
         ],
       },
-
-      // ✅ all non-earnings apply immediately (refunds, payout debits, adjustments)
-      { type: { $ne: 'EARNING' } },
+      { type: { $in: ['REFUND_DEBIT', 'PAYOUT_DEBIT', 'ADJUSTMENT'] } },
     ],
   };
 
   const agg = await SellerBalanceLedger.aggregate([
-    { $match: match },
+    { $match: availableMatch },
     { $group: { _id: null, sum: { $sum: '$amountCents' } } },
   ]);
 

@@ -159,45 +159,45 @@ function ensureCart(req) {
   if (!req.session.cart) req.session.cart = { items: [] };
   if (!Array.isArray(req.session.cart.items)) req.session.cart.items = [];
 
-  // ✅ Upgrade old cart items (stored as NET before) → convert to GROSS once
   const r = vatRate(req);
-  req.session.cart.items = (req.session.cart.items || []).map((it) => {
-    if (!it) return it;
 
-    // ✅ Upgrade old cart items ONLY ONCE per session cart
-    if (!req.session.cart._vatUpgradedOnce) {
-      const rr = vatRate(req);
-      req.session.cart.items = (req.session.cart.items || []).map((x) => {
-        if (!x) return x;
-        if (x.vatIncluded === true) return x;
+  // ✅ One-time upgrade for old cart items (NET -> GROSS)
+  if (!req.session.cart._vatUpgradedOnce) {
+    req.session.cart.items = (req.session.cart.items || []).map((it) => {
+      if (!it) return it;
+      if (it.vatIncluded === true) return it;
 
-        const net = Number(x.priceExVat ?? x.price ?? 0);
-        const gross = round2(net * (1 + rr));
-        return {
-          ...x,
-          price: gross,
-          priceExVat: net,
-          vatRate: rr,
-          vatIncluded: true,
-        };
-      });
+      const net = Number(it.priceExVat ?? it.price ?? 0);
+      const gross = round2(net * (1 + r));
 
-      req.session.cart._vatUpgradedOnce = true;
-    }
+      return {
+        ...it,
+        price: gross,
+        priceExVat: net,
+        vatRate: r,
+        vatIncluded: true,
+      };
+    });
 
-    if (it.vatIncluded === true) return it;
+    req.session.cart._vatUpgradedOnce = true;
+  } else {
+    // ✅ Keep VAT fields consistent for newer items too
+    req.session.cart.items = (req.session.cart.items || []).map((it) => {
+      if (!it) return it;
+      if (it.vatIncluded === true) return it;
 
-    const net = Number(it.priceExVat ?? it.price ?? 0);
-    const gross = round2(net * (1 + r));
+      const net = Number(it.priceExVat ?? it.price ?? 0);
+      const gross = round2(net * (1 + r));
 
-    return {
-      ...it,
-      price: gross,
-      priceExVat: net,
-      vatRate: r,
-      vatIncluded: true,
-    };
-  });
+      return {
+        ...it,
+        price: gross,
+        priceExVat: net,
+        vatRate: r,
+        vatIncluded: true,
+      };
+    });
+  }
 
   return req.session.cart;
 }
@@ -252,11 +252,28 @@ function normalizeCartItem(p, qty, variants = {}, req) {
 function findIndexById(items, id, variants = {}) {
   const list = items || [];
   const wantVariants = normVariants(variants);
+  const hasVariantKeys = Object.keys(wantVariants).length > 0;
 
-  return list.findIndex((it) => {
-    if (String(it.productId) !== String(id)) return false;
-    return variantsEqual(it.variants || {}, wantVariants);
-  });
+  // ✅ Exact match when variants are provided
+  if (hasVariantKeys) {
+    return list.findIndex((it) => {
+      if (String(it.productId) !== String(id)) return false;
+      return variantsEqual(it.variants || {}, wantVariants);
+    });
+  }
+
+  // ✅ Fallback when variants are NOT provided:
+  // only match if there is exactly ONE cart line for this product
+  // (prevents wrong increment when same product has multiple size/color variants)
+  const sameProductIndexes = [];
+  for (let i = 0; i < list.length; i++) {
+    if (String(list[i]?.productId) === String(id)) sameProductIndexes.push(i);
+  }
+
+  if (sameProductIndexes.length === 1) return sameProductIndexes[0];
+
+  // ambiguous or not found
+  return -1;
 }
 
 function wantsJson(req) {
@@ -354,10 +371,14 @@ router.get('/add', async (req, res) => {
       return res.redirect(back);
     }
 
-    // Variant validation (clothes/shoes)
-    const role = String(product.role || '').toLowerCase();
-    const type = String(product.type || '').toLowerCase();
-    const isVariantProduct = role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
+    // Variant validation (clothes/shoes) — ✅ use category first (matches sales-products.ejs)
+    const cat  = String(product.category || '').toLowerCase();
+    const type = String(product.type || '').toLowerCase(); // fallback only
+
+    const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
+    const isShoes   = (cat === 'shoes' || type === 'shoes');
+
+    const isVariantProduct = isClothes || isShoes;
 
     if (isVariantProduct) {
       if (product.sizes && product.sizes.length > 0) {
@@ -493,7 +514,19 @@ router.get('/dec', async (req, res) => {
     const maybeProduct = await findProductByPid(pid);
     if (maybeProduct) idForCart = String(maybeProduct._id);
 
-    const idx = findIndexById(cart.items, idForCart, {});
+    // ✅ Optional variants support for legacy dec endpoint
+    let variantData = {};
+    if (req.query.variants) {
+      try { variantData = JSON.parse(req.query.variants); } catch {
+        // placeholding
+      }
+    }
+    if (!variantData.size && req.query.size) variantData.size = String(req.query.size).trim();
+    if (!variantData.color && req.query.color) variantData.color = String(req.query.color).trim();
+    variantData = normVariants(variantData);
+
+    const idx = findIndexById(cart.items, idForCart, variantData);
+
     if (idx >= 0) {
       const newQty = Number(cart.items[idx].quantity || 1) - 1;
       if (newQty <= 0) cart.items.splice(idx, 1);
@@ -522,7 +555,29 @@ router.get('/remove', async (req, res) => {
     const maybeProduct = await findProductByPid(pid);
     if (maybeProduct) idForCart = String(maybeProduct._id);
 
-    cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(idForCart));
+    // ✅ Optional variants support for legacy remove endpoint
+    let variantData = {};
+    if (req.query.variants) {
+      try { variantData = JSON.parse(req.query.variants); } catch {
+        // placeholding
+      }
+    }
+    if (!variantData.size && req.query.size) variantData.size = String(req.query.size).trim();
+    if (!variantData.color && req.query.color) variantData.color = String(req.query.color).trim();
+    variantData = normVariants(variantData);
+
+    const hasVariantKeys = Object.keys(variantData).length > 0;
+
+    if (hasVariantKeys) {
+      cart.items = (cart.items || []).filter((i) => {
+        if (String(i.productId) !== String(idForCart)) return true;
+        return !variantsEqual(i.variants || {}, variantData); // remove only exact variant line
+      });
+    } else {
+      // keep old behavior for non-variant items
+      cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(idForCart));
+    }
+        
     req.session.cart = cart;
 
     if (wantsJson(req)) return res.json({ success: true, cart: { items: cart.items } });
@@ -595,13 +650,27 @@ router.post('/increase', express.json(), async (req, res) => {
 
     const id = String(product._id);
 
-    const idx = cart.items.findIndex(
-      (it) => String(it.productId) === id && variantsEqual(it.variants || {}, variants)
-    );
+    const idx = findIndexById(cart.items, id, variants);
 
     if (idx >= 0) {
       cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + 1;
     } else {
+      // ✅ If caller forgot variants but cart already has multiple variants of same product,
+      // do NOT create a duplicate ambiguous line.
+      const sameProductCount = (cart.items || []).filter(
+        (it) => String(it.productId) === id
+      ).length;
+
+      const noVariantsSent = Object.keys(normVariants(variants)).length === 0;
+
+      if (noVariantsSent && sameProductCount > 0) {
+        return res.status(409).json({
+          message: 'This item has size/color variants. Please send the selected variant when changing quantity.',
+          code: 'VARIANT_REQUIRED_FOR_QTY',
+          items: cart.items,
+        });
+      }
+
       cart.items.push(normalizeCartItem(product, 1, variants, req));
     }
 
@@ -621,13 +690,16 @@ router.post('/decrease', express.json(), async (req, res) => {
     const pid = String(req.body?.pid || '').trim();
     if (!pid) return res.status(400).json({ message: 'pid is required' });
 
+    let variants = req.body?.variants || {};
+    variants = normVariants(variants);
+
     const cart = ensureCart(req);
     let idForCart = pid;
 
     const maybeProduct = await findProductByPid(pid);
     if (maybeProduct) idForCart = String(maybeProduct._id);
 
-    const idx = findIndexById(cart.items, idForCart, {});
+    const idx = findIndexById(cart.items, idForCart, variants);
     if (idx >= 0) {
       const newQty = Number(cart.items[idx].quantity || 1) - 1;
       if (newQty <= 0) cart.items.splice(idx, 1);
@@ -650,16 +722,28 @@ router.post('/remove', express.json(), async (req, res) => {
     const pid = String(req.body?.pid || '').trim();
     if (!pid) return res.status(400).json({ message: 'pid is required' });
 
+    let variants = req.body?.variants || {};
+    variants = normVariants(variants);
+
     const cart = ensureCart(req);
 
     let idForCart = pid;
     const maybeProduct = await findProductByPid(pid);
     if (maybeProduct) idForCart = String(maybeProduct._id);
 
-    cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(idForCart));
-    req.session.cart = cart;
+    const hasVariantKeys = Object.keys(variants).length > 0;
 
-    return res.json({ items: cart.items });
+    if (hasVariantKeys) {
+      cart.items = (cart.items || []).filter((i) => {
+        if (String(i.productId) !== String(idForCart)) return true;
+        return !variantsEqual(i.variants || {}, variants); // remove exact variant only
+      });
+    } else {
+      cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(idForCart));
+    }
+
+    req.session.cart = cart;
+        return res.json({ items: cart.items });
   } catch (err) {
     console.error('❌ POST /api/cart/remove error:', err);
     return res.status(500).json({ message: 'Failed to remove item.', items: ensureCart(req).items });
@@ -684,15 +768,43 @@ router.patch('/item/:id', express.json(), async (req, res) => {
 
     const cart = ensureCart(req);
 
+    let variants = req.body?.variants || {
+      // placeholding
+    };
+    variants = normVariants(variants);
+
     if (quantity <= 0) {
-      cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(id));
+      const hasVariantKeys = Object.keys(variants).length > 0;
+
+      if (hasVariantKeys) {
+        cart.items = (cart.items || []).filter((i) => {
+          if (String(i.productId) !== String(id)) return true;
+          return !variantsEqual(i.variants || {}, variants); // remove exact variant only
+        });
+      } else {
+        // keep old behavior if no variants were sent
+        cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(id));
+      }
+
       req.session.cart = cart;
       return res.json({ items: cart.items });
     }
 
-    const idx = findIndexById(cart.items, id, {});
+    const idx = findIndexById(cart.items, id, variants);
 
     if (idx < 0) {
+      // ✅ If same product exists in multiple variant lines and caller did not send variants,
+      // reject instead of creating ambiguous/ghost behavior
+      const sameProductCount = (cart.items || []).filter((it) => String(it.productId) === String(id)).length;
+      const noVariantsSent = Object.keys(variants).length === 0;
+
+      if (sameProductCount > 0 && noVariantsSent) {
+        return res.status(409).json({
+          message: 'This item has size/color variants. Please send the selected variant when changing quantity.',
+          code: 'VARIANT_REQUIRED_FOR_QTY',
+          items: cart.items,
+        });
+      }
       const product = await findProductByPid(id);
       if (!product) return res.status(404).json({ message: 'Item not found.', items: cart.items });
 
@@ -725,7 +837,7 @@ router.patch('/item/:id', express.json(), async (req, res) => {
         return res.status(400).json({ success: false, message: msg, items: cart.items });
       }
 
-      cart.items.push(normalizeCartItem(product, quantity, {}, req));
+      cart.items.push(normalizeCartItem(product, quantity, variants, req));
     } else {
       cart.items[idx].quantity = Math.max(1, Math.floor(quantity));
     }
@@ -741,11 +853,24 @@ router.patch('/item/:id', express.json(), async (req, res) => {
 /* ------------------------------------------------------------------
  * DELETE /api/cart/item/:id
  * ------------------------------------------------------------------ */
-router.delete('/item/:id', async (req, res) => {
+router.delete('/item/:id', express.json(), async (req, res) => {
   try {
     const { id } = req.params;
+    let variants = req.body?.variants || {};
+    variants = normVariants(variants);
+
     const cart = ensureCart(req);
-    cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(id));
+    const hasVariantKeys = Object.keys(variants).length > 0;
+
+    if (hasVariantKeys) {
+      cart.items = (cart.items || []).filter((i) => {
+        if (String(i.productId) !== String(id)) return true;
+        return !variantsEqual(i.variants || {}, variants); // remove exact variant only
+      });
+    } else {
+      cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(id));
+    }
+
     req.session.cart = cart;
     return res.json({ items: cart.items });
   } catch (err) {
@@ -758,14 +883,15 @@ router.delete('/item/:id', async (req, res) => {
  * POST /api/cart/clear
  * ------------------------------------------------------------------ */
 router.post('/clear', (req, res) => {
-  req.session.cart = { items: [] };
+  req.session.cart = { items: [], _vatUpgradedOnce: true };
   return res.json({ items: [] });
 });
 
 // ✅ GET alias
 router.get('/clear', (req, res) => {
-  req.session.cart = { items: [] };
+  req.session.cart = { items: [], _vatUpgradedOnce: true };
   return res.json({ items: [] });
 });
 
 module.exports = router;
+
