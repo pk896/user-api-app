@@ -4,7 +4,8 @@
 const Order = require('../../models/Order');
 const { createLabelForOrder } = require('./createLabelForOrder');
 
-const PAID_LIKE = ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'];
+const PAID_LIKE_STATUS = ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'];
+const PAID_LIKE_PAYMENT_STATUS = ['paid', 'completed', 'captured'];
 
 function numEnv(name, fallback) {
   const v = Number(String(process.env[name] ?? '').trim());
@@ -49,7 +50,7 @@ async function runAutoBuyOnce() {
   const enabled = boolEnv('SHIPPO_AUTO_BUY_ENABLED', false);
   if (!enabled) return { ok: true, ran: false, reason: 'disabled' };
 
-  const hours = numEnv('SHIPPO_AUTO_BUY_AFTER_HOURS', 30); // default 30h
+  const hours = numEnv('SHIPPO_AUTO_BUY_AFTER_HOURS', 23); // default 23h
   const maxPerRun = numEnv('SHIPPO_AUTO_BUY_MAX_PER_RUN', 5);
 
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
@@ -67,7 +68,7 @@ async function runAutoBuyOnce() {
       { $or: [{ 'shippo.autoBuyEnabled': { $exists: false } }, { 'shippo.autoBuyEnabled': true }] },
 
       // paid-like by status OR paymentStatus
-      { $or: [{ status: { $in: PAID_LIKE } }, { paymentStatus: { $in: PAID_LIKE } }] },
+      { $or: [{ status: { $in: PAID_LIKE_STATUS } }, { paymentStatus: { $in: PAID_LIKE_PAYMENT_STATUS } }] },
     ],
   };
 
@@ -120,11 +121,15 @@ async function runAutoBuyOnce() {
     // Someone else already claimed it
     if (!claim || claim.modifiedCount !== 1) continue;
 
+    // ✅ Re-read fresh doc after claim (avoids stale document saves)
+    const freshOrder = await Order.findById(order._id);
+    if (!freshOrder) continue;
+
     try {
-      const savedRate = order?.shippo?.chosenRate || null;
+      const savedRate = freshOrder?.shippo?.chosenRate || null;
 
       // ✅ STRICT ONLY: buy exact payerRateId or stop
-      const result = await createLabelForOrder(order, {
+      const result = await createLabelForOrder(freshOrder, {
         rateId: payerRateId,
         chooseRate: 'payer',
         savedRate,
@@ -133,23 +138,25 @@ async function runAutoBuyOnce() {
 
       if (!result) throw new Error('Auto-buy failed: no result returned from createLabelForOrder()');
 
-      const { shipment, chosenRate, transaction, carrierToken } = result;
+      const { shipment, chosenRate, transaction, trackingNumber, carrierToken } = result;
 
       // ✅ persist result (same structure your admin route uses)
-      order.shippo = order.shippo || {};
-      order.shippo.shipmentId = shipment?.object_id || order.shippo.shipmentId || null;
-      order.shippo.transactionId = transaction?.object_id || null;
-      order.shippo.rateId = chosenRate?.object_id || null;
-      order.shippo.labelUrl = transaction?.label_url || null;
-      order.shippo.trackingStatus = transaction?.tracking_status || null;
-      order.shippo.carrier = carrierToken || null;
+      freshOrder.shippo = freshOrder.shippo || {};
+      freshOrder.shippo.shipmentId = shipment?.object_id || freshOrder.shippo.shipmentId || null;
+      freshOrder.shippo.transactionId = transaction?.object_id || null;
+      freshOrder.shippo.rateId = chosenRate?.object_id || null;
+      freshOrder.shippo.labelUrl = transaction?.label_url || null;
+      freshOrder.shippo.trackingNumber = trackingNumber || transaction?.tracking_number || null;
+      freshOrder.shippo.trackingStatus = transaction?.tracking_status || null;
+      freshOrder.shippo.carrier = carrierToken || null;
+      freshOrder.shippo.labelCreatedAt = new Date();
 
-      order.shippo.autoBuyStatus = 'SUCCESS';
-      order.shippo.autoBuyLastError = '';
-      order.shippo.autoBuyLastSuccessAt = new Date();
+      freshOrder.shippo.autoBuyStatus = 'SUCCESS';
+      freshOrder.shippo.autoBuyLastError = '';
+      freshOrder.shippo.autoBuyLastSuccessAt = new Date();
 
       // ✅ Save chosen rate snapshot for UI (does NOT change payerRateId)
-      order.shippo.chosenRate = {
+      freshOrder.shippo.chosenRate = {
         provider: String(chosenRate?.provider || '').trim() || null,
         service:
           String(chosenRate?.servicelevel?.name || chosenRate?.servicelevel?.token || '').trim() ||
@@ -160,24 +167,38 @@ async function runAutoBuyOnce() {
         durationTerms: String(chosenRate?.duration_terms || '').trim() || null,
       };
 
-      if (order.fulfillmentStatus === 'PAID' || order.fulfillmentStatus === 'PENDING') {
-        order.fulfillmentStatus = 'LABEL_CREATED';
+      if (freshOrder.fulfillmentStatus === 'PAID' || freshOrder.fulfillmentStatus === 'PENDING') {
+        freshOrder.fulfillmentStatus = 'LABEL_CREATED';
       }
 
-      await order.save();
+      await freshOrder.save();
       success++;
     } catch (e) {
       const expired = isExpiredOrNotPurchasableRateError(e);
 
       try {
-        order.shippo = order.shippo || {};
-        order.shippo.autoBuyAttemptedAt = new Date();
-        order.shippo.autoBuyStatus = expired ? 'SKIPPED' : 'FAILED';
-        order.shippo.autoBuyLastError = truncate(
-          e?.message || (expired ? 'Rate expired / not found' : 'Auto-buy failed'),
-          500
-        );
-        await order.save();
+        // ✅ re-read again in catch so we don't overwrite unrelated newer changes
+        const failedOrder = await Order.findById(order._id);
+        if (failedOrder) {
+          failedOrder.shippo = failedOrder.shippo || {};
+          failedOrder.shippo.autoBuyAttemptedAt = new Date();
+          failedOrder.shippo.autoBuyStatus = expired ? 'SKIPPED' : 'FAILED';
+
+          const shippoDetail =
+            e?.shippo?.detail ||
+            e?.shippo?.message ||
+            (Array.isArray(e?.shippo?.messages) ? JSON.stringify(e.shippo.messages) : '') ||
+            '';
+
+          failedOrder.shippo.autoBuyLastError = truncate(
+            [e?.message || (expired ? 'Rate expired / not found' : 'Auto-buy failed'), shippoDetail]
+              .filter(Boolean)
+              .join(' | '),
+            500
+          );
+
+          await failedOrder.save();
+        }
       } catch {
         // ignore
       }
@@ -209,7 +230,7 @@ function startAutoBuyLoop() {
   console.log(
     `[auto-buy] enabled. interval=${intervalMinutes}m afterHours=${numEnv(
       'SHIPPO_AUTO_BUY_AFTER_HOURS',
-      30
+      23
     )}h`
   );
 

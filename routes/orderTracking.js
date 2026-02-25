@@ -466,10 +466,11 @@ router.post('/:orderId', async (req, res, next) => {
       return res.redirect('/orders');
     }
 
-    const rawCarrier = String(req.body?.carrier || '').trim(); // can be "usps" OR "USPS" OR "COURIER_GUY"
+    const rawCarrier = String(req.body?.carrier || '').trim();
     const carrierLabel = String(req.body?.carrierLabel || '').trim();
     const trackingNumber = String(req.body?.trackingNumber || '').trim();
     const trackingUrl = String(req.body?.trackingUrl || '').trim();
+    const labelUrl = String(req.body?.labelUrl || '').trim(); // NEW (optional hidden/admin field later)
     const status = String(req.body?.status || '').trim();
 
     const normalized = normalizeCarrierForSchema(rawCarrier);
@@ -489,8 +490,20 @@ router.post('/:orderId', async (req, res, next) => {
       order.shippingTracking.carrierLabel ||
       '';
 
-    order.shippingTracking.trackingNumber = trackingNumber || '';
-    order.shippingTracking.trackingUrl = trackingUrl || '';
+    if (trackingNumber) {
+      order.shippingTracking.trackingNumber = trackingNumber;
+    }
+
+    if (trackingUrl) {
+      order.shippingTracking.trackingUrl = trackingUrl;
+    }
+
+    // ✅ Save label URL safely (do not wipe existing value if field is not posted)
+    order.shippo = order.shippo || {};
+    if (labelUrl) {
+      order.shippo.labelUrl = labelUrl;
+    }
+
     const trackingEnums = getTrackingStatusEnumValues(order);
     const safeStatus = mapToEnum(status || order.shippingTracking.status || 'SHIPPED', trackingEnums);
     if (safeStatus) order.shippingTracking.status = safeStatus;

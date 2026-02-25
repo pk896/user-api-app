@@ -37,9 +37,21 @@ async function shippoFetch(path, { timeoutMs = 15000 } = {}) {
     }
 
     if (!r.ok) {
+      const detailText = Array.isArray(data?.detail)
+        ? JSON.stringify(data.detail)
+        : (typeof data?.detail === 'object' && data?.detail !== null)
+        ? JSON.stringify(data.detail)
+        : data?.detail;
+
+      const messageText = Array.isArray(data?.message)
+        ? JSON.stringify(data.message)
+        : (typeof data?.message === 'object' && data?.message !== null)
+        ? JSON.stringify(data.message)
+        : data?.message;
+
       const msg =
-        data?.detail ||
-        data?.message ||
+        detailText ||
+        messageText ||
         (typeof data?.raw === 'string' && data.raw.trim() ? data.raw.slice(0, 180) : '') ||
         `Shippo error (${r.status})`;
 
@@ -99,7 +111,7 @@ function normalizeShippoTrack(track) {
     status: mapShippoStatus(last?.status),
     events,
     estimatedDelivery: track?.eta || null,
-    lastUpdate: last?.status_date || last?.object_updated || new Date(),
+    lastUpdate: last?.status_date || last?.object_updated || new Date().toISOString(),
     raw: track,
   };
 }

@@ -1,3 +1,4 @@
+// utils/payment/shippoCreateCustomsDeclaration.js
 'use strict';
 
 async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
@@ -16,9 +17,16 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
     SHIPPO_API,
     shippoHeaders,
     SHIPPO_TIMEOUT_MS,
+    Product, // ✅ received from routes/payment.js
   } = deps;
 
-  const pairs = await loadProductsForCart(cart);
+  if (!Product) {
+    const err = new Error('Product model is required for customs declaration.');
+    err.code = 'NO_PRODUCT_MODEL';
+    throw err;
+  }
+
+  const pairs = await loadProductsForCart(cart, { Product });
   validateCartProductsShippingOrThrow(pairs);
 
   const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
@@ -72,16 +80,32 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
     };
   });
 
+  const rawEelPfc =
+  typeof getShippoEelPfc === 'function'
+    ? String(getShippoEelPfc() || '').trim()
+    : '';
+
+  const eelPfc = rawEelPfc || 'NOEEI_30_37_a'; // ✅ hard fallback (never empty)
+
   const payload = {
     certify: true,
     certify_signer: String(signer).slice(0, 100),
     contents_type: 'MERCHANDISE',
     non_delivery_option: 'RETURN',
     incoterm: 'DDU',
-    eel_pfc: getShippoEelPfc(),
+    eel_pfc: eelPfc,
     exporter_reference: exporterRef,
     items,
   };
+
+  // ✅ temporary debug log (safe)
+  console.log('[Shippo customs payload]', {
+    eel_pfc: payload.eel_pfc,
+    exporter_reference: payload.exporter_reference,
+    itemsCount: Array.isArray(payload.items) ? payload.items.length : 0,
+    originCountry,
+    toCountry,
+  });
 
   const res = await fetchWithTimeout(
     `${SHIPPO_API}/customs/declarations/`,

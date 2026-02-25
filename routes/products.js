@@ -137,6 +137,13 @@ router.get('/sales', async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // ✅ restore virtual-like flags on lean objects
+    products.forEach((p) => {
+      p.isNew = !!p.isNewItem;
+      p.sale = !!p.isOnSale;
+      p.popular = !!p.isPopular;
+    });
+
     res.render('sales-products', {
       title: 'Shop Products',
       products,
@@ -144,7 +151,7 @@ router.get('/sales', async (req, res) => {
       success: req.flash('success'),
       error: req.flash('error'),
       nonce: res.locals.nonce,
-      vatRate: Number(process.env.VAT_RATE || 0.15), // ✅ I JUST ADDED THIS
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ Failed to load sales page:', err);
@@ -542,7 +549,9 @@ router.post(
 
       // ---------- STATUS FLAGS ----------
       // Checkbox => value "on", or undefined if unchecked
-      product.isNew = checkboxOn(req.body.isNew);       // virtual -> isNewItem
+      const isNewFlag = checkboxOn(req.body.isNew);
+      product.isNewItem = isNewFlag;   // real schema field
+      product.isNew = isNewFlag;       // optional if virtual exists, harmless
       product.isOnSale = checkboxOn(req.body.isOnSale);
       product.isPopular = checkboxOn(req.body.isPopular);
 

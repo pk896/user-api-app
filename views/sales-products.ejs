@@ -138,8 +138,16 @@
             const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
             const isShoes   = (cat === 'shoes' || type === 'shoes');
 
+            // ✅ Normalize booleans safely (handles true/false, "true"/"false", 1/0)
+            const toBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true';
+
+            // ✅ Normalize product flags (supports both isNew and isNewItem just in case)
+            const isNewFlag   = toBool(p.isNew ?? p.isNewItem);
+            const isSaleFlag  = toBool(p.isOnSale);
+            const isHotFlag   = toBool(p.isPopular);
+
             // ✅ Your Product fields are isOnSale / isPopular (not sale/popular)
-            const flags     = { isNew: !!p.isNew, sale: !!p.isOnSale, popular: !!p.isPopular };
+            const flags = { isNew: isNewFlag, sale: isSaleFlag, popular: isHotFlag };
 
             // Size options
             let sizeOptions = [];
@@ -178,14 +186,15 @@
               data-category="<%- cat %>"
               data-category-raw="<%- (p.category || '') %>"
               data-type="<%- type %>"
+              data-created="<%- (p.createdAt ? new Date(p.createdAt).toISOString() : '') %>"
               data-bizid="<%- String(p.businessId || p.business?._id || p.sellerId || p.seller?._id || '') %>"
               data-flags='<%- JSON.stringify(flags) %>'>
 
             <a class="imgbox" href="/products/view/<%= p.customId %>" aria-label="Open <%= name %>">
               <img src="<%= p.imageUrl %>" alt="<%= name %>" loading="lazy" decoding="async" />
-              <% if (p.isNew)      { %><span class="tag new">New</span><% } %>
-              <% if (p.isOnSale)   { %><span class="tag sale">Deal</span><% } %>
-              <% if (p.isPopular)  { %><span class="tag hot">Top</span><% } %>
+              <% if (isNewFlag)   { %><span class="tag new">New</span><% } %>
+              <% if (isSaleFlag)  { %><span class="tag sale">Deal</span><% } %>
+              <% if (isHotFlag)   { %><span class="tag hot">Top</span><% } %>
             </a>
 
             <div class="info">
@@ -1924,10 +1933,14 @@
           const pb = Number(b.getAttribute('data-price')||0);
           const na = a.getAttribute('data-name')||'';
           const nb = b.getAttribute('data-name')||'';
+
+          const ca = Date.parse(a.getAttribute('data-created') || '') || 0;
+          const cb = Date.parse(b.getAttribute('data-created') || '') || 0;
+
           if (sort==='price-asc')  return pa - pb;
           if (sort==='price-desc') return pb - pa;
           if (sort==='name')       return na.localeCompare(nb);
-          if (sort==='new')        return 0;
+          if (sort==='new')        return cb - ca; // newest first
           return 0;
         });
         const frag = document.createDocumentFragment();

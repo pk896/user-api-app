@@ -49,22 +49,37 @@ try {
 
 let Order = null;
 try {
-  Order = require('../models/Order');
-} catch {
+  const OrderMod = require('../models/Order');
+  Order = OrderMod?.Order || OrderMod;
+  if (!Order || typeof Order.findOne !== 'function') {
+    throw new Error('Invalid Order model export (missing .findOne)');
+  }
+} catch (e) {
+  console.error('[payment.js] Failed to load Order model:', e?.stack || e);
   Order = null;
 }
 
 let Product = null;
 try {
-  Product = require('../models/Product');
-} catch {
+  const ProductMod = require('../models/Product');
+  Product = ProductMod?.Product || ProductMod;
+  if (!Product || typeof Product.find !== 'function') {
+    throw new Error('Invalid Product model export (missing .find)');
+  }
+} catch (e) {
+  console.error('[payment.js] Failed to load Product model:', e?.stack || e);
   Product = null;
 }
 
 let Business = null;
 try {
-  Business = require('../models/Business');
-} catch {
+  const BusinessMod = require('../models/Business');
+  Business = BusinessMod?.Business || BusinessMod;
+  if (!Business || typeof Business.findById !== 'function') {
+    throw new Error('Invalid Business model export (missing .findById)');
+  }
+} catch (e) {
+  console.error('[payment.js] Failed to load Business model:', e?.stack || e);
   Business = null;
 }
 
@@ -135,7 +150,7 @@ const ALLOWED_ORIGINS = String(process.env.WEB_ORIGINS || '')
 
 function requireAllowedOriginJson(req, res, next) {
   const method = String(req.method || '').toUpperCase();
-  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return next();
 
   const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
   if (!isProd) return next();
@@ -148,37 +163,45 @@ function requireAllowedOriginJson(req, res, next) {
     });
   }
 
-  // ✅ Prefer Origin; fallback to Referer (some browsers/proxies strip Origin)
-  const origin = normalizeOrigin(req.headers.origin);
-  const referer = normalizeOrigin(req.headers.referer);
+  const rawOrigin = String(req.headers.origin || '').trim();
+  const rawReferer = String(req.headers.referer || '').trim();
 
-  if (!origin && !referer) {
-    return res.status(403).json({
-      ok: false,
-      code: 'ORIGIN_MISSING',
-      message: 'Missing Origin/Referer.',
-    });
+  const origin = normalizeOrigin(rawOrigin);
+  const referer = normalizeOrigin(rawReferer);
+
+  const hasOrigin = !!origin;
+  const hasReferer = !!referer;
+
+  // ✅ Stricter:
+  // - Prefer/expect Origin for JSON non-GET requests
+  // - Allow Referer fallback only when it matches an allowed same-site origin
+  if (!hasOrigin) {
+    if (!hasReferer) {
+      return res.status(403).json({
+        ok: false,
+        code: 'ORIGIN_MISSING',
+        message: 'Missing Origin header.',
+      });
+    }
+
+    const refererAllowed = ALLOWED_ORIGINS.some((allowed) => referer.startsWith(allowed));
+    if (!refererAllowed) {
+      return res.status(403).json({
+        ok: false,
+        code: 'REFERER_BLOCKED',
+        message: 'Blocked request from untrusted referer.',
+      });
+    }
+
+    return next(); // ✅ same-site fallback accepted
   }
 
-  const ok =
-    (origin && ALLOWED_ORIGINS.includes(origin)) ||
-    (referer && ALLOWED_ORIGINS.some((o) => referer.startsWith(o)));
-
-  if (!ok) {
-    const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  // ✅ Origin present: must match exactly
+  if (!ALLOWED_ORIGINS.includes(origin)) {
     return res.status(403).json({
       ok: false,
       code: 'ORIGIN_BLOCKED',
       message: 'Blocked request from untrusted origin.',
-      ...(isProd
-        ? {}
-        : {
-            debug: {
-              origin: req.headers.origin || null,
-              referer: req.headers.referer || null,
-              allowed: ALLOWED_ORIGINS,
-            },
-          }),
     });
   }
 
@@ -512,7 +535,8 @@ function getShippoEelPfc() {
   // Default commonly works for low-value exports; override in .env if needed
   // Example .env:
   // SHIPPO_EEL_PFC=NOEEI_30_37_a
-  return envStr('SHIPPO_EEL_PFC', 'NOEEI_30_37_a');
+  const v = String(envStr('SHIPPO_EEL_PFC', 'NOEEI_30_37_a') || '').trim();
+  return v || 'NOEEI_30_37_a';
 }
 
 function isBenignShippoMessage(m) {
@@ -618,6 +642,7 @@ async function shippoCreateShipment({ to, cart }) {
         SHIPPO_API,
         shippoHeaders,
         SHIPPO_TIMEOUT_MS,
+        Product, // ✅ REQUIRED for loadProductsForCart inside customs flow
       }
     );
   }
@@ -705,6 +730,10 @@ async function shippoCreateShipment({ to, cart }) {
 
   json._customsDeclarationId = customsDeclarationId || null;
   json._isInternational = !!intl;
+
+  // ✅ add these too
+  json._fromCountry = normalizeCountryCode(from?.country) || null;
+  json._toCountry = normalizeCountryCode(to?.country) || null;
 
   return json; // includes object_id + rates
 }
@@ -1535,12 +1564,25 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       });
     }
 
-    const customsDeclarationId = shipment?._customsDeclarationId ? String(shipment._customsDeclarationId) : null;
+    const customsDeclarationId = shipment?._customsDeclarationId
+      ? String(shipment._customsDeclarationId)
+      : null;
+
     const isInternational = !!shipment?._isInternational;
 
-    const fromCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
+    // ✅ Prefer explicit metadata set in shippoCreateShipment (most reliable)
+    const fromCountry =
+      normalizeCountryCode(shipment?._fromCountry) ||
+      normalizeCountryCode(
+        typeof shipment?.address_from === 'object' ? shipment?.address_from?.country : null
+      ) ||
+      normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) ||
+      'ZA';
 
-    const toCountry = String(to.country || '').toUpperCase();
+    const toCountry =
+      normalizeCountryCode(shipment?._toCountry) ||
+      normalizeCountryCode(to?.country) ||
+      '';
 
     if (!shipmentId || !rates.length) {
       return res.status(502).json({
@@ -1580,6 +1622,14 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       msg.toLowerCase().includes('aborted');
 
     const code = err?.code || (isAbort ? 'SHIPPO_TIMEOUT' : 'SHIPPO_QUOTE_FAILED');
+
+    if (code === 'NO_PRODUCT_MODEL') {
+      return res.status(500).json({
+        ok: false,
+        code,
+        message: 'Shipping is temporarily unavailable (server product model failed to load).',
+      });
+    }
 
     if (code === 'PRODUCT_SHIPPING_MISSING') {
       return res.status(422).json({ ok: false, code, message: msg });
@@ -1728,16 +1778,6 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       ? q.rates.find((r) => String(r.rateId) === String(shippoRateId))
       : null;
 
-    // ✅ Currency safety: shipping rate MUST match checkout currency
-    const rateCurrency = String(rate?.currency || '').toUpperCase();
-    if (!rateCurrency || rateCurrency !== upperCcy) {
-      return res.status(409).json({
-        ok: false,
-        code: 'SHIPPO_RATE_CURRENCY_MISMATCH',
-        message: `Selected shipping rate currency (${rateCurrency || 'UNKNOWN'}) does not match checkout currency (${upperCcy}). Please refresh shipping rates.`,
-      });
-    }
-
     if (!rate) {
       const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
       return res.status(409).json({
@@ -1755,6 +1795,16 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
                 },
               },
             }),
+      });
+    }
+
+    // ✅ Currency safety: shipping rate MUST match checkout currency
+    const rateCurrency = String(rate.currency || '').toUpperCase();
+    if (!rateCurrency || rateCurrency !== upperCcy) {
+      return res.status(409).json({
+        ok: false,
+        code: 'SHIPPO_RATE_CURRENCY_MISMATCH',
+        message: `Selected shipping rate currency (${rateCurrency || 'UNKNOWN'}) does not match checkout currency (${upperCcy}). Please refresh shipping rates.`,
       });
     }
 

@@ -1,4 +1,3 @@
-// utils/payment/buildShippoParcelsFromCart.js
 'use strict';
 
 function normalizeMoneyNumber(v) {
@@ -44,7 +43,8 @@ function cmFrom(value, unit) {
   return null;
 }
 
-async function loadProductsForCart(cart, { Product }) {
+// ✅ FIX: safe default for destructured deps
+async function loadProductsForCart(cart, { Product } = {}) {
   if (!Product) {
     const err = new Error('Product model not available for shipping calculation.');
     err.code = 'NO_PRODUCT_MODEL';
@@ -159,7 +159,14 @@ function buildCalculatedParcelFromProducts(rows, { onlyFragile } = {}) {
   };
 }
 
-async function buildShippoParcelsFromCart_Strict(cart, { Product }) {
+// ✅ FIX: safe default for destructured deps
+async function buildShippoParcelsFromCart_Strict(cart, { Product } = {}) {
+  if (!Product) {
+    const err = new Error('Product model not available for shipping parcel build.');
+    err.code = 'NO_PRODUCT_MODEL';
+    throw err;
+  }
+
   const pairs = await loadProductsForCart(cart, { Product });
   validateCartProductsShippingOrThrow(pairs);
 

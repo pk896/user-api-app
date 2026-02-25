@@ -47,9 +47,21 @@ async function shippoFetch(path, { method = 'GET', body, timeoutMs = 20000, retr
 
       if (!r.ok) {
         const status = r.status;
+        const detailText = Array.isArray(data?.detail)
+          ? JSON.stringify(data.detail)
+          : (typeof data?.detail === 'object' && data?.detail !== null)
+          ? JSON.stringify(data.detail)
+          : data?.detail;
+
+        const messageText = Array.isArray(data?.message)
+          ? JSON.stringify(data.message)
+          : (typeof data?.message === 'object' && data?.message !== null)
+          ? JSON.stringify(data.message)
+          : data?.message;
+
         const msg =
-          data?.detail ||
-          data?.message ||
+          detailText ||
+          messageText ||
           (typeof data?.raw === 'string' && data.raw.trim() ? data.raw.slice(0, 200) : '') ||
           `Shippo error (${status})`;
 
@@ -187,7 +199,11 @@ async function createLabelForOrder(order, opts = {}) {
   const strictRateId = !!opts.strictRateId;
 
   const rateId = opts.rateId ? String(opts.rateId).trim() : '';
-  const shipmentId = String(order?.shippo?.payerShipmentId || '').trim();
+  const shipmentId = String(
+    order?.shippo?.payerShipmentId ||
+    order?.shippo?.shipmentId ||
+    ''
+  ).trim();
 
   if (!rateId) {
     const err = new Error('Missing rateId.');
@@ -261,12 +277,13 @@ async function createLabelForOrder(order, opts = {}) {
     null;
 
   return {
-    shipment,       // may be null in non-strict
-    chosenRate,     // best-effort
-    transaction: tx,
-    carrierEnum: null,
-    carrierToken,
-  };
+  shipment,       // may be null in non-strict
+  chosenRate,     // best-effort
+  transaction: tx,
+  trackingNumber: tx?.tracking_number || null,
+  carrierEnum: null,
+  carrierToken,
+};
 }
 
 // ======================================================

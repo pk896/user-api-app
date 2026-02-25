@@ -34,13 +34,13 @@
   });
 
   const lastUpdateRaw =
-  pickEventDate(eventsSorted[0]) ||
-  t.lastTrackingUpdate ||
-  t.lastUpdate ||
-  t.lastUpdatedAt ||
-  t.updatedAt ||
-  o.updatedAt ||
-  null;
+    pickEventDate(eventsSorted[0]) ||
+    t.lastTrackingUpdate ||
+    t.lastUpdate ||
+    t.lastUpdatedAt ||
+    t.updatedAt ||
+    o.updatedAt ||
+    null;
 
   const etaRaw =
     t.eta ||
@@ -51,7 +51,6 @@
     null;
 
   const lastUpdateText = lastUpdateRaw ? niceDate(lastUpdateRaw) : '—';
-  const etaText = etaRaw ? niceDate(etaRaw) : '—';
 
   // Fallback ETA (approx) from chosen shipping rate (if tracking ETA is missing)
   const rateDays =
@@ -161,6 +160,51 @@
     return [String(v)];
   };
 
+  // ----------------------------------------------------
+  // Fallback tracking URL generator (when t.trackingUrl missing)
+  // Supports common carriers incl. DHL Express (global / SA use)
+  // ----------------------------------------------------
+  const buildCarrierTrackingUrl = (carrierToken, trackingNumber) => {
+    const c = String(carrierToken || '').trim().toLowerCase();
+    const tn = encodeURIComponent(String(trackingNumber || '').trim());
+    if (!c || !tn) return '';
+
+    if (c === 'usps') {
+      return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${tn}`;
+    }
+    if (c === 'ups') {
+      return `https://www.ups.com/track?tracknum=${tn}`;
+    }
+    if (c === 'fedex') {
+      return `https://www.fedex.com/fedextrack/?trknbr=${tn}`;
+    }
+    if (c.includes('dhl')) {
+      return `https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id=${tn}`;
+    }
+
+    // South Africa carrier placeholders (add exact URL formats when ready)
+    // if (c === 'courier_guy') return `...${tn}`;
+    // if (c === 'fastway') return `...${tn}`;
+    // if (c === 'aramex') return `...${tn}`;
+
+    return '';
+  };
+
+  const trackingUrlFinal =
+    String(t.trackingUrl || '').trim() ||
+    buildCarrierTrackingUrl(t.carrierToken || t.carrier, t.trackingNumber);
+
+  // Label link (prefer Shippo label URL, then any tracking-side label URL if you store one)
+  const labelUrlFinal =
+    String(
+      o?.shippo?.labelUrl ||
+      o?.shippo?.label_url ||
+      o?.shippo?.labelPdfUrl ||
+      o?.shippo?.label_pdf ||
+      t?.labelUrl ||
+      ''
+    ).trim();
+
   const successList = toArray(success);
   const errorList = toArray(error);
 %>
@@ -199,12 +243,23 @@
         </div>
       </div>
 
-      <% if (t.trackingUrl) { %>
+      <% if (trackingUrlFinal) { %>
         <div class="row">
           <div class="label">Tracking link</div>
           <div class="value">
-            <a class="link" href="<%= t.trackingUrl %>" target="_blank" rel="noopener noreferrer">
+            <a class="link link-card" href="<%= trackingUrlFinal %>" target="_blank" rel="noopener noreferrer">
               Open carrier tracking ↗
+            </a>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (labelUrlFinal) { %>
+        <div class="row">
+          <div class="label">Shipping label</div>
+          <div class="value">
+            <a class="link link-card" href="<%= labelUrlFinal %>" target="_blank" rel="noopener noreferrer">
+              Open shipping label ↗
             </a>
           </div>
         </div>
@@ -255,19 +310,33 @@
           </label>
 
           <label class="field">
-            <span>Carrier label (optional)</span>
-            <input name="carrierLabel" class="input" value="<%= t.carrierLabel || '' %>" placeholder="e.g. UPS, DHL, FedEx" />
+            <span>Carrier display name (optional)</span>
+            <input
+              name="carrierLabel"
+              class="input"
+              value="<%= t.carrierLabel || '' %>"
+              placeholder="Name shown on page (e.g. DHL Express South Africa)"
+            />
           </label>
 
-          <label class="field">
-            <span>Tracking URL (optional)</span>
-            <input name="trackingUrl" class="input" value="<%= t.trackingUrl || '' %>" placeholder="https://..." />
-          </label>
+          <div class="help muted">
+            Tracking link is auto-shown from the saved URL (or generated from carrier + tracking number if URL is missing).
+          </div>
+
+          <% if (labelUrlFinal) { %>
+            <div class="help muted">
+              Shipping label is available above as a clickable link.
+            </div>
+          <% } else { %>
+            <div class="help muted">
+              Shipping label will appear automatically after a label URL is saved from your shipping flow.
+            </div>
+          <% } %>
 
           <button class="btn btn-primary" type="submit">Save tracking</button>
 
           <div class="help muted">
-            Important: We store token in <span class="mono">carrierToken</span> and label in <span class="mono">carrierLabel</span> (prevents enum errors).
+            We save the real carrier in <span class="mono">carrierToken</span>. This field only changes the display name shown on this page.
           </div>
         </form>
       <% } %>
@@ -452,6 +521,16 @@ h2{margin:0 0 10px;font-size:14px;color:var(--black);text-transform:uppercase;le
 
 .link{color:var(--blue);font-weight:900;text-decoration:none}
 .link:hover{text-decoration:underline}
+
+.link-card{
+  display:inline-flex;
+  align-items:center;
+  width:fit-content;
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid rgba(37,99,235,.25);
+  background: rgba(37,99,235,.06);
+}
 </style>
 
 <script nonce="<%= PAGE_NONCE %>">

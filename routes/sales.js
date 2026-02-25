@@ -8,9 +8,17 @@ const router = express.Router();
  * 🛍️ GET: Sales Product Page
  * ------------------------------------------- */
 router.get('/', async (req, res) => {
-  // <-- changed from "/sales" to "/"
   try {
-    const products = await Product.find().sort({ createdAt: -1 }).lean();
+    const products = await Product.find()
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ✅ restore virtual-like flags on lean objects
+    products.forEach((p) => {
+      p.isNew = !!p.isNewItem;
+      p.sale = !!p.isOnSale;
+      p.popular = !!p.isPopular;
+    });
 
     const user = req.user || null;
     const business = req.session.business || null;
