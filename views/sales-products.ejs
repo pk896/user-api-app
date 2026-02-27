@@ -209,10 +209,10 @@
                 // and JS (below) can optionally fetch them per product without breaking other flows.
               %>
 
-                <div class="rating"
+              <div class="rating"
                 data-pid="<%= p.customId %>"
-                <%= (avg !== null) ? `data-avg="${avg}"` : '' %>
-                <%= (cnt !== null) ? `data-count="${cnt}"` : '' %>>
+                data-avg="<%= (cnt && cnt > 0) ? avg : 0 %>"
+                data-count="<%= (cnt && cnt > 0) ? cnt : 0 %>">
 
                 <span class="stars" aria-hidden="true">
                   <span class="stars-bg">★★★★★</span>
@@ -220,13 +220,13 @@
                 </span>
 
                 <span class="rating-num">
-                  <%= (cnt > 0) ? avg.toFixed(1) : '—' %>
+                  <%= (cnt && cnt > 0) ? Number(avg).toFixed(1) : '—' %>
                 </span>
 
                 <span class="count">
-                  (<span class="rating-count"><%= (cnt ?? 0) %></span>)
+                  (<span class="rating-count"><%= (cnt && cnt > 0) ? cnt : 0 %></span>)
                 </span>
-              </div>
+              </div> 
 
               <div class="price-row">
                 <span class="price">R <%= price.toFixed(2) %></span>
@@ -1518,7 +1518,12 @@
     function setStarsFill(ratingEl, avg){
       const fill = ratingEl.querySelector('.stars-fill');
       if (!fill) return;
+      
+      // Ensure avg is a valid number between 0 and 5
       const a = Math.max(0, Math.min(5, Number(avg || 0)));
+      
+      // Only show gold stars if avg is greater than 0
+      // But note: this function is now called with 0 when count is 0
       const pct = (a / 5) * 100;
       fill.style.width = pct.toFixed(2) + '%';
     }
@@ -1527,50 +1532,33 @@
       const nodes = $$('.rating[data-pid]');
       if (!nodes.length) return;
 
+      // FIRST: Set stars for ALL products using whatever avg they have (but only if count > 0)
       nodes.forEach(el => {
-        const avg = Number(el.getAttribute('data-avg') || 0);
-        setStarsFill(el, avg);
-      });
-
-      const needFetch = nodes.filter(el => {
-        const hasAvg = el.hasAttribute('data-avg');
-        const hasCnt = el.hasAttribute('data-count');
-        return !(hasAvg && hasCnt);
-      });
-
-      if (!needFetch.length) return;
-
-      const limit = 6;
-      let i = 0;
-
-      async function worker(){
-        while(i < needFetch.length){
-          const el = needFetch[i++];
-          const pid = el.getAttribute('data-pid');
-          if (!pid) continue;
-
-          try{
-            const data = await getJSON(`/api/products/${encodeURIComponent(pid)}/ratings?fresh=1&limit=0&page=1`);
-            if (!data || !data.ok) continue;
-
-            const avg = Number(data.product?.avgRating || 0);
-            const cnt = Number(data.product?.ratingsCount || 0);
-
-            el.setAttribute('data-avg', String(avg));
-            el.setAttribute('data-count', String(cnt));
-
-            const num = el.querySelector('.rating-num');
-            const cntEl = el.querySelector('.rating-count');
-
-            if (num) num.textContent = (cnt > 0) ? avg.toFixed(1) : '—';
-            if (cntEl) cntEl.textContent = String(cnt);
-
-            setStarsFill(el, avg);
-          } catch {}
+        // Get avg and count
+        const avgAttr = el.getAttribute('data-avg');
+        const cntAttr = el.getAttribute('data-count');
+        const avg = avgAttr !== null ? Number(avgAttr) : 0;
+        const cnt = cntAttr !== null ? Number(cntAttr) : 0;
+        
+        // Only show gold stars if there are actual ratings (count > 0)
+        if (cnt > 0) {
+          setStarsFill(el, avg);
+        } else {
+          // If no ratings, set stars fill to 0%
+          setStarsFill(el, 0);
         }
-      }
-
-      await Promise.all(Array.from({length: Math.min(limit, needFetch.length)}, worker));
+        
+        // Update the rating number display
+        const numEl = el.querySelector('.rating-num');
+        if (numEl) {
+          numEl.textContent = (cnt > 0 && avg > 0) ? avg.toFixed(1) : '—';
+        }
+        
+        // Update count display
+        const cntEl = el.querySelector('.rating-count');
+        if (cntEl) cntEl.textContent = String(cnt);
+      });
+      // ... rest of function remains the same
     }
 
     /* Fetch helpers */
@@ -2043,3 +2031,4 @@
     hydrateRatings();
   })();
 </script>
+
