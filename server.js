@@ -197,6 +197,12 @@ app.use(express.json());
 // 2) CORS
 app.use(cors(corsOptions));
 
+// ✅ Mark admin-ui requests so CSP can be relaxed only there
+app.use((req, res, next) => {
+  res.locals.isAdminUi = req.path.startsWith('/admin-ui');
+  next();
+});
+
 // 3) Nonce BEFORE Helmet (for CSP)
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString('base64');
@@ -212,14 +218,23 @@ app.use((req, res, next) => {
         defaultSrc: ["'self'"],
 
         // ✅ Only allow scripts from self + nonce + explicit providers
-        scriptSrc: [
-          "'self'",
-          `'nonce-${res.locals.nonce}'`,
-          'https://apis.google.com',
-          'https://www.paypal.com',
-          'https://www.sandbox.paypal.com',
-          'https://www.paypalobjects.com',
-        ],
+        scriptSrc: res.locals.isAdminUi
+          ? [
+              "'self'",
+              "'unsafe-inline'",
+              'https://apis.google.com',
+              'https://www.paypal.com',
+              'https://www.sandbox.paypal.com',
+              'https://www.paypalobjects.com',
+            ]
+          : [
+              "'self'",
+              `'nonce-${res.locals.nonce}'`,
+              'https://apis.google.com',
+              'https://www.paypal.com',
+              'https://www.sandbox.paypal.com',
+              'https://www.paypalobjects.com',
+            ],
 
         // ✅ Needed for PayPal button if it injects inline styles (you already allow unsafe-inline for style)
         styleSrc: ["'self'", "'unsafe-inline'"],
@@ -262,9 +277,6 @@ app.use((req, res, next) => {
     },
   })(req, res, next);
 });
-
-// 5) Static files
-app.use(express.static(path.join(__dirname, 'public')));
 
 // 6) Views / layouts / logs / compression
 app.set('view engine', 'ejs');
@@ -534,6 +546,7 @@ app.use((req, res, next) => {
 --------------------------------------- */
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const productRatingsApiRoutes = require('./routes/productRatingsApi');
+const adminStatsApi = require('./routes/adminStatsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
@@ -568,6 +581,7 @@ if (ratingsRouter) {
 
 // API first
 app.use('/api/cart', cartRoutes);
+app.use('/api/admin', adminStatsApi);
 
 // Public API for checkout
 app.use('/api', deliveryOptionsApi);
@@ -627,6 +641,46 @@ app.use(ordersRoutes);
 /* ---------------------------------------
    Additional Routes
 --------------------------------------- */
+const requireAdmin = require('./middleware/requireAdmin');
+
+const adminDistPath = path.join(__dirname, 'public', 'admin-ui');
+
+// ✅ Protect admin-ui pages using shared middleware
+app.use('/admin-ui', (req, res, next) => {
+  const isAsset =
+    req.path.startsWith('/assets/') ||
+    req.path.startsWith('/css/') ||
+    req.path.startsWith('/js/') ||
+    req.path.startsWith('/vendors/') ||
+    req.path.startsWith('/img/') ||
+    req.path.startsWith('/images/') ||
+    req.path.startsWith('/fonts/') ||
+    req.path.endsWith('.map') ||
+    req.path.endsWith('.ico') ||
+    req.path.endsWith('.png') ||
+    req.path.endsWith('.jpg') ||
+    req.path.endsWith('.jpeg') ||
+    req.path.endsWith('.svg') ||
+    req.path.endsWith('.webp') ||
+    req.path.endsWith('.woff') ||
+    req.path.endsWith('.woff2') ||
+    req.path.endsWith('.ttf') ||
+    req.path.endsWith('.eot');
+
+  if (isAsset) return next();
+  return requireAdmin(req, res, next);
+});
+
+// ✅ serve CoreUI static files
+app.use('/admin-ui', express.static(adminDistPath));
+
+// ✅ /admin-ui -> index.html
+app.get('/admin-ui', (req, res) => {
+  res.sendFile(path.join(adminDistPath, 'index.html'));
+});
+
+// 5) Static files
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Land on the shopping page by default
 app.get('/', (req, res) => {
