@@ -342,10 +342,26 @@
             <div class="col-sm-6 col-xl-3">
               <div class="card text-white bg-primary">
                 <div class="card-body pb-0 d-flex justify-content-between align-items-start">
-                  <div>
-                    <div class="fs-4 fw-semibold"><span id="stat-total-businesses">—</span></div>
-                    <div>Total Businesses</div>
-                  </div>           
+                  <div class="d-flex flex-column gap-1">
+                    <div class="d-flex align-items-baseline flex-wrap gap-2">
+                      <span id="stat-total-app-users" class="fw-semibold" style="font-size: .9rem; line-height: 1;"></span>
+                      <span class="opacity-75" style="font-size: .75rem; line-height: 1;">Total App Users</span>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center" style="gap: .5rem; font-size: .65rem; line-height: 1;">
+                      <div class="d-flex align-items-center gap-1">
+                        <span class="opacity-75">Biz:</span>
+                        <span id="stat-total-businesses" class="fw-semibold"></span>
+                      </div>
+
+                      <span class="opacity-50">|</span>
+
+                      <div class="d-flex align-items-center gap-1">
+                        <span class="opacity-75">Users:</span>
+                        <span id="stat-non-business-users" class="fw-semibold"></span>
+                      </div>
+                    </div>
+                  </div>
                   <div class="dropdown">
                     <button class="btn btn-transparent text-white p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                       <svg class="icon">
@@ -364,9 +380,34 @@
             <div class="col-sm-6 col-xl-3">
               <div class="card text-white bg-info">
                 <div class="card-body pb-0 d-flex justify-content-between align-items-start">
-                  <div>
-                    <div class="fs-4 fw-semibold"><span id="stat-sellers">—</span></div>
-                    <div>Sellers</div>
+                  <div class="d-flex flex-column gap-1">
+                    <!-- Top line: "3 Sellers" (compact + horizontal) -->
+                    <div class="d-flex align-items-baseline flex-wrap gap-2">
+                      <span id="stat-sellers" class="fw-semibold" style="font-size: .9rem; line-height: 1;"></span>
+                      <span class="opacity-75" style="font-size: .75rem; line-height: 1;">Sellers</span>
+                    </div>
+
+                    <!-- Seller inventory stats (very small + horizontal + responsive) -->
+                    <div class="d-flex flex-wrap align-items-center" style="gap: .5rem; font-size: .65rem; line-height: 1;">
+                      <div class="d-flex align-items-center gap-1">
+                        <span class="opacity-75">Prod:</span>
+                        <span id="stat-seller-products" class="fw-semibold"></span>
+                      </div>
+
+                      <span class="opacity-50">|</span>
+
+                      <div class="d-flex align-items-center gap-1">
+                        <span class="opacity-75">Stock:</span>
+                        <span id="stat-seller-stock" class="fw-semibold"></span>
+                      </div>
+
+                      <span class="opacity-50">|</span>
+
+                      <div class="d-flex align-items-center gap-1">
+                        <span class="opacity-75">Value:</span>
+                        <span id="stat-seller-value" class="fw-semibold"></span>
+                      </div>
+                    </div>
                   </div>
                   <div class="dropdown">
                     <button class="btn btn-transparent text-white p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -386,9 +427,11 @@
             <div class="col-sm-6 col-xl-3">
               <div class="card text-white bg-warning">
                 <div class="card-body pb-0 d-flex justify-content-between align-items-start">
-                  <div>
-                    <div class="fs-4 fw-semibold"><span id="stat-suppliers">—</span></div>
-                    <div>Suppliers</div>
+                  <div class="d-flex flex-column gap-1">
+                    <div class="d-flex align-items-baseline flex-wrap gap-2">
+                      <span id="stat-suppliers" class="fw-semibold" style="font-size: .9rem; line-height: 1;"></span>
+                      <span class="opacity-75" style="font-size: .75rem; line-height: 1;">Suppliers</span>
+                    </div>
                   </div>
                   <div class="dropdown">
                     <button class="btn btn-transparent text-white p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -408,9 +451,11 @@
             <div class="col-sm-6 col-xl-3">
               <div class="card text-white bg-danger">
                 <div class="card-body pb-0 d-flex justify-content-between align-items-start">
-                  <div>
-                    <div class="fs-4 fw-semibold"><span id="stat-buyers">—</span></div>
-                    <div>Buyers</div>
+                  <div class="d-flex flex-column gap-1">
+                    <div class="d-flex align-items-baseline flex-wrap gap-2">
+                      <span id="stat-buyers" class="fw-semibold" style="font-size: .9rem; line-height: 1;"></span>
+                      <span class="opacity-75" style="font-size: .75rem; line-height: 1;">Buyers</span>
+                    </div>
                   </div>
                   <div class="dropdown">
                     <button class="btn btn-transparent text-white p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -1085,11 +1130,13 @@
         }
       });
     </script>
+
     <!-- Plugins and scripts required by this view-->
     <script src="vendors/chart.js/js/chart.umd.js"></script>
     <script src="vendors/@coreui/chartjs/js/coreui-chartjs.js"></script>
     <script src="vendors/@coreui/utils/js/index.js"></script>
     <script src="js/main.js"></script>
+
     <script>
     async function loadAdminBusinessStats() {
       try {
@@ -1108,7 +1155,31 @@
           if (el) el.textContent = String(value ?? '0');
         };
 
+        // Keep a fallback businesses count if needed
         setText('stat-total-businesses', data.totalBusinesses);
+
+        // NEW: total app users (businesses + users)
+        try {
+          const res2 = await fetch('/api/admin/stats/app-users', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+          });
+
+          if (!res2.ok) throw new Error('Failed to load app users stats: ' + res2.status);
+
+          const data2 = await res2.json();
+          if (!data2 || data2.ok !== true) throw new Error(data2?.message || 'Bad response');
+
+          setText('stat-total-app-users', data2.totalAppUsers);
+          setText('stat-total-businesses', data2.totalBusinesses);
+          setText('stat-non-business-users', data2.nonBusinessUsers);
+        } catch (e) {
+          console.error('admin app users stats error:', e);
+          // fallback: if app-users fails, show businesses as the main number
+          setText('stat-total-app-users', data.totalBusinesses);
+          setText('stat-non-business-users', '—');
+        }
+
         setText('stat-sellers', data.sellers);
         setText('stat-suppliers', data.suppliers);
         setText('stat-buyers', data.buyers);
@@ -1118,7 +1189,42 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', loadAdminBusinessStats);
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAdminBusinessStats();
+      loadAdminInventoryStats();
+    });
+
+    async function loadAdminInventoryStats() {
+      try {
+        const res = await fetch('/api/admin/stats/inventory', {
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+        });
+
+        if (!res.ok) throw new Error('Failed to load inventory stats: ' + res.status);
+
+        const data = await res.json();
+        if (!data || data.ok !== true) throw new Error(data?.message || 'Bad response');
+
+        const setText = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = String(value ?? '0');
+        };
+
+        // sellers object: { totalProducts, totalStock, inventoryValue }
+        setText('stat-seller-products', data?.sellers?.totalProducts);
+        setText('stat-seller-stock', data?.sellers?.totalStock);
+
+        // optional: format value nicely (R 7,850,580.00)
+        const value = Number(data?.sellers?.inventoryValue ?? 0);
+        const formattedValue = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        setText('stat-seller-value', formattedValue);
+      } catch (err) {
+        console.error('admin inventory stats error:', err);
+        // Keep placeholders if it fails
+      }
+    }
   </script>
   </body>
 </html>
+

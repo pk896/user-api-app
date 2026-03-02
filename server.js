@@ -544,10 +544,12 @@ app.use((req, res, next) => {
 /* ---------------------------------------
    Import and Register Routers
 --------------------------------------- */
-const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const productRatingsApiRoutes = require('./routes/productRatingsApi');
 const adminStatsApi = require('./routes/adminStatsApi');
+const adminInventoryStatsApi = require('./routes/adminInventoryStatsApi');
+const adminAppUsersStatsApi = require('./routes/adminAppUsersStatsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
+const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
@@ -582,6 +584,8 @@ if (ratingsRouter) {
 // API first
 app.use('/api/cart', cartRoutes);
 app.use('/api/admin', adminStatsApi);
+app.use('/api/admin', adminInventoryStatsApi);
+app.use('/api/admin', adminAppUsersStatsApi);
 
 // Public API for checkout
 app.use('/api', deliveryOptionsApi);
