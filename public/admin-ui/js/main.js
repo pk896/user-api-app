@@ -1,3 +1,4 @@
+// public/admin-ui/js/main.js
 /* global Chart, coreui */
 
 /**
@@ -27,18 +28,6 @@ Chart.defaults.plugins.tooltip.mode = 'index';
 Chart.defaults.plugins.tooltip.position = 'nearest';
 Chart.defaults.plugins.tooltip.external = coreui.ChartJS.customTooltips;
 Chart.defaults.defaultFontColor = coreui.Utils.getStyle('--cui-body-color');
-document.documentElement.addEventListener('ColorSchemeChange', () => {
-  cardChart1.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-primary');
-  cardChart2.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-info');
-  mainChart.options.scales.x.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-  mainChart.options.scales.x.ticks.color = coreui.Utils.getStyle('--cui-body-color');
-  mainChart.options.scales.y.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-  mainChart.options.scales.y.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-  mainChart.options.scales.y.ticks.color = coreui.Utils.getStyle('--cui-body-color');
-  cardChart1.update();
-  cardChart2.update();
-  mainChart.update();
-});
 
 /**
  * Generates a random integer between min and max (inclusive)
@@ -249,7 +238,16 @@ const cardChart4 = new Chart(document.getElementById('card-chart4'), {
     }
   }
 });
-const mainChart = new Chart(document.getElementById('main-chart'), {
+
+// ✅ If this dashboard canvas is controlled by our admin sales chart, do NOT create the CoreUI demo chart.
+const mainChartEl = document.getElementById('main-chart');
+const isAdminSalesChart =
+  mainChartEl && mainChartEl.dataset && mainChartEl.dataset.adminSalesChart === '1';
+
+// eslint-disable-next-line no-unused-vars
+const mainChart = isAdminSalesChart
+  ? null
+  : new Chart(mainChartEl, {
   type: 'line',
   data: {
     labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
@@ -326,5 +324,23 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
       }
     }
   }
+});
+
+document.documentElement.addEventListener('ColorSchemeChange', () => {
+  cardChart1.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-primary');
+  cardChart2.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-info');
+
+  // ✅ mainChart may be disabled on admin dashboard (we use real sales chart instead)
+  if (mainChart) {
+    mainChart.options.scales.x.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.x.ticks.color = coreui.Utils.getStyle('--cui-body-color');
+    mainChart.options.scales.y.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.y.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.y.ticks.color = coreui.Utils.getStyle('--cui-body-color');
+  }
+
+  cardChart1.update();
+  cardChart2.update();
+  if (mainChart) mainChart.update();
 });
 //# sourceMappingURL=main.js.map

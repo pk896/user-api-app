@@ -548,8 +548,10 @@ const productRatingsApiRoutes = require('./routes/productRatingsApi');
 const adminStatsApi = require('./routes/adminStatsApi');
 const adminInventoryStatsApi = require('./routes/adminInventoryStatsApi');
 const adminAppUsersStatsApi = require('./routes/adminAppUsersStatsApi');
-const deliveryOptionsAdmin = require('./routes/deliveryOptions');
+const adminOrdersStatsApi = require('./routes/adminOrdersStatsApi');
+const adminDashboardRouter = require('./routes/admin/dashboard');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
+const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
@@ -569,7 +571,6 @@ const passwordResetRoutes = require('./routes/passwordReset');
 const ratingsRouter = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
-// const adminOrdersApi = require('./routes/adminOrdersApi');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
 const debugDangerRoutes = require('./routes/debugDanger');
 const ordersDetailsRoutes = require('./routes/orderDetails');
@@ -586,12 +587,11 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/admin', adminStatsApi);
 app.use('/api/admin', adminInventoryStatsApi);
 app.use('/api/admin', adminAppUsersStatsApi);
+app.use('/api/admin', adminOrdersStatsApi);
+app.use('/admin/api/dashboard', adminDashboardRouter);
 
 // Public API for checkout
 app.use('/api', deliveryOptionsApi);
-
-// Admin API
- //app.use('/api/admin', adminOrdersApi);
 
 // rating API
 app.use('/api', productRatingsApiRoutes);
@@ -627,10 +627,6 @@ app.use('/notifications', notificationsRoutes);
 
 // Disable EJS caching in development
 app.set('view cache', false);
-
-// Ratings)
-// app.use('productRatingsRoutes');
-//app.use('/', productRatingsRoutes);
 
 // Wishlist under /users
 app.use('/users', wishlistRoutes);

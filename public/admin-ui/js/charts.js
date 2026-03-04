@@ -1,3 +1,4 @@
+// public/admin-ui/js/chart.js
 /* global Chart */
 
 /**
