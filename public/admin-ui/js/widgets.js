@@ -1,3 +1,4 @@
+// public\admin-ui\js\widgets.js
 /* global Chart, coreui */
 
 /**

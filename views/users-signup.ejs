@@ -1,1169 +1,504 @@
 <!-- views/users-signup.ejs -->
-<section class="auth-page u-signup-page">
-  <!-- Brand header -->
-  <div class="u-brand-header">
-    <div class="u-logo-preview">
-      <div class="u-logo-color u-blue"></div>
-      <div class="u-logo-color u-purple"></div>
-      <div class="u-logo-color u-green"></div>
-      <div class="u-logo-color u-black"></div>
-    </div>
-    <h1 class="u-page-title">🚀 Join Our Platform</h1>
-    <p class="u-page-subtitle">
-      Use your real email so we can verify your account and send important updates.
-    </p>
-  </div>
 
-  <!-- Flash messages (layout still has its own global flash, this is page-local) -->
-  <% (success || []).forEach(msg => { %>
-    <div class="u-flash u-flash-success">
-      <svg class="u-flash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-      <span><%= msg %></span>
-    </div>
-  <% }) %>
+<div class="min-vh-100 bg-body-tertiary py-4">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-sm-11 col-md-9 col-lg-7 col-xl-6">
 
-  <% (error || []).forEach(msg => { %>
-    <div class="u-flash u-flash-error">
-      <svg class="u-flash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="15" y1="9" x2="9" y2="15"></line>
-        <line x1="9" y1="9" x2="15" y2="15"></line>
-      </svg>
-      <span><%= msg %></span>
-    </div>
-  <% }) %>
-
-  <!-- Main card -->
-  <div class="u-signup-card">
-    <form
-      action="/users/signup"
-      method="post"
-      class="u-signup-form"
-      autocomplete="off"
-      novalidate
-      id="signupForm"
-    >
-      <!-- Section 1: Basic info -->
-      <div class="u-form-section" data-step="1">
-        <h3 class="u-section-title">
-          <span class="u-section-number">1</span>
-          Basic Information
-        </h3>
-
-        <label class="u-floating-label">
-          <input
-            type="email"
-            name="email"
-            id="email"
-            required
-            autocomplete="email"
-            placeholder=" "
-            inputmode="email"
-          />
-          <span class="u-label-text">Contact Email (Gmail/Outlook)</span>
-          <small class="u-field-hint">
-            We'll send a verification link to this address.
-          </small>
-          <div class="u-input-icon">✉️</div>
-        </label>
-
-        <div class="u-input-group">
-          <label class="u-floating-label">
-            <input
-              type="text"
-              name="username"
-              id="username"
-              minlength="3"
-              maxlength="30"
-              required
-              autocomplete="username"
-              placeholder=" "
-            />
-            <span class="u-label-text">Username</span>
-            <div class="u-input-icon">👤</div>
-          </label>
-          <div class="u-char-counter" data-for="username">0/30</div>
+        <!-- Header -->
+        <div class="text-center mb-3">
+          <div class="d-inline-flex align-items-center gap-2 px-3 py-2 bg-white border rounded-pill shadow-sm">
+            <span class="badge text-bg-primary rounded-pill">🚀</span>
+            <span class="fw-semibold">Join Our Platform</span>
+          </div>
+          <p class="text-body-secondary small mt-2 mb-0">
+            Use your real email so we can verify your account and send important updates.
+          </p>
         </div>
 
-        <label class="u-floating-label">
-          <input
-            type="text"
-            name="name"
-            id="name"
-            minlength="2"
-            maxlength="80"
-            required
-            autocomplete="name"
-            placeholder=" "
-          />
-          <span class="u-label-text">Full Name</span>
-          <div class="u-input-icon">📝</div>
-        </label>
+        <!-- Page-local flash messages (kept) -->
+        <% (success || []).forEach(msg => { %>
+          <div class="alert alert-success d-flex align-items-center gap-2" role="alert">
+            <span aria-hidden="true">✅</span>
+            <span><%= msg %></span>
+          </div>
+        <% }) %>
 
-        <div class="u-input-group u-age-group">
-          <label class="u-floating-label">
-            <input
-              type="number"
-              name="age"
-              id="age"
-              min="16"
-              max="120"
-              step="1"
-              required
+        <% (error || []).forEach(msg => { %>
+          <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+            <span aria-hidden="true">⚠️</span>
+            <span><%= msg %></span>
+          </div>
+        <% }) %>
+
+        <!-- Card -->
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-3 p-md-4">
+
+            <!-- Step pills + progress -->
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <div class="d-flex gap-2 flex-wrap">
+                <span class="badge rounded-pill text-bg-primary" id="stepBadge1">1 · Info</span>
+                <span class="badge rounded-pill text-bg-secondary" id="stepBadge2">2 · Security</span>
+                <span class="badge rounded-pill text-bg-secondary" id="stepBadge3">3 · Terms</span>
+              </div>
+              <div class="small text-body-secondary">All fields marked * are required</div>
+            </div>
+
+            <div class="progress mb-3">
+              <div class="progress-bar bg-primary w-25" id="progressFill" role="progressbar" aria-label="Signup progress"></div>
+            </div>
+
+            <form
+              action="/users/signup"
+              method="post"
               autocomplete="off"
-              placeholder=" "
-            />
-            <span class="u-label-text">
-              Age <span class="u-age-note">(must be 16+)</span>
-            </span>
-            <div class="u-input-icon">🎂</div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Section 2: Security -->
-      <div class="u-form-section" data-step="2">
-        <h3 class="u-section-title">
-          <span class="u-section-number">2</span>
-          Security
-        </h3>
-
-        <div class="u-input-group">
-          <label class="u-floating-label">
-            <input
-              type="password"
-              name="password"
-              id="password"
-              required
-              minlength="6"
-              autocomplete="new-password"
-            />
-            <span class="u-label-text">Password</span>
-            <div class="u-input-icon">🔒</div>
-            <button
-              type="button"
-              class="u-toggle-password"
-              data-target="password"
-              aria-label="Show password"
+              novalidate
+              id="signupForm"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-            </button>
-          </label>
+              <!-- Section 1 -->
+              <div class="border rounded bg-light p-3 mb-3" data-step="1">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span class="badge text-bg-primary rounded-pill">1</span>
+                  <h3 class="h6 fw-bold mb-0">Basic Information</h3>
+                </div>
 
-          <div class="u-password-strength">
-            <div class="u-strength-bar"></div>
-            <div class="u-strength-bar"></div>
-            <div class="u-strength-bar"></div>
-            <div class="u-strength-bar"></div>
-            <span class="u-strength-text">Password strength</span>
+                <!-- Email -->
+                <div class="mb-3">
+                  <label for="email" class="form-label">Contact Email (Gmail/Outlook) <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text" aria-hidden="true">✉️</span>
+                    <input
+                      type="email"
+                      name="email"
+                      id="email"
+                      required
+                      autocomplete="email"
+                      inputmode="email"
+                      class="form-control"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                  <div class="form-text">We'll send a verification link to this address.</div>
+                </div>
+
+                <!-- Username -->
+                <div class="mb-3">
+                  <label for="username" class="form-label">Username <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text" aria-hidden="true">👤</span>
+                    <input
+                      type="text"
+                      name="username"
+                      id="username"
+                      minlength="3"
+                      maxlength="30"
+                      required
+                      autocomplete="username"
+                      class="form-control"
+                      placeholder="your_username"
+                    />
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <div class="form-text">3–30 characters (letters, numbers, . _ -)</div>
+                    <div class="form-text" id="usernameCounter">0/30</div>
+                  </div>
+                </div>
+
+                <!-- Full name -->
+                <div class="mb-3">
+                  <label for="name" class="form-label">Full Name <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text" aria-hidden="true">📝</span>
+                    <input
+                      type="text"
+                      name="name"
+                      id="name"
+                      minlength="2"
+                      maxlength="80"
+                      required
+                      autocomplete="name"
+                      class="form-control"
+                      placeholder="Your full name"
+                    />
+                  </div>
+                </div>
+
+                <!-- Age -->
+                <div class="mb-0">
+                  <label for="age" class="form-label">Age <span class="text-danger">*</span> <span class="text-body-secondary fw-normal">(must be 16+)</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text" aria-hidden="true">🎂</span>
+                    <input
+                      type="number"
+                      name="age"
+                      id="age"
+                      min="16"
+                      max="120"
+                      step="1"
+                      required
+                      autocomplete="off"
+                      class="form-control"
+                      placeholder="16"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2 -->
+              <div class="border rounded bg-light p-3 mb-3" data-step="2">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span class="badge text-bg-primary rounded-pill">2</span>
+                  <h3 class="h6 fw-bold mb-0">Security</h3>
+                </div>
+
+                <!-- Password -->
+                <div class="mb-3">
+                  <label for="password" class="form-label">Password <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text" aria-hidden="true">🔒</span>
+                    <input
+                      type="password"
+                      name="password"
+                      id="password"
+                      required
+                      minlength="6"
+                      autocomplete="new-password"
+                      class="form-control"
+                      placeholder="Create a password"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary u-toggle-password"
+                      data-target="password"
+                      aria-label="Show password"
+                    >
+                      👁️
+                    </button>
+                  </div>
+
+                  <div class="mt-2">
+                    <div class="d-flex justify-content-between small">
+                      <span class="text-body-secondary">Strength</span>
+                      <span class="fw-semibold" id="strengthText">Weak</span>
+                    </div>
+                    <div class="progress">
+                      <div class="progress-bar bg-danger w-0" id="strengthFill" role="progressbar" aria-label="Password strength"></div>
+                    </div>
+                  </div>
+
+                  <div class="mt-2 p-2 border rounded bg-white">
+                    <div class="small fw-semibold mb-1">Password must include:</div>
+                    <ul class="small mb-0 ps-3">
+                      <li id="reqLength">At least 6 characters</li>
+                      <li id="reqNumber">One number</li>
+                      <li id="reqLetter">One letter</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <!-- Confirm -->
+                <div class="mb-0">
+                  <label for="confirm" class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text" aria-hidden="true">✓</span>
+                    <input
+                      type="password"
+                      name="confirm"
+                      id="confirm"
+                      required
+                      minlength="6"
+                      autocomplete="new-password"
+                      class="form-control"
+                      placeholder="Repeat your password"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary u-toggle-password"
+                      data-target="confirm"
+                      aria-label="Show confirm password"
+                    >
+                      👁️
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3 -->
+              <div class="border rounded bg-light p-3 mb-3" data-step="3">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span class="badge text-bg-primary rounded-pill">3</span>
+                  <h3 class="h6 fw-bold mb-0">Terms &amp; Conditions</h3>
+                </div>
+
+                <div class="form-check mb-2">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    name="confirm16"
+                    value="1"
+                    required
+                    id="ageConfirm"
+                  />
+                  <label class="form-check-label" for="ageConfirm">
+                    I confirm I am 16 years or older and agree to the
+                    <a href="/terms" class="link-primary">Terms of Service</a> and
+                    <a href="/privacy" class="link-primary">Privacy Policy</a>.
+                  </label>
+                </div>
+
+                <div class="form-check mb-0">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    name="newsletter"
+                    value="1"
+                    id="newsletter"
+                    checked
+                  />
+                  <label class="form-check-label" for="newsletter">
+                    Send me occasional product updates and tips (optional).
+                  </label>
+                </div>
+              </div>
+
+              <!-- Submit (dominant brand green = primary) -->
+              <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold" id="submitBtn">
+                <span class="me-2" aria-hidden="true">✅</span>
+                <span class="u-btn-text">Create Account</span>
+                <span class="spinner-border spinner-border-sm ms-2 d-none" id="submitSpinner" role="status" aria-hidden="true"></span>
+              </button>
+
+              <!-- Divider -->
+              <div class="d-flex align-items-center gap-2 my-3">
+                <div class="flex-grow-1 border-top"></div>
+                <div class="text-body-secondary small">or continue with</div>
+                <div class="flex-grow-1 border-top"></div>
+              </div>
+
+              <!-- Social -->
+              <div class="d-grid gap-2">
+                <a href="/auth/google" class="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" data-nav="true" rel="noopener">
+                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <span>Continue with Google</span>
+                </a>
+                <div class="text-center text-body-secondary small">
+                  We'll use your Google email and profile information.
+                </div>
+              </div>
+
+              <!-- Switch to login -->
+              <p class="text-center text-body-secondary small mt-3 mb-0">
+                Already have an account?
+                <a href="/users/login" data-nav="true" rel="noopener" class="fw-semibold text-decoration-none link-primary">
+                  Log in here →
+                </a>
+              </p>
+            </form>
+
           </div>
         </div>
 
-        <label class="u-floating-label">
-          <input
-            type="password"
-            name="confirm"
-            id="confirm"
-            required
-            minlength="6"
-            autocomplete="new-password"
-          />
-          <span class="u-label-text">Confirm Password</span>
-          <div class="u-input-icon">✓</div>
-          <button
-            type="button"
-            class="u-toggle-password"
-            data-target="confirm"
-            aria-label="Show confirm password"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
-        </label>
-
-        <div class="u-password-requirements">
-          <p class="u-req-title">Password must include:</p>
-          <ul class="u-req-list">
-            <li class="u-req-item" data-check="length">At least 6 characters</li>
-            <li class="u-req-item" data-check="number">One number</li>
-            <li class="u-req-item" data-check="letter">One letter</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- Section 3: Terms -->
-      <div class="u-form-section" data-step="3">
-        <h3 class="u-section-title">
-          <span class="u-section-number">3</span>
-          Terms &amp; Conditions
-        </h3>
-
-        <label class="u-checkbox-container">
-          <input type="checkbox" name="confirm16" value="1" required id="ageConfirm" />
-          <span class="u-checkmark"></span>
-          <span class="u-checkbox-text">
-            I confirm I am 16 years or older and agree to the
-            <a href="/terms" class="u-link">Terms of Service</a> and
-            <a href="/privacy" class="u-link">Privacy Policy</a>.
-          </span>
-        </label>
-
-        <label class="u-checkbox-container">
-          <input type="checkbox" name="newsletter" value="1" id="newsletter" checked />
-          <span class="u-checkmark"></span>
-          <span class="u-checkbox-text">
-            Send me occasional product updates and tips (optional).
-          </span>
-        </label>
-      </div>
-
-      <!-- Submit -->
-      <button type="submit" class="u-btn u-btn-primary u-btn-full" id="submitBtn">
-        <span class="u-btn-text">Create Account</span>
-        <div class="u-spinner u-hidden">
-          <div class="u-spinner-dot"></div>
-          <div class="u-spinner-dot"></div>
-          <div class="u-spinner-dot"></div>
-        </div>
-      </button>
-
-      <!-- Social -->
-      <div class="u-divider">
-        <span class="u-divider-line"></span>
-        <span class="u-divider-text">or continue with</span>
-        <span class="u-divider-line"></span>
-      </div>
-
-      <div class="u-social-buttons">
-        <a href="/auth/google" class="u-social-btn u-google-btn" data-nav="true" rel="noopener">
-          <svg class="u-social-icon" width="18" height="18" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-          </svg>
-          <span>Continue with Google</span>
-        </a>
-        <p class="u-social-note">
-          We'll use your Google email and profile information.
-        </p>
-      </div>
-    </form>
-
-    <!-- Switch to login -->
-    <p class="u-auth-switch">
-      Already have an account?
-      <a href="/users/login" data-nav="true" rel="noopener" class="u-login-link">
-        Log in here
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="9 18 15 12 9 6"></polyline>
-        </svg>
-      </a>
-    </p>
-
-    <!-- Progress indicator -->
-    <div class="u-progress-indicator">
-      <div class="u-progress-bar">
-        <div class="u-progress-fill"></div>
-      </div>
-      <div class="u-progress-steps">
-        <div class="u-step u-active" data-step="1">Info</div>
-        <div class="u-step" data-step="2">Security</div>
-        <div class="u-step" data-step="3">Terms</div>
       </div>
     </div>
   </div>
-</section>
-
-<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
-  /* Scope everything to .u-signup-page so we don't affect layout/partials */
-  .u-signup-page {
-    --brand-blue:   #2563EB;
-    --brand-purple: #7C3AED;
-    --brand-green:  #22C55E;
-    --brand-black:  #0F172A;
-
-    --bg-primary:   #22C55E;
-    --bg-secondary: #f0fdf4;
-    --text-primary: #0F172A;
-    --text-secondary: #475569;
-    --card-bg:      #ffffff;
-    --card-border:  #e2e8f0;
-    --input-bg:     #f8fafc;
-    --success-light:#dcfce7;
-    --error-light:  #fee2e2;
-  }
-
-  .dark-theme .u-signup-page {
-    --bg-primary:   #16a34a;
-    --bg-secondary: #052e16;
-    --text-primary: #f1f5f9;
-    --text-secondary: #cbd5e1;
-    --card-bg:      #1e293b;
-    --card-border:  #334155;
-    --input-bg:     #0f172a;
-    --success-light:#064e3b;
-    --error-light:  #7f1d1d;
-  }
-
-  .u-signup-page {
-    box-sizing: border-box;
-    max-width: 420px;
-    width: 100%;
-    margin: 12px auto 16px;
-    padding: 12px 10px 18px;
-  }
-
-  .u-signup-page * {
-    box-sizing: border-box;
-  }
-
-  .u-signup-card {
-    background: var(--card-bg);
-    border-radius: 18px;
-    border: 1px solid var(--card-border);
-    padding: 14px 14px 18px;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .u-signup-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -40%;
-    width: 80%;
-    height: 3px;
-    background: linear-gradient(90deg, var(--brand-blue), var(--brand-purple), var(--brand-green));
-  }
-
-  /*.u-stamp {
-    display: block;
-    text-align: center;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    opacity: 0.55;
-    margin-bottom: 4px;
-  }*/
-
-  .u-brand-header {
-    text-align: center;
-    margin-bottom: 16px;
-  }
-
-  .u-logo-preview {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    margin-bottom: 10px;
-  }
-
-  .u-logo-color {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-  }
-
-  .u-logo-color.u-blue   { background: var(--brand-blue); }
-  .u-logo-color.u-purple { background: var(--brand-purple); }
-  .u-logo-color.u-green  { background: var(--brand-green); }
-  .u-logo-color.u-black  { background: var(--brand-black); }
-
-  .u-page-title {
-    font-size: 1.4rem;
-    font-weight: 800;
-    margin-bottom: 4px;
-    background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .u-page-subtitle {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
-  }
-
-  /* Flash */
-  .u-flash {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    margin-bottom: 8px;
-    font-size: 0.8rem;
-  }
-
-  .u-flash-success {
-    background: var(--success-light);
-    color: #065f46;
-    border: 1px solid #a7f3d0;
-  }
-
-  .u-flash-error {
-    background: var(--error-light);
-    color: #991b1b;
-    border: 1px solid #fecaca;
-  }
-
-  .u-flash-icon { flex-shrink: 0; }
-
-  /* Form layout */
-  .u-signup-form {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    margin-top: 6px;
-  }
-
-  .u-form-section {
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--card-border);
-  }
-
-  .u-form-section:last-of-type {
-    border-bottom: none;
-    margin-bottom: 10px;
-  }
-
-  .u-section-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.95rem;
-    font-weight: 600;
-    margin-bottom: 10px;
-    color: var(--text-primary);
-  }
-
-  .u-section-number {
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    background: var(--brand-green);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  /* Floating inputs (label always above) */
-  .u-floating-label {
-    position: relative;
-    margin-bottom: 16px;
-  }
-
-    .u-floating-label input {
-    width: 100%;
-    border-radius: 10px;
-    border: 2px solid var(--card-border);
-    /* smaller top padding because label is now fully above the border */
-    padding: 10px 34px 8px 10px;
-    background: var(--input-bg);
-    font-size: 0.86rem;
-    color: var(--text-primary);
-    transition: all 0.18s ease;
-    outline: none;
-  }
-
-  .u-label-text {
-    position: absolute;
-    left: 12px;
-    /* move label fully above the input border */
-    top: -11px;
-    font-size: 0.7rem;
-    line-height: 1;
-    color: var(--text-secondary);
-    padding: 0 4px;
-    background: var(--card-bg); /* covers the border nicely */
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  /* default placeholder style */
-  .u-floating-label input::placeholder {
-    color: #9CA3AF;
-    opacity: 0.95;
-  }
-
-  /* Completely hide any placeholder / hint for password fields */
-  .u-floating-label input[type="password"]::placeholder {
-    color: transparent;
-    opacity: 0;
-  }
-  .u-floating-label input[type="password"]:focus::placeholder {
-    color: transparent;
-    opacity: 0;
-  }
-
-  /* Hide Edge/IE password reveal icons */
-  input[type="password"]::-ms-reveal,
-  input[type="password"]::-ms-clear {
-    display: none;
-  }
-
-  .u-floating-label input:focus {
-    border-color: var(--brand-green);
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
-    background: #fff;
-  }
-
-  .u-floating-label input:focus + .u-label-text {
-    color: var(--brand-green);
-  }
-
-  .u-age-note {
-    color: var(--text-secondary);
-    font-weight: 400;
-    font-size: 0.8rem;
-  }
-
-  .u-input-icon {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.86rem;
-    color: var(--text-secondary);
-  }
-
-  .u-field-hint {
-    display: block;
-    margin-top: 2px;
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-  }
-
-  .u-input-group {
-    position: relative;
-    margin-bottom: 16px;
-  }
-
-  /* extra gap before age field */
-  .u-age-group {
-    margin-top: 6px;
-  }
-
-  .u-char-counter {
-    position: absolute;
-    right: 4px;
-    bottom: -14px;
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-  }
-
-  /* Password strength */
-  .u-password-strength {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 4px;
-  }
-
-  .u-strength-bar {
-    flex: 1;
-    height: 3px;
-    border-radius: 999px;
-    background: var(--card-border);
-    transition: all 0.25s ease;
-  }
-
-  .u-strength-bar.u-active { background: var(--brand-green); }
-  .u-strength-bar.u-weak   { background: #ef4444; }
-  .u-strength-bar.u-medium { background: #f59e0b; }
-  .u-strength-bar.u-strong { background: var(--brand-green); }
-
-  .u-strength-text {
-    margin-left: auto;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-  }
-
-  /* Password toggle */
-  .u-toggle-password {
-    position: absolute;
-    right: 32px;
-    top: 50%;
-    transform: translateY(-50%);
-    border: none;
-    background: transparent;
-    padding: 2px;
-    cursor: pointer;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .u-toggle-password:hover { color: var(--brand-green); }
-
-  /* Requirements */
-  .u-password-requirements {
-    margin-top: 8px;
-    padding: 8px 9px;
-    border-radius: 8px;
-    background: var(--input-bg);
-  }
-
-  .u-req-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-bottom: 4px;
-  }
-
-  .u-req-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .u-req-item {
-    font-size: 0.76rem;
-    color: var(--text-secondary);
-    padding-left: 16px;
-    position: relative;
-    margin-bottom: 2px;
-  }
-
-  .u-req-item::before {
-    content: '○';
-    position: absolute;
-    left: 0;
-    top: 0;
-  }
-
-  .u-req-item.u-valid::before {
-    content: '✓';
-    color: var(--brand-green);
-  }
-
-  /* Checkboxes */
-  .u-checkbox-container {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 10px;
-    position: relative;
-    cursor: pointer;
-  }
-
-  .u-checkbox-container input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .u-checkmark {
-    width: 18px;
-    height: 18px;
-    border-radius: 6px;
-    background: var(--input-bg);
-    border: 1.8px solid var(--card-border);
-    flex-shrink: 0;
-    position: relative;
-    transition: all 0.18s ease;
-  }
-
-  .u-checkbox-container input:checked + .u-checkmark {
-    background: var(--brand-green);
-    border-color: var(--brand-green);
-  }
-
-  .u-checkmark::after {
-    content: '';
-    position: absolute;
-    display: none;
-    left: 5px;
-    top: 2px;
-    width: 5px;
-    height: 9px;
-    border: solid #fff;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-
-  .u-checkbox-container input:checked + .u-checkmark::after {
-    display: block;
-  }
-
-  .u-checkbox-text {
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    line-height: 1.35;
-  }
-
-  .u-link {
-    color: var(--brand-blue);
-    text-decoration: none;
-    font-weight: 500;
-  }
-
-  .u-link:hover { text-decoration: underline; }
-
-  /* Buttons */
-  .u-btn {
-    border: none;
-    border-radius: 999px;
-    padding: 9px 14px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.18s ease;
-  }
-
-  .u-btn-primary {
-    background: linear-gradient(135deg, var(--brand-green), #16a34a);
-    color: #fff;
-    box-shadow: 0 10px 20px rgba(34, 197, 94, 0.28);
-  }
-
-  .u-btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 22px rgba(34, 197, 94, 0.35);
-  }
-
-  .u-btn-primary:active {
-    transform: translateY(0);
-    box-shadow: 0 7px 14px rgba(34, 197, 94, 0.25);
-  }
-
-  .u-btn-full { width: 100%; height: 44px; margin-top: 2px; }
-
-  .u-btn-text { transition: opacity 0.18s ease; }
-
-  .u-spinner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    gap: 4px;
-  }
-
-  .u-spinner-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: #fff;
-    animation: u-bounce 1.3s infinite ease-in-out both;
-  }
-
-  .u-spinner-dot:nth-child(1) { animation-delay: -0.3s; }
-  .u-spinner-dot:nth-child(2) { animation-delay: -0.15s; }
-
-  .u-hidden { display: none; }
-
-  @keyframes u-bounce {
-    0%, 80%, 100% { transform: scale(0); }
-    40%          { transform: scale(1); }
-  }
-
-  /* Divider & social */
-  .u-divider {
-    display: flex;
-    align-items: center;
-    margin: 14px 0 10px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-  }
-
-  .u-divider-line {
-    flex: 1;
-    height: 1px;
-    background: var(--card-border);
-  }
-
-  .u-divider-text {
-    padding: 0 10px;
-  }
-
-  .u-social-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .u-social-btn {
-    border-radius: 999px;
-    border: 1.8px solid var(--card-border);
-    background: var(--input-bg);
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-size: 0.86rem;
-    font-weight: 500;
-    color: var(--text-primary);
-    text-decoration: none;
-    transition: all 0.18s ease;
-  }
-
-  .u-social-btn:hover {
-    background: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 7px 16px rgba(15, 23, 42, 0.10);
-  }
-
-  .u-google-btn:hover {
-    border-color: var(--brand-blue);
-  }
-
-  .u-social-icon {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-  }
-
-  .u-social-note {
-    text-align: center;
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-  }
-
-  /* Switch to login */
-  .u-auth-switch {
-    margin-top: 12px;
-    font-size: 0.8rem;
-    text-align: center;
-    color: var(--text-secondary);
-  }
-
-  .u-login-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: 4px;
-    color: var(--brand-blue);
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .u-login-link:hover { text-decoration: underline; }
-
-  /* Progress indicator */
-  .u-progress-indicator {
-    margin-top: 12px;
-  }
-
-  .u-progress-bar {
-    height: 4px;
-    background: var(--card-border);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-bottom: 6px;
-  }
-
-  .u-progress-fill {
-    height: 100%;
-    width: 33%;
-    background: linear-gradient(90deg, var(--brand-blue), var(--brand-purple));
-    transition: width 0.25s ease;
-  }
-
-  .u-progress-steps {
-    display: flex;
-    justify-content: space-between;
-    padding: 0 4px;
-  }
-
-  .u-step {
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-    position: relative;
-    padding-top: 14px;
-  }
-
-  .u-step::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: var(--card-border);
-  }
-
-  .u-step.u-active {
-    color: var(--brand-purple);
-    font-weight: 600;
-  }
-
-  .u-step.u-active::before {
-    background: var(--brand-purple);
-  }
-
-  /* Small phones (Hisense U50 Lite) */
-  @media (max-width: 360px) {
-    .u-signup-page {
-      margin: 0;
-      padding: 10px 6px 14px;
-      max-width: 100%;
-    }
-
-    .u-signup-card {
-      border-radius: 16px 16px 0 0;
-      padding: 12px 10px 14px;
-    }
-
-    .u-page-title { font-size: 1.3rem; }
-    .u-page-subtitle { font-size: 0.76rem; }
-
-    .u-floating-label input {
-      font-size: 0.82rem;
-      padding: 13px 32px 6px 9px;
-    }
-
-    .u-section-title { font-size: 0.9rem; }
-    .u-checkbox-text,
-    .u-req-item,
-    .u-field-hint { font-size: 0.74rem; }
-
-    .u-social-btn { font-size: 0.82rem; }
-  }
-
-  /* Keyboard focus */
-  .u-signup-page :focus-visible {
-    outline: 2px solid var(--brand-green);
-    outline-offset: 2px;
-  }
-</style>
+</div>
 
 <script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   (function () {
     'use strict';
 
-    // Simple helper for scoped query
-    const root = document.querySelector('.u-signup-page');
-    if (!root) return;
+    const form = document.getElementById('signupForm');
+    if (!form) return;
 
-    const $  = (sel) => root.querySelector(sel);
-    const $$ = (sel) => Array.from(root.querySelectorAll(sel));
+    const emailInput = document.getElementById('email');
+    const usernameInput = document.getElementById('username');
+    const nameInput = document.getElementById('name');
+    const ageInput = document.getElementById('age');
+    const passwordInput = document.getElementById('password');
+    const confirmInput = document.getElementById('confirm');
+    const ageConfirm = document.getElementById('ageConfirm');
 
-    /* Navigation links (still normal full-page navigation) */
-    $$('.u-signup-page a[data-nav="true"]').forEach(link => {
+    const submitBtn = document.getElementById('submitBtn');
+    const submitSpinner = document.getElementById('submitSpinner');
+
+    const usernameCounter = document.getElementById('usernameCounter');
+
+    const strengthFill = document.getElementById('strengthFill');
+    const strengthText = document.getElementById('strengthText');
+
+    const reqLength = document.getElementById('reqLength');
+    const reqNumber = document.getElementById('reqNumber');
+    const reqLetter = document.getElementById('reqLetter');
+
+    const progressFill = document.getElementById('progressFill');
+    const stepBadge1 = document.getElementById('stepBadge1');
+    const stepBadge2 = document.getElementById('stepBadge2');
+    const stepBadge3 = document.getElementById('stepBadge3');
+
+    // Keep existing behavior: data-nav links do full navigation
+    document.querySelectorAll('a[data-nav="true"]').forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
         window.location.href = link.href;
       });
     });
 
-    /* Character counter for username */
-    (function initCharCounter() {
-      const input = $('#username');
-      const counter = root.querySelector('.u-char-counter[data-for="username"]');
-      if (!input || !counter) return;
-
-      const update = () => {
-        const len = input.value.length;
-        counter.textContent = len + '/30';
-        if (len > 25) counter.style.color = '#ef4444';
-        else if (len > 20) counter.style.color = '#f59e0b';
-        else counter.style.color = 'var(--text-secondary)';
-      };
-      input.addEventListener('input', update);
-      update();
-    })();
-
-    /* Password visibility toggle */
-    (function initPasswordToggle() {
-      $$('.u-toggle-password').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const targetId = btn.getAttribute('data-target');
-          const field = root.querySelector('#' + targetId);
-          if (!field) return;
-          const isPassword = field.type === 'password';
-          field.type = isPassword ? 'text' : 'password';
-
-          const svg = btn.querySelector('svg');
-          if (!svg) return;
-          if (isPassword) {
-            svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
-          } else {
-            svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
-          }
-        });
-      });
-    })();
-
-    /* Password strength + requirements */
-    (function initPasswordStrength() {
-      const pwdInput = $('#password');
-      const bars = $$('.u-strength-bar');
-      const text = $('.u-strength-text');
-      const reqItems = $$('.u-req-item');
-
-      if (!pwdInput) return;
-
-      const updateReqs = (pwd) => {
-        reqItems.forEach(item => {
-          const check = item.getAttribute('data-check');
-          let ok = false;
-          if (check === 'length') ok = pwd.length >= 6;
-          if (check === 'number') ok = /[0-9]/.test(pwd);
-          if (check === 'letter') ok = /[a-zA-Z]/.test(pwd);
-          item.classList.toggle('u-valid', ok);
-        });
-      };
-
-      const updateStrength = () => {
-        const pwd = pwdInput.value || '';
-        updateReqs(pwd);
-
-        let score = 0;
-        if (pwd.length >= 6) score++;
-        if (pwd.length >= 10) score++;
-        if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
-        if (/[0-9]/.test(pwd)) score++;
-        if (/[^A-Za-z0-9]/.test(pwd)) score++;
-
-        score = Math.min(score, 4);
-
-        bars.forEach((bar, i) => {
-          bar.className = 'u-strength-bar';
-          if (i < score) {
-            bar.classList.add('u-active');
-            if (score <= 1) bar.classList.add('u-weak');
-            else if (score <= 3) bar.classList.add('u-medium');
-            else bar.classList.add('u-strong');
-          }
-        });
-
-        if (text) {
-          const labels = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'];
-          text.textContent = labels[score] || 'Password strength';
-        }
-      };
-
-      pwdInput.addEventListener('input', updateStrength);
-      updateStrength();
-    })();
-
-    /* Progress indicator (changes when entering each section) */
-    (function initProgress() {
-      const sections = $$('.u-form-section');
-      const fill = $('.u-progress-fill');
-      const steps = $$('.u-step');
-      if (!sections.length || !fill) return;
-
-      const setStep = (idx) => {
-        const total = sections.length;
-        const percent = ((idx + 1) / total) * 100;
-        fill.style.width = percent + '%';
-        steps.forEach((s, i) => s.classList.toggle('u-active', i === idx));
-      };
-
-      sections.forEach((section, idx) => {
-        const firstInput = section.querySelector('input');
-        if (!firstInput) return;
-        firstInput.addEventListener('focus', () => setStep(idx));
-      });
-
-      setStep(0);
-    })();
-
-    /* Form validation – keep normal POST submit to server */
-    (function initFormValidation() {
-      const form = $('#signupForm');
-      const submitBtn = $('#submitBtn');
-      const btnText = submitBtn && submitBtn.querySelector('.u-btn-text');
-      const spinner = submitBtn && submitBtn.querySelector('.u-spinner');
-
-      if (!form) return;
-
-      form.addEventListener('submit', (e) => {
-        const email = ($('#email')?.value || '').trim();
-        const username = ($('#username')?.value || '').trim();
-        const pwd = ($('#password')?.value || '').trim();
-        const confirm = ($('#confirm')?.value || '').trim();
-        const ageVal = ($('#age')?.value || '').trim();
-        const age = parseInt(ageVal, 10);
-        const ageConfirm = $('#ageConfirm')?.checked;
-
-        let ok = true;
-        const errors = [];
-
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          ok = false;
-          errors.push('Enter a valid email address.');
-        }
-
-        if (!/^[a-zA-Z0-9._-]{3,30}$/.test(username)) {
-          ok = false;
-          errors.push('Username must be 3–30 characters (letters, numbers, . _ -).');
-        }
-
-        if (pwd.length < 6) {
-          ok = false;
-          errors.push('Password must be at least 6 characters.');
-        }
-
-        if (pwd !== confirm) {
-          ok = false;
-          errors.push('Passwords do not match.');
-        }
-
-        if (Number.isNaN(age) || age < 16 || age > 120) {
-          ok = false;
-          errors.push('Age must be between 16 and 120.');
-        }
-
-        if (!ageConfirm) {
-          ok = false;
-          errors.push('You must confirm that you are 16+ and agree to the terms.');
-        }
-
-        if (!ok) {
-          e.preventDefault();
-          alert(errors.join('\n'));
-          return;
-        }
-
-        // Show loading state but allow normal form submit
-        if (submitBtn && btnText && spinner) {
-          submitBtn.disabled = true;
-          btnText.style.opacity = '0';
-          spinner.classList.remove('u-hidden');
-        }
-      });
-    })();
-
-    // Subtle entrance animation
-    const form = root.querySelector('.u-signup-card');
-    if (form) {
-      form.style.opacity = '0';
-      form.style.transform = 'translateY(8px)';
-      setTimeout(() => {
-        form.style.transition = 'opacity 0.28s ease, transform 0.28s ease';
-        form.style.opacity = '1';
-        form.style.transform = 'translateY(0)';
-      }, 80);
+    // Username counter
+    function updateUsernameCounter() {
+      if (!usernameInput || !usernameCounter) return;
+      const len = usernameInput.value.length;
+      usernameCounter.textContent = len + '/30';
+    }
+    if (usernameInput) {
+      usernameInput.addEventListener('input', updateUsernameCounter);
+      updateUsernameCounter();
     }
 
-    // Autofocus email or username on small screens
+    // Toggle password visibility
+    document.querySelectorAll('.u-toggle-password').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const field = document.getElementById(targetId);
+        if (!field) return;
+        field.type = (field.type === 'password') ? 'text' : 'password';
+      });
+    });
+
+    // Password strength + requirements (Bootstrap progress)
+    function setStrengthWidthClass(pct) {
+      if (!strengthFill) return;
+      strengthFill.classList.remove('w-0','w-25','w-50','w-75','w-100');
+      if (pct <= 0) strengthFill.classList.add('w-0');
+      else if (pct <= 25) strengthFill.classList.add('w-25');
+      else if (pct <= 50) strengthFill.classList.add('w-50');
+      else if (pct <= 75) strengthFill.classList.add('w-75');
+      else strengthFill.classList.add('w-100');
+    }
+
+    function updatePasswordUI() {
+      if (!passwordInput || !strengthFill || !strengthText) return;
+
+      const pwd = passwordInput.value || '';
+      const hasLength = pwd.length >= 6;
+      const hasNumber = /[0-9]/.test(pwd);
+      const hasLetter = /[a-zA-Z]/.test(pwd);
+
+      if (reqLength) reqLength.classList.toggle('text-success', hasLength);
+      if (reqNumber) reqNumber.classList.toggle('text-success', hasNumber);
+      if (reqLetter) reqLetter.classList.toggle('text-success', hasLetter);
+
+      let score = 0;
+      if (hasLength) score++;
+      if (pwd.length >= 10) score++;
+      if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+      if (hasNumber) score++;
+      if (/[^A-Za-z0-9]/.test(pwd)) score++;
+
+      const pct = Math.min(Math.round((score / 5) * 100), 100);
+      setStrengthWidthClass(pct);
+
+      strengthFill.classList.remove('bg-danger', 'bg-warning', 'bg-success');
+
+      let label = 'Weak';
+      if (pct >= 80) { label = 'Strong'; strengthFill.classList.add('bg-success'); }
+      else if (pct >= 45) { label = 'Good'; strengthFill.classList.add('bg-warning'); }
+      else { label = 'Weak'; strengthFill.classList.add('bg-danger'); }
+
+      strengthText.textContent = label;
+    }
+
+    if (passwordInput) {
+      passwordInput.addEventListener('input', updatePasswordUI);
+      updatePasswordUI();
+    }
+
+    // Step progress (focus-based)
+    function setStep(step) {
+      if (!progressFill) return;
+
+      progressFill.classList.remove('w-25','w-50','w-75','w-100');
+      if (step === 1) progressFill.classList.add('w-25');
+      if (step === 2) progressFill.classList.add('w-50');
+      if (step === 3) progressFill.classList.add('w-100');
+
+      const setBadge = (el, active) => {
+        if (!el) return;
+        el.classList.remove('text-bg-primary', 'text-bg-secondary');
+        el.classList.add(active ? 'text-bg-primary' : 'text-bg-secondary');
+      };
+
+      setBadge(stepBadge1, step === 1);
+      setBadge(stepBadge2, step === 2);
+      setBadge(stepBadge3, step === 3);
+    }
+
+    const step1First = emailInput;
+    const step2First = passwordInput;
+    const step3First = ageConfirm;
+
+    if (step1First) step1First.addEventListener('focus', () => setStep(1));
+    if (step2First) step2First.addEventListener('focus', () => setStep(2));
+    if (step3First) step3First.addEventListener('focus', () => setStep(3));
+    setStep(1);
+
+    // Validation helpers
+    function markInvalid(el, isInvalid) {
+      if (!el) return;
+      el.classList.toggle('is-invalid', !!isInvalid);
+    }
+
+    function isEmailValid(v) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+    }
+
+    function isUsernameValid(v) {
+      return /^[a-zA-Z0-9._-]{3,30}$/.test(String(v || '').trim());
+    }
+
+    // Submit validation (keep normal POST submit)
+    form.addEventListener('submit', (e) => {
+      const email = (emailInput?.value || '').trim();
+      const username = (usernameInput?.value || '').trim();
+      const fullName = (nameInput?.value || '').trim();
+      const pwd = (passwordInput?.value || '').trim();
+      const confirm = (confirmInput?.value || '').trim();
+      const ageVal = (ageInput?.value || '').trim();
+      const age = parseInt(ageVal, 10);
+      const ageOk = !!ageConfirm?.checked;
+
+      let ok = true;
+
+      [emailInput, usernameInput, nameInput, passwordInput, confirmInput, ageInput].forEach(el => markInvalid(el, false));
+
+      if (!isEmailValid(email)) { ok = false; markInvalid(emailInput, true); }
+      if (!isUsernameValid(username)) { ok = false; markInvalid(usernameInput, true); }
+      if (fullName.length < 2) { ok = false; markInvalid(nameInput, true); }
+
+      if (pwd.length < 6) { ok = false; markInvalid(passwordInput, true); }
+      if (pwd !== confirm || confirm.length < 6) { ok = false; markInvalid(confirmInput, true); }
+
+      if (Number.isNaN(age) || age < 16 || age > 120) { ok = false; markInvalid(ageInput, true); }
+      if (!ageOk) { ok = false; }
+
+      if (!ok) {
+        e.preventDefault();
+        alert('Please fix the highlighted fields and confirm you are 16+ and agree to the terms.');
+        return;
+      }
+
+      if (submitBtn) submitBtn.disabled = true;
+      if (submitSpinner) submitSpinner.classList.remove('d-none');
+    });
+
     setTimeout(() => {
-      const email = $('#email');
-      if (email && !email.value) email.focus();
-    }, 250);
+      if (emailInput && !emailInput.value) emailInput.focus();
+    }, 200);
+
   })();
 </script>

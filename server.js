@@ -222,6 +222,7 @@ app.use((req, res, next) => {
           ? [
               "'self'",
               "'unsafe-inline'",
+              "https://cdn.jsdelivr.net",
               'https://apis.google.com',
               'https://www.paypal.com',
               'https://www.sandbox.paypal.com',
@@ -230,6 +231,7 @@ app.use((req, res, next) => {
           : [
               "'self'",
               `'nonce-${res.locals.nonce}'`,
+              "https://cdn.jsdelivr.net",
               'https://apis.google.com',
               'https://www.paypal.com',
               'https://www.sandbox.paypal.com',
@@ -237,7 +239,7 @@ app.use((req, res, next) => {
             ],
 
         // ✅ Needed for PayPal button if it injects inline styles (you already allow unsafe-inline for style)
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
 
         imgSrc: [
           "'self'",
@@ -549,6 +551,7 @@ const adminStatsApi = require('./routes/adminStatsApi');
 const adminInventoryStatsApi = require('./routes/adminInventoryStatsApi');
 const adminAppUsersStatsApi = require('./routes/adminAppUsersStatsApi');
 const adminOrdersStatsApi = require('./routes/adminOrdersStatsApi');
+const adminChartsApiRouter = require("./routes/adminChartsApi");
 const adminDashboardRouter = require('./routes/admin/dashboard');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
@@ -589,7 +592,7 @@ app.use('/api/admin', adminInventoryStatsApi);
 app.use('/api/admin', adminAppUsersStatsApi);
 app.use('/api/admin', adminOrdersStatsApi);
 app.use('/admin/api/dashboard', adminDashboardRouter);
-
+app.use("/api/admin/charts", adminChartsApiRouter);
 // Public API for checkout
 app.use('/api', deliveryOptionsApi);
 

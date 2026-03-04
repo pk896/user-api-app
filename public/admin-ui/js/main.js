@@ -239,6 +239,66 @@ const cardChart4 = new Chart(document.getElementById('card-chart4'), {
   }
 });
 
+// ------------------------------
+// ✅ REAL DATA for the 4 card charts (NO demo)
+// Fetch from backend: GET /api/admin/charts/cards
+// ------------------------------
+(function () {
+  fetch('/api/admin/charts/cards', { credentials: 'include' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((payload) => {
+      if (!payload) return;
+
+      const labels = Array.isArray(payload.labels) ? payload.labels : [];
+
+      const card1 = Array.isArray(payload.card1) ? payload.card1 : [];
+      const card2 = Array.isArray(payload.card2) ? payload.card2 : [];
+      const card3 = Array.isArray(payload.card3) ? payload.card3 : [];
+      const card4 = Array.isArray(payload.card4) ? payload.card4 : [];
+
+      // helper: update a chart safely
+      function apply(chart, values) {
+        if (!chart) return;
+        chart.data.labels = labels;
+        if (chart.data.datasets && chart.data.datasets[0]) {
+          chart.data.datasets[0].data = values;
+        }
+      }
+
+      // helper: adjust y scale for visibility (your demo had fixed min/max)
+      function adjustY(chart, values) {
+        if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.y) return;
+        const nums = values.map((x) => Number(x || 0));
+        const min = Math.min(...nums);
+        const max = Math.max(...nums);
+
+        // add small padding so line isn't stuck on the edge
+        const pad = Math.max(1, Math.round((max - min) * 0.1));
+
+        chart.options.scales.y.min = min - pad;
+        chart.options.scales.y.max = max + pad;
+      }
+
+      apply(cardChart1, card1);
+      adjustY(cardChart1, card1);
+
+      apply(cardChart2, card2);
+      adjustY(cardChart2, card2);
+
+      apply(cardChart3, card3);
+      // cardChart3 hides y scale completely, no fixed min/max in your config, so no adjustment needed
+
+      apply(cardChart4, card4);
+      // bar chart: ok without y min/max
+
+      cardChart1.update();
+      cardChart2.update();
+      cardChart3.update();
+      cardChart4.update();
+    })
+    .catch(() => {});
+})();
+
 // ✅ If this dashboard canvas is controlled by our admin sales chart, do NOT create the CoreUI demo chart.
 const mainChartEl = document.getElementById('main-chart');
 const isAdminSalesChart =
