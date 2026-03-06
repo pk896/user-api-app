@@ -47,11 +47,26 @@
     return [];
   };
 
-  const sizesArray = getArray(pd.sizes);
-  const colorsArray = getArray(pd.colors);
-  const isClothing =
-    (pd.type || '').toLowerCase() === 'clothes' ||
-    (pd.category || '').toLowerCase() === 'fashion';
+  const rawSizes = getArray(pd.sizes);
+  const rawColors = getArray(pd.colors);
+
+  const sizesArray = rawSizes.length ? rawSizes : (pd.size ? [String(pd.size).trim()] : []);
+  const colorsArray = rawColors.length ? rawColors : (pd.color ? [String(pd.color).trim()] : []);
+
+  const pdCategory = String(pd.category || '').toLowerCase();
+  const pdType = String(pd.type || '').toLowerCase();
+
+  const isClothes =
+    pdCategory === 'clothes' ||
+    pdCategory === 'second-hand-clothes' ||
+    pdCategory === 'fashion' ||
+    pdType === 'clothes';
+
+  const isShoes =
+    pdCategory === 'shoes' ||
+    pdType === 'shoes';
+
+  const needsVariants = isClothes || isShoes;
 
   const avgRating = Number(pd.avgRating || 0);
   const ratingsCount = Number(pd.ratingsCount || 0);
@@ -141,8 +156,8 @@
         </div>
       </div>
 
-      <!-- Variant Selection for Clothing -->
-      <% if (isClothing) { %>
+      <!-- Variant Selection for Products That Require Size and Color -->
+      <% if (needsVariants) { %>
         <div class="variant-selector">
           <% if (sizesArray.length > 0) { %>
             <div class="variant-group">
@@ -177,7 +192,7 @@
       <div class="add-to-cart-section">
         <button class="btn add-to-cart-btn"
                 data-pid="<%= customId %>"
-                data-is-clothing="<%= isClothing ? 'true' : 'false' %>"
+                data-needs-variants="<%= needsVariants ? 'true' : 'false' %>"
                 <%= pd.stock > 0 ? '' : 'disabled' %>>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M3 3h2l.4 2M7 13h10l4-8H5.4m-.4 5h16l-2 8H7" stroke="currentColor" stroke-width="1.5"/>
@@ -1140,15 +1155,22 @@
       if (this.disabled || this.classList.contains('loading')) return;
 
       const pid = this.getAttribute('data-pid');
-      const isClothing = this.getAttribute('data-is-clothing') === 'true';
+      const needsVariants = this.getAttribute('data-needs-variants') === 'true';
 
-      // Validate clothing variants
-      if (isClothing) {
+      // Validate required variants
+      if (needsVariants) {
         const hasSize = $$('.variant-option[data-type="size"]').length > 0;
         const hasColor = $$('.variant-option[data-type="color"]').length > 0;
 
-        if (hasSize && !selectedVariants.size) { showMessage('Please select a size', 'error'); return; }
-        if (hasColor && !selectedVariants.color) { showMessage('Please select a color', 'error'); return; }
+        if (hasSize && !selectedVariants.size) {
+          showMessage('Please select a size', 'error');
+          return;
+        }
+
+        if (hasColor && !selectedVariants.color) {
+          showMessage('Please select a color', 'error');
+          return;
+        }
       }
 
       // Show loading state
@@ -1157,16 +1179,20 @@
       this.classList.add('loading');
 
       try {
-        // Build URL with variants
-        let url = `/api/cart/add?pid=${encodeURIComponent(pid)}&json=1`;
-        const variantData = {};
+        // Build URL exactly like sales-products.ejs
+        const params = new URLSearchParams();
+        params.set('pid', pid);
+        params.set('json', '1');
 
-        if (selectedVariants.size) variantData.size = selectedVariants.size;
-        if (selectedVariants.color) variantData.color = selectedVariants.color;
-
-        if (Object.keys(variantData).length > 0) {
-          url += `&variants=${encodeURIComponent(JSON.stringify(variantData))}`;
+        if (selectedVariants.size) {
+          params.set('size', selectedVariants.size);
         }
+
+        if (selectedVariants.color) {
+          params.set('color', selectedVariants.color);
+        }
+
+        const url = `/api/cart/add?${params.toString()}`;
 
         const response = await fetch(url, { credentials: 'same-origin' });
         const result = await response.json();
@@ -1180,7 +1206,7 @@
           this.innerHTML = originalText;
           this.classList.remove('loading');
 
-          if (isClothing) {
+          if (needsVariants) {
             $$('.variant-option').forEach(opt => opt.classList.remove('selected'));
             selectedVariants = { size: null, color: null };
             updateSelectedVariantsDisplay();

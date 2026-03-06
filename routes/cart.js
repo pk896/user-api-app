@@ -27,6 +27,53 @@ function isSecondhandCategory(cat) {
   return SECONDHAND_CATS.has(String(cat || '').trim().toLowerCase());
 }
 
+function productNeedsVariants(product) {
+  const cat = String(product?.category || '').trim().toLowerCase();
+  const type = String(product?.type || '').trim().toLowerCase();
+
+  const isClothes =
+    cat === 'clothes' ||
+    cat === 'second-hand-clothes' ||
+    cat === 'fashion' ||
+    type === 'clothes';
+
+  const isShoes =
+    cat === 'shoes' ||
+    type === 'shoes';
+
+  return isClothes || isShoes;
+}
+
+function validateRequiredVariants(product, variants = {}) {
+  if (!productNeedsVariants(product)) return null;
+
+  const clean = normVariants(variants);
+
+  const sizes = Array.isArray(product?.sizes) && product.sizes.length
+    ? product.sizes.map((v) => String(v).trim()).filter(Boolean)
+    : (product?.size ? [String(product.size).trim()] : []);
+
+  const colors = Array.isArray(product?.colors) && product.colors.length
+    ? product.colors.map((v) => String(v).trim()).filter(Boolean)
+    : (product?.color ? [String(product.color).trim()] : []);
+
+  if (sizes.length > 0) {
+    if (!clean.size) return 'Please select a size';
+    if (!sizes.includes(clean.size)) {
+      return `Size "${clean.size}" is not available for this product`;
+    }
+  }
+
+  if (colors.length > 0) {
+    if (!clean.color) return 'Please select a color';
+    if (!colors.includes(clean.color)) {
+      return `Color "${clean.color}" is not available for this product`;
+    }
+  }
+
+  return null;
+}
+
 // Try hard to find the product’s “business owner” key
 function businessKeyFromProduct(p) {
   const v =
@@ -340,7 +387,10 @@ router.get('/count', (req, res) => {
 router.get('/add', async (req, res) => {
   try {
     const pid = String(req.query.pid || '').trim();
-    const qty = Math.max(1, Number(req.query.qty || 1));
+    const rawQty = Number(req.query.qty);
+    const qty = Number.isFinite(rawQty) && rawQty > 0
+      ? Math.floor(rawQty)
+      : 1;
     const product = await findProductByPid(pid);
 
     if (!product) {
@@ -371,48 +421,13 @@ router.get('/add', async (req, res) => {
       return res.redirect(back);
     }
 
-    // Variant validation (clothes/shoes) — ✅ use category first (matches sales-products.ejs)
-    const cat  = String(product.category || '').toLowerCase();
-    const type = String(product.type || '').toLowerCase(); // fallback only
-
-    const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
-    const isShoes   = (cat === 'shoes' || type === 'shoes');
-
-    const isVariantProduct = isClothes || isShoes;
-
-    if (isVariantProduct) {
-      if (product.sizes && product.sizes.length > 0) {
-        if (!variantData.size) {
-          if (wantsJson(req)) return res.status(400).json({ success: false, message: 'Please select a size' });
-          if (typeof req.flash === 'function') req.flash('error', 'Please select a size');
-          const back = req.query.back || req.get('referer') || '/sales';
-          return res.redirect(back);
-        }
-        if (!product.sizes.includes(variantData.size)) {
-          if (wantsJson(req))
-            return res.status(400).json({ success: false, message: `Size "${variantData.size}" is not available for this product` });
-          if (typeof req.flash === 'function') req.flash('error', 'Selected size is not available');
-          const back = req.query.back || req.get('referer') || '/sales';
-          return res.redirect(back);
-        }
-      }
-
-      if (product.colors && product.colors.length > 0) {
-        if (!variantData.color) {
-          if (wantsJson(req)) return res.status(400).json({ success: false, message: 'Please select a color' });
-          if (typeof req.flash === 'function') req.flash('error', 'Please select a color');
-          const back = req.query.back || req.get('referer') || '/sales';
-          return res.redirect(back);
-        }
-        if (!product.colors.includes(variantData.color)) {
-          if (wantsJson(req))
-            return res.status(400).json({ success: false, message: `Color "${variantData.color}" is not available for this product` });
-          if (typeof req.flash === 'function') req.flash('error', 'Selected color is not available');
-          const back = req.query.back || req.get('referer') || '/sales';
-          return res.redirect(back);
-        }
-      }
-    }
+    const variantError = validateRequiredVariants(product, variantData);
+    if (variantError) {
+      if (wantsJson(req)) return res.status(400).json({ success: false, message: variantError });
+      if (typeof req.flash === 'function') req.flash('error', variantError);
+      const back = req.query.back || req.get('referer') || '/sales';
+      return res.redirect(back);
+    }   
 
     const cart = ensureCart(req);
 
@@ -475,8 +490,29 @@ router.get('/add', async (req, res) => {
     const idx = findIndexById(cart.items, id, variantData);
 
     if (idx >= 0) {
-      cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + qty;
+      const currentQty = Number(cart.items[idx].quantity || 1);
+      const nextQty = currentQty + qty;
+
+      if (typeof product.stock === 'number' && product.stock >= 0 && nextQty > product.stock) {
+        const msg = `Only ${product.stock} item(s) available in stock.`;
+
+        if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
+        if (typeof req.flash === 'function') req.flash('error', msg);
+        const back = req.query.back || req.get('referer') || '/sales';
+        return res.redirect(back);
+      }
+
+      cart.items[idx].quantity = nextQty;
     } else {
+      if (typeof product.stock === 'number' && product.stock >= 0 && qty > product.stock) {
+        const msg = `Only ${product.stock} item(s) available in stock.`;
+
+        if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
+        if (typeof req.flash === 'function') req.flash('error', msg);
+        const back = req.query.back || req.get('referer') || '/sales';
+        return res.redirect(back);
+      }
+
       const cartItem = normalizeCartItem(product, qty, variantData, req);
       cart.items.push(cartItem);
     }
@@ -614,6 +650,15 @@ router.post('/increase', express.json(), async (req, res) => {
       return res.status(400).json({ message: 'Out of stock.' });
     }
 
+    const variantError = validateRequiredVariants(product, variants);
+    if (variantError) {
+      return res.status(400).json({
+        success: false,
+        message: variantError,
+        items: ensureCart(req).items,
+      });
+    }
+
     const cart = ensureCart(req);
 
     // Safety cleanup: if cart already has a second-hand lock, remove conflicting business items
@@ -653,7 +698,18 @@ router.post('/increase', express.json(), async (req, res) => {
     const idx = findIndexById(cart.items, id, variants);
 
     if (idx >= 0) {
-      cart.items[idx].quantity = Number(cart.items[idx].quantity || 1) + 1;
+      const currentQty = Number(cart.items[idx].quantity || 1);
+      const nextQty = currentQty + 1;
+
+      if (typeof product.stock === 'number' && product.stock >= 0 && nextQty > product.stock) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${product.stock} item(s) available in stock.`,
+          items: cart.items,
+        });
+      }
+
+      cart.items[idx].quantity = nextQty;
     } else {
       // ✅ If caller forgot variants but cart already has multiple variants of same product,
       // do NOT create a duplicate ambiguous line.
@@ -667,6 +723,14 @@ router.post('/increase', express.json(), async (req, res) => {
         return res.status(409).json({
           message: 'This item has size/color variants. Please send the selected variant when changing quantity.',
           code: 'VARIANT_REQUIRED_FOR_QTY',
+          items: cart.items,
+        });
+      }
+
+      if (typeof product.stock === 'number' && product.stock < 1) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${product.stock} item(s) available in stock.`,
           items: cart.items,
         });
       }
@@ -743,7 +807,7 @@ router.post('/remove', express.json(), async (req, res) => {
     }
 
     req.session.cart = cart;
-        return res.json({ items: cart.items });
+    return res.json({ items: cart.items });
   } catch (err) {
     console.error('❌ POST /api/cart/remove error:', err);
     return res.status(500).json({ message: 'Failed to remove item.', items: ensureCart(req).items });
@@ -808,6 +872,15 @@ router.patch('/item/:id', express.json(), async (req, res) => {
       const product = await findProductByPid(id);
       if (!product) return res.status(404).json({ message: 'Item not found.', items: cart.items });
 
+      const variantError = validateRequiredVariants(product, variants);
+      if (variantError) {
+        return res.status(400).json({
+          success: false,
+          message: variantError,
+          items: cart.items,
+        });
+      }
+
       // Safety cleanup (legacy)
       enforceSecondhandLockOnCart(cart);
 
@@ -837,9 +910,34 @@ router.patch('/item/:id', express.json(), async (req, res) => {
         return res.status(400).json({ success: false, message: msg, items: cart.items });
       }
 
-      cart.items.push(normalizeCartItem(product, quantity, variants, req));
+      const nextQty = Math.max(1, Math.floor(quantity));
+
+      if (typeof product.stock === 'number' && product.stock >= 0 && nextQty > product.stock) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${product.stock} item(s) available in stock.`,
+          items: cart.items,
+        });
+      }
+
+      cart.items.push(normalizeCartItem(product, nextQty, variants, req));
     } else {
-      cart.items[idx].quantity = Math.max(1, Math.floor(quantity));
+      const nextQty = Math.max(1, Math.floor(quantity));
+
+      const product = await findProductByPid(id);
+      if (!product) {
+        return res.status(404).json({ message: 'Item not found.', items: cart.items });
+      }
+
+      if (typeof product.stock === 'number' && product.stock >= 0 && nextQty > product.stock) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${product.stock} item(s) available in stock.`,
+          items: cart.items,
+        });
+      }
+
+      cart.items[idx].quantity = nextQty;
     }
 
     req.session.cart = cart;

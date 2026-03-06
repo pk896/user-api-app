@@ -100,11 +100,13 @@
 
       <section class="filter-block">
         <h3>Price</h3>
-        <div class="price-row">
-          <input id="minPrice" type="number" inputmode="decimal" placeholder="Min" />
-          <span>–</span>
-          <input id="maxPrice" type="number" inputmode="decimal" placeholder="Max" />
+
+        <div class="filter-price-row">
+          <input id="minPrice" class="filter-price-input" type="number" inputmode="decimal" placeholder="Min" min="0" step="0.01" />
+          <span class="filter-price-sep">–</span>
+          <input id="maxPrice" class="filter-price-input" type="number" inputmode="decimal" placeholder="Max" min="0" step="0.01" />
         </div>
+
         <button id="applyPrice" class="btn sm" type="button">Apply</button>
       </section>
 
@@ -134,9 +136,15 @@
             const cat       = (p.category || '').toLowerCase();
             const type      = (p.type || '').toLowerCase(); // keep if you still want type filter
 
-            // ✅ Role removed — decide variants by CATEGORY (and allow type fallback if you want)
-            const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
-            const isShoes   = (cat === 'shoes' || type === 'shoes');
+            const isClothes =
+              cat === 'clothes' ||
+              cat === 'second-hand-clothes' ||
+              cat === 'fashion' ||
+              type === 'clothes';
+
+            const isShoes =
+              cat === 'shoes' ||
+              type === 'shoes';
 
             // ✅ Normalize booleans safely (handles true/false, "true"/"false", 1/0)
             const toBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true';
@@ -604,6 +612,45 @@
     align-items:center;
   }
 
+  /* ===== Sidebar price filter row (separate from product price row) ===== */
+  .filter-price-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+    gap:.35rem;
+    align-items:center;
+    width:100%;
+  }
+
+  .filter-price-input{
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
+    border:1px solid var(--line);
+    background:var(--card);
+    color:var(--ink);
+    border-radius:8px;
+    padding:.45rem .55rem;
+    font:inherit;
+  }
+
+  .filter-price-sep{
+    color:var(--muted);
+    font-weight:800;
+    line-height:1;
+  }
+
+  #typeFilter{
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
+    border:1px solid var(--line);
+    background:var(--card);
+    color:var(--ink);
+    border-radius:8px;
+    padding:.45rem .55rem;
+    font:inherit;
+  }
+
   .btn{
     border:1px solid var(--line);
     background:var(--card);
@@ -614,7 +661,10 @@
     font-weight:700;
   }
 
-  .btn.sm{ font-size:.9rem; }
+  .btn.sm{
+    font-size:.9rem;
+    margin-top:.45rem;
+  }
 
   .amz-results{ min-height:40vh; }
 
@@ -1724,8 +1774,15 @@
             const type = (card.getAttribute('data-type') || '').toLowerCase();
             const cat  = (card.getAttribute('data-category') || '').toLowerCase();
 
-            const isClothes = (cat === 'clothes' || cat === 'second-hand-clothes' || type === 'clothes');
-            const isShoes   = (cat === 'shoes' || type === 'shoes');
+            const isClothes =
+              cat === 'clothes' ||
+              cat === 'second-hand-clothes' ||
+              cat === 'fashion' ||
+              type === 'clothes';
+
+            const isShoes =
+              cat === 'shoes' ||
+              type === 'shoes';
 
             if (isClothes || isShoes) {
               if (!card.classList.contains('show-variants')) {
@@ -1738,7 +1795,7 @@
               const sizeSel  = card.querySelector('.variant-size');
               const colorSel = card.querySelector('.variant-color');
 
-              size  = sizeSel  ? sizeSel.value.trim()  : '';
+              size  = sizeSel ? sizeSel.value.trim() : '';
               color = colorSel ? colorSel.value.trim() : '';
 
               if (!size || !color) {
@@ -1805,8 +1862,15 @@
               const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
               const catA  = (cardAfter.getAttribute('data-category') || '').toLowerCase();
 
-              const isClothesA = (catA === 'clothes' || catA === 'second-hand-clothes' || typeA === 'clothes');
-              const isShoesA   = (catA === 'shoes' || typeA === 'shoes');
+              const isClothesA =
+                catA === 'clothes' ||
+                catA === 'second-hand-clothes' ||
+                catA === 'fashion' ||
+                typeA === 'clothes';
+
+              const isShoesA =
+                catA === 'shoes' ||
+                typeA === 'shoes';
 
               if (isClothesA || isShoesA) {
                 const sizeSelA  = cardAfter.querySelector('.variant-size');
@@ -1879,8 +1943,19 @@
       const cat   = normalize(catSelect.value);
       const tAttr = normalize(typeFilter.value);
       const only  = !!inStockOnly?.checked;
-      const minP  = minPrice.value ? Number(minPrice.value) : -Infinity;
-      const maxP  = maxPrice.value ? Number(maxPrice.value) : Infinity;
+      
+      let minP = minPrice.value.trim() !== '' ? Number(minPrice.value) : -Infinity;
+      let maxP = maxPrice.value.trim() !== '' ? Number(maxPrice.value) : Infinity;
+
+      if (!Number.isFinite(minP)) minP = -Infinity;
+      if (!Number.isFinite(maxP)) maxP = Infinity;
+
+      /* If user enters Min bigger than Max, swap them safely */
+      if (minP > maxP){
+        const temp = minP;
+        minP = maxP;
+        maxP = temp;
+      }
 
       const reqFlags = {
         isNew:  !!$$('input[data-attr="isNew"]', sidebar).find(i=>i.checked),
@@ -1998,9 +2073,26 @@
       });
     });
 
-    applyPriceBtn.addEventListener('click', ()=>{
-      PAGE.page=1;
+    function applyPriceFilter(){
+      PAGE.page = 1;
       applyFilters();
+    }
+
+    applyPriceBtn.addEventListener('click', applyPriceFilter);
+
+    [minPrice, maxPrice].forEach(el=>{
+      el?.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter'){
+          e.preventDefault();
+          applyPriceFilter();
+        }
+      });
+
+      el?.addEventListener('input', ()=>{
+        /* Optional live filtering when user clears or edits values */
+        PAGE.page = 1;
+        applyFilters();
+      });
     });
 
     $$('input[data-attr]', sidebar).forEach(chk=>
@@ -2031,4 +2123,3 @@
     hydrateRatings();
   })();
 </script>
-
