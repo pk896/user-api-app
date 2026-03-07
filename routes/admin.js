@@ -10,15 +10,15 @@ const requireAdmin = require('../middleware/requireAdmin');
 /* -------------------------------------------
    Optional Models (safe requires)
 ------------------------------------------- */
-let Business = null;
-let Order = null;
-try { Business = require('../models/Business'); } catch { /* optional */ }
-try { Order = require('../models/Order'); } catch { /* optional */ }
+let _Business = null;
+let _Order = null;
+// try { checkMailerConfigBusiness = require('../models/Business'); } catch { /* optional */ }
+// try { Order = require('../models/Order'); } catch { /* optional */ }
 
 /* -------------------------------------------
    Helpers
 ------------------------------------------- */
-function checkMailerConfig() {
+function _checkMailerConfig() {
   const host = (process.env.SMTP_HOST || '').trim();
   const user = (process.env.SMTP_USER || '').trim();
   const pass = (process.env.SMTP_PASS || '').trim();
@@ -183,10 +183,31 @@ router.post('/login', adminLoginThrottle, async (req, res) => {
   }
 });
 
+router.get('/dashboard', requireAdmin, (req, res) => {
+  try {
+    const themeCss = themeCssFromSession(req);
+
+    return res.render('admin/go-to-admin-dashboard', {
+      title: 'Admin Dashboard',
+      nonce: res.locals.nonce,
+      themeCss,
+      admin: req.session.admin,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      info: req.flash('info'),
+      warning: req.flash('warning'),
+    });
+  } catch (err) {
+    console.error('❌ Error loading admin dashboard entry page:', err);
+    req.flash('error', '❌ Could not load admin dashboard entry page.');
+    return res.redirect('/admin/login');
+  }
+});
+
 /* -------------------------------------------
    ✅ GET /admin/dashboard (protected)
 ------------------------------------------- */
-router.get('/dashboard', requireAdmin, async (req, res) => {
+/*router.get('/dashboard', requireAdmin, async (req, res) => {
   try {
     const themeCss = themeCssFromSession(req);
     const mailerOk = checkMailerConfig();
@@ -224,7 +245,7 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
     req.flash('error', '❌ Could not load dashboard data.');
     return res.redirect('/admin/login');
   }
-});
+});*/
 
 /* -------------------------------------------
    ✅ GET /admin/orders (protected)
