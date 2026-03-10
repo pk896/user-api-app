@@ -109,12 +109,18 @@ async function runSyncPayoutById(payoutId) {
     const paypalItemId = String(remote?.payoutItemId || local.paypalItemId || '').trim();
     const error = String(remote?.errMsg || local.error || '').trim();
 
+    const paidAt =
+      nextStatus === 'SENT'
+        ? new Date()
+        : (local.paidAt || null);
+
     updates.push({
       businessId: local.businessId,
       receiver: local.receiver,
       amountCents: local.amountCents,
       currency: local.currency,
       status: nextStatus,
+      paidAt,
       paypalItemId,
       error,
     });
@@ -217,3 +223,4 @@ async function runSyncPayoutById(payoutId) {
 }
 
 module.exports = { runSyncPayoutById };
+

@@ -199,7 +199,8 @@ app.use(cors(corsOptions));
 
 // ✅ Mark admin-ui requests so CSP can be relaxed only there
 app.use((req, res, next) => {
-  res.locals.isAdminUi = req.path.startsWith('/admin-ui');
+  res.locals.isAdminUi =
+    req.path.startsWith('/admin-ui') || req.path.startsWith('/seller-ui');
   next();
 });
 
@@ -211,71 +212,104 @@ app.use((req, res, next) => {
 
 // 4) Helmet with CSP
 app.use((req, res, next) => {
+  const isDashboardUi =
+    req.path.startsWith('/admin-ui') || req.path.startsWith('/seller-ui');
+
+  const directives = {
+    defaultSrc: ["'self'"],
+
+    scriptSrc: isDashboardUi
+      ? [
+          "'self'",
+          "https://cdn.jsdelivr.net",
+          "https://cdnjs.cloudflare.com",
+          "https://unpkg.com",
+          "https://apis.google.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
+        ]
+      : [
+          "'self'",
+          `'nonce-${res.locals.nonce}'`,
+          "https://cdn.jsdelivr.net",
+          "https://apis.google.com",
+          "https://www.paypal.com",
+          "https://www.sandbox.paypal.com",
+          "https://www.paypalobjects.com",
+        ],
+
+    styleSrc: [
+      "'self'",
+      "'unsafe-inline'",
+      "https://cdn.jsdelivr.net",
+      "https://fonts.googleapis.com",
+    ],
+
+    styleSrcElem: [
+      "'self'",
+      "'unsafe-inline'",
+      "https://cdn.jsdelivr.net",
+      "https://fonts.googleapis.com",
+    ],
+
+    fontSrc: [
+      "'self'",
+      "data:",
+      "https://fonts.gstatic.com",
+      "https://cdn.jsdelivr.net",
+    ],
+
+    imgSrc: [
+      "'self'",
+      "data:",
+      "blob:",
+      "https://*.amazonaws.com",
+      "https://*.cloudinary.com",
+      "https://www.paypalobjects.com",
+      "https://www.paypal.com",
+      "https://www.sandbox.paypal.com",
+      "https://flagcdn.com",
+    ],
+
+    connectSrc: [
+      "'self'",
+      "http://localhost:3000",
+      "ws://localhost:3000",
+      "https://api-m.paypal.com",
+      "https://api-m.sandbox.paypal.com",
+      "https://api.paypal.com",
+      "https://api.sandbox.paypal.com",
+      "https://www.paypal.com",
+      "https://www.sandbox.paypal.com",
+      "https://www.paypalobjects.com",
+    ],
+
+    frameSrc: [
+      "'self'",
+      "https://www.paypal.com",
+      "https://www.sandbox.paypal.com",
+    ],
+
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    upgradeInsecureRequests: [],
+  };
+
+  if (isDashboardUi) {
+    directives.scriptSrcElem = [
+      "'self'",
+      "https://cdn.jsdelivr.net",
+      "https://cdnjs.cloudflare.com",
+      "https://unpkg.com",
+    ];
+  }
+
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
-      directives: {
-        defaultSrc: ["'self'"],
-
-        // ✅ Only allow scripts from self + nonce + explicit providers
-        scriptSrc: res.locals.isAdminUi
-          ? [
-              "'self'",
-              "'unsafe-inline'",
-              "https://cdn.jsdelivr.net",
-              'https://apis.google.com',
-              'https://www.paypal.com',
-              'https://www.sandbox.paypal.com',
-              'https://www.paypalobjects.com',
-            ]
-          : [
-              "'self'",
-              `'nonce-${res.locals.nonce}'`,
-              "https://cdn.jsdelivr.net",
-              'https://apis.google.com',
-              'https://www.paypal.com',
-              'https://www.sandbox.paypal.com',
-              'https://www.paypalobjects.com',
-            ],
-
-        // ✅ Needed for PayPal button if it injects inline styles (you already allow unsafe-inline for style)
-        styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-
-        imgSrc: [
-          "'self'",
-          'data:',
-          'blob:',
-          'https://*.amazonaws.com',
-          'https://*.cloudinary.com',
-          'https://www.paypalobjects.com',
-          'https://www.paypal.com',
-          'https://www.sandbox.paypal.com',
-          'https://flagcdn.com',
-        ],
-
-        // ✅ XHR/fetch/websocket
-        connectSrc: [
-          "'self'",
-          'https://api-m.paypal.com',
-          'https://api-m.sandbox.paypal.com',
-          'https://api.paypal.com',
-          'https://api.sandbox.paypal.com',
-          'https://www.paypal.com',
-          'https://www.sandbox.paypal.com',
-          'https://www.paypalobjects.com',
-        ],
-
-        // ✅ PayPal renders in iframes
-        frameSrc: ["'self'", 'https://www.paypal.com', 'https://www.sandbox.paypal.com'],
-
-        // ✅ Good security hardening (won’t break your app)
-        objectSrc: ["'none'"],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
-
-        // Keep as you had it (empty array disables auto-upgrade)
-        upgradeInsecureRequests: [],
-      },
+      directives,
     },
   })(req, res, next);
 });
@@ -552,6 +586,16 @@ const adminInventoryStatsApi = require('./routes/adminInventoryStatsApi');
 const adminAppUsersStatsApi = require('./routes/adminAppUsersStatsApi');
 const adminOrdersStatsApi = require('./routes/adminOrdersStatsApi');
 const adminChartsApiRouter = require("./routes/adminChartsApi");
+const sellerStatsApi = require('./routes/sellerStatsApi');
+const sellerEarningsApi = require('./routes/sellerEarningsApi');
+const sellerInventoryApi = require('./routes/sellerInventoryApi');
+const sellerPendingStatsApi = require('./routes/sellerPendingStatsApi');
+const sellerTrendOverviewApi = require('./routes/sellerTrendOverviewApi');
+const sellerLowStockProductsApi = require('./routes/sellerLowStockProductsApi');
+const sellerOutOfStockProductsApi = require('./routes/sellerOutOfStockProductsApi');
+const sellerTopBestSellersApi = require('./routes/sellerTopBestSellersApi');
+const sellerRecentOrdersCardApi = require('./routes/sellerRecentOrdersCardApi');
+const sellerTrendSummaryApi = require('./routes/sellerTrendSummaryApi');
 const adminDashboardRouter = require('./routes/admin/dashboard');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
@@ -587,6 +631,16 @@ if (ratingsRouter) {
 
 // API first
 app.use('/api/cart', cartRoutes);
+app.use('/api/seller', sellerStatsApi);
+app.use('/api/seller', sellerEarningsApi);
+app.use('/api/seller', sellerInventoryApi);
+app.use('/api/seller', sellerPendingStatsApi);
+app.use('/api/seller', sellerTrendOverviewApi);
+app.use('/api/seller', sellerLowStockProductsApi);
+app.use('/api/seller', sellerOutOfStockProductsApi);
+app.use('/api/seller', sellerTopBestSellersApi);
+app.use('/api/seller', sellerRecentOrdersCardApi);
+app.use('/api/seller', sellerTrendSummaryApi);
 app.use('/api/admin', adminStatsApi);
 app.use('/api/admin', adminInventoryStatsApi);
 app.use('/api/admin', adminAppUsersStatsApi);
@@ -647,6 +701,7 @@ app.use(ordersRoutes);
 const requireAdmin = require('./middleware/requireAdmin');
 
 const adminDistPath = path.join(__dirname, 'public', 'admin-ui');
+const sellerUiPath = path.join(__dirname, 'public', 'seller-ui');
 
 // ✅ Protect admin-ui pages using shared middleware
 app.use('/admin-ui', (req, res, next) => {
@@ -680,6 +735,46 @@ app.use('/admin-ui', express.static(adminDistPath));
 // ✅ /admin-ui -> index.html
 app.get('/admin-ui', (req, res) => {
   res.sendFile(path.join(adminDistPath, 'index.html'));
+});
+
+const requireBusiness = require('./middleware/requireBusiness');
+
+app.use('/seller-ui', (req, res, next) => {
+  const isAsset =
+    req.path.startsWith('/assets/') ||
+    req.path.startsWith('/css/') ||
+    req.path.startsWith('/js/') ||
+    req.path.startsWith('/vendors/') ||
+    req.path.startsWith('/img/') ||
+    req.path.startsWith('/images/') ||
+    req.path.startsWith('/fonts/') ||
+    req.path.startsWith('/icons/') ||
+    req.path.endsWith('.map') ||
+    req.path.endsWith('.ico') ||
+    req.path.endsWith('.png') ||
+    req.path.endsWith('.jpg') ||
+    req.path.endsWith('.jpeg') ||
+    req.path.endsWith('.svg') ||
+    req.path.endsWith('.webp') ||
+    req.path.endsWith('.woff') ||
+    req.path.endsWith('.woff2') ||
+    req.path.endsWith('.ttf') ||
+    req.path.endsWith('.eot');
+
+  if (isAsset) return next();
+  return requireBusiness(req, res, next);
+});
+
+app.use(
+  '/seller-ui',
+  express.static(sellerUiPath, {
+    extensions: ['html'],
+    index: 'index.html',
+  })
+);
+
+app.get('/seller-ui', requireBusiness, (req, res) => {
+  res.redirect('/seller-ui/');
 });
 
 // 5) Static files

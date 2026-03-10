@@ -2,6 +2,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const ProductStockHistory = require('./ProductStockHistory');
 
 // ==========================
 // 📦 Shipping / Physical data
@@ -400,6 +401,93 @@ productSchema.statics.findWithVariants = function () {
     ],
   });
 };
+
+/* ========= STOCK HISTORY ========= */
+
+async function writeStockHistory(doc, prevStock, nextStock, reason = 'manual-update') {
+  try {
+    const before = Number(prevStock || 0);
+    const after = Number(nextStock || 0);
+
+    if (before === after) return;
+    if (!doc?.business || !doc?._id) return;
+
+    await ProductStockHistory.create({
+      business: doc.business,
+      product: doc._id,
+      productCustomId: String(doc.customId || '').trim(),
+      productName: String(doc.name || '').trim(),
+      stockBefore: before,
+      stockAfter: after,
+      delta: after - before,
+      reason,
+    });
+  } catch (err) {
+    console.error('❌ Failed to write stock history:', err);
+  }
+}
+
+// save() flow
+productSchema.pre('save', async function (next) {
+  try {
+    // this.isNew here is Mongoose document state:
+    // true only when the DB document is being created for the first time
+    if (this.isNew) {
+      this._previousStock = 0;
+      this._stockHistoryReason = 'create';
+      return next();
+    }
+
+    const existing = await this.constructor.findById(this._id).select('stock').lean();
+    this._previousStock = Number(existing?.stock || 0);
+    this._stockHistoryReason = 'manual-update';
+
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+});
+
+productSchema.post('save', async function (doc) {
+  try {
+    const prevStock = Number(doc._previousStock || 0);
+    const nextStock = Number(doc.stock || 0);
+    const reason = doc._stockHistoryReason || 'manual-update';
+
+    await writeStockHistory(doc, prevStock, nextStock, reason);
+  } catch (err) {
+    console.error('❌ post-save stock history error:', err);
+  }
+});
+
+// findOneAndUpdate() / findByIdAndUpdate() flow
+productSchema.pre('findOneAndUpdate', async function (next) {
+  try {
+    const existing = await this.model.findOne(this.getQuery()).select('stock').lean();
+    this._previousStock = Number(existing?.stock || 0);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+productSchema.post('findOneAndUpdate', async function (doc) {
+  try {
+    if (!doc) return;
+
+    const update = this.getUpdate() || {};
+    const nextStockRaw = update.stock ?? update.$set?.stock;
+
+    if (nextStockRaw === undefined) return;
+
+    const prevStock = Number(this._previousStock || 0);
+    const nextStock = Number(nextStockRaw || 0);
+
+    await writeStockHistory(doc, prevStock, nextStock, 'manual-update');
+  } catch (err) {
+    console.error('❌ post-findOneAndUpdate stock history error:', err);
+  }
+});
 
 /* ========= INDEXES ========= */
 

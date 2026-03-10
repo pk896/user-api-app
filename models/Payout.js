@@ -38,6 +38,8 @@ const payoutItemSchema = new mongoose.Schema(
       default: 'PENDING',
     },
 
+    paidAt: { type: Date, default: null },
+
     paypalItemId: { type: String, trim: true }, // payout_item_id if returned
     error: { type: String, trim: true },
   },
