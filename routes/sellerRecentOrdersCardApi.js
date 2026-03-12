@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 
 const Order = require('../models/Order');
 const Product = require('../models/Product');
-const requireBusiness = require('../middleware/requireBusiness');
+const requireAdmin = require('../middleware/requireAdmin');
 
 const router = express.Router();
 
@@ -46,7 +46,7 @@ function getSellerOrderAmount(order, productKeySet, productPriceByKey) {
 }
 
 // GET /api/seller/recent-orders-card
-router.get('/recent-orders-card', requireBusiness, async (req, res) => {
+router.get('/recent-orders-card', requireAdmin, async (req, res) => {
   try {
     const business = getBiz(req);
 

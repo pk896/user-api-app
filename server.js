@@ -596,6 +596,7 @@ const sellerOutOfStockProductsApi = require('./routes/sellerOutOfStockProductsAp
 const sellerTopBestSellersApi = require('./routes/sellerTopBestSellersApi');
 const sellerRecentOrdersCardApi = require('./routes/sellerRecentOrdersCardApi');
 const sellerTrendSummaryApi = require('./routes/sellerTrendSummaryApi');
+const adminOrdersViewApi = require('./routes/adminOrdersViewApi');
 const adminDashboardRouter = require('./routes/admin/dashboard');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
@@ -646,6 +647,7 @@ app.use('/api/admin', adminStatsApi);
 app.use('/api/admin', adminInventoryStatsApi);
 app.use('/api/admin', adminAppUsersStatsApi);
 app.use('/api/admin', adminOrdersStatsApi);
+app.use('/api/admin', adminOrdersViewApi);
 app.use('/admin/api/dashboard', adminDashboardRouter);
 app.use("/api/admin/charts", adminChartsApiRouter);
 // Public API for checkout

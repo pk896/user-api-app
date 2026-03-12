@@ -1,0 +1,440 @@
+// views/admin-orders.ejs
+<div class="d-flex flex-column gap-4">
+  <style>
+    .brand-purple { color: #7C3AED !important; }
+    .bg-brand-purple { background-color: #7C3AED !important; }
+    .border-brand-purple { border-color: #7C3AED !important; }
+    .btn-brand-purple {
+      background-color: #7C3AED !important;
+      border-color: #7C3AED !important;
+      color: #fff !important;
+    }
+    .btn-brand-purple:hover,
+    .btn-brand-purple:focus {
+      background-color: #6D28D9 !important;
+      border-color: #6D28D9 !important;
+      color: #fff !important;
+    }
+    .text-brand-green { color: #22C55E !important; }
+    .bg-brand-green { background-color: #22C55E !important; }
+    .btn-outline-brand-purple {
+      color: #7C3AED !important;
+      border-color: #7C3AED !important;
+    }
+    .btn-outline-brand-purple:hover,
+    .btn-outline-brand-purple:focus {
+      background-color: #7C3AED !important;
+      border-color: #7C3AED !important;
+      color: #fff !important;
+    }
+    .badge-brand-purple {
+      background-color: #7C3AED !important;
+      color: #fff !important;
+    }
+    .badge-brand-green {
+      background-color: #22C55E !important;
+      color: #fff !important;
+    }
+    .badge-brand-refund {
+      background-color: #dc3545 !important;
+      color: #fff !important;
+    }
+    .badge-brand-partial {
+      background-color: #ffc107 !important;
+      color: #212529 !important;
+    }
+  </style>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div>
+          <h1 class="h3 mb-1 fw-bold brand-purple">Admin Orders</h1>
+          <p class="mb-0 text-secondary">
+            View completed and refunded orders only. Search by business name, order ID, or receipt number.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <span class="badge badge-brand-purple px-3 py-2">Admin Only</span>
+          <span class="badge badge-brand-green px-3 py-2">View Only</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-0 pb-0">
+      <h2 class="h5 fw-bold brand-purple mb-1">Search Orders</h2>
+      <p class="text-secondary mb-0">Use one or more fields below to find the exact order you want.</p>
+    </div>
+
+    <div class="card-body">
+      <form id="admin-orders-search-form" class="row g-3">
+        <div class="col-12 col-lg-6">
+          <label for="q" class="form-label fw-semibold brand-purple">General Search</label>
+          <input
+            type="text"
+            class="form-control"
+            id="q"
+            name="q"
+            placeholder="Order ID, receipt number, payer email, capture ID"
+          >
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+          <label for="businessName" class="form-label fw-semibold brand-purple">Business Name</label>
+          <input
+            type="text"
+            class="form-control"
+            id="businessName"
+            name="businessName"
+            placeholder="Search by business name"
+          >
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+          <label for="orderId" class="form-label fw-semibold brand-purple">Order ID</label>
+          <input
+            type="text"
+            class="form-control"
+            id="orderId"
+            name="orderId"
+            placeholder="Search by order ID"
+          >
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-4">
+          <label for="receiptNumber" class="form-label fw-semibold brand-purple">Receipt Number</label>
+          <input
+            type="text"
+            class="form-control"
+            id="receiptNumber"
+            name="receiptNumber"
+            placeholder="Example: RCPT-ORDER123"
+          >
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-4">
+          <label for="status" class="form-label fw-semibold brand-purple">Status</label>
+          <select class="form-select" id="status" name="status">
+            <option value="all">Completed + Refunded + Partial Refund</option>
+            <option value="completed">Completed only</option>
+            <option value="refunded">Refunded only</option>
+            <option value="partially_refunded">Partial refund only</option>
+          </select>
+        </div>
+
+        <div class="col-12 col-lg-4 d-flex align-items-end gap-2">
+          <button type="submit" class="btn btn-brand-purple w-100">
+            Search Orders
+          </button>
+          <button type="button" id="admin-orders-reset" class="btn btn-outline-secondary w-100">
+            Reset
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-0">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+        <div>
+          <h2 class="h5 fw-bold brand-purple mb-1">Order Results</h2>
+          <p id="admin-orders-meta" class="mb-0 text-secondary">Loading orders...</p>
+        </div>
+
+        <div class="text-secondary fw-semibold" id="admin-orders-page-text">Page 1 of 1</div>
+      </div>
+    </div>
+
+    <div class="card-body pt-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="brand-purple">Order ID</th>
+              <th class="brand-purple">Receipt</th>
+              <th class="brand-purple">Business</th>
+              <th class="brand-purple">Status</th>
+              <th class="brand-purple">Amount</th>
+              <th class="brand-purple">Refunded</th>
+              <th class="brand-purple">Payer</th>
+              <th class="brand-purple">Created</th>
+              <th class="brand-purple">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="admin-orders-tbody">
+            <tr>
+              <td colspan="9" class="text-center py-4 text-secondary">Loading orders...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="admin-orders-empty" class="alert alert-light border mt-3 d-none mb-0">
+        No orders were found for your current search.
+      </div>
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 mt-4">
+        <div class="text-secondary small">
+          Admin can only view order information and receipts here.
+        </div>
+
+        <div class="btn-group" role="group" aria-label="Pagination">
+          <button type="button" id="admin-orders-prev" class="btn btn-outline-brand-purple">
+            Previous
+          </button>
+          <button type="button" id="admin-orders-next" class="btn btn-outline-brand-purple">
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script nonce="<%= nonce %>">
+  (function () {
+    let currentPage = 1;
+    let totalPages = 1;
+    let isLoading = false;
+
+    function getTbody() {
+      return document.getElementById('admin-orders-tbody');
+    }
+
+    function getMeta() {
+      return document.getElementById('admin-orders-meta');
+    }
+
+    function getEmptyState() {
+      return document.getElementById('admin-orders-empty');
+    }
+
+    function getPrevBtn() {
+      return document.getElementById('admin-orders-prev');
+    }
+
+    function getNextBtn() {
+      return document.getElementById('admin-orders-next');
+    }
+
+    function getPageText() {
+      return document.getElementById('admin-orders-page-text');
+    }
+
+    function getSearchForm() {
+      return document.getElementById('admin-orders-search-form');
+    }
+
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatMoney(amount, currency) {
+      const n = Number(amount || 0);
+      return esc(currency || 'USD') + ' ' + n.toFixed(2);
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString();
+    }
+
+    function statusBadge(status) {
+      const s = String(status || '').toUpperCase();
+
+      if (s === 'REFUNDED') {
+        return '<span class="badge badge-brand-refund">Refunded</span>';
+      }
+
+      if (s === 'PARTIALLY_REFUNDED') {
+        return '<span class="badge badge-brand-partial">Partial Refund</span>';
+      }
+
+      return '<span class="badge badge-brand-green">Completed</span>';
+    }
+
+    function getFilters(page) {
+      const params = new URLSearchParams();
+
+      const q = document.getElementById('q').value.trim();
+      const businessName = document.getElementById('businessName').value.trim();
+      const orderId = document.getElementById('orderId').value.trim();
+      const receiptNumber = document.getElementById('receiptNumber').value.trim();
+      const status = document.getElementById('status').value;
+
+      if (q) params.set('q', q);
+      if (businessName) params.set('businessName', businessName);
+      if (orderId) params.set('orderId', orderId);
+      if (receiptNumber) params.set('receiptNumber', receiptNumber);
+      if (status) params.set('status', status);
+
+      params.set('page', String(page || 1));
+      params.set('limit', '20');
+
+      return params.toString();
+    }
+
+    function setLoadingState(loading) {
+      isLoading = loading;
+
+      if (getPrevBtn()) {
+        getPrevBtn().disabled = loading || currentPage <= 1;
+      }
+
+      if (getNextBtn()) {
+        getNextBtn().disabled = loading || currentPage >= totalPages;
+      }
+    }
+
+    function renderRows(orders) {
+      const tbody = getTbody();
+      const emptyState = getEmptyState();
+
+      if (!tbody) return;
+
+      if (!Array.isArray(orders) || orders.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('d-none');
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('d-none');
+
+      let html = '';
+
+      orders.forEach(function (order) {
+        html += ''
+          + '<tr>'
+          +   '<td class="fw-semibold text-break text-dark">' + esc(order.orderId || '—') + '</td>'
+          +   '<td class="text-break">' + esc(order.receiptNumber || '—') + '</td>'
+          +   '<td class="text-break">' + esc(order.businessName || '—') + '</td>'
+          +   '<td>' + statusBadge(order.status) + '</td>'
+          +   '<td class="fw-semibold">' + formatMoney(order.amount, order.currency) + '</td>'
+          +   '<td>' + formatMoney(order.refundedTotal, order.currency) + '</td>'
+          +   '<td class="text-break">' + esc(order.payerEmail || '—') + '</td>'
+          +   '<td>' + esc(formatDate(order.createdAt)) + '</td>'
+          +   '<td>'
+          +     '<div class="d-flex flex-column gap-2">'
+          +       '<a href="' + esc(order.viewUrl || '#') + '" class="btn btn-sm btn-outline-brand-purple">View</a>'
+          +       '<a href="' + esc(order.receiptUrl || '#') + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-brand-purple">Receipt</a>'
+          +     '</div>'
+          +   '</td>'
+          + '</tr>';
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    async function loadOrders(page) {
+      const tbody = getTbody();
+      const meta = getMeta();
+      const emptyState = getEmptyState();
+      const pageText = getPageText();
+
+      try {
+        setLoadingState(true);
+
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-secondary">Loading orders...</td></tr>';
+        }
+
+        if (emptyState) emptyState.classList.add('d-none');
+        if (meta) meta.textContent = 'Loading orders...';
+
+        const res = await fetch('/api/admin/orders?' + getFilters(page), {
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json'
+          }
+        });
+
+        const data = await res.json().catch(function () {
+          return {};
+        });
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.message || 'Failed to load orders');
+        }
+
+        currentPage = Number(data.page || 1);
+        totalPages = Math.max(1, Number(data.pages || 1));
+
+        renderRows(Array.isArray(data.orders) ? data.orders : []);
+
+        if (meta) {
+          meta.textContent =
+            'Showing '
+            + (Array.isArray(data.orders) ? data.orders.length : 0)
+            + ' of '
+            + Number(data.total || 0)
+            + ' orders';
+        }
+
+        if (pageText) {
+          pageText.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+        }
+      } catch (error) {
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-danger">' + esc(error.message || 'Failed to load orders') + '</td></tr>';
+        }
+
+        if (meta) meta.textContent = 'Failed to load orders';
+        if (pageText) pageText.textContent = 'Page 1 of 1';
+      } finally {
+        setLoadingState(false);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const form = getSearchForm();
+      const prevBtn = getPrevBtn();
+      const nextBtn = getNextBtn();
+      const resetBtn = document.getElementById('admin-orders-reset');
+
+      if (form) {
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          loadOrders(1);
+        });
+      }
+
+      if (prevBtn) {
+        prevBtn.addEventListener('click', function () {
+          if (isLoading || currentPage <= 1) return;
+          loadOrders(currentPage - 1);
+        });
+      }
+
+      if (nextBtn) {
+        nextBtn.addEventListener('click', function () {
+          if (isLoading || currentPage >= totalPages) return;
+          loadOrders(currentPage + 1);
+        });
+      }
+
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          document.getElementById('q').value = '';
+          document.getElementById('businessName').value = '';
+          document.getElementById('orderId').value = '';
+          document.getElementById('receiptNumber').value = '';
+          document.getElementById('status').value = 'all';
+          loadOrders(1);
+        });
+      }
+
+      loadOrders(1);
+    });
+  })();
+</script>
