@@ -32,7 +32,7 @@ router.get('/low-stock-products', requireBusiness, async (req, res) => {
       });
     }
 
-    const LOW_STOCK_THRESHOLD = 15;
+    const LOW_STOCK_THRESHOLD = 20;
 
     const lowStockProducts = await Product.find({
       business: business._id,

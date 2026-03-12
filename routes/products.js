@@ -191,7 +191,7 @@ router.get('/out-of-stock', requireBusiness, async (req, res) => {
   }
 });
 
-// LOW STOCK (<= 15, > 0)
+// LOW STOCK (<= 20, > 0)
 router.get('/low-stock', requireBusiness, async (req, res) => {
   try {
     const business = req.business || req.session.business; // ✅ same as /out-of-stock
@@ -200,11 +200,11 @@ router.get('/low-stock', requireBusiness, async (req, res) => {
       return res.redirect('/business/login');
     }
 
-    const lowStockThreshold = 15;
+    const lowStockThreshold = 20;
 
     const products = await Product.find({
       business: business._id,
-      stock: { $gt: 0, $lte: lowStockThreshold }, // 1–15 units
+      stock: { $gt: 0, $lte: lowStockThreshold }, // 1–20 units
     })
       .sort({ stock: 1, name: 1 })
       .lean();

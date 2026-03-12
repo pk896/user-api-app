@@ -164,6 +164,25 @@ function formatUsdCurrency(value) {
   }).format(amount);
 }
 
+function formatCompactNumber(value) {
+  const amount = Number(value || 0);
+
+  return new Intl.NumberFormat('en', {
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(amount);
+}
+
+function formatAxisCurrency(value) {
+  const amount = Number(value || 0);
+
+  if (Math.abs(amount) >= 1000) {
+    return `R${formatCompactNumber(amount)}`;
+  }
+
+  return `R${amount.toFixed(0)}`;
+}
+
 async function loadSellerInventoryValue() {
   try {
     const response = await fetch('/api/seller/inventory-value', {
@@ -530,15 +549,15 @@ async function loadSellerMainChart(range = sellerMainChartRange) {
     mainChart.data.datasets[0].data = salesData.length ? salesData : [0];
     mainChart.data.datasets[1].data = stockData.length ? stockData : [0];
 
-    const allValues = [
-      ...(salesData.length ? salesData : [0]),
-      ...(stockData.length ? stockData : [0])
-    ];
+    const maxSalesValue = Math.max(...(salesData.length ? salesData : [0]), 0);
+    const minStockValue = Math.min(...(stockData.length ? stockData : [0]), 0);
+    const maxStockValue = Math.max(...(stockData.length ? stockData : [0]), 0);
 
-    const maxValue = Math.max(...allValues, 1);
+    mainChart.options.scales.ySales.min = 0;
+    mainChart.options.scales.ySales.max = Math.ceil(Math.max(maxSalesValue, 1) * 1.15);
 
-    mainChart.options.scales.y.min = 0;
-    mainChart.options.scales.y.max = Math.ceil(maxValue * 1.15);
+    mainChart.options.scales.yStock.min = minStockValue < 0 ? Math.floor(minStockValue * 1.15) : 0;
+    mainChart.options.scales.yStock.max = Math.ceil(Math.max(maxStockValue, 1) * 1.15);
 
     mainChart.update();
     updateSellerMainChartRangeButtons(range);
@@ -588,6 +607,7 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
     datasets: [
       {
         label: 'Sales Amount',
+        yAxisID: 'ySales',
         backgroundColor: 'rgba(124, 58, 237, 0.12)',
         borderColor: '#7C3AED',
         pointBackgroundColor: '#7C3AED',
@@ -601,6 +621,7 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
       },
       {
         label: 'Stock Movement',
+        yAxisID: 'yStock',
         backgroundColor: 'transparent',
         borderColor: '#22C55E',
         pointBackgroundColor: '#22C55E',
@@ -628,6 +649,24 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
           usePointStyle: true,
           boxWidth: 10
         }
+      },
+      tooltip: {
+        callbacks: {
+          label(context) {
+            const datasetLabel = context.dataset?.label || '';
+            const rawValue = Number(context.raw || 0);
+
+            if (datasetLabel === 'Sales Amount') {
+              return `${datasetLabel}: ${formatCurrency(rawValue)}`;
+            }
+
+            if (datasetLabel === 'Stock Movement') {
+              return `${datasetLabel}: ${new Intl.NumberFormat('en-ZA').format(rawValue)}`;
+            }
+
+            return `${datasetLabel}: ${new Intl.NumberFormat('en-ZA').format(rawValue)}`;
+          }
+        }
       }
     },
     scales: {
@@ -640,7 +679,9 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
           color: coreui.Utils.getStyle('--cui-body-color')
         }
       },
-      y: {
+      ySales: {
+        type: 'linear',
+        position: 'left',
         beginAtZero: true,
         min: 0,
         border: {
@@ -650,8 +691,40 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
           color: coreui.Utils.getStyle('--cui-border-color-translucent')
         },
         ticks: {
-          color: coreui.Utils.getStyle('--cui-body-color'),
-          maxTicksLimit: 6
+          color: '#7C3AED',
+          maxTicksLimit: 6,
+          callback(value) {
+            return formatAxisCurrency(value);
+          }
+        },
+        title: {
+          display: true,
+          text: 'Sales Amount',
+          color: '#7C3AED'
+        }
+      },
+      yStock: {
+        type: 'linear',
+        position: 'right',
+        beginAtZero: true,
+        min: 0,
+        border: {
+          color: coreui.Utils.getStyle('--cui-border-color-translucent')
+        },
+        grid: {
+          drawOnChartArea: false
+        },
+        ticks: {
+          color: '#22C55E',
+          maxTicksLimit: 6,
+          callback(value) {
+            return formatCompactNumber(value);
+          }
+        },
+        title: {
+          display: true,
+          text: 'Stock Movement',
+          color: '#22C55E'
         }
       }
     },
@@ -675,9 +748,12 @@ document.documentElement.addEventListener('ColorSchemeChange', () => {
 
   mainChart.options.scales.x.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
   mainChart.options.scales.x.ticks.color = coreui.Utils.getStyle('--cui-body-color');
-  mainChart.options.scales.y.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-  mainChart.options.scales.y.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-  mainChart.options.scales.y.ticks.color = coreui.Utils.getStyle('--cui-body-color');
+
+  mainChart.options.scales.ySales.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+  mainChart.options.scales.ySales.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+
+  mainChart.options.scales.yStock.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+
   mainChart.options.plugins.legend.labels.color = coreui.Utils.getStyle('--cui-body-color');
 
   cardChart1.update();
