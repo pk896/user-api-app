@@ -1551,9 +1551,63 @@ router.post('/password/reset/:token', async (req, res) => {
 });
 
 /* ----------------------------------------------------------
- * SELLER DASHBOARD (NO CHART LOGIC)  ✅ NOW EXCLUDES REFUNDED/CANCELLED
+ * SELLER DASHBOARD → redirect to new /seller-ui
+ * Production-safe:
+ * - auth guarded
+ * - role checked
+ * - verification checked from DB
+ * - redirects only to internal local path
  * -------------------------------------------------------- */
 router.get(
+  '/dashboards/seller-dashboard',
+  requireBusiness,
+  requireVerifiedBusiness,
+  async (req, res) => {
+    try {
+      const sessionBusiness = getBiz(req);
+
+      if (!sessionBusiness || !sessionBusiness._id) {
+        req.flash('error', 'Session expired. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      if (sessionBusiness.role !== 'seller') {
+        req.flash('error', '⛔ Access denied. Seller accounts only.');
+        return res.redirect('/business/dashboard');
+      }
+
+      const sellerDoc = await Business.findById(getBizId(req))
+        .select('_id role isVerified')
+        .lean();
+
+      if (!sellerDoc) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      if (sellerDoc.role !== 'seller') {
+        req.flash('error', '⛔ Access denied. Seller accounts only.');
+        return res.redirect('/business/dashboard');
+      }
+
+      if (!sellerDoc.isVerified) {
+        req.flash('error', 'Please verify your email to access the seller dashboard.');
+        return res.redirect('/business/verify-pending');
+      }
+
+      return res.redirect(302, '/seller-ui/');
+    } catch (err) {
+      console.error('❌ Seller dashboard redirect error:', err);
+      req.flash('error', 'Failed to open seller dashboard.');
+      return res.redirect('/business/login');
+    }
+  }
+);
+
+/* ----------------------------------------------------------
+ * SELLER DASHBOARD (NO CHART LOGIC)  ✅ NOW EXCLUDES REFUNDED/CANCELLED
+ * -------------------------------------------------------- */
+/*router.get(
   '/dashboards/seller-dashboard',
   requireBusiness,
   requireVerifiedBusiness,
@@ -1840,7 +1894,7 @@ router.get(
       return res.redirect('/business/login');
     }
   }
-);
+);*/
 
 /* ----------------------------------------------------------
  * SUPPLIER DASHBOARD (NO CHART LOGIC)

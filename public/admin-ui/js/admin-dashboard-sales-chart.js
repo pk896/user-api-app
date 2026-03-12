@@ -197,9 +197,7 @@ console.log('[admin-dashboard-sales-chart] loaded');
               }
             },
             title: {
-              display: true,
-              text: 'Sales Amount',
-              color: '#7C3AED'
+              display: false
             }
           },
           yOrders: {
@@ -221,9 +219,7 @@ console.log('[admin-dashboard-sales-chart] loaded');
               }
             },
             title: {
-              display: true,
-              text: 'Orders',
-              color: '#22C55E'
+              display: false
             }
           }
         },

@@ -698,9 +698,7 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
           }
         },
         title: {
-          display: true,
-          text: 'Sales Amount',
-          color: '#7C3AED'
+          display: false
         }
       },
       yStock: {
@@ -722,9 +720,7 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
           }
         },
         title: {
-          display: true,
-          text: 'Stock Movement',
-          color: '#22C55E'
+          display: false
         }
       }
     },
