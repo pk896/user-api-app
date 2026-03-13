@@ -246,55 +246,84 @@ router.get('/orders/stats', requireAdmin, async (req, res) => {
 // GET /_danger/orders
 router.get('/orders', requireAdmin, async (req, res) => {
   try {
-    if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
+    if (!Order) {
+      return res.status(500).json({ ok: false, message: 'Order model not available.' });
+    }
 
     const page = Math.max(1, safeInt(req.query.page, 1));
     const limit = Math.min(200, Math.max(1, safeInt(req.query.limit, 20)));
     const skip = (page - 1) * limit;
 
     const sortStr = String(req.query.sort || '-createdAt');
-    const sort = sortStr.startsWith('-') ? { [sortStr.slice(1)]: -1 } : { [sortStr]: 1 };
+    const sort = sortStr.startsWith('-')
+      ? { [sortStr.slice(1)]: -1 }
+      : { [sortStr]: 1 };
 
     const q = String(req.query.q || '').trim();
     const status = String(req.query.status || '').trim();
     const paymentStatus = String(req.query.paymentStatus || '').trim();
+    const full = String(req.query.full || '').trim() === '1';
 
     const filter = {};
+
     if (q) {
       filter.$or = [
         { orderId: { $regex: q, $options: 'i' } },
         { status: { $regex: q, $options: 'i' } },
         { paymentStatus: { $regex: q, $options: 'i' } },
+
+        // useful identifiers for first-time vs repeat payer analysis
+        { 'payer.email': { $regex: q, $options: 'i' } },
+        { 'payer.payerId': { $regex: q, $options: 'i' } },
+        { 'shipping.email': { $regex: q, $options: 'i' } },
+        { 'shipping.phone': { $regex: q, $options: 'i' } },
+        { 'paypal.captureId': { $regex: q, $options: 'i' } },
+        { 'paypal.orderId': { $regex: q, $options: 'i' } },
       ];
     }
+
     if (status) filter.status = status;
     if (paymentStatus) filter.paymentStatus = paymentStatus;
 
-    const projection = {
-      orderId: 1,
-      status: 1,
-      paymentStatus: 1,
-      amount: 1,
-      refundedTotal: 1,
-      refundedAt: 1,
-      refundsCount: 1,
-      createdAt: 1,
-      updatedAt: 1,
-      paypal: 1,
-      capture0: 1,
-      refunds: 1,
-      itemsCount: 1,
-      items: 1,
-    };
+    const projection = full
+      ? undefined
+      : {
+          orderId: 1,
+          status: 1,
+          paymentStatus: 1,
+          amount: 1,
+          refundedTotal: 1,
+          refundedAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          paypal: 1,
+          payer: 1,
+          shipping: 1,
+          refunds: 1,
+          items: 1,
+          userId: 1,
+          businessBuyer: 1,
+        };
 
     const [count, orders] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter, projection).sort(sort).skip(skip).limit(limit).lean(),
     ]);
 
-    res.json({ ok: true, page, limit, count, pages: Math.ceil(count / limit), orders });
+    return res.json({
+      ok: true,
+      page,
+      limit,
+      count,
+      pages: Math.ceil(count / limit),
+      full,
+      orders,
+    });
   } catch (err) {
-    res.status(500).json({ ok: false, message: err?.message || 'Failed to list orders.' });
+    return res.status(500).json({
+      ok: false,
+      message: err?.message || 'Failed to list orders.',
+    });
   }
 });
 

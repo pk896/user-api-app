@@ -1368,3 +1368,297 @@
     initSimpleChart();
   });
 </script>
+
+
+
+<!--/* ----------------------------------------------------------
+ * SELLER DASHBOARD (NO CHART LOGIC)  ✅ NOW EXCLUDES REFUNDED/CANCELLED
+ * -------------------------------------------------------- */
+/*router.get(
+  '/dashboards/seller-dashboard',
+  requireBusiness,
+  requireVerifiedBusiness,
+  async (req, res) => {
+    try {
+      const sessionBusiness = getBiz(req);
+      if (!sessionBusiness || !sessionBusiness._id) {
+        req.flash('error', 'Session expired. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      if (sessionBusiness.role !== 'seller') {
+        req.flash('error', '⛔ Access denied. Seller accounts only.');
+        return res.redirect('/business/dashboard');
+      }
+
+      const sellerDoc = await Business.findById(getBizId(req)).lean();
+      if (!sellerDoc) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
+
+      // Extra safety
+      if (!sellerDoc.isVerified) {
+        req.flash('error', 'Please verify your email to access the seller dashboard.');
+        return res.redirect('/business/verify-pending');
+      }
+
+      const OrderModel = Order;
+
+      // 1) Products for this seller
+      const products = await Product.find({ business: sessionBusiness._id })
+        .select('_id customId name price stock category imageUrl createdAt updatedAt')
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+
+      const totalProducts = products.length;
+      const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
+      const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+
+      // keep your seller threshold (<= 5)
+      const lowStock = products.filter((p) => {
+        const s = Number(p.stock) || 0;
+        return s > 0 && s <= 5;
+      }).length;
+
+      const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
+
+      // ----------------------------------------------------
+      // Build product key maps for order matching (customId + _id)
+      // ----------------------------------------------------
+      const productsByKey = new Map();
+      const sellerCustomIds = [];
+
+      for (const p of products) {
+        // customId match
+        if (p.customId) {
+          const k = String(p.customId).trim();
+          if (k) {
+            sellerCustomIds.push(k);
+            productsByKey.set(k, p);
+          }
+        }
+
+        // _id match
+        const oid = String(p._id || '').trim();
+        if (oid) {
+          sellerCustomIds.push(oid);
+          productsByKey.set(oid, p);
+        }
+      }
+
+      const sellerKeySet = new Set(sellerCustomIds);
+
+      const hasSellerProducts = sellerKeySet.size > 0;
+
+      const idMatchOr = hasSellerProducts
+        ? [
+            { 'items.productId': { $in: sellerCustomIds } },
+            { 'items.customId': { $in: sellerCustomIds } },
+            { 'items.pid': { $in: sellerCustomIds } },
+            { 'items.sku': { $in: sellerCustomIds } },
+          ]
+        : [];
+
+      // 2) Orders (Recent Orders) — ✅ EXCLUDES refunded/cancelled via helper
+      let ordersTotal = 0;
+      let ordersByStatus = {};
+      let recentOrders = [];
+
+      if (OrderModel && hasSellerProducts) {
+        const baseOrderMatch = buildNonRefundedPaidMatch(OrderModel, { $or: idMatchOr });
+
+        const ordersAgg = await OrderModel.aggregate([
+          { $match: baseOrderMatch },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]);
+
+        ordersByStatus = ordersAgg.reduce((m, r) => {
+          m[r._id || 'Unknown'] = Number(r.count || 0);
+          return m;
+        }, {});
+
+        ordersTotal = await OrderModel.countDocuments(baseOrderMatch);
+
+        recentOrders = await OrderModel.find(baseOrderMatch)
+          .select('orderId status amount total createdAt shippingTracking')
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean();
+      }
+
+      // 3) Shipping tracking stats — ✅ EXCLUDES refunded/cancelled via helper
+      let trackingStats = {
+        pending: 0,
+        processing: 0,
+        shipped: 0,
+        inTransit: 0,
+        delivered: 0,
+      };
+
+      if (OrderModel && hasSellerProducts) {
+        const trackingAgg = await OrderModel.aggregate([
+          {
+            $match: {
+              ...buildNonRefundedPaidMatch(OrderModel),
+              $or: [
+                { 'items.productId': { $in: sellerCustomIds } },
+                { 'items.customId': { $in: sellerCustomIds } },
+                { 'items.pid': { $in: sellerCustomIds } },
+                { 'items.sku': { $in: sellerCustomIds } },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: '$shippingTracking.status',
+              count: { $sum: 1 },
+            },
+          },
+        ]);
+
+        trackingAgg.forEach((stat) => {
+          const status = (stat._id || 'PENDING').toString().toUpperCase();
+          if (status === 'PENDING') trackingStats.pending = stat.count;
+          else if (status === 'PROCESSING') trackingStats.processing = stat.count;
+          else if (status === 'SHIPPED') trackingStats.shipped = stat.count;
+          else if (status === 'IN_TRANSIT') trackingStats.inTransit = stat.count;
+          else if (status === 'DELIVERED') trackingStats.delivered = stat.count;
+        });
+      }
+
+      // 4) 30-day KPIs (sold products + revenue) — ✅ EXCLUDES refunded/cancelled via helper
+      const SINCE_DAYS = 30;
+      const since = new Date();
+      since.setDate(since.getDate() - SINCE_DAYS);
+
+      let soldPerProduct = [];
+      let soldTotalQty = 0;
+      let soldEstRevenue = 0;
+      let last30Revenue = 0;
+      let last30Items = 0;
+
+      if (OrderModel && hasSellerProducts) {
+        const baseMatch = buildNonRefundedPaidMatch(OrderModel, {
+          createdAt: { $gte: since },
+          $or: idMatchOr,
+        });
+
+        const recentOrders30 = await OrderModel.find(baseMatch)
+          .select('items createdAt status')
+          .lean();
+
+        const productSalesMap = new Map();
+
+        for (const order of recentOrders30) {
+          const items = Array.isArray(order.items) ? order.items : [];
+
+          for (const item of items) {
+            // ✅ Optional item-level refund skip (safe if fields don't exist)
+            if (item && item.isRefunded === true) continue;
+            if (String(item?.refundStatus || '').toUpperCase() === 'REFUNDED') continue;
+
+            const productId = String(
+              item.productId || item.customId || item.pid || item.sku || '',
+            ).trim();
+
+            if (!productId || !sellerKeySet.has(productId)) continue;
+
+            const quantity = Number(item.quantity || 1);
+            if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+            const product = productsByKey.get(productId);
+            if (!product) continue;
+
+            const price = Number(product.price || 0);
+            const revenue = quantity * price;
+
+            last30Items += quantity;
+            last30Revenue += revenue;
+
+            if (!productSalesMap.has(productId)) {
+              productSalesMap.set(productId, {
+                productId,
+                name: product.name || '(unknown)',
+                imageUrl: product.imageUrl || '',
+                category: product.category || '',
+                price,
+                qty: 0,
+                estRevenue: 0,
+              });
+            }
+
+            const existing = productSalesMap.get(productId);
+            existing.qty += quantity;
+            existing.estRevenue += revenue;
+          }
+        }
+
+        soldPerProduct = Array.from(productSalesMap.values()).sort((a, b) => b.qty - a.qty);
+        soldTotalQty = last30Items;
+        soldEstRevenue = last30Revenue;
+      }
+
+      // Optional fallback using computeSupplierKpis (kept as-is)
+      if (
+        typeof computeSupplierKpis === 'function' &&
+        soldPerProduct.length === 0 &&
+        hasSellerProducts
+      ) {
+        try {
+          const kpisRaw = await computeSupplierKpis(sessionBusiness._id);
+          if (kpisRaw && Array.isArray(kpisRaw.perProduct) && kpisRaw.perProduct.length > 0) {
+            soldPerProduct = kpisRaw.perProduct;
+            soldTotalQty = kpisRaw.perProductTotalQty || 0;
+            soldEstRevenue = kpisRaw.perProductEstRevenue || 0;
+            last30Items = kpisRaw.soldLast30 || 0;
+            last30Revenue = kpisRaw.revenueLast30 || 0;
+          }
+        } catch (e) {
+          console.error('Fallback computeSupplierKpis failed:', e);
+        }
+      }
+
+      const kpis = {
+        totalProducts,
+        totalStock,
+        inStock,
+        lowStock,
+        outOfStock,
+        soldLast30: last30Items,
+        revenueLast30: Number(last30Revenue.toFixed(2)),
+        last30Items,
+        last30Revenue: Number(last30Revenue.toFixed(2)),
+        perProduct: soldPerProduct,
+        perProductTotalQty: soldTotalQty,
+        perProductEstRevenue: Number(soldEstRevenue.toFixed(2)),
+      };
+
+      const deliveryOptions = await DeliveryOption.find({ active: true })
+        .sort({ deliveryDays: 1, priceCents: 1 })
+        .lean();
+
+      return res.render('dashboards/seller-dashboard', {
+        title: 'Seller Dashboard',
+        business: sellerDoc,
+        totals: { totalProducts, totalStock, inStock, lowStock, outOfStock },
+        products,
+        trackingStats,
+        orders: {
+          total: ordersTotal,
+          byStatus: ordersByStatus,
+          recent: recentOrders,
+        },
+        kpis,
+        deliveryOptions,
+        isOrdersAdmin: Boolean(req.session.ordersAdmin),
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+      });
+    } catch (err) {
+      console.error('❌ Seller dashboard error:', err);
+      req.flash('error', 'Failed to load seller dashboard.');
+      return res.redirect('/business/login');
+    }
+  }
+);*/-->

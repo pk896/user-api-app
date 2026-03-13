@@ -1,3 +1,4 @@
+<!--views/products-out-of-stock.ejs-->
 <section class="out-stock-page">
   <h1 class="page-title">📦 Out of Stock Products</h1>
   <p class="subtitle">
@@ -5,7 +6,6 @@
     quantity below to make them available again.
   </p>
 
-  <!-- Flash messages -->
   <% (success || []).forEach(msg => { %>
     <div class="flash flash-success">✅ <%= msg %></div>
   <% }) %>
@@ -13,18 +13,35 @@
     <div class="flash flash-error">❌ <%= msg %></div>
   <% }) %>
 
-  <% if (!products || products.length === 0) { %>
+  <%
+    const items = Array.isArray(products) ? products : [];
+  %>
+
+  <% if (!items.length) { %>
     <div class="empty-state">
       <div class="empty-icon">🎉</div>
       <p>Great news! You have no products that are completely out of stock.</p>
+      <a href="/products/all" class="btn btn-primary">← Back to My Products</a>
     </div>
   <% } else { %>
+    <div class="out-stock-summary">
+      <div class="summary-card">
+        <strong><%= items.length %></strong>
+        <span>products out of stock</span>
+      </div>
+      <a href="/products/all" class="btn-outline">← Back to My Products</a>
+    </div>
+
     <div class="out-stock-grid">
-      <% products.forEach(function (p) { %>
+      <% items.forEach(function (p) {
+           const stock = Number(p.stock) || 0;
+           const price = (p.price != null ? Number(p.price) : 0);
+           const idVal = typeof p.customId === 'string' ? p.customId.trim() : '';
+      %>
         <article class="product-card">
           <div class="product-main">
             <div class="product-image">
-              <% if (p.imageUrl) { %>
+              <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
                 <img src="<%= p.imageUrl %>" alt="<%= p.name %>" />
               <% } else { %>
                 <div class="image-placeholder">📦</div>
@@ -36,7 +53,7 @@
               <div class="product-meta">
                 <div class="meta-line">
                   <span class="meta-label">Product ID:</span>
-                  <span class="meta-value"><%= p.customId %></span>
+                  <span class="meta-value"><%= idVal || '—' %></span>
                 </div>
                 <div class="meta-line">
                   <span class="meta-label">Category:</span>
@@ -44,45 +61,47 @@
                 </div>
                 <div class="meta-line">
                   <span class="meta-label">Price:</span>
-                  <span class="meta-value">
-                    <%= (p.price != null ? Number(p.price).toFixed(2) : '0.00') %> ZAR
-                  </span>
+                  <span class="meta-value"><%= price.toFixed(2) %> ZAR</span>
                 </div>
                 <div class="meta-line">
                   <span class="meta-label">Current stock:</span>
-                  <span class="meta-value stock-zero">0</span>
+                  <span class="meta-value stock-zero"><%= stock %></span>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Inline stock update form -->
-          <form
-            class="stock-form"
-            method="post"
-            action="/products/edit/<%= p.customId %>"
-          >
-            <div class="stock-input-group">
-              <label for="stock-<%= p.customId %>">New stock</label>
-              <input
-                id="stock-<%= p.customId %>"
-                type="number"
-                name="stock"
-                min="0"
-                step="1"
-                required
-                placeholder="e.g. 10"
-                value="10"
-              />
+          <% if (idVal) { %>
+            <form
+              class="stock-form"
+              method="post"
+              action="/products/edit/<%= encodeURIComponent(idVal) %>"
+            >
+              <div class="stock-input-group">
+                <label for="stock-<%= idVal %>">New stock</label>
+                <input
+                  id="stock-<%= idVal %>"
+                  type="number"
+                  name="stock"
+                  min="0"
+                  step="1"
+                  required
+                  placeholder="e.g. 10"
+                  value="10"
+                />
+              </div>
+
+              <button type="submit" class="btn btn-primary">
+                💾 Save Stock
+              </button>
+
+              <input type="hidden" name="source" value="out-of-stock-page" />
+            </form>
+          <% } else { %>
+            <div class="no-id-warning">
+              <small>⚠️ Cannot update stock: this product has no custom product ID.</small>
             </div>
-
-            <button type="submit" class="btn btn-primary">
-              💾 Save Stock
-            </button>
-
-            <!-- Optional: hidden field so you know from which page update came -->
-            <input type="hidden" name="source" value="out-of-stock-page" />
-          </form>
+          <% } %>
         </article>
       <% }) %>
     </div>
@@ -125,6 +144,44 @@
     background: #fef2f2;
     color: #991b1b;
     border: 1px solid #fecaca;
+  }
+
+  .out-stock-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 12px 0;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .out-stock-summary .summary-card {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #991b1b;
+  }
+
+  .out-stock-summary .summary-card strong {
+    font-size: 16px;
+    margin-right: 4px;
+  }
+
+  .btn-outline {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    font-size: 12px;
+    text-decoration: none;
+    color: #0f172a;
+    white-space: nowrap;
+  }
+
+  .btn-outline:hover {
+    background: #e2e8f0;
   }
 
   .empty-state {
@@ -209,6 +266,7 @@
   .meta-line {
     display: flex;
     gap: 0.3rem;
+    flex-wrap: wrap;
   }
 
   .meta-label {
@@ -286,6 +344,12 @@
     background: #1d4ed8;
   }
 
+  .no-id-warning {
+    font-size: 0.75rem;
+    color: #b45309;
+    margin-top: 0.4rem;
+  }
+
   @media (max-width: 480px) {
     .out-stock-page {
       padding: 0.75rem;
@@ -306,4 +370,3 @@
     }
   }
 </style>
-

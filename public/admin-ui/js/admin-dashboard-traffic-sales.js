@@ -2,7 +2,6 @@
 'use strict';
 
 (async function () {
-  // If the page doesn't have the elements, do nothing (prevents breaking other pages)
   const elNewToday = document.getElementById('stat-new-clients-today');
   const elRecToday = document.getElementById('stat-recurring-clients-today');
   if (!elNewToday || !elRecToday) return;
@@ -17,7 +16,16 @@
     sun: { new: document.getElementById('bar-sun-new'), rec: document.getElementById('bar-sun-rec') },
   };
 
-  // Backend returns day names like "Monday", map to bar keys
+  const dayLabels = {
+    mon: document.querySelector('#bar-mon-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    tue: document.querySelector('#bar-tue-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    wed: document.querySelector('#bar-wed-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    thu: document.querySelector('#bar-thu-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    fri: document.querySelector('#bar-fri-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    sat: document.querySelector('#bar-sat-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    sun: document.querySelector('#bar-sun-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+  };
+
   const keyMap = {
     Monday: 'mon',
     Tuesday: 'tue',
@@ -26,6 +34,16 @@
     Friday: 'fri',
     Saturday: 'sat',
     Sunday: 'sun',
+  };
+
+  const defaultDayText = {
+    mon: 'Monday',
+    tue: 'Tuesday',
+    wed: 'Wednesday',
+    thu: 'Thursday',
+    fri: 'Friday',
+    sat: 'Saturday',
+    sun: 'Sunday',
   };
 
   function clampPct(pct) {
@@ -46,6 +64,24 @@
     el.textContent = value === null || value === undefined ? '—' : String(value);
   }
 
+  function formatShortDate(isoDate) {
+    if (!isoDate) return '';
+    const d = new Date(`${isoDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return String(isoDate);
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  function setDayLabel(key, dayName, isoDate) {
+    const el = dayLabels[key];
+    if (!el) return;
+
+    const shortDate = formatShortDate(isoDate);
+    el.textContent = shortDate ? `${dayName} (${shortDate})` : dayName;
+  }
+
   function resetWeekBars() {
     for (const k of ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
       setBar(bars[k]?.new, 0);
@@ -53,16 +89,32 @@
     }
   }
 
+  function resetWeekLabels() {
+    for (const k of ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
+      const el = dayLabels[k];
+      if (!el) continue;
+      el.textContent = defaultDayText[k];
+    }
+  }
+
+  function applyLabelsFromList(list) {
+    resetWeekLabels();
+
+    for (const item of list) {
+      const key = keyMap[item?.day];
+      if (!key) continue;
+      setDayLabel(key, item.day, item.date);
+    }
+  }
+
   function updateFromPayload(data) {
-    // Today
     setText(elNewToday, data?.today?.newClients ?? 0);
     setText(elRecToday, data?.today?.recurringClients ?? 0);
 
-    // Week
     const list = Array.isArray(data?.week?.days) ? data.week.days : [];
     resetWeekBars();
+    applyLabelsFromList(list);
 
-    // Prefer backend percentages (newPct/recurringPct). Fallback to scaling by max if missing.
     const hasPct = list.some((x) => x && (x.newPct !== undefined || x.recurringPct !== undefined));
 
     if (hasPct) {
@@ -75,7 +127,6 @@
       return;
     }
 
-    // Fallback: scale by max values (if backend didn't send pct)
     let max = 1;
     for (const item of list) {
       const n = Number(item?.newClients ?? 0);
@@ -97,8 +148,6 @@
   }
 
   try {
-    // Your backend mount: app.use('/admin/api/dashboard', adminDashboardRouter);
-    // Router path: router.get('/traffic-sales', ...)
     const res = await fetch('/admin/api/dashboard/traffic-sales', { credentials: 'include' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -108,9 +157,9 @@
     updateFromPayload(data);
   } catch (err) {
     console.warn('[admin-dashboard-traffic-sales] Failed to load:', err);
-    // Keep UI safe, do not crash anything
     setText(elNewToday, '—');
     setText(elRecToday, '—');
     resetWeekBars();
+    resetWeekLabels();
   }
 })();

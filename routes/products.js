@@ -462,9 +462,6 @@ router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, async (req, re
   }
 });
 
-/* ===========================================================
- * 💾 POST: Save Product Edits (only own)
- * =========================================================== */
 router.post(
   '/edit/:id',
   requireBusiness,
@@ -481,6 +478,45 @@ router.post(
       if (!product) {
         req.flash('error', '❌ Product not found or unauthorized.');
         return res.redirect('/products/all');
+      }
+
+      const source = String(req.body.source || '').trim();
+
+      // -----------------------------------
+      // STOCK-ONLY update from low-stock / out-of-stock pages
+      // -----------------------------------
+      if (source === 'low-stock-page' || source === 'out-of-stock-page') {
+        const numStock = Number(req.body.stock);
+
+        if (!Number.isFinite(numStock) || numStock < 0) {
+          req.flash('error', '❌ Stock must be a valid number 0 or greater.');
+          return res.redirect(
+            source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock'
+          );
+        }
+
+        const nextStock = Math.floor(numStock);
+
+        const result = await Product.updateOne(
+          {
+            customId: req.params.id,
+            business: business._id,
+          },
+          {
+            $set: { stock: nextStock },
+          }
+        );
+
+        if (!result.matchedCount) {
+          req.flash('error', '❌ Product not found or unauthorized.');
+          return res.redirect('/products/all');
+        }
+
+        req.flash('success', `✅ Stock updated for "${product.name}".`);
+
+        return res.redirect(
+          source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock'
+        );
       }
 
       // ---------- BASIC FIELDS ----------
@@ -512,12 +548,12 @@ router.post(
 
       if (req.body.stock !== undefined && req.body.stock !== '') {
         const numStock = Number(req.body.stock);
-        if (!Number.isNaN(numStock)) {
-          product.stock = numStock;
+        if (!Number.isNaN(numStock) && numStock >= 0) {
+          product.stock = Math.floor(numStock);
         }
       }
 
-      // description (can be empty)
+      // description
       if (typeof req.body.description === 'string') {
         product.description = req.body.description.trim();
       }
@@ -539,7 +575,6 @@ router.post(
         product.colors = parseListField(req.body.colors);
       }
 
-      // keep single color/size in sync (optional, but nice)
       if (!product.color && product.colors && product.colors.length > 0) {
         product.color = product.colors[0];
       }
@@ -548,50 +583,54 @@ router.post(
       }
 
       // ---------- STATUS FLAGS ----------
-      // Checkbox => value "on", or undefined if unchecked
       const isNewFlag = checkboxOn(req.body.isNew);
-      product.isNewItem = isNewFlag;   // real schema field
-      product.isNew = isNewFlag;       // optional if virtual exists, harmless
+      product.isNewItem = isNewFlag;
+      product.isNew = isNewFlag;
       product.isOnSale = checkboxOn(req.body.isOnSale);
       product.isPopular = checkboxOn(req.body.isPopular);
 
-      // ---------- SHIPPING (REQUIRED) ----------      
-      const shipWeightValue = numOrNull(req.body.shipWeightValue);
-      const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
+      // ---------- SHIPPING ----------
+      // Only validate shipping if the edit form actually submitted shipping fields
+      const shippingFieldsWereSubmitted =
+        req.body.shipWeightValue !== undefined ||
+        req.body.shipWeightUnit !== undefined ||
+        req.body.shipLength !== undefined ||
+        req.body.shipWidth !== undefined ||
+        req.body.shipHeight !== undefined ||
+        req.body.shipDimUnit !== undefined ||
+        req.body.shipSeparately !== undefined ||
+        req.body.fragile !== undefined ||
+        req.body.packagingHint !== undefined;
 
-      const shipLen = numOrNull(req.body.shipLength);
-      const shipWid = numOrNull(req.body.shipWidth);
-      const shipHei = numOrNull(req.body.shipHeight);
+      if (shippingFieldsWereSubmitted) {
+        const shipWeightValue = numOrNull(req.body.shipWeightValue);
+        const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
 
-      requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipHei });
+        const shipLen = numOrNull(req.body.shipLength);
+        const shipWid = numOrNull(req.body.shipWidth);
+        const shipHei = numOrNull(req.body.shipHeight);
 
-      const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
+        requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipHei });
 
-      // checkboxes return "on" or undefined
-      const shipSeparately = checkboxOn(req.body.shipSeparately);
-      const fragile = checkboxOn(req.body.fragile);
+        const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
+        const shipSeparately = checkboxOn(req.body.shipSeparately);
+        const fragile = checkboxOn(req.body.fragile);
+        const packagingHint = (req.body.packagingHint || '').toString().trim();
 
-      const packagingHint = (req.body.packagingHint || '').toString().trim();
+        if (!product.shipping) product.shipping = {};
+        if (!product.shipping.weight) product.shipping.weight = {};
+        if (!product.shipping.dimensions) product.shipping.dimensions = {};
 
-      // Ensure object exists
-      if (!product.shipping) product.shipping = {};
-      if (!product.shipping.weight) product.shipping.weight = {};
-      if (!product.shipping.dimensions) product.shipping.dimensions = {};
-
-      // Only overwrite if fields are present in the form submission
-      // (If your edit form doesn’t include them yet, this won’t break anything.)
-      if (req.body.shipWeightValue !== undefined) product.shipping.weight.value = shipWeightValue;
-      if (req.body.shipWeightUnit !== undefined) product.shipping.weight.unit = shipWeightUnit;
-
-      if (req.body.shipLength !== undefined) product.shipping.dimensions.length = shipLen;
-      if (req.body.shipWidth !== undefined) product.shipping.dimensions.width = shipWid;
-      if (req.body.shipHeight !== undefined) product.shipping.dimensions.height = shipHei;
-      if (req.body.shipDimUnit !== undefined) product.shipping.dimensions.unit = shipDimUnit;
-
-      // With hidden inputs in the form, these keys are always present => can safely update
-      product.shipping.shipSeparately = shipSeparately;
-      product.shipping.fragile = fragile;
-      if (req.body.packagingHint !== undefined) product.shipping.packagingHint = packagingHint;
+        product.shipping.weight.value = shipWeightValue;
+        product.shipping.weight.unit = shipWeightUnit;
+        product.shipping.dimensions.length = shipLen;
+        product.shipping.dimensions.width = shipWid;
+        product.shipping.dimensions.height = shipHei;
+        product.shipping.dimensions.unit = shipDimUnit;
+        product.shipping.shipSeparately = shipSeparately;
+        product.shipping.fragile = fragile;
+        product.shipping.packagingHint = packagingHint;
+      }
 
       // ---------- OPTIONAL NEW IMAGE ----------
       if (req.file) {
@@ -608,7 +647,6 @@ router.post(
           }),
         );
 
-        // Delete old image (best-effort)
         try {
           if (product.imageUrl && product.imageUrl.includes('.com/')) {
             const oldKey = product.imageUrl.split('.com/')[1];
@@ -627,6 +665,11 @@ router.post(
     } catch (err) {
       console.error('❌ Error updating product:', err);
       req.flash('error', `❌ Failed to update: ${err.message}`);
+
+      const source = String(req.body.source || '').trim();
+      if (source === 'low-stock-page') return res.redirect('/products/low-stock');
+      if (source === 'out-of-stock-page') return res.redirect('/products/out-of-stock');
+
       return res.redirect(`/products/edit/${req.params.id}`);
     }
   },
