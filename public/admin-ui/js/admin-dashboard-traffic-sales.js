@@ -17,13 +17,13 @@
   };
 
   const dayLabels = {
-    mon: document.querySelector('#bar-mon-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
-    tue: document.querySelector('#bar-tue-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
-    wed: document.querySelector('#bar-wed-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
-    thu: document.querySelector('#bar-thu-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
-    fri: document.querySelector('#bar-fri-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
-    sat: document.querySelector('#bar-sat-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
-    sun: document.querySelector('#bar-sun-new')?.closest('.progress-group')?.querySelector('.progress-group-prepend .text-body-secondary'),
+    mon: document.getElementById('label-mon-stats'),
+    tue: document.getElementById('label-tue-stats'),
+    wed: document.getElementById('label-wed-stats'),
+    thu: document.getElementById('label-thu-stats'),
+    fri: document.getElementById('label-fri-stats'),
+    sat: document.getElementById('label-sat-stats'),
+    sun: document.getElementById('label-sun-stats'),
   };
 
   const keyMap = {
@@ -74,12 +74,20 @@
     });
   }
 
-  function setDayLabel(key, dayName, isoDate) {
+  function setDayLabel(key, dayName, isoDate, newClients, recurringClients) {
     const el = dayLabels[key];
     if (!el) return;
 
     const shortDate = formatShortDate(isoDate);
-    el.textContent = shortDate ? `${dayName} (${shortDate})` : dayName;
+    const safeNew = Number.isFinite(Number(newClients)) ? Number(newClients) : 0;
+    const safeRecurring = Number.isFinite(Number(recurringClients)) ? Number(recurringClients) : 0;
+
+    if (shortDate) {
+      el.textContent = `${dayName} (${shortDate}) · New: ${safeNew} · Recurring: ${safeRecurring}`;
+      return;
+    }
+
+    el.textContent = `${dayName} · New: ${safeNew} · Recurring: ${safeRecurring}`;
   }
 
   function resetWeekBars() {
@@ -93,7 +101,7 @@
     for (const k of ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
       const el = dayLabels[k];
       if (!el) continue;
-      el.textContent = defaultDayText[k];
+      el.textContent = `${defaultDayText[k]} · New: 0 · Recurring: 0`;
     }
   }
 
@@ -103,7 +111,14 @@
     for (const item of list) {
       const key = keyMap[item?.day];
       if (!key) continue;
-      setDayLabel(key, item.day, item.date);
+
+      setDayLabel(
+        key,
+        item.day,
+        item.date,
+        item?.newClients ?? 0,
+        item?.recurringClients ?? 0
+      );
     }
   }
 
