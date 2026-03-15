@@ -78,6 +78,12 @@ async function shippoGetJson(path, { timeoutMs = 20000 } = {}) {
   }
 }
 
+async function shippoGetTransaction(transactionId, { timeoutMs = 20000 } = {}) {
+  const tid = String(transactionId || '').trim();
+  if (!tid) throw new Error('Missing Shippo transactionId');
+  return shippoGetJson(`/transactions/${encodeURIComponent(tid)}/`, { timeoutMs });
+}
+
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -166,20 +172,78 @@ router.get('/admin/shippo', requireAdmin, async (req, res) => {
     const orders = await Order.find({})
       .sort({ createdAt: -1 })
       .limit(50)
-      .select('_id orderId createdAt amount paymentStatus fulfillmentStatus status shippingTracking shippo shipping paypal'); // ✅ no lean
+      .select('_id orderId createdAt amount paymentStatus fulfillmentStatus status shippingTracking shippo shipping paypal');
 
-    // ✅ Use model method for one-source-of-truth paid-like check
     const paidLike = orders.filter((o) => (typeof o.isPaidLike === 'function' ? o.isPaidLike() : false));
 
-    // ✅ Backfill carrierLabel for old orders (UI only)
+    // Backfill missing tracking + carrier label for old orders
     for (const o of paidLike) {
-      const hasLabel = !!(o?.shippo?.labelUrl);
-      const hasTracking = !!(o?.shippingTracking?.trackingNumber || o?.shippingTracking?.trackingUrl);
+      const hasLabel = !!String(o?.shippo?.labelUrl || '').trim();
+      const txId = String(o?.shippo?.transactionId || '').trim();
+
+      const trackingNumber = String(o?.shippingTracking?.trackingNumber || '').trim();
+      const trackingUrl = String(o?.shippingTracking?.trackingUrl || '').trim();
+      const missingTracking = !trackingNumber && !trackingUrl;
+
+      // 1) Recover missing tracking from Shippo transaction
+      if (hasLabel && txId && missingTracking) {
+        try {
+          const tx = await shippoGetTransaction(txId);
+
+          const repairedTrackingNumber = String(tx?.tracking_number || '').trim();
+          const repairedTrackingUrl = String(tx?.tracking_url_provider || '').trim();
+          const repairedLabelUrl = String(tx?.label_url || o?.shippo?.labelUrl || '').trim();
+
+          const carrierToken = String(o?.shippo?.carrier || '').trim();
+
+          const rawProvider =
+            String(o?.shippo?.chosenRate?.provider || '').trim() ||
+            String(tx?.rate?.provider || '').trim() ||
+            '';
+
+          const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+          const repairedCarrierLabel =
+            (badProvider ? '' : rawProvider) ||
+            inferCarrierLabelFromUrl(repairedTrackingUrl) ||
+            (carrierToken ? String(carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '') ||
+            '';
+
+          if (repairedTrackingNumber || repairedTrackingUrl) {
+            await Order.updateOne(
+              { _id: o._id },
+              {
+                $set: {
+                  'shippingTracking.trackingNumber': repairedTrackingNumber,
+                  'shippingTracking.trackingUrl': repairedTrackingUrl,
+                  'shippingTracking.labelUrl': repairedLabelUrl,
+                  'shippingTracking.carrierToken': carrierToken || null,
+                  'shippingTracking.carrierLabel': repairedCarrierLabel || '',
+                },
+              }
+            );
+
+            o.shippingTracking = o.shippingTracking || {};
+            o.shippingTracking.trackingNumber = repairedTrackingNumber;
+            o.shippingTracking.trackingUrl = repairedTrackingUrl;
+            o.shippingTracking.labelUrl = repairedLabelUrl;
+            o.shippingTracking.carrierToken = carrierToken || null;
+            o.shippingTracking.carrierLabel = repairedCarrierLabel || '';
+          }
+        } catch (err) {
+          console.warn(`⚠️ Could not backfill Shippo tracking for ${o.orderId}:`, err.message);
+        }
+      }
+
+      // 2) Backfill missing carrierLabel if tracking exists
+      const nowHasTracking = !!(
+        String(o?.shippingTracking?.trackingNumber || '').trim() ||
+        String(o?.shippingTracking?.trackingUrl || '').trim()
+      );
       const missingLabel = !String(o?.shippingTracking?.carrierLabel || '').trim();
 
-      if (hasLabel && hasTracking && missingLabel) {
-        const rawProvider = String(o?.shippo?.chosenRate?.provider || '').trim() || '';
-
+      if (hasLabel && nowHasTracking && missingLabel) {
+        const rawProvider = String(o?.shippo?.chosenRate?.provider || '').trim();
         const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
 
         const inferred =
@@ -191,7 +255,6 @@ router.get('/admin/shippo', requireAdmin, async (req, res) => {
             : '');
 
         if (inferred) {
-          // ✅ update DB and the in-memory doc so the page shows immediately
           await Order.updateOne({ _id: o._id }, { $set: { 'shippingTracking.carrierLabel': inferred } });
           o.shippingTracking = o.shippingTracking || {};
           o.shippingTracking.carrierLabel = inferred;
@@ -199,7 +262,6 @@ router.get('/admin/shippo', requireAdmin, async (req, res) => {
       }
     }
 
-    // ✅ IMPORTANT: render needs plain objects (EJS is happiest with them)
     const paidLikeLean = paidLike.map((o) => o.toObject({ virtuals: true }));
 
     return res.render('admin-shippo', {
@@ -308,6 +370,42 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
 
     // ✅ idempotent: don't buy twice
     if (order.shippo?.transactionId && order.shippo?.labelUrl) {
+      const hasTracking =
+        !!String(order?.shippingTracking?.trackingNumber || '').trim() ||
+        !!String(order?.shippingTracking?.trackingUrl || '').trim();
+
+      if (!hasTracking) {
+        try {
+          const tx = await shippoGetTransaction(order.shippo.transactionId);
+
+          order.shippingTracking = order.shippingTracking || {};
+
+          order.shippingTracking.trackingNumber = String(tx?.tracking_number || '').trim();
+          order.shippingTracking.trackingUrl = String(tx?.tracking_url_provider || '').trim();
+          order.shippingTracking.labelUrl = String(tx?.label_url || order?.shippo?.labelUrl || '').trim();
+          order.shippingTracking.carrierToken = String(order?.shippo?.carrier || '').trim() || null;
+
+          const rawProvider =
+            String(order?.shippo?.chosenRate?.provider || '').trim() ||
+            String(tx?.rate?.provider || '').trim() ||
+            '';
+
+          const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+          order.shippingTracking.carrierLabel =
+            (badProvider ? '' : rawProvider) ||
+            inferCarrierLabelFromUrl(order.shippingTracking.trackingUrl) ||
+            (order.shippingTracking.carrierToken
+              ? String(order.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim()
+              : '') ||
+            '';
+
+          await order.save();
+        } catch (err) {
+          console.warn(`⚠️ Failed to recover tracking for existing label ${order.orderId}:`, err.message);
+        }
+      }
+
       return res.json({
         ok: true,
         labelUrl: order.shippo.labelUrl,

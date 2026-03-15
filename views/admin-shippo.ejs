@@ -9,973 +9,472 @@
     const c = amt.currency ?? '';
     return `${v} ${c}`.trim();
   };
+
+  const toArray = (v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    return [String(v)];
+  };
+
+  const successList = toArray(success);
+  const errorList = toArray(error);
 %>
 
-<section class="admin-shippo-page">
-  <!-- Header -->
-  <header class="shippo-hero">
-    <div class="shippo-hero__left">
-      <div class="shippo-hero__title">
-        <div class="shippo-badge">🏷️</div>
-        <div>
-          <h1>Shippo Labels</h1>
-          <p class="muted">
-            Create labels for paid orders and automatically save tracking to the order.
-          </p>
+<div class="container-fluid py-3 py-lg-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-xxl-11">
+
+      <!-- Header -->
+      <div class="card border-brand-purple shadow-sm mb-4">
+        <div class="card-header bg-brand-purple text-white py-3">
+          <div class="row g-3 align-items-center">
+            <div class="col-12 col-lg">
+              <div class="d-flex align-items-start gap-3">
+                <div class="rounded-3 bg-white bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;">
+                  <span class="fs-4">🏷️</span>
+                </div>
+                <div>
+                  <h1 class="h3 mb-1 fw-bold">Shippo Labels</h1>
+                  <p class="mb-0 text-white-50">
+                    Create labels for paid orders and automatically save tracking to the order.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-lg-auto">
+              <a class="btn btn-light text-brand-purple fw-semibold w-100" href="/admin">
+                Back to Admin
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <label for="shippoSearch" class="form-label small fw-semibold text-brand-purple text-uppercase mb-1">
+                Search
+              </label>
+              <input
+                class="form-control"
+                type="search"
+                id="shippoSearch"
+                placeholder="Search by OrderId, tracking number, carrier, status..."
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+              <label for="shippoFulfillment" class="form-label small fw-semibold text-brand-purple text-uppercase mb-1">
+                Fulfillment
+              </label>
+              <select class="form-select" id="shippoFulfillment">
+                <option value="">All</option>
+                <option value="PENDING">PENDING</option>
+                <option value="PAID">PAID</option>
+                <option value="PACKING">PACKING</option>
+                <option value="LABEL_CREATED">LABEL_CREATED</option>
+                <option value="SHIPPED">SHIPPED</option>
+                <option value="DELIVERED">DELIVERED</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3 d-flex align-items-end">
+              <button type="button" class="btn btn-outline-brand-purple w-100" id="shippoClearFilters">
+                Clear filters
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="shippo-controls">
-        <label class="field">
-          <span class="field__label">Search</span>
-          <input
-            class="input"
-            type="search"
-            id="shippoSearch"
-            placeholder="Search by OrderId, tracking number, carrier, status…"
-            autocomplete="off"
-          />
-        </label>
+      <!-- KPI row -->
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6 col-xl-3">
+          <div class="card border-brand-purple shadow-sm h-100">
+            <div class="card-body">
+              <div class="small text-uppercase fw-semibold text-brand-purple mb-2">Paid Orders</div>
+              <div class="display-6 fw-bold"><%= list.length %></div>
+              <div class="small text-body-secondary">Showing latest</div>
+            </div>
+          </div>
+        </div>
 
-        <label class="field">
-          <span class="field__label">Fulfillment</span>
-          <select class="select" id="shippoFulfillment">
-            <option value="">All</option>
-            <option value="PENDING">PENDING</option>
-            <option value="PAID">PAID</option>
-            <option value="PACKING">PACKING</option>
-            <option value="LABEL_CREATED">LABEL_CREATED</option>
-            <option value="SHIPPED">SHIPPED</option>
-            <option value="DELIVERED">DELIVERED</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </select>
-        </label>
+        <div class="col-12 col-md-6 col-xl-3">
+          <div class="card border-brand-purple shadow-sm h-100">
+            <div class="card-body">
+              <div class="small text-uppercase fw-semibold text-brand-purple mb-2">Visible</div>
+              <div class="display-6 fw-bold" id="shippoCount"><%= list.length %></div>
+              <div class="small text-body-secondary">After filters</div>
+            </div>
+          </div>
+        </div>
 
-        <div class="shippo-controls__actions">
-          <button type="button" class="btn btn-outline btn-sm" id="shippoClearFilters">
-            Clear
-          </button>
-          <a class="btn btn-outline" href="/admin">← Back to Admin</a>
+        <div class="col-12 col-xl-6">
+          <div class="card border-brand-purple shadow-sm h-100">
+            <div class="card-body">
+              <div class="small text-uppercase fw-semibold text-brand-purple mb-2">Tip</div>
+              <div class="fw-semibold">View rates first, then buy the label.</div>
+              <div class="small text-body-secondary mt-1">
+                If Shippo returns no rates, confirm carrier accounts are enabled and addresses are valid.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <aside class="shippo-hero__right">
-      <div class="kpi kpi--purple">
-        <div class="kpi__label">Paid Orders</div>
-        <div class="kpi__value"><%= list.length %></div>
-        <div class="kpi__hint">Showing latest</div>
-      </div>
+      <!-- Flash messages -->
+      <% successList.forEach(msg => { %>
+        <div class="alert alert-success shadow-sm" role="alert">✅ <%= msg %></div>
+      <% }) %>
 
-      <div class="kpi kpi--blue">
-        <div class="kpi__label">Tip</div>
-        <div class="kpi__value kpi__value--small">View rates first</div>
-        <div class="kpi__hint">Then “Buy this” for best service</div>
-      </div>
-    </aside>
-  </header>
+      <% errorList.forEach(msg => { %>
+        <div class="alert alert-danger shadow-sm" role="alert">❌ <%= msg %></div>
+      <% }) %>
 
-  <!-- Flash messages (keep compatible with your layout flash system) -->
-    <%
-    const toArray = (v) => {
-      if (!v) return [];
-      if (Array.isArray(v)) return v;
-      return [String(v)];
-    };
-    const successList = toArray(success);
-    const errorList = toArray(error);
-  %>
+      <% if (!list.length) { %>
+        <div class="card border-brand-purple shadow-sm">
+          <div class="card-body text-center py-5">
+            <div class="fs-1 mb-3">📦</div>
+            <div class="h4 text-brand-purple fw-bold mb-2">No paid orders found yet</div>
+            <div class="text-body-secondary">
+              Once orders are paid, they will appear here for label creation.
+            </div>
+          </div>
+        </div>
+      <% } else { %>
+        <div id="shippoOrdersList" class="d-grid gap-3">
+          <% list.forEach((o) => {
+            const hasLabel = Boolean(o?.shippo?.labelUrl);
+            const rate = o?.shippo?.chosenRate || null;
+            const rateText = rate && rate.amount && rate.currency
+              ? `${rate.amount} ${rate.currency}${rate.provider ? ' • ' + rate.provider : ''}${rate.service ? ' • ' + rate.service : ''}${rate.estimatedDays != null ? ' • ~' + rate.estimatedDays + 'd' : ''}`
+              : '';
 
-  <% successList.forEach(msg => { %>
-    <div class="flash flash-success">✅ <%= msg %></div>
-  <% }) %>
+            const trackNum =
+              String(
+                o?.shippingTracking?.trackingNumber ||
+                o?.shippingTracking?.number ||
+                o?.shippo?.trackingNumber ||
+                o?.shippo?.tracking_number ||
+                ''
+              ).trim();
 
-  <% errorList.forEach(msg => { %>
-    <div class="flash flash-error">❌ <%= msg %></div>
-  <% }) %>
+            const trackUrl =
+              String(
+                o?.shippingTracking?.trackingUrl ||
+                o?.shippingTracking?.tracking_url ||
+                o?.shippo?.trackingUrl ||
+                o?.shippo?.tracking_url ||
+                o?.shippo?.tracking_url_provider ||
+                ''
+              ).trim();
 
-  <!-- Main -->
-  <div class="panel">
-    <div class="panel__top">
-      <div class="panel__title">
-        <strong>Paid Orders</strong>
-        <span class="pill"><span id="shippoCount"><%= list.length %></span> showing</span>
-      </div>
+            const inferFromUrl = (url) => {
+              const u = String(url || '').toLowerCase();
+              if (!u) return '';
+              if (u.includes('dhl')) return 'DHL';
+              if (u.includes('fedex')) return 'FEDEX';
+              if (u.includes('ups')) return 'UPS';
+              if (u.includes('usps') || u.includes('postal')) return 'USPS';
+              return '';
+            };
 
-      <div class="panel__hint muted">
-        Mobile tip: rows become cards automatically.
-      </div>
-    </div>
+            const label =
+              String(o?.shippingTracking?.carrierLabel || '').trim();
 
-    <% if (!list.length) { %>
-      <div class="empty">
-        <div class="empty__icon">📦</div>
-        <div class="empty__title">No paid orders found yet</div>
-        <div class="empty__text muted">Once orders are paid, they will appear here for label creation.</div>
-      </div>
-    <% } else { %>
-      <div class="table-wrap" role="region" aria-label="Shippo orders table">
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>OrderId</th>
-              <th>Total</th>
-              <th>Created</th>
-              <th>Fulfillment</th>
-              <th>Label</th>
-              <th>Tracking</th>
-              <th class="th-actions"></th>
-            </tr>
-          </thead>
+            const tokenLabel =
+              String(o?.shippingTracking?.carrierToken || '').replace(/_/g, ' ').toUpperCase().trim();
 
-          <tbody id="shippoTbody">
-            <% list.forEach((o, idx) => {
-              const hasLabel = Boolean(o?.shippo?.labelUrl);
-              const rate = o?.shippo?.chosenRate || null;
-              const rateText = rate && rate.amount && rate.currency
-                ? `${rate.amount} ${rate.currency}${rate.provider ? ' • ' + rate.provider : ''}${rate.service ? ' • ' + rate.service : ''}${rate.estimatedDays != null ? ' • ~' + rate.estimatedDays + 'd' : ''}`
-                : '';
+            const shippoCarrier =
+              String(o?.shippo?.carrier || '').replace(/_/g, ' ').toUpperCase().trim();
 
-              const trackNum = o?.shippingTracking?.trackingNumber || '';
-              const trackUrl = o?.shippingTracking?.trackingUrl || '';
+            const chosenRateProvider =
+              String(o?.shippo?.chosenRate?.provider || '').trim();
 
-              const inferFromUrl = (url) => {
-                const u = String(url || '').toLowerCase();
-                if (!u) return '';
-                if (u.includes('dhl')) return 'DHL';
-                if (u.includes('fedex')) return 'FEDEX';
-                if (u.includes('ups')) return 'UPS';
-                if (u.includes('usps') || u.includes('postal')) return 'USPS';
-                return '';
-              };
+            const bad = (s) => {
+              const n = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+              return !n || n === 'UNKNOWN' || n === 'OTHER' || n === 'SHIPPO' || n === 'NULL';
+            };
 
-              const label = (o?.shippingTracking?.carrierLabel && String(o.shippingTracking.carrierLabel).trim()) || '';
+            const carrier =
+              (!bad(label) ? label : '') ||
+              (!bad(chosenRateProvider) ? chosenRateProvider : '') ||
+              inferFromUrl(trackUrl) ||
+              (!bad(tokenLabel) ? tokenLabel : '') ||
+              (!bad(shippoCarrier) ? shippoCarrier : '') ||
+              '';
 
-              const tokenLabel =
-                (o?.shippingTracking?.carrierToken && String(o.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim()) ||
-                (o?.shippo?.carrier && String(o.shippo.carrier).replace(/_/g, ' ').toUpperCase().trim()) ||
-                '';
+            const fulfill =
+              o.fulfillmentStatus ||
+              o.shippingTracking?.status ||
+              o.status ||
+              'PENDING';
 
-              const bad = (s) => {
-                const n = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-                return !n || n === 'UNKNOWN' || n === 'OTHER' || n === 'SHIPPO';
-              };
-
-              const carrier =
-                (!bad(label) ? label : '') ||
-                inferFromUrl(trackUrl) ||
-                (!bad(tokenLabel) ? tokenLabel : '') ||
-                '';
-
-              const fulfill =
-                o.fulfillmentStatus ||
-                o.shippingTracking?.status ||
-                o.status ||
-                'PENDING';
-
-              const createdText = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
-            %>
-              <tr
-                class="row row-alt-<%= (idx % 4) %>"
-                data-orderid="<%= o.orderId %>"
-                data-fulfillment="<%= String(fulfill || '').toUpperCase() %>"
-              >
-                <td data-label="OrderId">
-                  <div class="mono"><%= o.orderId %></div>
-                  <div class="muted tiny">Mongo: <%= String(o._id).slice(-6) %></div>
-
-                  <div class="row-badges">
-                    <% if (hasLabel) { %>
-                      <span class="tag tag--green">Label saved</span>
-                    <% } else { %>
-                      <span class="tag tag--gray">No label</span>
-                    <% } %>
-
-                    <% if (trackNum) { %>
-                      <span class="tag tag--blue">Tracking saved</span>
-                    <% } %>
+            const createdText = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
+          %>
+            <div
+              class="card border-brand-purple shadow-sm shippo-order-card"
+              data-orderid="<%= o.orderId %>"
+              data-fulfillment="<%= String(fulfill || '').toUpperCase() %>"
+            >
+              <div class="card-header bg-brand-purple-soft">
+                <div class="row g-2 align-items-center">
+                  <div class="col-12 col-lg">
+                    <div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
+                      <div class="fw-bold text-brand-purple font-monospace"><%= o.orderId %></div>
+                      <div class="small text-body-secondary">Mongo: <%= String(o._id).slice(-6) %></div>
+                    </div>
                   </div>
-                </td>
 
-                <td data-label="Total">
-                  <div class="strong"><%= money(o.amount) %></div>
-                </td>
+                  <div class="col-12 col-lg-auto">
+                    <div class="d-flex flex-wrap gap-2">
+                      <% if (hasLabel) { %>
+                        <span class="badge rounded-pill badge-brand-green">Label saved</span>
+                      <% } else { %>
+                        <span class="badge rounded-pill text-bg-secondary">No label</span>
+                      <% } %>
 
-                <td data-label="Created">
-                  <div class="muted"><%= createdText %></div>
-                </td>
+                      <% if (trackNum) { %>
+                        <span class="badge rounded-pill text-bg-info">Tracking saved</span>
+                      <% } %>
 
-                <td data-label="Fulfillment">
-                  <span class="pill pill--solid"><%= fulfill %></span>
-                </td>
+                      <span class="badge rounded-pill text-bg-light border"><%= fulfill %></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                <td data-label="Label">
-                  <% if (hasLabel) { %>
-                    <div class="stack label-wrap">
-                      <div class="label-actions">
-                        <a class="btn btn-sm btn-primary"
-                          href="<%= o.shippo.labelUrl %>"
-                          target="_blank"
-                          rel="noopener">Open</a>
-
-                        <button type="button"
-                                class="btn btn-sm btn-outline js-copy-label"
-                                data-url="<%= o.shippo.labelUrl %>">
-                          Copy
-                        </button>
+              <div class="card-body">
+                <div class="row g-4">
+                  <div class="col-12 col-xl-8">
+                    <div class="row g-3">
+                      <div class="col-12 col-md-6 col-xl-3">
+                        <div class="small text-body-secondary">Total</div>
+                        <div class="fw-bold fs-5"><%= money(o.amount) %></div>
                       </div>
 
-                      <% if (rateText) { %>
-                        <div class="muted tiny wrap-anywhere">Rate: <%= rateText %></div>
-                      <% } %>
+                      <div class="col-12 col-md-6 col-xl-3">
+                        <div class="small text-body-secondary">Created</div>
+                        <div><%= createdText %></div>
+                      </div>
 
-                      <div class="muted tiny js-copy-status" style="display:none;"></div>
+                      <div class="col-12 col-md-6 col-xl-3">
+                        <div class="small text-body-secondary">Tracking Number</div>
+                        <% if (trackNum) { %>
+                          <div class="font-monospace text-break"><%= trackNum %></div>
+                        <% } else { %>
+                          <div class="text-body-secondary">—</div>
+                        <% } %>
+                      </div>
+
+                      <div class="col-12 col-md-6 col-xl-3">
+                        <div class="small text-body-secondary">Carrier</div>
+                        <div><%= carrier || '—' %></div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="small text-body-secondary">Label</div>
+
+                        <% if (hasLabel) { %>
+                          <div class="d-flex flex-column gap-2 mt-1">
+                            <div class="d-flex flex-wrap gap-2">
+                              <a
+                                class="btn btn-sm btn-brand-purple"
+                                href="<%= o.shippo.labelUrl %>"
+                                target="_blank"
+                                rel="noopener"
+                              >
+                                Open
+                              </a>
+
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-outline-brand-purple js-copy-label"
+                                data-url="<%= o.shippo.labelUrl %>"
+                              >
+                                Copy
+                              </button>
+
+                              <% if (trackUrl) { %>
+                                <a
+                                  class="btn btn-sm btn-outline-brand-purple"
+                                  href="<%= trackUrl %>"
+                                  target="_blank"
+                                  rel="noopener"
+                                >
+                                  Tracking link
+                                </a>
+                              <% } %>
+                            </div>
+
+                            <% if (rateText) { %>
+                              <div class="small text-body-secondary text-break">
+                                Rate: <%= rateText %>
+                              </div>
+                            <% } %>
+
+                            <div class="small text-body-secondary js-copy-status d-none"></div>
+                          </div>
+                        <% } else { %>
+                          <div class="text-body-secondary mt-1">None</div>
+                        <% } %>
+                      </div>
                     </div>
-                  <% } else { %>
-                    <span class="muted">None</span>
-                  <% } %>
-                </td>
-
-                <td data-label="Tracking">
-                  <% if (trackNum) { %>
-                    <div class="stack">
-                      <div class="mono"><%= trackNum %></div>
-                      <% if (carrier) { %>
-                        <div class="muted tiny">Carrier: <%= carrier %></div>
-                      <% } %>
-                      <% if (trackUrl) { %>
-                        <a class="link tiny" href="<%= trackUrl %>" target="_blank" rel="noopener">Open tracking link</a>
-                      <% } %>
-                    </div>
-                  <% } else { %>
-                    <span class="muted">—</span>
-                  <% } %>
-                </td>
-
-                <td data-label="Actions" class="actions">
-                  <div class="actions__grid">
-                    <button
-                      type="button"
-                      class="btn btn-primary btn-sm js-create"
-                      data-orderid="<%= o.orderId %>"
-                      data-has-label="<%= hasLabel ? '1' : '0' %>"
-                    >
-                      <%= hasLabel ? 'Re-use saved label' : 'Open rates' %>
-                    </button>
-                    
-                    <button
-                      type="button"
-                      class="btn btn-outline btn-sm js-rates"
-                      data-orderid="<%= o.orderId %>"
-                    >
-                      View rates
-                    </button>
-
-                    <a class="btn btn-outline btn-sm" href="/orders/tracking/<%= o.orderId %>" target="_blank" rel="noopener">
-                      Track page
-                    </a>
-
-                    <button
-                      type="button"
-                      class="btn btn-outline btn-sm js-fixaddr"
-                      data-orderid="<%= o.orderId %>"
-                    >
-                      Fix address
-                    </button>
                   </div>
-                </td>
-              </tr>
 
-              <tr class="result-row" id="result-<%= o.orderId %>" style="display:none;">
-                <td colspan="7">
-                  <div class="result-box"></div>
-                </td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
+                  <div class="col-12 col-xl-4">
+                    <div class="d-grid gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-brand-purple js-create"
+                        data-orderid="<%= o.orderId %>"
+                        data-has-label="<%= hasLabel ? '1' : '0' %>"
+                      >
+                        <%= hasLabel ? 'Re-use saved label' : 'Open rates' %>
+                      </button>
 
-      <div class="footer-note">
-        <div class="footer-note__dot"></div>
-        <div class="muted">
-          If Shippo returns no rates, confirm carrier accounts are enabled and addresses are valid.
+                      <button
+                        type="button"
+                        class="btn btn-outline-brand-purple js-rates"
+                        data-orderid="<%= o.orderId %>"
+                      >
+                        View rates
+                      </button>
+
+                      <a
+                        class="btn btn-outline-brand-purple"
+                        href="/orders/tracking/<%= o.orderId %>"
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        Track page
+                      </a>
+
+                      <button
+                        type="button"
+                        class="btn btn-outline-brand-purple js-fixaddr"
+                        data-orderid="<%= o.orderId %>"
+                      >
+                        Fix address
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  id="result-<%= o.orderId %>"
+                  class="result-box border border-brand-purple rounded-3 p-3 mt-4 bg-light"
+                  style="display:none;"
+                ></div>
+              </div>
+            </div>
+          <% }) %>
         </div>
-      </div>
-    <% } %>
+      <% } %>
+    </div>
   </div>
-</section>
+</div>
 
 <style nonce="<%= PAGE_NONCE %>">
-/* =========================
-   Scoped: admin shippo page
-   Brand: Purple dominant
-   ========================= */
-.admin-shippo-page{
-  --blue:#2563EB;
-  --purple:#7C3AED;
-  --green:#22C55E;
-  --black:#0F172A;
+  .text-brand-purple { color: #7C3AED !important; }
+  .bg-brand-purple { background-color: #7C3AED !important; }
+  .bg-brand-purple-soft { background-color: rgba(124, 58, 237, 0.10) !important; }
+  .border-brand-purple { border-color: rgba(124, 58, 237, 0.35) !important; }
 
-  --bg:#0b1020;
-  --panel:#0f1630;
-  --card:rgba(255,255,255,.95);
-  --card2:rgba(255,255,255,.92);
-  --ink:#0F172A;
-  --muted:#64748B;
-
-  --line:rgba(148,163,184,.35);
-  --line2:rgba(15,23,42,.12);
-
-  --r-xl:22px;
-  --r-lg:18px;
-  --r-md:14px;
-  --shadow: 0 18px 55px rgba(2,6,23,.35);
-
-  max-width: 1150px;
-  margin: 0 auto;
-  padding: 14px;
-}
-
-.admin-shippo-page *{box-sizing:border-box}
-.admin-shippo-page .muted{color:var(--muted)}
-.admin-shippo-page .tiny{font-size:12px}
-.admin-shippo-page .mono{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-.admin-shippo-page .strong{font-weight:950;color:var(--ink)}
-.admin-shippo-page h1{
-  margin:0;
-  font-size:20px;
-  line-height:1.15;
-  letter-spacing:-.01em;
-  color:#0b1020;
-}
-
-/* Hero */
-.shippo-hero{
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-  align-items:stretch;
-  margin-bottom:12px;
-}
-.shippo-hero__left{
-  flex: 1 1 620px;
-  background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(37,99,235,.10));
-  border: 1px solid rgba(124,58,237,.25);
-  border-radius: var(--r-xl);
-  padding: 14px;
-  box-shadow: var(--shadow);
-  overflow:hidden;
-}
-.shippo-hero__right{
-  flex: 0 0 260px;
-  display:grid;
-  gap:10px;
-  align-content:stretch;
-}
-.shippo-hero__title{
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-}
-.shippo-badge{
-  width:42px;height:42px;border-radius:14px;
-  display:grid;place-items:center;
-  background: rgba(124,58,237,.18);
-  border: 1px solid rgba(124,58,237,.28);
-  font-size:18px;
-}
-
-.shippo-controls{
-  margin-top:12px;
-  display:grid;
-  grid-template-columns: 1.25fr .75fr auto;
-  gap:10px;
-  align-items:end;
-}
-.shippo-controls__actions{
-  display:flex;
-  gap:10px;
-  justify-content:flex-end;
-  flex-wrap:wrap;
-}
-.field{display:grid;gap:6px}
-.field__label{
-  font-size:12px;
-  font-weight:900;
-  color: rgba(15,23,42,.85);
-  letter-spacing:.04em;
-  text-transform: uppercase;
-}
-.input,.select{
-  width:100%;
-  padding:10px 12px;
-  border-radius: 14px;
-  border:1px solid rgba(148,163,184,.55);
-  background: rgba(255,255,255,.96);
-  color: var(--ink);
-  outline:none;
-}
-.input:focus,.select:focus{
-  border-color: rgba(124,58,237,.55);
-  box-shadow: 0 0 0 4px rgba(124,58,237,.14);
-}
-
-/* KPIs */
-.kpi{
-  border-radius: var(--r-xl);
-  padding: 12px;
-  border:1px solid rgba(148,163,184,.45);
-  background: rgba(255,255,255,.92);
-  box-shadow: var(--shadow);
-}
-.kpi--purple{border-color: rgba(124,58,237,.28); background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(255,255,255,.92));}
-.kpi--blue{border-color: rgba(37,99,235,.25); background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(255,255,255,.92));}
-.kpi__label{font-size:12px;font-weight:950;letter-spacing:.04em;text-transform:uppercase;color:rgba(15,23,42,.75)}
-.kpi__value{font-size:22px;font-weight:1000;color:var(--black);margin-top:2px}
-.kpi__value--small{font-size:14px;font-weight:950}
-.kpi__hint{margin-top:6px;font-size:12px;color:rgba(15,23,42,.68)}
-
-/* Panel */
-.panel{
-  background: rgba(255,255,255,.92);
-  border:1px solid rgba(124,58,237,.18);
-  border-radius: var(--r-xl);
-  padding: 12px;
-  box-shadow: var(--shadow);
-}
-.panel__top{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:10px;
-  flex-wrap:wrap;
-  margin-bottom:10px;
-}
-.panel__title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.panel__hint{font-size:12px}
-
-/* Pills & tags */
-.pill{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(124,58,237,.12);
-  border: 1px solid rgba(124,58,237,.25);
-  color: var(--purple);
-  font-weight: 950;
-  font-size: 12px;
-}
-.pill--solid{
-  background: rgba(15,23,42,.04);
-  border-color: rgba(15,23,42,.12);
-  color: var(--black);
-}
-.tag{
-  display:inline-flex;
-  align-items:center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 950;
-  border:1px solid transparent;
-}
-.tag--green{background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.25); color:#166534}
-.tag--blue{background: rgba(37,99,235,.12); border-color: rgba(37,99,235,.25); color:#1d4ed8}
-.tag--gray{background: rgba(100,116,139,.10); border-color: rgba(100,116,139,.22); color:#334155}
-.row-badges{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
-
-/* Table */
-.table-wrap{
-  overflow:auto;
-  border-radius: var(--r-lg);
-  border:1px solid rgba(148,163,184,.45);
-  background: rgba(255,255,255,.94);
-}
-/* ==========================================
-   ✅ Per-order row coloring (desktop/table)
-   Each ORDER gets its own “quality” background
-   so actions are clearly grouped to that order.
-========================================== */
-
-/* Make sure cells don’t fight the row background */
-.tbl tbody tr.row td{
-  background: transparent;
-}
-
-/* Premium row backgrounds (4-cycle) */
-.tbl tbody tr.row.row-alt-0 td{
-  background: linear-gradient(90deg, rgba(124,58,237,.14), rgba(255,255,255,.92));
-}
-.tbl tbody tr.row.row-alt-1 td{
-  background: linear-gradient(90deg, rgba(37,99,235,.12), rgba(255,255,255,.92));
-}
-.tbl tbody tr.row.row-alt-2 td{
-  background: linear-gradient(90deg, rgba(34,197,94,.10), rgba(255,255,255,.92));
-}
-.tbl tbody tr.row.row-alt-3 td{
-  background: linear-gradient(90deg, rgba(15,23,42,.06), rgba(255,255,255,.94));
-}
-
-/* Strong row “grouping” edges */
-.tbl tbody tr.row td{
-  border-top: 2px solid rgba(148,163,184,.22);
-  border-bottom: 2px solid rgba(148,163,184,.22);
-}
-
-/* Left + right “frame” so you can SEE where the order starts/ends */
-.tbl tbody tr.row td:first-child{
-  border-left: 6px solid rgba(124,58,237,.45);
-  border-top-left-radius: 16px;
-  border-bottom-left-radius: 16px;
-}
-.tbl tbody tr.row.row-alt-1 td:first-child{ border-left-color: rgba(37,99,235,.45); }
-.tbl tbody tr.row.row-alt-2 td:first-child{ border-left-color: rgba(34,197,94,.45); }
-.tbl tbody tr.row.row-alt-3 td:first-child{ border-left-color: rgba(15,23,42,.28); }
-
-.tbl tbody tr.row td:last-child{
-  border-right: 3px solid rgba(148,163,184,.25);
-  border-top-right-radius: 16px;
-  border-bottom-right-radius: 16px;
-}
-
-/* Hover: keep it subtle (don’t kill the row colors) */
-.tbl tbody tr.row:hover td{
-  filter: brightness(0.99);
-}
-.tbl{
-  width:100%;
-  border-collapse:separate;
-  border-spacing:0;
-  min-width: 900px;
-}
-.tbl th,.tbl td{
-  padding: 10px;
-  border-bottom: 1px solid rgba(148,163,184,.30);
-  vertical-align: top;
-}
-.tbl thead th{
-  background: linear-gradient(180deg, rgba(124,58,237,.08), rgba(37,99,235,.05));
-  color: var(--black);
-  font-size: 12px;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-.tbl tbody tr.row:hover td{background: rgba(124,58,237,.04)}
-.th-actions{width: 280px}
-
-/* Buttons */
-.btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  text-decoration:none;
-  font-weight: 950;
-  font-size: 13px;
-  cursor:pointer;
-  user-select:none;
-  white-space:nowrap;
-}
-.btn-sm{padding:7px 10px;border-radius:12px;font-size:12px}
-.btn-primary{
-  background: linear-gradient(135deg, rgba(124,58,237,1), rgba(37,99,235,.95));
-  color:#fff;
-  border-color: rgba(124,58,237,.65);
-  box-shadow: 0 10px 22px rgba(124,58,237,.25);
-}
-.btn-outline{
-  background:#fff;
-  border-color: rgba(148,163,184,.65);
-  color: var(--black);
-}
-.btn:disabled{opacity:.65;cursor:not-allowed}
-.link{color: var(--blue); font-weight: 950; text-decoration:none}
-.link:hover{text-decoration:underline}
-
-/* Actions layout */
-.actions{white-space:nowrap}
-.actions__grid{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:8px;
-  align-items:start;
-}
-.stack{display:grid;gap:6px;min-width:0}
-
-/* Result area */
-.result-row td{background: rgba(124,58,237,.04)}
-.result-box{
-  display:grid;
-  gap:10px;
-  padding: 10px;
-  border-radius: var(--r-lg);
-  border: 1px solid rgba(124,58,237,.18);
-  background: rgba(255,255,255,.95);
-}
-.result-head{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:space-between;
-  flex-wrap:wrap;
-}
-.result-title{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-.alert{
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid;
-  background:#fff;
-}
-.alert--ok{border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.10); color:#166534; font-weight:950}
-.alert--bad{border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.10); color:#991B1B; font-weight:950}
-
-.codebox{
-  margin:0;
-  padding:10px;
-  border-radius: 14px;
-  border:1px solid rgba(148,163,184,.45);
-  background: rgba(248,250,252,1);
-  max-width:100%;
-  overflow:auto;
-  font-size:12px;
-}
-
-/* Address form */
-.addr-form{
-  display:grid;
-  gap:10px;
-  padding: 10px;
-  border-radius: var(--r-lg);
-  border: 1px dashed rgba(37,99,235,.30);
-  background: linear-gradient(135deg, rgba(37,99,235,.06), rgba(124,58,237,.06));
-}
-.addr-grid{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:10px;
-}
-.addr-actions{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-}
-.help{
-  font-size:12px;
-  color: rgba(15,23,42,.65);
-}
-
-/* Flash */
-.flash{
-  padding:10px 12px;
-  border-radius: 14px;
-  margin: 10px 0;
-  border: 1px solid;
-  box-shadow: 0 10px 26px rgba(2,6,23,.10);
-}
-.flash-success{background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.25); color:#166534}
-.flash-error{background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.25); color:#991B1B}
-
-/* Empty */
-.empty{
-  padding: 18px;
-  border-radius: var(--r-xl);
-  border: 1px solid rgba(148,163,184,.45);
-  background: linear-gradient(135deg, rgba(124,58,237,.06), rgba(34,197,94,.04));
-  text-align:center;
-}
-.empty__icon{font-size:30px}
-.empty__title{font-weight:1000;color:var(--black);margin-top:6px}
-.empty__text{margin-top:6px}
-
-/* Footer note */
-.footer-note{
-  margin-top:12px;
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-  padding: 12px;
-  border-radius: var(--r-xl);
-  border: 1px solid rgba(34,197,94,.20);
-  background: rgba(34,197,94,.06);
-}
-.footer-note__dot{
-  width:10px;height:10px;border-radius:999px;
-  background: var(--green);
-  margin-top:4px;
-}
-
-/* ===== Mobile transformation ===== */
-@media (max-width: 920px){
-  .shippo-hero__right{flex: 1 1 260px}
-  .shippo-controls{
-    grid-template-columns: 1fr 1fr;
-  }
-  .shippo-controls__actions{
-    grid-column: 1 / -1;
-    justify-content:flex-start;
-  }
-  .tbl{min-width: 760px}
-}
-@media (max-width: 640px){
-  .admin-shippo-page{padding: 10px}
-  .shippo-controls{grid-template-columns: 1fr}
-  .shippo-controls__actions{justify-content:space-between}
-  .shippo-hero__right{grid-template-columns: 1fr 1fr}
-  .kpi__value{font-size:18px}
-
-  /* Turn table into cards */
-  .table-wrap{
-    border:none;
-    background:transparent;
-    overflow: hidden;     /* ✅ stop sideways scroll */
-    max-width: 100%;
+  .btn-brand-purple {
+    background-color: #7C3AED !important;
+    border-color: #7C3AED !important;
+    color: #fff !important;
   }
 
-  .tbl{min-width:0}
-  .tbl thead{display:none}
-  .tbl, .tbl tbody, .tbl tr, .tbl td{display:block;width:100%}
-  .tbl tbody tr.row{
-    border: 1px solid rgba(124,58,237,.18);
-    border-radius: var(--r-xl);
-    background: transparent; /* background comes from the td gradients below */
-    margin-bottom: 10px;
-    overflow:hidden;
-    box-shadow: 0 14px 40px rgba(2,6,23,.12);
-  }
-  /* Mobile: make the whole card use the order color */
-  .tbl tbody tr.row.row-alt-0{ background: linear-gradient(180deg, rgba(124,58,237,.12), rgba(255,255,255,.95)); }
-  .tbl tbody tr.row.row-alt-1{ background: linear-gradient(180deg, rgba(37,99,235,.10), rgba(255,255,255,.95)); }
-  .tbl tbody tr.row.row-alt-2{ background: linear-gradient(180deg, rgba(34,197,94,.09), rgba(255,255,255,.95)); }
-  .tbl tbody tr.row.row-alt-3{ background: linear-gradient(180deg, rgba(15,23,42,.06), rgba(255,255,255,.96)); }
-
-  /* Mobile: stop td backgrounds from double-layering */
-  .tbl tbody tr.row td{ background: transparent; }
-
-  .tbl tbody tr.row td{
-  border-bottom: 1px solid rgba(148,163,184,.25);
-    padding: 10px 12px;
-    min-width: 0;          /* ✅ important */
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+  .btn-brand-purple:hover,
+  .btn-brand-purple:focus {
+    background-color: #6D28D9 !important;
+    border-color: #6D28D9 !important;
+    color: #fff !important;
   }
 
-  .tbl tbody tr.row td:last-child{border-bottom:none}
-  .tbl tbody tr.row td::before{
-    content: attr(data-label);
-    display:block;
-    font-size: 11px;
-    font-weight: 950;
-    letter-spacing:.05em;
-    text-transform: uppercase;
-    color: rgba(15,23,42,.62);
-    margin-bottom: 6px;
+  .btn-outline-brand-purple {
+    color: #7C3AED !important;
+    border-color: #7C3AED !important;
+    background-color: transparent !important;
   }
-  .actions{white-space:normal}
-  .actions__grid{
-    grid-template-columns: 1fr;
+
+  .btn-outline-brand-purple:hover,
+  .btn-outline-brand-purple:focus {
+    background-color: #7C3AED !important;
+    border-color: #7C3AED !important;
+    color: #fff !important;
   }
-  .btn{width:100%}
-  .btn-outline, .btn-primary{justify-content:center}
-  .result-row td{
-    border:none;
-    padding: 0;
-    background: transparent;
+
+  .badge-brand-green {
+    background-color: #22C55E !important;
+    color: #fff !important;
   }
-  .result-box{margin-top:-6px}
-  .addr-grid{grid-template-columns: 1fr}
-}
-
-/* Reduce motion */
-@media (prefers-reduced-motion: reduce){
-  .btn{transition:none}
-}
-
-/* =========================
-   ✅ Rates (mobile friendly)
-   ========================= */
-.rates-wrap{
-  display:grid;
-  gap:10px;
-  max-width:100%;
-}
-
-.rates-grid{
-  display:grid;
-  gap:10px;
-}
-
-.rate-card{
-  max-width:100%;
-  border: 1px solid rgba(124,58,237,.18);
-  border-radius: var(--r-lg);
-  background: rgba(255,255,255,.96);
-  padding: 10px;
-  box-shadow: 0 12px 30px rgba(2,6,23,.08);
-}
-
-.rate-top{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:10px;
-  flex-wrap:wrap;
-}
-
-.rate-title{
-  display:grid;
-  gap:4px;
-  min-width: 0;
-}
-
-.rate-title strong{
-  color: var(--black);
-  font-size: 14px;
-  font-weight: 1000;
-}
-
-.rate-meta{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-}
-
-.rate-meta .chip{
-  display:inline-flex;
-  align-items:center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 950;
-  border:1px solid rgba(148,163,184,.45);
-  background:#fff;
-  color: rgba(15,23,42,.82);
-}
-
-.rate-meta .chip--purple{
-  border-color: rgba(124,58,237,.25);
-  background: rgba(124,58,237,.10);
-  color: var(--purple);
-}
-
-.rate-price{
-  font-weight: 1000;
-  color: var(--black);
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.rate-actions{
-  margin-top:10px;
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-}
-
-.rate-actions .btn{
-  flex: 1 1 160px;
-}
-
-/* Prevent long IDs from stretching */
-.wrap-anywhere{
-  overflow-wrap:anywhere;
-  word-break:break-word;
-}
-
-@media (max-width: 640px){
-  .rate-actions .btn{
-    width:100%;
-    flex: 1 1 auto;
-  }
-}
-
-/* ✅ Labels: prevent long content from stretching cards */
-.label-wrap{max-width:100%}
-.label-wrap .btn{max-width:100%}
-
-.label-actions{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  align-items:center;
-}
-.label-actions .btn{
-  width:auto;
-}
-@media (max-width: 640px){
-  .label-actions .btn{
-    width:100%;
-  }
-}
 </style>
 
 <script nonce="<%= PAGE_NONCE %>">
 document.addEventListener('DOMContentLoaded', () => {
-  const $ = (sel, root=document) => (root ? root.querySelector(sel) : null);
-  const $$ = (sel, root=document) => (root ? Array.from(root.querySelectorAll(sel)) : []);
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const searchInput = $('#shippoSearch');
   const fulfillSelect = $('#shippoFulfillment');
   const clearBtn = $('#shippoClearFilters');
-  const tbody = $('#shippoTbody');
   const countEl = $('#shippoCount');
 
-  function norm(s){ return String(s || '').toLowerCase().trim(); }
+  function norm(s) {
+    return String(s || '').toLowerCase().trim();
+  }
 
   function escapeHtml(s) {
     return String(s || '')
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#039;');
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
-  function showResult(orderId, html){
-    const row = document.getElementById(`result-${orderId}`);
-    const box = row ? row.querySelector('.result-box') : null;
-    if (!row || !box) return null;
-    row.style.display = '';
+  function getCards() {
+    return $$('.shippo-order-card');
+  }
+
+  function showResult(orderId, html) {
+    const box = document.getElementById(`result-${orderId}`);
+    if (!box) return null;
+    box.style.display = '';
     box.innerHTML = html;
-    return { row, box };
+    return box;
   }
 
-  function applyFilters(){
-    if (!tbody) return; // ✅ prevents crash when list is empty
+  function hideResult(orderId) {
+    const box = document.getElementById(`result-${orderId}`);
+    if (!box) return;
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+
+  function applyFilters() {
     const q = norm(searchInput && searchInput.value);
     const f = norm(fulfillSelect && fulfillSelect.value);
 
-    const rows = $$('tr.row', tbody);
     let shown = 0;
 
-    rows.forEach(row => {
-      const orderId = row.getAttribute('data-orderid') || '';
-      const fulfill = row.getAttribute('data-fulfillment') || '';
+    getCards().forEach(card => {
+      const orderId = card.getAttribute('data-orderid') || '';
+      const fulfill = card.getAttribute('data-fulfillment') || '';
+      const text = norm(card.textContent);
 
-      const text = norm(row.textContent);
       const okQ = !q || norm(orderId).includes(q) || text.includes(q);
       const okF = !f || norm(fulfill) === f;
-
       const show = okQ && okF;
-      row.style.display = show ? '' : 'none';
 
-      const resultRow = document.getElementById(`result-${orderId}`);
-      if (!show && resultRow) resultRow.style.display = 'none';
-
+      card.style.display = show ? '' : 'none';
+      if (!show) hideResult(orderId);
       if (show) shown++;
     });
 
@@ -984,14 +483,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (searchInput) searchInput.addEventListener('input', applyFilters);
   if (fulfillSelect) fulfillSelect.addEventListener('change', applyFilters);
-  if (clearBtn) clearBtn.addEventListener('click', () => {
-    if (searchInput) searchInput.value = '';
-    if (fulfillSelect) fulfillSelect.value = '';
-    applyFilters();
-  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      if (fulfillSelect) fulfillSelect.value = '';
+      applyFilters();
+    });
+  }
 
   async function showRates(orderId) {
-    showResult(orderId, `<div class="alert">Loading rates…</div>`);
+    showResult(orderId, `<div class="alert alert-secondary mb-0">Loading rates...</div>`);
 
     const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/rates`, {
       method: 'GET',
@@ -1004,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.ok) {
-      showResult(orderId, `<span class="alert alert--bad">❌ ${escapeHtml(data.message || 'Failed to load rates')}</span>`);
+      showResult(orderId, `<div class="alert alert-danger mb-0">❌ ${escapeHtml(data.message || 'Failed to load rates')}</div>`);
       return;
     }
 
@@ -1014,105 +516,106 @@ document.addEventListener('DOMContentLoaded', () => {
     const payerRecorded = !!data.payerRecorded;
     const payerInThisList = !!data.payerInThisList;
 
-    const norm2 = (s) => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
+    const norm2 = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
     if (!rates.length) {
-      showResult(orderId, `<div class="alert">No rates returned for this order.</div>`);
+      showResult(orderId, `<div class="alert alert-secondary mb-0">No rates returned for this order.</div>`);
       return;
     }
 
-    
-
     showResult(orderId, `
-      <div class="result-head">
-        <div class="result-title">
-          <strong>Available rates</strong>
-          <span class="help">Choose a rate to buy a label.</span>
-
-          <div class="muted tiny" style="margin-top:6px">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
+        <div>
+          <div class="h5 mb-1 text-brand-purple fw-bold">Available rates</div>
+          <div class="small text-body-secondary">Choose a rate to buy a label.</div>
+          <div class="small text-body-secondary mt-2">
             Payer rate recorded: <strong>${payerRecorded ? 'YES' : 'NO'}</strong>
-            ${payerRateId ? `• PayerRateId: <span class="mono wrap-anywhere">${escapeHtml(payerRateId)}</span>` : ''}
-            ${payerRecorded && !payerInThisList ? `• <span class="tag tag--gray">Payer not in this shipment list</span>` : ''}
+            ${payerRateId ? `• PayerRateId: <span class="font-monospace text-break">${escapeHtml(payerRateId)}</span>` : ''}
+            ${payerRecorded && !payerInThisList ? `• <span class="badge rounded-pill text-bg-secondary">Payer not in this shipment list</span>` : ''}
           </div>
         </div>
 
-        <div class="result-title">
+        <div class="d-flex flex-wrap gap-2">
           ${
             (payerRecorded && payerInThisList)
-              ? `<span class="tag tag--green">Strict: payer rate only</span>`
+              ? `<span class="badge rounded-pill badge-brand-green px-3 py-2">Strict: payer rate only</span>`
               : `
-                <button class="btn btn-sm btn-primary js-buy-cheapest" data-orderid="${escapeHtml(orderId)}">Buy cheapest</button>
-                <button class="btn btn-sm btn-outline js-buy-fastest" data-orderid="${escapeHtml(orderId)}">Buy fastest</button>
+                <button class="btn btn-sm btn-brand-purple js-buy-cheapest" data-orderid="${escapeHtml(orderId)}">Buy cheapest</button>
+                <button class="btn btn-sm btn-outline-brand-purple js-buy-fastest" data-orderid="${escapeHtml(orderId)}">Buy fastest</button>
               `
           }
-          <button type="button" class="btn btn-sm btn-outline js-close-result" data-orderid="${escapeHtml(orderId)}">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-brand-purple js-close-result" data-orderid="${escapeHtml(orderId)}">Close</button>
         </div>
       </div>
 
-      <div class="rates-wrap">
-        <div class="rates-grid">
-          ${
-            rates.map((rt) => {
-              const rateObjectIdRaw = rt.object_id || rt.id || rt.rateId || rt.objectId || '';
-              const rateObjectId = String(rateObjectIdRaw || '').trim();
-              const payerId = String(payerRateId || '').trim();
+      <div class="row g-3">
+        ${
+          rates.map((rt) => {
+            const rateObjectIdRaw = rt.object_id || rt.id || rt.rateId || rt.objectId || '';
+            const rateObjectId = String(rateObjectIdRaw || '').trim();
+            const payerId = String(payerRateId || '').trim();
 
-              const hintMatch =
-                !payerId &&
-                (payerHint && (payerHint.provider || payerHint.service || payerHint.amount)) &&
-                (
-                  (payerHint.provider && norm2(rt.provider) === norm2(payerHint.provider)) ||
-                  (payerHint.service && norm2(rt.service) === norm2(payerHint.service))
-                ) &&
-                (
-                  !payerHint.amount || String(rt.amount) === String(payerHint.amount)
-                );
+            const hintMatch =
+              !payerId &&
+              (payerHint && (payerHint.provider || payerHint.service || payerHint.amount)) &&
+              (
+                (payerHint.provider && norm2(rt.provider) === norm2(payerHint.provider)) ||
+                (payerHint.service && norm2(rt.service) === norm2(payerHint.service))
+              ) &&
+              (
+                !payerHint.amount || String(rt.amount) === String(payerHint.amount)
+              );
 
-              const isPayer = (payerId && rateObjectId === payerId) || hintMatch;
+            const isPayer = (payerId && rateObjectId === payerId) || hintMatch;
 
-              const etaText =
-                (rt.estimatedDays != null)
-                  ? `~${escapeHtml(rt.estimatedDays)} days`
-                  : escapeHtml(rt.durationTerms || '—');
+            const etaText =
+              (rt.estimatedDays != null)
+                ? `~${escapeHtml(rt.estimatedDays)} days`
+                : escapeHtml(rt.durationTerms || '—');
 
-              return `
-                <div class="rate-card" ${isPayer ? 'style="outline:2px solid rgba(124,58,237,.45);"' : ''}>
-                  <div class="rate-top">
-                    <div class="rate-title">
-                      <strong>${escapeHtml(rt.provider || 'Carrier')}</strong>
-                      <div class="rate-meta">
-                        <span class="chip chip--purple">${escapeHtml(rt.service || 'Service')}</span>
-                        <span class="chip">ETA: ${etaText}</span>
-                        ${isPayer ? `<span class="chip chip--purple">Payer chosen</span>` : ``}
+            return `
+              <div class="col-12 col-xl-6">
+                <div class="card h-100 ${isPayer ? 'border-brand-purple border-2' : 'border'} shadow-sm">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                      <div>
+                        <div class="fw-bold">${escapeHtml(rt.provider || 'Carrier')}</div>
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                          <span class="badge rounded-pill text-bg-light border text-brand-purple">${escapeHtml(rt.service || 'Service')}</span>
+                          <span class="badge rounded-pill text-bg-light border">ETA: ${etaText}</span>
+                          ${isPayer ? `<span class="badge rounded-pill badge-brand-green">Payer chosen</span>` : ``}
+                        </div>
                       </div>
-                      <div class="muted tiny">RateId: <span class="mono wrap-anywhere">${escapeHtml(rateObjectId)}</span></div>
+                      <div class="fw-bold text-nowrap">${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}</div>
                     </div>
 
-                    <div class="rate-price">
-                      ${escapeHtml(rt.amount)} ${escapeHtml(rt.currency)}
+                    <div class="small text-body-secondary mb-3">
+                      RateId: <span class="font-monospace text-break">${escapeHtml(rateObjectId)}</span>
                     </div>
-                  </div>
 
-                  <div class="rate-actions">
-                    <button
-                      type="button"
-                      class="btn btn-sm ${isPayer ? 'btn-primary' : 'btn-outline'} js-buy-rate"
-                      data-orderid="${escapeHtml(orderId)}"
-                      data-rateid="${escapeHtml(rateObjectId)}"
-                    >${isPayer ? 'Buy payer choice' : 'Buy this'}</button>
+                    <div class="d-grid">
+                      <button
+                        type="button"
+                        class="btn btn-sm ${isPayer ? 'btn-brand-purple' : 'btn-outline-brand-purple'} js-buy-rate"
+                        data-orderid="${escapeHtml(orderId)}"
+                        data-rateid="${escapeHtml(rateObjectId)}"
+                      >
+                        ${isPayer ? 'Buy payer choice' : 'Buy this'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              `;
-            }).join('')
-          }
-        </div>
+              </div>
+            `;
+          }).join('')
+        }
       </div>
     `);
   }
 
   async function createLabel(orderId) {
     const btn = document.querySelector(`.js-create[data-orderid="${orderId}"]`);
-    const hasLabel = (btn && btn.dataset.hasLabel === '1');
+    const hasLabel = btn && btn.dataset.hasLabel === '1';
 
     if (hasLabel) {
       const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
@@ -1126,26 +629,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) {
-        showResult(orderId, `<span class="alert alert--bad">❌ ${escapeHtml(data.message || 'Shippo failed')}</span>`);
+        showResult(orderId, `<div class="alert alert-danger mb-0">❌ ${escapeHtml(data.message || 'Shippo failed')}</div>`);
         return;
       }
 
       showResult(orderId, `
-        <div class="result-head">
-          <div class="result-title">
-            <span class="alert alert--ok">✅ Re-used saved label</span>
-            ${data.trackingNumber ? `<span class="mono">Tracking: ${escapeHtml(data.trackingNumber)}</span>` : ''}
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <div>
+            <div class="alert alert-success mb-2">✅ Re-used saved label</div>
+            ${data.trackingNumber ? `<div class="font-monospace">Tracking: ${escapeHtml(data.trackingNumber)}</div>` : ''}
           </div>
-          <div class="result-title">
-            ${data.labelUrl ? `<a class="btn btn-sm btn-primary" href="${data.labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
-            ${(data.trackingUrl || data.trackingNumber) ? `
-              <a class="btn btn-sm btn-outline"
-                href="${data.trackingUrl || '#'}"
-                target="_blank" rel="noopener">Courier tracking</a>` : ''
-            }
+
+          <div class="d-flex flex-wrap gap-2">
+            ${data.labelUrl ? `<a class="btn btn-sm btn-brand-purple" href="${data.labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
+            ${(data.trackingUrl || data.trackingNumber) ? `<a class="btn btn-sm btn-outline-brand-purple" href="${data.trackingUrl || '#'}" target="_blank" rel="noopener">Courier tracking</a>` : ''}
           </div>
         </div>
-        <div class="help">This label was already saved on the order.</div>
+
+        <div class="small text-body-secondary mt-2">This label was already saved on the order.</div>
       `);
       return;
     }
@@ -1153,56 +654,60 @@ document.addEventListener('DOMContentLoaded', () => {
     await showRates(orderId);
   }
 
-  // Buttons on each row
-  $$('.js-rates').forEach(btn => btn.addEventListener('click', () => showRates(btn.dataset.orderid)));
-  $$('.js-create').forEach(btn => btn.addEventListener('click', () => createLabel(btn.dataset.orderid)));
+  $$('.js-rates').forEach(btn => {
+    btn.addEventListener('click', () => showRates(btn.dataset.orderid));
+  });
 
-    // ✅ Fix address: inline form (no prompts)
+  $$('.js-create').forEach(btn => {
+    btn.addEventListener('click', () => createLabel(btn.dataset.orderid));
+  });
+
   $$('.js-fixaddr').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const orderId = btn.dataset.orderid;
 
-      const html = `
-        <div class="result-head">
-          <div class="result-title">
-            <strong>Fix address</strong>
-            <span class="help">Update the shipping address, then create label again.</span>
+      showResult(orderId, `
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+          <div>
+            <div class="h5 mb-1 text-brand-purple fw-bold">Fix address</div>
+            <div class="small text-body-secondary">Update the shipping address, then create label again.</div>
           </div>
-          <div class="result-title">
-            <button type="button" class="btn btn-sm btn-outline js-close-result" data-orderid="${escapeHtml(orderId)}">Close</button>
+
+          <div>
+            <button type="button" class="btn btn-sm btn-outline-brand-purple js-close-result" data-orderid="${escapeHtml(orderId)}">Close</button>
           </div>
         </div>
 
-        <form class="addr-form js-addr-form" data-orderid="${escapeHtml(orderId)}">
-          <div class="addr-grid">
-            <label class="field">
-              <span class="field__label">Street 1</span>
-              <input class="input" name="street1" placeholder="e.g. 1 Market St" required />
-            </label>
+        <form class="js-addr-form" data-orderid="${escapeHtml(orderId)}">
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold text-uppercase text-brand-purple">Street 1</label>
+              <input class="form-control" name="street1" placeholder="e.g. 1 Market St" required />
+            </div>
 
-            <label class="field">
-              <span class="field__label">Street 2</span>
-              <input class="input" name="street2" placeholder="Apartment / Suite (optional)" />
-            </label>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold text-uppercase text-brand-purple">Street 2</label>
+              <input class="form-control" name="street2" placeholder="Apartment / Suite (optional)" />
+            </div>
 
-            <label class="field">
-              <span class="field__label">City</span>
-              <input class="input" name="city" placeholder="e.g. San Francisco" required />
-            </label>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold text-uppercase text-brand-purple">City</label>
+              <input class="form-control" name="city" placeholder="e.g. San Francisco" required />
+            </div>
 
-            <label class="field">
-              <span class="field__label">State</span>
-              <input class="input" name="state" placeholder="State/Province (US: 2-letter, else optional)" />
-            </label>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold text-uppercase text-brand-purple">State</label>
+              <input class="form-control" name="state" placeholder="State/Province (US: 2-letter, else optional)" />
+            </div>
 
-            <label class="field">
-              <span class="field__label">ZIP</span>
-              <input class="input" name="zip" placeholder="e.g. 94107" required />
-            </label>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold text-uppercase text-brand-purple">ZIP</label>
+              <input class="form-control" name="zip" placeholder="e.g. 94107" required />
+            </div>
 
-            <label class="field">
-              <span class="field__label">Country</span>
-              <select class="select" name="country" required>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold text-uppercase text-brand-purple">Country</label>
+              <select class="form-select" name="country" required>
                 <option value="US" selected>US</option>
                 <option value="ZA">ZA</option>
                 <option value="GB">GB</option>
@@ -1211,24 +716,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="DE">DE</option>
                 <option value="FR">FR</option>
               </select>
-            </label>
+            </div>
           </div>
 
-          <div class="addr-actions">
-            <button type="button" class="btn btn-outline js-fill-demo">Fill example</button>
-            <button type="submit" class="btn btn-primary">Save address</button>
+          <div class="d-flex flex-column flex-sm-row justify-content-sm-end gap-2 mt-3">
+            <button type="button" class="btn btn-outline-brand-purple js-fill-demo">Fill example</button>
+            <button type="submit" class="btn btn-brand-purple">Save address</button>
           </div>
 
-          <div class="help">Tip: For US, State should be 2 letters (e.g. CA). Country should be ISO code (e.g. US).</div>
-          <div class="js-addr-status"></div>
+          <div class="small text-body-secondary mt-3">
+            Tip: For US, State should be 2 letters (e.g. CA). Country should be ISO code (e.g. US).
+          </div>
+
+          <div class="js-addr-status mt-3"></div>
         </form>
-      `;
-
-      showResult(orderId, html);
+      `);
     });
   });
 
-     // Buy chosen rate
   document.addEventListener('click', async (e) => {
     const buyBtn = e.target.closest('.js-buy-rate');
     if (!buyBtn) return;
@@ -1236,10 +741,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderId = buyBtn.dataset.orderid;
     const rateId = buyBtn.dataset.rateid;
 
-    // UI feedback
     buyBtn.disabled = true;
     const oldText = buyBtn.textContent;
-    buyBtn.textContent = 'Buying…';
+    buyBtn.textContent = 'Buying...';
 
     try {
       const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/create-label`, {
@@ -1257,13 +761,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!r.ok || !data.ok) {
         const shippo = data.shippo || {};
-        const status = shippo.status ? `<div class="muted tiny">Status: <span class="mono">${escapeHtml(shippo.status)}</span></div>` : '';
-        const msgs = shippo.messages ? `<pre class="codebox">${escapeHtml(JSON.stringify(shippo.messages, null, 2))}</pre>` : '';
-        const txid = shippo.transactionId ? `<div class="muted tiny">TransactionId: <span class="mono">${escapeHtml(shippo.transactionId)}</span></div>` : '';
-        const rid  = shippo.rateId ? `<div class="muted tiny">RateId: <span class="mono">${escapeHtml(shippo.rateId)}</span></div>` : '';
+        const status = shippo.status ? `<div class="small text-body-secondary">Status: <span class="font-monospace">${escapeHtml(shippo.status)}</span></div>` : '';
+        const msgs = shippo.messages ? `<pre class="border rounded bg-light p-3 mb-0 small">${escapeHtml(JSON.stringify(shippo.messages, null, 2))}</pre>` : '';
+        const txid = shippo.transactionId ? `<div class="small text-body-secondary">TransactionId: <span class="font-monospace">${escapeHtml(shippo.transactionId)}</span></div>` : '';
+        const rid = shippo.rateId ? `<div class="small text-body-secondary">RateId: <span class="font-monospace">${escapeHtml(shippo.rateId)}</span></div>` : '';
 
         showResult(orderId, `
-          <div class="alert alert--bad">❌ ${escapeHtml(data.message || 'Failed to buy label')}</div>
+          <div class="alert alert-danger">❌ ${escapeHtml(data.message || 'Failed to buy label')}</div>
           ${status}${txid}${rid}
           ${msgs}
         `);
@@ -1271,29 +775,30 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       showResult(orderId, `
-        <div class="result-head">
-          <div class="result-title">
-            <span class="alert alert--ok">✅ Label bought</span>
-            ${data.trackingNumber ? `<span class="mono">Tracking: ${escapeHtml(data.trackingNumber)}</span>` : ''}
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <div>
+            <div class="alert alert-success mb-2">✅ Label bought</div>
+            ${data.trackingNumber ? `<div class="font-monospace">Tracking: ${escapeHtml(data.trackingNumber)}</div>` : ''}
           </div>
-          <div class="result-title">
-            ${data.labelUrl ? `<a class="btn btn-sm btn-primary" href="${data.labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
-            ${data.trackingUrl ? `<a class="btn btn-sm btn-outline" href="${data.trackingUrl}" target="_blank" rel="noopener">Courier tracking</a>` : ''}
+
+          <div class="d-flex flex-wrap gap-2">
+            ${data.labelUrl ? `<a class="btn btn-sm btn-brand-purple" href="${data.labelUrl}" target="_blank" rel="noopener">Open label</a>` : ''}
+            ${data.trackingUrl ? `<a class="btn btn-sm btn-outline-brand-purple" href="${data.trackingUrl}" target="_blank" rel="noopener">Courier tracking</a>` : ''}
           </div>
         </div>
-        <div class="help">Refreshing the page to show the saved label…</div>
+
+        <div class="small text-body-secondary mt-2">Refreshing the page to show the saved label...</div>
       `);
 
       window.location.assign(`/admin/shippo?t=${Date.now()}`);
     } catch (err) {
-      showResult(orderId, `<div class="alert alert--bad">❌ Network error: ${escapeHtml(err.message || 'Request failed')}</div>`);
+      showResult(orderId, `<div class="alert alert-danger mb-0">❌ Network error: ${escapeHtml(err.message || 'Request failed')}</div>`);
     } finally {
       buyBtn.disabled = false;
       buyBtn.textContent = oldText;
     }
   });
- 
-  // Buy cheapest / fastest presets
+
   document.addEventListener('click', async (e) => {
     const cheapest = e.target.closest('.js-buy-cheapest');
     const fastest = e.target.closest('.js-buy-fastest');
@@ -1320,23 +825,20 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    alert(`✅ Label bought (${chooseRate}). Refreshing…`);
+    alert(`✅ Label bought (${chooseRate}). Refreshing...`);
     window.location.assign(`/admin/shippo?t=${Date.now()}`);
   });
 
-  // Close result panel
   document.addEventListener('click', (e) => {
     const close = e.target.closest('.js-close-result');
     if (!close) return;
-    const orderId = close.dataset.orderid;
-    const row = document.getElementById(`result-${orderId}`);
-    if (row) row.style.display = 'none';
+    hideResult(close.dataset.orderid);
   });
 
-  // Fill demo values
   document.addEventListener('click', (e) => {
     const fill = e.target.closest('.js-fill-demo');
     if (!fill) return;
+
     const form = fill.closest('.js-addr-form');
     if (!form) return;
 
@@ -1348,12 +850,12 @@ document.addEventListener('DOMContentLoaded', () => {
     form.country.value = 'US';
   });
 
-  // Submit address update
   document.addEventListener('submit', async (e) => {
     const form = e.target.closest('.js-addr-form');
     if (!form) return;
 
     e.preventDefault();
+
     const orderId = form.dataset.orderid;
     const statusBox = form.querySelector('.js-addr-status');
 
@@ -1366,26 +868,34 @@ document.addEventListener('DOMContentLoaded', () => {
       country: String(form.country.value || 'US').toUpperCase()
     };
 
-    if (statusBox) statusBox.innerHTML = `<div class="alert">Saving…</div>`;
+    if (statusBox) {
+      statusBox.innerHTML = `<div class="alert alert-secondary mb-0">Saving...</div>`;
+    }
 
     const r = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/shippo/update-address`, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify(payload)
     });
 
-    const data = await r.json().catch(()=>({}));
+    const data = await r.json().catch(() => ({}));
 
     if (!r.ok || !data.ok) {
-      if (statusBox) statusBox.innerHTML = `<div class="alert alert--bad">❌ ${escapeHtml(data.message || 'Could not update address')}</div>`;
+      if (statusBox) {
+        statusBox.innerHTML = `<div class="alert alert-danger mb-0">❌ ${escapeHtml(data.message || 'Could not update address')}</div>`;
+      }
       return;
     }
 
-    if (statusBox) statusBox.innerHTML = `<div class="alert alert--ok">✅ Address updated. Now click “Create label”.</div>`;
+    if (statusBox) {
+      statusBox.innerHTML = `<div class="alert alert-success mb-0">✅ Address updated. Now click “Create label”.</div>`;
+    }
   });
 
-  // ✅ Copy label URL button (for the "Copy" button in the Label column)
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('.js-copy-label');
     if (!btn) return;
@@ -1395,10 +905,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const original = btn.textContent;
 
-    // helper: flip to "Copied" briefly, then back
     const flashCopied = () => {
       btn.textContent = 'Copied';
-      setTimeout(() => { btn.textContent = original; }, 900);
+      setTimeout(() => {
+        btn.textContent = original;
+      }, 900);
     };
 
     try {
@@ -1408,7 +919,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // fallback for older browsers
       const ta = document.createElement('textarea');
       ta.value = url;
       ta.style.position = 'fixed';
@@ -1420,13 +930,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       flashCopied();
     } catch (err) {
-      // optional: quick failure feedback (still clean)
       btn.textContent = 'Failed';
-      setTimeout(() => { btn.textContent = original; }, 900);
+      setTimeout(() => {
+        btn.textContent = original;
+      }, 900);
     }
   });
 
-  // ✅ Only run filters if table exists
   applyFilters();
 });
 </script>
