@@ -1,19 +1,30 @@
+<!--admin-ui/orders.html-->
 <!DOCTYPE html>
 <!--
-FILE: admin-ui/order.html
-PURPOSE: Admin single Order Details page
+FILE: admin-ui/orders.html
+PURPOSE: Admin Orders Explorer page
 USED FOR:
-- Showing one selected order
-- Showing receipt link
-- Showing order status, totals, customer/business info
+- Searching orders
+- Filtering by status
+- Viewing the orders table
+- Navigating to a single order details page
 
 MAIN SCRIPT:
-- js/admin-order-details.js
+- js/admin-dashboard-orders-explorer.js
 
 IMPORTANT DOM IDS USED BY JS:
-- admin-order-details-meta
-- admin-order-details-root
-- admin-order-receipt-btn-top
+- admin-orders-search-form
+- admin-orders-q
+- admin-orders-business-name
+- admin-orders-order-id
+- admin-orders-receipt-number
+- admin-orders-status
+- admin-orders-reset-btn
+- admin-orders-explorer-tbody
+- admin-orders-explorer-meta
+- admin-orders-explorer-page-text
+- admin-orders-prev-btn
+- admin-orders-next-btn
 -->
 <html lang="en">
   <head>
@@ -21,10 +32,10 @@ IMPORTANT DOM IDS USED BY JS:
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
-    <meta name="description" content="Unicoporate Admin Order Details">
+    <meta name="description" content="Unicoporate Admin Orders Explorer">
     <meta name="author" content="Unicoporate">
-    <meta name="keyword" content="Unicoporate,Admin,Order Details">
-    <title>Order Details | Unicoporate Admin</title>
+    <meta name="keyword" content="Unicoporate,Admin,Orders">
+    <title>Unicoporate Admin - Orders Explorer</title>
 
     <link rel="icon" href="/favicon.ico">
     <link rel="shortcut icon" href="/favicon.ico">
@@ -35,9 +46,6 @@ IMPORTANT DOM IDS USED BY JS:
     <link rel="stylesheet" href="css/vendors/simplebar.css">
     <link href="css/style.css" rel="stylesheet">
     <link href="css/examples.css" rel="stylesheet">
-
-    <script src="js/config.js"></script>
-    <script src="js/color-modes.js"></script>
 
     <style>
       .text-brand-purple { color: #7C3AED !important; }
@@ -75,6 +83,9 @@ IMPORTANT DOM IDS USED BY JS:
         color: #fff !important;
       }
     </style>
+
+    <script src="js/config.js"></script>
+    <script src="js/color-modes.js"></script>
   </head>
   <body>
     <div class="sidebar sidebar-dark sidebar-fixed border-end" id="sidebar">
@@ -285,8 +296,7 @@ IMPORTANT DOM IDS USED BY JS:
           <nav aria-label="breadcrumb">
             <ol class="breadcrumb my-0">
               <li class="breadcrumb-item"><a href="index.html">Dashboard</a></li>
-              <li class="breadcrumb-item"><a href="orders.html">Orders Explorer</a></li>
-              <li class="breadcrumb-item active" aria-current="page"><span>Order Details</span></li>
+              <li class="breadcrumb-item active" aria-current="page"><span>Orders Explorer</span></li>
             </ol>
           </nav>
         </div>
@@ -295,30 +305,126 @@ IMPORTANT DOM IDS USED BY JS:
       <div class="body flex-grow-1">
         <div class="container-lg px-1 px-md-4">
           <div class="card mb-4 border-brand-purple shadow-sm">
-            <div class="card-header bg-brand-purple text-white d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+            <div class="card-header bg-brand-purple text-white d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
               <div>
-                <div class="fw-semibold fs-5">Order Details</div>
-                <div class="small text-white-50" id="admin-order-details-meta">
-                  Loading order...
+                <div class="fw-semibold fs-5">Orders Explorer</div>
+                <div class="small text-white-50">
+                  Search completed and refunded orders by business name, order ID, or receipt number
                 </div>
               </div>
-
-              <div class="d-flex gap-2">
-                <a href="orders.html" class="btn btn-outline-light btn-sm">Back to Orders</a>
-                <a
-                  href="#"
-                  id="admin-order-receipt-btn-top"
-                  class="btn btn-light btn-sm text-brand-purple fw-semibold"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open Receipt
-                </a>
+              <div class="small text-white-50" id="admin-orders-explorer-meta">
+                Loading orders...
               </div>
             </div>
 
-            <div class="card-body" id="admin-order-details-root">
-              <div class="text-center text-brand-purple py-4 fw-semibold">Loading order details...</div>
+            <div class="card-body">
+              <form id="admin-orders-search-form" class="row g-3 mb-4">
+                <div class="col-12 col-md-6 col-xl-3">
+                  <label class="form-label small fw-semibold text-brand-purple" for="admin-orders-q">General Search</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="admin-orders-q"
+                    placeholder="Order ID, payer email, capture ID"
+                  >
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-2">
+                  <label class="form-label small text-body-secondary" for="admin-orders-business-name">Business Name</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="admin-orders-business-name"
+                    placeholder="Business name"
+                  >
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-2">
+                  <label class="form-label small text-body-secondary" for="admin-orders-order-id">Order ID</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="admin-orders-order-id"
+                    placeholder="Order ID"
+                  >
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-2">
+                  <label class="form-label small text-body-secondary" for="admin-orders-receipt-number">Receipt Number</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="admin-orders-receipt-number"
+                    placeholder="RCPT-..."
+                  >
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-2">
+                  <label class="form-label small text-body-secondary" for="admin-orders-status">Status</label>
+                  <select class="form-select" id="admin-orders-status">
+                    <option value="all">All viewable</option>
+                    <option value="completed">Completed</option>
+                    <option value="refunded">Refunded</option>
+                    <option value="partially_refunded">Partial refund</option>
+                  </select>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-1 d-flex align-items-end">
+                  <button type="submit" class="btn btn-brand-purple w-100">
+                    Search
+                  </button>
+                </div>
+
+                <div class="col-12">
+                  <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-brand-purple btn-sm" id="admin-orders-reset-btn">
+                      Reset
+                    </button>
+                    <span class="small text-brand-purple align-self-center">
+                      Admin can only view order information and receipts here.
+                    </span>
+                  </div>
+                </div>
+              </form>
+
+              <div class="table-responsive">
+                <table class="table border align-middle mb-0">
+                  <thead class="fw-semibold text-nowrap">
+                    <tr class="align-middle">
+                      <th class="bg-brand-purple-soft text-brand-purple">Order ID</th>
+                      <th class="bg-body-secondary">Receipt</th>
+                      <th class="bg-body-secondary">Business</th>
+                      <th class="bg-body-secondary">Status</th>
+                      <th class="bg-brand-purple-soft text-brand-purple text-end">Amount</th>
+                      <th class="bg-body-secondary text-end">Refunded</th>
+                      <th class="bg-body-secondary">Payer</th>
+                      <th class="bg-body-secondary">Created</th>
+                      <th class="bg-brand-purple-soft text-brand-purple text-center">Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody id="admin-orders-explorer-tbody">
+                    <tr>
+                      <td colspan="9" class="text-center text-body-secondary">Loading orders...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3">
+                <div class="small text-brand-purple fw-semibold" id="admin-orders-explorer-page-text">
+                  Page 1 of 1
+                </div>
+
+                <div class="btn-group" role="group" aria-label="Orders pagination">
+                  <button type="button" class="btn btn-outline-brand-purple" id="admin-orders-prev-btn">
+                    Previous
+                  </button>
+                  <button type="button" class="btn btn-outline-brand-purple" id="admin-orders-next-btn">
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -363,7 +469,7 @@ IMPORTANT DOM IDS USED BY JS:
     <script src="vendors/@coreui/coreui/js/coreui.bundle.min.js"></script>
     <script src="vendors/simplebar/js/simplebar.min.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/admin-dashboard-orders-explorer.js"></script>
     <script src="js/admin-header-sidebar-toggle.js"></script>
-    <script src="js/admin-order-details.js"></script>
   </body>
 </html>

@@ -63,15 +63,19 @@
   function renderStatusBadge(status) {
     const normalized = String(status || '').trim().toUpperCase();
 
-    if (normalized === 'REFUNDED') {
-      return '<span class="badge bg-danger">Refunded</span>';
-    }
+    switch (normalized) {
+      case 'REFUNDED':
+        return '<span class="badge bg-danger">Refunded</span>';
 
-    if (normalized === 'PARTIALLY_REFUNDED') {
-      return '<span class="badge bg-warning text-dark">Partial Refund</span>';
-    }
+      case 'PARTIALLY_REFUNDED':
+        return '<span class="badge bg-warning text-dark">Partial Refund</span>';
 
-    return '<span class="badge badge-brand-green">Completed</span>';
+      case 'COMPLETED':
+        return '<span class="badge badge-brand-green">Completed</span>';
+
+      default:
+        return `<span class="badge bg-secondary">${escapeHtml(normalized || 'UNKNOWN')}</span>`;
+    }
   }
 
   function buildQueryString(page) {
@@ -227,4 +231,3 @@
 
   loadOrders(1);
 })();
-
