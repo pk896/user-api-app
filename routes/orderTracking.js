@@ -422,8 +422,20 @@ router.get('/:orderId', async (req, res, next) => {
       liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
 
       if (liveTracking) {
-        // Cache your live tracking fields (what you already do)
+        // Cache your live tracking fields
         await cacheLiveTracking(req.params.orderId, liveTracking);
+
+        // Also update the in-memory order object used by this render
+        order.shippingTracking = order.shippingTracking || {};
+        order.shippingTracking.liveStatus = liveTracking.status || '';
+        order.shippingTracking.liveEvents = Array.isArray(liveTracking.events) ? liveTracking.events : [];
+        order.shippingTracking.lastTrackingUpdate = liveTracking.lastUpdate || new Date();
+        order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery || null;
+
+        // If no saved status yet, let the page show the live one
+        if (!order.shippingTracking.status && liveTracking.status) {
+          order.shippingTracking.status = liveTracking.status;
+        }
       }
     }
 

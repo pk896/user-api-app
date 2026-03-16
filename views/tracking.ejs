@@ -1,4 +1,5 @@
-<!--views/tracking-->
+<!-- views/tracking.ejs -->
+<!-- views/tracking.ejs -->
 <%
   const PAGE_NONCE = typeof nonce !== 'undefined' ? nonce : '';
   const BASE = (typeof baseUrl !== 'undefined' && baseUrl) ? baseUrl : '/orders/tracking';
@@ -10,7 +11,9 @@
     try {
       if (!d) return '';
       return new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' });
-    } catch { return String(d || ''); }
+    } catch {
+      return String(d || '');
+    }
   }
 
   const pickEventDate = (ev) => {
@@ -44,15 +47,22 @@
 
   const etaRaw =
     t.eta ||
-    t.estimated_delivery ||
     t.estimatedDelivery ||
+    t.estimated_delivery ||
     t.expected_delivery_date ||
     t.tracking_status?.eta ||
     null;
 
   const lastUpdateText = lastUpdateRaw ? niceDate(lastUpdateRaw) : '—';
 
-  // Fallback ETA (approx) from chosen shipping rate (if tracking ETA is missing)
+  const currentStatus =
+    t.liveStatus ||
+    t.status ||
+    liveTracking?.status ||
+    eventsSorted[0]?.status ||
+    o.fulfillmentStatus ||
+    (t.trackingNumber ? 'SHIPPED' : '');
+
   const rateDays =
     o?.shippo?.chosenRate?.estimatedDays ??
     o?.shippo?.chosenRate?.estimated_days ??
@@ -74,9 +84,6 @@
     ? niceDate(etaRaw)
     : (approxEtaRaw ? (niceDate(approxEtaRaw) + ' (approx)') : '—');
 
-  // ----------------------------
-  // UI display helpers (no DB changes)
-  // ----------------------------
   const prettyCarrier = (v) => {
     const s = String(v || '').trim();
     if (!s) return '';
@@ -113,35 +120,32 @@
     return m[s] || (s ? s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '—');
   };
 
-  // small tag text for pills (keeps your nice UI)
   const statusTag = (v) => String(prettyStatus(v) || '—');
 
-  // Return a CSS class name based on status (UI-only)
   const statusClass = (v) => {
     const s = String(v || '').trim().toUpperCase();
 
-    if (s === 'DELIVERED') return 'pill--ok';
+    if (s === 'DELIVERED') return 'trk-badge-ok';
 
-    if (s === 'OUT_FOR_DELIVERY') return 'pill--ship';
-    if (s === 'IN_TRANSIT') return 'pill--ship';
-    if (s === 'SHIPPED') return 'pill--ship';
-    if (s === 'LABEL_CREATED') return 'pill--ship';
+    if (s === 'OUT_FOR_DELIVERY') return 'trk-badge-ship';
+    if (s === 'IN_TRANSIT') return 'trk-badge-ship';
+    if (s === 'SHIPPED') return 'trk-badge-ship';
+    if (s === 'LABEL_CREATED') return 'trk-badge-ship';
 
-    if (s === 'CANCELLED') return 'pill--bad';
-    if (s === 'RETURNED') return 'pill--bad';
-    if (s === 'FAILURE') return 'pill--bad';
+    if (s === 'CANCELLED') return 'trk-badge-bad';
+    if (s === 'RETURNED') return 'trk-badge-bad';
+    if (s === 'FAILURE') return 'trk-badge-bad';
 
-    if (s === 'PROCESSING') return 'pill--muted';
-    if (s === 'PENDING') return 'pill--muted';
-    if (s === 'UNKNOWN') return 'pill--muted';
+    if (s === 'PROCESSING') return 'trk-badge-muted';
+    if (s === 'PENDING') return 'trk-badge-muted';
+    if (s === 'UNKNOWN') return 'trk-badge-muted';
 
-    return 'pill--muted';
+    return 'trk-badge-muted';
   };
 
   const eventDetails = (ev) => {
     const d = String(ev?.details || '').trim();
     const r = String(ev?.rawStatus || '').trim();
-    // Prefer details; fallback to raw status; fallback to pretty status
     return d || r || prettyStatus(ev?.status);
   };
 
@@ -160,10 +164,6 @@
     return [String(v)];
   };
 
-  // ----------------------------------------------------
-  // Fallback tracking URL generator (when t.trackingUrl missing)
-  // Supports common carriers incl. DHL Express (global / SA use)
-  // ----------------------------------------------------
   const buildCarrierTrackingUrl = (carrierToken, trackingNumber) => {
     const c = String(carrierToken || '').trim().toLowerCase();
     const tn = encodeURIComponent(String(trackingNumber || '').trim());
@@ -182,11 +182,6 @@
       return `https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id=${tn}`;
     }
 
-    // South Africa carrier placeholders (add exact URL formats when ready)
-    // if (c === 'courier_guy') return `...${tn}`;
-    // if (c === 'fastway') return `...${tn}`;
-    // if (c === 'aramex') return `...${tn}`;
-
     return '';
   };
 
@@ -194,7 +189,6 @@
     String(t.trackingUrl || '').trim() ||
     buildCarrierTrackingUrl(t.carrierToken || t.carrier, t.trackingNumber);
 
-  // Label link (prefer Shippo label URL, then any tracking-side label URL if you store one)
   const labelUrlFinal =
     String(
       o?.shippo?.labelUrl ||
@@ -209,328 +203,341 @@
   const errorList = toArray(error);
 %>
 
-<section class="trk">
-  <header class="trk__head">
-    <div>
-      <h1>📦 Order Tracking</h1>
-      <div class="muted">OrderId: <span class="mono"><%= o.orderId || '—' %></span></div>
-      <div class="muted tiny">Created: <%= niceDate(o.createdAt) %></div>
-    </div>
-    <div class="trk__actions">
-      <a class="btn btn-outline" href="<%= isAdmin ? '/admin/shippo' : '/orders' %>">← Back</a>
-      <button class="btn btn-primary" type="button" id="btnRefresh">Refresh live tracking</button>
-    </div>
-  </header>
+<div class="container-fluid px-2 px-sm-3 px-lg-4 py-3 py-lg-4 tracking-page-bg">
+  <div class="row justify-content-center mx-0">
+    <div class="col-12 col-xl-11 px-0">
 
-  <% successList.forEach(msg => { %>
-    <div class="flash ok">✅ <%= msg %></div>
-  <% }) %>
-  <% errorList.forEach(msg => { %>
-    <div class="flash bad">❌ <%= msg %></div>
-  <% }) %>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Current tracking</h2>
-
-      <div class="row">
-        <div class="label">Carrier</div>
-        <div class="value">
-          <%= (t.carrierLabel || prettyCarrier(t.carrier) || '—') %>
-          <% if (t.carrierToken) { %>
-            <span class="pill"><%= prettyCarrier(t.carrierToken) %></span>
-          <% } %>
-        </div>
-      </div>
-
-      <% if (trackingUrlFinal) { %>
-        <div class="row">
-          <div class="label">Tracking link</div>
-          <div class="value">
-            <a class="link link-card" href="<%= trackingUrlFinal %>" target="_blank" rel="noopener noreferrer">
-              Open carrier tracking ↗
-            </a>
-          </div>
-        </div>
-      <% } %>
-
-      <% if (labelUrlFinal) { %>
-        <div class="row">
-          <div class="label">Shipping label</div>
-          <div class="value">
-            <a class="link link-card" href="<%= labelUrlFinal %>" target="_blank" rel="noopener noreferrer">
-              Open shipping label ↗
-            </a>
-          </div>
-        </div>
-      <% } %>
-
-      <div class="row">
-        <div class="label">Status</div>
-        <div class="value">
-          <span class="pill solid <%= statusClass(t.liveStatus || t.status) %>">
-            <%= statusTag(t.liveStatus || t.status) %>
-          </span>
-          <% if (t.status && t.liveStatus && String(t.status).toUpperCase() !== String(t.liveStatus).toUpperCase()) { %>
-            <span class="pill <%= statusClass(t.status) %>"><%= 'Saved: ' + statusTag(t.status) %></span>
-          <% } %>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">Last update</div>
-        <div class="value muted"><%= lastUpdateText %></div>
-      </div>
-
-      <div class="row">
-        <div class="label">ETA</div>
-        <div class="value muted"><%= etaFinalText %></div>
-      </div>
-
-      <% if (isAdmin) { %>
-        <hr class="hr" />
-
-        <h2>Admin: set tracking</h2>
-
-        <form method="POST" action="<%= BASE %>/<%= o._id %>" class="form">
-          <label class="field">
-            <span>Carrier (Shippo token)</span>
-            <select name="carrier" class="select" required>
-              <option value="">Choose…</option>
-              <option value="usps" <%= t.carrierToken==='usps' ? 'selected' : '' %>>USPS</option>
-              <option value="ups" <%= t.carrierToken==='ups' ? 'selected' : '' %>>UPS</option>
-              <option value="fedex" <%= t.carrierToken==='fedex' ? 'selected' : '' %>>FedEx</option>
-              <option value="dhl_express" <%= t.carrierToken==='dhl_express' ? 'selected' : '' %>>DHL Express</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Tracking number</span>
-            <input name="trackingNumber" class="input" value="<%= t.trackingNumber || '' %>" placeholder="Enter tracking number" required />
-          </label>
-
-          <label class="field">
-            <span>Carrier display name (optional)</span>
-            <input
-              name="carrierLabel"
-              class="input"
-              value="<%= t.carrierLabel || '' %>"
-              placeholder="Name shown on page (e.g. DHL Express South Africa)"
-            />
-          </label>
-
-          <div class="help muted">
-            Tracking link is auto-shown from the saved URL (or generated from carrier + tracking number if URL is missing).
-          </div>
-
-          <% if (labelUrlFinal) { %>
-            <div class="help muted">
-              Shipping label is available above as a clickable link.
-            </div>
-          <% } else { %>
-            <div class="help muted">
-              Shipping label will appear automatically after a label URL is saved from your shipping flow.
-            </div>
-          <% } %>
-
-          <button class="btn btn-primary" type="submit">Save tracking</button>
-
-          <div class="help muted">
-            We save the real carrier in <span class="mono">carrierToken</span>. This field only changes the display name shown on this page.
-          </div>
-        </form>
-      <% } %>
-    </div>
-
-    <div class="card">
-      <h2>Tracking events</h2>
-
-      <div id="liveMsg" class="muted tiny"></div>
-
-      <% if (!events.length) { %>
-        <div class="empty muted">No live events yet. Click “Refresh live tracking”.</div>
-      <% } else { %>
-        <div class="events" id="eventsBox">
-          <% events.slice().reverse().forEach(ev => { %>
-            <div class="ev">
-              <div class="ev__top">
-                <span class="pill <%= statusClass(ev.status) %>"><%= statusTag(ev.status) %></span>
-                <span class="muted tiny"><%= niceDate(pickEventDate(ev) || ev.date) %></span>
+      <div class="card border-brand-purple shadow-sm overflow-hidden mb-3 mb-lg-4">
+        <div class="card-body p-0">
+          <div class="bg-brand-purple text-white p-3 p-lg-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+              <div class="w-100">
+                <div class="small fw-semibold text-uppercase tracking-head-kicker mb-2">Shipment progress</div>
+                <h1 class="h3 fw-bold mb-2">Order Tracking</h1>
+                <div class="d-flex flex-column gap-1">
+                  <div class="small text-white-50">
+                    OrderId:
+                    <span class="font-monospace fw-semibold text-white"><%= o.orderId || '—' %></span>
+                  </div>
+                  <div class="small text-white-50">
+                    Created: <%= niceDate(o.createdAt) %>
+                  </div>
+                </div>
               </div>
-              <div class="ev__mid"><%= eventDetails(ev) %></div>
 
-              <% const locLine = eventLocationLine(ev.location); %>
-              <% if (locLine) { %>
-                <div class="muted tiny">📍 <%= locLine %></div>
-              <% } else if (ev.location) { %>
-                <div class="muted tiny"><%= JSON.stringify(ev.location) %></div>
+              <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-lg-auto">
+                <a class="btn btn-light text-brand-purple fw-semibold" href="<%= isAdmin ? '/admin/shippo' : '/orders' %>">
+                  ← Back
+                </a>
+                <button class="btn btn-brand-green" type="button" id="btnRefresh">
+                  Refresh live tracking
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-3 px-lg-4 py-3 bg-brand-purple-soft border-top border-brand-purple-soft">
+            <div class="d-flex flex-column flex-md-row align-items-md-center gap-2 gap-md-3">
+              <div class="small fw-semibold text-brand-purple text-uppercase">Current status</div>
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge rounded-pill trk-badge-solid <%= statusClass(currentStatus) %>">
+                  <%= statusTag(currentStatus) %>
+                </span>
+                <% if (t.status && currentStatus && String(t.status).toUpperCase() !== String(currentStatus).toUpperCase()) { %>
+                  <span class="badge rounded-pill <%= statusClass(t.status) %>">
+                    <%= 'Saved: ' + statusTag(t.status) %>
+                  </span>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <% successList.forEach(msg => { %>
+        <div class="alert alert-success shadow-sm mb-3" role="alert">✅ <%= msg %></div>
+      <% }) %>
+
+      <% errorList.forEach(msg => { %>
+        <div class="alert alert-danger shadow-sm mb-3" role="alert">❌ <%= msg %></div>
+      <% }) %>
+
+      <div class="row g-3 g-lg-4">
+        <div class="col-12 col-lg-6">
+          <div class="card border-brand-purple shadow-sm h-100 overflow-hidden">
+            <div class="card-header bg-brand-purple text-white py-3">
+              <h2 class="h5 fw-bold mb-0">Current tracking</h2>
+            </div>
+
+            <div class="card-body p-3 p-lg-4">
+
+              <div class="tracking-field rounded-3 p-3 mb-3">
+                <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Carrier</div>
+                <div class="fw-semibold fs-5 text-dark">
+                  <%= (t.carrierLabel || prettyCarrier(t.carrier) || '—') %>
+                  <% if (t.carrierToken) { %>
+                    <span class="badge rounded-pill trk-badge-base ms-2"><%= prettyCarrier(t.carrierToken) %></span>
+                  <% } %>
+                </div>
+              </div>
+
+              <% if (trackingUrlFinal) { %>
+                <div class="tracking-field rounded-3 p-3 mb-3">
+                  <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Tracking link</div>
+                  <a class="btn btn-outline-brand-purple fw-semibold" href="<%= trackingUrlFinal %>" target="_blank" rel="noopener noreferrer">
+                    Open carrier tracking ↗
+                  </a>
+                </div>
+              <% } %>
+
+              <% if (labelUrlFinal) { %>
+                <div class="tracking-field rounded-3 p-3 mb-3">
+                  <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Shipping label</div>
+                  <a class="btn btn-outline-brand-purple fw-semibold" href="<%= labelUrlFinal %>" target="_blank" rel="noopener noreferrer">
+                    Open shipping label ↗
+                  </a>
+                </div>
+              <% } %>
+
+              <div class="tracking-field rounded-3 p-3 mb-3">
+                <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Last update</div>
+                <div class="fw-semibold text-dark"><%= lastUpdateText %></div>
+              </div>
+
+              <div class="tracking-field rounded-3 p-3 <%= isAdmin ? 'mb-4' : 'mb-0' %>">
+                <div class="small fw-semibold text-uppercase text-brand-purple mb-2">ETA</div>
+                <div class="fw-semibold text-dark"><%= etaFinalText %></div>
+              </div>
+
+              <% if (isAdmin) { %>
+                <div class="pt-2">
+                  <h2 class="h5 fw-bold text-brand-purple mb-3">Admin: set tracking</h2>
+
+                  <form method="POST" action="<%= BASE %>/<%= o._id %>" class="row g-3">
+                    <div class="col-12">
+                      <label class="form-label fw-semibold text-brand-purple">Carrier (Shippo token)</label>
+                      <select name="carrier" class="form-select tracking-input" required>
+                        <option value="">Choose…</option>
+                        <option value="usps" <%= t.carrierToken === 'usps' ? 'selected' : '' %>>USPS</option>
+                        <option value="ups" <%= t.carrierToken === 'ups' ? 'selected' : '' %>>UPS</option>
+                        <option value="fedex" <%= t.carrierToken === 'fedex' ? 'selected' : '' %>>FedEx</option>
+                        <option value="dhl_express" <%= t.carrierToken === 'dhl_express' ? 'selected' : '' %>>DHL Express</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12">
+                      <label class="form-label fw-semibold text-brand-purple">Tracking number</label>
+                      <input
+                        name="trackingNumber"
+                        class="form-control tracking-input"
+                        value="<%= t.trackingNumber || '' %>"
+                        placeholder="Enter tracking number"
+                        required
+                      />
+                    </div>
+
+                    <div class="col-12">
+                      <label class="form-label fw-semibold text-brand-purple">Carrier display name (optional)</label>
+                      <input
+                        name="carrierLabel"
+                        class="form-control tracking-input"
+                        value="<%= t.carrierLabel || '' %>"
+                        placeholder="Name shown on page (e.g. DHL Express South Africa)"
+                      />
+                    </div>
+
+                    <div class="col-12">
+                      <div class="small text-body-secondary">
+                        Tracking link is auto-shown from the saved URL, or generated from carrier + tracking number if URL is missing.
+                      </div>
+                    </div>
+
+                    <div class="col-12">
+                      <% if (labelUrlFinal) { %>
+                        <div class="small text-body-secondary">
+                          Shipping label is available above as a clickable link.
+                        </div>
+                      <% } else { %>
+                        <div class="small text-body-secondary">
+                          Shipping label will appear automatically after a label URL is saved from your shipping flow.
+                        </div>
+                      <% } %>
+                    </div>
+
+                    <div class="col-12">
+                      <button class="btn btn-brand-purple fw-semibold" type="submit">Save tracking</button>
+                    </div>
+
+                    <div class="col-12">
+                      <div class="small text-body-secondary">
+                        We save the real carrier in <span class="font-monospace">carrierToken</span>. This field only changes the display name shown on this page.
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              <% } %>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+          <div class="card border-brand-purple shadow-sm h-100 overflow-hidden">
+            <div class="card-header bg-brand-purple text-white py-3">
+              <h2 class="h5 fw-bold mb-0">Tracking events</h2>
+            </div>
+
+            <div class="card-body p-3 p-lg-4">
+              <div id="liveMsg" class="small text-body-secondary mb-3"></div>
+
+              <% if (!events.length) { %>
+                <div class="tracking-empty rounded-3 p-3">
+                  No live events yet. Click “Refresh live tracking”.
+                </div>
+              <% } else { %>
+                <div class="d-grid gap-3" id="eventsBox">
+                  <% events.slice().reverse().forEach(ev => { %>
+                    <div class="tracking-field rounded-3 p-3">
+                      <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-2">
+                        <span class="badge rounded-pill <%= statusClass(ev.status) %>">
+                          <%= statusTag(ev.status) %>
+                        </span>
+                        <span class="small text-body-secondary">
+                          <%= niceDate(pickEventDate(ev) || ev.date) %>
+                        </span>
+                      </div>
+
+                      <div class="fw-semibold text-dark mb-2"><%= eventDetails(ev) %></div>
+
+                      <% const locLine = eventLocationLine(ev.location); %>
+                      <% if (locLine) { %>
+                        <div class="small text-body-secondary">📍 <%= locLine %></div>
+                      <% } else if (ev.location) { %>
+                        <div class="small text-body-secondary"><%= JSON.stringify(ev.location) %></div>
+                      <% } %>
+                    </div>
+                  <% }) %>
+                </div>
               <% } %>
             </div>
-          <% }) %>
+          </div>
         </div>
-      <% } %>
+      </div>
+
     </div>
   </div>
-</section>
+</div>
 
 <style nonce="<%= PAGE_NONCE %>">
-.trk{
-  --blue:#2563EB;
-  --purple:#7C3AED;
-  --green:#22C55E;
-  --black:#0F172A;
+  .tracking-page-bg {
+    background-color: #f8f5ff !important;
+  }
 
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 14px;
-}
-.trk *{box-sizing:border-box}
-h1{margin:0;font-size:22px;color:var(--black)}
-h2{margin:0 0 10px;font-size:14px;color:var(--black);text-transform:uppercase;letter-spacing:.05em}
-.muted{color:#64748B}
-.tiny{font-size:12px}
-.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  .text-brand-purple { color: #7C3AED !important; }
+  .bg-brand-purple { background-color: #7C3AED !important; }
+  .bg-brand-purple-soft { background-color: rgba(124, 58, 237, 0.10) !important; }
+  .border-brand-purple { border-color: rgba(124, 58, 237, 0.35) !important; }
+  .border-brand-purple-soft { border-color: rgba(124, 58, 237, 0.18) !important; }
 
-.trk__head{
-  display:flex;
-  justify-content:space-between;
-  gap:12px;
-  flex-wrap:wrap;
-  align-items:flex-start;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(124,58,237,.18);
-  background: linear-gradient(135deg, rgba(124,58,237,.10), rgba(37,99,235,.06));
-  margin-bottom: 12px;
-}
-.trk__actions{display:flex;gap:10px;flex-wrap:wrap}
+  .tracking-head-kicker {
+    color: rgba(255, 255, 255, 0.82) !important;
+    letter-spacing: 0.08em;
+  }
 
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  gap:8px;padding:10px 12px;border-radius:14px;
-  border:1px solid transparent;font-weight:950;cursor:pointer;text-decoration:none;
-}
-.btn-primary{background:linear-gradient(135deg, rgba(124,58,237,1), rgba(37,99,235,.95));color:#fff}
-.btn-outline{background:#fff;border-color:rgba(148,163,184,.65);color:var(--black)}
+  .tracking-field {
+    background-color: rgba(124, 58, 237, 0.08) !important;
+    border: 1px solid rgba(124, 58, 237, 0.18) !important;
+  }
 
-.flash{
-  padding:10px 12px;border-radius:14px;border:1px solid;margin: 10px 0;
-}
-.flash.ok{background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.25); color:#166534}
-.flash.bad{background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.25); color:#991B1B}
+  .tracking-empty {
+    background-color: rgba(124, 58, 237, 0.08) !important;
+    border: 1px dashed rgba(124, 58, 237, 0.28) !important;
+    color: #6b7280 !important;
+  }
 
-.grid{
-  display:grid;
-  grid-template-columns: 1.05fr .95fr;
-  gap:12px;
-}
-.card{
-  background:#fff;
-  border:1px solid rgba(148,163,184,.45);
-  border-radius: 18px;
-  padding: 12px;
-}
+  .tracking-input {
+    border-color: rgba(124, 58, 237, 0.25) !important;
+    background-color: rgba(124, 58, 237, 0.04) !important;
+  }
 
-.row{
-  display:grid;
-  grid-template-columns: 160px 1fr;
-  gap:10px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(148,163,184,.22);
-}
-.row:last-child{border-bottom:none}
-.label{font-weight:950;color:rgba(15,23,42,.70);text-transform:uppercase;letter-spacing:.05em;font-size:11px}
-.value{color:var(--black);font-weight:800}
+  .tracking-input:focus {
+    border-color: rgba(124, 58, 237, 0.55) !important;
+    box-shadow: 0 0 0 0.25rem rgba(124, 58, 237, 0.12) !important;
+    background-color: #fff !important;
+  }
 
-.pill{
-  display:inline-flex;align-items:center;gap:6px;
-  padding: 4px 10px;border-radius:999px;
-  border:1px solid rgba(124,58,237,.25);
-  background: rgba(124,58,237,.10);
-  color: var(--purple);
-  font-size:12px;font-weight:950;
-}
-.pill.solid{
-  border-color: rgba(15,23,42,.12);
-  background: rgba(15,23,42,.04);
-  color: var(--black);
-}
+  .btn-brand-purple {
+    background-color: #7C3AED !important;
+    border-color: #7C3AED !important;
+    color: #fff !important;
+  }
 
-/* -----------------------------
-   Status color variants
------------------------------- */
-.pill--ok{
-  border-color: rgba(34,197,94,.35);
-  background: rgba(34,197,94,.12);
-  color: #166534;
-}
+  .btn-brand-purple:hover,
+  .btn-brand-purple:focus {
+    background-color: #6D28D9 !important;
+    border-color: #6D28D9 !important;
+    color: #fff !important;
+  }
 
-.pill--ship{
-  border-color: rgba(124,58,237,.35);
-  background: rgba(124,58,237,.12);
-  color: var(--purple);
-}
+  .btn-outline-brand-purple {
+    color: #7C3AED !important;
+    border-color: #7C3AED !important;
+    background-color: rgba(124, 58, 237, 0.06) !important;
+  }
 
-.pill--muted{
-  border-color: rgba(100,116,139,.35);
-  background: rgba(100,116,139,.10);
-  color: #334155;
-}
+  .btn-outline-brand-purple:hover,
+  .btn-outline-brand-purple:focus {
+    background-color: #7C3AED !important;
+    border-color: #7C3AED !important;
+    color: #fff !important;
+  }
 
-.pill--bad{
-  border-color: rgba(239,68,68,.35);
-  background: rgba(239,68,68,.12);
-  color: #991B1B;
-}
+  .btn-brand-green {
+    background-color: #22C55E !important;
+    border-color: #22C55E !important;
+    color: #fff !important;
+  }
 
-/* When it's the main "solid" status pill, make it pop slightly */
-.pill.solid.pill--ok{ background: rgba(34,197,94,.14); }
-.pill.solid.pill--ship{ background: rgba(124,58,237,.14); }
-.pill.solid.pill--muted{ background: rgba(100,116,139,.12); }
-.pill.solid.pill--bad{ background: rgba(239,68,68,.14); }
+  .btn-brand-green:hover,
+  .btn-brand-green:focus {
+    background-color: #16A34A !important;
+    border-color: #16A34A !important;
+    color: #fff !important;
+  }
 
-.hr{border:none;border-top:1px solid rgba(148,163,184,.25);margin:12px 0}
+  .trk-badge-base {
+    background-color: rgba(124, 58, 237, 0.12) !important;
+    border: 1px solid rgba(124, 58, 237, 0.25) !important;
+    color: #7C3AED !important;
+  }
 
-.form{display:grid;gap:10px}
-.field{display:grid;gap:6px}
-.input,.select{
-  width:100%;padding:10px 12px;border-radius:14px;
-  border:1px solid rgba(148,163,184,.55);outline:none;
-}
-.input:focus,.select:focus{
-  border-color: rgba(124,58,237,.55);
-  box-shadow: 0 0 0 4px rgba(124,58,237,.14);
-}
-.help{font-size:12px}
+  .trk-badge-solid {
+    border: 1px solid transparent !important;
+  }
 
-.events{display:grid;gap:10px}
-.ev{
-  border:1px solid rgba(148,163,184,.40);
-  border-radius:16px;
-  padding:10px;
-  background: rgba(248,250,252,1);
-}
-.ev__top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
-.ev__mid{margin-top:6px;color:var(--black);font-weight:750}
-.empty{padding:12px;border-radius:16px;border:1px dashed rgba(148,163,184,.55)}
+  .trk-badge-ok {
+    background-color: rgba(34, 197, 94, 0.14) !important;
+    border: 1px solid rgba(34, 197, 94, 0.30) !important;
+    color: #166534 !important;
+  }
 
-@media (max-width: 880px){
-  .grid{grid-template-columns:1fr}
-  .row{grid-template-columns:1fr}
-}
+  .trk-badge-ship {
+    background-color: rgba(124, 58, 237, 0.14) !important;
+    border: 1px solid rgba(124, 58, 237, 0.30) !important;
+    color: #7C3AED !important;
+  }
 
-.link{color:var(--blue);font-weight:900;text-decoration:none}
-.link:hover{text-decoration:underline}
+  .trk-badge-muted {
+    background-color: rgba(107, 114, 128, 0.12) !important;
+    border: 1px solid rgba(107, 114, 128, 0.24) !important;
+    color: #4b5563 !important;
+  }
 
-.link-card{
-  display:inline-flex;
-  align-items:center;
-  width:fit-content;
-  padding:8px 10px;
-  border-radius:12px;
-  border:1px solid rgba(37,99,235,.25);
-  background: rgba(37,99,235,.06);
-}
+  .trk-badge-bad {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+    border: 1px solid rgba(239, 68, 68, 0.28) !important;
+    color: #991B1B !important;
+  }
 </style>
 
 <script nonce="<%= PAGE_NONCE %>">
@@ -540,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function refresh() {
     if (msg) msg.textContent = 'Refreshing…';
-    btn && (btn.disabled = true);
+    if (btn) btn.disabled = true;
 
     let r, data;
     try {
@@ -550,12 +557,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       data = await r.json().catch(() => ({}));
     } catch (e) {
-      btn && (btn.disabled = false);
+      if (btn) btn.disabled = false;
       if (msg) msg.textContent = '❌ Network error. Please try again.';
       return;
     }
 
-    btn && (btn.disabled = false);
+    if (btn) btn.disabled = false;
 
     if (!r.ok || !data.ok) {
       if (msg) msg.textContent = '❌ ' + (data.message || 'Failed to refresh');
