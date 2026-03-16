@@ -612,6 +612,7 @@ const businessSidebarApiRoutes = require('./routes/businessSidebarApi');
 const staticPagesRoutes = require('./routes/staticPages');
 const salesRoutes = require('./routes/sales');
 const someLinksRoutes = require('./routes/someRoute');
+const storePagesRoutes = require('./routes/storePages');
 const demandsRoutes = require('./routes/demands');
 const matchesRoutes = require('./routes/matches');
 const notificationsRoutes = require('./routes/notifications');
@@ -678,6 +679,7 @@ app.use('/payment', paymentRouter);
 app.use('/contact', contactRoutes);
 app.use('/sales', salesRoutes);
 app.use('/links', someLinksRoutes);
+app.use('/', storePagesRoutes);
 
 // Demands & Matches
 app.use('/demands', demandsRoutes);
