@@ -788,4 +788,67 @@ router.get('/admin/cleanup-orphans', async (req, res) => {
   }
 });
 
+/* ===========================================================
+ * 🌍 PUBLIC STORE DATA HELPERS
+ * =========================================================== */
+
+// newest in-stock products
+router.get('/api/public/featured', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 8, 50));
+
+    const products = await Product.find({ stock: { $gt: 0 } })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const safe = products.map((p) => ({
+      customId: p.customId,
+      name: p.name,
+      price: p.price,
+      imageUrl: p.imageUrl,
+      category: p.category || p.type || 'Product',
+      isNew: !!p.isNewItem,
+      isOnSale: !!p.isOnSale,
+      isPopular: !!p.isPopular,
+      stock: p.stock || 0,
+      oldPrice: p.isOnSale ? Number((p.price * 1.19).toFixed(2)) : null,
+    }));
+
+    return res.json({ ok: true, products: safe });
+  } catch (err) {
+    console.error('❌ public featured products error:', err);
+    return res.status(500).json({ ok: false, message: 'Failed to load products' });
+  }
+});
+
+router.get('/api/public/bestsellers', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 8, 50));
+
+    const products = await Product.find({ stock: { $gt: 0 } })
+      .sort({ soldCount: -1, createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const safe = products.map((p) => ({
+      customId: p.customId,
+      name: p.name,
+      price: p.price,
+      imageUrl: p.imageUrl,
+      category: p.category || p.type || 'Product',
+      isNew: !!p.isNewItem,
+      isOnSale: !!p.isOnSale,
+      isPopular: !!p.isPopular,
+      stock: p.stock || 0,
+      oldPrice: p.isOnSale ? Number((p.price * 1.19).toFixed(2)) : null,
+    }));
+
+    return res.json({ ok: true, products: safe });
+  } catch (err) {
+    console.error('❌ public bestseller products error:', err);
+    return res.status(500).json({ ok: false, message: 'Failed to load products' });
+  }
+});
+
 module.exports = router;
