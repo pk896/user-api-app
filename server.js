@@ -224,6 +224,7 @@ app.use((req, res, next) => {
           "https://cdn.jsdelivr.net",
           "https://cdnjs.cloudflare.com",
           "https://unpkg.com",
+          "https://ajax.googleapis.com",
           "https://apis.google.com",
           "https://www.paypal.com",
           "https://www.sandbox.paypal.com",
@@ -233,6 +234,8 @@ app.use((req, res, next) => {
           "'self'",
           `'nonce-${res.locals.nonce}'`,
           "https://cdn.jsdelivr.net",
+          "https://cdnjs.cloudflare.com",
+          "https://ajax.googleapis.com",
           "https://apis.google.com",
           "https://www.paypal.com",
           "https://www.sandbox.paypal.com",
@@ -243,6 +246,7 @@ app.use((req, res, next) => {
       "'self'",
       "'unsafe-inline'",
       "https://cdn.jsdelivr.net",
+      "https://cdnjs.cloudflare.com",
       "https://fonts.googleapis.com",
     ],
 
@@ -250,6 +254,7 @@ app.use((req, res, next) => {
       "'self'",
       "'unsafe-inline'",
       "https://cdn.jsdelivr.net",
+      "https://cdnjs.cloudflare.com",
       "https://fonts.googleapis.com",
     ],
 
@@ -258,6 +263,7 @@ app.use((req, res, next) => {
       "data:",
       "https://fonts.gstatic.com",
       "https://cdn.jsdelivr.net",
+      "https://cdnjs.cloudflare.com",
     ],
 
     imgSrc: [
