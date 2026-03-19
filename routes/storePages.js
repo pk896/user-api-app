@@ -4,6 +4,8 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const HeroSlide = require('../models/HeroSlide');
+const FeaturedBanner = require('../models/FeaturedBanner');
 
 function mapStoreProduct(p) {
   const price = Number(p.price || 0);
@@ -66,6 +68,42 @@ router.get('/store', async (req, res) => {
     const bestSellerProducts = bestSellerProductsRaw.map(mapStoreProduct);
     const productListProducts = productListProductsRaw.map(mapStoreProduct);
 
+    const heroSlidesRaw = await HeroSlide.find({ active: true })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+
+    const heroSlides = heroSlidesRaw.map((slide) => ({
+      title: slide.title || '',
+      subtitle: slide.subtitle || '',
+      description: slide.description || '',
+      image: slide.image || '',
+      buttonText: slide.buttonText || 'Shop Now',
+      buttonUrl: slide.buttonUrl || '/store/shop',
+    }));
+
+    const featuredBanner = await FeaturedBanner.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    let sideBannerProduct = null;
+
+    if (featuredBanner?.productCustomId) {
+      const rawBannerProduct = await Product.findOne({
+        customId: featuredBanner.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (rawBannerProduct) {
+        const mapped = mapStoreProduct(rawBannerProduct);
+
+        sideBannerProduct = {
+          ...mapped,
+          badgeText: featuredBanner.badgeText || 'Special Offer',
+          offerText: featuredBanner.offerText || 'Featured Product',
+        };
+      }
+    }
+
     res.render('store/index', {
       layout: 'layouts/store',
       title: 'Electro Store',
@@ -74,6 +112,8 @@ router.get('/store', async (req, res) => {
       featuredProducts,
       bestSellerProducts,
       productListProducts,
+      heroSlides,
+      sideBannerProduct,
     });
   } catch (err) {
     console.error('❌ store index error:', err);
@@ -85,6 +125,8 @@ router.get('/store', async (req, res) => {
       featuredProducts: [],
       bestSellerProducts: [],
       productListProducts: [],
+      heroSlides: [],
+      sideBannerProduct: null,
     });
   }
 });

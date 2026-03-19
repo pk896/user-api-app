@@ -276,6 +276,8 @@ app.use((req, res, next) => {
       "https://www.paypal.com",
       "https://www.sandbox.paypal.com",
       "https://flagcdn.com",
+      "https://images.unsplash.com",
+      "https://plus.unsplash.com",
     ],
 
     connectSrc: [
@@ -610,6 +612,7 @@ const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
+const adminHomeBannersRoutes = require('./routes/adminHomeBanners');
 const cartRoutes = require('./routes/cart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
@@ -670,6 +673,7 @@ app.use('/business/api', businessSidebarApiRoutes);
 
 // Business/admin pages
 app.use('/admin', adminRoutes);
+app.use('/admin', adminHomeBannersRoutes);
 // app.use('/admin', adminOrdersRoutes);
 app.use('/admin', adminBizVerifyRoutes);
 // Admin pages/forms

@@ -1,0 +1,143 @@
+<!--views/admin/home-banners/add-slide.ejs-->
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">Add Hero Slide</h1>
+            <a href="/admin/home-banners" class="btn btn-outline-secondary">Back</a>
+          </div>
+
+          <form action="/admin/home-banners/slides" method="POST" enctype="multipart/form-data" class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Title</label>
+              <input type="text" name="title" class="form-control" required>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Subtitle</label>
+              <input type="text" name="subtitle" class="form-control">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Sort Order</label>
+              <input type="number" name="sortOrder" class="form-control" value="0">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Description</label>
+              <textarea name="description" rows="3" class="form-control"></textarea>
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">Hero Slide Image</label>
+                <input
+                    type="file"
+                    name="imageFile"
+                    id="heroSlideImageFile"
+                    accept="image/*"
+                    class="form-control"
+                    required
+                >
+                <div class="form-text">Upload a landscape image only. JPG, PNG, WEBP, GIF, or BMP.</div>
+
+                <div id="heroSlidePreviewWrap" class="mt-3 d-none">
+                    <div class="border rounded p-2 bg-light">
+                    <div class="small text-muted mb-2">Preview</div>
+                    <img
+                        id="heroSlidePreviewImg"
+                        src=""
+                        alt="Hero slide preview"
+                        class="img-fluid rounded border"
+                        style="max-height: 260px; object-fit: cover;"
+                    >
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Button Text</label>
+              <input type="text" name="buttonText" class="form-control" value="Shop Now">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Button URL</label>
+              <input type="text" name="buttonUrl" class="form-control" value="/store/shop">
+            </div>
+
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="active" id="active" checked>
+                <label class="form-check-label" for="active">Active</label>
+              </div>
+            </div>
+
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary">Create Slide</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script nonce="<%= nonce %>">
+  document.addEventListener('DOMContentLoaded', function () {
+    const input = document.getElementById('heroSlideImageFile');
+    const previewWrap = document.getElementById('heroSlidePreviewWrap');
+    const previewImg = document.getElementById('heroSlidePreviewImg');
+
+    if (!input || !previewWrap || !previewImg) return;
+
+    function resetPreview() {
+      previewImg.src = '';
+      previewWrap.classList.add('d-none');
+      input.value = '';
+    }
+
+    input.addEventListener('change', function (event) {
+      const file = event.target.files && event.target.files[0];
+
+      if (!file) {
+        previewImg.src = '';
+        previewWrap.classList.add('d-none');
+        return;
+      }
+
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp'];
+      if (!validTypes.includes(file.type)) {
+        alert('Only JPG, PNG, WEBP, GIF, or BMP images are allowed.');
+        resetPreview();
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const testImg = new Image();
+
+      testImg.onload = function () {
+        const width = testImg.naturalWidth;
+        const height = testImg.naturalHeight;
+
+        if (width <= height) {
+          URL.revokeObjectURL(objectUrl);
+          alert('Hero slide image must be landscape, not portrait or square.');
+          resetPreview();
+          return;
+        }
+
+        previewImg.src = objectUrl;
+        previewWrap.classList.remove('d-none');
+      };
+
+      testImg.onerror = function () {
+        URL.revokeObjectURL(objectUrl);
+        alert('Could not read this image file.');
+        resetPreview();
+      };
+
+      testImg.src = objectUrl;
+    });
+  });
+</script>
