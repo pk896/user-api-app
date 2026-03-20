@@ -7,6 +7,7 @@ const Product = require('../models/Product');
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
 const HomePromoOffer = require('../models/HomePromoOffer');
+const HomeMidBanner = require('../models/HomeMidBanner');
 
 function mapStoreProduct(p) {
   const price = Number(p.price || 0);
@@ -46,6 +47,26 @@ function mapPromoOffer(offer, product) {
     productName: mappedProduct.name,
     active: !!offer.active,
     sortOrder: Number(offer.sortOrder || 0),
+  };
+}
+
+function mapMidBanner(banner, product) {
+  if (!banner || !product) return null;
+
+  const mappedProduct = mapStoreProduct(product);
+
+  return {
+    slot: banner.slot,
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    priceText: banner.priceText || '',
+    buttonText: banner.buttonText || 'Shop Now',
+    image: banner.image || '',
+    url: `/store/product/${mappedProduct.customId}`,
+    productCustomId: mappedProduct.customId,
+    productName: mappedProduct.name,
+    active: !!banner.active,
+    sortOrder: Number(banner.sortOrder || 0),
   };
 }
 
@@ -124,7 +145,7 @@ router.get('/store', async (req, res) => {
       }
     }
 
-        const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
+    const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
       .sort({ sortOrder: 1, createdAt: 1 })
       .lean();
 
@@ -152,6 +173,34 @@ router.get('/store', async (req, res) => {
       }
     }
 
+    const homeMidBannersRaw = await HomeMidBanner.find({ active: true })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+
+    let midBannerLeft = null;
+    let midBannerRight = null;
+
+    for (const banner of homeMidBannersRaw) {
+      if (!banner?.productCustomId) continue;
+
+      const rawProduct = await Product.findOne({
+        customId: banner.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (!rawProduct) continue;
+
+      const mappedBanner = mapMidBanner(banner, rawProduct);
+
+      if (banner.slot === 'left') {
+        midBannerLeft = mappedBanner;
+      }
+
+      if (banner.slot === 'right') {
+        midBannerRight = mappedBanner;
+      }
+    }
+
     res.render('store/index', {
       layout: 'layouts/store',
       title: 'Electro Store',
@@ -164,6 +213,8 @@ router.get('/store', async (req, res) => {
       sideBannerProduct,
       promoOfferLeft,
       promoOfferRight,
+      midBannerLeft,
+      midBannerRight,
     });
   } catch (err) {
     console.error('❌ store index error:', err);
@@ -179,6 +230,8 @@ router.get('/store', async (req, res) => {
       sideBannerProduct: null,
       promoOfferLeft: null,
       promoOfferRight: null,
+      midBannerLeft: null,
+      midBannerRight: null,
     });
   }
 });
