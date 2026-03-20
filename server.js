@@ -613,6 +613,7 @@ const productsRouter = require('./routes/products');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
 const adminHomeBannersRoutes = require('./routes/adminHomeBanners');
+const adminHomePromoOffersRoutes = require('./routes/adminHomePromoOffers');
 const cartRoutes = require('./routes/cart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
@@ -674,7 +675,7 @@ app.use('/business/api', businessSidebarApiRoutes);
 // Business/admin pages
 app.use('/admin', adminRoutes);
 app.use('/admin', adminHomeBannersRoutes);
-// app.use('/admin', adminOrdersRoutes);
+app.use('/admin', adminHomePromoOffersRoutes);
 app.use('/admin', adminBizVerifyRoutes);
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);

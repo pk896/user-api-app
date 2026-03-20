@@ -36,3 +36,5 @@ const featuredBannerSchema = new mongoose.Schema(
 
 module.exports =
   mongoose.models.FeaturedBanner || mongoose.model('FeaturedBanner', featuredBannerSchema);
+
+  

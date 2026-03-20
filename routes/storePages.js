@@ -6,6 +6,7 @@ const router = express.Router();
 const Product = require('../models/Product');
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
+const HomePromoOffer = require('../models/HomePromoOffer');
 
 function mapStoreProduct(p) {
   const price = Number(p.price || 0);
@@ -26,6 +27,25 @@ function mapStoreProduct(p) {
     stock: Number(p.stock || 0),
     rating: 4,
     url: `/store/product/${p.customId}`,
+  };
+}
+
+function mapPromoOffer(offer, product) {
+  if (!offer || !product) return null;
+
+  const mappedProduct = mapStoreProduct(product);
+
+  return {
+    slot: offer.slot,
+    eyebrowText: offer.eyebrowText || '',
+    title: offer.titleOverride || mappedProduct.name,
+    discountText: offer.discountText || '',
+    url: `/store/product/${mappedProduct.customId}`,
+    image: mappedProduct.image,
+    productCustomId: mappedProduct.customId,
+    productName: mappedProduct.name,
+    active: !!offer.active,
+    sortOrder: Number(offer.sortOrder || 0),
   };
 }
 
@@ -104,6 +124,34 @@ router.get('/store', async (req, res) => {
       }
     }
 
+        const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+
+    let promoOfferLeft = null;
+    let promoOfferRight = null;
+
+    for (const offer of homePromoOffersRaw) {
+      if (!offer?.productCustomId) continue;
+
+      const rawProduct = await Product.findOne({
+        customId: offer.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (!rawProduct) continue;
+
+      const mappedOffer = mapPromoOffer(offer, rawProduct);
+
+      if (offer.slot === 'left') {
+        promoOfferLeft = mappedOffer;
+      }
+
+      if (offer.slot === 'right') {
+        promoOfferRight = mappedOffer;
+      }
+    }
+
     res.render('store/index', {
       layout: 'layouts/store',
       title: 'Electro Store',
@@ -114,6 +162,8 @@ router.get('/store', async (req, res) => {
       productListProducts,
       heroSlides,
       sideBannerProduct,
+      promoOfferLeft,
+      promoOfferRight,
     });
   } catch (err) {
     console.error('❌ store index error:', err);
@@ -127,6 +177,8 @@ router.get('/store', async (req, res) => {
       productListProducts: [],
       heroSlides: [],
       sideBannerProduct: null,
+      promoOfferLeft: null,
+      promoOfferRight: null,
     });
   }
 });
