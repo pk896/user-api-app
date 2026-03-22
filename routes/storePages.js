@@ -8,6 +8,8 @@ const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
 const HomePromoOffer = require('../models/HomePromoOffer');
 const HomeMidBanner = require('../models/HomeMidBanner');
+const BestsellerCard = require('../models/BestsellerCard');
+const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 
 function mapStoreProduct(p) {
   const price = Number(p.price || 0);
@@ -62,6 +64,46 @@ function mapMidBanner(banner, product) {
     priceText: banner.priceText || '',
     buttonText: banner.buttonText || 'Shop Now',
     image: banner.image || '',
+    url: `/store/product/${mappedProduct.customId}`,
+    productCustomId: mappedProduct.customId,
+    productName: mappedProduct.name,
+    active: !!banner.active,
+    sortOrder: Number(banner.sortOrder || 0),
+  };
+}
+
+function mapBestsellerCard(card, product) {
+  if (!card || !product) return null;
+
+  const mappedProduct = mapStoreProduct(product);
+
+  return {
+    slot: card.slot,
+    eyebrowText: card.eyebrowText || '',
+    title: card.titleOverride || mappedProduct.name,
+    discountText: card.discountText || '',
+    image: mappedProduct.image,
+    url: `/store/product/${mappedProduct.customId}`,
+    productCustomId: mappedProduct.customId,
+    productName: mappedProduct.name,
+    active: !!card.active,
+    sortOrder: Number(card.sortOrder || 0),
+  };
+}
+
+function mapBestsellerBottomBanner(banner, product) {
+  if (!banner || !product) return null;
+
+  const mappedProduct = mapStoreProduct(product);
+
+  return {
+    slot: banner.slot,
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    priceText: banner.priceText || '',
+    buttonText: banner.buttonText || 'Shop Now',
+    image: banner.image || '',
+    overlayStyle: banner.overlayStyle || '',
     url: `/store/product/${mappedProduct.customId}`,
     productCustomId: mappedProduct.customId,
     productName: mappedProduct.name,
@@ -251,11 +293,71 @@ router.get('/store/shop', async (req, res) => {
     const shopProducts = shopProductsRaw.map(mapStoreProduct);
     const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
 
+    const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+
+    let promoOfferLeft = null;
+    let promoOfferRight = null;
+
+    for (const offer of homePromoOffersRaw) {
+      if (!offer || !offer.productCustomId) continue;
+
+      const rawProduct = await Product.findOne({
+        customId: offer.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (!rawProduct) continue;
+
+      const mappedOffer = mapPromoOffer(offer, rawProduct);
+
+      if (offer.slot === 'left') {
+        promoOfferLeft = mappedOffer;
+      }
+
+      if (offer.slot === 'right') {
+        promoOfferRight = mappedOffer;
+      }
+    }
+
+    const homeMidBannersRaw = await HomeMidBanner.find({ active: true })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+
+    let midBannerLeft = null;
+    let midBannerRight = null;
+
+    for (const banner of homeMidBannersRaw) {
+      if (!banner || !banner.productCustomId) continue;
+
+      const rawProduct = await Product.findOne({
+        customId: banner.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (!rawProduct) continue;
+
+      const mappedBanner = mapMidBanner(banner, rawProduct);
+
+      if (banner.slot === 'left') {
+        midBannerLeft = mappedBanner;
+      }
+
+      if (banner.slot === 'right') {
+        midBannerRight = mappedBanner;
+      }
+    }
+
     res.render('store/shop', {
       layout: 'layouts/store',
       title: 'Shop',
       shopProducts,
       featuredSidebarProducts,
+      promoOfferLeft,
+      promoOfferRight,
+      midBannerLeft,
+      midBannerRight,
     });
   } catch (err) {
     console.error('❌ store shop error:', err);
@@ -264,6 +366,10 @@ router.get('/store/shop', async (req, res) => {
       title: 'Shop',
       shopProducts: [],
       featuredSidebarProducts: [],
+      promoOfferLeft: null,
+      promoOfferRight: null,
+      midBannerLeft: null,
+      midBannerRight: null,
     });
   }
 });
@@ -383,6 +489,55 @@ router.get('/store/bestseller', async (req, res) => {
     const topSellingProducts = topSellingProductsRaw.map(mapStoreProduct);
     const productListProducts = productListProductsRaw.map(mapStoreProduct);
 
+    const cardsRaw = await BestsellerCard.find({ active: true })
+      .sort({ sortOrder: 1 })
+      .lean();
+
+    let bestsellerLeft = null;
+    let bestsellerRight = null;
+
+    for (const card of cardsRaw) {
+      const product = await Product.findOne({
+        customId: card.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (!product) continue;
+
+      const final = mapBestsellerCard(card, product);
+
+      if (card.slot === 'left') bestsellerLeft = final;
+      if (card.slot === 'right') bestsellerRight = final;
+    }
+
+    const bottomBannersRaw = await BestsellerBottomBanner.find({ active: true })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+
+    let bottomBannerLeft = null;
+    let bottomBannerRight = null;
+
+    for (const banner of bottomBannersRaw) {
+      if (!banner || !banner.productCustomId) continue;
+
+      const rawProduct = await Product.findOne({
+        customId: banner.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (!rawProduct) continue;
+
+      const mappedBanner = mapBestsellerBottomBanner(banner, rawProduct);
+
+      if (banner.slot === 'left') {
+        bottomBannerLeft = mappedBanner;
+      }
+
+      if (banner.slot === 'right') {
+        bottomBannerRight = mappedBanner;
+      }
+    }
+
     res.render('store/bestseller', {
       layout: 'layouts/store',
       title: 'Bestseller',
@@ -392,6 +547,10 @@ router.get('/store/bestseller', async (req, res) => {
       featuredProducts,
       topSellingProducts,
       productListProducts,
+      bestsellerLeft,
+      bestsellerRight,
+      bottomBannerLeft,
+      bottomBannerRight,
     });
   } catch (err) {
     console.error('❌ store bestseller error:', err);
@@ -404,6 +563,10 @@ router.get('/store/bestseller', async (req, res) => {
       featuredProducts: [],
       topSellingProducts: [],
       productListProducts: [],
+      bestsellerLeft: null,
+      bestsellerRight: null,
+      bottomBannerLeft: null,
+      bottomBannerRight: null,
     });
   }
 });

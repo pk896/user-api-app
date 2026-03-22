@@ -1,0 +1,136 @@
+<!--views/admin/bestseller-bottom-banners/index.ejs-->
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">Manage Bestseller Bottom Banners</h1>
+      <p class="text-muted mb-0">
+        Manage the two lower banners shown on the /store/bestseller page.
+      </p>
+    </div>
+    <a href="/admin/dashboard" class="btn btn-outline-secondary">Back</a>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success">
+      <%= success[0] %>
+    </div>
+  <% } %>
+
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger">
+      <%= error[0] %>
+    </div>
+  <% } %>
+
+  <div class="row g-4">
+    <% ['left', 'right'].forEach(function(slot) { 
+      const banner = (banners || []).find(function(item) {
+        return item.slot === slot;
+      });
+    %>
+      <div class="col-12 col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+              <div>
+                <h2 class="h5 mb-1">
+                  <%= slot === 'left' ? 'Left Bottom Banner' : 'Right Bottom Banner' %>
+                </h2>
+                <p class="text-muted mb-0">
+                  <%= slot === 'left' ? 'EOS Rebel T7i Kit area' : 'Sale banner area' %>
+                </p>
+              </div>
+
+              <% if (banner) { %>
+                <span class="badge <%= banner.active ? 'bg-success' : 'bg-secondary' %>">
+                  <%= banner.active ? 'Active' : 'Inactive' %>
+                </span>
+              <% } else { %>
+                <span class="badge bg-warning text-dark">Not Configured</span>
+              <% } %>
+            </div>
+
+            <% if (banner) { %>
+              <div class="border rounded p-3 bg-light mb-3">
+                <div class="row g-3 align-items-center">
+                  <div class="col-12 col-md-4">
+                    <% if (banner.image) { %>
+                      <img
+                        src="<%= banner.image %>"
+                        alt="<%= banner.product && banner.product.name ? banner.product.name : 'Banner image' %>"
+                        class="img-fluid rounded border"
+                        style="max-height: 140px; object-fit: cover;"
+                      >
+                    <% } else if (banner.product && banner.product.imageUrl) { %>
+                      <img
+                        src="<%= banner.product.imageUrl %>"
+                        alt="<%= banner.product.name %>"
+                        class="img-fluid rounded border"
+                        style="max-height: 140px; object-fit: cover;"
+                      >
+                    <% } else { %>
+                      <div
+                        class="border rounded bg-white d-flex align-items-center justify-content-center text-muted"
+                        style="height: 140px;"
+                      >
+                        No banner image
+                      </div>
+                    <% } %>
+                  </div>
+
+                  <div class="col-12 col-md-8">
+                    <div class="mb-2">
+                      <strong>Product:</strong>
+                      <%= banner.product && banner.product.name ? banner.product.name : 'No linked product' %>
+                    </div>
+
+                    <div class="mb-2">
+                      <strong>Product ID:</strong>
+                      <%= banner.productCustomId || '—' %>
+                    </div>
+
+                    <div class="mb-2">
+                      <strong>Title:</strong>
+                      <%= banner.title || '—' %>
+                    </div>
+
+                    <div class="mb-2">
+                      <strong>Subtitle:</strong>
+                      <%= banner.subtitle || '—' %>
+                    </div>
+
+                    <div class="mb-2">
+                      <strong>Price Text:</strong>
+                      <%= banner.priceText || '—' %>
+                    </div>
+
+                    <div class="mb-0">
+                      <strong>Button:</strong>
+                      <%= banner.buttonText || 'Shop Now' %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% } else { %>
+              <div class="alert alert-light border mb-3">
+                No bottom banner configured for this slot yet.
+              </div>
+            <% } %>
+
+            <div class="d-flex flex-wrap gap-2">
+              <a href="/admin/bestseller-bottom-banners/<%= slot %>/edit" class="btn btn-primary">
+                <%= banner ? 'Edit' : 'Set Up' %> <%= slot === 'left' ? 'Left' : 'Right' %> Banner
+              </a>
+
+              <% if (banner) { %>
+                <a href="/admin/bestseller-bottom-banners/<%= slot %>/toggle" class="btn btn-outline-secondary">
+                  <%= banner.active ? 'Deactivate' : 'Activate' %>
+                </a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+</div>

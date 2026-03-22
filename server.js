@@ -615,6 +615,8 @@ const adminRoutes = require('./routes/admin');
 const adminHomeBannersRoutes = require('./routes/adminHomeBanners');
 const adminHomePromoOffersRoutes = require('./routes/adminHomePromoOffers');
 const adminHomeMidBannersRoutes = require('./routes/adminHomeMidBanners');
+const adminBestsellerCards = require('./routes/adminBestsellerCards');
+const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBanners');
 const cartRoutes = require('./routes/cart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
@@ -678,6 +680,8 @@ app.use('/admin', adminRoutes);
 app.use('/admin', adminHomeBannersRoutes);
 app.use('/admin', adminHomePromoOffersRoutes);
 app.use('/admin', adminHomeMidBannersRoutes);
+app.use('/admin', adminBestsellerCards);
+app.use('/admin', adminBestsellerBottomBanners);
 app.use('/admin', adminBizVerifyRoutes);
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);
