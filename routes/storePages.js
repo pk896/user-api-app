@@ -10,6 +10,7 @@ const HomePromoOffer = require('../models/HomePromoOffer');
 const HomeMidBanner = require('../models/HomeMidBanner');
 const BestsellerCard = require('../models/BestsellerCard');
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
+const ShopSidebarBanner = require('../models/ShopSidebarBanner');
 
 function mapStoreProduct(p) {
   const price = Number(p.price || 0);
@@ -109,6 +110,23 @@ function mapBestsellerBottomBanner(banner, product) {
     productName: mappedProduct.name,
     active: !!banner.active,
     sortOrder: Number(banner.sortOrder || 0),
+  };
+}
+
+function mapShopSidebarBanner(banner, product) {
+  if (!banner || !product) return null;
+
+  const mappedProduct = mapStoreProduct(product);
+
+  return {
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    buttonText: banner.buttonText || 'Shop Now',
+    image: banner.image || '',
+    url: `/store/product/${mappedProduct.customId}`,
+    productCustomId: mappedProduct.customId,
+    productName: mappedProduct.name,
+    active: !!banner.active,
   };
 }
 
@@ -349,6 +367,23 @@ router.get('/store/shop', async (req, res) => {
       }
     }
 
+    const shopSidebarBannerRaw = await ShopSidebarBanner.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    let shopSidebarBanner = null;
+
+    if (shopSidebarBannerRaw && shopSidebarBannerRaw.productCustomId) {
+      const rawSidebarProduct = await Product.findOne({
+        customId: shopSidebarBannerRaw.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (rawSidebarProduct) {
+        shopSidebarBanner = mapShopSidebarBanner(shopSidebarBannerRaw, rawSidebarProduct);
+      }
+    }
+
     res.render('store/shop', {
       layout: 'layouts/store',
       title: 'Shop',
@@ -358,6 +393,7 @@ router.get('/store/shop', async (req, res) => {
       promoOfferRight,
       midBannerLeft,
       midBannerRight,
+      shopSidebarBanner,
     });
   } catch (err) {
     console.error('❌ store shop error:', err);
@@ -370,6 +406,7 @@ router.get('/store/shop', async (req, res) => {
       promoOfferRight: null,
       midBannerLeft: null,
       midBannerRight: null,
+      shopSidebarBanner: null,
     });
   }
 });

@@ -617,6 +617,7 @@ const adminHomePromoOffersRoutes = require('./routes/adminHomePromoOffers');
 const adminHomeMidBannersRoutes = require('./routes/adminHomeMidBanners');
 const adminBestsellerCards = require('./routes/adminBestsellerCards');
 const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBanners');
+const adminShopSidebarBanner = require('./routes/adminShopSidebarBanner');
 const cartRoutes = require('./routes/cart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
@@ -682,6 +683,7 @@ app.use('/admin', adminHomePromoOffersRoutes);
 app.use('/admin', adminHomeMidBannersRoutes);
 app.use('/admin', adminBestsellerCards);
 app.use('/admin', adminBestsellerBottomBanners);
+app.use('/admin', adminShopSidebarBanner);
 app.use('/admin', adminBizVerifyRoutes);
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);
