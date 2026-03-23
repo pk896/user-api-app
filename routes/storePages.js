@@ -11,6 +11,8 @@ const HomeMidBanner = require('../models/HomeMidBanner');
 const BestsellerCard = require('../models/BestsellerCard');
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 const ShopSidebarBanner = require('../models/ShopSidebarBanner');
+const ShopMainBanner = require('../models/ShopMainBanner');
+const ShopHeaderImage = require('../models/ShopHeaderImage');
 
 function mapStoreProduct(p) {
   const price = Number(p.price || 0);
@@ -129,6 +131,23 @@ function mapShopSidebarBanner(banner, product) {
     active: !!banner.active,
   };
 }
+
+function mapShopMainBanner(banner, product) {
+  if (!banner || !product) return null;
+
+  const mappedProduct = mapStoreProduct(product);
+
+  return {
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    buttonText: banner.buttonText || 'Shop Now',
+    image: banner.image || '',
+    url: `/store/product/${mappedProduct.customId}`,
+    productCustomId: mappedProduct.customId,
+    productName: mappedProduct.name,
+    active: !!banner.active,
+  };
+}    
 
 router.get('/store', async (req, res) => {
   try {
@@ -384,6 +403,27 @@ router.get('/store/shop', async (req, res) => {
       }
     }
 
+    const shopMainBannerRaw = await ShopMainBanner.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    let shopMainBanner = null;
+
+    if (shopMainBannerRaw && shopMainBannerRaw.productCustomId) {
+      const rawMainProduct = await Product.findOne({
+        customId: shopMainBannerRaw.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (rawMainProduct) {
+        shopMainBanner = mapShopMainBanner(shopMainBannerRaw, rawMainProduct);
+      }
+    }
+
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
     res.render('store/shop', {
       layout: 'layouts/store',
       title: 'Shop',
@@ -394,6 +434,8 @@ router.get('/store/shop', async (req, res) => {
       midBannerLeft,
       midBannerRight,
       shopSidebarBanner,
+      shopMainBanner,
+      shopHeaderImage,
     });
   } catch (err) {
     console.error('❌ store shop error:', err);
@@ -407,11 +449,67 @@ router.get('/store/shop', async (req, res) => {
       midBannerLeft: null,
       midBannerRight: null,
       shopSidebarBanner: null,
+      shopMainBanner: null,
+      shopHeaderImage: null,
     });
   }
 });
 
 router.get('/store/product/:id', async (req, res) => {
+  try {
+    const rawProduct = await Product.findOne({
+      customId: req.params.id,
+      stock: { $gt: 0 },
+    }).lean();
+
+    if (!rawProduct) {
+      return res.redirect('/store/shop');
+    }
+
+    const product = mapStoreProduct(rawProduct);
+
+    const featuredSidebarRaw = await Product.find({
+      stock: { $gt: 0 },
+      customId: { $ne: rawProduct.customId },
+    })
+      .sort({ soldCount: -1, createdAt: -1 })
+      .limit(6)
+      .lean();
+
+    const relatedProductsRaw = await Product.find({
+      stock: { $gt: 0 },
+      customId: { $ne: rawProduct.customId },
+      $or: [
+        { category: rawProduct.category || null },
+        { type: rawProduct.type || null },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
+    const relatedProducts = relatedProductsRaw.map(mapStoreProduct);
+
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return res.render('store/single', {
+      layout: 'layouts/store',
+      title: product.name || 'Single Product',
+      product,
+      featuredSidebarProducts,
+      relatedProducts,
+      shopHeaderImage,
+    });
+  } catch (err) {
+    console.error('❌ store single product error:', err);
+    return res.redirect('/store/shop');
+  }
+});
+
+/*router.get('/store/product/:id', async (req, res) => {
   try {
     const rawProduct = await Product.findOne({
       customId: req.params.id,
@@ -458,27 +556,69 @@ router.get('/store/product/:id', async (req, res) => {
     console.error('❌ store single product error:', err);
     return res.redirect('/store/404');
   }
+});*/
+
+router.get('/store/cart', async (req, res) => {
+  try {
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.render('store/cart', {
+      layout: 'layouts/store',
+      title: 'Cart',
+      shopHeaderImage,
+    });
+  } catch (err) {
+    console.error('❌ store cart error:', err);
+    res.render('store/cart', {
+      layout: 'layouts/store',
+      title: 'Cart',
+      shopHeaderImage: null,
+    });
+  }
 });
 
-router.get('/store/cart', (req, res) => {
-  res.render('store/cart', {
-    layout: 'layouts/store',
-    title: 'Cart',
-  });
+router.get('/store/checkout', async (req, res) => {
+  try {
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.render('store/checkout', {
+      layout: 'layouts/store',
+      title: 'Checkout',
+      shopHeaderImage,
+    });
+  } catch (err) {
+    console.error('❌ store checkout error:', err);
+    res.render('store/checkout', {
+      layout: 'layouts/store',
+      title: 'Checkout',
+      shopHeaderImage: null,
+    });
+  }
 });
 
-router.get('/store/checkout', (req, res) => {
-  res.render('store/checkout', {
-    layout: 'layouts/store',
-    title: 'Checkout',
-  });
-});
+router.get('/store/contact', async (req, res) => {
+  try {
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
 
-router.get('/store/contact', (req, res) => {
-  res.render('store/contact', {
-    layout: 'layouts/store',
-    title: 'Contact',
-  });
+    res.render('store/contact', {
+      layout: 'layouts/store',
+      title: 'Contact',
+      shopHeaderImage,
+    });
+  } catch (err) {
+    console.error('❌ store contact error:', err);
+    res.render('store/contact', {
+      layout: 'layouts/store',
+      title: 'Contact',
+      shopHeaderImage: null,
+    });
+  }
 });
 
 router.get('/store/bestseller', async (req, res) => {
@@ -575,6 +715,10 @@ router.get('/store/bestseller', async (req, res) => {
       }
     }
 
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
     res.render('store/bestseller', {
       layout: 'layouts/store',
       title: 'Bestseller',
@@ -588,6 +732,7 @@ router.get('/store/bestseller', async (req, res) => {
       bestsellerRight,
       bottomBannerLeft,
       bottomBannerRight,
+      shopHeaderImage,
     });
   } catch (err) {
     console.error('❌ store bestseller error:', err);
@@ -604,6 +749,7 @@ router.get('/store/bestseller', async (req, res) => {
       bestsellerRight: null,
       bottomBannerLeft: null,
       bottomBannerRight: null,
+      shopHeaderImage: null,
     });
   }
 });

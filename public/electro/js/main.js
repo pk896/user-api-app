@@ -1,3 +1,4 @@
+// public/electro/js/main.js
 (function ($) {
     "use strict";
 
