@@ -491,6 +491,26 @@ router.get('/store/product/:id', async (req, res) => {
     const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
     const relatedProducts = relatedProductsRaw.map(mapStoreProduct);
 
+    const shopSidebarBannerRaw = await ShopSidebarBanner.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    let shopSidebarBanner = null;
+
+    if (shopSidebarBannerRaw && shopSidebarBannerRaw.productCustomId) {
+      const rawSidebarProduct = await Product.findOne({
+        customId: shopSidebarBannerRaw.productCustomId,
+        stock: { $gt: 0 },
+      }).lean();
+
+      if (rawSidebarProduct) {
+        shopSidebarBanner = mapShopSidebarBanner(
+          shopSidebarBannerRaw,
+          rawSidebarProduct
+        );
+      }
+    }
+
     const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
       .sort({ updatedAt: -1 })
       .lean();
@@ -501,6 +521,7 @@ router.get('/store/product/:id', async (req, res) => {
       product,
       featuredSidebarProducts,
       relatedProducts,
+      shopSidebarBanner,
       shopHeaderImage,
     });
   } catch (err) {
@@ -517,7 +538,7 @@ router.get('/store/product/:id', async (req, res) => {
     }).lean();
 
     if (!rawProduct) {
-      return res.redirect('/store/404');
+      return res.redirect('/store/shop');
     }
 
     const product = mapStoreProduct(rawProduct);
@@ -545,16 +566,21 @@ router.get('/store/product/:id', async (req, res) => {
     const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
     const relatedProducts = relatedProductsRaw.map(mapStoreProduct);
 
+    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
     return res.render('store/single', {
       layout: 'layouts/store',
       title: product.name || 'Single Product',
       product,
       featuredSidebarProducts,
       relatedProducts,
+      shopHeaderImage,
     });
   } catch (err) {
     console.error('❌ store single product error:', err);
-    return res.redirect('/store/404');
+    return res.redirect('/store/shop');
   }
 });*/
 
