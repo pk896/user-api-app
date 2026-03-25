@@ -81,12 +81,11 @@
                 <div class="d-flex border rounded-pill">
                     <input class="form-control border-0 rounded-pill w-100 py-3" type="text"
                         data-bs-target="#dropdownToggle123" placeholder="Search Looking For?">
-                    <select class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="All Category">All Category</option>
-                        <option value="Pest Control-2">Category 1</option>
-                        <option value="Pest Control-3">Category 2</option>
-                        <option value="Pest Control-4">Category 3</option>
-                        <option value="Pest Control-5">Category 4</option>
+                    <select id="cartCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
+                        <option value="">All Category</option>
+                        <% (CATEGORIES || []).forEach(function(category) { %>
+                            <option value="<%= category.value %>"><%= category.label %></option>
+                        <% }) %>
                     </select>
                     <button type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
                             class="fas fa-search"></i></button>
@@ -120,11 +119,20 @@
                 <div class="collapse navbar-collapse rounded-bottom" id="allCat">
                     <div class="navbar-nav ms-auto py-0">
                         <ul class="list-unstyled categories-bars">
-                            <li><div class="categories-bars-item"><a href="#">Accessories</a><span>(3)</span></div></li>
-                            <li><div class="categories-bars-item"><a href="#">Electronics & Computer</a><span>(5)</span></div></li>
-                            <li><div class="categories-bars-item"><a href="#">Laptops & Desktops</a><span>(2)</span></div></li>
-                            <li><div class="categories-bars-item"><a href="#">Mobiles & Tablets</a><span>(8)</span></div></li>
-                            <li><div class="categories-bars-item"><a href="#">SmartPhone & Smart TV</a><span>(5)</span></div></li>
+                            <li>
+                                <div class="categories-bars-item">
+                                    <a href="/store/shop" class="cart-category-link" data-category="">All Categories</a>
+                                    <span></span>
+                                </div>
+                            </li>
+                            <% (CATEGORIES || []).forEach(function(category) { %>
+                                <li>
+                                    <div class="categories-bars-item">
+                                        <a href="/store/shop" class="cart-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                                        <span></span>
+                                    </div>
+                                </li>
+                            <% }) %>
                         </ul>
                     </div>
                 </div>
@@ -168,11 +176,20 @@
                             <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
                             <div class="dropdown-menu m-0">
                                 <ul class="list-unstyled categories-bars">
-                                    <li><div class="categories-bars-item"><a href="#">Accessories</a><span>(3)</span></div></li>
-                                    <li><div class="categories-bars-item"><a href="#">Electronics & Computer</a><span>(5)</span></div></li>
-                                    <li><div class="categories-bars-item"><a href="#">Laptops & Desktops</a><span>(2)</span></div></li>
-                                    <li><div class="categories-bars-item"><a href="#">Mobiles & Tablets</a><span>(8)</span></div></li>
-                                    <li><div class="categories-bars-item"><a href="#">SmartPhone & Smart TV</a><span>(5)</span></div></li>
+                                    <li>
+                                        <div class="categories-bars-item">
+                                            <a href="/store/shop" class="cart-category-link" data-category="">All Categories</a>
+                                            <span></span>
+                                        </div>
+                                    </li>
+                                    <% (CATEGORIES || []).forEach(function(category) { %>
+                                        <li>
+                                            <div class="categories-bars-item">
+                                                <a href="/store/shop" class="cart-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                                                <span></span>
+                                            </div>
+                                        </li>
+                                    <% }) %>
                                 </ul>
                             </div>
                         </div>
@@ -423,5 +440,33 @@
 </div>
 <!-- Copyright End -->
 
+<script nonce="<%= nonce %>">
+  (function () {
+    const select = document.getElementById('cartCategorySelect');
+    const links = Array.from(document.querySelectorAll('.cart-category-link'));
+
+    function goToCategory(categoryValue) {
+      const selected = String(categoryValue || '').trim().toLowerCase();
+      const url = selected
+        ? '/store/shop?category=' + encodeURIComponent(selected)
+        : '/store/shop';
+
+      window.location.href = url;
+    }
+
+    links.forEach(function (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        goToCategory(link.getAttribute('data-category') || '');
+      });
+    });
+
+    if (select) {
+      select.addEventListener('change', function () {
+        goToCategory(select.value || '');
+      });
+    }
+  })();
+</script>
 <!-- Back to Top -->
 <a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>
