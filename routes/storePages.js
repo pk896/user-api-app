@@ -536,10 +536,27 @@ router.get('/store/cart', async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
+    const cartItems = Array.isArray(req.session?.cart?.items)
+      ? req.session.cart.items
+      : [];
+
+    const cartSubtotal = cartItems.reduce((sum, item) => {
+      const price = Number(item.price || 0);
+      const quantity = Number(item.quantity || 0);
+      return sum + (price * quantity);
+    }, 0);
+
+    const cartCount = cartItems.reduce((sum, item) => {
+      return sum + Number(item.quantity || 0);
+    }, 0);
+
     res.render('store/cart', {
       layout: 'layouts/store',
       title: 'Cart',
       shopHeaderImage,
+      cartItems,
+      cartSubtotal,
+      cartCount,
     });
   } catch (err) {
     console.error('❌ store cart error:', err);
@@ -547,6 +564,9 @@ router.get('/store/cart', async (req, res) => {
       layout: 'layouts/store',
       title: 'Cart',
       shopHeaderImage: null,
+      cartItems: [],
+      cartSubtotal: 0,
+      cartCount: 0,
     });
   }
 });
@@ -557,10 +577,22 @@ router.get('/store/checkout', async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
+    const cartItems = Array.isArray(req.session?.cart?.items)
+      ? req.session.cart.items
+      : [];
+
+    const cartSubtotal = cartItems.reduce((sum, item) => {
+      const price = Number(item.price || 0);
+      const quantity = Number(item.quantity || 0);
+      return sum + (price * quantity);
+    }, 0);
+
     res.render('store/checkout', {
       layout: 'layouts/store',
       title: 'Checkout',
       shopHeaderImage,
+      cartItems,
+      cartSubtotal,
     });
   } catch (err) {
     console.error('❌ store checkout error:', err);
@@ -568,6 +600,8 @@ router.get('/store/checkout', async (req, res) => {
       layout: 'layouts/store',
       title: 'Checkout',
       shopHeaderImage: null,
+      cartItems: [],
+      cartSubtotal: 0,
     });
   }
 });

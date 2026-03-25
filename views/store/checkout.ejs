@@ -100,9 +100,12 @@
                         class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
                 <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span
                         class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
-                <a href="/store/cart" class="text-muted d-flex align-items-center justify-content-center"><span
-                        class="rounded-circle btn-md-square border"><i class="fas fa-shopping-cart"></i></span>
-                    <span class="text-dark ms-2">$0.00</span></a>
+                <a href="/store/cart" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+                    <span class="rounded-circle btn-md-square border">
+                        <i class="fas fa-shopping-cart"></i>
+                    </span>
+                    <span class="text-dark ms-2 store-cart-total">$0.00</span>
+                </a>
             </div>
         </div>
     </div>
@@ -367,17 +370,35 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <% for (let i = 0; i < 5; i++) { %>
-                                <tr class="text-center">
-                                    <th scope="row" class="text-start py-4">
-                                        Apple iPad Mini
-                                    </th>
-                                    <td class="py-4">G2356</td>
-                                    <td class="py-4">$269.00</td>
-                                    <td class="py-4">2</td>
-                                    <td class="py-4">$538.00</td>
-                                </tr>
+                                <% if (!(cartItems || []).length) { %>
+                                    <tr>
+                                        <td colspan="5" class="text-center py-5">
+                                            <h5 class="mb-3">Your cart is empty</h5>
+                                            <a href="/store/shop" class="btn btn-primary rounded-pill px-4 py-2">Continue Shopping</a>
+                                        </td>
+                                    </tr>
                                 <% } %>
+
+                                <% (cartItems || []).forEach(function(item) { %>
+                                    <tr class="text-center">
+                                        <th scope="row" class="text-start py-4">
+                                            <div>
+                                                <div><%= item.name %></div>
+                                                <% if (item.variants && (item.variants.size || item.variants.color)) { %>
+                                                    <small class="text-muted">
+                                                        <% if (item.variants.size) { %>Size: <%= item.variants.size %><% } %>
+                                                        <% if (item.variants.size && item.variants.color) { %> | <% } %>
+                                                        <% if (item.variants.color) { %>Color: <%= item.variants.color %><% } %>
+                                                    </small>
+                                                <% } %>
+                                            </div>
+                                        </th>
+                                        <td class="py-4"><%= item.customId || 'N/A' %></td>
+                                        <td class="py-4">$<%= Number(item.price || 0).toFixed(2) %></td>
+                                        <td class="py-4"><%= Number(item.quantity || 0) %></td>
+                                        <td class="py-4">$<%= (Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2) %></td>
+                                    </tr>
+                                <% }) %>
 
                                 <tr>
                                     <th scope="row"></th>
@@ -388,7 +409,7 @@
                                     </td>
                                     <td class="py-4">
                                         <div class="py-2 text-center border-bottom border-top">
-                                            <p class="mb-0 text-dark">$1134.00</p>
+                                            <p class="mb-0 text-dark" id="checkoutSubtotal">$<%= Number(cartSubtotal || 0).toFixed(2) %></p>
                                         </div>
                                     </td>
                                 </tr>
@@ -399,21 +420,16 @@
                                     </td>
                                     <td colspan="3" class="py-4">
                                         <div class="form-check text-start">
-                                            <input type="checkbox" class="form-check-input bg-primary border-0"
-                                                id="Shipping-1" name="Shipping-1" value="Shipping">
+                                            <input type="checkbox" class="form-check-input bg-primary border-0" id="Shipping-1" name="Shipping-1" value="Shipping">
                                             <label class="form-check-label" for="Shipping-1">Free Shipping</label>
                                         </div>
                                         <div class="form-check text-start">
-                                            <input type="checkbox" class="form-check-input bg-primary border-0"
-                                                id="Shipping-2" name="Shipping-1" value="Shipping">
-                                            <label class="form-check-label" for="Shipping-2">Flat rate:
-                                                $15.00</label>
+                                            <input type="checkbox" class="form-check-input bg-primary border-0" id="Shipping-2" name="Shipping-1" value="Shipping">
+                                            <label class="form-check-label" for="Shipping-2">Flat rate: $15.00</label>
                                         </div>
                                         <div class="form-check text-start">
-                                            <input type="checkbox" class="form-check-input bg-primary border-0"
-                                                id="Shipping-3" name="Shipping-1" value="Shipping">
-                                            <label class="form-check-label" for="Shipping-3">Local Pickup:
-                                                $8.00</label>
+                                            <input type="checkbox" class="form-check-input bg-primary border-0" id="Shipping-3" name="Shipping-1" value="Shipping">
+                                            <label class="form-check-label" for="Shipping-3">Local Pickup: $8.00</label>
                                         </div>
                                     </td>
                                 </tr>
@@ -426,7 +442,7 @@
                                     <td class="py-4"></td>
                                     <td class="py-4">
                                         <div class="py-2 text-center border-bottom border-top">
-                                            <p class="mb-0 text-dark">$135.00</p>
+                                            <p class="mb-0 text-dark" id="checkoutGrandTotal">$<%= Number(cartSubtotal || 0).toFixed(2) %></p>
                                         </div>
                                     </td>
                                 </tr>
@@ -647,5 +663,51 @@
     }
   })();
 </script>
+
+<script nonce="<%= nonce %>">
+  (function () {
+    function round2(n) {
+      return Math.round(Number(n || 0) * 100) / 100;
+    }
+
+    function getCartSummary(items) {
+      const list = Array.isArray(items) ? items : [];
+
+      return list.reduce(function (acc, item) {
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+
+        acc.count += quantity;
+        acc.total += price * quantity;
+        return acc;
+      }, { count: 0, total: 0 });
+    }
+
+    function updateCartHeader(items) {
+      const summary = getCartSummary(items);
+      const totalEls = document.querySelectorAll('.store-cart-total');
+
+      totalEls.forEach(function (el) {
+        el.textContent = '$' + round2(summary.total).toFixed(2);
+      });
+    }
+
+    async function refreshCartHeader() {
+      try {
+        const res = await fetch('/api/cart', {
+          headers: { 'Accept': 'application/json' }
+        });
+
+        const data = await res.json();
+        updateCartHeader((data && data.items) || []);
+      } catch (err) {
+        console.error('Failed to refresh cart header:', err);
+      }
+    }
+
+    refreshCartHeader();
+  })();
+</script>
+
 <!-- Back to Top -->
 <a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>
