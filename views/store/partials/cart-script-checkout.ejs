@@ -1,0 +1,45 @@
+<!--views/store/partials/cart-script-checkout.ej-->
+<script nonce="<%= nonce %>">
+  (function () {
+    function round2(n) {
+      return Math.round(Number(n || 0) * 100) / 100;
+    }
+
+    function getCartSummary(items) {
+      const list = Array.isArray(items) ? items : [];
+
+      return list.reduce(function (acc, item) {
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+
+        acc.count += quantity;
+        acc.total += price * quantity;
+        return acc;
+      }, { count: 0, total: 0 });
+    }
+
+    function updateCartHeader(items) {
+      const summary = getCartSummary(items);
+      const totalEls = document.querySelectorAll('.store-cart-total');
+
+      totalEls.forEach(function (el) {
+        el.textContent = '$' + round2(summary.total).toFixed(2);
+      });
+    }
+
+    async function refreshCartHeader() {
+      try {
+        const res = await fetch('/api/cart', {
+          headers: { 'Accept': 'application/json' }
+        });
+
+        const data = await res.json();
+        updateCartHeader((data && data.items) || []);
+      } catch (err) {
+        console.error('Failed to refresh cart header:', err);
+      }
+    }
+
+    refreshCartHeader();
+  })();
+</script>

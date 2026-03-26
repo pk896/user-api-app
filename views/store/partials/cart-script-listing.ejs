@@ -1,0 +1,123 @@
+<!--views/store/partials/cart-script-listing.ejs-->
+<script nonce="<%= nonce %>">
+  (function () {
+    function round2(n) {
+      return Math.round(Number(n || 0) * 100) / 100;
+    }
+
+    function getCartSummary(items) {
+      const list = Array.isArray(items) ? items : [];
+
+      return list.reduce(function (acc, item) {
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+
+        acc.count += quantity;
+        acc.total += price * quantity;
+        return acc;
+      }, { count: 0, total: 0 });
+    }
+
+    function updateCartHeader(items) {
+      const summary = getCartSummary(items);
+      const totalEls = document.querySelectorAll('.store-cart-total');
+      const mobileFloatingCart = document.getElementById('mobileFloatingCart');
+
+      totalEls.forEach(function (el) {
+        el.textContent = '$' + round2(summary.total).toFixed(2);
+      });
+
+      if (mobileFloatingCart) {
+        if (summary.count > 0) {
+          mobileFloatingCart.classList.remove('d-none');
+        } else {
+          mobileFloatingCart.classList.add('d-none');
+        }
+      }
+    }
+
+    function showCartMessage(message, type) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'position-fixed top-0 end-0 p-3';
+      wrapper.style.zIndex = '1080';
+
+      wrapper.innerHTML = [
+        '<div class="alert alert-' + (type || 'success') + ' alert-dismissible fade show shadow-sm mb-0" role="alert">',
+        '  ' + String(message || 'Done'),
+        '  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+        '</div>'
+      ].join('');
+
+      document.body.appendChild(wrapper);
+
+      window.setTimeout(function () {
+        wrapper.remove();
+      }, 3000);
+    }
+
+    async function refreshCartHeader() {
+      try {
+        const res = await fetch('/api/cart', {
+          headers: { 'Accept': 'application/json' }
+        });
+
+        const data = await res.json();
+        updateCartHeader((data && data.items) || []);
+      } catch (err) {
+        console.error('Failed to refresh cart header:', err);
+      }
+    }
+
+    async function addToCart(pid, qty) {
+      const url =
+        '/api/cart/add?pid=' +
+        encodeURIComponent(pid) +
+        '&qty=' +
+        encodeURIComponent(qty || 1) +
+        '&json=1';
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || 'Failed to add to cart.');
+      }
+
+      const items = (data.cart && data.cart.items) || [];
+      updateCartHeader(items);
+      return data;
+    }
+
+    document.addEventListener('click', async function (event) {
+      const button = event.target.closest('.js-add-to-cart');
+      if (!button) return;
+
+      event.preventDefault();
+
+      const pid = button.getAttribute('data-pid');
+      if (!pid) return;
+
+      const originalHtml = button.innerHTML;
+      button.classList.add('disabled');
+      button.setAttribute('aria-disabled', 'true');
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
+
+      try {
+        const data = await addToCart(pid, 1);
+        showCartMessage(data.message || 'Added to cart.', 'success');
+      } catch (err) {
+        showCartMessage(err.message || 'Failed to add to cart.', 'danger');
+      } finally {
+        button.classList.remove('disabled');
+        button.removeAttribute('aria-disabled');
+        button.innerHTML = originalHtml;
+      }
+    });
+
+    refreshCartHeader();
+  })();
+</script>

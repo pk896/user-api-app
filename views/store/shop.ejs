@@ -837,119 +837,29 @@
   })();
 </script>
 
-<script nonce="<%= nonce %>">
-  (function () {
-    function round2(n) {
-      return Math.round(Number(n || 0) * 100) / 100;
-    }
+<%- include('partials/cart-script-listing') %>
 
-    function getCartSummary(items) {
-      const list = Array.isArray(items) ? items : [];
-
-      return list.reduce(function (acc, item) {
-        const quantity = Number(item.quantity || 0);
-        const price = Number(item.price || 0);
-
-        acc.count += quantity;
-        acc.total += price * quantity;
-        return acc;
-      }, { count: 0, total: 0 });
-    }
-
-    function updateCartHeader(items) {
-      const summary = getCartSummary(items);
-      const totalEls = document.querySelectorAll('.store-cart-total');
-
-      totalEls.forEach(function (el) {
-        el.textContent = '$' + round2(summary.total).toFixed(2);
-      });
-    }
-
-    function showCartMessage(message, type) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'position-fixed top-0 end-0 p-3';
-      wrapper.style.zIndex = '1080';
-
-      wrapper.innerHTML = [
-        '<div class="alert alert-' + (type || 'success') + ' alert-dismissible fade show shadow-sm mb-0" role="alert">',
-        '  ' + String(message || 'Done'),
-        '  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
-        '</div>'
-      ].join('');
-
-      document.body.appendChild(wrapper);
-
-      window.setTimeout(function () {
-        wrapper.remove();
-      }, 3000);
-    }
-
-    async function refreshCartHeader() {
-      try {
-        const res = await fetch('/api/cart', {
-          headers: { 'Accept': 'application/json' }
-        });
-
-        const data = await res.json();
-        updateCartHeader((data && data.items) || []);
-      } catch (err) {
-        console.error('Failed to refresh cart header:', err);
-      }
-    }
-
-    async function addToCart(pid, qty) {
-      const url =
-        '/api/cart/add?pid=' +
-        encodeURIComponent(pid) +
-        '&qty=' +
-        encodeURIComponent(qty || 1) +
-        '&json=1';
-
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || data.success === false) {
-        throw new Error(data.message || 'Failed to add to cart.');
-      }
-
-      const items = (data.cart && data.cart.items) || [];
-      updateCartHeader(items);
-      return data;
-    }
-
-    document.addEventListener('click', async function (event) {
-      const button = event.target.closest('.js-add-to-cart');
-      if (!button) return;
-
-      event.preventDefault();
-
-      const pid = button.getAttribute('data-pid');
-      if (!pid) return;
-
-      const originalHtml = button.innerHTML;
-      button.classList.add('disabled');
-      button.setAttribute('aria-disabled', 'true');
-      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
-
-      try {
-        const data = await addToCart(pid, 1);
-        showCartMessage(data.message || 'Added to cart.', 'success');
-      } catch (err) {
-        showCartMessage(err.message || 'Failed to add to cart.', 'danger');
-      } finally {
-        button.classList.remove('disabled');
-        button.removeAttribute('aria-disabled');
-        button.innerHTML = originalHtml;
-      }
-    });
-
-    refreshCartHeader();
-  })();
-</script>
-
+<!-- Mobile Floating Cart Start -->
+<div
+    id="mobileFloatingCart"
+    class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3"
+    style="z-index: 1080;"
+>
+    <a
+        href="/store/cart"
+        class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link"
+        style="font-size: 0.85rem;"
+    >
+        <span
+            class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1"
+            style="width: 24px; height: 24px;"
+        >
+            <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
+        </span>
+        <span class="store-cart-total text-white fw-semibold">$0.00</span>
+    </a>
+</div>
+<!-- Mobile Floating Cart End -->
+ 
 <!-- Back to Top -->
 <a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>

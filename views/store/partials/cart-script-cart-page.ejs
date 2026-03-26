@@ -1,0 +1,163 @@
+<!--views/store/partials/cart-script-cart-page.ejs-->
+
+<script nonce="<%= nonce %>">
+  (function () {
+    function round2(n) {
+      return Math.round(Number(n || 0) * 100) / 100;
+    }
+
+    function getVariantsFromRow(row) {
+      const size = (row.getAttribute('data-variant-size') || '').trim();
+      const color = (row.getAttribute('data-variant-color') || '').trim();
+      const variants = {};
+
+      if (size) variants.size = size;
+      if (color) variants.color = color;
+
+      return variants;
+    }
+
+    function getCartSummary(items) {
+      const list = Array.isArray(items) ? items : [];
+
+      return list.reduce(function (acc, item) {
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+
+        acc.count += quantity;
+        acc.total += price * quantity;
+        return acc;
+      }, { count: 0, total: 0 });
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderCart(items) {
+      const body = document.getElementById('cartTableBody');
+      const subtotalEl = document.getElementById('cartSubtotal');
+      const totalEl = document.getElementById('cartGrandTotal');
+      const headerTotals = document.querySelectorAll('.store-cart-total');
+
+      if (!body) return;
+
+      const list = Array.isArray(items) ? items : [];
+      const summary = getCartSummary(list);
+
+      if (subtotalEl) subtotalEl.textContent = '$' + round2(summary.total).toFixed(2);
+      if (totalEl) totalEl.textContent = '$' + round2(summary.total).toFixed(2);
+
+      headerTotals.forEach(function (el) {
+        el.textContent = '$' + round2(summary.total).toFixed(2);
+      });
+
+      if (!list.length) {
+        body.innerHTML = [
+          '<tr>',
+          '  <td colspan="6" class="text-center py-5">',
+          '    <h5 class="mb-3">Your cart is empty</h5>',
+          '    <a href="/store/shop" class="btn btn-primary rounded-pill px-4 py-2">Continue Shopping</a>',
+          '  </td>',
+          '</tr>'
+        ].join('');
+        return;
+      }
+
+      body.innerHTML = list.map(function (item) {
+        const size = item.variants && item.variants.size ? item.variants.size : '';
+        const color = item.variants && item.variants.color ? item.variants.color : '';
+        const lineTotal = Number(item.price || 0) * Number(item.quantity || 0);
+
+        return [
+          '<tr class="cart-row" data-pid="' + escapeHtml(item.customId || '') + '" data-variant-size="' + escapeHtml(size) + '" data-variant-color="' + escapeHtml(color) + '">',
+          '  <th scope="row">',
+          '    <div class="py-4">',
+          '      <p class="mb-1">' + escapeHtml(item.name || 'Product') + '</p>',
+          (size || color)
+            ? '      <small class="text-muted">' +
+                (size ? ('Size: ' + escapeHtml(size)) : '') +
+                (size && color ? ' | ' : '') +
+                (color ? ('Color: ' + escapeHtml(color)) : '') +
+              '</small>'
+            : '',
+          '    </div>',
+          '  </th>',
+          '  <td><p class="mb-0 py-4">' + escapeHtml(item.customId || 'N/A') + '</p></td>',
+          '  <td><p class="mb-0 py-4">$' + Number(item.price || 0).toFixed(2) + '</p></td>',
+          '  <td>',
+          '    <div class="input-group quantity py-4" style="width: 100px;">',
+          '      <div class="input-group-btn">',
+          '        <button type="button" class="btn btn-sm btn-minus rounded-circle bg-light border js-cart-decrease"><i class="fa fa-minus"></i></button>',
+          '      </div>',
+          '      <input type="text" class="form-control form-control-sm text-center border-0" value="' + Number(item.quantity || 0) + '" readonly>',
+          '      <div class="input-group-btn">',
+          '        <button type="button" class="btn btn-sm btn-plus rounded-circle bg-light border js-cart-increase"><i class="fa fa-plus"></i></button>',
+          '      </div>',
+          '    </div>',
+          '  </td>',
+          '  <td><p class="mb-0 py-4">$' + Number(lineTotal || 0).toFixed(2) + '</p></td>',
+          '  <td class="py-4">',
+          '    <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">',
+          '      <i class="fa fa-times text-danger"></i>',
+          '    </button>',
+          '  </td>',
+          '</tr>'
+        ].join('');
+      }).join('');
+    }
+
+    async function postCart(url, payload) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload || {})
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Cart update failed.');
+      }
+
+      return data;
+    }
+
+    document.addEventListener('click', async function (event) {
+      const row = event.target.closest('.cart-row');
+      if (!row) return;
+
+      const pid = row.getAttribute('data-pid');
+      const variants = getVariantsFromRow(row);
+
+      try {
+        if (event.target.closest('.js-cart-increase')) {
+          const data = await postCart('/api/cart/increase', { pid: pid, variants: variants });
+          renderCart(data.items || []);
+          return;
+        }
+
+        if (event.target.closest('.js-cart-decrease')) {
+          const data = await postCart('/api/cart/decrease', { pid: pid, variants: variants });
+          renderCart(data.items || []);
+          return;
+        }
+
+        if (event.target.closest('.js-cart-remove')) {
+          const data = await postCart('/api/cart/remove', { pid: pid, variants: variants });
+          renderCart(data.items || []);
+        }
+      } catch (err) {
+        alert(err.message || 'Failed to update cart.');
+      }
+    });
+  })();
+</script>
