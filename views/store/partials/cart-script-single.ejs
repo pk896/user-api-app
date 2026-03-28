@@ -1,6 +1,8 @@
 <!--views/store/partials/cart-script-single.ejs-->
 <script nonce="<%= nonce %>">
   (function () {
+    let activeChooserCard = null;
+
     function round2(n) {
       return Math.round(Number(n || 0) * 100) / 100;
     }
@@ -55,6 +57,74 @@
       }, 3000);
     }
 
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function normalizeArray(value) {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map(function (item) { return String(item || '').trim(); })
+        .filter(Boolean);
+    }
+
+    function normalizeColorImages(value) {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map(function (entry) {
+          return {
+            color: String(entry && entry.color ? entry.color : '').trim(),
+            imageUrl: String(entry && entry.imageUrl ? entry.imageUrl : '').trim()
+          };
+        })
+        .filter(function (entry) {
+          return entry.color && entry.imageUrl;
+        });
+    }
+
+    function parseProductData(button) {
+      if (!button) return null;
+
+      const raw = button.getAttribute('data-product');
+      if (!raw) return null;
+
+      try {
+        const decoded = decodeURIComponent(raw);
+        const parsed = JSON.parse(decoded);
+        parsed.sizes = normalizeArray(parsed.sizes);
+        parsed.colors = normalizeArray(parsed.colors);
+        parsed.colorImages = normalizeColorImages(parsed.colorImages);
+        parsed.image = String(parsed.image || '').trim();
+        parsed.customId = String(parsed.customId || '').trim();
+        parsed.name = String(parsed.name || '').trim();
+        return parsed;
+      } catch (err) {
+        console.error('Failed to parse product data:', err, raw);
+        return null;
+      }
+    }
+
+    function requiresChooser(product) {
+      if (!product) return false;
+      return (product.sizes && product.sizes.length > 0) || (product.colors && product.colors.length > 0);
+    }
+
+    function getColorImage(product, color) {
+      const picked = String(color || '').trim().toLowerCase();
+      if (!picked) return product.image || '';
+
+      const match = (product.colorImages || []).find(function (entry) {
+        return String(entry.color || '').trim().toLowerCase() === picked;
+      });
+
+      return (match && match.imageUrl) || product.image || '';
+    }
+
     function getSingleQuantity() {
       const qtyInput = document.querySelector('.quantity input.form-control');
       const parsedQty = Number(qtyInput && qtyInput.value ? qtyInput.value : 1);
@@ -64,6 +134,210 @@
       }
 
       return Math.floor(parsedQty);
+    }
+
+    function getOrCreateChooser(card, isSingle) {
+      if (!card) return null;
+
+      let chooser = card.querySelector('.js-variant-chooser');
+      if (chooser) return chooser;
+
+      chooser = document.createElement('div');
+      chooser.className = 'js-variant-chooser card shadow border-0 d-none';
+
+      if (isSingle) {
+        chooser.className += ' mt-3';
+      } else {
+        chooser.className += ' position-absolute start-50 translate-middle-x';
+        chooser.style.top = '12px';
+        chooser.style.zIndex = '25';
+        chooser.style.width = 'calc(100% - 24px)';
+        chooser.style.maxWidth = '340px';
+        card.classList.add('position-relative');
+      }
+
+      chooser.innerHTML = [
+        '<div class="card-body p-2">',
+        '  <div class="border rounded-3 overflow-hidden mb-2 d-flex align-items-center justify-content-center bg-white" style="height: 144px; border-color: #7C3AED !important;">',
+        '    <img src="" alt="Variant preview" class="js-variant-preview img-fluid w-100 h-100" style="object-fit: contain;">',
+        '  </div>',
+        '  <div class="js-variant-title fw-semibold small mb-1" style="color: #7C3AED;"></div>',
+        '  <div class="js-variant-status small text-secondary mb-2">Choose required options</div>',
+        '  <div class="js-color-wrap d-none mb-2">',
+        '    <div class="fw-semibold small mb-1" style="color: #7C3AED;">Color</div>',
+        '    <div class="js-color-options d-flex flex-wrap gap-1"></div>',
+        '  </div>',
+        '  <div class="js-size-wrap d-none mb-2">',
+        '    <div class="fw-semibold small mb-1" style="color: #7C3AED;">Size</div>',
+        '    <div class="js-size-options d-flex flex-wrap gap-1"></div>',
+        '  </div>',
+        '  <div class="d-grid gap-1">',
+        '    <button type="button" class="btn btn-sm rounded-pill js-variant-confirm" disabled style="background-color: #7C3AED; border-color: #7C3AED; color: #fff;">',
+        '      <i class="fas fa-shopping-cart me-1"></i>Add To Cart',
+        '    </button>',
+        '    <a href="#" class="btn btn-sm rounded-pill js-variant-view" style="border-color: #D4AF37; color: #7C3AED; background-color: #fff;">',
+        '      <i class="fas fa-eye me-1"></i>View Product',
+        '    </a>',
+        '  </div>',
+        '</div>'
+      ].join('');
+
+      if (isSingle) {
+        const anchorButton = card.querySelector('.js-single-add-to-cart');
+        if (anchorButton && anchorButton.parentNode) {
+          anchorButton.insertAdjacentElement('afterend', chooser);
+        } else {
+          card.appendChild(chooser);
+        }
+      } else {
+        card.appendChild(chooser);
+      }
+
+      return chooser;
+    }
+
+    function updateChooserStatus(chooser, product) {
+      if (!chooser) return;
+
+      const selectedColor = String(chooser.getAttribute('data-selected-color') || '').trim();
+      const selectedSize = String(chooser.getAttribute('data-selected-size') || '').trim();
+      const status = chooser.querySelector('.js-variant-status');
+      const preview = chooser.querySelector('.js-variant-preview');
+      const confirmBtn = chooser.querySelector('.js-variant-confirm');
+
+      const needsColor = Array.isArray(product.colors) && product.colors.length > 0;
+      const needsSize = Array.isArray(product.sizes) && product.sizes.length > 0;
+
+      if (preview) {
+        preview.src = getColorImage(product, selectedColor) || product.image || '';
+        preview.style.objectFit = 'contain';
+      }
+
+      if (status) {
+        if (needsColor && needsSize) {
+          if (selectedColor && selectedSize) {
+            status.textContent = 'Ready: ' + selectedColor + ' / ' + selectedSize;
+          } else if (selectedColor) {
+            status.textContent = 'Color selected. Choose size.';
+          } else if (selectedSize) {
+            status.textContent = 'Size selected. Choose color.';
+          } else {
+            status.textContent = 'Choose color and size';
+          }
+        } else if (needsColor) {
+          status.textContent = selectedColor ? ('Ready: ' + selectedColor) : 'Choose color';
+        } else if (needsSize) {
+          status.textContent = selectedSize ? ('Ready: ' + selectedSize) : 'Choose size';
+        } else {
+          status.textContent = 'Ready to add';
+        }
+      }
+
+      if (confirmBtn) {
+        const ready =
+          (!needsColor || !!selectedColor) &&
+          (!needsSize || !!selectedSize);
+
+        confirmBtn.disabled = !ready;
+      }
+    }
+
+    function setChooserState(card, product, sourceButton, isSingle) {
+      const chooser = getOrCreateChooser(card, isSingle);
+      if (!chooser) return;
+
+      const preview = chooser.querySelector('.js-variant-preview');
+      const title = chooser.querySelector('.js-variant-title');
+      const colorWrap = chooser.querySelector('.js-color-wrap');
+      const colorOptions = chooser.querySelector('.js-color-options');
+      const sizeWrap = chooser.querySelector('.js-size-wrap');
+      const sizeOptions = chooser.querySelector('.js-size-options');
+      const confirmBtn = chooser.querySelector('.js-variant-confirm');
+      const viewLink = chooser.querySelector('.js-variant-view');
+
+      chooser.setAttribute('data-pid', product.customId || '');
+      chooser.setAttribute('data-selected-color', '');
+      chooser.setAttribute('data-selected-size', '');
+      chooser.setAttribute('data-is-single', isSingle ? '1' : '0');
+
+      if (viewLink) {
+        viewLink.setAttribute('href', '/store/product/' + encodeURIComponent(product.customId || ''));
+      }
+
+      if (preview) preview.src = product.image || '';
+      if (title) title.textContent = product.name || 'Product';
+
+      if (colorWrap) {
+        colorWrap.classList.toggle('d-none', !(product.colors && product.colors.length > 0));
+      }
+
+      if (sizeWrap) {
+        sizeWrap.classList.toggle('d-none', !(product.sizes && product.sizes.length > 0));
+      }
+
+      if (colorOptions) {
+        colorOptions.innerHTML = (product.colors || []).map(function (color) {
+          const img = getColorImage(product, color);
+          return [
+            '<button type="button" class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1 js-color-choice" data-color="' + escapeHtml(color) + '" style="border-color: #7C3AED; color: #7C3AED; background-color: #fff;">',
+            img
+              ? '<span class="rounded-circle border overflow-hidden d-inline-flex align-items-center justify-content-center bg-white" style="width: 22px; height: 22px; border-color: #D4AF37 !important;">' +
+                  '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(color) + '" style="width: 100%; height: 100%; object-fit: contain;">' +
+                '</span>'
+              : '',
+            '<span class="small">' + escapeHtml(color) + '</span>',
+            '</button>'
+          ].join('');
+        }).join('');
+      }
+
+      if (sizeOptions) {
+        sizeOptions.innerHTML = (product.sizes || []).map(function (size) {
+          return '<button type="button" class="btn btn-sm rounded-pill js-size-choice" data-size="' + escapeHtml(size) + '" style="border-color: #D4AF37; color: #7C3AED; background-color: #fff;">' + escapeHtml(size) + '</button>';
+        }).join('');
+      }
+
+      if (confirmBtn) {
+        confirmBtn.setAttribute('data-pid', product.customId || '');
+        confirmBtn.setAttribute('data-source', isSingle ? 'single' : 'listing');
+        confirmBtn.setAttribute('data-origin-button-class', sourceButton && sourceButton.classList.contains('js-single-add-to-cart') ? 'js-single-add-to-cart' : 'js-add-to-cart');
+      }
+
+      updateChooserStatus(chooser, product);
+    }
+
+    function closeChooser(card) {
+      if (!card) return;
+      const chooser = card.querySelector('.js-variant-chooser');
+      if (chooser) chooser.classList.add('d-none');
+      if (activeChooserCard === card) activeChooserCard = null;
+    }
+
+    function openChooser(card, button, product, isSingle) {
+      if (!card || !button || !product || !requiresChooser(product)) return;
+
+      if (activeChooserCard && activeChooserCard !== card) {
+        closeChooser(activeChooserCard);
+      }
+
+      setChooserState(card, product, button, isSingle);
+
+      const chooser = getOrCreateChooser(card, isSingle);
+      if (!chooser) return;
+
+      chooser.classList.remove('d-none');
+      activeChooserCard = card;
+    }
+
+    function getSelectedVariants(chooser) {
+      const variants = {};
+      const color = String(chooser.getAttribute('data-selected-color') || '').trim();
+      const size = String(chooser.getAttribute('data-selected-size') || '').trim();
+
+      if (color) variants.color = color;
+      if (size) variants.size = size;
+
+      return variants;
     }
 
     async function refreshCartHeader() {
@@ -79,13 +353,21 @@
       }
     }
 
-    async function addToCart(pid, qty) {
-      const url =
+    async function addToCart(pid, qty, variants) {
+      let url =
         '/api/cart/add?pid=' +
         encodeURIComponent(pid) +
         '&qty=' +
         encodeURIComponent(qty || 1) +
         '&json=1';
+
+      if (variants && variants.color) {
+        url += '&color=' + encodeURIComponent(variants.color);
+      }
+
+      if (variants && variants.size) {
+        url += '&size=' + encodeURIComponent(variants.size);
+      }
 
       const res = await fetch(url, {
         method: 'GET',
@@ -119,11 +401,91 @@
         event.preventDefault();
         const current = Number(qtyInput.value || 1);
         qtyInput.value = Math.max(1, current + 1);
+      }
+    });
+
+    document.addEventListener('click', function (event) {
+      const colorBtn = event.target.closest('.js-color-choice');
+      if (colorBtn) {
+        event.preventDefault();
+        const chooser = colorBtn.closest('.js-variant-chooser');
+        if (!chooser) return;
+
+        const card = chooser.parentElement;
+        const trigger = card && (card.querySelector('.js-single-add-to-cart') || card.querySelector('.js-add-to-cart'));
+        const product = parseProductData(trigger);
+        if (!product) return;
+
+        chooser.setAttribute('data-selected-color', colorBtn.getAttribute('data-color') || '');
+
+        chooser.querySelectorAll('.js-color-choice').forEach(function (btn) {
+          btn.classList.remove('active');
+        });
+        colorBtn.classList.add('active');
+
+        updateChooserStatus(chooser, product);
         return;
+      }
+
+      const sizeBtn = event.target.closest('.js-size-choice');
+      if (sizeBtn) {
+        event.preventDefault();
+        const chooser = sizeBtn.closest('.js-variant-chooser');
+        if (!chooser) return;
+
+        const card = chooser.parentElement;
+        const trigger = card && (card.querySelector('.js-single-add-to-cart') || card.querySelector('.js-add-to-cart'));
+        const product = parseProductData(trigger);
+        if (!product) return;
+
+        chooser.setAttribute('data-selected-size', sizeBtn.getAttribute('data-size') || '');
+
+        chooser.querySelectorAll('.js-size-choice').forEach(function (btn) {
+          btn.classList.remove('active');
+        });
+        sizeBtn.classList.add('active');
+
+        updateChooserStatus(chooser, product);
       }
     });
 
     document.addEventListener('click', async function (event) {
+      const confirmBtn = event.target.closest('.js-variant-confirm');
+      if (confirmBtn) {
+        event.preventDefault();
+
+        const chooser = confirmBtn.closest('.js-variant-chooser');
+        if (!chooser) return;
+
+        const card = chooser.parentElement;
+        const trigger = card && (card.querySelector('.js-single-add-to-cart') || card.querySelector('.js-add-to-cart'));
+        const product = parseProductData(trigger);
+        const pid = confirmBtn.getAttribute('data-pid');
+
+        if (!product || !pid) return;
+
+        const qty = confirmBtn.getAttribute('data-source') === 'single' ? getSingleQuantity() : 1;
+        const variants = getSelectedVariants(chooser);
+
+        const originalHtml = confirmBtn.innerHTML;
+        confirmBtn.classList.add('disabled');
+        confirmBtn.setAttribute('aria-disabled', 'true');
+        confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
+
+        try {
+          const data = await addToCart(pid, qty, variants);
+          showCartMessage(data.message || 'Added to cart.', 'success');
+          closeChooser(card);
+        } catch (err) {
+          showCartMessage(err.message || 'Failed to add to cart.', 'danger');
+        } finally {
+          confirmBtn.classList.remove('disabled');
+          confirmBtn.removeAttribute('aria-disabled');
+          confirmBtn.innerHTML = originalHtml;
+        }
+        return;
+      }
+
       const button = event.target.closest('.js-single-add-to-cart, .js-add-to-cart');
       if (!button) return;
 
@@ -132,9 +494,19 @@
       const pid = button.getAttribute('data-pid');
       if (!pid) return;
 
-      const qty = button.classList.contains('js-single-add-to-cart')
-        ? getSingleQuantity()
-        : 1;
+      const product = parseProductData(button);
+      const isSingle = button.classList.contains('js-single-add-to-cart');
+
+      if (product && requiresChooser(product)) {
+        const card = isSingle
+          ? button.closest('.js-single-product-card')
+          : button.closest('.js-store-product-card');
+
+        openChooser(card, button, product, isSingle);
+        return;
+      }
+
+      const qty = isSingle ? getSingleQuantity() : 1;
 
       const originalHtml = button.innerHTML;
       button.classList.add('disabled');
@@ -150,6 +522,16 @@
         button.classList.remove('disabled');
         button.removeAttribute('aria-disabled');
         button.innerHTML = originalHtml;
+      }
+    });
+
+    document.addEventListener('click', function (event) {
+      if (event.target.closest('.js-variant-chooser')) return;
+      if (event.target.closest('.js-single-add-to-cart')) return;
+      if (event.target.closest('.js-add-to-cart')) return;
+
+      if (activeChooserCard) {
+        closeChooser(activeChooserCard);
       }
     });
 

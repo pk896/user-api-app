@@ -1,4 +1,17 @@
 <!--views/store/single.ejs-->
+<%
+  function storeProductPayload(product) {
+    return encodeURIComponent(JSON.stringify({
+      customId: product.customId || '',
+      name: product.name || '',
+      image: product.image || product.imageUrl || '',
+      sizes: Array.isArray(product.sizes) ? product.sizes : [],
+      colors: Array.isArray(product.colors) ? product.colors : [],
+      colorImages: Array.isArray(product.colorImages) ? product.colorImages : []
+    }));
+  }
+%>
+
 <!-- Spinner Start -->
 <div id="spinner"
     class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
@@ -343,7 +356,7 @@
                         </div>
                     </div>
 
-                    <div class="col-xl-6">
+                    <div class="col-xl-6 js-single-product-card">
                         <h4 class="fw-bold mb-3"><%= product.name %></h4>
                         <p class="mb-3">Category: <%= product.category %></p>
                         <h5 class="fw-bold mb-3">$<%= product.price.toFixed(2) %></h5>
@@ -380,11 +393,11 @@
                                 </button>
                             </div>
                         </div>
-
                         <a
                             href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
                             class="btn btn-primary border border-secondary rounded-pill px-4 py-2 mb-4 text-primary js-single-add-to-cart"
                             data-pid="<%= product.customId %>"
+                            data-product="<%= storeProductPayload(product) %>"
                         >
                             <i class="fa fa-shopping-bag me-2 text-white"></i> Add to cart
                         </a>
@@ -529,7 +542,7 @@
 
         <div class="related-carousel owl-carousel pt-4">
             <% (relatedProducts || []).forEach(function(item){ %>
-            <div class="related-item rounded">
+            <div class="related-item rounded js-store-product-card">
                 <div class="related-item-inner border rounded">
                     <div class="related-item-inner-item">
                         <img src="<%= item.image %>" class="img-fluid w-100 rounded-top" alt="<%= item.name %>">
@@ -554,6 +567,7 @@
                         href="/api/cart/add?pid=<%= encodeURIComponent(item.customId) %>&qty=1&json=1"
                         class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cart"
                         data-pid="<%= item.customId %>"
+                        data-product="<%= storeProductPayload(item) %>"
                     >
                         <i class="fas fa-shopping-cart me-2"></i> Add To Cart
                     </a>
