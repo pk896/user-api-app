@@ -1,6 +1,8 @@
 <!--views/store/partials/cart-script-listing.ejs-->
 <script nonce="<%= nonce %>">
   (function () {
+    let activeChooserCard = null;
+
     function round2(n) {
       return Math.round(Number(n || 0) * 100) / 100;
     }
@@ -55,6 +57,276 @@
       }, 3000);
     }
 
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function normalizeArray(value) {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map(function (item) { return String(item || '').trim(); })
+        .filter(Boolean);
+    }
+
+    function normalizeColorImages(value) {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map(function (entry) {
+          return {
+            color: String(entry && entry.color ? entry.color : '').trim(),
+            imageUrl: String(entry && entry.imageUrl ? entry.imageUrl : '').trim()
+          };
+        })
+        .filter(function (entry) {
+          return entry.color && entry.imageUrl;
+        });
+    }
+
+    function parseProductData(button) {
+      if (!button) return null;
+
+      const raw = button.getAttribute('data-product');
+      if (!raw) return null;
+
+      try {
+        const decoded = decodeURIComponent(raw);
+        const parsed = JSON.parse(decoded);
+        parsed.sizes = normalizeArray(parsed.sizes);
+        parsed.colors = normalizeArray(parsed.colors);
+        parsed.colorImages = normalizeColorImages(parsed.colorImages);
+        parsed.image = String(parsed.image || '').trim();
+        parsed.customId = String(parsed.customId || '').trim();
+        parsed.name = String(parsed.name || '').trim();
+        return parsed;
+      } catch (err) {
+        console.error('Failed to parse product data:', err, raw);
+        return null;
+      }
+    }
+
+    function requiresChooser(product) {
+      if (!product) return false;
+      return (product.sizes && product.sizes.length > 0) || (product.colors && product.colors.length > 0);
+    }
+
+    function getColorImage(product, color) {
+      const picked = String(color || '').trim().toLowerCase();
+      if (!picked) return product.image || '';
+
+      const match = (product.colorImages || []).find(function (entry) {
+        return String(entry.color || '').trim().toLowerCase() === picked;
+      });
+
+      return (match && match.imageUrl) || product.image || '';
+    }
+
+    function getOrCreateChooser(card) {
+      if (!card) return null;
+
+      let chooser = card.querySelector('.js-variant-chooser');
+      if (chooser) return chooser;
+
+      chooser = document.createElement('div');
+      chooser.className = 'js-variant-chooser card shadow border-0 position-absolute start-50 translate-middle-x d-none';
+      chooser.style.top = '12px';
+      chooser.style.zIndex = '25';
+      chooser.style.width = 'calc(100% - 24px)';
+      chooser.style.maxWidth = '340px';
+
+      chooser.innerHTML = [
+        '<div class="card-body p-3">',
+        '  <div class="d-flex align-items-start gap-3">',
+        '    <img src="" alt="Variant preview" class="js-variant-preview rounded border flex-shrink-0" style="width:72px;height:72px;object-fit:cover;">',
+        '    <div class="flex-grow-1 min-w-0">',
+        '      <div class="fw-semibold small js-variant-title mb-1"></div>',
+        '      <div class="text-muted small js-variant-status mb-2">Choose required options</div>',
+        '      <div class="js-color-wrap d-none mb-2">',
+        '        <div class="small fw-semibold mb-2">Color</div>',
+        '        <div class="js-color-options d-flex flex-wrap gap-2"></div>',
+        '      </div>',
+        '      <div class="js-size-wrap d-none mb-2">',
+        '        <div class="small fw-semibold mb-2">Size</div>',
+        '        <div class="js-size-options d-flex flex-wrap gap-2"></div>',
+        '      </div>',
+        '      <div class="d-grid gap-2">',
+        '        <button type="button" class="btn btn-primary btn-sm rounded-pill js-variant-confirm" disabled>',
+        '          <i class="fas fa-shopping-cart me-2"></i>Add To Cart',
+        '        </button>',
+        '        <a href="#" class="btn btn-outline-secondary btn-sm rounded-pill js-variant-view">',
+        '          <i class="fas fa-eye me-2"></i>View Product',
+        '        </a>',
+        '      </div>',
+        '    </div>',
+        '  </div>',
+        '</div>'
+      ].join('');
+
+      card.classList.add('position-relative');
+      card.appendChild(chooser);
+      return chooser;
+    }
+
+    function setChooserState(card, product) {
+      const chooser = getOrCreateChooser(card);
+      if (!chooser) return;
+
+      const preview = chooser.querySelector('.js-variant-preview');
+      const title = chooser.querySelector('.js-variant-title');
+      const status = chooser.querySelector('.js-variant-status');
+      const colorWrap = chooser.querySelector('.js-color-wrap');
+      const colorOptions = chooser.querySelector('.js-color-options');
+      const sizeWrap = chooser.querySelector('.js-size-wrap');
+      const sizeOptions = chooser.querySelector('.js-size-options');
+      const confirmBtn = chooser.querySelector('.js-variant-confirm');
+      const viewLink = chooser.querySelector('.js-variant-view');
+
+      chooser.setAttribute('data-pid', product.customId || '');
+      chooser.setAttribute('data-selected-color', '');
+      chooser.setAttribute('data-selected-size', '');
+
+      if (viewLink) {
+        viewLink.setAttribute('href', '/store/product/' + encodeURIComponent(product.customId || ''));
+      }
+
+      if (preview) preview.src = product.image || '';
+      if (title) title.textContent = product.name || 'Product';
+
+      if (colorWrap) {
+        if (product.colors.length > 0) {
+          colorWrap.classList.remove('d-none');
+        } else {
+          colorWrap.classList.add('d-none');
+        }
+      }
+
+      if (sizeWrap) {
+        if (product.sizes.length > 0) {
+          sizeWrap.classList.remove('d-none');
+        } else {
+          sizeWrap.classList.add('d-none');
+        }
+      }
+
+      if (colorOptions) {
+        colorOptions.innerHTML = (product.colors || []).map(function (color) {
+          const img = getColorImage(product, color);
+
+          return [
+            '<button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2 rounded-pill js-color-choice" data-color="' + escapeHtml(color) + '">',
+            img
+              ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(color) + '" class="rounded-circle border" style="width:24px;height:24px;object-fit:cover;">'
+              : '',
+            '<span>' + escapeHtml(color) + '</span>',
+            '</button>'
+          ].join('');
+        }).join('');
+      }
+
+      if (sizeOptions) {
+        sizeOptions.innerHTML = (product.sizes || []).map(function (size) {
+          return '<button type="button" class="btn btn-outline-secondary btn-sm rounded-pill js-size-choice" data-size="' + escapeHtml(size) + '">' + escapeHtml(size) + '</button>';
+        }).join('');
+      }
+
+      updateChooserStatus(chooser, product);
+
+      if (confirmBtn) {
+        confirmBtn.setAttribute('data-pid', product.customId || '');
+      }
+    }
+
+    function updateChooserStatus(chooser, product) {
+      if (!chooser) return;
+
+      const selectedColor = String(chooser.getAttribute('data-selected-color') || '').trim();
+      const selectedSize = String(chooser.getAttribute('data-selected-size') || '').trim();
+      const status = chooser.querySelector('.js-variant-status');
+      const preview = chooser.querySelector('.js-variant-preview');
+      const confirmBtn = chooser.querySelector('.js-variant-confirm');
+
+      const needsColor = Array.isArray(product.colors) && product.colors.length > 0;
+      const needsSize = Array.isArray(product.sizes) && product.sizes.length > 0;
+
+      if (preview) {
+        preview.src = getColorImage(product, selectedColor) || product.image || '';
+      }
+
+      if (status) {
+        if (needsColor && needsSize) {
+          if (selectedColor && selectedSize) {
+            status.textContent = 'Ready: ' + selectedColor + ' / ' + selectedSize;
+          } else if (selectedColor) {
+            status.textContent = 'Color selected. Choose size.';
+          } else if (selectedSize) {
+            status.textContent = 'Size selected. Choose color.';
+          } else {
+            status.textContent = 'Choose color and size';
+          }
+        } else if (needsColor) {
+          status.textContent = selectedColor ? ('Ready: ' + selectedColor) : 'Choose color';
+        } else if (needsSize) {
+          status.textContent = selectedSize ? ('Ready: ' + selectedSize) : 'Choose size';
+        } else {
+          status.textContent = 'Ready to add';
+        }
+      }
+
+      if (confirmBtn) {
+        const ready =
+          (!needsColor || !!selectedColor) &&
+          (!needsSize || !!selectedSize);
+
+        confirmBtn.disabled = !ready;
+      }
+    }
+
+    function openChooser(card, button, product) {
+      if (!card || !button || !product || !requiresChooser(product)) return;
+
+      if (activeChooserCard && activeChooserCard !== card) {
+        closeChooser(activeChooserCard);
+      }
+
+      const chooser = getOrCreateChooser(card);
+      if (!chooser) return;
+
+      const alreadyOpen = !chooser.classList.contains('d-none');
+
+      if (!alreadyOpen) {
+        setChooserState(card, product);
+      }
+
+      chooser.classList.remove('d-none');
+      activeChooserCard = card;
+    }
+
+    function closeChooser(card) {
+      if (!card) return;
+      const chooser = card.querySelector('.js-variant-chooser');
+      if (chooser) {
+        chooser.classList.add('d-none');
+      }
+      if (activeChooserCard === card) {
+        activeChooserCard = null;
+      }
+    }
+
+    function getSelectedVariants(chooser) {
+      const variants = {};
+      const color = String(chooser.getAttribute('data-selected-color') || '').trim();
+      const size = String(chooser.getAttribute('data-selected-size') || '').trim();
+
+      if (color) variants.color = color;
+      if (size) variants.size = size;
+
+      return variants;
+    }
+
     async function refreshCartHeader() {
       try {
         const res = await fetch('/api/cart', {
@@ -68,13 +340,21 @@
       }
     }
 
-    async function addToCart(pid, qty) {
-      const url =
-        '/api/cart/add?pid=' +
-        encodeURIComponent(pid) +
-        '&qty=' +
-        encodeURIComponent(qty || 1) +
-        '&json=1';
+    async function addToCart(pid, qty, variants) {
+      const params = new URLSearchParams();
+      params.set('pid', pid);
+      params.set('qty', qty || 1);
+      params.set('json', '1');
+
+      if (variants && variants.size) {
+        params.set('size', variants.size);
+      }
+
+      if (variants && variants.color) {
+        params.set('color', variants.color);
+      }
+
+      const url = '/api/cart/add?' + params.toString();
 
       const res = await fetch(url, {
         method: 'GET',
@@ -92,9 +372,116 @@
       return data;
     }
 
+    document.addEventListener('mouseenter', function (event) {
+      const card = event.target.closest('.js-store-product-card');
+      if (!card) return;
+
+      const button = card.querySelector('.js-add-to-cart');
+      const product = parseProductData(button);
+
+      if (!requiresChooser(product)) return;
+      openChooser(card, button, product);
+    }, true);
+
+    document.addEventListener('mousedown', function (event) {
+      const colorBtn = event.target.closest('.js-color-choice');
+      if (!colorBtn) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const chooser = colorBtn.closest('.js-variant-chooser');
+      if (!chooser) return;
+
+      const card = colorBtn.closest('.js-store-product-card');
+      const addBtn = card ? card.querySelector('.js-add-to-cart') : null;
+      const product = parseProductData(addBtn);
+
+      chooser.setAttribute('data-selected-color', colorBtn.getAttribute('data-color') || '');
+
+      chooser.querySelectorAll('.js-color-choice').forEach(function (btn) {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+      });
+
+      colorBtn.classList.remove('btn-outline-secondary');
+      colorBtn.classList.add('btn-secondary');
+
+      updateChooserStatus(chooser, product || { colors: [], sizes: [], colorImages: [], image: '' });
+    });
+
+    document.addEventListener('mousedown', function (event) {
+      const sizeBtn = event.target.closest('.js-size-choice');
+      if (!sizeBtn) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const chooser = sizeBtn.closest('.js-variant-chooser');
+      if (!chooser) return;
+
+      const card = sizeBtn.closest('.js-store-product-card');
+      const addBtn = card ? card.querySelector('.js-add-to-cart') : null;
+      const product = parseProductData(addBtn);
+
+      chooser.setAttribute('data-selected-size', sizeBtn.getAttribute('data-size') || '');
+
+      chooser.querySelectorAll('.js-size-choice').forEach(function (btn) {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+      });
+
+      sizeBtn.classList.remove('btn-outline-secondary');
+      sizeBtn.classList.add('btn-secondary');
+
+      updateChooserStatus(chooser, product || { colors: [], sizes: [], colorImages: [], image: '' });
+    });
+
+    document.addEventListener('click', async function (event) {
+      const confirmBtn = event.target.closest('.js-variant-confirm');
+      if (!confirmBtn) return;
+
+      event.preventDefault();
+
+      const chooser = confirmBtn.closest('.js-variant-chooser');
+      const card = confirmBtn.closest('.js-store-product-card');
+      const addBtn = card ? card.querySelector('.js-add-to-cart') : null;
+      const product = parseProductData(addBtn);
+      const pid = confirmBtn.getAttribute('data-pid') || '';
+      const variants = getSelectedVariants(chooser);
+
+      if (!pid || !product) return;
+
+      const originalHtml = confirmBtn.innerHTML;
+      confirmBtn.classList.add('disabled');
+      confirmBtn.setAttribute('aria-disabled', 'true');
+      confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
+
+      try {
+        const data = await addToCart(pid, 1, variants);
+        showCartMessage(data.message || 'Added to cart.', 'success');
+        closeChooser(card);
+      } catch (err) {
+        showCartMessage(err.message || 'Failed to add to cart.', 'danger');
+      } finally {
+        confirmBtn.classList.remove('disabled');
+        confirmBtn.removeAttribute('aria-disabled');
+        confirmBtn.innerHTML = originalHtml;
+      }
+    });
+
     document.addEventListener('click', async function (event) {
       const button = event.target.closest('.js-add-to-cart');
       if (!button) return;
+
+      const card = button.closest('.js-store-product-card');
+      const product = parseProductData(button);
+
+      if (requiresChooser(product)) {
+        event.preventDefault();
+        openChooser(card, button, product);
+        return;
+      }
 
       event.preventDefault();
 
@@ -107,7 +494,7 @@
       button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
 
       try {
-        const data = await addToCart(pid, 1);
+        const data = await addToCart(pid, 1, {});
         showCartMessage(data.message || 'Added to cart.', 'success');
       } catch (err) {
         showCartMessage(err.message || 'Failed to add to cart.', 'danger');
@@ -115,6 +502,27 @@
         button.classList.remove('disabled');
         button.removeAttribute('aria-disabled');
         button.innerHTML = originalHtml;
+      }
+    });
+
+    document.addEventListener('touchstart', function (event) {
+      const button = event.target.closest('.js-add-to-cart');
+      if (!button) return;
+
+      const card = button.closest('.js-store-product-card');
+      const product = parseProductData(button);
+
+      if (!requiresChooser(product)) return;
+      openChooser(card, button, product);
+    }, { passive: true });
+
+    document.addEventListener('click', function (event) {
+      const clickedInsideChooser = event.target.closest('.js-variant-chooser');
+      const clickedInsideCard = event.target.closest('.js-store-product-card');
+
+      if (clickedInsideChooser) return;
+      if (!clickedInsideCard && activeChooserCard) {
+        closeChooser(activeChooserCard);
       }
     });
 

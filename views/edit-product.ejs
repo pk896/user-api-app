@@ -245,6 +245,20 @@
                   </div>
                 </div>
 
+                <div class="form-group">
+                  <label for="role" class="form-label">Product Role</label>
+                  <select id="role" name="role" class="form-select">
+                    <option value="general" <%= String(product.role || 'general') === 'general' ? 'selected' : '' %>>General</option>
+                    <option value="clothes" <%= String(product.role || '') === 'clothes' ? 'selected' : '' %>>Clothes</option>
+                    <option value="shoes" <%= String(product.role || '') === 'shoes' ? 'selected' : '' %>>Shoes</option>
+                    <option value="electronics" <%= String(product.role || '') === 'electronics' ? 'selected' : '' %>>Electronics</option>
+                    <option value="home" <%= String(product.role || '') === 'home' ? 'selected' : '' %>>Home</option>
+                    <option value="beauty" <%= String(product.role || '') === 'beauty' ? 'selected' : '' %>>Beauty</option>
+                    <option value="groceries" <%= String(product.role || '') === 'groceries' ? 'selected' : '' %>>Groceries</option>
+                  </select>
+                  <div class="form-hint">Controls how variants behave in the store and cart.</div>
+                </div>
+
                 <div class="form-grid">
                   <!-- MATCHING TYPE (string, used in demands etc.) -->
                   <div class="form-group">
@@ -648,6 +662,79 @@
                         <span id="fileSize"></span>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <div class="color-images-card">
+                  <div class="image-card-header">
+                    <h4>Images Per Color</h4>
+                    <span class="image-optional">Optional</span>
+                  </div>
+
+                  <div class="form-hint" style="margin-bottom:10px;">
+                    Add one row per color. Upload a new image file or keep/use an image URL for that color.
+                  </div>
+
+                  <div id="colorImageRows" class="color-image-rows">
+                    <% const existingColorImages = Array.isArray(product.colorImages) ? product.colorImages : []; %>
+
+                    <% if (existingColorImages.length > 0) { %>
+                      <% existingColorImages.forEach(function(entry) { %>
+                        <div class="color-image-row">
+                          <input
+                            type="text"
+                            name="colorImageColors"
+                            value="<%= entry.color || '' %>"
+                            placeholder="Color"
+                            class="form-input"
+                          />
+                          <input
+                            type="text"
+                            name="colorImageUrls"
+                            value="<%= entry.imageUrl || '' %>"
+                            placeholder="Image URL"
+                            class="form-input"
+                          />
+                          <input
+                            type="file"
+                            name="colorImageFiles"
+                            accept="image/*"
+                            class="form-input"
+                          />
+                          <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
+                        </div>
+                      <% }) %>
+                    <% } else { %>
+                      <div class="color-image-row">
+                        <input
+                          type="text"
+                          name="colorImageColors"
+                          value=""
+                          placeholder="Color"
+                          class="form-input"
+                        />
+                        <input
+                          type="text"
+                          name="colorImageUrls"
+                          value=""
+                          placeholder="Image URL"
+                          class="form-input"
+                        />
+                        <input
+                          type="file"
+                          name="colorImageFiles"
+                          accept="image/*"
+                          class="form-input"
+                        />
+                        <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
+                      </div>
+                    <% } %>
+                  </div>
+
+                  <div style="margin-top:10px;">
+                    <button type="button" id="addColorImageRow" class="btn btn-secondary">
+                      Add another color image
+                    </button>
                   </div>
                 </div>
 
@@ -1413,6 +1500,44 @@
   .pill-blue{ background:rgba(37,99,235,.10); color:var(--pg-blue); border-color:rgba(37,99,235,.18); }
   .pill-green{ background:rgba(34,197,94,.12); color:#166534; border-color:rgba(34,197,94,.22); }
 
+  .color-images-card{
+    margin-top:12px;
+    background:rgba(124,58,237,.04);
+    border-radius:18px;
+    padding:12px;
+    border:1px solid rgba(124,58,237,.16);
+  }
+
+  .dark-theme .color-images-card{
+    background:rgba(2,6,23,.18);
+    border-color:rgba(148,163,184,.20);
+  }
+
+  .color-image-rows{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+
+  .color-image-row{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+    padding:10px;
+    border-radius:14px;
+    border:1px solid rgba(124,58,237,.16);
+    background:rgba(124,58,237,.05);
+  }
+
+  .dark-theme .color-image-row{
+    background:rgba(15,23,42,.45);
+    border-color:rgba(148,163,184,.18);
+  }
+
+  .btn-row-remove{
+    min-height:46px;
+  }
+
   .media-note{
     margin-top:12px;
     padding:10px 12px;
@@ -1598,6 +1723,7 @@
     .form-section{ padding:16px; }
     .form-grid{ grid-template-columns:repeat(2, 1fr); }
     .media-grid{ grid-template-columns:1fr 1fr; }
+    .color-image-row{ grid-template-columns:1fr 1.3fr 1fr auto; align-items:center; }
     .action-buttons{ grid-template-columns:1fr 1fr 1fr; }
     .product-actions{ grid-template-columns:1fr 1fr; }
     .product-content{ grid-template-columns:320px 1fr; }
@@ -1939,6 +2065,91 @@
         imageInput.value = '';
         previewWrapper.style.display = 'none';
         newImagePreview.src = '';
+      });
+    }
+
+    // =============================
+    // Color Image Rows
+    // =============================
+    const colorRowsWrapper = document.getElementById('colorImageRows');
+    const addColorRowBtn = document.getElementById('addColorImageRow');
+    const colorsInput = document.getElementById('colors');
+
+    function createColorImageRow(color = '', imageUrl = '') {
+      if (!colorRowsWrapper) return;
+
+      const row = document.createElement('div');
+      row.className = 'color-image-row';
+
+      row.innerHTML = `
+        <input
+          type="text"
+          name="colorImageColors"
+          value="${String(color || '').replace(/"/g, '&quot;')}"
+          placeholder="Color"
+          class="form-input"
+        />
+        <input
+          type="text"
+          name="colorImageUrls"
+          value="${String(imageUrl || '').replace(/"/g, '&quot;')}"
+          placeholder="Image URL"
+          class="form-input"
+        />
+        <input
+          type="file"
+          name="colorImageFiles"
+          accept="image/*"
+          class="form-input"
+        />
+        <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
+      `;
+
+      colorRowsWrapper.appendChild(row);
+    }
+
+    if (addColorRowBtn) {
+      addColorRowBtn.addEventListener('click', () => createColorImageRow());
+    }
+
+    if (colorRowsWrapper) {
+      colorRowsWrapper.addEventListener('click', (e) => {
+        const btn = e.target.closest('.js-remove-color-row');
+        if (!btn) return;
+
+        const rows = colorRowsWrapper.querySelectorAll('.color-image-row');
+
+        if (rows.length === 1) {
+          rows[0].querySelectorAll('input').forEach((input) => {
+            input.value = '';
+          });
+          return;
+        }
+
+        btn.closest('.color-image-row')?.remove();
+      });
+    }
+
+    if (colorsInput && colorRowsWrapper) {
+      colorsInput.addEventListener('blur', () => {
+        const colors = String(colorsInput.value || '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+
+        if (!colors.length) return;
+
+        const existing = Array.from(
+          colorRowsWrapper.querySelectorAll('input[name="colorImageColors"]')
+        )
+          .map((input) => String(input.value || '').trim().toLowerCase())
+          .filter(Boolean);
+
+        colors.forEach((color) => {
+          if (!existing.includes(color.toLowerCase())) {
+            createColorImageRow(color, '');
+          }
+        });
       });
     }
 

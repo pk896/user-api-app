@@ -129,10 +129,9 @@
                   type="text"
                   name="color"
                   placeholder="e.g., Orange / Black / Blue"
-                  required
                   class="pf-input"
                 />
-                <div class="pf-hint">Optional: shown as the first color if you use variants later.</div>
+                <div class="pf-hint">Optional fallback color. If empty, the first variant color will be used.</div>
               </label>
             </div>
           </div>
@@ -147,9 +146,9 @@
                   type="text"
                   name="size"
                   placeholder="e.g., 1L Bottle / M / Size 7"
-                  required
                   class="pf-input"
                 />
+                <div class="pf-hint">Optional fallback size. If empty, the first variant size will be used.</div>
               </label>
             </div>
 
@@ -281,6 +280,68 @@
               </label>
             </div>
           </div>
+        </div>
+        
+        <!-- Variant Setup -->
+        <div class="pf-field">
+          <label class="pf-label">
+            <span>Product Role</span>
+            <select name="role" class="pf-input pf-select">
+              <option value="general" selected>General</option>
+              <option value="clothes">Clothes</option>
+              <option value="shoes">Shoes</option>
+              <option value="electronics">Electronics</option>
+              <option value="home">Home</option>
+              <option value="beauty">Beauty</option>
+              <option value="groceries">Groceries</option>
+            </select>
+            <div class="pf-hint">Controls how variants behave in the store.</div>
+          </label>
+        </div>
+
+        <div class="pf-field">
+          <label class="pf-label">
+            <span>Variant Sizes</span>
+            <input
+              id="variantSizesInput"
+              type="text"
+              name="sizes"
+              placeholder="e.g., S, M, L or 500ml, 1L"
+              class="pf-input"
+            />
+          </label>
+        </div>
+
+        <div class="pf-field">
+          <label class="pf-label">
+            <span>Variant Colors</span>
+            <input
+              id="variantColorsInput"
+              type="text"
+              name="colors"
+              placeholder="e.g., Black, Blue, Red"
+              class="pf-input"
+            />
+          </label>
+        </div>
+
+        <div class="pf-field">
+          <label class="pf-label">
+            <span>Image Per Color</span>
+
+            <div id="colorImageRows">
+              <div class="pf-color-row">
+                <input type="text" name="colorImageColors" placeholder="Color" class="pf-input" />
+                <input type="text" name="colorImageUrls" placeholder="Image URL" class="pf-input" />
+                <input type="file" name="colorImageFiles" class="pf-input" />
+                <button type="button" class="pf-btn pf-btn-secondary js-remove-color-row">Remove</button>
+              </div>
+            </div>
+
+            <button type="button" id="addColorImageRow" class="pf-btn pf-btn-secondary" style="margin-top:10px;">
+              Add another color
+            </button>
+          </label>
         </div>
 
         <!-- ==========================
@@ -995,6 +1056,18 @@
     color: #FFFFFF;
   }
 
+  .pf-color-row {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  @media (min-width: 768px) {
+    .pf-color-row {
+      grid-template-columns: 1fr 1fr 1fr auto;
+    }
+  }
+
   /* ========= BUTTONS ========= */
   .pf-actions {
     display: flex;
@@ -1484,6 +1557,63 @@
         if (!Number.isNaN(num)) {
           e.target.value = num.toFixed(2);
         }
+      });
+    }
+
+    // =============================
+    // Color Image Rows (NEW)
+    // =============================
+    const rowsWrapper = document.getElementById('colorImageRows');
+    const addRowBtn = document.getElementById('addColorImageRow');
+    const colorsInput = document.getElementById('variantColorsInput');
+
+    function createColorRow(color = '') {
+      const row = document.createElement('div');
+      row.className = 'pf-color-row';
+
+      row.innerHTML = `
+        <input type="text" name="colorImageColors" placeholder="Color" class="pf-input" value="${color}" />
+        <input type="text" name="colorImageUrls" placeholder="Image URL" class="pf-input" />
+        <input type="file" name="colorImageFiles" class="pf-input" />
+        <button type="button" class="pf-btn pf-btn-secondary js-remove-color-row">Remove</button>
+      `;
+
+      rowsWrapper.appendChild(row);
+    }
+
+    if (addRowBtn) {
+      addRowBtn.addEventListener('click', () => createColorRow());
+    }
+
+    if (rowsWrapper) {
+      rowsWrapper.addEventListener('click', (e) => {
+        const btn = e.target.closest('.js-remove-color-row');
+        if (!btn) return;
+
+        const rows = rowsWrapper.querySelectorAll('.pf-color-row');
+
+        if (rows.length === 1) {
+          rows[0].querySelectorAll('input').forEach(i => i.value = '');
+          return;
+        }
+
+        btn.closest('.pf-color-row').remove();
+      });
+    }
+
+    if (colorsInput) {
+      colorsInput.addEventListener('blur', () => {
+        const colors = colorsInput.value.split(',').map(c => c.trim()).filter(Boolean);
+
+        const existing = Array.from(
+          document.querySelectorAll('input[name="colorImageColors"]')
+        ).map(i => i.value.toLowerCase());
+
+        colors.forEach(color => {
+          if (!existing.includes(color.toLowerCase())) {
+            createColorRow(color);
+          }
+        });
       });
     }
   });

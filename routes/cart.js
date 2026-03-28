@@ -27,46 +27,42 @@ function isSecondhandCategory(cat) {
   return SECONDHAND_CATS.has(String(cat || '').trim().toLowerCase());
 }
 
-function productNeedsVariants(product) {
-  const cat = String(product?.category || '').trim().toLowerCase();
-  const type = String(product?.type || '').trim().toLowerCase();
+function normalizeVariantArray(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(
+    value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+  )];
+}
 
-  const isClothes =
-    cat === 'clothes' ||
-    cat === 'second-hand-clothes' ||
-    cat === 'fashion' ||
-    type === 'clothes';
+function getVariantRequirements(product) {
+  const sizes = normalizeVariantArray(product?.sizes);
+  const colors = normalizeVariantArray(product?.colors);
 
-  const isShoes =
-    cat === 'shoes' ||
-    type === 'shoes';
-
-  return isClothes || isShoes;
+  return {
+    sizes,
+    colors,
+    requiresSize: sizes.length > 0,
+    requiresColor: colors.length > 0,
+    requiresAnyVariant: sizes.length > 0 || colors.length > 0,
+  };
 }
 
 function validateRequiredVariants(product, variants = {}) {
-  if (!productNeedsVariants(product)) return null;
-
   const clean = normVariants(variants);
+  const rules = getVariantRequirements(product);
 
-  const sizes = Array.isArray(product?.sizes) && product.sizes.length
-    ? product.sizes.map((v) => String(v).trim()).filter(Boolean)
-    : (product?.size ? [String(product.size).trim()] : []);
-
-  const colors = Array.isArray(product?.colors) && product.colors.length
-    ? product.colors.map((v) => String(v).trim()).filter(Boolean)
-    : (product?.color ? [String(product.color).trim()] : []);
-
-  if (sizes.length > 0) {
+  if (rules.requiresSize) {
     if (!clean.size) return 'Please select a size';
-    if (!sizes.includes(clean.size)) {
+    if (!rules.sizes.includes(clean.size)) {
       return `Size "${clean.size}" is not available for this product`;
     }
   }
 
-  if (colors.length > 0) {
+  if (rules.requiresColor) {
     if (!clean.color) return 'Please select a color';
-    if (!colors.includes(clean.color)) {
+    if (!rules.colors.includes(clean.color)) {
       return `Color "${clean.color}" is not available for this product`;
     }
   }
@@ -253,12 +249,12 @@ async function findProductByPid(pid) {
   if (!pid) return null;
 
   // Try customId first
-  let p = await Product.findOne({ customId: pid }).lean();
+  let p = await Product.findOne({ customId: pid });
   if (p) return p;
 
   // Fallback: treat pid as Mongo _id
   try {
-    p = await Product.findById(pid).lean();
+    p = await Product.findById(pid);
   } catch {
     // ignore invalid ObjectId
   }
@@ -272,6 +268,9 @@ function productUnitPriceNumber(p) {
 
 function normalizeCartItem(p, qty, variants = {}, req) {
   const { net, gross, vatIncluded, vatRate: r } = priceGrossFromProduct(p, req);
+
+  const cleanVariants = normVariants(variants);
+  const selectedColor = String(cleanVariants.color || '').trim();
 
   return {
     productId: String(p._id),
@@ -290,9 +289,13 @@ function normalizeCartItem(p, qty, variants = {}, req) {
     vatRate: r,
     vatIncluded,
 
-    imageUrl: p.imageUrl || p.image || '',
+    imageUrl:
+      selectedColor && typeof p.getColorImage === 'function'
+        ? (p.getColorImage(selectedColor) || p.imageUrl || p.image || '')
+        : (p.imageUrl || p.image || ''),
+
     quantity: Math.max(1, Math.floor(Number(qty || 1))),
-    variants: normVariants(variants),
+    variants: cleanVariants,
   };
 }
 

@@ -64,6 +64,106 @@ function randomKey(ext) {
   return `products/${uuidv4()}.${ext}`;
 }
 
+function parseListField(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(
+      value
+        .map((x) => String(x || '').trim())
+        .filter(Boolean)
+    )];
+  }
+
+  if (!value || typeof value !== 'string') return [];
+
+  return [...new Set(
+    value
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+  )];
+}
+
+function normalizeColorImageInputs(body) {
+  const colorsRaw = body.colorImageColors;
+  const urlsRaw = body.colorImageUrls;
+
+  const colors = Array.isArray(colorsRaw)
+    ? colorsRaw
+    : colorsRaw !== undefined
+      ? [colorsRaw]
+      : [];
+
+  const urls = Array.isArray(urlsRaw)
+    ? urlsRaw
+    : urlsRaw !== undefined
+      ? [urlsRaw]
+      : [];
+
+  const maxLen = Math.max(colors.length, urls.length);
+  const rows = [];
+
+  for (let i = 0; i < maxLen; i += 1) {
+    rows.push({
+      color: String(colors[i] || '').trim(),
+      imageUrl: String(urls[i] || '').trim(),
+      index: i,
+    });
+  }
+
+  return rows.filter((row) => row.color || row.imageUrl);
+}
+
+async function uploadSingleFileToS3(file) {
+  if (!file) return '';
+
+  const ext = extFromFilename(file.originalname || '');
+  const key = randomKey(ext);
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    }),
+  );
+
+  return buildImageUrl(key);
+}
+
+async function buildColorImagesFromRequest(req) {
+  const rows = normalizeColorImageInputs(req.body);
+  const uploadedFiles = Array.isArray(req.files?.colorImageFiles) ? req.files.colorImageFiles : [];
+
+  const result = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const uploadedFile = uploadedFiles[i];
+
+    let finalImageUrl = row.imageUrl;
+
+    if (uploadedFile) {
+      finalImageUrl = await uploadSingleFileToS3(uploadedFile);
+    }
+
+    if (!row.color || !finalImageUrl) continue;
+
+    result.push({
+      color: row.color,
+      imageUrl: finalImageUrl,
+    });
+  }
+
+  const seen = new Set();
+  return result.filter((entry) => {
+    const key = entry.color.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /* ---------------------------------------------
  * 📦 Shipping parsing helpers
  * ------------------------------------------- */
@@ -235,7 +335,10 @@ router.post(
   requireBusiness,
   requireVerifiedBusiness,
   requireOfficialNumberVerified,
-  upload.single('imageFile'),
+  upload.fields([
+    { name: 'imageFile', maxCount: 1 },
+    { name: 'colorImageFiles', maxCount: 20 },
+  ]),
   async (req, res) => {
     console.log('🟢 POST /products/add reached');
     try {
@@ -259,28 +362,17 @@ router.post(
         return res.redirect('/products/add');
       }
 
+      const mainImageFile = Array.isArray(req.files?.imageFile) ? req.files.imageFile[0] : null;
+
       // Validate image
-      if (!req.file) {
+      if (!mainImageFile) {
         req.flash('error', 'Product image is required.');
         return res.redirect('/products/add');
       }
 
-      // Upload image to S3
-      const { originalname, buffer, mimetype } = req.file;
-      const ext = extFromFilename(originalname);
-      const key = randomKey(ext);
-
-      console.log(`🟡 Uploading to S3: s3://${BUCKET}/${key}`);
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: mimetype,
-        }),
-      );
-      const imageUrl = buildImageUrl(key);
-      console.log(`✅ S3 upload successful -> ${imageUrl}`);
+      // Upload main image to S3
+      const imageUrl = await uploadSingleFileToS3(mainImageFile);
+      console.log(`✅ Main product image upload successful -> ${imageUrl}`);
 
       // Prepare and save product
       const customId = req.body.id?.trim() || uuidv4();
@@ -301,6 +393,25 @@ router.post(
       const fragile = checkboxOn(req.body.fragile);
       const packagingHint = (req.body.packagingHint || '').toString().trim();
 
+            const parsedSizes = parseListField(req.body.sizes);
+      const parsedColors = parseListField(req.body.colors);
+      const parsedColorImages = await buildColorImagesFromRequest(req);
+
+      const fallbackColor =
+        String(req.body.color || '').trim() || (parsedColors[0] || '') || (parsedColorImages[0]?.color || '');
+
+      const fallbackSize =
+        String(req.body.size || '').trim() || (parsedSizes[0] || '');
+
+      if (parsedColorImages.length > 0) {
+        parsedColorImages.forEach((entry) => {
+          const exists = parsedColors.some((c) => c.toLowerCase() === entry.color.toLowerCase());
+          if (!exists) {
+            parsedColors.push(entry.color);
+          }
+        });
+      }
+
       const product = new Product({
         customId,
         name: name.trim(),
@@ -308,19 +419,26 @@ router.post(
         description: req.body.description?.trim(),
         imageUrl,
         stock: Number.isFinite(Number(req.body.stock)) ? Number(req.body.stock) : 0,
+
+        role: String(req.body.role || '').trim() || 'general',
+        type: String(req.body.type || '').trim(),
         category: req.body.category?.trim(),
-        color: req.body.color?.trim(),
-        size: req.body.size?.trim(),
+
+        color: fallbackColor,
+        size: fallbackSize,
+        sizes: parsedSizes,
+        colors: parsedColors,
+        colorImages: parsedColorImages,
+
         quality: req.body.quality?.trim(),
         made: req.body.made?.trim(),
         madeCode: (req.body.madeCode || '').trim(),
         manufacturer: req.body.manufacturer?.trim(),
 
-
-        // ✅ status flags (match your edit route + virtual isNew)
-        isNew: !!req.body.isNew,
-        isOnSale: !!req.body.isOnSale,
-        isPopular: !!req.body.isPopular,
+        // ✅ status flags
+        isNew: checkboxOn(req.body.isNew),
+        isOnSale: checkboxOn(req.body.isOnSale),
+        isPopular: checkboxOn(req.body.isPopular),
 
         shipping: {
           weight: { value: shipWeightValue, unit: shipWeightUnit },
@@ -466,7 +584,10 @@ router.post(
   '/edit/:id',
   requireBusiness,
   requireVerifiedBusiness,
-  upload.single('imageFile'),
+  upload.fields([
+    { name: 'imageFile', maxCount: 1 },
+    { name: 'colorImageFiles', maxCount: 20 },
+  ]),
   async (req, res) => {
     try {
       const business = req.business || req.session.business;
@@ -520,7 +641,7 @@ router.post(
       }
 
       // ---------- BASIC FIELDS ----------
-      const baseFields = [
+            const baseFields = [
         'name',
         'category',
         'color',
@@ -530,6 +651,7 @@ router.post(
         'madeCode',
         'manufacturer',
         'type',
+        'role',
       ];
 
       baseFields.forEach((f) => {
@@ -559,16 +681,26 @@ router.post(
       }
 
       // ---------- VARIANT ARRAYS ----------
-      function parseListField(value) {
-        if (!value || typeof value !== 'string') return [];
-        return value
-          .split(',')
-          .map((x) => x.trim())
-          .filter(Boolean);
-      }
-
       if (req.body.sizes !== undefined) {
         product.sizes = parseListField(req.body.sizes);
+      }
+
+      if (req.body.colors !== undefined) {
+        product.colors = parseListField(req.body.colors);
+      }
+
+      product.colorImages = await buildColorImagesFromRequest(req);
+
+      if (!product.color && product.colors && product.colors.length > 0) {
+        product.color = product.colors[0];
+      }
+
+      if (!product.color && product.colorImages && product.colorImages.length > 0) {
+        product.color = product.colorImages[0].color;
+      }
+
+      if (!product.size && product.sizes && product.sizes.length > 0) {
+        product.size = product.sizes[0];
       }
 
       if (req.body.colors !== undefined) {
@@ -633,30 +765,14 @@ router.post(
       }
 
       // ---------- OPTIONAL NEW IMAGE ----------
-      if (req.file) {
-        const { originalname, buffer, mimetype } = req.file;
-        const ext = extFromFilename(originalname);
-        const key = randomKey(ext);
+      const mainImageFile = Array.isArray(req.files?.imageFile) ? req.files.imageFile[0] : null;
 
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: BUCKET,
-            Key: key,
-            Body: buffer,
-            ContentType: mimetype,
-          }),
-        );
-
+      if (mainImageFile) {
         try {
-          if (product.imageUrl && product.imageUrl.includes('.com/')) {
-            const oldKey = product.imageUrl.split('.com/')[1];
-            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: oldKey }));
-          }
+          product.imageUrl = await uploadSingleFileToS3(mainImageFile);
         } catch (err) {
-          console.warn('⚠️ Failed to delete old image:', err.message);
+          throw new Error(err.message);
         }
-
-        product.imageUrl = buildImageUrl(key);
       }
 
       await product.save();
@@ -807,7 +923,15 @@ router.get('/api/public/featured', async (req, res) => {
       name: p.name,
       price: p.price,
       imageUrl: p.imageUrl,
+      image: p.imageUrl,
       category: p.category || p.type || 'Product',
+      role: p.role || 'general',
+      type: p.type || '',
+      color: p.color || '',
+      size: p.size || '',
+      sizes: Array.isArray(p.sizes) ? p.sizes : [],
+      colors: Array.isArray(p.colors) ? p.colors : [],
+      colorImages: Array.isArray(p.colorImages) ? p.colorImages : [],
       isNew: !!p.isNewItem,
       isOnSale: !!p.isOnSale,
       isPopular: !!p.isPopular,
@@ -836,7 +960,15 @@ router.get('/api/public/bestsellers', async (req, res) => {
       name: p.name,
       price: p.price,
       imageUrl: p.imageUrl,
+      image: p.imageUrl,
       category: p.category || p.type || 'Product',
+      role: p.role || 'general',
+      type: p.type || '',
+      color: p.color || '',
+      size: p.size || '',
+      sizes: Array.isArray(p.sizes) ? p.sizes : [],
+      colors: Array.isArray(p.colors) ? p.colors : [],
+      colorImages: Array.isArray(p.colorImages) ? p.colorImages : [],
       isNew: !!p.isNewItem,
       isOnSale: !!p.isOnSale,
       isPopular: !!p.isPopular,

@@ -45,6 +45,26 @@ const ProductShippingSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const ProductColorImageSchema = new mongoose.Schema(
+  {
+    color: {
+      type: String,
+      trim: true,
+      required: [true, 'Color image color is required'],
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
+      required: [true, 'Color image URL is required'],
+      validate: {
+        validator: (v) => /^https?:\/\/.+/.test(v),
+        message: (props) => `${props.value} is not a valid color image URL!`,
+      },
+    },
+  },
+  { _id: false },
+);
+
 const productSchema = new mongoose.Schema(
   {
     // Human-friendly id separate from _id
@@ -150,6 +170,12 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
       // Only used for non-clothing products or as default
+    },
+
+    // Per-color images for variant UI in store pages
+    colorImages: {
+      type: [ProductColorImageSchema],
+      default: [],
     },
 
     // Classification / attributes
@@ -268,73 +294,98 @@ productSchema
   });
 
 /* ========= MIDDLEWARE ========= */
-// Middleware to ensure size/color arrays are valid and in sync
+// Middleware to ensure size/color arrays and colorImages are valid and in sync
 productSchema.pre('save', function (next) {
-  const role = (this.role || '').toLowerCase();
-  const type = (this.type || '').toLowerCase();
-
-  // We want variants for clothes + shoes (because your shop uses type to control size/color)
-  const wantsVariants =
-    role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
-
-  if (!wantsVariants) {
-    return next();
-  }
-
-  // Make sure these fields are proper arrays
   if (!Array.isArray(this.colors)) {
     this.colors = this.colors ? [this.colors] : [];
   }
+
   if (!Array.isArray(this.sizes)) {
     this.sizes = this.sizes ? [this.sizes] : [];
   }
 
-  // If arrays are still empty but single fields exist, seed them
+  if (!Array.isArray(this.colorImages)) {
+    this.colorImages = [];
+  }
+
+  // Seed arrays from single fallback fields
   if (this.color && this.colors.length === 0) {
     this.colors.push(this.color);
   }
+
   if (this.size && this.sizes.length === 0) {
     this.sizes.push(this.size);
   }
 
-  // Clean & dedupe
-  if (this.colors && this.colors.length > 0) {
-    this.colors = [...new Set(this.colors.map((c) => (c || '').toString().trim()).filter(Boolean))];
-  }
+  // Clean + dedupe colors
+  this.colors = [...new Set(
+    (this.colors || [])
+      .map((c) => String(c || '').trim())
+      .filter(Boolean)
+  )];
 
-  if (this.sizes && this.sizes.length > 0) {
-    this.sizes = [...new Set(this.sizes.map((s) => (s || '').toString().trim()).filter(Boolean))];
-  }
+  // Clean + dedupe sizes
+  this.sizes = [...new Set(
+    (this.sizes || [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+  )];
+
+  // Clean colorImages
+  this.colorImages = (this.colorImages || [])
+    .map((entry) => ({
+      color: String(entry?.color || '').trim(),
+      imageUrl: String(entry?.imageUrl || '').trim(),
+    }))
+    .filter((entry) => entry.color && entry.imageUrl);
+
+  // Deduplicate colorImages by color, keep first valid one
+  const seenColors = new Set();
+  this.colorImages = this.colorImages.filter((entry) => {
+    const key = entry.color.toLowerCase();
+    if (seenColors.has(key)) return false;
+    seenColors.add(key);
+    return true;
+  });
+
+  // If colorImages contains colors not in colors array, add them
+  this.colorImages.forEach((entry) => {
+    const exists = this.colors.some((c) => c.toLowerCase() === entry.color.toLowerCase());
+    if (!exists) {
+      this.colors.push(entry.color);
+    }
+  });
 
   next();
 });
 
 /* ========= INSTANCE METHODS ========= */
 
-// Helper method to check if a specific variant is available
 productSchema.methods.isVariantAvailable = function (size, color) {
-  // Only enforce for clothes / shoes; for others, just return stock > 0
-  const role = (this.role || '').toLowerCase();
-  const type = (this.type || '').toLowerCase();
-
-  const needsVariants =
-    role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
-
-  if (!needsVariants) {
-    return this.stock > 0;
-  }
-
   let available = true;
 
-  if (size && Array.isArray(this.sizes) && this.sizes.length > 0) {
+  if (Array.isArray(this.sizes) && this.sizes.length > 0) {
+    if (!size) return false;
     available = available && this.sizes.includes(size);
   }
 
-  if (color && Array.isArray(this.colors) && this.colors.length > 0) {
+  if (Array.isArray(this.colors) && this.colors.length > 0) {
+    if (!color) return false;
     available = available && this.colors.includes(color);
   }
 
   return available && this.stock > 0;
+};
+
+productSchema.methods.getColorImage = function (color) {
+  const picked = String(color || '').trim().toLowerCase();
+  if (!picked) return this.imageUrl;
+
+  const match = (this.colorImages || []).find(
+    (entry) => String(entry.color || '').trim().toLowerCase() === picked
+  );
+
+  return match?.imageUrl || this.imageUrl;
 };
 
 productSchema.methods.toSafeJSON = function () {
@@ -365,6 +416,7 @@ productSchema.methods.toFrontendJSON = function () {
     role: this.role,
     sizes: this.sizes,
     colors: this.colors,
+    colorImages: this.colorImages || [],
     category: this.category,
     type: this.type,
     isNew: this.isNew,
