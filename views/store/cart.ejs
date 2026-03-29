@@ -1,4 +1,14 @@
 <!--views/store/cart.ejs-->
+<%
+  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
+    ? Number(vatRate)
+    : 0.15;
+
+  const cartGrossTotal = Number(cartSubtotal || 0);
+  const cartNetSubtotal = VAT > 0 ? (cartGrossTotal / (1 + VAT)) : cartGrossTotal;
+  const cartVatAmount = cartGrossTotal - cartNetSubtotal;
+%>
+
 <!-- Spinner Start -->
 <div id="spinner"
     class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
@@ -102,7 +112,7 @@
                     <span class="rounded-circle btn-md-square border">
                         <i class="fas fa-shopping-cart"></i>
                     </span>
-                    <span class="text-dark ms-2 store-cart-total">$<%= Number(cartSubtotal || 0).toFixed(2) %></span>
+                    <span class="text-dark ms-2 store-cart-total">$<%= cartGrossTotal.toFixed(2) %></span>
                 </a>
             </div>
         </div>
@@ -312,22 +322,27 @@
                 <div class="bg-light rounded">
                     <div class="p-4">
                         <h1 class="display-6 mb-4">Cart <span class="fw-normal">Total</span></h1>
-                        <div class="d-flex justify-content-between mb-4">
-                            <h5 class="mb-0 me-4">Subtotal:</h5>
-                            <p class="mb-0" id="cartSubtotal">$<%= Number(cartSubtotal || 0).toFixed(2) %></p>
+
+                        <div class="d-flex justify-content-between mb-3">
+                            <h5 class="mb-0 me-4">Subtotal (excl. VAT):</h5>
+                            <p class="mb-0" id="cartSubtotal">$<%= cartNetSubtotal.toFixed(2) %></p>
                         </div>
-                        <div class="d-flex justify-content-between">
-                            <h5 class="mb-0 me-4">Shipping</h5>
-                            <div>
-                                <p class="mb-0">Flat rate: $0.00</p>
-                            </div>
+
+                        <div class="d-flex justify-content-between mb-3">
+                            <h5 class="mb-0 me-4">VAT (<%= (VAT * 100).toFixed(0) %>%):</h5>
+                            <p class="mb-0" id="cartVatTotal">$<%= cartVatAmount.toFixed(2) %></p>
                         </div>
-                        <p class="mb-0 text-end">Shipping to South Africa.</p>
+
+                        <div class="d-flex justify-content-between mb-0">
+                            <h5 class="mb-0 me-4">Total (incl. VAT):</h5>
+                            <p class="mb-0 fw-bold" id="cartGrandTotal">$<%= cartGrossTotal.toFixed(2) %></p>
+                        </div>
+
+                        <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">
+                            Shipping is not included in the cart total yet. You will select your shipping rate in Checkout.
+                        </div>
                     </div>
-                    <div class="py-4 mb-4 border-top border-bottom d-flex justify-content-between">
-                        <h5 class="mb-0 ps-4 me-4">Total</h5>
-                        <p class="mb-0 pe-4" id="cartGrandTotal">$<%= Number(cartSubtotal || 0).toFixed(2) %></p>
-                    </div>
+
                     <a href="/payment/checkout" class="btn btn-primary rounded-pill px-4 py-3 text-uppercase mb-4 ms-4">
                         Proceed Checkout
                     </a>

@@ -290,7 +290,7 @@ router.get('/store', async (req, res) => {
 
     res.render('store/index', {
       layout: 'layouts/store',
-      title: 'Electro Store',
+      title: 'Unicoporate Store',
       allProducts,
       newArrivals,
       featuredProducts,
@@ -302,12 +302,13 @@ router.get('/store', async (req, res) => {
       promoOfferRight,
       midBannerLeft,
       midBannerRight,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ store index error:', err);
     res.render('store/index', {
       layout: 'layouts/store',
-      title: 'Electro Store',
+      title: 'Unicoporate Store',
       allProducts: [],
       newArrivals: [],
       featuredProducts: [],
@@ -319,6 +320,7 @@ router.get('/store', async (req, res) => {
       promoOfferRight: null,
       midBannerLeft: null,
       midBannerRight: null,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
 });
@@ -444,6 +446,7 @@ router.get('/store/shop', async (req, res) => {
       shopSidebarBanner,
       shopMainBanner,
       shopHeaderImage,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ store shop error:', err);
@@ -459,6 +462,7 @@ router.get('/store/shop', async (req, res) => {
       shopSidebarBanner: null,
       shopMainBanner: null,
       shopHeaderImage: null,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
 });
@@ -531,6 +535,7 @@ router.get('/store/product/:id', async (req, res) => {
       relatedProducts,
       shopSidebarBanner,
       shopHeaderImage,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ store single product error:', err);
@@ -565,6 +570,7 @@ router.get('/store/cart', async (req, res) => {
       cartItems,
       cartSubtotal,
       cartCount,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ store cart error:', err);
@@ -575,11 +581,12 @@ router.get('/store/cart', async (req, res) => {
       cartItems: [],
       cartSubtotal: 0,
       cartCount: 0,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
 });
 
-router.get('/store/checkout', async (req, res) => {
+/*router.get('/store/checkout', async (req, res) => {
   try {
     const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
       .sort({ updatedAt: -1 })
@@ -601,6 +608,7 @@ router.get('/store/checkout', async (req, res) => {
       shopHeaderImage,
       cartItems,
       cartSubtotal,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ store checkout error:', err);
@@ -610,9 +618,10 @@ router.get('/store/checkout', async (req, res) => {
       shopHeaderImage: null,
       cartItems: [],
       cartSubtotal: 0,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
-});
+});*/
 
 router.get('/store/contact', async (req, res) => {
   try {
@@ -747,6 +756,7 @@ router.get('/store/bestseller', async (req, res) => {
       bottomBannerLeft,
       bottomBannerRight,
       shopHeaderImage,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
     console.error('❌ store bestseller error:', err);
@@ -764,6 +774,7 @@ router.get('/store/bestseller', async (req, res) => {
       bottomBannerLeft: null,
       bottomBannerRight: null,
       shopHeaderImage: null,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
 });
