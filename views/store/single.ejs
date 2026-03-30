@@ -4,6 +4,13 @@
     ? Number(vatRate)
     : 0.15;
 
+  const avgRating = Number((product && product.avgRating) || 0);
+  const ratingsCount = Number((product && product.ratingsCount) || 0);
+  const ratingSummaryText =
+    (ratingsCount > 0)
+      ? `${avgRating.toFixed(1)} • ${ratingsCount} review${ratingsCount === 1 ? '' : 's'}`
+      : 'No reviews yet';
+
   function storeProductPayload(product) {
     return encodeURIComponent(JSON.stringify({
       customId: product.customId || '',
@@ -294,12 +301,12 @@
                         </div>
                         <div>
                             <h6 class="mb-2"><%= item.category %></h6>
-                            <div class="d-flex mb-2">
-                                <i class="fa fa-star text-secondary"></i>
-                                <i class="fa fa-star text-secondary"></i>
-                                <i class="fa fa-star text-secondary"></i>
-                                <i class="fa fa-star text-secondary"></i>
-                                <i class="fa fa-star"></i>
+                            <div class="mb-2">
+                                <%- include('../partials/rating-stars', {
+                                    avg: Number(item.avgRating || 0),
+                                    count: Number(item.ratingsCount || 0),
+                                    nonce
+                                }) %>
                             </div>
                             <div class="d-flex mb-2 align-items-center flex-wrap">
                                 <h5 class="fw-bold me-2 mb-0">$<%= (Number(item.price || 0) * (1 + VAT)).toFixed(2) %></h5>
@@ -367,11 +374,11 @@
                         <h5 class="fw-bold mb-1">$<%= (Number(product.price || 0) * (1 + VAT)).toFixed(2) %></h5>
                         <p class="text-muted mb-3">incl. VAT</p>   
                         <div class="d-flex mb-4">
-                            <i class="fa fa-star text-secondary"></i>
-                            <i class="fa fa-star text-secondary"></i>
-                            <i class="fa fa-star text-secondary"></i>
-                            <i class="fa fa-star text-secondary"></i>
-                            <i class="fa fa-star"></i>
+                            <%- include('../partials/rating-stars', {
+                                avg: Number(product.avgRating || 0),
+                                count: Number(product.ratingsCount || 0),
+                                nonce
+                            }) %> 
                         </div>
                         <div class="mb-3">
                             <div class="btn btn-primary d-inline-block rounded text-white py-1 px-4 me-2"><i
@@ -408,127 +415,42 @@
                             <i class="fa fa-shopping-bag me-2 text-white"></i> Add to cart
                         </a>
                     </div>
-
                     <div class="col-lg-12">
-                        <nav>
-                            <div class="nav nav-tabs mb-3">
-                                <button class="nav-link active border-white border-bottom-0" type="button"
-                                    role="tab" id="nav-about-tab" data-bs-toggle="tab" data-bs-target="#nav-about"
-                                    aria-controls="nav-about" aria-selected="true">Description</button>
-                                <button class="nav-link border-white border-bottom-0" type="button" role="tab"
-                                    id="nav-mission-tab" data-bs-toggle="tab" data-bs-target="#nav-mission"
-                                    aria-controls="nav-mission" aria-selected="false">Reviews</button>
-                            </div>
-                        </nav>
+                        <div class="reviews-card" id="reviewsCard">
+                            <div class="reviews-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                                <h3 class="mb-0">Customer Reviews</h3>
 
-                        <div class="tab-content mb-5">
-                            <div class="tab-pane active" id="nav-about" role="tabpanel"
-                                aria-labelledby="nav-about-tab">
-                                <p>
-                                    <%= product.description && product.description.trim()
-                                        ? product.description
-                                        : 'No product description is available yet for this item.' %>
-                                </p>
-                                <p class="small mb-1"><strong>Product SKU:</strong> <%= product.customId || 'N/A' %></p>
-                                <p class="small mb-1"><strong>Category:</strong> <%= product.category || 'Product' %></p>
-                                <p class="small mb-1"><strong>Price:</strong> $<%= (Number(product.price || 0) * (1 + VAT)).toFixed(2) %> <span class="text-muted">incl. VAT</span></p>
-                                <p class="small mb-0"><strong>Stock:</strong> <%= product.stock %></p>
-                            </div>
-
-                            <div class="tab-pane" id="nav-mission" role="tabpanel"
-                                aria-labelledby="nav-mission-tab">
-                                <div class="d-flex">
-                                    <img src="/electro/img/avatar.jpg" class="img-fluid rounded-circle p-3"
-                                        style="width: 100px; height: 100px;" alt="">
-                                    <div class="">
-                                        <p class="mb-2" style="font-size: 14px;">April 12, 2024</p>
-                                        <div class="d-flex justify-content-between">
-                                            <h5>Jason Smith</h5>
-                                            <div class="d-flex mb-3">
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star"></i>
-                                            </div>
-                                        </div>
-                                        <p>The generated Lorem Ipsum is therefore always free from repetition
-                                            injected humour, or non-characteristic
-                                            words etc. Susp endisse ultricies nisi vel quam suscipit </p>
+                                <div class="rating-summary" id="ratingSummary">
+                                    <div id="ratingStarsWrap">
+                                        <%- include('../partials/rating-stars', { avg: avgRating, count: ratingsCount, nonce }) %>
                                     </div>
-                                </div>
-
-                                <div class="d-flex">
-                                    <img src="/electro/img/avatar.jpg" class="img-fluid rounded-circle p-3"
-                                        style="width: 100px; height: 100px;" alt="">
-                                    <div class="">
-                                        <p class="mb-2" style="font-size: 14px;">April 12, 2024</p>
-                                        <div class="d-flex justify-content-between">
-                                            <h5>Sam Peters</h5>
-                                            <div class="d-flex mb-3">
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star text-secondary"></i>
-                                                <i class="fa fa-star"></i>
-                                                <i class="fa fa-star"></i>
-                                            </div>
-                                        </div>
-                                        <p class="text-dark">The generated Lorem Ipsum is therefore always free from
-                                            repetition injected humour, or non-characteristic
-                                            words etc. Susp endisse ultricies nisi vel quam suscipit </p>
-                                    </div>
+                                    <span class="rating-text d-block mt-2" id="ratingText"><%= ratingSummaryText %></span>
                                 </div>
                             </div>
 
-                            <div class="tab-pane" id="nav-vision" role="tabpanel">
-                                <p class="text-dark">Tempor erat elitr rebum at clita. Diam dolor diam ipsum et
-                                    tempor sit. Aliqu diam
-                                    amet diam et eos labore. 3</p>
-                                <p class="mb-0">Diam dolor diam ipsum et tempor sit. Aliqu diam amet diam et eos
-                                    labore.
-                                    Clita erat ipsum et lorem et sit</p>
+                            <div class="reviews-content mb-4" id="reviewsList">
+                                <div class="review-item" id="reviewsLoadingRow">
+                                    <div class="review-stars">Loading…</div>
+                                    <p class="review-text mb-1">Fetching latest customer ratings.</p>
+                                    <span class="review-author"></span>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="pdCustomId" value="<%= product.customId %>">
+
+                            <div class="rate-box" id="rateBox">
+                                <div class="rate-box-head d-flex justify-content-between align-items-center mb-3">
+                                    <h3 class="rate-title mb-0">Rate this product</h3>
+                                    <a class="rate-jump text-decoration-none" href="#rateBox">Write a review</a>
+                                </div>
+                                <%- include('../partials/rating-form', {
+                                    productId: product.customId,
+                                    myRating: (typeof myRating !== 'undefined' ? myRating : null),
+                                    nonce
+                                }) %>
                             </div>
                         </div>
-                    </div>
-
-                    <form action="#">
-                        <h4 class="mb-5 fw-bold">Leave a Reply</h4>
-                        <div class="row g-4">
-                            <div class="col-lg-6">
-                                <div class="border-bottom rounded">
-                                    <input type="text" class="form-control border-0 me-4" placeholder="Yur Name *">
-                                </div>
-                            </div>
-                            <div class="col-lg-6">
-                                <div class="border-bottom rounded">
-                                    <input type="email" class="form-control border-0" placeholder="Your Email *">
-                                </div>
-                            </div>
-                            <div class="col-lg-12">
-                                <div class="border-bottom rounded my-4">
-                                    <textarea name="" id="" class="form-control border-0" cols="30" rows="8"
-                                        placeholder="Your Review *" spellcheck="false"></textarea>
-                                </div>
-                            </div>
-                            <div class="col-lg-12">
-                                <div class="d-flex justify-content-between py-3 mb-5">
-                                    <div class="d-flex align-items-center">
-                                        <p class="mb-0 me-3">Please rate:</p>
-                                        <div class="d-flex align-items-center" style="font-size: 12px;">
-                                            <i class="fa fa-star text-muted"></i>
-                                            <i class="fa fa-star"></i>
-                                            <i class="fa fa-star"></i>
-                                            <i class="fa fa-star"></i>
-                                            <i class="fa fa-star"></i>
-                                        </div>
-                                    </div>
-                                    <a href="#"
-                                        class="btn btn-primary border border-secondary text-primary rounded-pill px-4 py-3">
-                                        Post Comment</a>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
+                    </div>                   
                 </div>
             </div>
         </div>
@@ -579,12 +501,12 @@
                         <i class="fas fa-shopping-cart me-2"></i> Add To Cart
                     </a>
                     <div class="d-flex justify-content-between align-items-center">
-                        <div class="d-flex">
-                            <i class="fas fa-star text-primary"></i>
-                            <i class="fas fa-star text-primary"></i>
-                            <i class="fas fa-star text-primary"></i>
-                            <i class="fas fa-star text-primary"></i>
-                            <i class="fas fa-star"></i>
+                        <div>
+                            <%- include('../partials/rating-stars', {
+                                avg: Number(item.avgRating || 0),
+                                count: Number(item.ratingsCount || 0),
+                                nonce
+                            }) %>
                         </div>
                         <div class="d-flex">
                             <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3"><span
@@ -631,6 +553,145 @@
       });
     }
   })();
+</script>
+
+<script nonce="<%= nonce %>">
+(function(){
+  const $ = (s, c = document) => c.querySelector(s);
+
+  const customIdEl = $('#pdCustomId');
+  const customId = (customIdEl && customIdEl.value) ? String(customIdEl.value) : '';
+  if (!customId) return;
+
+  const ratingText = $('#ratingText');
+  const reviewsList = $('#reviewsList');
+  const loadingRow = $('#reviewsLoadingRow');
+  const ratingStarsWrap = $('#ratingStarsWrap');
+
+  function starsText(n) {
+    const s = Math.max(0, Math.min(5, parseInt(n || 0, 10)));
+    return '★★★★★'.slice(0, s) + '☆☆☆☆☆'.slice(0, 5 - s);
+  }
+
+  function renderAvgStars(avg, count) {
+    const a = Number(avg || 0);
+    const c = Number(count || 0);
+
+    const full = Math.floor(a);
+    const frac = a - full;
+    const half = frac >= 0.5;
+
+    let starsHtml = '';
+    for (let i = 1; i <= 5; i++) {
+      const isFull = i <= full;
+      const isHalf = (!isFull && i === full + 1 && half);
+      starsHtml += `<span class="rs-star ${isFull ? 'on' : (isHalf ? 'half' : 'off')}">★</span>`;
+    }
+
+    const aria = (c > 0)
+      ? `Average rating ${a.toFixed(1)} out of 5 based on ${c} reviews`
+      : `No ratings yet`;
+
+    const meta = (c > 0)
+      ? `<span class="rs-avg">${a.toFixed(1)}</span><span class="rs-count">(${c})</span>`
+      : `<span class="rs-none">No ratings</span>`;
+
+    return `
+      <div class="rs" aria-label="${aria}">
+        <div class="rs-stars" aria-hidden="true">${starsHtml}</div>
+        <div class="rs-meta">${meta}</div>
+      </div>
+    `;
+  }
+
+  function formatDate(iso) {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  async function loadRatings() {
+    try {
+      const url = `/api/products/${encodeURIComponent(customId)}/ratings?fresh=1&limit=3&page=1`;
+      const res = await fetch(url, { credentials: 'same-origin' });
+      const data = await res.json();
+
+      if (!res.ok || !data || !data.ok) {
+        throw new Error((data && data.error) ? data.error : 'Failed');
+      }
+
+      const avg = Number((data.product && data.product.avgRating) ? data.product.avgRating : 0);
+      const cnt = Number((data.product && data.product.ratingsCount) ? data.product.ratingsCount : 0);
+
+      if (ratingText) {
+        ratingText.textContent = (cnt > 0)
+          ? `${avg.toFixed(1)} • ${cnt} review${cnt === 1 ? '' : 's'}`
+          : 'No reviews yet';
+      }
+
+      if (ratingStarsWrap) {
+        ratingStarsWrap.innerHTML = renderAvgStars(avg, cnt);
+      }
+
+      if (!reviewsList) return;
+      if (loadingRow) loadingRow.remove();
+
+      const items = Array.isArray(data.items) ? data.items : [];
+
+      if (!items.length) {
+        reviewsList.innerHTML = `
+          <div class="review-item">
+            <div class="review-stars">☆☆☆☆☆</div>
+            <p class="review-text mb-1">No reviews yet. Be the first to rate this product.</p>
+            <span class="review-author"></span>
+          </div>
+        `;
+        return;
+      }
+
+      reviewsList.innerHTML = items.map((item) => {
+        const title = item.title ? `<h6 class="mb-1">${escapeHtml(item.title)}</h6>` : '';
+        const body = item.body ? `<p class="review-text mb-1">${escapeHtml(item.body)}</p>` : '<p class="review-text mb-1">No written comment.</p>';
+        const who = item.raterType === 'business' ? 'Business buyer' : (item.raterType === 'user' ? 'Customer' : 'Guest');
+        const when = formatDate(item.createdAt);
+
+        return `
+          <div class="review-item mb-3">
+            <div class="review-stars">${starsText(item.stars)}</div>
+            ${title}
+            ${body}
+            <span class="review-author d-block text-muted">${escapeHtml(who)}${when ? ` • ${escapeHtml(when)}` : ''}</span>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      if (reviewsList) {
+        reviewsList.innerHTML = `
+          <div class="review-item">
+            <div class="review-stars">Error</div>
+            <p class="review-text mb-1">Could not load ratings right now.</p>
+            <span class="review-author"></span>
+          </div>
+        `;
+      }
+    }
+  }
+
+  loadRatings();
+})();
 </script>
 
 <%- include('partials/cart-script-single') %>

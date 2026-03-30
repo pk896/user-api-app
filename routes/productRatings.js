@@ -46,7 +46,7 @@ async function getProductByCustomId(customId) {
 async function productViewUrlByObjectId(productId) {
   if (!productId) return null;
   const p = await Product.findById(productId).select('customId').lean();
-  return p?.customId ? `/products/view/${p.customId}` : null;
+  return p?.customId ? `/store/product/${p.customId}` : null;
 }
 
 // Guest identity (cookie-based)
@@ -155,10 +155,10 @@ router.post('/ratings/submit/:customId', writeLimiter, currentActor(false), asyn
     const product = await getProductByCustomId(req.params.customId);
     if (!product) {
       req.flash('error', 'Product not found.');
-      return redirect303(res, '/products/sales');
+      return redirect303(res, '/store/shop');
     }
 
-    const fallbackUrl = String(req.body.redirect || `/products/view/${product.customId}`);
+    const fallbackUrl = String(req.body.redirect || `/store/product/${product.customId}`);
 
     const stars = clampStars(req.body.stars);
     if (!stars) {
@@ -210,7 +210,7 @@ router.post('/ratings/submit/:customId', writeLimiter, currentActor(false), asyn
     return redirect303(res, fallbackUrl);
   } catch (err) {
     console.error('rating upsert error', err);
-    const safeUrl = `/products/view/${encodeURIComponent(req.params.customId)}`;
+    const safeUrl = `/store/product/${encodeURIComponent(req.params.customId)}`;
     req.flash('error', 'Could not save your rating. Please try again.');
     return redirect303(res, safeUrl);
   }
@@ -224,24 +224,24 @@ router.post('/ratings/:ratingId/flag', writeLimiter, currentActor(true), async (
     const id = req.params.ratingId;
     if (!isValidObjectId(id)) {
       req.flash('error', 'Invalid rating id.');
-      return redirect303(res, backOr(req, '/products/sales'));
+      return redirect303(res, backOr(req, '/store/shop'));
     }
 
     const rating = await Rating.findById(id).select('productId');
     if (!rating) {
       req.flash('error', 'Rating not found.');
-      return redirect303(res, backOr(req, '/products/sales'));
+      return redirect303(res, backOr(req, '/store/shop'));
     }
 
     await Rating.updateOne({ _id: rating._id }, { $set: { status: 'flagged' } });
 
     const productUrl = await productViewUrlByObjectId(rating.productId);
     req.flash('success', 'Thanks for reporting. We’ll review this rating.');
-    return redirect303(res, backOr(req, productUrl || '/products/sales'));
+    return redirect303(res, backOr(req, productUrl || '/store/shop'));
   } catch (err) {
     console.error('flag rating error', err);
     req.flash('error', 'Could not flag rating.');
-    return redirect303(res, backOr(req, '/products/sales'));
+    return redirect303(res, backOr(req, '/store/shop'));
   }
 });
 
@@ -253,13 +253,13 @@ router.post('/ratings/:ratingId/delete', writeLimiter, currentActor(true), async
     const id = req.params.ratingId;
     if (!isValidObjectId(id)) {
       req.flash('error', 'Invalid rating id.');
-      return redirect303(res, backOr(req, '/products/sales'));
+      return redirect303(res, backOr(req, '/store/shop'));
     }
 
     const rating = await Rating.findById(id);
     if (!rating) {
       req.flash('error', 'Rating not found.');
-      return redirect303(res, backOr(req, '/products/sales'));
+      return redirect303(res, backOr(req, '/store/shop'));
     }
 
     const isOwner =
@@ -270,7 +270,7 @@ router.post('/ratings/:ratingId/delete', writeLimiter, currentActor(true), async
       req.flash('error', 'You can only delete your own rating.');
       return redirect303(
         res,
-        backOr(req, (await productViewUrlByObjectId(rating.productId)) || '/products/sales'),
+        backOr(req, (await productViewUrlByObjectId(rating.productId)) || '/store/shop'),
       );
     }
 
@@ -280,11 +280,11 @@ router.post('/ratings/:ratingId/delete', writeLimiter, currentActor(true), async
 
     const productUrl = await productViewUrlByObjectId(productId);
     req.flash('success', 'Your rating was deleted.');
-    return redirect303(res, backOr(req, productUrl || '/products/sales'));
+    return redirect303(res, backOr(req, productUrl || '/store/shop'));
   } catch (err) {
     console.error('delete rating error', err);
     req.flash('error', 'Could not delete the rating.');
-    return redirect303(res, backOr(req, '/products/sales'));
+    return redirect303(res, backOr(req, '/store/shop'));
   }
 });
 

@@ -4,37 +4,6 @@ const express = require('express');
 const Product = require('../models/Product');
 const router = express.Router();
 
-// GET: Public sales products page
-/*router.get('/sales', async (req, res) => {
-  try {
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // keep flags available in EJS
-    products.forEach((p) => {
-      p.isNew = !!p.isNewItem;
-      p.sale = !!p.isOnSale;
-      p.popular = !!p.isPopular;
-      p.inStock = Number(p.stock || 0) > 0;
-    });
-
-    res.render('store/shop', {
-      title: 'Shop',
-      layout: 'layouts/store',
-      products,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      nonce: res.locals.nonce,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
-    });
-  } catch (err) {
-    console.error('❌ Failed to load sales page:', err);
-    req.flash('error', 'Could not load products.');
-    res.redirect('/');
-  }
-});*/
-
 /* ---------------------------------------------
  * 🛍️ GET: Sales Product Page
  * ------------------------------------------- */

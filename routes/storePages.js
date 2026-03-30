@@ -4,6 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const Rating = require('../models/Rating');
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
 const HomePromoOffer = require('../models/HomePromoOffer');
@@ -40,6 +41,8 @@ function mapStoreProduct(p) {
     popular: !!p.isPopular,
     stock: Number(p.stock || 0),
     rating: 4,
+    avgRating: Number(p.avgRating || 0),
+    ratingsCount: Number(p.ratingsCount || 0),
     url: `/store/product/${p.customId}`,
   };
 }
@@ -156,6 +159,21 @@ function mapShopMainBanner(banner, product) {
     active: !!banner.active,
   };
 }    
+
+function getGuestKeyFromReq(req) {
+  try {
+    const fromCookies = req.cookies && req.cookies.guestKey ? String(req.cookies.guestKey) : null;
+
+    const rawCookie = req.headers.cookie || '';
+    const match = rawCookie.match(/(?:^|;\s*)guestKey=([^;]+)/);
+    const fromHeader = match ? decodeURIComponent(match[1]) : null;
+
+    const existing = fromCookies || fromHeader;
+    return existing && existing.length >= 16 ? existing : null;
+  } catch {
+    return null;
+  }
+}
 
 router.get('/store', async (req, res) => {
   try {
@@ -480,6 +498,38 @@ router.get('/store/product/:id', async (req, res) => {
 
     const product = mapStoreProduct(rawProduct);
 
+    let myRating = null;
+
+    const actorUserId = req.user?._id || req.session?.user?._id || req.session?.userId || null;
+    const actorBusinessId = req.session?.business?._id || req.session?.businessId || null;
+    const guestKey = getGuestKeyFromReq(req);
+
+    if (actorUserId) {
+      myRating = await Rating.findOne({
+        productId: rawProduct._id,
+        raterType: 'user',
+        raterUser: actorUserId,
+      })
+        .select('stars title body')
+        .lean();
+    } else if (actorBusinessId) {
+      myRating = await Rating.findOne({
+        productId: rawProduct._id,
+        raterType: 'business',
+        raterBusiness: actorBusinessId,
+      })
+        .select('stars title body')
+        .lean();
+    } else if (guestKey) {
+      myRating = await Rating.findOne({
+        productId: rawProduct._id,
+        raterType: 'guest',
+        guestKey,
+      })
+        .select('stars title body')
+        .lean();
+    }
+
     const featuredSidebarRaw = await Product.find({
       stock: { $gt: 0 },
       customId: { $ne: rawProduct.customId },
@@ -531,6 +581,7 @@ router.get('/store/product/:id', async (req, res) => {
       layout: 'layouts/store',
       title: product.name || 'Single Product',
       product,
+      myRating,
       featuredSidebarProducts,
       relatedProducts,
       shopSidebarBanner,

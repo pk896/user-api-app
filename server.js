@@ -809,9 +809,9 @@ app.get('/seller-ui', requireBusiness, (req, res) => {
 // 5) Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Land on the shopping page by default
+// Land on the store page by default
 app.get('/', (req, res) => {
-  res.redirect(302, '/products/sales');
+  res.redirect(302, '/store');
 });
 
 // Cart count API
