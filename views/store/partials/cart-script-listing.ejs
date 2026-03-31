@@ -373,15 +373,17 @@
       return data;
     }
 
-    document.addEventListener('mouseenter', function (event) {
-      const card = event.target.closest('.js-store-product-card');
-      if (!card) return;
+    document.addEventListener('mouseleave', function (event) {
+      if (!activeChooserCard) return;
 
-      const button = card.querySelector('.js-add-to-cart');
-      const product = parseProductData(button);
+      const leftCard = event.target.closest('.js-store-product-card');
+      if (!leftCard) return;
+      if (leftCard !== activeChooserCard) return;
 
-      if (!requiresChooser(product)) return;
-      openChooser(card, button, product);
+      const related = event.relatedTarget;
+      if (related && leftCard.contains(related)) return;
+
+      closeChooser(activeChooserCard);
     }, true);
 
     document.addEventListener('mousedown', function (event) {
@@ -506,26 +508,49 @@
       }
     });
 
-    document.addEventListener('touchstart', function (event) {
-      const button = event.target.closest('.js-add-to-cart');
-      if (!button) return;
-
-      const card = button.closest('.js-store-product-card');
-      const product = parseProductData(button);
-
-      if (!requiresChooser(product)) return;
-      openChooser(card, button, product);
-    }, { passive: true });
-
     document.addEventListener('click', function (event) {
+      if (!activeChooserCard) return;
+
       const clickedInsideChooser = event.target.closest('.js-variant-chooser');
-      const clickedInsideCard = event.target.closest('.js-store-product-card');
+      const clickedInsideActiveCard = event.target.closest('.js-store-product-card') === activeChooserCard;
+      const clickedAddButton = event.target.closest('.js-add-to-cart');
 
       if (clickedInsideChooser) return;
-      if (!clickedInsideCard && activeChooserCard) {
+      if (clickedAddButton && clickedInsideActiveCard) return;
+
+      closeChooser(activeChooserCard);
+    });
+
+    document.addEventListener('mouseover', function (event) {
+      if (!activeChooserCard) return;
+
+      const hoveredChooser = event.target.closest('.js-variant-chooser');
+      const hoveredCard = event.target.closest('.js-store-product-card');
+
+      if (hoveredChooser) return;
+      if (hoveredCard === activeChooserCard) return;
+
+      closeChooser(activeChooserCard);
+    }, true);
+
+    document.addEventListener('touchstart', function (event) {
+      if (!activeChooserCard) return;
+
+      const touchedInsideChooser = event.target.closest('.js-variant-chooser');
+      const touchedInsideActiveCard = event.target.closest('.js-store-product-card') === activeChooserCard;
+      const touchedAddButton = event.target.closest('.js-add-to-cart');
+
+      if (touchedInsideChooser) return;
+      if (touchedAddButton && touchedInsideActiveCard) return;
+
+      closeChooser(activeChooserCard);
+    }, { passive: true });
+
+    window.addEventListener('scroll', function () {
+      if (activeChooserCard) {
         closeChooser(activeChooserCard);
       }
-    });
+    }, { passive: true });
 
     refreshCartHeader();
   })();
