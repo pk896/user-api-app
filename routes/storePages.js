@@ -160,6 +160,63 @@ function mapShopMainBanner(banner, product) {
   };
 }    
 
+async function getFeaturedProducts(limit, excludeCustomId = null) {
+  const safeLimit = Number(limit || 0) > 0 ? Number(limit) : 4;
+  const excludeFilter = excludeCustomId
+    ? { customId: { $ne: excludeCustomId } }
+    : {};
+
+  const pickedIds = new Set();
+  const results = [];
+
+  async function addBatch(query) {
+    if (results.length >= safeLimit) return;
+
+    const remaining = safeLimit - results.length;
+
+    const rows = await Product.find({
+      stock: { $gt: 0 },
+      ...excludeFilter,
+      ...query,
+    })
+      .sort({ createdAt: -1 })
+      .limit(remaining + 8)
+      .lean();
+
+    for (const row of rows) {
+      const id = String(row.customId || row._id || '');
+      if (!id || pickedIds.has(id)) continue;
+
+      pickedIds.add(id);
+      results.push(row);
+
+      if (results.length >= safeLimit) break;
+    }
+  }
+
+  await addBatch({
+    isOnSale: true,
+    isNewItem: true,
+    isPopular: true,
+  });
+
+  await addBatch({
+    isPopular: true,
+    $or: [
+      { isOnSale: true },
+      { isNewItem: true },
+    ],
+  });
+
+  await addBatch({
+    isPopular: true,
+  });
+
+  await addBatch({});
+
+  return results;
+}
+
 function getGuestKeyFromReq(req) {
   try {
     const fromCookies = req.cookies && req.cookies.guestKey ? String(req.cookies.guestKey) : null;
@@ -190,13 +247,7 @@ router.get('/store', async (req, res) => {
       .limit(8)
       .lean();
 
-    const featuredProductsRaw = await Product.find({
-      stock: { $gt: 0 },
-      isPopular: true,
-    })
-      .sort({ createdAt: -1 })
-      .limit(8)
-      .lean();
+    const featuredProductsRaw = await getFeaturedProducts(8);
 
     const bestSellerProductsRaw = await Product.find({ stock: { $gt: 0 } })
       .sort({ soldCount: -1, createdAt: -1 })
@@ -350,10 +401,7 @@ router.get('/store/shop', async (req, res) => {
       .limit(12)
       .lean();
 
-    const featuredSidebarRaw = await Product.find({ stock: { $gt: 0 } })
-      .sort({ soldCount: -1, createdAt: -1 })
-      .limit(4)
-      .lean();
+    const featuredSidebarRaw = await getFeaturedProducts(4);
 
     const shopProducts = shopProductsRaw.map(mapStoreProduct);
     const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
@@ -530,13 +578,7 @@ router.get('/store/product/:id', async (req, res) => {
         .lean();
     }
 
-    const featuredSidebarRaw = await Product.find({
-      stock: { $gt: 0 },
-      customId: { $ne: rawProduct.customId },
-    })
-      .sort({ soldCount: -1, createdAt: -1 })
-      .limit(6)
-      .lean();
+    const featuredSidebarRaw = await getFeaturedProducts(4, rawProduct.customId);
 
     const relatedProductsRaw = await Product.find({
       stock: { $gt: 0 },
@@ -715,13 +757,7 @@ router.get('/store/bestseller', async (req, res) => {
       .limit(4)
       .lean();
 
-    const featuredProductsRaw = await Product.find({
-      stock: { $gt: 0 },
-      isPopular: true,
-    })
-      .sort({ createdAt: -1 })
-      .limit(4)
-      .lean();
+    const featuredProductsRaw = await getFeaturedProducts(4);
 
     const topSellingProductsRaw = await Product.find({ stock: { $gt: 0 } })
       .sort({ soldCount: -1, createdAt: -1 })

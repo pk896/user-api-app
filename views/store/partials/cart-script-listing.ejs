@@ -125,6 +125,64 @@
       return (match && match.imageUrl) || product.image || '';
     }
 
+    function applyChooserLayout(chooser) {
+      if (!chooser) return;
+
+      const isMobile = window.innerWidth < 576;
+
+      if (isMobile) {
+        chooser.style.position = 'fixed';
+        chooser.style.top = '50%';
+        chooser.style.left = '50%';
+        chooser.style.right = 'auto';
+        chooser.style.transform = 'translate(-50%, -50%)';
+        chooser.style.width = 'calc(100vw - 32px)';
+        chooser.style.maxWidth = '340px';
+        chooser.style.maxHeight = 'calc(100vh - 24px)';
+        chooser.style.overflowY = 'auto';
+        chooser.style.zIndex = '1095';
+
+        const body = chooser.querySelector('.card-body');
+        if (body) {
+          body.className = 'card-body p-2';
+        }
+
+        const status = chooser.querySelector('.js-variant-status');
+        if (status) {
+          status.className = 'js-variant-status small text-secondary mb-2';
+        }
+
+        chooser.querySelectorAll('.js-color-choice').forEach(function (btn) {
+          btn.className = 'btn btn-sm rounded-pill d-inline-flex align-items-center gap-1 js-color-choice';
+        });
+
+        chooser.querySelectorAll('.js-size-choice').forEach(function (btn) {
+          btn.className = 'btn btn-sm rounded-pill js-size-choice';
+        });
+
+        const confirmBtn = chooser.querySelector('.js-variant-confirm');
+        if (confirmBtn) {
+          confirmBtn.className = 'btn btn-sm rounded-pill js-variant-confirm';
+        }
+
+        const viewBtn = chooser.querySelector('.js-variant-view');
+        if (viewBtn) {
+          viewBtn.className = 'btn btn-sm rounded-pill js-variant-view';
+        }
+      } else {
+        chooser.style.position = 'absolute';
+        chooser.style.top = '12px';
+        chooser.style.left = '50%';
+        chooser.style.right = 'auto';
+        chooser.style.transform = 'translateX(-50%)';
+        chooser.style.width = 'calc(100% - 24px)';
+        chooser.style.maxWidth = '340px';
+        chooser.style.maxHeight = '';
+        chooser.style.overflowY = '';
+        chooser.style.zIndex = '25';
+      }
+    }
+
     function getOrCreateChooser(card) {
       if (!card) return null;
 
@@ -132,8 +190,10 @@
       if (chooser) return chooser;
 
       chooser = document.createElement('div');
-      chooser.className = 'js-variant-chooser card shadow border-0 position-absolute start-50 translate-middle-x d-none';
+      chooser.className = 'js-variant-chooser card shadow border-0 d-none';
       chooser.style.top = '12px';
+      chooser.style.left = '50%';
+      chooser.style.transform = 'translateX(-50%)';
       chooser.style.zIndex = '25';
       chooser.style.width = 'calc(100% - 24px)';
       chooser.style.maxWidth = '340px';
@@ -302,6 +362,7 @@
         setChooserState(card, product);
       }
 
+      applyChooserLayout(chooser);
       chooser.classList.remove('d-none');
       activeChooserCard = card;
     }
@@ -552,6 +613,14 @@
       }
     }, { passive: true });
 
+    window.addEventListener('resize', function () {
+      if (!activeChooserCard) return;
+
+      const chooser = activeChooserCard.querySelector('.js-variant-chooser');
+      if (!chooser || chooser.classList.contains('d-none')) return;
+
+      applyChooserLayout(chooser);
+    });
     refreshCartHeader();
   })();
 </script>
