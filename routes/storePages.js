@@ -403,8 +403,17 @@ router.get('/store/shop', async (req, res) => {
 
     const featuredSidebarRaw = await getFeaturedProducts(4);
 
+    const topRatedTagProductsRaw = await Product.find({
+      stock: { $gt: 0 },
+      ratingsCount: { $gt: 0 },
+    })
+      .sort({ ratingsCount: -1, avgRating: -1, createdAt: -1 })
+      .limit(8)
+      .lean();
+
     const shopProducts = shopProductsRaw.map(mapStoreProduct);
     const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
+    const topRatedTagProducts = topRatedTagProductsRaw.map(mapStoreProduct);
 
     const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
       .sort({ sortOrder: 1, createdAt: 1 })
@@ -505,6 +514,7 @@ router.get('/store/shop', async (req, res) => {
       title: 'Shop',
       shopProducts,
       featuredSidebarProducts,
+      topRatedTagProducts,
       promoOfferLeft,
       promoOfferRight,
       midBannerLeft,
@@ -521,6 +531,7 @@ router.get('/store/shop', async (req, res) => {
       title: 'Shop',
       shopProducts: [],
       featuredSidebarProducts: [],
+      topRatedTagProducts: [],
       promoOfferLeft: null,
       promoOfferRight: null,
       midBannerLeft: null,
