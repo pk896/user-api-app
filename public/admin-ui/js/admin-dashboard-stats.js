@@ -25,6 +25,18 @@ function money(n) {
   });
 }
 
+function setAdminSummaryBar(elementId, value, maxValue) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+
+  const safeValue = Number(value || 0);
+  const safeMax = Math.max(Number(maxValue || 0), 1);
+  const percent = Math.max(0, Math.min(100, Math.round((safeValue / safeMax) * 100)));
+
+  el.style.width = `${percent}%`;
+  el.setAttribute('aria-valuenow', String(percent));
+}
+
 // -----------------------------
 // API loaders
 // -----------------------------
@@ -120,6 +132,39 @@ async function loadAdminOrdersStats() {
     setText('stat-available-revenue', money(available));
 
     setText('stat-chargebacks-count', data.chargebacksCount);
+
+    const totalOrders = Number(data.totalOrders || 0);
+    const pendingOrders = Number(data.pendingOrders || 0);
+    const totalPaid = Number(data.totalPaid || 0);
+    const refundsCount = Number(data.refundsCount || 0);
+    const availableRevenue = Number(available || 0);
+    const chargebacksCount = Number(data.chargebacksCount || 0);
+
+    // Count-based bars
+    const countMaxValue = Math.max(
+      totalOrders,
+      refundsCount,
+      chargebacksCount,
+      1
+    );
+
+    // Money-based bars
+    const moneyMaxValue = Math.max(
+      totalPaid,
+      availableRevenue,
+      1
+    );
+
+    // Total Orders bar should reflect pending volume within the last 30 days
+    setAdminSummaryBar('admin-summary-total-orders-bar', pendingOrders, countMaxValue);
+
+    // Money bars
+    setAdminSummaryBar('admin-summary-total-paid-bar', totalPaid, moneyMaxValue);
+    setAdminSummaryBar('admin-summary-available-revenue-bar', availableRevenue, moneyMaxValue);
+
+    // Other count bars
+    setAdminSummaryBar('admin-summary-refunds-bar', refundsCount, countMaxValue);
+    setAdminSummaryBar('admin-summary-chargebacks-bar', chargebacksCount, countMaxValue);
   } catch (err) {
     console.error('admin orders stats error:', err);
   }

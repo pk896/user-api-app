@@ -43,7 +43,7 @@ function buildTopBestSellerItem(product, index) {
         </div>
       </div>
 
-      <a href="/products/view/${encodeURIComponent(String(product?.customId || ''))}" class="btn btn-sm btn-success flex-shrink-0">
+      <a href="/store/product/${encodeURIComponent(String(product?.customId || ''))}" class="btn btn-sm btn-success flex-shrink-0">
         View
       </a>
     </div>

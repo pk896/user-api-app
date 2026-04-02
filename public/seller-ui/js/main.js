@@ -1,3 +1,4 @@
+// C:\Users\phaki\user-api-app\public\seller-ui\js\main.js
 /* global Chart, coreui */
 
 /**

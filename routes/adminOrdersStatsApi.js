@@ -26,11 +26,23 @@ const PENDING_FULFILLMENT = ['PENDING', 'PAID', 'PACKING', 'LABEL_CREATED'];
  */
 router.get('/stats/orders', requireAdmin, async (req, res) => {
   try {
-    // 1) Total orders (fast count)
-    const totalOrdersPromise = Order.countDocuments({});
+    // Last 30 days window
+    const start = new Date();
+    start.setDate(start.getDate() - 29);
+    start.setHours(0, 0, 0, 0);
+
+    const last30DaysMatch = {
+      createdAt: { $gte: start },
+    };
+
+    // 1) Total orders (last 30 days)
+    const totalOrdersPromise = Order.countDocuments(last30DaysMatch);
 
     // 2) Aggregate money + refunds + pending + chargebacks
     const agg = await Order.aggregate([
+      {
+        $match: last30DaysMatch,
+      },
       {
         $project: {
           statusU: { $toUpper: { $ifNull: ['$status', ''] } },
