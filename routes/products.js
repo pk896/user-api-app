@@ -64,11 +64,19 @@ function randomKey(ext) {
   return `products/${uuidv4()}.${ext}`;
 }
 
-function parseListField(value) {
+function parseListField(value, options = {}) {
+  const { lowercase = false } = options;
+
+  const normalizeItem = (item) => {
+    const cleaned = String(item || '').trim();
+    if (!cleaned) return '';
+    return lowercase ? cleaned.toLowerCase() : cleaned;
+  };
+
   if (Array.isArray(value)) {
     return [...new Set(
       value
-        .map((x) => String(x || '').trim())
+        .map(normalizeItem)
         .filter(Boolean)
     )];
   }
@@ -78,7 +86,7 @@ function parseListField(value) {
   return [...new Set(
     value
       .split(',')
-      .map((x) => x.trim())
+      .map(normalizeItem)
       .filter(Boolean)
   )];
 }
@@ -393,8 +401,9 @@ router.post(
       const fragile = checkboxOn(req.body.fragile);
       const packagingHint = (req.body.packagingHint || '').toString().trim();
 
-            const parsedSizes = parseListField(req.body.sizes);
+      const parsedSizes = parseListField(req.body.sizes);
       const parsedColors = parseListField(req.body.colors);
+      const parsedKeywords = parseListField(req.body.keywords, { lowercase: true });
       const parsedColorImages = await buildColorImagesFromRequest(req);
 
       const fallbackColor =
@@ -434,6 +443,7 @@ router.post(
         made: req.body.made?.trim(),
         madeCode: (req.body.madeCode || '').trim(),
         manufacturer: req.body.manufacturer?.trim(),
+        keywords: parsedKeywords,
 
         // ✅ status flags
         isNew: checkboxOn(req.body.isNew),
@@ -641,7 +651,7 @@ router.post(
       }
 
       // ---------- BASIC FIELDS ----------
-            const baseFields = [
+      const baseFields = [
         'name',
         'category',
         'color',
@@ -679,6 +689,9 @@ router.post(
       if (typeof req.body.description === 'string') {
         product.description = req.body.description.trim();
       }
+
+      // keywords
+      product.keywords = parseListField(req.body.keywords, { lowercase: true });
 
       // ---------- VARIANT ARRAYS ----------
       if (req.body.sizes !== undefined) {

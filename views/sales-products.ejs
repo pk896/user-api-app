@@ -74,7 +74,7 @@
         <option value="relevance">Relevance</option>
         <option value="price-asc">Price: Low → High</option>
         <option value="price-desc">Price: High → Low</option>
-        <option value="new">Newest</option>
+        <option value="new">Newest Added</option>
         <option value="name">Name A–Z</option>
       </select>
     </div>
@@ -187,6 +187,14 @@
           %>
           <li class="amz-item"
             data-name="<%- name %>"
+            data-search="<%- [
+              p.name,
+              p.category,
+              p.type,
+              p.manufacturer,
+              p.description,
+              Array.isArray(p.keywords) ? p.keywords.join(' ') : ''
+            ].filter(Boolean).join(' ').toLowerCase() %>"
             data-price="<%= price %>"
             data-stock="<%= inStock ? '1':'0' %>"
             data-category="<%- cat %>"
@@ -2015,14 +2023,14 @@
 
       let visible = 0;
       CARD().forEach(li=>{
-        const name  = normalize(li.getAttribute('data-name'));
+        const searchable = normalize(li.getAttribute('data-search'));
         const price = Number(li.getAttribute('data-price')||0);
         const stock = li.getAttribute('data-stock') === '1';
         const ccat  = normalize(li.getAttribute('data-category'));
         const type  = normalize(li.getAttribute('data-type'));
 
         let show = true;
-        if (q && !name.includes(q)) show = false;
+        if (q && !searchable.includes(q)) show = false;
         if (cat && ccat !== cat) show = false;
         if (tAttr && !type.includes(tAttr)) show = false;
         if (only && !stock) show = false;

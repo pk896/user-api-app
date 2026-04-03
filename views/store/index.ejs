@@ -97,15 +97,20 @@
         <div class="col-md-4 col-lg-6 text-center">
             <div class="position-relative ps-4">
                 <div class="d-flex border rounded-pill">
-                    <input class="form-control border-0 rounded-pill w-100 py-3" type="text"
-                        data-bs-target="#dropdownToggle123" placeholder="Search Looking For?">
+                    <input
+                        id="storeKeywordInput"
+                        class="form-control border-0 rounded-pill w-100 py-3"
+                        type="text"
+                        data-bs-target="#dropdownToggle123"
+                        placeholder="Search products by name or keywords"
+                    >
                     <select id="storeCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
                         <option value="">All Category</option>
                         <% (CATEGORIES || []).forEach(function(category) { %>
                             <option value="<%= category.value %>"><%= category.label %></option>
                         <% }) %>
                     </select>
-                    <button type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
+                    <button id="storeKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
                             class="fas fa-search"></i></button>
                 </div>
             </div>
@@ -473,7 +478,19 @@
                 <div id="tab-1" class="tab-pane fade show p-0 active">
                     <div class="row g-4 product">
                         <% (allProducts || []).forEach(function(product) { %>
-                            <div class="col-md-6 col-lg-3 wow fadeInUp store-filter-card" data-wow-delay="0.1s" data-category="<%= (product.category || '').toLowerCase() %>">
+                            <div
+                                class="col-md-6 col-lg-3 wow fadeInUp store-filter-card"
+                                data-wow-delay="0.1s"
+                                data-category="<%= String(product.category || '').trim().toLowerCase() %>"
+                                data-search="<%= [
+                                    product.name,
+                                    product.category,
+                                    product.type,
+                                    product.manufacturer,
+                                    product.description,
+                                    Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
+                                ].filter(Boolean).join(' ').toLowerCase() %>"
+                            >
                                 <div class="product-item rounded js-store-product-card">
                                     <div class="product-item-inner border rounded">
                                         <div class="product-item-inner-item">
@@ -534,7 +551,19 @@
                 <div id="tab-2" class="tab-pane fade show p-0">
                     <div class="row g-4 product">
                         <% (newArrivals || []).forEach(function(product) { %>
-                            <div class="col-md-6 col-lg-3 wow fadeInUp store-filter-card" data-wow-delay="0.1s" data-category="<%= (product.category || '').toLowerCase() %>">
+                            <div
+                                class="col-md-6 col-lg-3 wow fadeInUp store-filter-card"
+                                data-wow-delay="0.1s"
+                                data-category="<%= String(product.category || '').trim().toLowerCase() %>"
+                                data-search="<%= [
+                                    product.name,
+                                    product.category,
+                                    product.type,
+                                    product.manufacturer,
+                                    product.description,
+                                    Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
+                                ].filter(Boolean).join(' ').toLowerCase() %>"
+                            >
                                 <div class="product-item rounded js-store-product-card">
                                     <div class="product-item-inner border rounded">
                                         <div class="product-item-inner-item">
@@ -592,7 +621,19 @@
                 <div id="tab-3" class="tab-pane fade show p-0">
                     <div class="row g-4 product">
                         <% (featuredProducts || []).forEach(function(product) { %>
-                            <div class="col-md-6 col-lg-3 wow fadeInUp store-filter-card" data-wow-delay="0.1s" data-category="<%= (product.category || '').toLowerCase() %>">
+                            <div
+                                class="col-md-6 col-lg-3 wow fadeInUp store-filter-card"
+                                data-wow-delay="0.1s"
+                                data-category="<%= String(product.category || '').trim().toLowerCase() %>"
+                                data-search="<%= [
+                                    product.name,
+                                    product.category,
+                                    product.type,
+                                    product.manufacturer,
+                                    product.description,
+                                    Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
+                                ].filter(Boolean).join(' ').toLowerCase() %>"
+                            >
                                 <div class="product-item rounded js-store-product-card">
                                     <div class="product-item-inner border rounded">
                                         <div class="product-item-inner-item">
@@ -653,7 +694,19 @@
                 <div id="tab-4" class="tab-pane fade show p-0">
                     <div class="row g-4 product">
                         <% (bestSellerProducts || []).forEach(function(product) { %>
-                            <div class="col-md-6 col-lg-3 wow fadeInUp store-filter-card" data-wow-delay="0.1s" data-category="<%= (product.category || '').toLowerCase() %>">
+                            <div
+                                class="col-md-6 col-lg-3 wow fadeInUp store-filter-card"
+                                data-wow-delay="0.1s"
+                                data-category="<%= String(product.category || '').trim().toLowerCase() %>"
+                                data-search="<%= [
+                                    product.name,
+                                    product.category,
+                                    product.type,
+                                    product.manufacturer,
+                                    product.description,
+                                    Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
+                                ].filter(Boolean).join(' ').toLowerCase() %>"
+                            >
                                 <div class="product-item rounded js-store-product-card">
                                     <div class="product-item-inner border rounded">
                                         <div class="product-item-inner-item">
@@ -917,6 +970,8 @@
 <script nonce="<%= nonce %>">
   (function () {
     const select = document.getElementById('storeCategorySelect');
+    const keywordInput = document.getElementById('storeKeywordInput');
+    const keywordBtn = document.getElementById('storeKeywordSearchBtn');
     const links = Array.from(document.querySelectorAll('.store-category-link'));
     const cards = Array.from(document.querySelectorAll('.store-filter-card'));
 
@@ -926,32 +981,52 @@
       return String(value || '').trim().toLowerCase();
     }
 
-    function applyCategoryFilter(categoryValue) {
-      const selected = normalize(categoryValue);
+    function applyFilters() {
+      const selectedCategory = normalize(select.value);
+      const keyword = normalize(keywordInput ? keywordInput.value : '');
 
       cards.forEach(function (card) {
         const cardCategory = normalize(card.getAttribute('data-category'));
-        const show = !selected || cardCategory === selected;
-        card.style.display = show ? '' : 'none';
-      });
+        const cardSearch = normalize(card.getAttribute('data-search'));
 
-      if (select.value !== selected) {
-        select.value = selected;
-      }
+        const matchesCategory = !selectedCategory || cardCategory === selectedCategory;
+        const matchesKeyword = !keyword || cardSearch.includes(keyword);
+
+        card.style.display = (matchesCategory && matchesKeyword) ? '' : 'none';
+      });
+    }
+
+    function setCategory(categoryValue) {
+      const selected = normalize(categoryValue);
+      select.value = selected;
+      applyFilters();
     }
 
     links.forEach(function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        applyCategoryFilter(link.getAttribute('data-category') || '');
+        setCategory(link.getAttribute('data-category'));
       });
     });
 
-    select.addEventListener('change', function () {
-      applyCategoryFilter(select.value || '');
-    });
+    select.addEventListener('change', applyFilters);
 
-    applyCategoryFilter('');
+    if (keywordInput) {
+      keywordInput.addEventListener('input', applyFilters);
+
+      keywordInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          applyFilters();
+        }
+      });
+    }
+
+    if (keywordBtn) {
+      keywordBtn.addEventListener('click', applyFilters);
+    }
+
+    applyFilters();
   })();
 </script>
 

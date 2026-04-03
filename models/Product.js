@@ -204,6 +204,12 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
 
+    keywords: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+
     // Matching type
     type: {
       type: String,
@@ -308,6 +314,10 @@ productSchema.pre('save', function (next) {
     this.colorImages = [];
   }
 
+  if (!Array.isArray(this.keywords)) {
+    this.keywords = this.keywords ? [this.keywords] : [];
+  }
+
   // Seed arrays from single fallback fields
   if (this.color && this.colors.length === 0) {
     this.colors.push(this.color);
@@ -328,6 +338,13 @@ productSchema.pre('save', function (next) {
   this.sizes = [...new Set(
     (this.sizes || [])
       .map((s) => String(s || '').trim())
+      .filter(Boolean)
+  )];
+
+  // Clean + dedupe keywords
+  this.keywords = [...new Set(
+    (this.keywords || [])
+      .map((k) => String(k || '').trim().toLowerCase())
       .filter(Boolean)
   )];
 

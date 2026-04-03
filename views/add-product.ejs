@@ -1,1620 +1,828 @@
 <!-- views/add-product.ejs -->
-<div class="pf-shell <%= themeCss && themeCss.includes('dark') ? 'theme-dark' : 'theme-light' %>">
-  <div class="pf">
-    <div class="pf-header">
-      <div class="pf-pill">
-        <span class="pf-pill-dot"></span>
-        <span class="pf-pill-text">Business · Product Setup</span>
-      </div>
-      <h1 class="pf-title">➕ Add New Product</h1>
-      <p class="pf-subtitle">
-        Capture a clean product card for your shop in under a minute.
-      </p>
-    </div>
-
-    <!-- Toast Container -->
-    <div id="toast-container" class="pf-toast-container"></div>
-
-    <% if (!business) { %>
-      <div class="pf-unauthorized">
-        <div class="pf-unauth-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 9v3m0 4h.01M5.07 20h13.86c1.05 0 1.72-1.12 1.23-2.05L13.23 4.52c-.52-.97-1.94-.97-2.46 0L3.84 17.95C3.35 18.88 4.02 20 5.07 20z"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </div>
-        <p class="pf-unauth-text">
-          You need a business account to add products.
-        </p>
-        <a href="/business/login" class="pf-btn pf-btn-primary">
-          <span>Login to continue</span>
-        </a>
-      </div>
-    <% } else { %>
-      <form id="addProductForm" action="/products/add" method="POST" enctype="multipart/form-data">
-        <!-- Form Grid -->
-        <div class="pf-grid">
-          <!-- Left Column -->
-          <div class="pf-col">
-            <!-- Product ID -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>CustomID <span class="pf-label-tag">required</span></span>
-                <!-- ❗ name="id" to match router: req.body.id -->
-                <input
-                  type="text"
-                  name="id"
-                  placeholder="PROD-001 (fill it for advanced analytics & customization)"
-                  required
-                  class="pf-input"
-                />
-                <div class="pf-hint">custom Id must be unique and alphanumeric (20-30 characters).</div>
-              </label>
+<div class="container-fluid py-4 bg-dark min-vh-100">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-xl-10">
+        <div class="card shadow-lg border-0 overflow-hidden">
+          <div class="card-body p-3 p-md-4 p-lg-5">
+            <div class="mb-4">
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle text-uppercase small">
+                Business · Product Setup
+              </span>
+              <h1 class="h3 mt-3 mb-2 text-primary">➕ Add New Product</h1>
+              <p class="text-muted mb-0">
+                Capture a clean product card for your shop in under a minute.
+              </p>
             </div>
 
-            <!-- Product Name -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Product Name <em>*</em></span>
-                <input
-                  type="text"
-                  name="name"
-                  placeholder="e.g., Orange Juice 1L"
-                  required
-                  class="pf-input"
-                />
-              </label>
-            </div>
+            <div id="toast-container" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;"></div>
 
-            <!-- Price -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Price (incl. VAT) <em>*</em></span>
-                <div class="pf-input-group">
-                  <span class="pf-input-prefix">R</span>
-                  <input
-                    type="number"
-                    name="price"
-                    placeholder="29.99"
-                    step="0.01"
-                    min="0"
-                    required
-                    class="pf-input pf-input-with-prefix"
-                  />
-                </div>
-                <div class="pf-hint">Enter the selling price you want buyers to see.</div>
-              </label>
-            </div>
-
-            <!-- Stock -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Stock Quantity</span>
-                <input
-                  type="number"
-                  name="stock"
-                  placeholder="100"
-                  min="0"
-                  required
-                  class="pf-input"
-                />
-                <div class="pf-hint">Required. Use 0 for out of stock. You can update stock anytime in Edit Product.</div>
-              </label>
-            </div>
-
-            <!-- Category (DROPDOWN) -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Category</span>
-
-                <select id="categorySelect" name="category" class="pf-input pf-select">
-                  <option value="">Choose category</option>
-
-                  <% if (Array.isArray(CATEGORIES)) { %>
-                    <% CATEGORIES.forEach(function(c){ %>
-                      <option value="<%= c.value %>"><%= c.label %></option>
-                    <% }) %>
-                  <% } %>
-                </select>
-
-                <div class="pf-hint">Used for filters on the shopping page.</div>
-              </label>
-            </div>
-
-            <!-- Color (default) -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Default Color</span>
-                <input
-                  type="text"
-                  name="color"
-                  placeholder="e.g., Orange / Black / Blue"
-                  class="pf-input"
-                />
-                <div class="pf-hint">Optional fallback color. If empty, the first variant color will be used.</div>
-              </label>
-            </div>
-          </div>
-
-          <!-- Right Column -->
-          <div class="pf-col">
-            <!-- Size (default) -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Default Size</span>
-                <input
-                  type="text"
-                  name="size"
-                  placeholder="e.g., 1L Bottle / M / Size 7"
-                  class="pf-input"
-                />
-                <div class="pf-hint">Optional fallback size. If empty, the first variant size will be used.</div>
-              </label>
-            </div>
-
-            <!-- Quality (DROPDOWN) -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Quality / Grade</span>
-                <select name="quality" class="pf-input pf-select">
-                  <option value="">Not specified</option>
-                  <option value="standard">Standard</option>
-                  <option value="premium">Premium</option>
-                  <option value="grade-a">Grade A</option>
-                  <option value="grade-b">Grade B</option>
-                  <option value="economy">Economy</option>
-                </select>
-                <div class="pf-hint">Pick the quality level buyers should see.</div>
-              </label>
-            </div>
-
-            <!-- Made In (Custom searchable dropdown like business-profile-edit-details.ejs) -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Made In <em>*</em></span>
-
-                <div class="pf-country-dropdown" id="madeDropdown">
-                  <div
-                    class="pf-country-selected"
-                    id="madeSelected"
-                    tabindex="0"
-                    role="button"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                  >
-                    <span class="pf-country-selected-left">
-                      <img id="madeSelectedFlagImg" class="pf-flag-img" alt="" aria-hidden="true" />
-                      <span id="madeSelectedText">Select country</span>
-                    </span>
-                    <span class="pf-country-arrow">▾</span>
+            <% if (!business) { %>
+              <div class="alert alert-warning border-0 shadow-sm mb-0">
+                <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
+                  <div class="fs-4">⚠️</div>
+                  <div class="flex-grow-1">
+                    <h2 class="h6 mb-1">Business account required</h2>
+                    <p class="mb-0">You need a business account to add products.</p>
                   </div>
+                  <a href="/business/login" class="btn btn-primary pf-btn-primary">Login to continue</a>
+                </div>
+              </div>
+            <% } else { %>
+              <form id="addProductForm" action="/products/add" method="POST" enctype="multipart/form-data" novalidate>
+                <div class="row g-4">
+                  <!-- LEFT COLUMN -->
+                  <div class="col-12 col-lg-6">
+                    <div class="row g-3">
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="productCustomId">
+                          CustomID <span class="badge text-bg-light border ms-1">required</span>
+                        </label>
+                        <input
+                          id="productCustomId"
+                          type="text"
+                          name="id"
+                          placeholder="PROD-001 (fill it for advanced analytics & customization)"
+                          required
+                          class="form-control pf-input"
+                        />
+                        <div class="form-text">Custom Id must be unique and alphanumeric (20-30 characters).</div>
+                      </div>
 
-                  <div class="pf-country-menu" id="madeMenu" role="listbox">
-                    <input
-                      type="text"
-                      id="madeSearch"
-                      placeholder="Search country..."
-                      autocomplete="off"
-                      class="pf-country-search-input"
-                    />
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="productName">
+                          Product Name <span class="text-danger">*</span>
+                        </label>
+                        <input
+                          id="productName"
+                          type="text"
+                          name="name"
+                          placeholder="e.g., Orange Juice 1L"
+                          required
+                          class="form-control pf-input"
+                        />
+                      </div>
 
-                    <div class="pf-country-list" id="madeList">
-                     <% if (Array.isArray(COUNTRIES)) { %>
-                        <% COUNTRIES.forEach(function(c) { %>
-                          <div
-                            class="pf-country-option"
-                            data-value="<%= c.name %>"
-                            data-code="<%= c.code %>"
-                            data-flag="<%= c.flag %>"
-                            data-search="<%= String(c.name || '').toLowerCase() %>"
-                            role="option"
-                          >
-                           <img
-                              class="pf-flag-img"
-                              src="https://flagcdn.com/20x15/<%= String(c.code || '').toLowerCase() %>.png"
-                              alt=""
-                              loading="lazy"
-                            />
-                            <span class="pf-country-name"><%= c.name %></span>
-                          </div>
-                        <% }) %>
-                      <% } %>
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="productPrice">
+                          Price <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                          <span class="input-group-text">R</span>
+                          <input
+                            id="productPrice"
+                            type="number"
+                            name="price"
+                            placeholder="29.99"
+                            step="0.01"
+                            min="0"
+                            required
+                            class="form-control pf-input"
+                          />
+                        </div>
+                        <div class="form-text">Enter the selling price you want buyers to see.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="productStock">Stock Quantity</label>
+                        <input
+                          id="productStock"
+                          type="number"
+                          name="stock"
+                          placeholder="100"
+                          min="0"
+                          required
+                          class="form-control pf-input"
+                        />
+                        <div class="form-text">Required. Use 0 for out of stock. You can update stock anytime in Edit Product.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="categorySelect">Category</label>
+                        <select id="categorySelect" name="category" class="form-select pf-input pf-select">
+                          <option value="">Choose category</option>
+                          <% if (Array.isArray(CATEGORIES)) { %>
+                            <% CATEGORIES.forEach(function(c){ %>
+                              <option value="<%= c.value %>"><%= c.label %></option>
+                            <% }) %>
+                          <% } %>
+                        </select>
+                        <div class="form-text">Used for filters on the shopping page.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="defaultColor">Default Color</label>
+                        <input
+                          id="defaultColor"
+                          type="text"
+                          name="color"
+                          placeholder="e.g., Orange / Black / Blue"
+                          class="form-control pf-input"
+                        />
+                        <div class="form-text">Optional fallback color. If empty, the first variant color will be used.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="productKeywords">Search Keywords</label>
+                        <input
+                          id="productKeywords"
+                          type="text"
+                          name="keywords"
+                          placeholder="e.g., iphone, apple phone, smartphone, ios"
+                          class="form-control pf-input"
+                        />
+                        <div class="form-text">Optional. Separate keywords with commas so buyers can find this product in search.</div>
+                      </div>
                     </div>
                   </div>
 
-                  <!-- ✅ backend-safe hidden inputs (these are what gets submitted) -->
-                  <input type="hidden" name="made" id="made" value="" required />
-                  <input type="hidden" name="madeCode" id="madeCode" value="" />
+                  <!-- RIGHT COLUMN -->
+                  <div class="col-12 col-lg-6">
+                    <div class="row g-3">
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="defaultSize">Default Size</label>
+                        <input
+                          id="defaultSize"
+                          type="text"
+                          name="size"
+                          placeholder="e.g., 1L Bottle / M / Size 7"
+                          class="form-control pf-input"
+                        />
+                        <div class="form-text">Optional fallback size. If empty, the first variant size will be used.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="productQuality">Quality / Grade</label>
+                        <select id="productQuality" name="quality" class="form-select pf-input pf-select">
+                          <option value="">Select quality...</option>
+                          <option value="Premium">Premium</option>
+                          <option value="Standard">Standard</option>
+                          <option value="Economy">Economy</option>
+                          <option value="Wholesale">Wholesale</option>
+                        </select>
+                        <div class="form-text">Pick the quality level buyers should see.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold">
+                          Made In <span class="text-danger">*</span>
+                        </label>
+
+                        <div class="pf-country-dropdown position-relative" id="madeDropdown">
+                          <div
+                            class="pf-country-selected form-control d-flex align-items-center justify-content-between gap-2"
+                            id="madeSelected"
+                            tabindex="0"
+                            role="button"
+                            aria-haspopup="listbox"
+                            aria-expanded="false"
+                          >
+                            <span class="pf-country-selected-left d-flex align-items-center gap-2 min-w-0">
+                              <img id="madeSelectedFlagImg" class="pf-flag-img d-none" alt="" aria-hidden="true" />
+                              <span id="madeSelectedText" class="text-truncate">Select country</span>
+                            </span>
+                            <span class="pf-country-arrow small">▾</span>
+                          </div>
+
+                          <div class="pf-country-menu dropdown-menu w-100 mt-1 p-0 shadow-sm" id="madeMenu" role="listbox">
+                            <div class="p-2 border-bottom">
+                              <input
+                                type="text"
+                                id="madeSearch"
+                                placeholder="Search country..."
+                                autocomplete="off"
+                                class="form-control form-control-sm pf-country-search-input"
+                              />
+                            </div>
+
+                            <div class="pf-country-list list-group list-group-flush" id="madeList">
+                              <% if (Array.isArray(COUNTRIES)) { %>
+                                <% COUNTRIES.forEach(function(c) { %>
+                                  <button
+                                    type="button"
+                                    class="pf-country-option list-group-item list-group-item-action d-flex align-items-center gap-2"
+                                    data-value="<%= c.name %>"
+                                    data-code="<%= c.code %>"
+                                    data-flag="<%= c.flag %>"
+                                    data-search="<%= String(c.name || '').toLowerCase() %>"
+                                    role="option"
+                                  >
+                                    <img
+                                      class="pf-flag-img"
+                                      src="https://flagcdn.com/20x15/<%= String(c.code || '').toLowerCase() %>.png"
+                                      alt=""
+                                      loading="lazy"
+                                    />
+                                    <span class="pf-country-name text-truncate"><%= c.name %></span>
+                                  </button>
+                                <% }) %>
+                              <% } %>
+                            </div>
+                          </div>
+
+                          <input type="hidden" name="made" id="made" value="" required />
+                          <input type="hidden" name="madeCode" id="madeCode" value="" />
+                        </div>
+
+                        <div class="form-text">Search and select a country (e.g., South Africa, Nigeria, United States…)</div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="manufacturer">Manufacturer</label>
+                        <input
+                          id="manufacturer"
+                          type="text"
+                          name="manufacturer"
+                          placeholder="e.g., PK's Engineering"
+                          class="form-control pf-input"
+                        />
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="typeSelect">
+                          Matching Type <span class="text-danger">*</span>
+                        </label>
+                        <select id="typeSelect" name="type" class="form-select pf-input pf-select" required>
+                          <option value="">Choose type</option>
+                          <% if (Array.isArray(PRODUCT_TYPES)) { %>
+                            <% PRODUCT_TYPES.forEach(function(t){ %>
+                              <option value="<%= t.value %>"><%= t.label %></option>
+                            <% }) %>
+                          <% } %>
+                        </select>
+                        <div class="form-text">
+                          Use <strong>clothes</strong> or <strong>shoes</strong> to enable size + color variants on the shop page.
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label fw-semibold" for="description">Description</label>
+                        <textarea
+                          id="description"
+                          name="description"
+                          rows="3"
+                          placeholder="Short description buyers will see (features, highlights, etc.)"
+                          maxlength="500"
+                          class="form-control pf-textarea"
+                        ></textarea>
+                        <div class="form-text">Max 500 characters</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- VARIANTS -->
+                  <div class="col-12">
+                    <div class="card border rounded-4 shadow-sm">
+                      <div class="card-body">
+                        <h2 class="h5 text-primary mb-3">Variants & Store Behaviour</h2>
+
+                        <div class="row g-3">
+                          <div class="col-12 col-lg-4">
+                            <label class="form-label fw-semibold" for="productRole">Product Role</label>
+                            <select id="productRole" name="role" class="form-select pf-input pf-select">
+                              <option value="general" selected>General</option>
+                              <option value="clothes">Clothes</option>
+                              <option value="shoes">Shoes</option>
+                              <option value="electronics">Electronics</option>
+                              <option value="home">Home</option>
+                              <option value="beauty">Beauty</option>
+                              <option value="groceries">Groceries</option>
+                            </select>
+                            <div class="form-text">Controls how variants behave in the store.</div>
+                          </div>
+
+                          <div class="col-12 col-lg-4">
+                            <label class="form-label fw-semibold" for="variantSizesInput">Variant Sizes</label>
+                            <input
+                              id="variantSizesInput"
+                              type="text"
+                              name="sizes"
+                              placeholder="e.g., S, M, L or 500ml, 1L"
+                              class="form-control pf-input"
+                            />
+                          </div>
+
+                          <div class="col-12 col-lg-4">
+                            <label class="form-label fw-semibold" for="variantColorsInput">Variant Colors</label>
+                            <input
+                              id="variantColorsInput"
+                              type="text"
+                              name="colors"
+                              placeholder="e.g., Black, Blue, Red"
+                              class="form-control pf-input"
+                            />
+                          </div>
+
+                          <div class="col-12">
+                            <label class="form-label fw-semibold">Image Per Color</label>
+
+                            <div id="colorImageRows" class="d-flex flex-column gap-2">
+                              <div class="pf-color-row row g-2 align-items-center">
+                                <div class="col-12 col-md-3">
+                                  <input type="text" name="colorImageColors" placeholder="Color" class="form-control pf-input" />
+                                </div>
+                                <div class="col-12 col-md-4">
+                                  <input type="text" name="colorImageUrls" placeholder="Image URL" class="form-control pf-input" />
+                                </div>
+                                <div class="col-12 col-md-3">
+                                  <input type="file" name="colorImageFiles" class="form-control pf-input" />
+                                </div>
+                                <div class="col-12 col-md-2 d-grid">
+                                  <button type="button" class="btn btn-outline-secondary js-remove-color-row">Remove</button>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button type="button" id="addColorImageRow" class="btn btn-outline-primary mt-3">
+                              Add another color
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- SHIPPING -->
+                  <div class="col-12">
+                    <div class="card border rounded-4 shadow-sm">
+                      <div class="card-body">
+                        <h2 class="h5 text-primary mb-2">📦 Shipping & Package Info</h2>
+                        <p class="text-muted small mb-4">
+                          <strong>Required.</strong> These measurements are used to calculate Shippo rates at checkout.
+                          Enter the size/weight of <strong>ONE item</strong> (without the shipping box).
+                        </p>
+
+                        <div class="row g-4">
+                          <div class="col-12 col-lg-6">
+                            <div class="row g-3">
+                              <div class="col-12">
+                                <label class="form-label fw-semibold">Item Weight <span class="text-danger">*</span></label>
+                                <div class="row g-2">
+                                  <div class="col-8">
+                                    <input
+                                      type="number"
+                                      name="shipWeightValue"
+                                      step="0.001"
+                                      min="0"
+                                      placeholder="e.g., 0.50"
+                                      required
+                                      class="form-control pf-input"
+                                    />
+                                  </div>
+                                  <div class="col-4">
+                                    <select name="shipWeightUnit" class="form-select pf-input pf-select">
+                                      <option value="kg" selected>kg</option>
+                                      <option value="g">g</option>
+                                      <option value="lb">lb</option>
+                                      <option value="oz">oz</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div class="form-text">Weight of ONE item (without box). Example: 0.5 kg.</div>
+                              </div>
+
+                              <div class="col-12">
+                                <label class="form-label fw-semibold" for="packagingHint">Packaging Hint (optional)</label>
+                                <input
+                                  id="packagingHint"
+                                  type="text"
+                                  name="packagingHint"
+                                  placeholder="e.g., small-box / tube / fragile"
+                                  class="form-control pf-input"
+                                />
+                                <div class="form-text">Helps auto-packing later. Leave empty if unsure.</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="col-12 col-lg-6">
+                            <div class="row g-3">
+                              <div class="col-12">
+                                <label class="form-label fw-semibold">Item Dimensions (L × W × H) <span class="text-danger">*</span></label>
+                                <div class="row g-2">
+                                  <div class="col-6 col-md-3">
+                                    <input
+                                      type="number"
+                                      name="shipLength"
+                                      step="0.1"
+                                      min="0"
+                                      placeholder="Length"
+                                      required
+                                      class="form-control pf-input"
+                                    />
+                                  </div>
+                                  <div class="col-6 col-md-3">
+                                    <input
+                                      type="number"
+                                      name="shipWidth"
+                                      step="0.1"
+                                      min="0"
+                                      placeholder="Width"
+                                      required
+                                      class="form-control pf-input"
+                                    />
+                                  </div>
+                                  <div class="col-6 col-md-3">
+                                    <input
+                                      type="number"
+                                      name="shipHeight"
+                                      step="0.1"
+                                      min="0"
+                                      placeholder="Height"
+                                      required
+                                      class="form-control pf-input"
+                                    />
+                                  </div>
+                                  <div class="col-6 col-md-3">
+                                    <select name="shipDimUnit" class="form-select pf-input pf-select">
+                                      <option value="cm" selected>cm</option>
+                                      <option value="in">in</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div class="form-text">Dimensions of ONE item (without box). Example: 30 × 20 × 10 cm.</div>
+                              </div>
+
+                              <div class="col-12">
+                                <label class="form-label fw-semibold d-block">Shipping Flags</label>
+                                <div class="d-flex flex-wrap gap-3">
+                                  <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input type="hidden" name="shipSeparately" value="0" />
+                                    <input class="form-check-input mt-0" type="checkbox" name="shipSeparately" value="on" />
+                                    <span class="form-check-label">Ship separately</span>
+                                  </label>
+
+                                  <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input type="hidden" name="fragile" value="0" />
+                                    <input class="form-check-input mt-0" type="checkbox" name="fragile" value="on" />
+                                    <span class="form-check-label">Fragile</span>
+                                  </label>
+                                </div>
+                                <div class="form-text">Use if this product must be boxed alone or needs careful handling.</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- IMAGE -->
+                  <div class="col-12">
+                    <div class="card border rounded-4 shadow-sm">
+                      <div class="card-body">
+                        <label class="form-label fw-semibold d-block mb-3">
+                          Product Image <span class="text-danger">*</span>
+                        </label>
+
+                        <div class="position-relative">
+                          <input
+                            id="imageFile"
+                            type="file"
+                            name="imageFile"
+                            accept="image/*"
+                            required
+                            class="position-absolute top-0 start-0 w-100 h-100 opacity-0"
+                            style="cursor:pointer; z-index:2;"
+                          />
+                          <div class="border border-2 border-dashed rounded-4 p-4 bg-light d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width:52px;height:52px;">
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 5v14m-7-7h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div class="fw-semibold">Click or tap to upload image</div>
+                              <div class="text-muted small">JPG, PNG, GIF or WebP · Max 5MB</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div id="previewWrapper" class="mt-3 d-none">
+                          <div class="position-relative d-inline-block">
+                            <img id="imagePreview" class="img-fluid rounded border" alt="Product preview" style="max-height: 220px;" />
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 rounded-circle" onclick="removeImage()" aria-label="Remove image">
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- ACTIONS -->
+                  <div class="col-12">
+                    <div class="d-flex flex-column flex-sm-row gap-2 justify-content-end">
+                      <button type="submit" class="btn btn-primary px-4 pf-btn-primary">
+                        <span class="pf-submit-label d-inline-flex align-items-center gap-2">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M4 8l3 3 5-6M2 8a6 6 0 1112 0A6 6 0 012 8z"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                          <span>Save Product</span>
+                        </span>
+                        <span class="pf-submit-loading d-none align-items-center gap-2">
+                          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <span>Saving...</span>
+                        </span>
+                      </button>
+
+                      <a href="/products/all" class="btn btn-outline-secondary px-4">
+                        <span class="d-inline-flex align-items-center gap-2">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M10 12L6 8l4-4"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                          <span>Back to Products</span>
+                        </span>
+                      </a>
+                    </div>
+                  </div>
                 </div>
-
-                <div class="pf-hint">Search and select a country (e.g., South Africa, Nigeria, United States…)</div>
-              </label>
-            </div>
-
-            <!-- Manufacturer -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Manufacturer</span>
-                <input
-                  type="text"
-                  name="manufacturer"
-                  placeholder="e.g., PK's Engineering"
-                  class="pf-input"
-                />
-              </label>
-            </div>
-
-            <!-- Matching Type (product.type controls shoes/clothes behaviour) -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Matching Type <em>*</em></span>
-
-                <select id="typeSelect" name="type" class="pf-input pf-select" required>
-                  <option value="">Choose type</option>
-
-                  <% if (Array.isArray(PRODUCT_TYPES)) { %>
-                    <% PRODUCT_TYPES.forEach(function(t){ %>
-                      <option value="<%= t.value %>"><%= t.label %></option>
-                    <% }) %>
-                  <% } %>
-                </select>
-
-                <div class="pf-hint">
-                  Use <strong>clothes</strong> or <strong>shoes</strong> to enable size + color variants on the shop page.
-                </div>
-              </label>
-            </div>
-
-            <!-- Description -->
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Description</span>
-                <textarea
-                  name="description"
-                  rows="2"
-                  placeholder="Short description buyers will see (features, highlights, etc.)"
-                  maxlength="500"
-                  class="pf-textarea"
-                ></textarea>
-                <div class="pf-hint">Max 500 characters</div>
-              </label>
-            </div>
+              </form>
+            <% } %>
           </div>
         </div>
-        
-        <!-- Variant Setup -->
-        <div class="pf-field">
-          <label class="pf-label">
-            <span>Product Role</span>
-            <select name="role" class="pf-input pf-select">
-              <option value="general" selected>General</option>
-              <option value="clothes">Clothes</option>
-              <option value="shoes">Shoes</option>
-              <option value="electronics">Electronics</option>
-              <option value="home">Home</option>
-              <option value="beauty">Beauty</option>
-              <option value="groceries">Groceries</option>
-            </select>
-            <div class="pf-hint">Controls how variants behave in the store.</div>
-          </label>
-        </div>
-
-        <div class="pf-field">
-          <label class="pf-label">
-            <span>Variant Sizes</span>
-            <input
-              id="variantSizesInput"
-              type="text"
-              name="sizes"
-              placeholder="e.g., S, M, L or 500ml, 1L"
-              class="pf-input"
-            />
-          </label>
-        </div>
-
-        <div class="pf-field">
-          <label class="pf-label">
-            <span>Variant Colors</span>
-            <input
-              id="variantColorsInput"
-              type="text"
-              name="colors"
-              placeholder="e.g., Black, Blue, Red"
-              class="pf-input"
-            />
-          </label>
-        </div>
-
-        <div class="pf-field">
-          <label class="pf-label">
-            <span>Image Per Color</span>
-
-            <div id="colorImageRows">
-              <div class="pf-color-row">
-                <input type="text" name="colorImageColors" placeholder="Color" class="pf-input" />
-                <input type="text" name="colorImageUrls" placeholder="Image URL" class="pf-input" />
-                <input type="file" name="colorImageFiles" class="pf-input" />
-                <button type="button" class="pf-btn pf-btn-secondary js-remove-color-row">Remove</button>
-              </div>
-            </div>
-
-            <button type="button" id="addColorImageRow" class="pf-btn pf-btn-secondary" style="margin-top:10px;">
-              Add another color
-            </button>
-          </label>
-        </div>
-
-        <!-- ==========================
-        📦 Shipping (for accurate Shippo rates)
-        ========================== -->
-        <div class="pf-field" style="margin-top: 6px;">
-          <label class="pf-label">
-            <span>📦 Shipping & Package Info</span>
-            <div class="pf-hint">
-              <strong>Required.</strong> These measurements are used to calculate Shippo rates at checkout.
-              Enter the size/weight of <strong>ONE item</strong> (without the shipping box).
-            </div>
-          </label>
-        </div>
-
-        <div class="pf-grid" style="margin-top: 6px; margin-bottom: 18px;">
-          <!-- Left column: Weight -->
-          <div class="pf-col">
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Item Weight <em>*</em></span>
-                <div class="pf-input-group" style="gap: 8px; position: relative;">
-                  <input
-                    type="number"
-                    name="shipWeightValue"
-                    step="0.001"
-                    min="0"
-                    placeholder="e.g., 0.50"
-                    required
-                    class="pf-input"
-                  />
-                  <select name="shipWeightUnit" class="pf-input pf-select" style="max-width: 110px;">
-                    <option value="kg" selected>kg</option>
-                    <option value="g">g</option>
-                    <option value="lb">lb</option>
-                    <option value="oz">oz</option>
-                  </select>
-                </div>
-                <div class="pf-hint">Weight of ONE item (without box). Example: 0.5 kg.</div>
-              </label>
-            </div>
-
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Packaging Hint (optional)</span>
-                <input
-                  type="text"
-                  name="packagingHint"
-                  placeholder="e.g., small-box / tube / fragile"
-                  class="pf-input"
-                />
-                <div class="pf-hint">Helps auto-packing later. Leave empty if unsure.</div>
-              </label>
-            </div>
-          </div>
-
-          <!-- Right column: Dimensions -->
-          <div class="pf-col">
-            <div class="pf-field">
-              <label class="pf-label">
-                <span>Item Dimensions (L × W × H) <em>*</em></span>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px;">
-                  <input
-                    type="number"
-                    name="shipLength"
-                    step="0.1"
-                    min="0"
-                    placeholder="Length"
-                    required
-                    class="pf-input"
-                  />
-                  <input
-                    type="number"
-                    name="shipWidth"
-                    step="0.1"
-                    min="0"
-                    placeholder="Width"
-                    required
-                    class="pf-input"
-                  />
-                  <input
-                    type="number"
-                    name="shipHeight"
-                    step="0.1"
-                    min="0"
-                    placeholder="Height"
-                    required
-                    class="pf-input"
-                  />
-                  <select name="shipDimUnit" class="pf-input pf-select" style="max-width: 90px;">
-                    <option value="cm" selected>cm</option>
-                    <option value="in">in</option>
-                  </select>
-                </div>
-                <div class="pf-hint">Dimensions of ONE item (without box). Example: 30 × 20 × 10 cm.</div>
-              </label>
-            </div>
-
-            <div class="pf-field" style="margin-top: 2px;">
-              <label class="pf-label">
-                <span>Shipping Flags</span>
-                <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px;">
-                  <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:12px;">
-                    <input type="hidden" name="shipSeparately" value="0" />
-                    <input type="checkbox" name="shipSeparately" value="on" />
-                    <span>Ship separately</span>
-                  </label>
-
-                  <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:12px;">
-                    <input type="hidden" name="fragile" value="0" />
-                    <input type="checkbox" name="fragile" value="on" />
-                    <span>Fragile</span>
-                  </label>
-                </div>
-
-                <div class="pf-hint">Use if this product must be boxed alone or needs careful handling.</div>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Image Upload -->
-        <div class="pf-image-section">
-          <label class="pf-label pf-label-block">
-            <span>Product Image <em>*</em></span>
-            <div class="pf-image-upload">
-              <input
-                id="imageFile"
-                type="file"
-                name="imageFile"
-                accept="image/*"
-                required
-                class="pf-file-input"
-              />
-              <div class="pf-image-upload-area">
-                <div class="pf-image-upload-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M12 5v14m-7-7h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                  </svg>
-                </div>
-                <div class="pf-image-upload-text">
-                  <span>Click or tap to upload image</span>
-                  <div class="pf-hint">JPG, PNG, GIF or WebP · Max 5MB</div>
-                </div>
-              </div>
-            </div>
-          </label>
-
-          <div id="previewWrapper" class="pf-image-preview">
-            <img id="imagePreview" class="pf-image-preview-img" alt="Product preview" />
-            <button type="button" class="pf-image-remove" onclick="removeImage()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Form Actions -->
-        <div class="pf-actions">
-          <button type="submit" class="pf-btn pf-btn-primary">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4 8l3 3 5-6M2 8a6 6 0 1112 0A6 6 0 012 8z"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span>Save Product</span>
-          </button>
-          <a href="/products/all" class="pf-btn pf-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M10 12L6 8l4-4"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span>Back to Products</span>
-          </a>
-        </div>
-      </form>
-    <% } %>
+      </div>
+    </div>
   </div>
 </div>
 
-<style>
-  /* ========= BRAND WRAPPER (dark body) ========= */
-  .pf-shell {
-    min-height: calc(100vh - 80px);
-    padding: 12px 8px 18px;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    background: #0b1220; /* your favourite dark body color */
-  }
-
-  .pf-shell.theme-light {
-    background: radial-gradient(circle at top, rgba(37, 99, 235, 0.15), transparent 60%),
-                #0b1220;
-  }
-
-  .pf-shell.theme-dark {
-    background: radial-gradient(circle at top, rgba(124, 58, 237, 0.25), transparent 65%),
-                #0b1220;
-  }
-
-  /* ========= BRAND VARIABLES ========= */
-  .pf {
-    --blue: #2563EB;
-    --purple: #7C3AED;
-    --white: #F9FAFF;
-    --pure-white: #FFFFFF;
-    --dark-body: #0b1220;
-    --dark-surface: #111827;
-    --dark-soft: #1f2937;
-    --text-main: #0f172a;
-    --text-muted: #64748b;
-    --border-subtle: #e2e8f0;
-    --radius: 14px;
-    --transition: all 0.18s ease-out;
-  }
-
-  /* ========= CONTAINER ========= */
-  .pf {
-    width: 100%;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 16px 14px 18px;
-    border-radius: var(--radius);
-    background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 55%),
-                radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.08), transparent 55%),
-                var(--white);
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.4);
-  }
-
-  .pf-shell.theme-dark .pf {
-    background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.25), transparent 55%),
-                radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.2), transparent 55%),
-                #0b1220;
-    border-color: rgba(30, 64, 175, 0.7);
-    color: #E5E7EB;
-  }
-
-  @media (min-width: 768px) {
-    .pf {
-      padding: 18px 18px 20px;
-      max-width: 840px;
-    }
-    .pf-shell {
-      padding: 18px 12px 26px;
-      align-items: center;
-    }
-  }
-
-  /* ========= HEADER ========= */
-  .pf-header {
-    text-align: left;
-    margin-bottom: 16px;
-  }
-
-  .pf-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(37, 99, 235, 0.08);
-    border: 1px solid rgba(37, 99, 235, 0.3);
-    margin-bottom: 6px;
-  }
-
-  .pf-pill-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, #2563EB, #7C3AED);
-  }
-
-  .pf-pill-text {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: #e5e7eb;
-  }
-
-  .pf-shell.theme-light .pf-pill-text {
-    color: #1e293b;
-  }
-
-  .pf-title {
-    font-size: 18px;
-    font-weight: 700;
-    margin: 2px 0 4px;
-    color: #e5e7eb;
-  }
-
-  .pf-shell.theme-light .pf-title {
-    color: #0f172a;
-  }
-
-  .pf-subtitle {
-    margin: 0;
-    font-size: 12px;
-    color: #9CA3AF;
-  }
-
-  .pf-shell.theme-light .pf-subtitle {
-    color: var(--text-muted);
-  }
-
-  /* ========= UNAUTHORIZED ========= */
-  .pf-unauthorized {
-    margin-top: 8px;
-    padding: 20px 16px;
-    border-radius: 10px;
-    background: rgba(15, 23, 42, 0.9);
-    border: 1px dashed rgba(148, 163, 184, 0.9);
-    text-align: center;
-    color: #E5E7EB;
-  }
-
-  .pf-shell.theme-light .pf-unauthorized {
-    background: rgba(248, 250, 252, 0.95);
-    color: var(--text-main);
-  }
-
-  .pf-unauth-icon {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 8px;
-    color: #fbbf24;
-  }
-
-  .pf-unauth-text {
-    margin: 0 0 14px;
-    font-size: 13px;
-    font-weight: 500;
-  }
-
-  /* ========= FORM LAYOUT ========= */
-  .pf-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    margin-top: 8px;
-    margin-bottom: 18px;
-  }
-
-  .pf-col {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  @media (min-width: 640px) {
-    .pf-grid {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 18px;
-    }
-  }
-
-  /* ========= FIELDS ========= */
-  .pf-field {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .pf-label {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #E5E7EB;
-  }
-
-  .pf-shell.theme-light .pf-label {
-    color: var(--text-main);
-  }
-
-  .pf-label em {
-    color: #F97316;
-    font-style: normal;
-    margin-left: 2px;
-  }
-
-  .pf-label-tag {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #cbd5f5;
-    border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.8);
-    padding: 2px 6px;
-    margin-left: 6px;
-  }
-
-  .pf-shell.theme-light .pf-label-tag {
-    color: var(--text-muted);
-  }
-
-  .pf-input,
-  .pf-textarea,
-  .pf-select {
-    padding: 8px 9px;
-    border-radius: 9px;
-    border: 1px solid var(--border-subtle);
-    font-size: 13px;
-    font-family: inherit;
-    background: #f9fafb;
-    color: #0f172a;
-    transition: var(--transition);
-    min-height: 36px;
-  }
-
-  .pf-textarea {
-    resize: vertical;
-    min-height: 60px;
-    line-height: 1.4;
-  }
-
-  .pf-input:focus,
-  .pf-textarea:focus,
-  .pf-select:focus {
-    outline: none;
-    border-color: #2563EB;
-    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.45);
-    background: #ffffff;
-  }
-
-  .pf-shell.theme-dark .pf-input,
-  .pf-shell.theme-dark .pf-textarea,
-  .pf-shell.theme-dark .pf-select {
-    background: #020617;
-    border-color: rgba(51, 65, 85, 0.9);
-    color: #E5E7EB;
-  }
-
-  .pf-shell.theme-dark .pf-input:focus,
-  .pf-shell.theme-dark .pf-textarea:focus,
-  .pf-shell.theme-dark .pf-select:focus {
-    border-color: #7C3AED;
-    box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.7);
-  }
-
-  .pf-input-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-  }
-
-  .pf-input-prefix {
-    position: absolute;
-    left: 9px;
-    font-size: 12px;
-    color: var(--text-muted);
-    font-weight: 600;
-  }
-
-  .pf-input-with-prefix {
-    padding-left: 24px;
-  }
-
-  .pf-hint {
-    font-size: 10px;
-    color: #9CA3AF;
-    margin-top: 2px;
-  }
-
-  .pf-shell.theme-light .pf-hint {
-    color: var(--text-muted);
-  }
-
-  /* ========= COUNTRY DROPDOWN (Made In) ========= */
-  .pf-country-dropdown {
-    position: relative;
-    width: 100%;
-  }
-
-  .pf-country-selected {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 9px;
-    border-radius: 9px;
-    border: 1px solid var(--border-subtle);
-    background: #f9fafb;
-    color: #0f172a;
-    min-height: 36px;
-    cursor: pointer;
-    user-select: none;
-    transition: var(--transition);
-  }
-
-  .pf-shell.theme-dark .pf-country-selected {
-    background: #020617;
-    border-color: rgba(51, 65, 85, 0.9);
-    color: #E5E7EB;
-  }
-
-  .pf-country-selected:focus {
-    outline: none;
-    border-color: #2563EB;
-    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.45);
-  }
-
-  .pf-shell.theme-dark .pf-country-selected:focus {
-    border-color: #7C3AED;
-    box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.7);
-  }
-
-  .pf-country-arrow {
-    opacity: 0.8;
-    font-size: 12px;
-  }
-
+<style nonce="<%= nonce %>">
   .pf-country-menu {
-    display: none;              /* ✅ closed by default */
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    right: 0;
-    z-index: 50;
-    border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.6);
-    background: rgba(248, 250, 252, 0.98);
+    display: none;
+    max-height: 280px;
     overflow: hidden;
-    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.35);
-  }
-
-  .pf-shell.theme-dark .pf-country-menu {
-    background: rgba(2, 6, 23, 0.98);
-    border-color: rgba(51, 65, 85, 0.9);
+    z-index: 1055;
   }
 
   .pf-country-dropdown.open .pf-country-menu {
-    display: block;             /* ✅ opens when JS adds .open */
-  }
-
-  .pf-country-search-input {
-    width: 100%;
-    border: none;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.5);
-    padding: 10px 10px;
-    font-size: 13px;
-    outline: none;
-    background: transparent;
-    color: inherit;
-  }
-
-  .pf-shell.theme-dark .pf-country-search-input {
-    border-bottom-color: rgba(51, 65, 85, 0.9);
-    color: #E5E7EB;
+    display: block;
   }
 
   .pf-country-list {
     max-height: 220px;
-    overflow: auto;
-  }
-
-  .pf-country-option {
-    padding: 9px 10px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: var(--transition);
-  }
-
-  .pf-country-option{
-    display:flex;
-    align-items:center;
-    gap:10px;
-  }
-
-  .pf-country-option:hover {
-    background: rgba(37, 99, 235, 0.12);
-  }
-
-  .pf-shell.theme-dark .pf-country-option:hover {
-    background: rgba(124, 58, 237, 0.18);
+    overflow-y: auto;
   }
 
   .pf-country-option.active {
-    background: rgba(37, 99, 235, 0.18);
-    font-weight: 700;
+    background-color: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.18);
   }
 
-  .pf-shell.theme-dark .pf-country-option.active {
-    background: rgba(124, 58, 237, 0.25);
-  }
-
-  .pf-country-selected-left{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    min-width:0;
-  }
-
-  .pf-flag{
-    width: 1.4em;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    line-height: 1;
-    font-size: 15px;
-    font-family: "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",system-ui,sans-serif;
-  }
-
-  .pf-flag-img{
+  .pf-flag-img {
     width: 18px;
     height: 13px;
-    border-radius: 3px;
     object-fit: cover;
+    border-radius: 2px;
     flex: 0 0 auto;
-    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
   }
 
-  .pf-country-name{
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* ========= IMAGE UPLOAD ========= */
-  .pf-image-section {
-    margin-bottom: 18px;
-  }
-
-  .pf-label-block {
-    margin-bottom: 8px;
-  }
-
-  .pf-image-upload {
-    position: relative;
-  }
-
-  .pf-file-input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
+  .pf-country-selected {
     cursor: pointer;
+    user-select: none;
   }
 
-  .pf-image-upload-area {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 11px;
-    border-radius: 10px;
-    border: 1px dashed rgba(148, 163, 184, 0.9);
-    background: rgba(15, 23, 42, 0.9);
-    transition: var(--transition);
-  }
-
-  .pf-shell.theme-light .pf-image-upload-area {
-    background: rgba(248, 250, 252, 0.95);
-  }
-
-  .pf-image-upload-area:hover {
-    border-style: solid;
-    border-color: #2563EB;
-    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.24);
-  }
-
-  .pf-image-upload-icon {
-    padding: 8px;
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(37, 99, 235, 0.6), rgba(124, 58, 237, 0.4));
-    display: flex;
-    color: #fff;
-  }
-
-  .pf-image-upload-text span {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .pf-image-preview {
-    display: none;
-    position: relative;
-    width: 110px;
-    height: 110px;
-    margin-top: 10px;
-  }
-
-  .pf-image-preview-img {
-    width: 100%;
-    height: 100%;
-    border-radius: 10px;
-    object-fit: cover;
-    border: 1px solid rgba(148, 163, 184, 0.8);
-  }
-
-  .pf-image-remove {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    border: 1px solid #EF4444;
-    background: #0b1220;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #EF4444;
-    cursor: pointer;
-    transition: var(--transition);
-  }
-
-  .pf-image-remove:hover {
-    background: #EF4444;
-    color: #FFFFFF;
-  }
-
-  .pf-color-row {
-    display: grid;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-
-  @media (min-width: 768px) {
-    .pf-color-row {
-      grid-template-columns: 1fr 1fr 1fr auto;
-    }
-  }
-
-  /* ========= BUTTONS ========= */
-  .pf-actions {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 4px;
-  }
-
-  .pf-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-width: 130px;
-    padding: 9px 15px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 600;
-    border: 1px solid transparent;
-    text-decoration: none;
-    cursor: pointer;
-    transition: var(--transition);
+  .pf-color-row .btn {
     white-space: nowrap;
   }
 
-  .pf-btn svg {
-    flex-shrink: 0;
-  }
-
-  .pf-btn-primary {
-    background: linear-gradient(135deg, #2563EB, #7C3AED);
-    color: #FFFFFF;
-    box-shadow: 0 14px 32px rgba(37, 99, 235, 0.55);
-  }
-
-  .pf-btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 18px 40px rgba(37, 99, 235, 0.75);
-  }
-
-  .pf-btn-secondary {
-    background: transparent;
-    color: #bfdbfe;
-    border-color: rgba(148, 163, 184, 0.9);
-  }
-
-  .pf-shell.theme-light .pf-btn-secondary {
-    color: #2563EB;
-  }
-
-  .pf-btn-secondary:hover {
-    background: rgba(37, 99, 235, 0.1);
-    border-color: #2563EB;
-  }
-
-  /* ========= TOAST ========= */
-  .pf-toast-container {
-    position: fixed;
-    bottom: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    pointer-events: none;
-  }
-
-  .pf-toast {
-    max-width: 320px;
-    padding: 10px 14px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 500;
-    color: #FFFFFF;
-    background: linear-gradient(135deg, #22C55E, #16A34A);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.7);
-    animation: toastSlideIn 0.25s ease-out;
-    text-align: center;
-  }
-
-  .pf-toast.pf-toast-error {
-    background: linear-gradient(135deg, #EF4444, #DC2626);
-  }
-
-  @keyframes toastSlideIn {
-    from {
-      opacity: 0;
-      transform: translate(-50%, 18px);
+  @media (max-width: 575.98px) {
+    .pf-color-row .btn {
+      width: 100%;
     }
-    to {
-      opacity: 1;
-      transform: translate(-50%, 0);
-    }
-  }
-
-  /* ========= MOBILE COMPACT ========= */
-  @media (max-width: 380px) {
-    .pf-shell {
-      padding: 10px 6px 16px;
-    }
-    .pf {
-      padding: 14px 11px 16px;
-    }
-    .pf-title {
-      font-size: 16px;
-    }
-    .pf-subtitle {
-      font-size: 11px;
-    }
-    .pf-input,
-    .pf-textarea,
-    .pf-select {
-      font-size: 12px;
-      padding: 7px 8px;
-      min-height: 34px;
-    }
-    .pf-btn {
-      min-width: 120px;
-      padding: 8px 13px;
-      font-size: 12px;
-    }
-    .pf-image-upload-area {
-      padding: 10px 9px;
-    }
-  }
-
-  /* ========= VALIDATION & LOADING ========= */
-  .pf-input:invalid,
-  .pf-textarea:invalid {
-    border-color: #EF4444;
-  }
-
-  .pf-input:invalid:focus,
-  .pf-textarea:invalid:focus {
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.55);
-  }
-
-  .pf-submitting .pf-btn-primary {
-    opacity: 0.75;
-    cursor: wait;
-  }
-
-  .pf-submitting .pf-btn-primary::after {
-    content: '';
-    display: inline-block;
-    width: 11px;
-    height: 11px;
-    margin-left: 7px;
-    border-radius: 999px;
-    border: 2px solid rgba(255, 255, 255, 0.35);
-    border-top-color: #FFFFFF;
-    animation: spin 0.7s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
   }
 </style>
 
 <script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
+  (function () {
+    const form = document.getElementById('addProductForm');
+    if (!form) return;
 
-    // =============================
-    // Made In (custom searchable dropdown)
-    // =============================
+    const toastContainer = document.getElementById('toast-container');
+    const imageInput = document.getElementById('imageFile');
+    const previewWrapper = document.getElementById('previewWrapper');
+    const imagePreview = document.getElementById('imagePreview');
+    const addColorImageRowBtn = document.getElementById('addColorImageRow');
+    const colorImageRows = document.getElementById('colorImageRows');
+
     const madeDropdown = document.getElementById('madeDropdown');
     const madeSelected = document.getElementById('madeSelected');
-    const madeSelectedText = document.getElementById('madeSelectedText');
-    const madeSelectedFlagImg = document.getElementById('madeSelectedFlagImg');
     const madeMenu = document.getElementById('madeMenu');
     const madeSearch = document.getElementById('madeSearch');
+    const madeList = document.getElementById('madeList');
+    const madeHidden = document.getElementById('made');
+    const madeCodeHidden = document.getElementById('madeCode');
+    const madeSelectedText = document.getElementById('madeSelectedText');
+    const madeSelectedFlagImg = document.getElementById('madeSelectedFlagImg');
 
-    const madeHidden = document.getElementById('made');      // hidden required input (submits)
-    const madeCode = document.getElementById('madeCode');    // hidden ISO code (submits)
+    function showToast(message, type) {
+      if (!toastContainer) return;
 
-    if (madeDropdown && madeSelected && madeMenu && madeHidden) {
-      const getOptions = () => Array.from(madeDropdown.querySelectorAll('.pf-country-option'));
+      const toast = document.createElement('div');
+      toast.className = `alert ${type === 'error' ? 'alert-danger' : 'alert-success'} shadow-sm border-0 mb-2`;
+      toast.innerHTML = `<div class="small fw-semibold">${message}</div>`;
 
-      const open = () => {
-        madeDropdown.classList.add('open');
-        madeSelected.setAttribute('aria-expanded', 'true');
+      toastContainer.appendChild(toast);
 
-        if (madeSearch) {
-          madeSearch.value = '';
-          madeSearch.focus();
-        }
-
-        // show all options on open
-        getOptions().forEach(opt => (opt.style.display = 'flex'));
-      };
-
-      const close = () => {
-        madeDropdown.classList.remove('open');
-        madeSelected.setAttribute('aria-expanded', 'false');
-      };
-
-      // toggle open/close
-      madeSelected.addEventListener('click', () => {
-        madeDropdown.classList.contains('open') ? close() : open();
-      });
-
-      // keyboard open/close
-      madeSelected.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          madeDropdown.classList.contains('open') ? close() : open();
-        }
-        if (e.key === 'Escape') close();
-      });
-
-      // click outside closes
-      document.addEventListener('click', (e) => {
-        if (!madeDropdown.contains(e.target)) close();
-      });
-
-      getOptions().forEach(opt => {
-        opt.addEventListener('click', () => {
-          const value = String(opt.dataset.value || '').trim();
-          const code  = String(opt.dataset.code || '').trim();
-          madeSelectedText.textContent = value || 'Select country';
-
-          if (madeSelectedFlagImg) {
-            if (code) {
-              madeSelectedFlagImg.src = `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
-            } else {
-              madeSelectedFlagImg.removeAttribute('src');
-            }
-          }
-
-          madeHidden.value = value;
-          if (madeCode) madeCode.value = code;
-
-          getOptions().forEach(o => o.classList.remove('active'));
-          opt.classList.add('active');
-
-          close();
-        });
-      });
-
-      // search filter
-      if (madeSearch) {
-        madeSearch.addEventListener('input', () => {
-          const term = String(madeSearch.value || '').toLowerCase().trim();
-          getOptions().forEach(opt => {
-            const hay = String(opt.dataset.search || opt.textContent || '').toLowerCase();
-            opt.style.display = hay.includes(term) ? 'flex' : 'none';
-          });
-        });
-      }
+      window.setTimeout(function () {
+        toast.remove();
+      }, 3000);
     }
 
-    // =============================
-    // Product Type filtering by Category (uses PRODUCT_TYPES_BY_CATEGORY)
-    // =============================
-    const categorySelect = document.getElementById('categorySelect');
-    const typeSelect = document.getElementById('typeSelect');
-
-    // Server-provided map: { electronics: ['phone','laptop',...], fashion: [...], ... }
-    const TYPES_BY_CAT = <%- JSON.stringify(PRODUCT_TYPES_BY_CATEGORY || {}) %>;
-
-    // ✅ All type objects from server: [{value,label},...]
-    const allTypeOptions = <%- JSON.stringify(PRODUCT_TYPES || []) %>;
-
-    // Fast lookup: value -> full object
-    const TYPE_INDEX = Object.create(null);
-    (allTypeOptions || []).forEach(t => {
-      const v = String(t?.value || '').trim();
-      if (v) TYPE_INDEX[v] = { value: v, label: String(t?.label || v) };
-    });
-
-    // Convert list of strings OR objects into [{value,label}, ...]
-    function normalizeTypeList(list) {
-      const out = [];
-      (Array.isArray(list) ? list : []).forEach(item => {
-        // already object?
-        if (item && typeof item === 'object') {
-          const v = String(item.value || '').trim();
-          if (!v) return;
-          out.push({ value: v, label: String(item.label || v) });
-          return;
-        }
-
-        // string value -> find label from TYPE_INDEX
-        const v = String(item || '').trim();
-        if (!v) return;
-        const found = TYPE_INDEX[v];
-        if (found) out.push(found);
-        else out.push({ value: v, label: v }); // fallback label
-      });
-
-      return out;
-    }
-
-    function setTypeOptions(list, keepValue = '') {
-      if (!typeSelect) return;
-
-      // remember current selection if caller didn't pass one
-      const current = keepValue || String(typeSelect.value || '');
-
-      // reset select
-      typeSelect.innerHTML = '';
-      const ph = document.createElement('option');
-      ph.value = '';
-      ph.textContent = 'Choose type';
-      typeSelect.appendChild(ph);
-
-      // add new options
-      (Array.isArray(list) ? list : []).forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = String(t.value || '');
-        opt.textContent = String(t.label || t.value || '');
-        typeSelect.appendChild(opt);
-      });
-
-      // restore selection if still valid
-      if (current) {
-        const exists = Array.from(typeSelect.options).some(o => o.value === current);
-        typeSelect.value = exists ? current : '';
-      }
-    }
-
-    function applyTypeFilter() {
-      if (!categorySelect || !typeSelect) return;
-
-      const cat = String(categorySelect.value || '').trim().toLowerCase();
-
-      if (cat && Array.isArray(TYPES_BY_CAT[cat]) && TYPES_BY_CAT[cat].length) {
-        setTypeOptions(normalizeTypeList(TYPES_BY_CAT[cat]));
+    function updateImagePreview(file) {
+      if (!file || !previewWrapper || !imagePreview) {
+        if (previewWrapper) previewWrapper.classList.add('d-none');
         return;
       }
 
-      // no category chosen or no mapping -> show all types
-      setTypeOptions(normalizeTypeList(allTypeOptions));
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        imagePreview.src = event.target.result;
+        previewWrapper.classList.remove('d-none');
+      };
+      reader.readAsDataURL(file);
     }
 
-    if (categorySelect && typeSelect) {
-      categorySelect.addEventListener('change', () => {
-        // clear selection, then rebuild options
-        typeSelect.value = '';
-        applyTypeFilter();
-      });
-      // initial filter on page load (in case category is pre-filled)
-      applyTypeFilter();
-    }
-
-    // Image preview
-    const imageInput = document.getElementById("imageFile");
-    const previewWrapper = document.getElementById("previewWrapper");
-    const previewImg = document.getElementById("imagePreview");
-    const form = document.getElementById("addProductForm");
-
-    if (imageInput) {
-      imageInput.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          // file size limit 5MB
-          if (file.size > 5 * 1024 * 1024) {
-            showToast("Image size must be less than 5MB", "error");
-            imageInput.value = "";
-            return;
-          }
-
-          // file type
-          const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-          if (!validTypes.includes(file.type)) {
-            showToast("Only JPG, PNG, GIF or WebP images are allowed", "error");
-            imageInput.value = "";
-            return;
-          }
-
-          const url = URL.createObjectURL(file);
-          previewImg.src = url;
-          previewWrapper.style.display = "block";
-        }
-      });
-    }
-
-    // remove image
-    window.removeImage = function () {
-      if (imageInput) imageInput.value = "";
-      previewWrapper.style.display = "none";
+    window.removeImage = function removeImage() {
+      if (imageInput) imageInput.value = '';
+      if (imagePreview) imagePreview.removeAttribute('src');
+      if (previewWrapper) previewWrapper.classList.add('d-none');
     };
 
-    // toast
-    function showToast(message, type = "success") {
-      const container = document.getElementById("toast-container");
-      if (!container) return;
-
-      const toast = document.createElement("div");
-      toast.className = "pf-toast" + (type === "error" ? " pf-toast-error" : "");
-      toast.textContent = message;
-      container.appendChild(toast);
-
-      setTimeout(() => {
-        toast.style.opacity = "0";
-        toast.style.transform = "translate(-50%, 18px)";
-        setTimeout(() => toast.remove(), 260);
-      }, 3800);
-    }
-
-    // server-side messages (flash)
-    const successMsg = "<%= (success && success.length > 0) ? success : '' %>";
-    const errorMsg = "<%= (error && error.length > 0) ? error : '' %>";
-    if (successMsg) showToast(successMsg);
-    if (errorMsg) showToast(errorMsg, "error");
-
-    // loading state on submit
-    if (form) {
-      form.addEventListener("submit", (e) => {
-
-        // ✅ Made In required check (because it is hidden now)
-        const madeVal = String((document.getElementById('made')?.value || '')).trim();
-        if (!madeVal) {
-          e.preventDefault();
-          showToast("Made In is required. Please select a country.", "error");
-          return;
-        }
-
-        // ✅ Shipping required check (toast-friendly)
-        const w = form.querySelector('input[name="shipWeightValue"]');
-        const l = form.querySelector('input[name="shipLength"]');
-        const wi = form.querySelector('input[name="shipWidth"]');
-        const h = form.querySelector('input[name="shipHeight"]');
-
-        const missing = [];
-        const num = (el) => (el ? Number(String(el.value || "").trim()) : NaN);
-
-        if (!w || !Number.isFinite(num(w)) || num(w) <= 0) missing.push("weight");
-        if (!l || !Number.isFinite(num(l)) || num(l) <= 0) missing.push("length");
-        if (!wi || !Number.isFinite(num(wi)) || num(wi) <= 0) missing.push("width");
-        if (!h || !Number.isFinite(num(h)) || num(h) <= 0) missing.push("height");
-
-        if (missing.length) {
-          e.preventDefault();
-          showToast(`Shipping is required. Missing: ${missing.join(", ")}.`, "error");
-          return;
-        }
-
-        // existing loading state
-        const submitBtn = form.querySelector(".pf-btn-primary");
-        form.classList.add("pf-submitting");
-        if (submitBtn) submitBtn.disabled = true;
-
-        setTimeout(() => {
-          form.classList.remove("pf-submitting");
-          if (submitBtn) submitBtn.disabled = false;
-        }, 10000);
+    if (imageInput) {
+      imageInput.addEventListener('change', function () {
+        const file = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
+        updateImagePreview(file);
       });
     }
 
-    // description counter
-    const descriptionField = document.querySelector('textarea[name="description"]');
-    if (descriptionField) {
-      const hint = descriptionField.parentNode.querySelector(".pf-hint");
-      descriptionField.addEventListener("input", () => {
-        const length = descriptionField.value.length;
-        if (hint) {
-          hint.textContent = `${length}/500 characters`;
-          if (length > 500) {
-            hint.style.color = "#EF4444";
-          } else if (length > 450) {
-            hint.style.color = "#F59E0B";
-          } else {
-            hint.style.color = "";
-          }
-        }
-      });
-      descriptionField.dispatchEvent(new Event("input"));
-    }
-
-    // product ID auto-format (name="id")
-    const productIdField = document.querySelector('input[name="id"]');
-    if (productIdField) {
-      productIdField.addEventListener("input", (e) => {
-        let value = e.target.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
-        e.target.value = value;
-      });
-    }
-
-    // price formatting
-    const priceField = document.querySelector('input[name="price"]');
-    if (priceField) {
-      priceField.addEventListener("blur", (e) => {
-        const num = parseFloat(e.target.value);
-        if (!Number.isNaN(num)) {
-          e.target.value = num.toFixed(2);
-        }
-      });
-    }
-
-    // =============================
-    // Color Image Rows (NEW)
-    // =============================
-    const rowsWrapper = document.getElementById('colorImageRows');
-    const addRowBtn = document.getElementById('addColorImageRow');
-    const colorsInput = document.getElementById('variantColorsInput');
-
-    function createColorRow(color = '') {
+    function buildColorRow() {
       const row = document.createElement('div');
-      row.className = 'pf-color-row';
-
+      row.className = 'pf-color-row row g-2 align-items-center';
       row.innerHTML = `
-        <input type="text" name="colorImageColors" placeholder="Color" class="pf-input" value="${color}" />
-        <input type="text" name="colorImageUrls" placeholder="Image URL" class="pf-input" />
-        <input type="file" name="colorImageFiles" class="pf-input" />
-        <button type="button" class="pf-btn pf-btn-secondary js-remove-color-row">Remove</button>
+        <div class="col-12 col-md-3">
+          <input type="text" name="colorImageColors" placeholder="Color" class="form-control pf-input" />
+        </div>
+        <div class="col-12 col-md-4">
+          <input type="text" name="colorImageUrls" placeholder="Image URL" class="form-control pf-input" />
+        </div>
+        <div class="col-12 col-md-3">
+          <input type="file" name="colorImageFiles" class="form-control pf-input" />
+        </div>
+        <div class="col-12 col-md-2 d-grid">
+          <button type="button" class="btn btn-outline-secondary js-remove-color-row">Remove</button>
+        </div>
       `;
-
-      rowsWrapper.appendChild(row);
+      return row;
     }
 
-    if (addRowBtn) {
-      addRowBtn.addEventListener('click', () => createColorRow());
-    }
+    if (addColorImageRowBtn && colorImageRows) {
+      addColorImageRowBtn.addEventListener('click', function () {
+        colorImageRows.appendChild(buildColorRow());
+      });
 
-    if (rowsWrapper) {
-      rowsWrapper.addEventListener('click', (e) => {
-        const btn = e.target.closest('.js-remove-color-row');
-        if (!btn) return;
+      colorImageRows.addEventListener('click', function (event) {
+        const removeBtn = event.target.closest('.js-remove-color-row');
+        if (!removeBtn) return;
 
-        const rows = rowsWrapper.querySelectorAll('.pf-color-row');
-
+        const rows = colorImageRows.querySelectorAll('.pf-color-row');
         if (rows.length === 1) {
-          rows[0].querySelectorAll('input').forEach(i => i.value = '');
+          const inputs = rows[0].querySelectorAll('input');
+          inputs.forEach(function (input) {
+            input.value = '';
+          });
           return;
         }
 
-        btn.closest('.pf-color-row').remove();
+        const row = removeBtn.closest('.pf-color-row');
+        if (row) row.remove();
       });
     }
 
-    if (colorsInput) {
-      colorsInput.addEventListener('blur', () => {
-        const colors = colorsInput.value.split(',').map(c => c.trim()).filter(Boolean);
+    function closeCountryDropdown() {
+      if (!madeDropdown || !madeSelected) return;
+      madeDropdown.classList.remove('open');
+      madeSelected.setAttribute('aria-expanded', 'false');
+    }
 
-        const existing = Array.from(
-          document.querySelectorAll('input[name="colorImageColors"]')
-        ).map(i => i.value.toLowerCase());
+    function openCountryDropdown() {
+      if (!madeDropdown || !madeSelected) return;
+      madeDropdown.classList.add('open');
+      madeSelected.setAttribute('aria-expanded', 'true');
+      if (madeSearch) {
+        window.setTimeout(function () {
+          madeSearch.focus();
+        }, 0);
+      }
+    }
 
-        colors.forEach(color => {
-          if (!existing.includes(color.toLowerCase())) {
-            createColorRow(color);
+    function setCountry(option) {
+      const value = option.getAttribute('data-value') || '';
+      const code = option.getAttribute('data-code') || '';
+
+      madeHidden.value = value;
+      madeCodeHidden.value = code;
+      madeSelectedText.textContent = value || 'Select country';
+
+      if (code) {
+        madeSelectedFlagImg.src = `https://flagcdn.com/20x15/${String(code).toLowerCase()}.png`;
+        madeSelectedFlagImg.classList.remove('d-none');
+      } else {
+        madeSelectedFlagImg.removeAttribute('src');
+        madeSelectedFlagImg.classList.add('d-none');
+      }
+
+      Array.from(madeList.querySelectorAll('.pf-country-option')).forEach(function (btn) {
+        btn.classList.toggle('active', btn === option);
+      });
+
+      closeCountryDropdown();
+    }
+
+    function filterCountries() {
+      if (!madeSearch || !madeList) return;
+      const query = String(madeSearch.value || '').trim().toLowerCase();
+
+      Array.from(madeList.querySelectorAll('.pf-country-option')).forEach(function (option) {
+        const hay = option.getAttribute('data-search') || '';
+        option.classList.toggle('d-none', !!query && !hay.includes(query));
+      });
+    }
+
+    if (madeSelected) {
+      madeSelected.addEventListener('click', function () {
+        if (madeDropdown.classList.contains('open')) {
+          closeCountryDropdown();
+        } else {
+          openCountryDropdown();
+        }
+      });
+
+      madeSelected.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          if (madeDropdown.classList.contains('open')) {
+            closeCountryDropdown();
+          } else {
+            openCountryDropdown();
           }
-        });
+        }
+
+        if (event.key === 'Escape') {
+          closeCountryDropdown();
+        }
       });
     }
-  });
+
+    if (madeSearch) {
+      madeSearch.addEventListener('input', filterCountries);
+      madeSearch.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+          closeCountryDropdown();
+        }
+      });
+    }
+
+    if (madeList) {
+      madeList.addEventListener('click', function (event) {
+        const option = event.target.closest('.pf-country-option');
+        if (!option) return;
+        setCountry(option);
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      if (!madeDropdown) return;
+      if (!madeDropdown.contains(event.target)) {
+        closeCountryDropdown();
+      }
+    });
+
+    form.addEventListener('submit', function (event) {
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const submitLabel = submitBtn ? submitBtn.querySelector('.pf-submit-label') : null;
+      const submitLoading = submitBtn ? submitBtn.querySelector('.pf-submit-loading') : null;
+
+      if (!madeHidden.value) {
+        event.preventDefault();
+        showToast('Please select the country in "Made In".', 'error');
+        openCountryDropdown();
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+      }
+
+      if (submitLabel) {
+        submitLabel.classList.add('d-none');
+      }
+
+      if (submitLoading) {
+        submitLoading.classList.remove('d-none');
+        submitLoading.classList.add('d-inline-flex');
+      }
+    });
+  })();
 </script>

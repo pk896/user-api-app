@@ -103,15 +103,20 @@
         <div class="col-md-4 col-lg-6 text-center">
             <div class="position-relative ps-4">
                 <div class="d-flex border rounded-pill">
-                    <input class="form-control border-0 rounded-pill w-100 py-3" type="text"
-                        data-bs-target="#dropdownToggle123" placeholder="Search Looking For?">
+                    <input
+                        id="singleKeywordInput"
+                        class="form-control border-0 rounded-pill w-100 py-3"
+                        type="text"
+                        data-bs-target="#dropdownToggle123"
+                        placeholder="Search products by name or keywords"
+                    >
                     <select id="singleCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
                         <option value="">All Category</option>
                         <% (CATEGORIES || []).forEach(function(category) { %>
                             <option value="<%= category.value %>"><%= category.label %></option>
                         <% }) %>
                     </select>
-                    <button type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
+                    <button id="singleKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
                             class="fas fa-search"></i></button>
                 </div>
             </div>
@@ -244,11 +249,22 @@
 <div class="container-fluid shop py-5">
     <div class="container py-5">
         <div class="row g-4">
-                        <div class="col-lg-5 col-xl-3 order-2 order-xl-2 wow fadeInUp" data-wow-delay="0.1s">
+            <div class="col-lg-5 col-xl-3 order-2 order-xl-2 wow fadeInUp" data-wow-delay="0.1s">
                 <div class="input-group w-100 mx-auto d-flex mb-4">
-                    <input type="search" class="form-control p-3" placeholder="keywords"
-                        aria-describedby="search-icon-1">
-                    <span id="search-icon-1" class="input-group-text p-3"><i class="fa fa-search"></i></span>
+                    <input
+                        id="singleKeywordInputSecondary"
+                        type="search"
+                        class="form-control p-3"
+                        placeholder="keywords"
+                        aria-describedby="single-search-icon-1"
+                    >
+                    <button
+                        id="singleKeywordSearchBtnSecondary"
+                        type="button"
+                        class="input-group-text p-3 border-0 bg-primary text-white"
+                    >
+                        <i class="fa fa-search"></i>
+                    </button>
                 </div>
 
                 <% if (shopSidebarBanner) { %>
@@ -504,27 +520,98 @@
 <script nonce="<%= nonce %>">
   (function () {
     const select = document.getElementById('singleCategorySelect');
+    const keywordInput = document.getElementById('singleKeywordInput');
+    const keywordInputSecondary = document.getElementById('singleKeywordInputSecondary');
+    const keywordBtn = document.getElementById('singleKeywordSearchBtn');
+    const keywordBtnSecondary = document.getElementById('singleKeywordSearchBtnSecondary');
     const links = Array.from(document.querySelectorAll('.single-category-link'));
 
-    function goToCategory(categoryValue) {
-      const selected = String(categoryValue || '').trim().toLowerCase();
-      const url = selected
-        ? '/store/shop?category=' + encodeURIComponent(selected)
-        : '/store/shop';
+    function normalize(value) {
+      return String(value || '').trim();
+    }
 
-      window.location.href = url;
+    function goToShop(categoryValue, keywordValue) {
+      const selectedCategory = normalize(categoryValue).toLowerCase();
+      const keyword = normalize(keywordValue);
+
+      const params = new URLSearchParams();
+
+      if (selectedCategory) {
+        params.set('category', selectedCategory);
+      }
+
+      if (keyword) {
+        params.set('q', keyword);
+      }
+
+      const query = params.toString();
+      window.location.href = query ? `/store/shop?${query}` : '/store/shop';
+    }
+
+    function currentKeyword() {
+      const primary = normalize(keywordInput ? keywordInput.value : '');
+      const secondary = normalize(keywordInputSecondary ? keywordInputSecondary.value : '');
+      return primary || secondary;
+    }
+
+    function syncInputs(source) {
+      if (!keywordInput || !keywordInputSecondary) return;
+
+      if (source === 'primary') {
+        keywordInputSecondary.value = keywordInput.value;
+      } else if (source === 'secondary') {
+        keywordInput.value = keywordInputSecondary.value;
+      }
     }
 
     links.forEach(function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        goToCategory(link.getAttribute('data-category') || '');
+        goToShop(link.getAttribute('data-category') || '', currentKeyword());
       });
     });
 
     if (select) {
       select.addEventListener('change', function () {
-        goToCategory(select.value || '');
+        goToShop(select.value || '', currentKeyword());
+      });
+    }
+
+    if (keywordInput) {
+      keywordInput.addEventListener('input', function () {
+        syncInputs('primary');
+      });
+
+      keywordInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select ? select.value : '', keywordInput.value);
+        }
+      });
+    }
+
+    if (keywordInputSecondary) {
+      keywordInputSecondary.addEventListener('input', function () {
+        syncInputs('secondary');
+      });
+
+      keywordInputSecondary.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select ? select.value : '', keywordInputSecondary.value);
+        }
+      });
+    }
+
+    if (keywordBtn) {
+      keywordBtn.addEventListener('click', function () {
+        goToShop(select ? select.value : '', currentKeyword());
+      });
+    }
+
+    if (keywordBtnSecondary) {
+      keywordBtnSecondary.addEventListener('click', function () {
+        goToShop(select ? select.value : '', currentKeyword());
       });
     }
   })();

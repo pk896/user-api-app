@@ -34,6 +34,7 @@ function mapStoreProduct(p) {
     sizes: Array.isArray(p.sizes) ? p.sizes : [],
     colors: Array.isArray(p.colors) ? p.colors : [],
     colorImages: Array.isArray(p.colorImages) ? p.colorImages : [],
+    keywords: Array.isArray(p.keywords) ? p.keywords : [],
     price,
     oldPrice,
     isNew: !!p.isNewItem,
