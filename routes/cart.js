@@ -383,7 +383,7 @@ router.get('/count', (req, res) => {
 
 /* ------------------------------------------------------------------
  * LEGACY LINK ENDPOINTS (kept for compatibility)
- * - /api/cart/add?pid=...&qty=1[&json=1][&back=/sales]
+ * - /api/cart/add?pid=...&qty=1[&json=1][&back=/product/sales]
  * - /api/cart/dec?pid=...&json=1
  * - /api/cart/remove?pid=...&json=1
  * ------------------------------------------------------------------ */
@@ -399,7 +399,7 @@ router.get('/add', async (req, res) => {
     if (!product) {
       if (wantsJson(req)) return res.status(404).json({ success: false, message: 'Product not found.' });
       if (typeof req.flash === 'function') req.flash('error', 'Product not found.');
-      const back = req.query.back || req.get('referer') || '/sales';
+      const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }
 
@@ -420,7 +420,7 @@ router.get('/add', async (req, res) => {
     if (typeof product.stock === 'number' && product.stock <= 0) {
       if (wantsJson(req)) return res.status(400).json({ success: false, message: 'Out of stock.' });
       if (typeof req.flash === 'function') req.flash('error', 'Out of stock.');
-      const back = req.query.back || req.get('referer') || '/sales';
+      const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }
 
@@ -428,7 +428,7 @@ router.get('/add', async (req, res) => {
     if (variantError) {
       if (wantsJson(req)) return res.status(400).json({ success: false, message: variantError });
       if (typeof req.flash === 'function') req.flash('error', variantError);
-      const back = req.query.back || req.get('referer') || '/sales';
+      const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }   
 
@@ -443,7 +443,7 @@ router.get('/add', async (req, res) => {
     if (hasSH && hasNSH) {
       if (wantsJson(req)) return res.status(409).json(mixingRejectPayload());
       if (typeof req.flash === 'function') req.flash('error', mixingRejectPayload().message);
-      const back = req.query.back || req.get('referer') || '/sales';
+      const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }
 
@@ -458,13 +458,13 @@ router.get('/add', async (req, res) => {
       if (!prodIsSH) {
         if (wantsJson(req)) return res.status(409).json(nonSecondhandRejectPayloadWhenSecondhandLocked());
         if (typeof req.flash === 'function') req.flash('error', nonSecondhandRejectPayloadWhenSecondhandLocked().message);
-        const back = req.query.back || req.get('referer') || '/sales';
+        const back = req.query.back || req.get('referer') || '/products/sales';
         return res.redirect(back);
       }
       if (prodBiz && prodBiz !== lockBiz) {
         if (wantsJson(req)) return res.status(409).json(secondhandRejectPayload());
         if (typeof req.flash === 'function') req.flash('error', secondhandRejectPayload().message);
-        const back = req.query.back || req.get('referer') || '/sales';
+        const back = req.query.back || req.get('referer') || '/products/sales';
         return res.redirect(back);
       }
     }
@@ -473,7 +473,7 @@ router.get('/add', async (req, res) => {
     if (!lockBiz && cart.items.length > 0 && prodIsSH) {
       if (wantsJson(req)) return res.status(409).json(secondhandRejectPayloadWhenNormalCartHasItems());
       if (typeof req.flash === 'function') req.flash('error', secondhandRejectPayloadWhenNormalCartHasItems().message);
-      const back = req.query.back || req.get('referer') || '/sales';
+      const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }
 
@@ -484,7 +484,7 @@ router.get('/add', async (req, res) => {
         'Please contact support or re-save the product with a business owner.';
       if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
       if (typeof req.flash === 'function') req.flash('error', msg);
-      const back = req.query.back || req.get('referer') || '/sales';
+      const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }
 
@@ -501,7 +501,7 @@ router.get('/add', async (req, res) => {
 
         if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
         if (typeof req.flash === 'function') req.flash('error', msg);
-        const back = req.query.back || req.get('referer') || '/sales';
+        const back = req.query.back || req.get('referer') || '/products/sales';
         return res.redirect(back);
       }
 
@@ -512,7 +512,7 @@ router.get('/add', async (req, res) => {
 
         if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
         if (typeof req.flash === 'function') req.flash('error', msg);
-        const back = req.query.back || req.get('referer') || '/sales';
+        const back = req.query.back || req.get('referer') || '/products/sales';
         return res.redirect(back);
       }
 
@@ -532,13 +532,13 @@ router.get('/add', async (req, res) => {
     }
 
     if (typeof req.flash === 'function') req.flash('success', 'Added to cart.');
-    const back = req.query.back || req.get('referer') || '/sales';
+    const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   } catch (err) {
     console.error('❌ /api/cart/add error:', err);
     if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Failed to add to cart.' });
     if (typeof req.flash === 'function') req.flash('error', 'Failed to add to cart.');
-    const back = req.query.back || req.get('referer') || '/sales';
+    const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   }
 });
@@ -574,12 +574,12 @@ router.get('/dec', async (req, res) => {
     }
 
     if (wantsJson(req)) return res.json({ success: true, cart: { items: cart.items } });
-    const back = req.query.back || req.get('referer') || '/sales';
+    const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   } catch (err) {
     console.error('❌ /api/cart/dec error:', err);
     if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Failed to decrease.' });
-    const back = req.query.back || req.get('referer') || '/sales';
+    const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   }
 });
@@ -620,12 +620,12 @@ router.get('/remove', async (req, res) => {
     req.session.cart = cart;
 
     if (wantsJson(req)) return res.json({ success: true, cart: { items: cart.items } });
-    const back = req.query.back || req.get('referer') || '/sales';
+    const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   } catch (err) {
     console.error('❌ /api/cart/remove error:', err);
     if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Failed to remove.' });
-    const back = req.query.back || req.get('referer') || '/sales';
+    const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   }
 });

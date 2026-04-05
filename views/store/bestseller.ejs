@@ -103,12 +103,15 @@
                         class="form-control border-0 rounded-pill w-100 py-3"
                         type="text"
                         data-bs-target="#dropdownToggle123"
+                        value="<%= selectedKeyword || '' %>"
                         placeholder="Search products by name or keywords"
                     >
                     <select id="bestsellerCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="">All Category</option>
+                        <option value="" <%= !selectedCategory ? 'selected' : '' %>>All Category</option>
                         <% (CATEGORIES || []).forEach(function(category) { %>
-                            <option value="<%= category.value %>"><%= category.label %></option>
+                            <option value="<%= category.value %>" <%= selectedCategory === category.value ? 'selected' : '' %>>
+                                <%= category.label %>
+                            </option>
                         <% }) %>
                     </select>
                     <button id="bestsellerKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
@@ -186,7 +189,7 @@
                     <div class="navbar-nav ms-auto py-0">
                         <a href="/store" class="nav-item nav-link">Shopping home</a>
                         <a href="/store/shop" class="nav-item nav-link">Shop</a>
-                        <a href="/sales" class="nav-item nav-link">Fast liner</a>
+                        <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
                         <div class="nav-item dropdown">
                             <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
                             <div class="dropdown-menu m-0">
@@ -393,13 +396,34 @@
     <div class="container py-5">
         <div class="tab-class">
             <div class="row g-4">
-                <div class="col-lg-4 text-start wow fadeInLeft" data-wow-delay="0.1s">
+                <div class="col-12 col-lg-4 text-start wow fadeInLeft" data-wow-delay="0.1s">
                     <h1>Our Products</h1>
                 </div>
-                <div class="col-lg-8 text-end wow fadeInRight" data-wow-delay="0.1s">
+
+                <div class="col-12 d-block d-lg-none wow fadeInUp" data-wow-delay="0.15s">
+                    <div class="input-group w-100 mx-auto d-flex mb-4">
+                        <input
+                            id="bestsellerKeywordInputSecondary"
+                            type="search"
+                            class="form-control p-3"
+                            value="<%= selectedKeyword || '' %>"
+                            placeholder="keywords"
+                            aria-describedby="bestseller-search-icon-1"
+                        >
+                        <button
+                            id="bestsellerKeywordSearchBtnSecondary"
+                            type="button"
+                            class="input-group-text p-3 border-0 bg-primary text-white"
+                        >
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-8 text-start text-lg-end wow fadeInRight" data-wow-delay="0.1s">
                     <ul class="nav nav-pills d-inline-flex text-center mb-5">
                         <li class="nav-item mb-4">
-                            <a class="d-flex mx-2 py-2 bg-light rounded-pill active" data-bs-toggle="pill"
+                            <a class="d-flex mx-2 py-2 bg-light rounded-pill" data-bs-toggle="pill"
                                 href="#tab-1">
                                 <span class="text-dark" style="width: 130px;">All Products</span>
                             </a>
@@ -415,7 +439,7 @@
                             </a>
                         </li>
                         <li class="nav-item mb-4">
-                            <a class="d-flex mx-2 py-2 bg-light rounded-pill" data-bs-toggle="pill" href="#tab-4">
+                            <a class="d-flex mx-2 py-2 bg-light rounded-pill active" data-bs-toggle="pill" href="#tab-4">
                                 <span class="text-dark" style="width: 130px;">Top Selling</span>
                             </a>
                         </li>
@@ -424,7 +448,7 @@
             </div>
 
             <div class="tab-content">
-                <div id="tab-1" class="tab-pane fade show p-0 active">
+                <div id="tab-1" class="tab-pane fade show p-0">
                     <div class="row g-4">
                         <% (allProducts || []).forEach(function(product, index) { %>
                         <div
@@ -642,7 +666,7 @@
                     </div>
                 </div>
 
-                <div id="tab-4" class="tab-pane fade show p-0">
+                <div id="tab-4" class="tab-pane fade show p-0 active">
                     <div class="row g-4">
                         <% (topSellingProducts || []).forEach(function(product, index) { %>
                         <div
@@ -846,62 +870,96 @@
   (function () {
     const select = document.getElementById('bestsellerCategorySelect');
     const keywordInput = document.getElementById('bestsellerKeywordInput');
+    const keywordInputSecondary = document.getElementById('bestsellerKeywordInputSecondary');
     const keywordBtn = document.getElementById('bestsellerKeywordSearchBtn');
+    const keywordBtnSecondary = document.getElementById('bestsellerKeywordSearchBtnSecondary');
     const links = Array.from(document.querySelectorAll('.bestseller-category-link'));
-    const cards = Array.from(document.querySelectorAll('.bestseller-filter-card'));
 
-    if (!select || !cards.length) return;
+    if (!select) return;
 
-    function normalize(value) {
-      return String(value || '').trim().toLowerCase();
+    function getKeyword() {
+      const primaryValue = keywordInput ? String(keywordInput.value || '').trim() : '';
+      const secondaryValue = keywordInputSecondary ? String(keywordInputSecondary.value || '').trim() : '';
+      return primaryValue || secondaryValue;
     }
 
-    function applyFilters() {
-      const selectedCategory = normalize(select.value);
-      const keyword = normalize(keywordInput ? keywordInput.value : '');
+    function syncKeywordInputs(keyword) {
+      if (keywordInput) {
+        keywordInput.value = keyword;
+      }
 
-      cards.forEach(function (card) {
-        const cardCategory = normalize(card.getAttribute('data-category'));
-        const cardSearch = normalize(card.getAttribute('data-search'));
-
-        const matchesCategory = !selectedCategory || cardCategory === selectedCategory;
-        const matchesKeyword = !keyword || cardSearch.includes(keyword);
-
-        card.style.display = (matchesCategory && matchesKeyword) ? '' : 'none';
-      });
+      if (keywordInputSecondary) {
+        keywordInputSecondary.value = keyword;
+      }
     }
 
-    function setCategory(categoryValue) {
-      const selected = normalize(categoryValue);
-      select.value = selected;
-      applyFilters();
+    function goToBestseller(categoryValue) {
+      const params = new URLSearchParams();
+      const keyword = getKeyword();
+      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+
+      syncKeywordInputs(keyword);
+
+      if (keyword) {
+        params.set('keyword', keyword);
+      }
+
+      if (category) {
+        params.set('category', category);
+      }
+
+      const queryString = params.toString();
+      window.location.href = queryString ? '/store/bestseller?' + queryString : '/store/bestseller';
     }
 
     links.forEach(function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        setCategory(link.getAttribute('data-category'));
+        goToBestseller(link.getAttribute('data-category'));
       });
     });
 
-    select.addEventListener('change', applyFilters);
+    select.addEventListener('change', function () {
+      goToBestseller(select.value);
+    });
 
     if (keywordInput) {
-      keywordInput.addEventListener('input', applyFilters);
+      keywordInput.addEventListener('input', function () {
+        syncKeywordInputs(String(keywordInput.value || '').trim());
+      });
 
       keywordInput.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
           event.preventDefault();
-          applyFilters();
+          goToBestseller(select.value);
+        }
+      });
+    }
+
+    if (keywordInputSecondary) {
+      keywordInputSecondary.addEventListener('input', function () {
+        syncKeywordInputs(String(keywordInputSecondary.value || '').trim());
+      });
+
+      keywordInputSecondary.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToBestseller(select.value);
         }
       });
     }
 
     if (keywordBtn) {
-      keywordBtn.addEventListener('click', applyFilters);
+      keywordBtn.addEventListener('click', function () {
+        goToBestseller(select.value);
+      });
     }
 
-    applyFilters();
+    if (keywordBtnSecondary) {
+      keywordBtnSecondary.addEventListener('click', function () {
+        goToBestseller(select.value);
+      });
+    }
   })();
 </script>
 

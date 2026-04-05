@@ -194,7 +194,7 @@
                     <div class="navbar-nav ms-auto py-0">
                         <a href="/store" class="nav-item nav-link active">Shopping home</a>
                         <a href="/store/shop" class="nav-item nav-link">Shop</a>
-                        <a href="/sales" class="nav-item nav-link">Fast liner</a>
+                        <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
                         <div class="nav-item dropdown">
                             <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
                             <div class="dropdown-menu m-0">
@@ -445,10 +445,30 @@
     <div class="container py-5">
         <div class="tab-class">
             <div class="row g-4">
-                <div class="col-lg-4 text-start wow fadeInLeft" data-wow-delay="0.1s">
+                <div class="col-12 col-lg-4 text-start wow fadeInLeft" data-wow-delay="0.1s">
                     <h1>Our Products</h1>
                 </div>
-                <div class="col-lg-8 text-end wow fadeInRight" data-wow-delay="0.1s">
+
+                <div class="col-12 d-block d-lg-none wow fadeInUp" data-wow-delay="0.15s">
+                    <div class="input-group w-100 mx-auto d-flex mb-4">
+                        <input
+                            id="storeKeywordInputSecondary"
+                            type="search"
+                            class="form-control p-3"
+                            placeholder="keywords"
+                            aria-describedby="store-search-icon-1"
+                        >
+                        <button
+                            id="storeKeywordSearchBtnSecondary"
+                            type="button"
+                            class="input-group-text p-3 border-0 bg-primary text-white"
+                        >
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-8 text-start text-lg-end wow fadeInRight" data-wow-delay="0.1s">
                     <ul class="nav nav-pills d-inline-flex text-center mb-5">
                         <li class="nav-item mb-4">
                             <a class="d-flex mx-2 py-2 bg-light rounded-pill active" data-bs-toggle="pill"
@@ -971,62 +991,96 @@
   (function () {
     const select = document.getElementById('storeCategorySelect');
     const keywordInput = document.getElementById('storeKeywordInput');
+    const keywordInputSecondary = document.getElementById('storeKeywordInputSecondary');
     const keywordBtn = document.getElementById('storeKeywordSearchBtn');
+    const keywordBtnSecondary = document.getElementById('storeKeywordSearchBtnSecondary');
     const links = Array.from(document.querySelectorAll('.store-category-link'));
-    const cards = Array.from(document.querySelectorAll('.store-filter-card'));
 
-    if (!select || !cards.length) return;
+    if (!select) return;
 
-    function normalize(value) {
-      return String(value || '').trim().toLowerCase();
+    function getKeyword() {
+      const primaryValue = keywordInput ? String(keywordInput.value || '').trim() : '';
+      const secondaryValue = keywordInputSecondary ? String(keywordInputSecondary.value || '').trim() : '';
+      return primaryValue || secondaryValue;
     }
 
-    function applyFilters() {
-      const selectedCategory = normalize(select.value);
-      const keyword = normalize(keywordInput ? keywordInput.value : '');
+    function syncKeywordInputs(keyword) {
+      if (keywordInput) {
+        keywordInput.value = keyword;
+      }
 
-      cards.forEach(function (card) {
-        const cardCategory = normalize(card.getAttribute('data-category'));
-        const cardSearch = normalize(card.getAttribute('data-search'));
-
-        const matchesCategory = !selectedCategory || cardCategory === selectedCategory;
-        const matchesKeyword = !keyword || cardSearch.includes(keyword);
-
-        card.style.display = (matchesCategory && matchesKeyword) ? '' : 'none';
-      });
+      if (keywordInputSecondary) {
+        keywordInputSecondary.value = keyword;
+      }
     }
 
-    function setCategory(categoryValue) {
-      const selected = normalize(categoryValue);
-      select.value = selected;
-      applyFilters();
+    function goToShop(categoryValue) {
+      const params = new URLSearchParams();
+      const keyword = getKeyword();
+      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+
+      syncKeywordInputs(keyword);
+
+      if (keyword) {
+        params.set('keyword', keyword);
+      }
+
+      if (category) {
+        params.set('category', category);
+      }
+
+      const queryString = params.toString();
+      window.location.href = queryString ? '/store/shop?' + queryString : '/store/shop';
     }
 
     links.forEach(function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        setCategory(link.getAttribute('data-category'));
+        goToShop(link.getAttribute('data-category'));
       });
     });
 
-    select.addEventListener('change', applyFilters);
+    select.addEventListener('change', function () {
+      goToShop(select.value);
+    });
 
     if (keywordInput) {
-      keywordInput.addEventListener('input', applyFilters);
+      keywordInput.addEventListener('input', function () {
+        syncKeywordInputs(String(keywordInput.value || '').trim());
+      });
 
       keywordInput.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
           event.preventDefault();
-          applyFilters();
+          goToShop(select.value);
+        }
+      });
+    }
+
+    if (keywordInputSecondary) {
+      keywordInputSecondary.addEventListener('input', function () {
+        syncKeywordInputs(String(keywordInputSecondary.value || '').trim());
+      });
+
+      keywordInputSecondary.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select.value);
         }
       });
     }
 
     if (keywordBtn) {
-      keywordBtn.addEventListener('click', applyFilters);
+      keywordBtn.addEventListener('click', function () {
+        goToShop(select.value);
+      });
     }
 
-    applyFilters();
+    if (keywordBtnSecondary) {
+      keywordBtnSecondary.addEventListener('click', function () {
+        goToShop(select.value);
+      });
+    }
   })();
 </script>
 

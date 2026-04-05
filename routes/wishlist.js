@@ -112,7 +112,7 @@ router.get('/wishlist', requireAnyAccountPage, async (req, res) => {
   } catch (err) {
     console.error('wishlist page error:', err);
     req.flash?.('error', 'Could not load wishlist.');
-    return res.redirect('/sales');
+    return res.redirect('/products/sales');
   }
 });
 

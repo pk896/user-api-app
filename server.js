@@ -626,7 +626,6 @@ const usersRouter = require('./routes/users');
 const businessAuthRoutes = require('./routes/businessAuth');
 const businessSidebarApiRoutes = require('./routes/businessSidebarApi');
 const staticPagesRoutes = require('./routes/staticPages');
-const salesRoutes = require('./routes/sales');
 const someLinksRoutes = require('./routes/someRoute');
 const storePagesRoutes = require('./routes/storePages');
 const demandsRoutes = require('./routes/demands');
@@ -700,7 +699,6 @@ app.use('/payment', paymentRouter);
 
 // Public pages
 app.use('/contact', contactRoutes);
-app.use('/sales', salesRoutes);
 app.use('/links', someLinksRoutes);
 app.use('/', storePagesRoutes);
 

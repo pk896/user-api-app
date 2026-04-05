@@ -74,7 +74,7 @@
         <option value="relevance">Relevance</option>
         <option value="price-asc">Price: Low → High</option>
         <option value="price-desc">Price: High → Low</option>
-        <option value="new">Newest Added</option>
+        <option value="new" selected>Newest Added</option>
         <option value="name">Name A–Z</option>
       </select>
     </div>
@@ -201,6 +201,7 @@
             data-category-raw="<%- (p.category || '') %>"
             data-type="<%- type %>"
             data-created="<%- (p.createdAt ? new Date(p.createdAt).toISOString() : '') %>"
+            data-sort-id="<%- String(p._id || '') %>"
             data-bizid="<%- String(p.businessId || p.business?._id || p.sellerId || p.seller?._id || '') %>"
             data-flags='<%- JSON.stringify(flags) %>'>
 
@@ -2046,28 +2047,38 @@
         if (show) visible++;
       });
 
-      const sort = sortSelect.value;
-      const items = CARD().filter(li=>li.style.display!=='none');
-      if (sort !== 'relevance'){
-        items.sort((a,b)=>{
-          const pa = Number(a.getAttribute('data-price')||0);
-          const pb = Number(b.getAttribute('data-price')||0);
-          const na = a.getAttribute('data-name')||'';
-          const nb = b.getAttribute('data-name')||'';
+      const sort = (sortSelect?.value === 'relevance' || !sortSelect?.value)
+        ? 'new'
+        : sortSelect.value;
 
-          const ca = Date.parse(a.getAttribute('data-created') || '') || 0;
-          const cb = Date.parse(b.getAttribute('data-created') || '') || 0;
+      const items = CARD().filter(li => li.style.display !== 'none');
 
-          if (sort==='price-asc')  return pa - pb;
-          if (sort==='price-desc') return pb - pa;
-          if (sort==='name')       return na.localeCompare(nb);
-          if (sort==='new')        return cb - ca; // newest first
-          return 0;
-        });
-        const frag = document.createDocumentFragment();
-        items.forEach(el=>frag.appendChild(el));
-        list.appendChild(frag);
-      }
+      items.sort((a, b) => {
+        const pa = Number(a.getAttribute('data-price') || 0);
+        const pb = Number(b.getAttribute('data-price') || 0);
+        const na = a.getAttribute('data-name') || '';
+        const nb = b.getAttribute('data-name') || '';
+
+        const ca = Date.parse(a.getAttribute('data-created') || '') || 0;
+        const cb = Date.parse(b.getAttribute('data-created') || '') || 0;
+
+        const ia = a.getAttribute('data-sort-id') || '';
+        const ib = b.getAttribute('data-sort-id') || '';
+
+        if (sort === 'price-asc')  return pa - pb;
+        if (sort === 'price-desc') return pb - pa;
+        if (sort === 'name')       return na.localeCompare(nb);
+
+        // Default and "Newest Added"
+        if (cb !== ca) return cb - ca;
+
+        // Tie-breaker for same createdAt
+        return ib.localeCompare(ia);
+      });
+
+      const frag = document.createDocumentFragment();
+      items.forEach(el => frag.appendChild(el));
+      list.appendChild(frag);
 
       PAGE.pages = Math.max(1, Math.ceil(visible / PAGE.size));
       PAGE.page = Math.min(PAGE.page, PAGE.pages);

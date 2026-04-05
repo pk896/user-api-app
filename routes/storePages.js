@@ -16,8 +16,10 @@ const ShopMainBanner = require('../models/ShopMainBanner');
 const ShopHeaderImage = require('../models/ShopHeaderImage');
 
 function mapStoreProduct(p) {
+  const vatRate = Number(process.env.VAT_RATE || 0.15);
   const price = Number(p.price || 0);
-  const oldPrice = p.isOnSale ? Number((price * 1.19).toFixed(2)) : null;
+  const priceWithVat = Number((price * (1 + vatRate)).toFixed(2));
+  const oldPrice = p.isOnSale ? Number((priceWithVat * 1.19).toFixed(2)) : null;
 
   return {
     id: p.customId,
@@ -397,7 +399,33 @@ router.get('/store', async (req, res) => {
 
 router.get('/store/shop', async (req, res) => {
   try {
-    const shopProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const keyword = String(req.query.keyword || '').trim();
+    const category = String(req.query.category || '').trim();
+
+    const shopQuery = {
+      stock: { $gt: 0 },
+    };
+
+    if (category) {
+      shopQuery.category = category;
+    }
+
+    if (keyword) {
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const keywordRegex = new RegExp(escapedKeyword, 'i');
+
+      shopQuery.$or = [
+        { name: keywordRegex },
+        { category: keywordRegex },
+        { type: keywordRegex },
+        { description: keywordRegex },
+        { color: keywordRegex },
+        { size: keywordRegex },
+        { keywords: keywordRegex },
+      ];
+    }
+
+    const shopProductsRaw = await Product.find(shopQuery)
       .sort({ createdAt: -1 })
       .limit(12)
       .lean();
@@ -523,6 +551,8 @@ router.get('/store/shop', async (req, res) => {
       shopSidebarBanner,
       shopMainBanner,
       shopHeaderImage,
+      selectedKeyword: keyword,
+      selectedCategory: category,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -540,6 +570,8 @@ router.get('/store/shop', async (req, res) => {
       shopSidebarBanner: null,
       shopMainBanner: null,
       shopHeaderImage: null,
+      selectedKeyword: '',
+      selectedCategory: '',
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
@@ -751,32 +783,61 @@ router.get('/store/contact', async (req, res) => {
 
 router.get('/store/bestseller', async (req, res) => {
   try {
-    const bestSellerProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const keyword = String(req.query.keyword || '').trim();
+    const category = String(req.query.category || '').trim();
+
+    const bestsellerQuery = {
+      stock: { $gt: 0 },
+    };
+
+    if (category) {
+      bestsellerQuery.category = category;
+    }
+
+    if (keyword) {
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const keywordRegex = new RegExp(escapedKeyword, 'i');
+
+      bestsellerQuery.$or = [
+        { name: keywordRegex },
+        { category: keywordRegex },
+        { type: keywordRegex },
+        { description: keywordRegex },
+        { color: keywordRegex },
+        { size: keywordRegex },
+        { keywords: keywordRegex },
+      ];
+    }
+
+    const bestSellerProductsRaw = await Product.find(bestsellerQuery)
       .sort({ soldCount: -1, createdAt: -1 })
       .limit(6)
       .lean();
 
-    const allProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const allProductsRaw = await Product.find(bestsellerQuery)
       .sort({ createdAt: -1 })
       .limit(8)
       .lean();
 
     const newArrivalsRaw = await Product.find({
-      stock: { $gt: 0 },
+      ...bestsellerQuery,
       isNewItem: true,
     })
       .sort({ createdAt: -1 })
       .limit(4)
       .lean();
 
-    const featuredProductsRaw = await getFeaturedProducts(4);
+    const featuredProductsRaw = await Product.find(bestsellerQuery)
+      .sort({ createdAt: -1 })
+      .limit(4)
+      .lean();
 
-    const topSellingProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const topSellingProductsRaw = await Product.find(bestsellerQuery)
       .sort({ soldCount: -1, createdAt: -1 })
       .limit(4)
       .lean();
 
-    const productListProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const productListProductsRaw = await Product.find(bestsellerQuery)
       .sort({ createdAt: -1 })
       .limit(12)
       .lean();
@@ -855,6 +916,8 @@ router.get('/store/bestseller', async (req, res) => {
       bottomBannerLeft,
       bottomBannerRight,
       shopHeaderImage,
+      selectedKeyword: keyword,
+      selectedCategory: category,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -873,6 +936,8 @@ router.get('/store/bestseller', async (req, res) => {
       bottomBannerLeft: null,
       bottomBannerRight: null,
       shopHeaderImage: null,
+      selectedKeyword: '',
+      selectedCategory: '',
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }

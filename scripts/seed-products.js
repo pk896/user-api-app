@@ -1,3 +1,4 @@
+// C:\Users\phaki\user-api-app\scripts\seed-products.js
 require("dotenv").config();
 const mongoose = require("mongoose");
 const path = require("path");
@@ -124,13 +125,30 @@ async function main() {
         stock,
         imageUrl,
         customId,
-        isNew: !!raw.isNew,
-        sale: !!raw.sale,
-        popular: !!raw.popular,
+
+        isNewItem: !!raw.isNew,
+        isOnSale: !!raw.sale,
+        isPopular: !!raw.popular,
+
         description: raw.description || "",
         category: raw.category || raw.type || "General",
-        createdAt: now,
-        updatedAt: now,
+        role: "general",
+        type: raw.type || "general",
+
+        shipping: {
+          weight: { value: 1, unit: "kg" },
+          dimensions: {
+            length: 10,
+            width: 10,
+            height: 10,
+            unit: "cm",
+          },
+          shipSeparately: false,
+          fragile: false,
+          packagingHint: "",
+        },
+
+        business: new mongoose.Types.ObjectId("67f1234567890abc12345678"),
       });
 
       createdIds.push(doc._id.toString());

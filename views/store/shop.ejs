@@ -97,12 +97,15 @@
                         class="form-control border-0 rounded-pill w-100 py-3"
                         type="text"
                         data-bs-target="#dropdownToggle123"
+                        value="<%= selectedKeyword || '' %>"
                         placeholder="Search products by name or keywords"
                     >
                     <select id="shopCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="">All Category</option>
+                        <option value="" <%= !selectedCategory ? 'selected' : '' %>>All Category</option>
                         <% (CATEGORIES || []).forEach(function(category) { %>
-                            <option value="<%= category.value %>"><%= category.label %></option>
+                            <option value="<%= category.value %>" <%= selectedCategory === category.value ? 'selected' : '' %>>
+                                <%= category.label %>
+                            </option>
                         <% }) %>
                     </select>
                     <button id="shopKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i class="fas fa-search"></i></button>
@@ -175,7 +178,7 @@
                     <div class="navbar-nav ms-auto py-0">
                         <a href="/store" class="nav-item nav-link">Shopping home</a>
                         <a href="/store/shop" class="nav-item nav-link active">Shop</a>
-                        <a href="/sales" class="nav-item nav-link">Fast liner</a>
+                        <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
                         <div class="nav-item dropdown">
                             <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
                             <div class="dropdown-menu m-0">
@@ -324,7 +327,7 @@
                     <h4 class="mb-3">Featured products</h4>
 
                     <% (featuredSidebarProducts || []).forEach(function(product) { %>
-                        <div class="featured-product-item mb-3">
+                        <a href="<%= product.url %>" class="featured-product-item mb-3 d-flex text-decoration-none text-dark">
                             <div class="rounded me-4" style="width: 100px; height: 100px;">
                                 <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
                             </div>
@@ -345,7 +348,7 @@
                                     <% } %>
                                 </div>
                             </div>
-                        </div>
+                        </a>
                     <% }) %>
 
                     <div class="d-flex justify-content-center my-4">
@@ -417,6 +420,7 @@
                                 id="shopKeywordInputSecondary"
                                 type="search"
                                 class="form-control p-3"
+                                value="<%= selectedKeyword || '' %>"
                                 placeholder="keywords"
                                 aria-describedby="search-icon-1"
                             >
@@ -746,104 +750,92 @@
     const keywordBtn = document.getElementById('shopKeywordSearchBtn');
     const keywordBtnSecondary = document.getElementById('shopKeywordSearchBtnSecondary');
     const links = Array.from(document.querySelectorAll('.shop-category-link'));
-    const cards = Array.from(document.querySelectorAll('.shop-filter-card'));
 
-    if (!select || !cards.length) return;
+    if (!select) return;
 
-    function normalize(value) {
-      return String(value || '').trim().toLowerCase();
+    function getKeyword() {
+      const primaryValue = keywordInput ? String(keywordInput.value || '').trim() : '';
+      const secondaryValue = keywordInputSecondary ? String(keywordInputSecondary.value || '').trim() : '';
+      return primaryValue || secondaryValue;
     }
 
-    // filter
-    function applyFilters() {
-        const selectedCategory = normalize(select.value);
-        const primaryKeyword = normalize(keywordInput ? keywordInput.value : '');
-        const secondaryKeyword = normalize(keywordInputSecondary ? keywordInputSecondary.value : '');
-        const keyword = primaryKeyword || secondaryKeyword;
+    function syncKeywordInputs(keyword) {
+      if (keywordInput) {
+        keywordInput.value = keyword;
+      }
 
-        if (keywordInput && keywordInputSecondary) {
-            if (document.activeElement === keywordInput) {
-            keywordInputSecondary.value = keywordInput.value;
-            } else if (document.activeElement === keywordInputSecondary) {
-            keywordInput.value = keywordInputSecondary.value;
-            } else {
-            keywordInputSecondary.value = keywordInput.value || keywordInputSecondary.value;
-            keywordInput.value = keywordInput.value || keywordInputSecondary.value;
-            }
-        }
-
-        cards.forEach(function (card) {
-            const cardCategory = normalize(card.getAttribute('data-category'));
-            const cardSearch = normalize(card.getAttribute('data-search'));
-
-            const matchesCategory = !selectedCategory || cardCategory === selectedCategory;
-            const matchesKeyword = !keyword || cardSearch.includes(keyword);
-
-            card.style.display = (matchesCategory && matchesKeyword) ? '' : 'none';
-        });
+      if (keywordInputSecondary) {
+        keywordInputSecondary.value = keyword;
+      }
     }
 
-    function setCategory(categoryValue) {
-      const selected = normalize(categoryValue);
-      select.value = selected;
-      applyFilters();
-    }
+    function goToShop(categoryValue) {
+      const params = new URLSearchParams();
+      const keyword = getKeyword();
+      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
 
-    const params = new URLSearchParams(window.location.search);
-    const initialCategory = normalize(params.get('category') || '');
-    const initialKeyword = String(params.get('q') || '').trim();
+      syncKeywordInputs(keyword);
 
-    if (initialCategory) {
-    select.value = initialCategory;
-    }
+      if (keyword) {
+        params.set('keyword', keyword);
+      }
 
-    if (keywordInput && initialKeyword) {
-    keywordInput.value = initialKeyword;
-    }
+      if (category) {
+        params.set('category', category);
+      }
 
-    if (keywordInputSecondary && initialKeyword) {
-    keywordInputSecondary.value = initialKeyword;
+      const queryString = params.toString();
+      window.location.href = queryString ? '/store/shop?' + queryString : '/store/shop';
     }
 
     links.forEach(function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        setCategory(link.getAttribute('data-category'));
+        goToShop(link.getAttribute('data-category'));
       });
     });
 
-    select.addEventListener('change', applyFilters);
+    select.addEventListener('change', function () {
+      goToShop(select.value);
+    });
 
     if (keywordInput) {
-        keywordInput.addEventListener('input', applyFilters);
+      keywordInput.addEventListener('input', function () {
+        syncKeywordInputs(String(keywordInput.value || '').trim());
+      });
 
-        keywordInput.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-            event.preventDefault();
-            applyFilters();
-            }
-        });
+      keywordInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select.value);
         }
-
-        if (keywordInputSecondary) {
-        keywordInputSecondary.addEventListener('input', applyFilters);
-
-        keywordInputSecondary.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-            event.preventDefault();
-            applyFilters();
-            }
-        });
-        }
-
-        if (keywordBtn) {
-        keywordBtn.addEventListener('click', applyFilters);
-        }
-
-        if (keywordBtnSecondary) {
-        keywordBtnSecondary.addEventListener('click', applyFilters);
+      });
     }
-    applyFilters();
+
+    if (keywordInputSecondary) {
+      keywordInputSecondary.addEventListener('input', function () {
+        syncKeywordInputs(String(keywordInputSecondary.value || '').trim());
+      });
+
+      keywordInputSecondary.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select.value);
+        }
+      });
+    }
+
+    if (keywordBtn) {
+      keywordBtn.addEventListener('click', function () {
+        goToShop(select.value);
+      });
+    }
+
+    if (keywordBtnSecondary) {
+      keywordBtnSecondary.addEventListener('click', function () {
+        goToShop(select.value);
+      });
+    }
   })();
 </script>
 

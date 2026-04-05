@@ -9,6 +9,7 @@ const Product = require('../models/Product');
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 const requireOfficialNumberVerified = require('../middleware/requireOfficialNumberVerified');
+const requireAdmin = require('../middleware/requireAdmin');
 const Business = require('../models/Business');
 
 const router = express.Router();
@@ -54,6 +55,14 @@ const upload = multer({
 });
 
 const buildImageUrl = (key) => `https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
+
+function getS3KeyFromUrl(imageUrl) {
+  const url = String(imageUrl || '').trim();
+  if (!url) return '';
+
+  const parts = url.split('.com/');
+  return parts[1] || '';
+}
 
 function extFromFilename(name) {
   const dot = name.lastIndexOf('.');
@@ -242,12 +251,10 @@ router.get(
 router.get('/sales', async (req, res) => {
   try {
     const products = await Product.find({ stock: { $gt: 0 } })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .lean();
 
-    // ✅ restore virtual-like flags on lean objects
     products.forEach((p) => {
-      p.isNew = !!p.isNewItem;
       p.sale = !!p.isOnSale;
       p.popular = !!p.isPopular;
     });
@@ -446,7 +453,7 @@ router.post(
         keywords: parsedKeywords,
 
         // ✅ status flags
-        isNew: checkboxOn(req.body.isNew),
+        isNewItem: checkboxOn(req.body.isNew),
         isOnSale: checkboxOn(req.body.isOnSale),
         isPopular: checkboxOn(req.body.isPopular),
 
@@ -491,7 +498,7 @@ router.post(
 router.get('/all', requireBusiness, async (req, res) => {
   try {
     const business = req.business || req.session.business;
-    const products = await Product.find({ business: business._id }).sort({ createdAt: -1 }).lean();
+    const products = await Product.find({ business: business._id }).sort({ createdAt: -1, _id: -1 }).lean();
 
     res.render('all-products', {
       title: 'My Products',
@@ -520,6 +527,153 @@ router.get('/stats/summary', requireBusiness, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok: false, message: 'Failed to load' });
+  }
+});
+
+router.get('/debug-created-order', requireAdmin, async (_req, res) => {
+  try {
+    const products = await Product.find({ stock: { $gt: 0 } })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('name customId createdAt updatedAt')
+      .lean();
+
+    return res.json({
+      ok: true,
+      count: products.length,
+      products: products.map((p) => ({
+        name: p.name,
+        customId: p.customId,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      })),
+    });
+  } catch (err) {
+    console.error('debug-created-order error:', err);
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+router.get('/admin/backfill-missing-createdat', requireAdmin, async (_req, res) => {
+  try {
+    const products = await Product.find({
+      $or: [
+        { createdAt: { $exists: false } },
+        { createdAt: null }
+      ]
+    }).select('_id name customId createdAt updatedAt').lean();
+
+    let fixed = 0;
+    const rows = [];
+
+    for (const product of products) {
+      const fallbackCreatedAt =
+        product.updatedAt ||
+        new Date();
+
+      await Product.collection.updateOne(
+        { _id: product._id },
+        { $set: { createdAt: fallbackCreatedAt } }
+      );
+
+      fixed += 1;
+      rows.push({
+        name: product.name,
+        customId: product.customId,
+        createdAtSetTo: fallbackCreatedAt
+      });
+    }
+
+    return res.json({
+      ok: true,
+      fixed,
+      products: rows
+    });
+  } catch (err) {
+    console.error('backfill-missing-createdat error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: err.message
+    });
+  }
+});
+
+router.get('/admin/delete-by-customid/:id', requireAdmin, async (req, res) => {
+  try {
+    const customId = String(req.params.id || '').trim();
+
+    if (!customId) {
+      return res.status(400).send('Missing product customId.');
+    }
+
+    const product = await Product.findOneAndDelete({ customId });
+
+    if (!product) {
+      return res.status(404).send(`Product not found: ${customId}`);
+    }
+
+    try {
+      const imageKey = getS3KeyFromUrl(product.imageUrl);
+      if (imageKey) {
+        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }));
+      }
+    } catch (err) {
+      console.warn('⚠️ Could not delete image from S3:', err.message);
+    }
+
+    return res.send(`Deleted product: ${product.customId} - ${product.name}`);
+  } catch (err) {
+    console.error('❌ delete-by-customid error:', err);
+    return res.status(500).send(err.message);
+  }
+});
+
+router.get('/admin/delete-many', requireAdmin, async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    if (!ids.length) {
+      return res.status(400).send('Use ?ids=ID1,ID2,ID3');
+    }
+
+    const products = await Product.find({
+      customId: { $in: ids },
+    }).select('_id customId name imageUrl').lean();
+
+    if (!products.length) {
+      return res.status(404).send('No matching products found.');
+    }
+
+    const productIds = products.map((p) => p._id);
+
+    await Product.deleteMany({
+      _id: { $in: productIds },
+    });
+
+    for (const product of products) {
+      try {
+        const imageKey = getS3KeyFromUrl(product.imageUrl);
+        if (imageKey) {
+          await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }));
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not delete image from S3:', err.message);
+      }
+    }
+
+    return res.json({
+      ok: true,
+      deletedCount: products.length,
+      deleted: products.map((p) => ({
+        customId: p.customId,
+        name: p.name,
+      })),
+    });
+  } catch (err) {
+    console.error('❌ delete-many error:', err);
+    return res.status(500).send(err.message);
   }
 });
 
@@ -730,7 +884,6 @@ router.post(
       // ---------- STATUS FLAGS ----------
       const isNewFlag = checkboxOn(req.body.isNew);
       product.isNewItem = isNewFlag;
-      product.isNew = isNewFlag;
       product.isOnSale = checkboxOn(req.body.isOnSale);
       product.isPopular = checkboxOn(req.body.isPopular);
 
@@ -927,7 +1080,7 @@ router.get('/api/public/featured', async (req, res) => {
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 8, 50));
 
     const products = await Product.find({ stock: { $gt: 0 } })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .lean();
 
@@ -964,7 +1117,7 @@ router.get('/api/public/bestsellers', async (req, res) => {
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 8, 50));
 
     const products = await Product.find({ stock: { $gt: 0 } })
-      .sort({ soldCount: -1, createdAt: -1 })
+      .sort({ soldCount: -1, createdAt: -1, _id: -1 })
       .limit(limit)
       .lean();
 

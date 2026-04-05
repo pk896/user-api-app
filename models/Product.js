@@ -300,8 +300,34 @@ productSchema
   });
 
 /* ========= MIDDLEWARE ========= */
+productSchema.pre('insertMany', function (next, docs) {
+  const now = new Date();
+
+  for (const doc of docs) {
+    if (!doc.createdAt) {
+      doc.createdAt = now;
+    }
+
+    if (!doc.updatedAt) {
+      doc.updatedAt = now;
+    }
+  }
+
+  next();
+});
+
 // Middleware to ensure size/color arrays and colorImages are valid and in sync
 productSchema.pre('save', function (next) {
+  const now = new Date();
+
+  if (!this.createdAt) {
+    this.createdAt = now;
+  }
+
+  if (!this.updatedAt) {
+    this.updatedAt = now;
+  }
+
   if (!Array.isArray(this.colors)) {
     this.colors = this.colors ? [this.colors] : [];
   }
@@ -436,7 +462,7 @@ productSchema.methods.toFrontendJSON = function () {
     colorImages: this.colorImages || [],
     category: this.category,
     type: this.type,
-    isNew: this.isNew,
+    isNew: this.isNewItem,
     isOnSale: this.isOnSale,
     isPopular: this.isPopular,
     sale: this.isOnSale, // short flags for templates if needed
