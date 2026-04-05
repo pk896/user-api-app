@@ -47,11 +47,18 @@
             if (!vv) return;
             const ll = String(c?.label || vv).trim();
         %>
-          <option value="<%- vv %>"><%= ll %></option>
+          <option value="<%- vv %>" <%= (typeof selectedCat !== 'undefined' && selectedCat === vv) ? 'selected' : '' %>><%= ll %></option>
         <% }) %>
       </select>
 
-      <input id="searchInput" type="search" placeholder="Search Product" aria-label="Search products" autocomplete="off" />
+      <input
+        id="searchInput"
+        type="search"
+        placeholder="Search Product"
+        aria-label="Search products"
+        autocomplete="off"
+        value="<%= typeof selectedQ !== 'undefined' ? selectedQ : '' %>"
+      />
       <button id="searchBtn" type="submit" class="amz-search-btn">🔍</button>
     </form>
 
@@ -2047,10 +2054,61 @@
         if (show) visible++;
       });
 
-      const sort = (sortSelect?.value === 'relevance' || !sortSelect?.value)
-        ? 'new'
-        : sortSelect.value;
+      function keywordTokens(value){
+        return normalize(value)
+          .split(/\s+/)
+          .map(s => s.trim())
+          .filter(Boolean);
+      }
 
+      function relevanceScore(card, query){
+        const q = normalize(query);
+        if (!q) return 0;
+
+        const tokens = keywordTokens(q);
+
+        const name = normalize(card.getAttribute('data-name'));
+        const searchable = normalize(card.getAttribute('data-search'));
+        const categoryRaw = normalize(card.getAttribute('data-category-raw'));
+        const category = normalize(card.getAttribute('data-category'));
+        const type = normalize(card.getAttribute('data-type'));
+
+        let score = 0;
+
+        // strongest signals
+        if (name === q) score += 1000;
+        if (name.startsWith(q)) score += 400;
+        if (name.includes(q)) score += 250;
+
+        if (categoryRaw === q || category === q) score += 220;
+        if (type === q) score += 180;
+
+        if (searchable.includes(q)) score += 120;
+
+        // token-based scoring
+        tokens.forEach(token => {
+          if (!token) return;
+
+          if (name === token) score += 180;
+          else if (name.startsWith(token)) score += 90;
+          else if (name.includes(token)) score += 50;
+
+          if (categoryRaw === token || category === token) score += 45;
+          if (type === token) score += 35;
+
+          if (searchable.includes(token)) score += 20;
+        });
+
+        // small bonus for popular products when relevance ties are close
+        try {
+          const flags = JSON.parse(card.getAttribute('data-flags') || '{}');
+          if (flags && flags.popular) score += 5;
+        } catch {}
+
+        return score;
+      }
+
+      const sort = sortSelect?.value || 'relevance';
       const items = CARD().filter(li => li.style.display !== 'none');
 
       items.sort((a, b) => {
@@ -2065,14 +2123,23 @@
         const ia = a.getAttribute('data-sort-id') || '';
         const ib = b.getAttribute('data-sort-id') || '';
 
-        if (sort === 'price-asc')  return pa - pb;
+        if (sort === 'price-asc') return pa - pb;
         if (sort === 'price-desc') return pb - pa;
-        if (sort === 'name')       return na.localeCompare(nb);
+        if (sort === 'name') return na.localeCompare(nb);
+        if (sort === 'new') {
+          if (cb !== ca) return cb - ca;
+          return ib.localeCompare(ia);
+        }
 
-        // Default and "Newest Added"
+        // real relevance sorting
+        const q = normalize(searchInput.value);
+        const ra = relevanceScore(a, q);
+        const rb = relevanceScore(b, q);
+
+        if (rb !== ra) return rb - ra;
+
+        // tie-breakers for relevance
         if (cb !== ca) return cb - ca;
-
-        // Tie-breaker for same createdAt
         return ib.localeCompare(ia);
       });
 
@@ -2127,13 +2194,49 @@
     });
 
     // events
+    function goToSalesSearch(){
+      const params = new URLSearchParams();
+
+      const q = normalize(searchInput?.value || '');
+      const cat = String(catSelect?.value || '').trim();
+
+      if (q) params.set('q', q);
+      if (cat) params.set('cat', cat);
+
+      const qs = params.toString();
+      window.location.href = qs ? `/products/sales?${qs}#results` : '/products/sales#results';
+    }
+
     searchForm.addEventListener('submit', (e)=>{
       e.preventDefault();
-      PAGE.page=1;
-      applyFilters();
+      goToSalesSearch();
     });
 
-    [searchInput, catSelect, sortSelect, inStockOnly, typeFilter].forEach(el=>{
+    if (catSelect) {
+      catSelect.addEventListener('change', ()=>{
+        goToSalesSearch();
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', ()=>{
+        const q = normalize(searchInput.value || '');
+        const cat = String(catSelect?.value || '').trim();
+
+        if (!q) {
+          const params = new URLSearchParams();
+
+          if (cat) {
+            params.set('cat', cat);
+          }
+
+          const qs = params.toString();
+          window.location.href = qs ? `/products/sales?${qs}#results` : '/products/sales#results';
+        }
+      });
+    }
+
+    [sortSelect, inStockOnly, typeFilter].forEach(el=>{
       el?.addEventListener('input', ()=>{
         PAGE.page=1;
         applyFilters();
@@ -2176,15 +2279,6 @@
     regionSelect.addEventListener('change', ()=>{
       loadDeliveryOptions(regionSelect.value);
     });
-
-    // Prefill from URL ?q= & ?cat=
-    try{
-      const usp = new URLSearchParams(location.search);
-      const q0=usp.get('q');
-      const c0=usp.get('cat');
-      if (q0) searchInput.value=q0;
-      if (c0) catSelect.value=c0;
-    }catch{}
 
     // Wire buttons & init
     wireAddButtons();

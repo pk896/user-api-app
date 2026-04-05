@@ -401,6 +401,7 @@ router.get('/store/shop', async (req, res) => {
   try {
     const keyword = String(req.query.keyword || '').trim();
     const category = String(req.query.category || '').trim();
+    const selectedSort = String(req.query.sort || 'default').trim();
 
     const shopQuery = {
       stock: { $gt: 0 },
@@ -425,8 +426,22 @@ router.get('/store/shop', async (req, res) => {
       ];
     }
 
+    let shopSort = { createdAt: -1 };
+
+    if (selectedSort === 'popular') {
+      shopSort = { soldCount: -1, createdAt: -1 };
+    } else if (selectedSort === 'newest') {
+      shopSort = { createdAt: -1 };
+    } else if (selectedSort === 'rating') {
+      shopSort = { avgRating: -1, ratingsCount: -1, createdAt: -1 };
+    } else if (selectedSort === 'price_asc') {
+      shopSort = { price: 1, createdAt: -1 };
+    } else if (selectedSort === 'price_desc') {
+      shopSort = { price: -1, createdAt: -1 };
+    }
+
     const shopProductsRaw = await Product.find(shopQuery)
-      .sort({ createdAt: -1 })
+      .sort(shopSort)
       .limit(12)
       .lean();
 
@@ -553,6 +568,7 @@ router.get('/store/shop', async (req, res) => {
       shopHeaderImage,
       selectedKeyword: keyword,
       selectedCategory: category,
+      selectedSort,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -572,6 +588,7 @@ router.get('/store/shop', async (req, res) => {
       shopHeaderImage: null,
       selectedKeyword: '',
       selectedCategory: '',
+      selectedSort: 'default',
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }

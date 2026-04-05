@@ -250,7 +250,32 @@ router.get(
 // GET: Public sales products page
 router.get('/sales', async (req, res) => {
   try {
-    const products = await Product.find({ stock: { $gt: 0 } })
+    const q = String(req.query.q || '').trim();
+    const cat = String(req.query.cat || '').trim();
+
+    const salesQuery = {
+      stock: { $gt: 0 },
+    };
+
+    if (cat) {
+      salesQuery.category = cat;
+    }
+
+    if (q) {
+      const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const qRegex = new RegExp(escapedQ, 'i');
+
+      salesQuery.$or = [
+        { name: qRegex },
+        { category: qRegex },
+        { type: qRegex },
+        { manufacturer: qRegex },
+        { description: qRegex },
+        { keywords: qRegex },
+      ];
+    }
+
+    const products = await Product.find(salesQuery)
       .sort({ createdAt: -1, _id: -1 })
       .lean();
 
@@ -262,6 +287,8 @@ router.get('/sales', async (req, res) => {
     res.render('sales-products', {
       title: 'Shop Products',
       products,
+      selectedQ: q,
+      selectedCat: cat,
       themeCss: res.locals.themeCss,
       success: req.flash('success'),
       error: req.flash('error'),

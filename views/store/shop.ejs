@@ -435,15 +435,14 @@
                     </div>
                     <div class="col-xl-3 text-end">
                         <div class="bg-light ps-3 py-3 rounded d-flex justify-content-between">
-                            <label for="electronics">Sort By:</label>
-                            <select id="electronics" name="electronicslist" class="border-0 form-select-sm bg-light me-3" form="electronicsform">
-                                <option value="volvo">Default Sorting</option>
-                                <option value="volv">Nothing</option>
-                                <option value="sab">Popularity</option>
-                                <option value="saab">Newness</option>
-                                <option value="opel">Average Rating</option>
-                                <option value="audio">Low to high</option>
-                                <option value="audi">High to low</option>
+                            <label for="shopSortSelect">Sort By:</label>
+                            <select id="shopSortSelect" name="sort" class="border-0 form-select-sm bg-light me-3">
+                                <option value="default" <%= (selectedSort || 'default') === 'default' ? 'selected' : '' %>>Default Sorting</option>
+                                <option value="popular" <%= selectedSort === 'popular' ? 'selected' : '' %>>Popularity</option>
+                                <option value="newest" <%= selectedSort === 'newest' ? 'selected' : '' %>>Newness</option>
+                                <option value="rating" <%= selectedSort === 'rating' ? 'selected' : '' %>>Average Rating</option>
+                                <option value="price_asc" <%= selectedSort === 'price_asc' ? 'selected' : '' %>>Low to high</option>
+                                <option value="price_desc" <%= selectedSort === 'price_desc' ? 'selected' : '' %>>High to low</option>
                             </select>
                         </div>
                     </div>
@@ -745,6 +744,7 @@
 <script nonce="<%= nonce %>">
   (function () {
     const select = document.getElementById('shopCategorySelect');
+    const sortSelect = document.getElementById('shopSortSelect');
     const keywordInput = document.getElementById('shopKeywordInput');
     const keywordInputSecondary = document.getElementById('shopKeywordInputSecondary');
     const keywordBtn = document.getElementById('shopKeywordSearchBtn');
@@ -770,22 +770,27 @@
     }
 
     function goToShop(categoryValue) {
-      const params = new URLSearchParams();
-      const keyword = getKeyword();
-      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+        const params = new URLSearchParams();
+        const keyword = getKeyword();
+        const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+        const sortValue = sortSelect ? String(sortSelect.value || 'default').trim() : 'default';
 
-      syncKeywordInputs(keyword);
+        syncKeywordInputs(keyword);
 
-      if (keyword) {
-        params.set('keyword', keyword);
-      }
+        if (keyword) {
+            params.set('keyword', keyword);
+        }
 
-      if (category) {
-        params.set('category', category);
-      }
+        if (category) {
+            params.set('category', category);
+        }
 
-      const queryString = params.toString();
-      window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';
+        if (sortValue && sortValue !== 'default') {
+            params.set('sort', sortValue);
+        }
+
+        const queryString = params.toString();
+        window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';
     }
 
     links.forEach(function (link) {
@@ -796,33 +801,63 @@
     });
 
     select.addEventListener('change', function () {
-      goToShop(select.value);
-    });
+        goToShop(select.value);
+        });
 
-    if (keywordInput) {
-      keywordInput.addEventListener('input', function () {
-        syncKeywordInputs(String(keywordInput.value || '').trim());
-      });
-
-      keywordInput.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          goToShop(select.value);
-        }
-      });
+        if (sortSelect) {
+        sortSelect.addEventListener('change', function () {
+            goToShop(select ? select.value : '');
+        });
     }
 
-    if (keywordInputSecondary) {
-      keywordInputSecondary.addEventListener('input', function () {
-        syncKeywordInputs(String(keywordInputSecondary.value || '').trim());
-      });
+    if (keywordInput) {
+        keywordInput.addEventListener('input', function () {
+            const keyword = String(keywordInput.value || '').trim();
+            const category = String(select ? (select.value || '') : '').trim();
+            const sortValue = String(sortSelect ? (sortSelect.value || 'default') : 'default').trim();
 
-      keywordInputSecondary.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          goToShop(select.value);
+            syncKeywordInputs(keyword);
+
+            if (!keyword) {
+            if (category || (sortValue && sortValue !== 'default')) {
+                goToShop(category);
+            } else {
+                window.location.href = '/store/shop#shopProductsSection';
+            }
+            }
+        });
+
+        keywordInput.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+            event.preventDefault();
+            goToShop(select.value);
+            }
+        });
         }
-      });
+
+        if (keywordInputSecondary) {
+        keywordInputSecondary.addEventListener('input', function () {
+            const keyword = String(keywordInputSecondary.value || '').trim();
+            const category = String(select ? (select.value || '') : '').trim();
+            const sortValue = String(sortSelect ? (sortSelect.value || 'default') : 'default').trim();
+
+            syncKeywordInputs(keyword);
+
+            if (!keyword) {
+            if (category || (sortValue && sortValue !== 'default')) {
+                goToShop(category);
+            } else {
+                window.location.href = '/store/shop#shopProductsSection';
+            }
+            }
+        });
+
+        keywordInputSecondary.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+            event.preventDefault();
+            goToShop(select.value);
+            }
+        });
     }
 
     if (keywordBtn) {
