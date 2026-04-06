@@ -102,12 +102,15 @@
                         class="form-control border-0 rounded-pill w-100 py-3"
                         type="text"
                         data-bs-target="#dropdownToggle123"
+                        value="<%= selectedKeyword || '' %>"
                         placeholder="Search products by name or keywords"
                     >
                     <select id="storeCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="">All Category</option>
+                        <option value="" <%= !selectedCategory ? 'selected' : '' %>>All Category</option>
                         <% (CATEGORIES || []).forEach(function(category) { %>
-                            <option value="<%= category.value %>"><%= category.label %></option>
+                            <option value="<%= category.value %>" <%= selectedCategory === category.value ? 'selected' : '' %>>
+                                <%= category.label %>
+                            </option>
                         <% }) %>
                     </select>
                     <button id="storeKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
@@ -455,6 +458,7 @@
                             id="storeKeywordInputSecondary"
                             type="search"
                             class="form-control p-3"
+                            value="<%= selectedKeyword || '' %>"
                             placeholder="keywords"
                             aria-describedby="store-search-icon-1"
                         >
@@ -469,26 +473,36 @@
                 </div>
 
                 <div class="col-12 col-lg-8 text-start text-lg-end wow fadeInRight" data-wow-delay="0.1s">
-                    <ul class="nav nav-pills d-inline-flex text-center mb-5">
-                        <li class="nav-item mb-4">
-                            <a class="d-flex mx-2 py-2 bg-light rounded-pill active" data-bs-toggle="pill"
-                                href="#tab-1">
-                                <span class="text-dark" style="width: 130px;">All Products</span>
+                    <ul class="nav nav-pills row g-0 justify-content-center mb-5">
+                        <li class="nav-item col-6 col-lg-3 border-start border-end wow fadeInUp" data-wow-delay="0.1s">
+                            <a class="w-100 h-100 d-flex align-items-center justify-content-center text-center py-3 px-2 bg-light active"
+                            data-bs-toggle="pill"
+                            href="#tab-1">
+                                <span class="text-primary text-uppercase fw-bold">All Products</span>
                             </a>
                         </li>
-                        <li class="nav-item mb-4">
-                            <a class="d-flex py-2 mx-2 bg-light rounded-pill" data-bs-toggle="pill" href="#tab-2">
-                                <span class="text-dark" style="width: 130px;">New Arrivals</span>
+
+                        <li class="nav-item col-6 col-lg-3 border-end wow fadeInUp" data-wow-delay="0.2s">
+                            <a class="w-100 h-100 d-flex align-items-center justify-content-center text-center py-3 px-2 bg-light"
+                            data-bs-toggle="pill"
+                            href="#tab-2">
+                                <span class="text-primary text-uppercase fw-bold">New Arrivals</span>
                             </a>
                         </li>
-                        <li class="nav-item mb-4">
-                            <a class="d-flex mx-2 py-2 bg-light rounded-pill" data-bs-toggle="pill" href="#tab-3">
-                                <span class="text-dark" style="width: 130px;">Featured</span>
+
+                        <li class="nav-item col-6 col-lg-3 border-start border-end wow fadeInUp" data-wow-delay="0.3s">
+                            <a class="w-100 h-100 d-flex align-items-center justify-content-center text-center py-3 px-2 bg-light"
+                            data-bs-toggle="pill"
+                            href="#tab-3">
+                                <span class="text-primary text-uppercase fw-bold">Featured</span>
                             </a>
                         </li>
-                        <li class="nav-item mb-4">
-                            <a class="d-flex mx-2 py-2 bg-light rounded-pill" data-bs-toggle="pill" href="#tab-4">
-                                <span class="text-dark" style="width: 130px;">Top Selling</span>
+
+                        <li class="nav-item col-6 col-lg-3 border-end wow fadeInUp" data-wow-delay="0.4s">
+                            <a class="w-100 h-100 d-flex align-items-center justify-content-center text-center py-3 px-2 bg-light"
+                            data-bs-toggle="pill"
+                            href="#tab-4">
+                                <span class="text-primary text-uppercase fw-bold">Top Selling</span>
                             </a>
                         </li>
                     </ul>
@@ -1005,19 +1019,14 @@
     }
 
     function syncKeywordInputs(keyword) {
-      if (keywordInput) {
-        keywordInput.value = keyword;
-      }
-
-      if (keywordInputSecondary) {
-        keywordInputSecondary.value = keyword;
-      }
+      if (keywordInput) keywordInput.value = keyword;
+      if (keywordInputSecondary) keywordInputSecondary.value = keyword;
     }
 
-    function goToShop(categoryValue) {
+    function goToHomeProducts(categoryValue) {
       const params = new URLSearchParams();
       const keyword = getKeyword();
-      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+      const category = String(categoryValue != null ? categoryValue : (select.value || '')).trim();
 
       syncKeywordInputs(keyword);
 
@@ -1030,77 +1039,80 @@
       }
 
       const queryString = params.toString();
-      window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';
+
+      window.location.href = queryString
+        ? '/store?' + queryString + '#homeProductsSection'
+        : '/store#homeProductsSection';
     }
 
     links.forEach(function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        goToShop(link.getAttribute('data-category'));
+        goToHomeProducts(link.getAttribute('data-category'));
       });
     });
 
     select.addEventListener('change', function () {
-      goToShop(select.value);
+      goToHomeProducts(select.value);
     });
 
     if (keywordInput) {
-        keywordInput.addEventListener('input', function () {
-            const keyword = String(keywordInput.value || '').trim();
-            const category = String(select ? (select.value || '') : '').trim();
+      keywordInput.addEventListener('input', function () {
+        const keyword = String(keywordInput.value || '').trim();
+        const category = String(select ? (select.value || '') : '').trim();
 
-            syncKeywordInputs(keyword);
+        syncKeywordInputs(keyword);
 
-            if (!keyword) {
-            if (category) {
-                goToShop(category);
-            } else {
-                window.location.href = '/store#homeProductsSection';
-            }
-            }
-        });
-
-        keywordInput.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-            event.preventDefault();
-            goToShop(select.value);
-            }
-        });
+        if (!keyword) {
+          if (category) {
+            goToHomeProducts(category);
+          } else {
+            window.location.href = '/store#homeProductsSection';
+          }
         }
+      });
 
-        if (keywordInputSecondary) {
-        keywordInputSecondary.addEventListener('input', function () {
-            const keyword = String(keywordInputSecondary.value || '').trim();
-            const category = String(select ? (select.value || '') : '').trim();
+      keywordInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToHomeProducts(select.value);
+        }
+      });
+    }
 
-            syncKeywordInputs(keyword);
+    if (keywordInputSecondary) {
+      keywordInputSecondary.addEventListener('input', function () {
+        const keyword = String(keywordInputSecondary.value || '').trim();
+        const category = String(select ? (select.value || '') : '').trim();
 
-            if (!keyword) {
-            if (category) {
-                goToShop(category);
-            } else {
-                window.location.href = '/store#homeProductsSection';
-            }
-            }
-        });
+        syncKeywordInputs(keyword);
 
-        keywordInputSecondary.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-            event.preventDefault();
-            goToShop(select.value);
-            }
-        });
+        if (!keyword) {
+          if (category) {
+            goToHomeProducts(category);
+          } else {
+            window.location.href = '/store#homeProductsSection';
+          }
+        }
+      });
+
+      keywordInputSecondary.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToHomeProducts(select.value);
+        }
+      });
     }
 
     if (keywordBtn) {
       keywordBtn.addEventListener('click', function () {
-        goToShop(select.value);
+        goToHomeProducts(select.value);
       });
     }
 
     if (keywordBtnSecondary) {
       keywordBtnSecondary.addEventListener('click', function () {
-        goToShop(select.value);
+        goToHomeProducts(select.value);
       });
     }
   })();

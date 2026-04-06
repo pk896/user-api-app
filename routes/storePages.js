@@ -237,27 +237,59 @@ function getGuestKeyFromReq(req) {
 
 router.get('/store', async (req, res) => {
   try {
-    const allProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const keyword = String(req.query.keyword || '').trim();
+    const category = String(req.query.category || '').trim();
+
+    const baseQuery = {
+      stock: { $gt: 0 },
+    };
+
+    if (category) {
+      baseQuery.category = category;
+    }
+
+    if (keyword) {
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const keywordRegex = new RegExp(escapedKeyword, 'i');
+
+      baseQuery.$or = [
+        { name: keywordRegex },
+        { category: keywordRegex },
+        { type: keywordRegex },
+        { description: keywordRegex },
+        { color: keywordRegex },
+        { size: keywordRegex },
+        { keywords: keywordRegex },
+      ];
+    }
+
+    const allProductsRaw = await Product.find(baseQuery)
       .sort({ createdAt: -1 })
       .limit(8)
       .lean();
 
     const newArrivalsRaw = await Product.find({
-      stock: { $gt: 0 },
+      ...baseQuery,
       isNewItem: true,
     })
       .sort({ createdAt: -1 })
       .limit(8)
       .lean();
 
-    const featuredProductsRaw = await getFeaturedProducts(8);
+    const featuredProductsRaw = await Product.find({
+      ...baseQuery,
+      isPopular: true,
+    })
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean();
 
-    const bestSellerProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const bestSellerProductsRaw = await Product.find(baseQuery)
       .sort({ soldCount: -1, createdAt: -1 })
       .limit(8)
       .lean();
 
-    const productListProductsRaw = await Product.find({ stock: { $gt: 0 } })
+    const productListProductsRaw = await Product.find(baseQuery)
       .sort({ createdAt: -1 })
       .limit(12)
       .lean();
@@ -374,6 +406,8 @@ router.get('/store', async (req, res) => {
       promoOfferRight,
       midBannerLeft,
       midBannerRight,
+      selectedKeyword: keyword,
+      selectedCategory: category,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -392,6 +426,8 @@ router.get('/store', async (req, res) => {
       promoOfferRight: null,
       midBannerLeft: null,
       midBannerRight: null,
+      selectedKeyword: '',
+      selectedCategory: '',
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
