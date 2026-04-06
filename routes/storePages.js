@@ -438,6 +438,8 @@ router.get('/store/shop', async (req, res) => {
     const keyword = String(req.query.keyword || '').trim();
     const category = String(req.query.category || '').trim();
     const selectedSort = String(req.query.sort || 'default').trim();
+    const requestedPage = Number(req.query.page || 1);
+    const perPage = 12;
 
     const shopQuery = {
       stock: { $gt: 0 },
@@ -476,9 +478,15 @@ router.get('/store/shop', async (req, res) => {
       shopSort = { price: -1, createdAt: -1 };
     }
 
+    const totalProducts = await Product.countDocuments(shopQuery);
+    const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
+    const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
+    const skip = (currentPage - 1) * perPage;
+
     const shopProductsRaw = await Product.find(shopQuery)
       .sort(shopSort)
-      .limit(12)
+      .skip(skip)
+      .limit(perPage)
       .lean();
 
     const featuredSidebarRaw = await getFeaturedProducts(4);
@@ -605,6 +613,11 @@ router.get('/store/shop', async (req, res) => {
       selectedKeyword: keyword,
       selectedCategory: category,
       selectedSort,
+      currentPage,
+      totalPages,
+      totalProducts,
+      hasPrevPage: currentPage > 1,
+      hasNextPage: currentPage < totalPages,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -625,6 +638,11 @@ router.get('/store/shop', async (req, res) => {
       selectedKeyword: '',
       selectedCategory: '',
       selectedSort: 'default',
+      currentPage: 1,
+      totalPages: 1,
+      totalProducts: 0,
+      hasPrevPage: false,
+      hasNextPage: false,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }

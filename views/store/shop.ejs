@@ -14,6 +14,26 @@
       colorImages: Array.isArray(product.colorImages) ? product.colorImages : []
     }));
   }
+
+  function shopPageUrl(pageNumber) {
+    const params = [];
+
+    if (selectedKeyword) {
+        params.push('keyword=' + encodeURIComponent(selectedKeyword));
+    }
+
+    if (selectedCategory) {
+        params.push('category=' + encodeURIComponent(selectedCategory));
+    }
+
+    if (selectedSort && selectedSort !== 'default') {
+        params.push('sort=' + encodeURIComponent(selectedSort));
+    }
+
+    params.push('page=' + encodeURIComponent(pageNumber));
+
+    return '/store/shop?' + params.join('&') + '#shopProductsSection';
+    }
 %>
 
 <!-- Spinner Start -->
@@ -531,15 +551,27 @@
                             <% }) %>
 
                             <div class="col-12 wow fadeInUp" data-wow-delay="0.1s">
-                                <div class="pagination d-flex justify-content-center mt-5">
-                                    <a href="#" class="rounded">&laquo;</a>
-                                    <a href="#" class="active rounded">1</a>
-                                    <a href="#" class="rounded">2</a>
-                                    <a href="#" class="rounded">3</a>
-                                    <a href="#" class="rounded">4</a>
-                                    <a href="#" class="rounded">5</a>
-                                    <a href="#" class="rounded">6</a>
-                                    <a href="#" class="rounded">&raquo;</a>
+                                <div class="pagination d-flex justify-content-center mt-5 flex-wrap">
+                                    <% if (hasPrevPage) { %>
+                                        <a href="<%= shopPageUrl(currentPage - 1) %>" class="rounded">&laquo;</a>
+                                    <% } else { %>
+                                        <span class="rounded disabled">&laquo;</span>
+                                    <% } %>
+
+                                    <% for (let page = 1; page <= totalPages; page++) { %>
+                                        <a
+                                            href="<%= shopPageUrl(page) %>"
+                                            class="rounded <%= page === currentPage ? 'active' : '' %>"
+                                        >
+                                            <%= page %>
+                                        </a>
+                                    <% } %>
+
+                                    <% if (hasNextPage) { %>
+                                        <a href="<%= shopPageUrl(currentPage + 1) %>" class="rounded">&raquo;</a>
+                                    <% } else { %>
+                                        <span class="rounded disabled">&raquo;</span>
+                                    <% } %>
                                 </div>
                             </div>
                         </div>
@@ -614,15 +646,27 @@
                             <% }) %>
 
                             <div class="col-12 wow fadeInUp" data-wow-delay="0.1s">
-                                <div class="pagination d-flex justify-content-center mt-5">
-                                    <a href="#" class="rounded">&laquo;</a>
-                                    <a href="#" class="active rounded">1</a>
-                                    <a href="#" class="rounded">2</a>
-                                    <a href="#" class="rounded">3</a>
-                                    <a href="#" class="rounded">4</a>
-                                    <a href="#" class="rounded">5</a>
-                                    <a href="#" class="rounded">6</a>
-                                    <a href="#" class="rounded">&raquo;</a>
+                                <div class="pagination d-flex justify-content-center mt-5 flex-wrap">
+                                    <% if (hasPrevPage) { %>
+                                        <a href="<%= shopPageUrl(currentPage - 1) %>" class="rounded">&laquo;</a>
+                                    <% } else { %>
+                                        <span class="rounded disabled">&laquo;</span>
+                                    <% } %>
+
+                                    <% for (let page = 1; page <= totalPages; page++) { %>
+                                        <a
+                                            href="<%= shopPageUrl(page) %>"
+                                            class="rounded <%= page === currentPage ? 'active' : '' %>"
+                                        >
+                                            <%= page %>
+                                        </a>
+                                    <% } %>
+
+                                    <% if (hasNextPage) { %>
+                                        <a href="<%= shopPageUrl(currentPage + 1) %>" class="rounded">&raquo;</a>
+                                    <% } else { %>
+                                        <span class="rounded disabled">&raquo;</span>
+                                    <% } %>
                                 </div>
                             </div>
                         </div>
@@ -788,6 +832,8 @@
         if (sortValue && sortValue !== 'default') {
             params.set('sort', sortValue);
         }
+
+        params.set('page', '1');
 
         const queryString = params.toString();
         window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';

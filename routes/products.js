@@ -226,6 +226,106 @@ function requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipH
   }
 }
 
+function buildAddProductOldInput(body = {}) {
+  return {
+    id: String(body.id || '').trim(),
+    name: String(body.name || '').trim(),
+    price: String(body.price || '').trim(),
+    stock: String(body.stock || '').trim(),
+    category: String(body.category || '').trim(),
+    color: String(body.color || '').trim(),
+    keywords: String(body.keywords || '').trim(),
+
+    size: String(body.size || '').trim(),
+    quality: String(body.quality || '').trim(),
+    made: String(body.made || '').trim(),
+    madeCode: String(body.madeCode || '').trim(),
+    manufacturer: String(body.manufacturer || '').trim(),
+    type: String(body.type || '').trim(),
+    description: String(body.description || '').trim(),
+
+    role: String(body.role || '').trim() || 'general',
+    sizes: String(body.sizes || '').trim(),
+    colors: String(body.colors || '').trim(),
+
+    shipWeightValue: String(body.shipWeightValue || '').trim(),
+    shipWeightUnit: String(body.shipWeightUnit || '').trim() || 'kg',
+    shipLength: String(body.shipLength || '').trim(),
+    shipWidth: String(body.shipWidth || '').trim(),
+    shipHeight: String(body.shipHeight || '').trim(),
+    shipDimUnit: String(body.shipDimUnit || '').trim() || 'cm',
+    packagingHint: String(body.packagingHint || '').trim(),
+
+    shipSeparately: checkboxOn(body.shipSeparately),
+    fragile: checkboxOn(body.fragile),
+
+    isNew: checkboxOn(body.isNew),
+    isOnSale: checkboxOn(body.isOnSale),
+    isPopular: checkboxOn(body.isPopular),
+  };
+}
+
+function stashAddProductFormState(req, oldInput = {}, fieldErrors = {}, flashMessage = '') {
+  req.session.addProductOldInput = oldInput;
+  req.session.addProductFieldErrors = fieldErrors;
+
+  if (flashMessage) {
+    req.flash('error', flashMessage);
+  }
+}
+
+function consumeAddProductFormState(req) {
+  const oldInput = req.session.addProductOldInput || {};
+  const fieldErrors = req.session.addProductFieldErrors || {};
+
+  delete req.session.addProductOldInput;
+  delete req.session.addProductFieldErrors;
+
+  return { oldInput, fieldErrors };
+}
+
+function normalizeMongooseFieldErrors(err) {
+  const fieldErrors = {};
+
+  if (!err || err.name !== 'ValidationError' || !err.errors) {
+    return fieldErrors;
+  }
+
+  Object.keys(err.errors).forEach((key) => {
+    const entry = err.errors[key];
+    if (!entry) return;
+
+    if (key === 'sizes') {
+      fieldErrors.sizes = entry.message;
+      return;
+    }
+
+    if (key === 'colors') {
+      fieldErrors.colors = entry.message;
+      return;
+    }
+
+    if (key === 'imageUrl') {
+      fieldErrors.imageFile = entry.message;
+      return;
+    }
+
+    if (key === 'name') {
+      fieldErrors.name = entry.message;
+      return;
+    }
+
+    if (key === 'price') {
+      fieldErrors.price = entry.message;
+      return;
+    }
+
+    fieldErrors[key] = entry.message;
+  });
+
+  return fieldErrors;
+}
+
 /* ---------------------------------------------
  * 🧾 GET /products/add — show Add Product form
  * ------------------------------------------- */
@@ -235,10 +335,14 @@ router.get(
   requireVerifiedBusiness,
   requireOfficialNumberVerified,
   (req, res) => {
-    const business = req.business || req.session.business; // ✅ prefer DB-loaded business
+    const business = req.business || req.session.business;
+    const { oldInput, fieldErrors } = consumeAddProductFormState(req);
+
     res.render('add-product', {
       title: 'Add Product',
-      business, // ✅ Pass it to EJS
+      business,
+      oldInput,
+      fieldErrors,
       success: req.flash('success'),
       error: req.flash('error'),
       themeCss: res.locals.themeCss,
@@ -383,6 +487,9 @@ router.post(
   ]),
   async (req, res) => {
     console.log('🟢 POST /products/add reached');
+
+    const oldInput = buildAddProductOldInput(req.body);
+
     try {
       const business = req.business || req.session.business;
 
@@ -391,52 +498,98 @@ router.post(
         return res.redirect('/business/login');
       }
 
-      // Validate name & price
+      const fieldErrors = {};
+
       const { name, price } = req.body;
-      if (!name || !price) {
-        req.flash('error', 'Name and price are required.');
-        return res.redirect('/products/add');
-      }
-
-      const numericPrice = Number(price);
-      if (Number.isNaN(numericPrice) || numericPrice < 0) {
-        req.flash('error', 'Price must be a valid positive number.');
-        return res.redirect('/products/add');
-      }
-
       const mainImageFile = Array.isArray(req.files?.imageFile) ? req.files.imageFile[0] : null;
 
-      // Validate image
-      if (!mainImageFile) {
-        req.flash('error', 'Product image is required.');
-        return res.redirect('/products/add');
-      }
+      const role = String(req.body.role || '').trim().toLowerCase();
+      const type = String(req.body.type || '').trim().toLowerCase();
+      const needsVariants =
+        role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
 
-      // Upload main image to S3
-      const imageUrl = await uploadSingleFileToS3(mainImageFile);
-      console.log(`✅ Main product image upload successful -> ${imageUrl}`);
+      const parsedSizes = parseListField(req.body.sizes);
+      const parsedColors = parseListField(req.body.colors);
 
-      // Prepare and save product
-      const customId = req.body.id?.trim() || uuidv4();
-
-      // ---------- SHIPPING (REQUIRED) ----------    
       const shipWeightValue = numOrNull(req.body.shipWeightValue);
       const shipWeightUnit = pickEnum(req.body.shipWeightUnit, ['kg', 'g', 'lb', 'oz'], 'kg');
 
       const shipLen = numOrNull(req.body.shipLength);
       const shipWid = numOrNull(req.body.shipWidth);
       const shipHei = numOrNull(req.body.shipHeight);
-
-      requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipHei });
-
       const shipDimUnit = pickEnum(req.body.shipDimUnit, ['cm', 'in'], 'cm');
 
       const shipSeparately = checkboxOn(req.body.shipSeparately);
       const fragile = checkboxOn(req.body.fragile);
       const packagingHint = (req.body.packagingHint || '').toString().trim();
 
-      const parsedSizes = parseListField(req.body.sizes);
-      const parsedColors = parseListField(req.body.colors);
+      if (!String(name || '').trim()) {
+        fieldErrors.name = 'Product name is required.';
+      }
+
+      if (!String(price || '').trim()) {
+        fieldErrors.price = 'Price is required.';
+      } else {
+        const numericPriceCheck = Number(price);
+        if (Number.isNaN(numericPriceCheck) || numericPriceCheck <= 0) {
+          fieldErrors.price = 'Price must be a valid positive number.';
+        }
+      }
+
+      if (!mainImageFile) {
+        fieldErrors.imageFile = 'Product image is required.';
+      }
+
+      if (!String(req.body.made || '').trim()) {
+        fieldErrors.made = 'Please select the country in "Made In".';
+      }
+
+      if (!String(req.body.type || '').trim()) {
+        fieldErrors.type = 'Please choose a matching type.';
+      }
+
+      if (shipWeightValue === null) {
+        fieldErrors.shipWeightValue = 'Weight must be greater than 0.';
+      }
+
+      if (shipLen === null) {
+        fieldErrors.shipLength = 'Length must be greater than 0.';
+      }
+
+      if (shipWid === null) {
+        fieldErrors.shipWidth = 'Width must be greater than 0.';
+      }
+
+      if (shipHei === null) {
+        fieldErrors.shipHeight = 'Height must be greater than 0.';
+      }
+
+      if (needsVariants && parsedSizes.length === 0) {
+        fieldErrors.sizes = 'Add at least one size for clothes/shoes products.';
+      }
+
+      if (needsVariants && parsedColors.length === 0) {
+        fieldErrors.colors = 'Add at least one color for clothes/shoes products.';
+      }
+
+      if (Object.keys(fieldErrors).length > 0) {
+        stashAddProductFormState(
+          req,
+          oldInput,
+          fieldErrors,
+          'Please fill the highlighted fields and submit again.'
+        );
+        return res.redirect('/products/add');
+      }
+
+      const numericPrice = Number(price);
+
+      // Upload main image to S3
+      const imageUrl = await uploadSingleFileToS3(mainImageFile);
+      console.log(`✅ Main product image upload successful -> ${imageUrl}`);
+
+      const customId = req.body.id?.trim() || uuidv4();
+
       const parsedKeywords = parseListField(req.body.keywords, { lowercase: true });
       const parsedColorImages = await buildColorImagesFromRequest(req);
 
@@ -479,7 +632,6 @@ router.post(
         manufacturer: req.body.manufacturer?.trim(),
         keywords: parsedKeywords,
 
-        // ✅ status flags
         isNewItem: checkboxOn(req.body.isNew),
         isOnSale: checkboxOn(req.body.isOnSale),
         isPopular: checkboxOn(req.body.isPopular),
@@ -509,11 +661,33 @@ router.post(
       console.error('❌ Add product error:', err);
 
       if (err.code === 11000) {
-        req.flash('error', 'That Product ID already exists. Try another.');
+        stashAddProductFormState(
+          req,
+          oldInput,
+          { id: 'That Product ID already exists. Try another.' },
+          'Please fix the highlighted field and submit again.'
+        );
         return res.redirect('/products/add');
       }
 
-      req.flash('error', `Failed to add product: ${err.message}`);
+      const mongooseFieldErrors = normalizeMongooseFieldErrors(err);
+
+      if (Object.keys(mongooseFieldErrors).length > 0) {
+        stashAddProductFormState(
+          req,
+          oldInput,
+          mongooseFieldErrors,
+          'Please fix the highlighted fields and submit again.'
+        );
+        return res.redirect('/products/add');
+      }
+
+      stashAddProductFormState(
+        req,
+        oldInput,
+        {},
+        `Failed to add product: ${err.message}`
+      );
       return res.redirect('/products/add');
     }
   },

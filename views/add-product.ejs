@@ -1,4 +1,18 @@
 <!-- views/add-product.ejs -->
+<%
+  const form = oldInput || {};
+  const errors = fieldErrors || {};
+
+  function valueOf(name, fallback = '') {
+    const value = form[name];
+    return value === undefined || value === null ? fallback : value;
+  }
+
+  function hasError(name) {
+    return !!errors[name];
+  }
+%>
+
 <div class="container-fluid py-4 bg-dark min-vh-100">
   <div class="container">
     <div class="row justify-content-center">
@@ -16,6 +30,19 @@
             </div>
 
             <div id="toast-container" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;"></div>
+
+            <% if (Array.isArray(error) && error.length) { %>
+              <div class="alert alert-danger border-0 shadow-sm mt-3" role="alert">
+                <div class="fw-semibold mb-1 text-primary">Please fix the highlighted fields</div>
+                <div><%= error[0] %></div>
+              </div>
+            <% } %>
+
+            <% if (Array.isArray(success) && success.length) { %>
+              <div class="alert alert-success border-0 shadow-sm mt-3" role="alert">
+                <div><%= success[0] %></div>
+              </div>
+            <% } %>
 
             <% if (!business) { %>
               <div class="alert alert-warning border-0 shadow-sm mb-0">
@@ -44,9 +71,13 @@
                           name="id"
                           placeholder="PROD-001 (fill it for advanced analytics & customization)"
                           required
-                          class="form-control pf-input"
+                          value="<%= valueOf('id') %>"
+                          class="form-control pf-input <%= hasError('id') ? 'is-invalid' : '' %>"
                         />
                         <div class="form-text">Custom Id must be unique and alphanumeric (20-30 characters).</div>
+                        <% if (hasError('id')) { %>
+                          <div class="invalid-feedback d-block"><%= errors.id %></div>
+                        <% } %>
                       </div>
 
                       <div class="col-12">
@@ -59,8 +90,12 @@
                           name="name"
                           placeholder="e.g., Orange Juice 1L"
                           required
-                          class="form-control pf-input"
+                          value="<%= valueOf('name') %>"
+                          class="form-control pf-input <%= hasError('name') ? 'is-invalid' : '' %>"
                         />
+                        <% if (hasError('name')) { %>
+                          <div class="invalid-feedback d-block"><%= errors.name %></div>
+                        <% } %>
                       </div>
 
                       <div class="col-12">
@@ -77,10 +112,14 @@
                             step="0.01"
                             min="0"
                             required
-                            class="form-control pf-input"
+                            value="<%= valueOf('price') %>"
+                            class="form-control pf-input <%= hasError('price') ? 'is-invalid' : '' %>"
                           />
                         </div>
                         <div class="form-text">Enter the selling price you want buyers to see.</div>
+                        <% if (hasError('price')) { %>
+                          <div class="invalid-feedback d-block"><%= errors.price %></div>
+                        <% } %>
                       </div>
 
                       <div class="col-12">
@@ -92,6 +131,7 @@
                           placeholder="100"
                           min="0"
                           required
+                          value="<%= valueOf('stock') %>"
                           class="form-control pf-input"
                         />
                         <div class="form-text">Required. Use 0 for out of stock. You can update stock anytime in Edit Product.</div>
@@ -103,7 +143,7 @@
                           <option value="">Choose category</option>
                           <% if (Array.isArray(CATEGORIES)) { %>
                             <% CATEGORIES.forEach(function(c){ %>
-                              <option value="<%= c.value %>"><%= c.label %></option>
+                              <option value="<%= c.value %>" <%= valueOf('category') === c.value ? 'selected' : '' %>><%= c.label %></option>
                             <% }) %>
                           <% } %>
                         </select>
@@ -117,6 +157,7 @@
                           type="text"
                           name="color"
                           placeholder="e.g., Orange / Black / Blue"
+                          value="<%= valueOf('color') %>"
                           class="form-control pf-input"
                         />
                         <div class="form-text">Optional fallback color. If empty, the first variant color will be used.</div>
@@ -129,6 +170,7 @@
                           type="text"
                           name="keywords"
                           placeholder="e.g., iphone, apple phone, smartphone, ios"
+                          value="<%= valueOf('keywords') %>"
                           class="form-control pf-input"
                         />
                         <div class="form-text">Optional. Separate keywords with commas so buyers can find this product in search.</div>
@@ -146,6 +188,7 @@
                           type="text"
                           name="size"
                           placeholder="e.g., 1L Bottle / M / Size 7"
+                          value="<%= valueOf('size') %>"
                           class="form-control pf-input"
                         />
                         <div class="form-text">Optional fallback size. If empty, the first variant size will be used.</div>
@@ -155,10 +198,10 @@
                         <label class="form-label fw-semibold" for="productQuality">Quality / Grade</label>
                         <select id="productQuality" name="quality" class="form-select pf-input pf-select">
                           <option value="">Select quality...</option>
-                          <option value="Premium">Premium</option>
-                          <option value="Standard">Standard</option>
-                          <option value="Economy">Economy</option>
-                          <option value="Wholesale">Wholesale</option>
+                          <option value="Premium" <%= valueOf('quality') === 'Premium' ? 'selected' : '' %>>Premium</option>
+                          <option value="Standard" <%= valueOf('quality') === 'Standard' ? 'selected' : '' %>>Standard</option>
+                          <option value="Economy" <%= valueOf('quality') === 'Economy' ? 'selected' : '' %>>Economy</option>
+                          <option value="Wholesale" <%= valueOf('quality') === 'Wholesale' ? 'selected' : '' %>>Wholesale</option>
                         </select>
                         <div class="form-text">Pick the quality level buyers should see.</div>
                       </div>
@@ -170,7 +213,7 @@
 
                         <div class="pf-country-dropdown position-relative" id="madeDropdown">
                           <div
-                            class="pf-country-selected form-control d-flex align-items-center justify-content-between gap-2"
+                            class="pf-country-selected form-control d-flex align-items-center justify-content-between gap-2 <%= hasError('made') ? 'is-invalid' : '' %>"
                             id="madeSelected"
                             tabindex="0"
                             role="button"
@@ -179,7 +222,7 @@
                           >
                             <span class="pf-country-selected-left d-flex align-items-center gap-2 min-w-0">
                               <img id="madeSelectedFlagImg" class="pf-flag-img d-none" alt="" aria-hidden="true" />
-                              <span id="madeSelectedText" class="text-truncate">Select country</span>
+                              <span id="madeSelectedText" class="text-truncate"><%= valueOf('made') || 'Select country' %></span>
                             </span>
                             <span class="pf-country-arrow small">▾</span>
                           </div>
@@ -220,11 +263,14 @@
                             </div>
                           </div>
 
-                          <input type="hidden" name="made" id="made" value="" required />
-                          <input type="hidden" name="madeCode" id="madeCode" value="" />
+                          <input type="hidden" name="made" id="made" value="<%= valueOf('made') %>" required />
+                          <input type="hidden" name="madeCode" id="madeCode" value="<%= valueOf('madeCode') %>" />
                         </div>
 
                         <div class="form-text">Search and select a country (e.g., South Africa, Nigeria, United States…)</div>
+                        <% if (hasError('made')) { %>
+                          <div class="invalid-feedback d-block"><%= errors.made %></div>
+                        <% } %>
                       </div>
 
                       <div class="col-12">
@@ -234,6 +280,7 @@
                           type="text"
                           name="manufacturer"
                           placeholder="e.g., PK's Engineering"
+                          value="<%= valueOf('manufacturer') %>"
                           class="form-control pf-input"
                         />
                       </div>
@@ -242,17 +289,20 @@
                         <label class="form-label fw-semibold" for="typeSelect">
                           Matching Type <span class="text-danger">*</span>
                         </label>
-                        <select id="typeSelect" name="type" class="form-select pf-input pf-select" required>
+                        <select id="typeSelect" name="type" class="form-select pf-input pf-select <%= hasError('type') ? 'is-invalid' : '' %>" required>
                           <option value="">Choose type</option>
                           <% if (Array.isArray(PRODUCT_TYPES)) { %>
                             <% PRODUCT_TYPES.forEach(function(t){ %>
-                              <option value="<%= t.value %>"><%= t.label %></option>
+                              <option value="<%= t.value %>" <%= valueOf('type') === t.value ? 'selected' : '' %>><%= t.label %></option>
                             <% }) %>
                           <% } %>
                         </select>
                         <div class="form-text">
                           Use <strong>clothes</strong> or <strong>shoes</strong> to enable size + color variants on the shop page.
                         </div>
+                        <% if (hasError('type')) { %>
+                          <div class="invalid-feedback d-block"><%= errors.type %></div>
+                        <% } %>
                       </div>
 
                       <div class="col-12">
@@ -264,7 +314,7 @@
                           placeholder="Short description buyers will see (features, highlights, etc.)"
                           maxlength="500"
                           class="form-control pf-textarea"
-                        ></textarea>
+                        ><%= valueOf('description') %></textarea>
                         <div class="form-text">Max 500 characters</div>
                       </div>
                     </div>
@@ -280,13 +330,13 @@
                           <div class="col-12 col-lg-4">
                             <label class="form-label fw-semibold" for="productRole">Product Role</label>
                             <select id="productRole" name="role" class="form-select pf-input pf-select">
-                              <option value="general" selected>General</option>
-                              <option value="clothes">Clothes</option>
-                              <option value="shoes">Shoes</option>
-                              <option value="electronics">Electronics</option>
-                              <option value="home">Home</option>
-                              <option value="beauty">Beauty</option>
-                              <option value="groceries">Groceries</option>
+                              <option value="general" <%= valueOf('role', 'general') === 'general' ? 'selected' : '' %>>General</option>
+                              <option value="clothes" <%= valueOf('role') === 'clothes' ? 'selected' : '' %>>Clothes</option>
+                              <option value="shoes" <%= valueOf('role') === 'shoes' ? 'selected' : '' %>>Shoes</option>
+                              <option value="electronics" <%= valueOf('role') === 'electronics' ? 'selected' : '' %>>Electronics</option>
+                              <option value="home" <%= valueOf('role') === 'home' ? 'selected' : '' %>>Home</option>
+                              <option value="beauty" <%= valueOf('role') === 'beauty' ? 'selected' : '' %>>Beauty</option>
+                              <option value="groceries" <%= valueOf('role') === 'groceries' ? 'selected' : '' %>>Groceries</option>
                             </select>
                             <div class="form-text">Controls how variants behave in the store.</div>
                           </div>
@@ -298,8 +348,12 @@
                               type="text"
                               name="sizes"
                               placeholder="e.g., S, M, L or 500ml, 1L"
-                              class="form-control pf-input"
+                              value="<%= valueOf('sizes') %>"
+                              class="form-control pf-input <%= hasError('sizes') ? 'is-invalid' : '' %>"
                             />
+                            <% if (hasError('sizes')) { %>
+                              <div class="invalid-feedback d-block"><%= errors.sizes %></div>
+                            <% } %>
                           </div>
 
                           <div class="col-12 col-lg-4">
@@ -309,8 +363,12 @@
                               type="text"
                               name="colors"
                               placeholder="e.g., Black, Blue, Red"
-                              class="form-control pf-input"
+                              value="<%= valueOf('colors') %>"
+                              class="form-control pf-input <%= hasError('colors') ? 'is-invalid' : '' %>"
                             />
+                            <% if (hasError('colors')) { %>
+                              <div class="invalid-feedback d-block"><%= errors.colors %></div>
+                            <% } %>
                           </div>
 
                           <div class="col-12">
@@ -360,25 +418,30 @@
                                 <div class="row g-2">
                                   <div class="col-8">
                                     <input
+                                      id="shipWeightValue"
                                       type="number"
                                       name="shipWeightValue"
                                       step="0.001"
                                       min="0"
                                       placeholder="e.g., 0.50"
                                       required
-                                      class="form-control pf-input"
+                                      value="<%= valueOf('shipWeightValue') %>"
+                                      class="form-control pf-input <%= hasError('shipWeightValue') ? 'is-invalid' : '' %>"
                                     />
                                   </div>
                                   <div class="col-4">
                                     <select name="shipWeightUnit" class="form-select pf-input pf-select">
-                                      <option value="kg" selected>kg</option>
-                                      <option value="g">g</option>
-                                      <option value="lb">lb</option>
-                                      <option value="oz">oz</option>
+                                      <option value="kg" <%= valueOf('shipWeightUnit', 'kg') === 'kg' ? 'selected' : '' %>>kg</option>
+                                      <option value="g" <%= valueOf('shipWeightUnit') === 'g' ? 'selected' : '' %>>g</option>
+                                      <option value="lb" <%= valueOf('shipWeightUnit') === 'lb' ? 'selected' : '' %>>lb</option>
+                                      <option value="oz" <%= valueOf('shipWeightUnit') === 'oz' ? 'selected' : '' %>>oz</option>
                                     </select>
                                   </div>
                                 </div>
                                 <div class="form-text">Weight of ONE item (without box). Example: 0.5 kg.</div>
+                                <% if (hasError('shipWeightValue')) { %>
+                                  <div class="invalid-feedback d-block"><%= errors.shipWeightValue %></div>
+                                <% } %>
                               </div>
 
                               <div class="col-12">
@@ -388,6 +451,7 @@
                                   type="text"
                                   name="packagingHint"
                                   placeholder="e.g., small-box / tube / fragile"
+                                  value="<%= valueOf('packagingHint') %>"
                                   class="form-control pf-input"
                                 />
                                 <div class="form-text">Helps auto-packing later. Leave empty if unsure.</div>
@@ -402,45 +466,60 @@
                                 <div class="row g-2">
                                   <div class="col-6 col-md-3">
                                     <input
+                                      id="shipLength"
                                       type="number"
                                       name="shipLength"
                                       step="0.1"
                                       min="0"
                                       placeholder="Length"
                                       required
-                                      class="form-control pf-input"
+                                      value="<%= valueOf('shipLength') %>"
+                                      class="form-control pf-input <%= hasError('shipLength') ? 'is-invalid' : '' %>"
                                     />
                                   </div>
                                   <div class="col-6 col-md-3">
                                     <input
+                                      id="shipWidth"
                                       type="number"
                                       name="shipWidth"
                                       step="0.1"
                                       min="0"
                                       placeholder="Width"
                                       required
-                                      class="form-control pf-input"
+                                      value="<%= valueOf('shipWidth') %>"
+                                      class="form-control pf-input <%= hasError('shipWidth') ? 'is-invalid' : '' %>"
                                     />
                                   </div>
                                   <div class="col-6 col-md-3">
                                     <input
+                                      id="shipHeight"
                                       type="number"
                                       name="shipHeight"
                                       step="0.1"
                                       min="0"
                                       placeholder="Height"
                                       required
-                                      class="form-control pf-input"
+                                      value="<%= valueOf('shipHeight') %>"
+                                      class="form-control pf-input <%= hasError('shipHeight') ? 'is-invalid' : '' %>"
                                     />
                                   </div>
                                   <div class="col-6 col-md-3">
                                     <select name="shipDimUnit" class="form-select pf-input pf-select">
-                                      <option value="cm" selected>cm</option>
-                                      <option value="in">in</option>
+                                      <option value="cm" <%= valueOf('shipDimUnit', 'cm') === 'cm' ? 'selected' : '' %>>cm</option>
+                                      <option value="in" <%= valueOf('shipDimUnit') === 'in' ? 'selected' : '' %>>in</option>
                                     </select>
                                   </div>
                                 </div>
                                 <div class="form-text">Dimensions of ONE item (without box). Example: 30 × 20 × 10 cm.</div>
+                                <% if (hasError('shipLength')) { %>
+                                  <div class="invalid-feedback d-block"><%= errors.shipLength %></div>
+                                <% } %>
+                                <% if (hasError('shipWidth')) { %>
+                                  <div class="invalid-feedback d-block"><%= errors.shipWidth %></div>
+                                <% } %>
+                                <% if (hasError('shipHeight')) { %>
+                                  <div class="invalid-feedback d-block"><%= errors.shipHeight %></div>
+                                <% } %>
                               </div>
 
                               <div class="col-12">
@@ -448,13 +527,25 @@
                                 <div class="d-flex flex-wrap gap-3">
                                   <label class="form-check d-flex align-items-center gap-2 m-0">
                                     <input type="hidden" name="shipSeparately" value="0" />
-                                    <input class="form-check-input mt-0" type="checkbox" name="shipSeparately" value="on" />
+                                    <input
+                                      class="form-check-input mt-0"
+                                      type="checkbox"
+                                      name="shipSeparately"
+                                      value="on"
+                                      <%= valueOf('shipSeparately') ? 'checked' : '' %>
+                                    />
                                     <span class="form-check-label">Ship separately</span>
                                   </label>
 
                                   <label class="form-check d-flex align-items-center gap-2 m-0">
                                     <input type="hidden" name="fragile" value="0" />
-                                    <input class="form-check-input mt-0" type="checkbox" name="fragile" value="on" />
+                                    <input
+                                      class="form-check-input mt-0"
+                                      type="checkbox"
+                                      name="fragile"
+                                      value="on"
+                                      <%= valueOf('fragile') ? 'checked' : '' %>
+                                    />
                                     <span class="form-check-label">Fragile</span>
                                   </label>
                                 </div>
@@ -482,7 +573,7 @@
                             name="imageFile"
                             accept="image/*"
                             required
-                            class="position-absolute top-0 start-0 w-100 h-100 opacity-0"
+                            class="position-absolute top-0 start-0 w-100 h-100 opacity-0 <%= hasError('imageFile') ? 'is-invalid' : '' %>"
                             style="cursor:pointer; z-index:2;"
                           />
                           <div class="border border-2 border-dashed rounded-4 p-4 bg-light d-flex align-items-center gap-3">
@@ -498,6 +589,10 @@
                           </div>
                         </div>
 
+                        <% if (hasError('imageFile')) { %>
+                          <div class="invalid-feedback d-block"><%= errors.imageFile %></div>
+                        <% } %>
+
                         <div id="previewWrapper" class="mt-3 d-none">
                           <div class="position-relative d-inline-block">
                             <img id="imagePreview" class="img-fluid rounded border" alt="Product preview" style="max-height: 220px;" />
@@ -505,6 +600,53 @@
                               ×
                             </button>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- STATUS FLAGS -->
+                  <div class="col-12">
+                    <div class="card border rounded-4 shadow-sm">
+                      <div class="card-body">
+                        <h2 class="h5 text-primary mb-3">Product Status</h2>
+
+                        <div class="d-flex flex-wrap gap-3">
+                          <label class="form-check d-flex align-items-center gap-2 m-0">
+                            <input type="hidden" name="isNew" value="0" />
+                            <input
+                              class="form-check-input mt-0"
+                              type="checkbox"
+                              name="isNew"
+                              value="on"
+                              <%= valueOf('isNew') ? 'checked' : '' %>
+                            />
+                            <span class="form-check-label">New item</span>
+                          </label>
+
+                          <label class="form-check d-flex align-items-center gap-2 m-0">
+                            <input type="hidden" name="isOnSale" value="0" />
+                            <input
+                              class="form-check-input mt-0"
+                              type="checkbox"
+                              name="isOnSale"
+                              value="on"
+                              <%= valueOf('isOnSale') ? 'checked' : '' %>
+                            />
+                            <span class="form-check-label">On sale</span>
+                          </label>
+
+                          <label class="form-check d-flex align-items-center gap-2 m-0">
+                            <input type="hidden" name="isPopular" value="0" />
+                            <input
+                              class="form-check-input mt-0"
+                              type="checkbox"
+                              name="isPopular"
+                              value="on"
+                              <%= valueOf('isPopular') ? 'checked' : '' %>
+                            />
+                            <span class="form-check-label">Popular</span>
+                          </label>
                         </div>
                       </div>
                     </div>
@@ -733,6 +875,10 @@
         madeSelectedFlagImg.classList.add('d-none');
       }
 
+      if (madeSelected) {
+        madeSelected.classList.remove('is-invalid');
+      }
+
       Array.from(madeList.querySelectorAll('.pf-country-option')).forEach(function (btn) {
         btn.classList.toggle('active', btn === option);
       });
@@ -807,8 +953,17 @@
       if (!madeHidden.value) {
         event.preventDefault();
         showToast('Please select the country in "Made In".', 'error');
+
+        if (madeSelected) {
+          madeSelected.classList.add('is-invalid');
+        }
+
         openCountryDropdown();
         return;
+      }
+
+      if (madeSelected) {
+        madeSelected.classList.remove('is-invalid');
       }
 
       if (submitBtn) {
