@@ -268,21 +268,12 @@ router.get('/store', async (req, res) => {
       .limit(8)
       .lean();
 
-    const newArrivalsRaw = await Product.find({
-      ...baseQuery,
-      isNewItem: true,
-    })
-      .sort({ createdAt: -1 })
+    const newArrivalsRaw = await Product.find(baseQuery)
+      .sort({ createdAt: -1, _id: -1 })
       .limit(8)
       .lean();
 
-    const featuredProductsRaw = await Product.find({
-      ...baseQuery,
-      isPopular: true,
-    })
-      .sort({ createdAt: -1 })
-      .limit(8)
-      .lean();
+    const featuredProductsRaw = await getFeaturedProducts(8);
 
     const bestSellerProductsRaw = await Product.find(baseQuery)
       .sort({ soldCount: -1, createdAt: -1 })
@@ -464,12 +455,12 @@ router.get('/store/shop', async (req, res) => {
       ];
     }
 
-    let shopSort = { createdAt: -1 };
+    let shopSort = { createdAt: -1, _id: -1 };
 
     if (selectedSort === 'popular') {
       shopSort = { soldCount: -1, createdAt: -1 };
     } else if (selectedSort === 'newest') {
-      shopSort = { createdAt: -1 };
+      shopSort = { createdAt: -1, _id: -1 };
     } else if (selectedSort === 'rating') {
       shopSort = { avgRating: -1, ratingsCount: -1, createdAt: -1 };
     } else if (selectedSort === 'price_asc') {
@@ -890,11 +881,8 @@ router.get('/store/bestseller', async (req, res) => {
       .limit(8)
       .lean();
 
-    const newArrivalsRaw = await Product.find({
-      ...bestsellerQuery,
-      isNewItem: true,
-    })
-      .sort({ createdAt: -1 })
+    const newArrivalsRaw = await Product.find(bestsellerQuery)
+      .sort({ createdAt: -1, _id: -1 })
       .limit(4)
       .lean();
 

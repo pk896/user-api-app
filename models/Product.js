@@ -70,10 +70,19 @@ const productSchema = new mongoose.Schema(
     // Human-friendly id separate from _id
     customId: {
       type: String,
-      required: true,
-      unique: true, // uniqueness at schema level
-      index: true, // explicit index for speed
+      required: [true, 'Custom ID is required'],
+      unique: true,
+      index: true,
       trim: true,
+      minlength: [10, 'Custom ID must be at least 10 characters'],
+      maxlength: [36, 'Custom ID cannot be longer than 36 characters'],
+      validate: {
+        validator: function (v) {
+          const value = String(v || '').trim();
+          return /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9-]{10,36}$/.test(value);
+        },
+        message: 'Custom ID must be 10-36 characters, contain both letters and numbers, and use only letters, numbers, or hyphens.',
+      },
     },
 
     name: {
@@ -259,6 +268,18 @@ const productSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+
+    // Hard timestamp fields (defensive fix)
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      immutable: true,
+      index: true,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
     timestamps: true,
@@ -320,13 +341,11 @@ productSchema.pre('insertMany', function (next, docs) {
 productSchema.pre('save', function (next) {
   const now = new Date();
 
-  if (!this.createdAt) {
+  if (!(this.createdAt instanceof Date) || Number.isNaN(this.createdAt.getTime())) {
     this.createdAt = now;
   }
 
-  if (!this.updatedAt) {
-    this.updatedAt = now;
-  }
+  this.updatedAt = now;
 
   if (!Array.isArray(this.colors)) {
     this.colors = this.colors ? [this.colors] : [];

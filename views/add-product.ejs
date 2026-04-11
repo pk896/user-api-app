@@ -69,12 +69,16 @@
                           id="productCustomId"
                           type="text"
                           name="id"
-                          placeholder="PROD-001 (fill it for advanced analytics & customization)"
+                          placeholder="e.g. PROD-2026A1"
                           required
+                          minlength="10"
+                          maxlength="36"
+                          pattern="^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9-]{10,36}$"
+                          title="Custom ID must be 10-36 characters, include letters and numbers, and use only letters, numbers, or hyphens."
                           value="<%= valueOf('id') %>"
                           class="form-control pf-input <%= hasError('id') ? 'is-invalid' : '' %>"
                         />
-                        <div class="form-text">Custom Id must be unique and alphanumeric (20-30 characters).</div>
+                        <div class="form-text">Custom ID must be unique, 10-36 characters, include both letters and numbers, and may use hyphens.</div>
                         <% if (hasError('id')) { %>
                           <div class="invalid-feedback d-block"><%= errors.id %></div>
                         <% } %>
@@ -945,6 +949,48 @@
       }
     });
 
+    function getFieldMessage(field) {
+      if (!field) return 'Please fix the highlighted fields.';
+
+      if (field.name === 'id') {
+        return 'Custom ID must be 10-36 characters, include letters and numbers, and use only letters, numbers, or hyphens.';
+      }
+
+      if (field.name === 'name') {
+        return 'Product name is required.';
+      }
+
+      if (field.name === 'price') {
+        return 'Please enter a valid price greater than 0.';
+      }
+
+      if (field.name === 'imageFile') {
+        return 'Product image is required.';
+      }
+
+      if (field.name === 'type') {
+        return 'Please choose a matching type.';
+      }
+
+      if (field.name === 'shipWeightValue') {
+        return 'Weight must be greater than 0.';
+      }
+
+      if (field.name === 'shipLength') {
+        return 'Length must be greater than 0.';
+      }
+
+      if (field.name === 'shipWidth') {
+        return 'Width must be greater than 0.';
+      }
+
+      if (field.name === 'shipHeight') {
+        return 'Height must be greater than 0.';
+      }
+
+      return field.validationMessage || 'Please fix the highlighted fields.';
+    }
+
     form.addEventListener('submit', function (event) {
       const submitBtn = form.querySelector('button[type="submit"]');
       const submitLabel = submitBtn ? submitBtn.querySelector('.pf-submit-label') : null;
@@ -964,6 +1010,25 @@
 
       if (madeSelected) {
         madeSelected.classList.remove('is-invalid');
+      }
+
+      const invalidField = form.querySelector(':invalid');
+
+      if (invalidField) {
+        event.preventDefault();
+
+        invalidField.classList.add('is-invalid');
+
+        if (typeof invalidField.reportValidity === 'function') {
+          invalidField.reportValidity();
+        }
+
+        if (typeof invalidField.focus === 'function') {
+          invalidField.focus();
+        }
+
+        showToast(getFieldMessage(invalidField), 'error');
+        return;
       }
 
       if (submitBtn) {

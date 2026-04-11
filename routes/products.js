@@ -148,6 +148,42 @@ async function uploadSingleFileToS3(file) {
   return buildImageUrl(key);
 }
 
+function isOurS3Url(imageUrl) {
+  const url = String(imageUrl || '').trim();
+  if (!url) return false;
+
+  const expectedBase = `https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
+  return url.startsWith(expectedBase);
+}
+
+async function deleteSingleFileFromS3ByUrl(imageUrl) {
+  try {
+    if (!isOurS3Url(imageUrl)) return;
+
+    const key = getS3KeyFromUrl(imageUrl);
+    if (!key) return;
+
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+      }),
+    );
+  } catch (err) {
+    console.warn('⚠️ Failed to delete S3 object during cleanup:', err.message);
+  }
+}
+
+async function cleanupUploadedProductAssets({ mainImageUrl = '', colorImages = [] } = {}) {
+  if (mainImageUrl) {
+    await deleteSingleFileFromS3ByUrl(mainImageUrl);
+  }
+
+  for (const entry of colorImages) {
+    await deleteSingleFileFromS3ByUrl(entry?.imageUrl || '');
+  }
+}
+
 async function buildColorImagesFromRequest(req) {
   const rows = normalizeColorImageInputs(req.body);
   const uploadedFiles = Array.isArray(req.files?.colorImageFiles) ? req.files.colorImageFiles : [];
@@ -486,9 +522,10 @@ router.post(
     { name: 'colorImageFiles', maxCount: 20 },
   ]),
   async (req, res) => {
-    console.log('🟢 POST /products/add reached');
-
     const oldInput = buildAddProductOldInput(req.body);
+
+    let uploadedMainImageUrl = '';
+    let uploadedColorImages = [];
 
     try {
       const business = req.business || req.session.business;
@@ -499,8 +536,9 @@ router.post(
       }
 
       const fieldErrors = {};
-
       const { name, price } = req.body;
+      const customIdInput = String(req.body.id || '').trim();
+      const customIdPattern = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9-]{10,36}$/;
       const mainImageFile = Array.isArray(req.files?.imageFile) ? req.files.imageFile[0] : null;
 
       const role = String(req.body.role || '').trim().toLowerCase();
@@ -523,6 +561,12 @@ router.post(
       const fragile = checkboxOn(req.body.fragile);
       const packagingHint = (req.body.packagingHint || '').toString().trim();
 
+      if (!customIdInput) {
+        fieldErrors.id = 'Custom ID is required.';
+      } else if (!customIdPattern.test(customIdInput)) {
+        fieldErrors.id = 'Custom ID must be 10-36 characters, include letters and numbers, and use only letters, numbers, or hyphens.';
+      }
+
       if (!String(name || '').trim()) {
         fieldErrors.name = 'Product name is required.';
       }
@@ -531,7 +575,7 @@ router.post(
         fieldErrors.price = 'Price is required.';
       } else {
         const numericPriceCheck = Number(price);
-        if (Number.isNaN(numericPriceCheck) || numericPriceCheck <= 0) {
+        if (!Number.isFinite(numericPriceCheck) || numericPriceCheck <= 0) {
           fieldErrors.price = 'Price must be a valid positive number.';
         }
       }
@@ -584,23 +628,24 @@ router.post(
 
       const numericPrice = Number(price);
 
-      // Upload main image to S3
-      const imageUrl = await uploadSingleFileToS3(mainImageFile);
-      console.log(`✅ Main product image upload successful -> ${imageUrl}`);
+      uploadedMainImageUrl = await uploadSingleFileToS3(mainImageFile);
 
-      const customId = req.body.id?.trim() || uuidv4();
-
+      const customId = customIdInput || uuidv4();
       const parsedKeywords = parseListField(req.body.keywords, { lowercase: true });
-      const parsedColorImages = await buildColorImagesFromRequest(req);
+
+      uploadedColorImages = await buildColorImagesFromRequest(req);
 
       const fallbackColor =
-        String(req.body.color || '').trim() || (parsedColors[0] || '') || (parsedColorImages[0]?.color || '');
+        String(req.body.color || '').trim() ||
+        (parsedColors[0] || '') ||
+        (uploadedColorImages[0]?.color || '');
 
       const fallbackSize =
-        String(req.body.size || '').trim() || (parsedSizes[0] || '');
+        String(req.body.size || '').trim() ||
+        (parsedSizes[0] || '');
 
-      if (parsedColorImages.length > 0) {
-        parsedColorImages.forEach((entry) => {
+      if (uploadedColorImages.length > 0) {
+        uploadedColorImages.forEach((entry) => {
           const exists = parsedColors.some((c) => c.toLowerCase() === entry.color.toLowerCase());
           if (!exists) {
             parsedColors.push(entry.color);
@@ -608,12 +653,14 @@ router.post(
         });
       }
 
+      const now = new Date();
+
       const product = new Product({
         customId,
         name: name.trim(),
         price: numericPrice,
         description: req.body.description?.trim(),
-        imageUrl,
+        imageUrl: uploadedMainImageUrl,
         stock: Number.isFinite(Number(req.body.stock)) ? Number(req.body.stock) : 0,
 
         role: String(req.body.role || '').trim() || 'general',
@@ -624,7 +671,7 @@ router.post(
         size: fallbackSize,
         sizes: parsedSizes,
         colors: parsedColors,
-        colorImages: parsedColorImages,
+        colorImages: uploadedColorImages,
 
         quality: req.body.quality?.trim(),
         made: req.body.made?.trim(),
@@ -650,15 +697,43 @@ router.post(
         },
 
         business: business._id,
+        createdAt: now,
+        updatedAt: now,
       });
 
-      await product.save();
-      console.log(`✅ MongoDB save successful -> ${product.customId}`);
+      const savedProduct = await product.save();
+
+      let rawSaved = await Product.collection.findOne(
+        { _id: savedProduct._id },
+        { projection: { createdAt: 1, updatedAt: 1 } }
+      );
+
+      if (!rawSaved?.createdAt) {
+        const fallbackCreatedAt = rawSaved?.updatedAt || savedProduct.updatedAt || now;
+
+        await Product.collection.updateOne(
+          {
+            _id: savedProduct._id,
+            $or: [
+              { createdAt: { $exists: false } },
+              { createdAt: null },
+            ],
+          },
+          {
+            $set: { createdAt: fallbackCreatedAt },
+          }
+        );
+      }
 
       req.flash('success', '✅ Product added successfully!');
       return res.redirect('/products/all');
     } catch (err) {
       console.error('❌ Add product error:', err);
+
+      await cleanupUploadedProductAssets({
+        mainImageUrl: uploadedMainImageUrl,
+        colorImages: uploadedColorImages,
+      });
 
       if (err.code === 11000) {
         stashAddProductFormState(
