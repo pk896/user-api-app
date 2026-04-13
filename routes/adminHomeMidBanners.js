@@ -144,13 +144,21 @@ router.get('/home-mid-banners/:slot/edit', requireAdmin, async (req, res) => {
       return res.redirect('/admin/home-mid-banners');
     }
 
-    const banner = await HomeMidBanner.findOne({ slot }).lean();
+    const bannerRaw = await HomeMidBanner.findOne({ slot }).lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name category type price imageUrl isOnSale')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
+    let selectedProduct = null;
+    let banner = bannerRaw;
+
+    if (bannerRaw?.productCustomId) {
+      selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
+        .select('customId name imageUrl category type price stock isOnSale')
+        .lean();
+
+      banner = {
+        ...bannerRaw,
+        product: selectedProduct || null,
+      };
+    }
 
     return res.render('admin/home-mid-banners/edit', {
       title: `Edit ${slot === 'left' ? 'Left' : 'Right'} Mid Banner`,
@@ -158,7 +166,7 @@ router.get('/home-mid-banners/:slot/edit', requireAdmin, async (req, res) => {
       nonce: res.locals.nonce,
       slot,
       banner,
-      products,
+      selectedProduct,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -168,6 +176,40 @@ router.get('/home-mid-banners/:slot/edit', requireAdmin, async (req, res) => {
     console.error('❌ home mid banner edit page error:', err);
     req.flash('error', 'Could not load home mid banner.');
     return res.redirect('/admin/home-mid-banners');
+  }
+});
+
+/* SEARCH PRODUCTS FOR HOME MID BANNERS */
+router.get('/home-mid-banners/products/search', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+
+    if (!q) {
+      return res.json({ success: true, products: [] });
+    }
+
+    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const products = await Product.find({
+      stock: { $gt: 0 },
+      $or: [
+        { customId: { $regex: safeQ, $options: 'i' } },
+        { name: { $regex: safeQ, $options: 'i' } },
+      ],
+    })
+      .select('customId name imageUrl category type price stock isOnSale')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.json({ success: true, products });
+  } catch (err) {
+    console.error('❌ home mid banners product search error:', err);
+    return res.status(500).json({
+      success: false,
+      products: [],
+      message: 'Failed to search products.',
+    });
   }
 });
 

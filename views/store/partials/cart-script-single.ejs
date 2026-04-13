@@ -136,6 +136,91 @@
       return Math.floor(parsedQty);
     }
 
+    function applyChooserLayout(chooser, button) {
+      if (!chooser) return;
+
+      const gap = 10;
+      const viewportPadding = 12;
+      const isMobile = window.innerWidth < 576;
+
+      chooser.style.position = 'fixed';
+      chooser.style.right = 'auto';
+      chooser.style.bottom = 'auto';
+      chooser.style.transform = 'none';
+      chooser.style.zIndex = '1095';
+      chooser.style.width = isMobile ? 'calc(100vw - 32px)' : '340px';
+      chooser.style.maxWidth = '340px';
+      chooser.style.maxHeight = 'calc(100vh - 24px)';
+      chooser.style.overflowY = 'auto';
+
+      const body = chooser.querySelector('.card-body');
+      if (body) {
+        body.className = 'card-body p-2';
+      }
+
+      const status = chooser.querySelector('.js-variant-status');
+      if (status) {
+        status.className = 'js-variant-status small text-secondary mb-2';
+      }
+
+      chooser.querySelectorAll('.js-color-choice').forEach(function (btn) {
+        btn.className = 'btn btn-sm rounded-pill d-inline-flex align-items-center gap-1 js-color-choice';
+      });
+
+      chooser.querySelectorAll('.js-size-choice').forEach(function (btn) {
+        btn.className = 'btn btn-sm rounded-pill js-size-choice';
+      });
+
+      const confirmBtn = chooser.querySelector('.js-variant-confirm');
+      if (confirmBtn) {
+        confirmBtn.className = 'btn btn-sm rounded-pill js-variant-confirm';
+      }
+
+      const viewBtn = chooser.querySelector('.js-variant-view');
+      if (viewBtn) {
+        viewBtn.className = 'btn btn-sm rounded-pill js-variant-view';
+      }
+
+      if (isMobile || !button) {
+        chooser.style.top = '50%';
+        chooser.style.left = '50%';
+        chooser.style.transform = 'translate(-50%, -50%)';
+        return;
+      }
+
+      const buttonRect = button.getBoundingClientRect();
+      const chooserRect = chooser.getBoundingClientRect();
+
+      let left = buttonRect.left + (buttonRect.width / 2) - (chooserRect.width / 2);
+      let top = buttonRect.bottom + gap;
+
+      const fitsBelow = (buttonRect.bottom + gap + chooserRect.height + viewportPadding) <= window.innerHeight;
+      const fitsAbove = (buttonRect.top - gap - chooserRect.height - viewportPadding) >= 0;
+
+      if (!fitsBelow && fitsAbove) {
+        top = buttonRect.top - chooserRect.height - gap;
+      }
+
+      if (left < viewportPadding) {
+        left = viewportPadding;
+      }
+
+      if (left + chooserRect.width > window.innerWidth - viewportPadding) {
+        left = window.innerWidth - chooserRect.width - viewportPadding;
+      }
+
+      if (top < viewportPadding) {
+        top = viewportPadding;
+      }
+
+      if (top + chooserRect.height > window.innerHeight - viewportPadding) {
+        top = window.innerHeight - chooserRect.height - viewportPadding;
+      }
+
+      chooser.style.left = left + 'px';
+      chooser.style.top = top + 'px';
+    }
+
     function getOrCreateChooser(card, isSingle) {
       if (!card) return null;
 
@@ -144,17 +229,17 @@
 
       chooser = document.createElement('div');
       chooser.className = 'js-variant-chooser card shadow border-0 d-none';
-
-      if (isSingle) {
-        chooser.className += ' mt-3';
-      } else {
-        chooser.className += ' position-absolute start-50 translate-middle-x';
-        chooser.style.top = '12px';
-        chooser.style.zIndex = '25';
-        chooser.style.width = 'calc(100% - 24px)';
-        chooser.style.maxWidth = '340px';
-        card.classList.add('position-relative');
-      }
+      chooser.style.position = 'fixed';
+      chooser.style.top = '50%';
+      chooser.style.left = '50%';
+      chooser.style.right = 'auto';
+      chooser.style.bottom = 'auto';
+      chooser.style.transform = 'translate(-50%, -50%)';
+      chooser.style.zIndex = '1095';
+      chooser.style.width = 'calc(100vw - 32px)';
+      chooser.style.maxWidth = '340px';
+      chooser.style.maxHeight = 'calc(100vh - 24px)';
+      chooser.style.overflowY = 'auto';
 
       chooser.innerHTML = [
         '<div class="card-body p-2">',
@@ -326,6 +411,23 @@
       if (!chooser) return;
 
       chooser.classList.remove('d-none');
+      applyChooserLayout(chooser, button);
+
+      window.requestAnimationFrame(function () {
+        applyChooserLayout(chooser, button);
+
+        const preview = chooser.querySelector('.js-variant-preview');
+        if (preview) {
+          if (preview.complete) {
+            applyChooserLayout(chooser, button);
+          } else {
+            preview.onload = function () {
+              applyChooserLayout(chooser, button);
+            };
+          }
+        }
+      });
+
       activeChooserCard = card;
     }
 
@@ -688,6 +790,24 @@
         closeChooser(activeChooserCard);
       }
     });
+
+    window.addEventListener('resize', function () {
+      if (!activeChooserCard) return;
+
+      const chooser = activeChooserCard.querySelector('.js-variant-chooser');
+      const button =
+        activeChooserCard.querySelector('.js-single-add-to-cart') ||
+        activeChooserCard.querySelector('.js-add-to-cart');
+
+      if (!chooser || chooser.classList.contains('d-none')) return;
+
+      applyChooserLayout(chooser, button);
+    });
+
+    window.addEventListener('scroll', function () {
+      if (!activeChooserCard) return;
+      closeChooser(activeChooserCard);
+    }, true);
 
     refreshCartHeader();
   })();

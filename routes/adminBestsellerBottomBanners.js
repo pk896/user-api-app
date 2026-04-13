@@ -101,12 +101,6 @@ router.get('/bestseller-bottom-banners', requireAdmin, async (req, res) => {
       .sort({ sortOrder: 1, createdAt: 1 })
       .lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name imageUrl category type price stock')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
-
     const bannersWithProducts = await Promise.all(
       banners.map(async (banner) => {
         let product = null;
@@ -129,7 +123,6 @@ router.get('/bestseller-bottom-banners', requireAdmin, async (req, res) => {
       themeCss: themeCssFromSession(req),
       nonce: res.locals.nonce,
       banners: bannersWithProducts,
-      products,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -154,22 +147,17 @@ router.get('/bestseller-bottom-banners/:slot/edit', requireAdmin, async (req, re
 
     const bannerRaw = await BestsellerBottomBanner.findOne({ slot }).lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name imageUrl category type price stock')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
-
+    let selectedProduct = null;
     let banner = bannerRaw;
 
     if (bannerRaw && bannerRaw.productCustomId) {
-      const product = await Product.findOne({ customId: bannerRaw.productCustomId })
-        .select('customId name imageUrl category type price stock')
+      selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
+        .select('customId name imageUrl category type price stock isOnSale')
         .lean();
 
       banner = {
         ...bannerRaw,
-        product: product || null,
+        product: selectedProduct || null,
       };
     }
 
@@ -179,7 +167,7 @@ router.get('/bestseller-bottom-banners/:slot/edit', requireAdmin, async (req, re
       nonce: res.locals.nonce,
       slot,
       banner,
-      products,
+      selectedProduct,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -189,6 +177,40 @@ router.get('/bestseller-bottom-banners/:slot/edit', requireAdmin, async (req, re
     console.error('❌ bestseller bottom banner edit page error:', err);
     req.flash('error', 'Could not load bestseller bottom banner.');
     return res.redirect('/admin/bestseller-bottom-banners');
+  }
+});
+
+/* SEARCH PRODUCTS FOR BESTSELLER BOTTOM BANNER */
+router.get('/bestseller-bottom-banners/products/search', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+
+    if (!q) {
+      return res.json({ success: true, products: [] });
+    }
+
+    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const products = await Product.find({
+      stock: { $gt: 0 },
+      $or: [
+        { customId: { $regex: safeQ, $options: 'i' } },
+        { name: { $regex: safeQ, $options: 'i' } },
+      ],
+    })
+      .select('customId name imageUrl category type price stock isOnSale')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.json({ success: true, products });
+  } catch (err) {
+    console.error('❌ bestseller bottom banner product search error:', err);
+    return res.status(500).json({
+      success: false,
+      products: [],
+      message: 'Failed to search products.',
+    });
   }
 });
 

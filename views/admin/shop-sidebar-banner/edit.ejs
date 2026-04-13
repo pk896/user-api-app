@@ -5,24 +5,70 @@
       <div class="card shadow-sm border-0">
         <div class="card-body p-4">
           <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Edit Shop Sidebar Banner</h1>
+            <h1 class="h3 mb-0 text-primary">Edit Shop Sidebar Banner</h1>
             <a href="/admin/shop-sidebar-banner" class="btn btn-outline-secondary">Back</a>
           </div>
 
           <form action="/admin/shop-sidebar-banner" method="POST" enctype="multipart/form-data" class="row g-3">
             <div class="col-12">
-              <label class="form-label">Choose Product</label>
-              <select name="productCustomId" class="form-select" required>
-                <option value="">Select a product</option>
-                <% (products || []).forEach(function(product) { %>
-                  <option
-                    value="<%= product.customId %>"
-                    <%= banner && banner.productCustomId === product.customId ? 'selected' : '' %>
-                  >
-                    <%= product.name %> — <%= product.customId %>
-                  </option>
-                <% }) %>
-              </select>
+              <label for="productSearch" class="form-label fw-semibold text-primary">Choose Product</label>
+
+              <input
+                type="hidden"
+                name="productCustomId"
+                id="productCustomId"
+                value="<%= banner?.productCustomId || '' %>"
+                required
+              >
+
+              <div class="position-relative">
+                <input
+                  type="text"
+                  id="productSearch"
+                  class="form-control border-primary"
+                  placeholder="Search by product custom ID or name"
+                  autocomplete="off"
+                  value="<%= selectedProduct ? `${selectedProduct.name} — ${selectedProduct.customId}` : '' %>"
+                  required
+                >
+
+                <div
+                  id="productSearchResults"
+                  class="list-group position-absolute top-100 start-0 end-0 shadow-sm d-none"
+                  style="z-index: 1050;"
+                ></div>
+              </div>
+
+              <div class="form-text text-primary mt-2">
+                Start typing the product custom ID or product name, then click the correct result.
+              </div>
+
+              <div
+                id="selectedProductBox"
+                class="mt-3 <%= selectedProduct ? '' : 'd-none' %>"
+              >
+                <div class="card border-primary shadow-sm">
+                  <div class="card-body py-2 px-3">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                      <div>
+                        <div class="fw-semibold text-primary" id="selectedProductName">
+                          <%= selectedProduct?.name || '' %>
+                        </div>
+                        <div class="small text-body-secondary" id="selectedProductMeta">
+                          <%= selectedProduct ? `Custom ID: ${selectedProduct.customId}` : '' %>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        id="clearSelectedProduct"
+                        class="btn btn-sm btn-outline-secondary"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="col-md-6">
@@ -99,27 +145,44 @@
               </div>
             <% } %>
 
-            <% if (banner && banner.product) { %>
-              <div class="col-12">
-                <div class="border rounded p-3 bg-light">
-                  <div class="row g-3 align-items-center">
-                    <div class="col-12 col-md-3">
+            <div class="col-12 <%= selectedProduct ? '' : 'd-none' %>" id="selectedProductPreviewWrap">
+              <div class="border rounded p-3 bg-light">
+                <div class="row g-3 align-items-center">
+                  <div class="col-12 col-md-3">
+                    <% if (selectedProduct && selectedProduct.imageUrl) { %>
                       <img
-                        src="<%= banner.product.imageUrl %>"
-                        alt="<%= banner.product.name %>"
+                        src="<%= selectedProduct.imageUrl %>"
+                        alt="<%= selectedProduct.name %>"
                         class="img-fluid rounded border"
                         style="max-height: 120px; object-fit: cover;"
+                        id="selectedProductPreviewImage"
                       >
-                    </div>
-                    <div class="col-12 col-md-9">
-                      <div><strong>Current Product:</strong> <%= banner.product.name %></div>
-                      <div><strong>Product ID:</strong> <%= banner.product.customId %></div>
-                      <div><strong>Price:</strong> $<%= Number(banner.product.price || 0).toFixed(2) %></div>
-                    </div>
+                    <% } else { %>
+                      <div
+                        class="border rounded bg-white d-flex align-items-center justify-content-center text-muted"
+                        style="height: 120px;"
+                        id="selectedProductPreviewPlaceholder"
+                      >
+                        No product image
+                      </div>
+                      <img
+                        src=""
+                        alt=""
+                        class="img-fluid rounded border d-none"
+                        style="max-height: 120px; object-fit: cover;"
+                        id="selectedProductPreviewImage"
+                      >
+                    <% } %>
+                  </div>
+
+                  <div class="col-12 col-md-9">
+                    <div><strong>Current Product:</strong> <span id="selectedPreviewName"><%= selectedProduct?.name || '' %></span></div>
+                    <div><strong>Product ID:</strong> <span id="selectedPreviewCustomId"><%= selectedProduct?.customId || '' %></span></div>
+                    <div><strong>Price:</strong> $<span id="selectedPreviewPrice"><%= selectedProduct ? Number(selectedProduct.price || 0).toFixed(2) : '0.00' %></span></div>
                   </div>
                 </div>
               </div>
-            <% } %>
+            </div>
 
             <div class="col-12">
               <button type="submit" class="btn btn-primary">
@@ -138,3 +201,208 @@
     </div>
   </div>
 </div>
+
+<%
+  scripts = `
+  <script nonce="${nonce}">
+    document.addEventListener('DOMContentLoaded', function () {
+      const searchInput = document.getElementById('productSearch');
+      const hiddenInput = document.getElementById('productCustomId');
+      const resultsBox = document.getElementById('productSearchResults');
+      const selectedProductBox = document.getElementById('selectedProductBox');
+      const selectedProductName = document.getElementById('selectedProductName');
+      const selectedProductMeta = document.getElementById('selectedProductMeta');
+      const clearSelectedProductBtn = document.getElementById('clearSelectedProduct');
+
+      const previewWrap = document.getElementById('selectedProductPreviewWrap');
+      const previewImage = document.getElementById('selectedProductPreviewImage');
+      const previewPlaceholder = document.getElementById('selectedProductPreviewPlaceholder');
+      const previewName = document.getElementById('selectedPreviewName');
+      const previewCustomId = document.getElementById('selectedPreviewCustomId');
+      const previewPrice = document.getElementById('selectedPreviewPrice');
+
+      let debounceTimer = null;
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function hideResults() {
+        resultsBox.classList.add('d-none');
+        resultsBox.innerHTML = '';
+      }
+
+      function showPreview(product) {
+        if (!previewWrap) return;
+
+        previewWrap.classList.remove('d-none');
+
+        if (previewName) previewName.textContent = product.name || '';
+        if (previewCustomId) previewCustomId.textContent = product.customId || '';
+        if (previewPrice) previewPrice.textContent = Number(product.price || 0).toFixed(2);
+
+        if (previewImage) {
+          if (product.imageUrl) {
+            previewImage.src = product.imageUrl;
+            previewImage.alt = product.name || 'Selected product';
+            previewImage.classList.remove('d-none');
+            if (previewPlaceholder) previewPlaceholder.classList.add('d-none');
+          } else {
+            previewImage.src = '';
+            previewImage.alt = '';
+            previewImage.classList.add('d-none');
+            if (previewPlaceholder) previewPlaceholder.classList.remove('d-none');
+          }
+        }
+      }
+
+      function hidePreview() {
+        if (!previewWrap) return;
+        previewWrap.classList.add('d-none');
+
+        if (previewName) previewName.textContent = '';
+        if (previewCustomId) previewCustomId.textContent = '';
+        if (previewPrice) previewPrice.textContent = '0.00';
+
+        if (previewImage) {
+          previewImage.src = '';
+          previewImage.alt = '';
+          previewImage.classList.add('d-none');
+        }
+
+        if (previewPlaceholder) {
+          previewPlaceholder.classList.remove('d-none');
+        }
+      }
+
+      function showSelectedProduct(product) {
+        hiddenInput.value = product.customId;
+        searchInput.value = product.name + ' — ' + product.customId;
+        selectedProductName.textContent = product.name;
+        selectedProductMeta.textContent = 'Custom ID: ' + product.customId;
+        selectedProductBox.classList.remove('d-none');
+        showPreview(product);
+        hideResults();
+      }
+
+      function clearSelectedProduct() {
+        hiddenInput.value = '';
+        searchInput.value = '';
+        selectedProductName.textContent = '';
+        selectedProductMeta.textContent = '';
+        selectedProductBox.classList.add('d-none');
+        hidePreview();
+        hideResults();
+        searchInput.focus();
+      }
+
+      async function searchProducts(query) {
+        try {
+          const response = await fetch('/admin/shop-sidebar-banner/products/search?q=' + encodeURIComponent(query), {
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+
+          const data = await response.json();
+
+          if (!data.success || !Array.isArray(data.products)) {
+            hideResults();
+            return;
+          }
+
+          if (data.products.length === 0) {
+            resultsBox.innerHTML = '<button type="button" class="list-group-item list-group-item-action disabled">No matching products found</button>';
+            resultsBox.classList.remove('d-none');
+            return;
+          }
+
+          resultsBox.innerHTML = data.products.map(function (product) {
+            return \`
+              <button
+                type="button"
+                class="list-group-item list-group-item-action"
+                data-custom-id="\${escapeHtml(product.customId)}"
+                data-name="\${escapeHtml(product.name)}"
+                data-price="\${escapeHtml(product.price)}"
+                data-image-url="\${escapeHtml(product.imageUrl || '')}"
+              >
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="fw-semibold text-primary">\${escapeHtml(product.name)}</div>
+                    <div class="small text-body-secondary">Custom ID: \${escapeHtml(product.customId)}</div>
+                  </div>
+                  \${product.isOnSale ? '<span class="badge bg-success">Sale</span>' : ''}
+                </div>
+              </button>
+            \`;
+          }).join('');
+
+          resultsBox.classList.remove('d-none');
+        } catch (err) {
+          console.error('Shop sidebar banner product search failed:', err);
+          hideResults();
+        }
+      }
+
+      searchInput.addEventListener('input', function () {
+        const query = searchInput.value.trim();
+
+        hiddenInput.value = '';
+
+        if (query.length < 1) {
+          hideResults();
+          return;
+        }
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+          searchProducts(query);
+        }, 250);
+      });
+
+      resultsBox.addEventListener('click', function (event) {
+        const button = event.target.closest('button[data-custom-id]');
+        if (!button) return;
+
+        showSelectedProduct({
+          customId: button.getAttribute('data-custom-id'),
+          name: button.getAttribute('data-name'),
+          price: button.getAttribute('data-price'),
+          imageUrl: button.getAttribute('data-image-url')
+        });
+      });
+
+      if (clearSelectedProductBtn) {
+        clearSelectedProductBtn.addEventListener('click', clearSelectedProduct);
+      }
+
+      document.addEventListener('click', function (event) {
+        const insideSearch =
+          event.target.closest('#productSearch') ||
+          event.target.closest('#productSearchResults');
+
+        if (!insideSearch) {
+          hideResults();
+        }
+      });
+
+      const form = searchInput.closest('form');
+      if (form) {
+        form.addEventListener('submit', function (event) {
+          if (!hiddenInput.value.trim()) {
+            event.preventDefault();
+            searchInput.focus();
+            alert('Please search and select a product first.');
+          }
+        });
+      }
+    });
+  </script>
+  `;
+%>

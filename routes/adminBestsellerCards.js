@@ -31,12 +31,6 @@ router.get('/bestseller-cards', requireAdmin, async (req, res) => {
       .sort({ sortOrder: 1, createdAt: 1 })
       .lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name imageUrl category type price stock')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
-
     const cardsWithProducts = await Promise.all(
       cards.map(async (card) => {
         let product = null;
@@ -59,7 +53,6 @@ router.get('/bestseller-cards', requireAdmin, async (req, res) => {
       themeCss: themeCssFromSession(req),
       nonce: res.locals.nonce,
       cards: cardsWithProducts,
-      products,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -84,22 +77,17 @@ router.get('/bestseller-cards/:slot/edit', requireAdmin, async (req, res) => {
 
     const cardRaw = await BestsellerCard.findOne({ slot }).lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name imageUrl category type price')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
-
+    let selectedProduct = null;
     let card = cardRaw;
 
     if (cardRaw?.productCustomId) {
-      const product = await Product.findOne({ customId: cardRaw.productCustomId })
-        .select('customId name imageUrl category type price stock')
+      selectedProduct = await Product.findOne({ customId: cardRaw.productCustomId })
+        .select('customId name imageUrl category type price stock isOnSale')
         .lean();
 
       card = {
         ...cardRaw,
-        product: product || null,
+        product: selectedProduct || null,
       };
     }
 
@@ -109,7 +97,7 @@ router.get('/bestseller-cards/:slot/edit', requireAdmin, async (req, res) => {
       nonce: res.locals.nonce,
       slot,
       card,
-      products,
+      selectedProduct,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -119,6 +107,40 @@ router.get('/bestseller-cards/:slot/edit', requireAdmin, async (req, res) => {
     console.error('❌ bestseller card edit page error:', err);
     req.flash('error', 'Could not load bestseller card.');
     return res.redirect('/admin/bestseller-cards');
+  }
+});
+
+/* SEARCH PRODUCTS FOR BESTSELLER CARD */
+router.get('/bestseller-cards/products/search', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+
+    if (!q) {
+      return res.json({ success: true, products: [] });
+    }
+
+    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const products = await Product.find({
+      stock: { $gt: 0 },
+      $or: [
+        { customId: { $regex: safeQ, $options: 'i' } },
+        { name: { $regex: safeQ, $options: 'i' } },
+      ],
+    })
+      .select('customId name imageUrl category type price stock isOnSale')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.json({ success: true, products });
+  } catch (err) {
+    console.error('❌ bestseller card product search error:', err);
+    return res.status(500).json({
+      success: false,
+      products: [],
+      message: 'Failed to search products.',
+    });
   }
 });
 

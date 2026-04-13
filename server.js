@@ -891,12 +891,25 @@ app.use('/', staticPagesRoutes);
 /* ---------------------------------------
    404 & 500 Error Handlers
 --------------------------------------- */
-app.use((req, res) => {
-  res.status(404).render('404', {
-    layout: 'layout',
+app.use(async (req, res) => {
+  let shopHeaderImage = null;
+
+  try {
+    const ShopHeaderImage = require('./models/ShopHeaderImage');
+
+    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+  } catch (err) {
+    console.warn('⚠️ Failed to load shopHeaderImage for 404 page:', err.message);
+  }
+
+  res.status(404).render('store/404', {
+    layout: 'layouts/store',
     title: 'Page Not Found',
     active: '',
     dbAvailable: dbConnectionEstablished,
+    shopHeaderImage,
   });
 });
 

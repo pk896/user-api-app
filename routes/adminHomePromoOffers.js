@@ -31,12 +31,6 @@ router.get('/home-promo-offers', requireAdmin, async (req, res) => {
       .sort({ sortOrder: 1, createdAt: 1 })
       .lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name imageUrl category type price')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
-
     const offersWithProducts = await Promise.all(
       offers.map(async (offer) => {
         let product = null;
@@ -59,7 +53,6 @@ router.get('/home-promo-offers', requireAdmin, async (req, res) => {
       themeCss: themeCssFromSession(req),
       nonce: res.locals.nonce,
       offers: offersWithProducts,
-      products,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -82,13 +75,21 @@ router.get('/home-promo-offers/:slot/edit', requireAdmin, async (req, res) => {
       return res.redirect('/admin/home-promo-offers');
     }
 
-    const offer = await HomePromoOffer.findOne({ slot }).lean();
+    const offerRaw = await HomePromoOffer.findOne({ slot }).lean();
 
-    const products = await Product.find({ stock: { $gt: 0 } })
-      .select('customId name imageUrl category type price')
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
+    let selectedProduct = null;
+    let offer = offerRaw;
+
+    if (offerRaw?.productCustomId) {
+      selectedProduct = await Product.findOne({ customId: offerRaw.productCustomId })
+        .select('customId name imageUrl category type price stock isOnSale')
+        .lean();
+
+      offer = {
+        ...offerRaw,
+        product: selectedProduct || null,
+      };
+    }
 
     return res.render('admin/home-promo-offers/edit', {
       title: `Edit ${slot === 'left' ? 'Left' : 'Right'} Promo Offer`,
@@ -96,7 +97,7 @@ router.get('/home-promo-offers/:slot/edit', requireAdmin, async (req, res) => {
       nonce: res.locals.nonce,
       slot,
       offer,
-      products,
+      selectedProduct,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -106,6 +107,40 @@ router.get('/home-promo-offers/:slot/edit', requireAdmin, async (req, res) => {
     console.error('❌ home promo offer edit page error:', err);
     req.flash('error', 'Could not load promo offer.');
     return res.redirect('/admin/home-promo-offers');
+  }
+});
+
+/* SEARCH PRODUCTS FOR HOME PROMO OFFERS */
+router.get('/home-promo-offers/products/search', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+
+    if (!q) {
+      return res.json({ success: true, products: [] });
+    }
+
+    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const products = await Product.find({
+      stock: { $gt: 0 },
+      $or: [
+        { customId: { $regex: safeQ, $options: 'i' } },
+        { name: { $regex: safeQ, $options: 'i' } },
+      ],
+    })
+      .select('customId name imageUrl category type price stock isOnSale')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.json({ success: true, products });
+  } catch (err) {
+    console.error('❌ home promo offers product search error:', err);
+    return res.status(500).json({
+      success: false,
+      products: [],
+      message: 'Failed to search products.',
+    });
   }
 });
 
