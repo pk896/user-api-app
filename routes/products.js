@@ -433,9 +433,54 @@ router.get('/sales', async (req, res) => {
       p.popular = !!p.isPopular;
     });
 
+    let relatedProducts = [];
+
+    if (q && products.length) {
+      const shownIds = products.map((p) => p._id);
+      const firstProduct = products[0];
+
+      const relatedQuery = {
+        stock: { $gt: 0 },
+        _id: { $nin: shownIds },
+      };
+
+      if (cat) {
+        relatedQuery.category = cat;
+      } else {
+        const orConditions = [];
+
+        if (firstProduct.category) {
+          orConditions.push({ category: firstProduct.category });
+        }
+
+        if (firstProduct.type) {
+          orConditions.push({ type: firstProduct.type });
+        }
+
+        if (firstProduct.manufacturer) {
+          orConditions.push({ manufacturer: firstProduct.manufacturer });
+        }
+
+        if (orConditions.length > 0) {
+          relatedQuery.$or = orConditions;
+        }
+      }
+
+      relatedProducts = await Product.find(relatedQuery)
+        .sort({ isPopular: -1, soldCount: -1, createdAt: -1, _id: -1 })
+        .limit(8)
+        .lean();
+
+      relatedProducts.forEach((p) => {
+        p.sale = !!p.isOnSale;
+        p.popular = !!p.isPopular;
+      });
+    }
+
     res.render('sales-products', {
       title: 'Shop Products',
       products,
+      relatedProducts,
       selectedQ: q,
       selectedCat: cat,
       currentPage,
@@ -454,61 +499,6 @@ router.get('/sales', async (req, res) => {
     res.redirect('/');
   }
 });
-
-// GET: Public sales products page
-/*router.get('/sales', async (req, res) => {
-  try {
-    const q = String(req.query.q || '').trim();
-    const cat = String(req.query.cat || '').trim();
-
-    const salesQuery = {
-      stock: { $gt: 0 },
-    };
-
-    if (cat) {
-      salesQuery.category = cat;
-    }
-
-    if (q) {
-      const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const qRegex = new RegExp(escapedQ, 'i');
-
-      salesQuery.$or = [
-        { name: qRegex },
-        { category: qRegex },
-        { type: qRegex },
-        { manufacturer: qRegex },
-        { description: qRegex },
-        { keywords: qRegex },
-      ];
-    }
-
-    const products = await Product.find(salesQuery)
-      .sort({ createdAt: -1, _id: -1 })
-      .lean();
-
-    products.forEach((p) => {
-      p.sale = !!p.isOnSale;
-      p.popular = !!p.isPopular;
-    });
-
-    res.render('sales-products', {
-      title: 'Shop Products',
-      products,
-      selectedQ: q,
-      selectedCat: cat,
-      themeCss: res.locals.themeCss,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      nonce: res.locals.nonce,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
-    });
-  } catch (err) {
-    console.error('❌ Failed to load sales page:', err);
-    req.flash('error', 'Could not load products.');
-    res.redirect('/');
-  }
-});*/
 
 router.get('/out-of-stock', requireBusiness, async (req, res) => {
   try {
