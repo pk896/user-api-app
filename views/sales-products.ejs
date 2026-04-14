@@ -1,2290 +1,321 @@
 <!--views/sales-products.ejs-->
-<% /* ------------------------------------------------------------
-   Amazon-style Shop (mobile-first, Hisense U50 Lite friendly)
-   Uses your real Delivery Options API for live shipping summary.
-   Endpoints used:
-     • GET /api/cart  (fallback /cart/items)
-     • GET /api/cart/add?pid=:customId&json=1[&size=][&color=]
-     • GET /api/delivery-options[?region=&sort=&order=&limit=]
-     • Product details: /products/view/:customId
-   Expects locals: products, success, error, nonce, themeCss
-------------------------------------------------------------- */ %>
-<%
-  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
-    ? Number(vatRate)
-    : 0.15;
-%>
+<section class="sales-ministore py-3">
+  <style nonce="<%= nonce %>">
+    :root{
+      --ms-accent:#72AEC8;
+      --ms-dark:#212529;
+      --ms-light:#f8f9fa;
+      --ms-blue:#EDF1F3;
+      --ms-gray:#AEAEAE;
+    }
 
-<!-- ✅ Flash Messages -->
-<% if (success && success.length) { %>
-  <div class="flash flash-success">✅ <%= success %></div>
-<% } %>
-<% if (error && error.length) { %>
-  <div class="flash flash-error">❌ <%= error %></div>
-<% } %>
+    .sales-ministore{
+      background: var(--ms-light);
+    }
 
-<main id="shopRoot" class="amz-wrap <%= (themeCss||'').includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <!-- ====== Top Nav (Amazon-like) ====== -->
-  <header class="amz-top">
-    <a href="/store" class="brand shopping-home-link" aria-label="Shopping home">
-      <i class="fas fa-shopping-bag brand-bag-icon" aria-hidden="true"></i>
-      <span class="brand-text">Shopping home</span>
-    </a>
-    
-    <form id="searchForm" class="amz-search" role="search" action="javascript:void(0)">
-      <%
-        // ✅ Categories come ONLY from res.locals (server.js)
-        // server.js sets: res.locals.CATEGORIES = CATEGORIES;
-        const __CATS = (typeof CATEGORIES !== 'undefined' && Array.isArray(CATEGORIES))
-          ? CATEGORIES
-          : [];
-      %>
+    .sales-toolbar{
+      position: sticky;
+      top: 0;
+      z-index: 1020;
+      background: rgba(248,249,250,.96);
+      backdrop-filter: blur(8px);
+    }
 
-      <select id="catSelect" aria-label="Category">
-        <option value="">All</option>
-        <% __CATS.forEach(c => { 
-            const vv = String(c?.value || '').trim();
-            if (!vv) return;
-            const ll = String(c?.label || vv).trim();
-        %>
-          <option value="<%- vv %>" <%= (typeof selectedCat !== 'undefined' && selectedCat === vv) ? 'selected' : '' %>><%= ll %></option>
-        <% }) %>
-      </select>
+    .sales-search-card{
+      border: 0;
+      border-radius: 0;
+      background: #fff;
+      box-shadow: 0 6px 20px rgba(0,0,0,.05);
+    }
 
-      <input
-        id="searchInput"
-        type="search"
-        placeholder="Search Product"
-        aria-label="Search products"
-        autocomplete="off"
-        value="<%= typeof selectedQ !== 'undefined' ? selectedQ : '' %>"
-      />
-      <button id="searchBtn" type="submit" class="amz-search-btn">🔍</button>
-    </form>
+    .sales-search-card .form-control,
+    .sales-search-card .form-select{
+      min-height: 44px;
+      border-radius: 0;
+      border: 1px solid #e9ecef;
+      box-shadow: none;
+    }
 
-    <nav class="amz-quick">
-      <a href="/payment/orders" class="amz-link">Orders</a>
-      <button id="cartBtn" class="amz-cart-btn" type="button">🛒 <span class="cart-count-top" id="cartCountTop">0</span></button>
-    </nav>
-  </header>
+    .sales-search-card .btn{
+      min-height: 44px;
+      border-radius: 0;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
 
-  <!-- ====== Below-Nav tools ====== -->
-  <div class="amz-subnav">
-    <div class="left">
-      <button id="filterToggle" class="subnav-btn" type="button">☰ Filters</button>
-      <button id="viewToggle" class="subnav-btn" type="button" aria-pressed="true">☰ List</button>
+    .sales-grid .product-card{
+      background: #fff;
+      border: 0;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+
+    .sales-grid .product-card:hover{
+      transform: translateY(-3px);
+      box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    }
+
+    .sales-grid .image-holder{
+      background: var(--ms-blue);
+      aspect-ratio: 1 / 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .sales-grid .image-holder img{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 12px;
+      display: block;
+    }
+
+    .sales-grid .card-detail{
+        padding: 14px 8px 0;
+        display: block !important;
+        text-align: center;
+    }
+
+    .sales-grid h3.card-title{
+        font-size: 1rem;
+        line-height: 1.3;
+        margin: 0 0 8px;
+        min-height: 2.6em;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-transform: uppercase;
+        text-align: center;
+    }
+
+    .sales-grid .card-title span{
+      color: var(--ms-dark);
+      text-decoration: none;
+    }
+
+    .sales-grid .item-price{
+        display: block;
+        color: var(--ms-accent) !important;
+        font-size: 1.15rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: center;
+    }
+
+    .sales-empty{
+      background: #fff;
+      padding: 3rem 1rem;
+      text-align: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,.05);
+    }
+
+    .sales-pager .btn{
+      min-width: 120px;
+      border-radius: 0;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    @media (max-width: 575.98px){
+      .sales-toolbar{
+        padding-left: 0;
+        padding-right: 0;
+      }
+
+      .sales-grid{
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+      }
+
+      .sales-grid .col-6{
+        padding-left: 0;
+        padding-right: 0;
+      }
+
+      .sales-grid .image-holder img{
+        padding: 8px;
+      }
+
+      .sales-grid h3.card-title{
+        font-size: .92rem;
+        min-height: 2.45em;
+      }
+
+      .sales-grid .item-price{
+        font-size: 1.02rem;
+      }
+    }
+  </style>
+
+  <div class="container-fluid px-0 px-md-3">
+    <div class="sales-toolbar pb-2">
+      <form method="GET" action="/products/sales" class="sales-search-card p-2 p-md-3">
+        <div class="row g-2 align-items-center">
+          <div class="col-12 col-md-5">
+            <input
+              id="salesKeywordInput"  
+              type="text"
+              name="q"
+              class="form-control"
+              placeholder="Search products..."
+              value="<%= selectedQ || '' %>"
+            >
+          </div>
+
+          <div class="col-8 col-md-5">
+            <select id="salesCategorySelect" name="cat" class="form-select">
+              <option value="" <%= !selectedCat ? 'selected' : '' %>>All Category</option>
+              <% (CATEGORIES || []).forEach(function(category) { %>
+                <option
+                  value="<%= category.value %>"
+                  <%= selectedCat === category.value ? 'selected' : '' %>
+                >
+                  <%= category.label %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+
+          <div class="col-4 col-md-2 d-grid">
+            <button id="salesKeywordSearchBtn" type="button" class="btn btn-dark">Search</button>
+          </div>
+        </div>
+      </form>
     </div>
 
-    <div class="subnav-meta">
-      <a href="/store" class="amz-link subnav-store-link">Shopping home</a>
-      <select id="sortSelect" aria-label="Sort">
-        <option value="relevance">Relevance</option>
-        <option value="price-asc">Price: Low → High</option>
-        <option value="price-desc">Price: High → Low</option>
-        <option value="new" selected>Newest Added</option>
-        <option value="name">Name A–Z</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="amz-body">
-    <!-- ====== Sidebar Filters ====== -->
-    <aside id="sidebar" class="amz-side" aria-label="Filters">
-      <section class="filter-block">
-        <h3>Delivery</h3>
-        <label class="chk"><input type="checkbox" id="inStockOnly" /> In stock only</label>
-        <div class="region-row">
-          <label for="regionSelect">Region</label>
-          <select id="regionSelect">
-            <option value="">All regions</option>
-          </select>
-        </div>
-        <div class="tiny" id="shipSummary">Loading delivery options…</div>
-      </section>
-
-      <section class="filter-block">
-        <h3>Price</h3>
-
-        <div class="filter-price-row">
-          <input id="minPrice" class="filter-price-input" type="number" inputmode="decimal" placeholder="Min" min="0" step="0.01" />
-          <span class="filter-price-sep">–</span>
-          <input id="maxPrice" class="filter-price-input" type="number" inputmode="decimal" placeholder="Max" min="0" step="0.01" />
-        </div>
-
-        <button id="applyPrice" class="btn sm" type="button">Apply</button>
-      </section>
-
-      <section class="filter-block">
-        <h3>Attributes</h3>
-        <label class="chk"><input type="checkbox" data-attr="popular" /> Popular</label>
-        <label class="chk"><input type="checkbox" data-attr="sale" /> On sale</label>
-        <label class="chk"><input type="checkbox" data-attr="isNew" /> New</label>
-      </section>
-
-      <section class="filter-block">
-        <h3>Type</h3>
-        <input id="typeFilter" type="text" placeholder="e.g. wireless" />
-      </section>
-    </aside>
-
-    <!-- ====== Results Column ====== -->
-    <section class="amz-results" id="results">
-      <% if (products && products.length) { %>
-        <!-- Default GRID mode -->
-        <ul id="list" class="amz-list grid-mode">
-          <% products.forEach(p => {
-            const priceNet  = Number(p.price || 0);  // seller input (excluding VAT)
-            const price     = priceNet * (1 + VAT);  // shopper price (including VAT)
-            const inStock   = Number(p.stock || 0) > 0;
-            if (!inStock) return;
-            const name      = String(p.name || '');
-            const cat       = (p.category || '').toLowerCase();
-            const type      = (p.type || '').toLowerCase(); // keep if you still want type filter
-
-            const isClothes =
-              cat === 'clothes' ||
-              cat === 'second-hand-clothes' ||
-              cat === 'fashion' ||
-              type === 'clothes';
-
-            const isShoes =
-              cat === 'shoes' ||
-              type === 'shoes';
-
-            // ✅ Normalize booleans safely (handles true/false, "true"/"false", 1/0)
-            const toBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true';
-
-            // ✅ Normalize product flags (supports both isNew and isNewItem just in case)
-            const isNewFlag   = toBool(p.isNew ?? p.isNewItem);
-            const isSaleFlag  = toBool(p.isOnSale);
-            const isHotFlag   = toBool(p.isPopular);
-
-            // ✅ Your Product fields are isOnSale / isPopular (not sale/popular)
-            const flags = { isNew: isNewFlag, sale: isSaleFlag, popular: isHotFlag };
-
-            // Size options
-            let sizeOptions = [];
-            if (isClothes || isShoes) {
-              if (Array.isArray(p.sizes) && p.sizes.length) {
-                // Use sizes from DB if present
-                sizeOptions = p.sizes;
-              } else if (isClothes) {
-                // Default clothes sizes
-                sizeOptions = ['XS', 'S', 'M', 'L', 'XL'];
-              } else if (isShoes) {
-                // Default shoe sizes (you can tweak for SA sizes)
-                sizeOptions = ['3', '4', '5', '6', '7', '8', '9', '10'];
-              }
-            }
-
-            // ✅ Color options – for BOTH clothes and shoes
-            let colorOptions = [];
-            if (isClothes || isShoes) {
-              if (Array.isArray(p.colors) && p.colors.length) {
-                // Use colors from DB if present
-                colorOptions = p.colors;
-              } else if (isClothes) {
-                // Default clothes colors
-                colorOptions = ['Black', 'White', 'Blue', 'Red'];
-              } else if (isShoes) {
-                // Default shoe colors
-                colorOptions = ['Black', 'White', 'Brown', 'Navy'];
-              }
-            }
+    <% if (!products || !products.length) { %>
+      <div class="sales-empty mt-3">
+        <h5 class="mb-0">No products found</h5>
+      </div>
+    <% } else { %>
+      <div class="row g-2 g-md-3 mt-1 sales-grid">
+        <% products.forEach(product => { %>
+          <%
+            const image = product.imageUrl || '/images/no-image.png';
+            const basePrice = Number(product.price || 0);
+            const vatPrice = basePrice * (1 + Number(vatRate || 0));
           %>
-          <li class="amz-item"
-            data-name="<%- name %>"
-            data-search="<%- [
-              p.name,
-              p.category,
-              p.type,
-              p.manufacturer,
-              p.description,
-              Array.isArray(p.keywords) ? p.keywords.join(' ') : ''
-            ].filter(Boolean).join(' ').toLowerCase() %>"
-            data-price="<%= price %>"
-            data-stock="<%= inStock ? '1':'0' %>"
-            data-category="<%- cat %>"
-            data-category-raw="<%- (p.category || '') %>"
-            data-type="<%- type %>"
-            data-created="<%- (p.createdAt ? new Date(p.createdAt).toISOString() : '') %>"
-            data-sort-id="<%- String(p._id || '') %>"
-            data-bizid="<%- String(p.businessId || p.business?._id || p.sellerId || p.seller?._id || '') %>"
-            data-flags='<%- JSON.stringify(flags) %>'>
 
-            <a class="d-block text-decoration-none text-reset h-100" href="/store/product/<%= p.customId %>" aria-label="Open <%= name %>">
-              <div class="imgbox">
-                <img src="<%= p.imageUrl %>" alt="<%= name %>" loading="lazy" decoding="async" />
-                <% if (isNewFlag)   { %><span class="tag new">New</span><% } %>
-                <% if (isSaleFlag)  { %><span class="tag sale">Deal</span><% } %>
-                <% if (isHotFlag)   { %><span class="tag hot">Top</span><% } %>
-              </div>
-
-              <div class="info">
-                <div class="title"><%= name %></div>
-
-                <%
-                  const avg = (p.avgRating === undefined || p.avgRating === null) ? null : Number(p.avgRating || 0);
-                  const cnt = (p.ratingsCount === undefined || p.ratingsCount === null) ? null : Number(p.ratingsCount || 0);
-                %>
-
-                <div class="rating"
-                  data-pid="<%= p.customId %>"
-                  data-avg="<%= (cnt && cnt > 0) ? avg : 0 %>"
-                  data-count="<%= (cnt && cnt > 0) ? cnt : 0 %>">
-
-                  <span class="stars" aria-hidden="true">
-                    <span class="stars-bg">★★★★★</span>
-                    <span class="stars-fill">★★★★★</span>
-                  </span>
-
-                  <span class="rating-num">
-                    <%= (cnt && cnt > 0) ? Number(avg).toFixed(1) : '—' %>
-                  </span>
-
-                  <span class="count">
-                    (<span class="rating-count"><%= (cnt && cnt > 0) ? cnt : 0 %></span>)
-                  </span>
+          <div class="col-6 col-md-4 col-lg-3">
+            <a
+              href="/store/product/<%= product.customId %>"
+              class="text-decoration-none text-reset d-block h-100"
+              aria-label="Open <%= product.name || 'product' %>"
+            >
+              <div class="product-card position-relative h-100">
+                <div class="image-holder">
+                  <img
+                    src="<%= image %>"
+                    alt="<%= product.name %>"
+                    class="img-fluid"
+                    loading="lazy"
+                  >
                 </div>
 
-                <div class="price-row">
-                  <span class="price">R <%= price.toFixed(2) %></span>
-                  <span class="muted vat">incl. VAT</span>
-                  <span class="<%= inStock ? 'stock in' : 'stock out' %>">
-                    <%= inStock ? 'In Stock' : 'Out of Stock' %>
-                  </span>
+                <div class="card-detail">
+                  <h3 class="card-title text-uppercase">
+                    <span><%= product.name || 'Untitled Product' %></span>
+                  </h3>
+                  <span class="item-price text-primary">R<%= vatPrice.toFixed(2) %></span>
                 </div>
               </div>
             </a>
-          </li>
-          <% }) %>
-        </ul>
+          </div>
+        <% }) %>
+      </div>
 
-        <!-- Pager (client-side simple) -->
-        <div class="pager" id="pager" hidden>
-          <button class="pg-btn" data-dir="-1" type="button">‹ Prev</button>
-          <span class="pg-meta"><span id="pgNow">1</span> / <span id="pgTotal">1</span></span>
-          <button class="pg-btn" data-dir="1" type="button">Next ›</button>
-        </div>
-      <% } else { %>
-        <div class="empty">
-          <div>🪄</div>
-          <h3>No products yet</h3>
-          <p class="muted">Please check back later.</p>
+      <% if (typeof hasPrevPage !== 'undefined' || typeof hasNextPage !== 'undefined') { %>
+        <div class="d-flex justify-content-between align-items-center mt-4 sales-pager">
+          <% if (hasPrevPage) { %>
+            <a
+              href="/products/sales?<%= new URLSearchParams({
+                q: selectedQ || '',
+                cat: selectedCat || '',
+                page: String(currentPage - 1)
+              }).toString() %>"
+              class="btn btn-outline-dark"
+            >
+              Previous
+            </a>
+          <% } else { %>
+            <span></span>
+          <% } %>
+
+          <% if (hasNextPage) { %>
+            <a
+              href="/products/sales?<%= new URLSearchParams({
+                q: selectedQ || '',
+                cat: selectedCat || '',
+                page: String(currentPage + 1)
+              }).toString() %>"
+              class="btn btn-dark"
+            >
+              Next
+            </a>
+          <% } else { %>
+            <span></span>
+          <% } %>
         </div>
       <% } %>
-    </section>
+    <% } %>
   </div>
 
-  <!-- ===== Mini Checkout Bar ===== -->
-  <div class="mini-co" id="miniCheckout" hidden>
-    <div class="co-left">
-      <strong id="miniSubtotal">R 0.00</strong>
-      <span class="muted"> · <span id="miniCount">0</span> item(s)</span>
-    </div>
-    <a href="/payment/checkout" class="co-btn">Checkout</a>
-  </div>
-
-   <!-- ===== Variant warning toast ===== -->
-  <div id="variantToast" class="variant-toast" aria-live="polite" hidden>
-    <div class="variant-toast-inner">
-      <span class="variant-toast-icon">⚠️</span>
-      <span class="variant-toast-text" id="variantToastText">
-        Please choose size and color before adding to cart.
-      </span>
-      <button type="button" class="variant-toast-close" id="variantToastClose" aria-label="Dismiss">
-        ✕
-      </button>
-    </div>
-  </div>
-
-  <!-- ===== Second-hand policy toast (popup) ===== -->
-<div id="policyToast" class="policy-toast" aria-live="polite" hidden>
-  <div class="policy-toast-inner">
-    <span class="policy-toast-icon">ℹ️</span>
-    <div class="policy-toast-text" id="policyToastText">
-      Second-hand orders must be from ONE business/location only.
-    </div>
-
-    <div class="policy-toast-actions">
-      <button type="button" class="policy-toast-btn danger" id="policyToastClearBtn">
-        Clear cart
-      </button>
-      <button type="button" class="policy-toast-btn" id="policyToastCloseBtn" aria-label="Dismiss">
-        ✕
-      </button>
-    </div>
-  </div>
-</div>
-</main>
-
-<!-- ===== Cart Drawer ===== -->
-<div class="drawer-overlay" id="drawerOverlay"></div>
-<aside class="drawer" id="cartDrawer" aria-label="Cart">
-  <div class="drawer-head">
-    <strong>Your Cart</strong>
-    <button class="close-x" id="drawerClose" aria-label="Close cart">✖</button>
-  </div>
-  <div class="drawer-body" id="cartList">
-    <p class="muted">Loading cart…</p>
-  </div>
-  <div class="drawer-foot">
-    <div class="total-row">
-      <span>Subtotal</span>
-      <span id="cartSubtotal">R 0.00</span>
-    </div>
-    <a href="/payment/checkout" class="btn-checkout">Proceed Making Payments</a>
-  </div>
-</aside>
-
-<style nonce="<%= nonce %>">
-  :root{
-    --brand:#7C3AED;
-    --brand2:#6D28D9;
-    --accent:#7C3AED;
-    --card:#ffffff;
-    --ink:#484848;
-    --muted:#6b7280;
-    --line:#e5e7eb;
-    --shadow:0 6px 24px rgba(0,0,0,.08);
-  }
-
-  .dark-theme{
-    --card:#1e1b2e;
-    --ink:#f5f3ff;
-    --muted:#c4b5fd;
-    --line:#4c1d95;
-    --brand:#7C3AED;
-    --brand2:#6D28D9;
-  }
-
-  /* === Cinematic Navy Backdrop (keeps your Amazon layout) === */
-  .amz-wrap{
-    --brand:#7C3AED;
-    --brand2:#6D28D9;
-    --accent:#7C3AED;
-    background:
-      linear-gradient(180deg, rgba(124,58,237,.10), rgba(124,58,237,.04));
-    min-height:100dvh;
-    color:var(--ink);
-  }
-
-  .amz-top{
-    display:grid;
-    grid-template-columns:140px 1fr auto;
-    gap:.6rem;
-    align-items:center;
-    padding:.5rem .6rem;
-    background:var(--brand);
-    color:#fff;
-    position:sticky;
-    top:0;
-    z-index:60;
-    border-bottom:1px solid rgba(255,255,255,.14);
-  }
-
-  /* ===== Brand (logo + short text) ===== */
-  .brand{
-    display:inline-flex;
-    align-items:center;
-    gap:.45rem;
-    color:#fff;
-    text-decoration:none;
-    font-weight:900;
-    line-height:1;
-    min-width:0; /* important for truncation */
-  }
-
-  .brand-logo{
-    width:26px;
-    height:26px;
-    border-radius:8px;
-    object-fit:contain;
-    flex:0 0 auto;
-    box-shadow:0 1px 6px rgba(0,0,0,.25);
-  }
-
-  .brand-text{
-    display:block;
-    min-width:0;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    font-size:.95rem;
-    letter-spacing:.01em;
-  }
-
-  /* Phone */
-  @media (max-width:480px){
-    .brand-logo{ width:24px; height:24px; }
-    .brand-text{ font-size:.88rem; }
-  }
-
-  /* Tablet / medium */
-  @media (min-width:768px){
-    .brand-logo{ width:28px; height:28px; }
-    .brand-text{ font-size:1rem; }
-  }
-
-  /* Desktop */
-  @media (min-width:1024px){
-    .brand-logo{ width:30px; height:30px; }
-    .brand-text{ font-size:1.05rem; }
-  }
-
-  .amz-search{
-    display:grid;
-    grid-template-columns:96px 1fr 40px;
-    background:#fff;
-    border-radius:999px;
-    overflow:hidden;
-  }
-
-  .amz-search select,
-  .amz-search input{
-    border:0;
-    padding:.5rem .55rem;
-    font:inherit;
-    outline:none;
-  }
-
-  .amz-search input{
-    min-width:0;
-    font-size:.95rem;
-  }
-
-  .amz-search-btn{
-    border:0;
-    background: #22C55E;
-    color:#fff;
-    font-weight:900;
-    cursor:pointer;
-  }
-
-  .amz-quick{
-    display:flex;
-    gap:.6rem;
-    align-items:center;
-  }
-
-  .amz-link{
-    color:#fff;
-    text-decoration:none;
-    font-size:.92rem;
-  }
-
-  .amz-cart-btn{
-    background:#f3f4f6;
-    border:0;
-    border-radius:999px;
-    padding:.3rem .6rem;
-    cursor:pointer;
-    font-weight:800;
-  }
-
-  .amz-subnav{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:.5rem;
-    background:var(--brand2);
-    border-bottom:1px solid rgba(255,255,255,.14);
-    padding:.45rem .6rem;
-  }
-
-  .left{
-    display:flex;
-    gap:.45rem;
-    align-items:center;
-  }
-
-  .subnav-btn{
-    border:1px solid var(--line);
-    background:#fff;
-    border-radius:8px;
-    padding:.35rem .5rem;
-    cursor:pointer;
-    font-weight:700;
-    font-size:.9rem;
-    color:#0f172a;
-  }
-
-  .subnav-meta{
-    display:flex;
-    gap:.6rem;
-    align-items:center;
-    flex-wrap:wrap;
-    font-size:.92rem;
-  }
-
-  .subnav-store-link{
-    color:#ffffff;
-    text-decoration:none;
-    font-weight:700;
-    margin-right:.35rem;
-    display:inline-flex;
-    align-items:center;
-    transition:
-      color .25s ease,
-      transform .25s ease,
-      letter-spacing .25s ease,
-      font-weight .25s ease;
-    animation: shoppingHomePulse 2s ease-in-out infinite;
-  }
-
-  .subnav-store-link:hover{
-    color: #22C55E;
-    transform:scale(1.08);
-    font-weight:800;
-    letter-spacing:.02em;
-  }
-
-  @keyframes shoppingHomePulse {
-    0%, 100% {
-      color:#ffffff;
-      transform:scale(1);
-      font-weight:700;
-      letter-spacing:0;
-    }
-    50% {
-      color: #22C55E;
-      transform:scale(1.08);
-      font-weight:800;
-      letter-spacing:.02em;
-    }
-  }
-
-  .sort-wrap{
-    display:flex;
-    gap:.3rem;
-    align-items:center;
-  }
-
-  .sort-wrap select{
-    padding:.3rem .5rem;
-    border:1px solid var(--line);
-    border-radius:8px;
-    background:var(--card);
-    color:var(--ink);
-  }
-
-  .amz-body{
-    display:grid;
-    grid-template-columns:220px 1fr;
-    gap:.7rem;
-    padding:.6rem;
-    align-items:start;
-  }
-
-  .amz-side{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:10px;
-    box-shadow:var(--shadow);
-    padding:.6rem;
-  }
-
-  .filter-block + .filter-block{ margin-top:.7rem; }
-  .filter-block h3{ margin:.05rem 0 .35rem; font-size:.95rem; }
-
-  .chk{
-    display:block;
-    margin:.2rem 0;
-    color:var(--ink);
-    font-size:.95rem;
-  }
-
-  .region-row{
-    display:grid;
-    gap:.35rem;
-    margin-top:.35rem;
-  }
-
-  .region-row select{
-    border:1px solid var(--line);
-    background:var(--card);
-    color:var(--ink);
-    border-radius:8px;
-    padding:.4rem .5rem;
-  }
-
-  .tiny{
-    color:var(--muted);
-    font-size:.82rem;
-    margin-top:.25rem;
-  }
-
-  .price-row{
-    display:grid;
-    grid-template-columns:1fr auto 1fr;
-    gap:.35rem;
-    align-items:center;
-  }
-
-  /* ===== Sidebar price filter row (separate from product price row) ===== */
-  .filter-price-row{
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
-    gap:.35rem;
-    align-items:center;
-    width:100%;
-  }
-
-  .filter-price-input{
-    width:100%;
-    min-width:0;
-    box-sizing:border-box;
-    border:1px solid var(--line);
-    background:var(--card);
-    color:var(--ink);
-    border-radius:8px;
-    padding:.45rem .55rem;
-    font:inherit;
-  }
-
-  .filter-price-sep{
-    color:var(--muted);
-    font-weight:800;
-    line-height:1;
-  }
-
-  #typeFilter{
-    width:100%;
-    min-width:0;
-    box-sizing:border-box;
-    border:1px solid var(--line);
-    background:var(--card);
-    color:var(--ink);
-    border-radius:8px;
-    padding:.45rem .55rem;
-    font:inherit;
-  }
-
-  .btn{
-    border:1px solid var(--line);
-    background:var(--card);
-    color:var(--ink);
-    border-radius:8px;
-    padding:.4rem .6rem;
-    cursor:pointer;
-    font-weight:700;
-  }
-
-  .btn.sm{
-    font-size:.9rem;
-    margin-top:.45rem;
-  }
-
-  .amz-results{ min-height:40vh; }
-
-  /* --- GRID is the default on all screens --- */
-  .amz-list{
-    list-style:none;
-    padding:0;
-    margin:0;
-    display:grid;
-    gap:.6rem;
-  }
-
-  .amz-list.grid-mode{
-    grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
-  }
-
-  @media (min-width:768px){
-    .amz-list.grid-mode{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
-  }
-
-  @media (min-width:1024px){
-    .amz-list.grid-mode{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
-  }
-
-  /* Grid cards stack image on top */
-  .amz-list.grid-mode .amz-item{ grid-template-columns:1fr; }
-
-  .amz-item{
-    display:grid;
-    grid-template-columns:150px 1fr;
-    gap:.55rem;
-    padding:.55rem;
-    border:1px solid var(--line);
-    border-radius:10px;
-    background:var(--card);
-    box-shadow:0 10px 28px rgba(0,0,0,.12);
-  }
-
-  /* Image box: square, keeps full image on small screens */
-  .imgbox{
-    position:relative;
-    background:#f3f4f6;
-    border-radius:10px;
-    overflow:hidden;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    aspect-ratio:1 / 1;
-  }
-
-  .imgbox img{
-    width:100%;
-    height:100%;
-    object-fit:contain;
-    transition:transform .3s ease;
-  }
-
-  .imgbox:hover img{ transform:scale(1.04); }
-
-  .tag{
-    position:absolute;
-    top:6px;
-    left:6px;
-    padding:.16rem .44rem;
-    border-radius:999px;
-    font-size:.72rem;
-    font-weight:800;
-    color:#111;
-    background:#fde68a;
-  }
-
-  .tag.new{ background:#a7f3d0; }
-  .tag.sale{ background:#fda4af; }
-  .tag.hot{ background:#93c5fd; }
-
-  .info{
-    display:grid;
-    gap:.28rem;
-  }
-
-  /* ✅ No -webkit-line-clamp (eslint friendly) */
-  .title{
-    font-weight:800;
-    color:inherit;
-    text-decoration:none;
-    font-size:.98rem;
-    line-height:1.2;
-    display:block;
-    overflow:hidden;
-    max-height:2.4em; /* 2 lines max */
-  }
-
-  /* ✅ Prevent overflow inside tight grid cards (tablet/desktop) */
-  .amz-item,
-  .amz-item .info{
-    min-width:0;
-  }
-
-  /* ✅ Price + VAT + Stock: ONE LINE on tablet/desktop */
-  .info .price-row{
-    display:flex;
-    align-items:baseline;
-    gap:.32rem;
-    flex-wrap:nowrap;        /* ✅ keep single line by default */
-    min-width:0;
-  }
-
-  /* ✅ Small screens can still wrap */
-  @media (max-width:767px){
-    .info .price-row{ flex-wrap:wrap; }
-  }
-
-  /* ✅ Keep "R 218.50" together always */
-  .info .price-row .price{
-    white-space:nowrap;
-    line-height:1;
-    flex:0 0 auto;
-  }
-
-  /* ✅ VAT: small and allowed to shrink safely */
-  .info .price-row .vat{
-    white-space:nowrap;
-    line-height:1;
-    flex:0 1 auto;
-    min-width:0;
-    font-weight:800;
-    opacity:.9;
-  }
-
-  /* ✅ Stock: stays on the SAME LINE, smaller + can shrink safely */
-  .info .price-row .stock{
-    margin-left:auto;
-    text-align:right;
-    white-space:nowrap;
-    line-height:1;
-    flex:0 1 auto;           /* ✅ don't force a new line */
-    max-width:45%;
-    overflow:hidden;
-    text-overflow:ellipsis;
-
-    font-size:.70rem;        /* ✅ smaller than VAT/price */
-    font-weight:900;
-    letter-spacing:.01em;
-  }
-
-  /* ✅ Tablet / medium: smaller text */
- @media (min-width:768px) and (max-width:1023px){
-    .info .price-row{ gap:.28rem; }
-    .info .price-row .price{ font-size:1.00rem; }
-    .info .price-row .vat{ font-size:.68rem; }
-    .info .price-row .stock{ font-size:.68rem; }
-  }
-
-  /* ✅ Desktop: crisp + compact (no wrapping unless needed) */
-  @media (min-width:1024px){
-    .info .price-row{ gap:.32rem; }
-    .info .price-row .price{ font-size:1.02rem; }
-    .info .price-row .vat{ font-size:.70rem; }
-    .info .price-row .stock{ font-size:.70rem; }
-  }
-
-  /* VAT label (no inline styles) */
-  .vat{
-    font-size:.78rem;
-    font-weight:800;
-    white-space:nowrap;
-  }
-
-  /* ===== REAL RATING STARS (no inline style attributes) ===== */
-  .rating{
-    display:flex;
-    align-items:center;
-    gap:.35rem;
-    color:#6b7280;
-    font-size:.86rem;
-  }
-
-  .rating .stars{
-    position:relative;
-    display:inline-block;
-    line-height:1;
-    letter-spacing:.12ch;
-    font-size:.92rem;
-  }
-
-  .rating .stars-bg{ color:#E5E7EB; }
-
-  .rating .stars-fill{
-    position:absolute;
-    left:0;
-    top:0;
-    overflow:hidden;
-    width:0%; /* JS sets this */
-    color:#F59E0B;
-    white-space:nowrap;
-  }
-
-  .rating .rating-num{
-    font-weight:800;
-    color:var(--ink);
-  }
-
-  .dark-theme .rating .rating-num{ color:#E5E7EB; }
-
-  .price{white-space:nowrap;
-    color:#B12704;
-    font-weight:900; 
-    font-size:1.02rem; 
-  }
-  .stock.in{ color:#16a34a; font-weight:700; }
-  .stock.out{ color:#ef4444; font-weight:700; }
-
-  .act{
-    display:flex;
-    gap:.45rem;
-    flex-wrap:wrap;
-    margin-top:.15rem;
-  }
-
-   .btn.add{
-    background:#7C3AED;
-    border-color:#7C3AED;
-    color:#fff;
-  } 
-
-  .btn.ghost{ background:transparent; }
-
-  .pager{
-    display:flex;
-    gap:.6rem;
-    align-items:center;
-    justify-content:center;
-    padding:.6rem 0;
-  }
-
-  /* ✅ When we scroll to #results, stop below sticky header/subnav */
-  #results{
-    scroll-margin-top: 120px;
-  }
-  @media (max-width:480px){
-    #results{ scroll-margin-top: 140px; }
-  }
-
-  .pg-btn{
-    border:1px solid var(--line);
-    background:#ffffff;
-    border-radius:8px;
-    padding:.35rem .7rem;
-    cursor:pointer;
-    font-weight:700;
-    color:#0f172a;
-  }
-
-  .pg-btn:hover,
-  .pg-btn:focus-visible{
-    background:#1d4ed8;
-    border-color:#1d4ed8;
-    color:#ffffff;
-  }
-
-  .pg-meta{ color:var(--muted); }
-
-  .empty{ text-align:center; padding:1.6rem 1rem; }
-  .muted{ color:var(--muted); }
-
-  /* Mini checkout bar – almost invisible */
-  .mini-co{
-    position:fixed;
-    left:50%;
-    transform:translateX(-50%);
-    bottom:72px;
-    z-index:55;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:.6rem;
-    background:rgba(15, 23, 42, 0.03);
-    border:1px solid rgba(148, 163, 184, 0.10);
-    backdrop-filter:blur(2px);
-    box-shadow:none;
-    color:#16a34a;
-    border-radius:999px;
-    padding:.5rem .7rem;
-    width:min(725px, 94vw);
-  }
-
-  /* ✅ IMPORTANT: respect the HTML [hidden] attribute */
-  .mini-co[hidden]{
-    display:none !important;
-  }
-
-  .co-btn{
-    text-decoration:none;
-    background:#16a34a;
-    color:#fff;
-    font-weight:900;
-    padding:.45rem .8rem;
-    border-radius:999px;
-  }
-
-  /* Drawer */
-  .drawer-overlay{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.5);
-    display:none;
-    z-index:70;
-  }
-
-  .drawer{
-    position:fixed;
-    right:0;
-    top:0;
-    bottom:0;
-    width:min(420px, 92vw);
-    background:var(--card);
-    box-shadow:-10px 0 24px rgba(0,0,0,.25);
-    transform:translateX(100%);
-    transition:transform .28s ease;
-    z-index:80;
-    display:flex;
-    flex-direction:column;
-    border-left:1px solid var(--line);
-  }
-
-  .drawer.open{ transform:translateX(0); }
-
-  .drawer-head{
-    padding:.8rem;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    border-bottom:1px solid var(--line);
-  }
-
-  .drawer-body{
-    padding:.6rem .8rem;
-    overflow:auto;
-    flex:1;
-    display:flex;
-    flex-direction:column;
-    gap:.6rem;
-  }
-
-  .drawer-item{
-    display:grid;
-    grid-template-columns:64px 1fr auto;
-    gap:.55rem;
-    align-items:center;
-    background:rgba(0,0,0,.02);
-    border-radius:.7rem;
-    padding:.45rem;
-  }
-
-  .drawer-item img{
-    width:64px;
-    height:64px;
-    object-fit:cover;
-    border-radius:.6rem;
-  }
-
-  .drawer-item-name{
-    font-weight:800;
-  }
-
-  .drawer-foot{
-    padding:.8rem;
-    border-top:1px solid var(--line);
-    display:grid;
-    gap:.5rem;
-  }
-
-  .total-row{
-    display:flex;
-    justify-content:space-between;
-    font-weight:900;
-  }
-
-  .btn-checkout{
-    border:0;
-    border-radius:.7rem;
-    padding:.6rem .9rem;
-    font-weight:900;
-    background:#16a34a;
-    color:#fff;
-    cursor:pointer;
-  }
-
-  .close-x{
-    background:transparent;
-    border:0;
-    font-size:1.05rem;
-    cursor:pointer;
-  }
-
-  /* ===== Mobile (Hisense U50 Lite ~360x720) ===== */
-  @media (max-width:480px){
-    .amz-top{ grid-template-columns:1fr; gap:.45rem; }
-    .amz-search{ grid-template-columns:80px 1fr 38px; }
-    .amz-subnav{ padding:.4rem .5rem; }
-    .subnav-btn{ padding:.3rem .45rem; font-size:.88rem; }
-    .amz-body{ grid-template-columns:1fr; gap:.5rem; padding:.5rem; }
-    .amz-side{ display:none; } /* toggled via JS */
-
-    .amz-list.grid-mode{
-      grid-template-columns:repeat(2, minmax(0, 1fr));
-      gap:.5rem;
-    }
-
-    .imgbox img{
-      object-fit:contain;
-      padding:6px;
-      background:#fff;
-      transform:none;
-    }
-
-    .amz-item{ grid-template-columns:1fr; padding:.5rem; gap:.45rem; }
-    .title{ font-size:.92rem; }
-    .price{
-      white-space:nowrap;
-      font-size:.98rem; 
-    }
-
-    .mini-co{
-      bottom:64px;
-      width:calc(94vw - 15px);
-      background:rgba(15, 23, 42, 0.03);
-      border:1px solid rgba(148, 163, 184, 0.10);
-      backdrop-filter:blur(2px);
-      box-shadow:none;
-    }
-  }
-
-  /* Extra compact mobile card tuning (top-level media block) */
-  @media (max-width:480px){
-    .amz-list.grid-mode{ gap:.42rem; }
-
-    .amz-item{
-      padding:.42rem;
-      gap:.35rem;
-      border-radius:12px;
-    }
-
-    .imgbox{
-      aspect-ratio:4 / 5;
-      border-radius:12px;
-    }
-
-    .info{ gap:.18rem; }
-    .title{ font-size:.88rem; max-height:2.2em; }
-
-    .rating{ font-size:.76rem; gap:.28rem; }
-    .rating .stars{ font-size:.84rem; }
-
-    .info .price-row{
-      flex-wrap:wrap;
-      justify-content:flex-start;
-      gap:.12rem .45rem;
-      align-items:baseline;
-    }
-
-    .info .price-row .price{
-      flex:1 1 100%;
-      font-size:.92rem;
-      line-height:1.05;
-    }
-
-    .info .price-row .vat{
-      font-size:.64rem;
-      font-weight:900;
-      line-height:1.05;
-    }
-
-    .info .price-row .stock{
-      font-size:.64rem;
-      font-weight:900;
-      line-height:1.05;
-      white-space:nowrap;
-    }
-
-    .amz-item .act{ gap:.35rem; margin-top:.05rem; }
-    .amz-item .act .btn{
-      padding:.28rem .55rem;
-      font-size:.82rem;
-      border-radius:999px;
-    }
-
-    .tag{ font-size:.66rem; padding:.12rem .38rem; }
-  }
-
-  /* Cart count: navy by default, white on hover */
-  .cart-count-top{
-    color:#0f1f35 !important;
-    font-weight:900;
-    transition:color .15s ease;
-  }
-
-  .amz-cart-btn:hover .cart-count-top,
-  .amz-cart-btn:focus-visible .cart-count-top{
-    color:#ffffff !important;
-  }
-
-  .dark-theme .cart-count-top{ color:#c7d2fe; }
-
-  /* Drawer head hidden (keeps spacing) */
-  .drawer-head{ visibility:hidden; }
-
-  /* Variants (size + color) – hidden by default */
-  .variants{
-    display:none;
-    flex-wrap:wrap;
-    gap:.35rem;
-    margin-top:.1rem;
-    font-size:.85rem;
-  }
-
-  .amz-item.show-variants .variants{ display:flex; }
-
-  .variants label{
-    display:flex;
-    flex-direction:column;
-    gap:.12rem;
-  }
-
-  .v-label{
-    font-weight:600;
-    color:var(--muted);
-    font-size:.78rem;
-    text-transform:uppercase;
-    letter-spacing:.04em;
-  }
-
-  .variants select{
-    border:1px solid var(--line);
-    border-radius:999px;
-    padding:.25rem .6rem;
-    font-size:.85rem;
-    background:var(--card);
-    color:var(--ink);
-  }
-
-  @media (max-width:480px){
-    .variants{ gap:.25rem; }
-  }
-
-  /* ===== Variant warning toast ===== */
-  .variant-toast{
-    position:fixed;
-    left:50%;
-    bottom:18px;
-    transform:translateX(-50%) translateY(16px);
-    z-index:95;
-    opacity:0;
-    visibility:hidden;
-    transition:opacity .2s ease, transform .2s ease, visibility .2s ease;
-    pointer-events:none;
-  }
-
-  .variant-toast.show{
-    opacity:1;
-    visibility:visible;
-    transform:translateX(-50%) translateY(0);
-    pointer-events:auto;
-  }
-
-  .variant-toast-inner{
-    display:inline-flex;
-    align-items:center;
-    gap:.4rem;
-    padding:.5rem .8rem;
-    border-radius:999px;
-    background:#111827;
-    color:#f9fafb;
-    box-shadow:var(--shadow);
-    font-size:.86rem;
-  }
-
-  .variant-toast-icon{ font-size:1rem; }
-
-  .variant-toast-close{
-    border:0;
-    background:transparent;
-    color:inherit;
-    cursor:pointer;
-    font-size:.9rem;
-    padding:0 .1rem;
-  }
-
-  .dark-theme .variant-toast-inner{ background:#0b1120; }
-
-  /* ===== Second-hand policy toast (popup) ===== */
-  .policy-toast{
-    position:fixed;
-    left:50%;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
-    transform:translateX(-50%) translateY(16px);
-    z-index:96;
-    opacity:0;
-    visibility:hidden;
-    transition:opacity .2s ease, transform .2s ease, visibility .2s ease;
-    pointer-events:none;
-  }
-
-  .policy-toast.show{
-    opacity:1;
-    visibility:visible;
-    transform:translateX(-50%) translateY(0);
-    pointer-events:auto;
-  }
-
-  .policy-toast-inner{
-    display:flex;
-    align-items:flex-start;
-    gap:.45rem;
-    padding:.42rem .55rem;        /* ✅ smaller */
-    border-radius:12px;           /* ✅ slightly smaller */
-    background:#0b1120;
-    color:#f9fafb;
-    box-shadow:var(--shadow);
-    width:min(520px, 92vw);       /* ✅ narrower */
-  }
-
-  .policy-toast-icon{
-    font-size:.95rem;             /* ✅ smaller icon */
-    margin-top:.05rem;
-  }
-
-  .policy-toast-text{
-    font-weight:800;
-    font-size:.84rem;             /* ✅ smaller text */
-    line-height:1.2;
-    flex:1;
-  }
-
-  .policy-toast-actions{
-    display:flex;
-    gap:.3rem;
-    align-items:center;
-    flex:0 0 auto;
-  }
-
-  .policy-toast-btn{
-    border:0;
-    border-radius:999px;
-    padding:.28rem .5rem;         /* ✅ smaller buttons */
-    font-weight:900;
-    cursor:pointer;
-    background:rgba(255,255,255,.12);
-    color:#fff;
-    font-size:.78rem;             /* ✅ smaller button text */
-    line-height:1;
-  }
-
-  .policy-toast-btn.danger{
-    background:#ef4444;
-  }
-
-  .shopping-home-link{
-    display:inline-flex;
-    align-items:center;
-    gap:.45rem;
-    color:#fff;
-    text-decoration:none;
-    font-weight:900;
-    line-height:1;
-    min-width:0;
-  }
-
-  .brand-bag-icon{
-    width:26px;
-    height:26px;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    border-radius:8px;
-    font-size:1rem;
-    background: #22C55E;
-    color:#111827;
-    flex:0 0 26px;
-    box-shadow:0 1px 6px rgba(0,0,0,.25);
-  }
-
-  @media (max-width:480px){
-    .brand-bag-icon{
-      width:24px;
-      height:24px;
-      flex:0 0 24px;
-      font-size:.95rem;
-    }
-  }
-
-  @media (min-width:768px){
-    .brand-bag-icon{
-      width:28px;
-      height:28px;
-      flex:0 0 28px;
-      font-size:1.02rem;
-    }
-  }
-
-  @media (min-width:1024px){
-    .brand-bag-icon{
-      width:30px;
-      height:30px;
-      flex:0 0 30px;
-      font-size:1.06rem;
-    }
-  }
-</style>
-
-<!-- ===== Page Script (CSP-safe) ===== -->
-<script nonce="<%= nonce %>">
-  (function(){
-    const $  = (s,c=document)=>c.querySelector(s);
-    const $$ = (s,c=document)=>Array.from(c.querySelectorAll(s));
-
-    /* Elements */
-    const list          = $('#list');
-    const resultMeta    = $('#resultMeta');
-    const sortSelect    = $('#sortSelect');
-    const filterToggle  = $('#filterToggle');
-    const viewToggle    = $('#viewToggle');
-    const sidebar       = $('#sidebar');
-
-    const searchForm    = $('#searchForm');
-    const searchInput   = $('#searchInput');
-    const catSelect     = $('#catSelect');
-    const regionSelect  = $('#regionSelect');
-    const shipSummary   = $('#shipSummary');
-
-    const inStockOnly   = $('#inStockOnly');
-    const minPrice      = $('#minPrice');
-    const maxPrice      = $('#maxPrice');
-    const applyPriceBtn = $('#applyPrice');
-    const typeFilter    = $('#typeFilter');
-
-    const pager         = $('#pager');
-    const pgNow         = $('#pgNow');
-    const pgTotal       = $('#pgTotal');
-
-    const drawer        = $('#cartDrawer');
-    const overlay       = $('#drawerOverlay');
-    const drawerClose   = $('#drawerClose');
-    const cartBtn       = $('#cartBtn');
-    const cartList      = $('#cartList');
-    const cartSubtotal  = $('#cartSubtotal');
-    const cartCountTop  = $('#cartCountTop');
-
-    const miniBar       = $('#miniCheckout');
-    const miniSubtotal  = $('#miniSubtotal');
-    const miniCount     = $('#miniCount');
-
-    const variantToast      = $('#variantToast');
-    const variantToastText  = $('#variantToastText');
-    const variantToastClose = $('#variantToastClose');
-    let   variantToastTimer = null;
-
-    // Second-hand policy toast (popup)
-    const policyToast         = $('#policyToast');
-    const policyToastText     = $('#policyToastText');
-    const policyToastClearBtn = $('#policyToastClearBtn');
-    const policyToastCloseBtn = $('#policyToastCloseBtn');
-    let   policyToastTimer    = null;
-
-    const PAGE = { size: 12, page: 1, pages: 1 };
-    const CARD = () => list ? Array.from(list.children) : [];
-
-    function esc(s){
-      return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function hideVariantToast(){
-      if (!variantToast) return;
-      variantToast.classList.remove('show');
-      setTimeout(()=>{ variantToast.setAttribute('hidden', 'true'); }, 220);
-    }
-
-    function showVariantToast(message){
-      if (!variantToast || !variantToastText){
-        alert(message);
-        return;
-      }
-      variantToastText.textContent = message || 'Please choose size and color before adding to cart.';
-      variantToast.removeAttribute('hidden');
-      variantToast.classList.add('show');
-
-      if (variantToastTimer) clearTimeout(variantToastTimer);
-      variantToastTimer = setTimeout(hideVariantToast, 2500);
-    }
-
-    if (variantToastClose){
-      variantToastClose.addEventListener('click',()=>{
-        if (variantToastTimer) clearTimeout(variantToastTimer);
-        hideVariantToast();
-      });
-    }
-
-    function hidePolicyToast(){
-      if (!policyToast) return;
-      policyToast.classList.remove('show');
-      setTimeout(()=> policyToast.setAttribute('hidden','true'), 220);
-    }
-
-    function showPolicyToast(message, { showClear = true } = {}){
-      if (!policyToast || !policyToastText){
-        alert(message);
-        return;
-      }
-      policyToastText.textContent = message || 'Policy notice.';
-      policyToast.removeAttribute('hidden');
-      policyToast.classList.add('show');
-
-      if (policyToastClearBtn){
-        policyToastClearBtn.style.display = showClear ? '' : 'none';
-      }
-
-      // ✅ IMPORTANT: do NOT auto-hide. User must click ✕ (or Clear cart).
-      if (policyToastTimer) {
-        clearTimeout(policyToastTimer);
-        policyToastTimer = null;
-      }
-    }
-
-    policyToastCloseBtn?.addEventListener('click', hidePolicyToast);
-
-    // ------------------------------------------------------
-    // ✅ Second-hand lock state (client UX + filtering)
-    // Rule:
-    // - If cart has ANY second-hand items -> show ONLY second-hand categories AND ONLY from SAME business
-    // - No mixing with normal items
-    // ------------------------------------------------------
-    const SECONDHAND_CATS = new Set(['second-hand-clothes','uncategorized-second-hand-things']);
-    function isSecondhandCat(cat){
-      return SECONDHAND_CATS.has(String(cat||'').trim().toLowerCase());
-    }
-
-    // Returns: { mode: 'none' | 'secondhand', lockBizId: string }
-    function getCartLockState(items){
-      const arr = Array.isArray(items) ? items : [];
-      for (const it of arr){
-        const cat = String(it.category || it.product?.category || '').trim().toLowerCase();
-        if (!isSecondhandCat(cat)) continue;
-
-        const biz = String(
-          it.businessId ||
-          it.product?.businessId ||
-          it.sellerId ||
-          it.product?.sellerId ||
-          it.business?._id ||
-          it.product?.business?._id ||
-          ''
-        ).trim();
-
-        if (biz) return { mode:'secondhand', lockBizId: biz };
-        return { mode:'secondhand', lockBizId: '' }; // safer fallback
-      }
-      return { mode:'none', lockBizId:'' };
-    }
-
-    // Global lock state so applyFilters() can enforce it
-    const LOCK = { mode:'none', lockBizId:'' };
-
-    // ✅ Prevent stale async cart responses from repainting "ghost" values
-    let CART_REFRESH_SEQ = 0;
-
-    function enforceSecondhandLockOnCards(){
-      const cards = CARD();
-
-      // If NOT locked, mark everything as allowed (prevents stale lockOk after clear cart)
-      if (LOCK.mode !== 'secondhand'){
-        cards.forEach(li => { li.dataset.lockOk = '1'; });
-        return;
-      }
-
-      cards.forEach(li=>{
-        const cardBiz = String(li.getAttribute('data-bizid') || '').trim();
-        const cardCat = String(li.getAttribute('data-category') || '').trim().toLowerCase();
-
-        const okCat = isSecondhandCat(cardCat);
-        const okBiz = !LOCK.lockBizId ? true : (cardBiz && cardBiz === LOCK.lockBizId);
-
-        li.dataset.lockOk = (okCat && okBiz) ? '1' : '0';
-      });
-    }
-
-    /* Sidebar toggle (mobile) */
-    function hideFiltersOnce(){
-      sidebar.style.display = 'none';
-      // only hide overlay if drawer is not open
-      if (!drawer.classList.contains('open')) {
-        overlay.style.display = 'none';
-      }
-    }
-
-    if (filterToggle) {
-      filterToggle.addEventListener('click', () => {
-        const showing = getComputedStyle(sidebar).display !== 'none';
-
-        if (showing) {
-          hideFiltersOnce();
-          return;
+  <script nonce="<%= nonce %>">
+    (function () {
+        const keywordInput = document.getElementById('salesKeywordInput');
+        const categorySelect = document.getElementById('salesCategorySelect');
+        const keywordBtn = document.getElementById('salesKeywordSearchBtn');
+
+        if (!keywordInput || !categorySelect) return;
+
+        function goToSales(categoryValue) {
+        const params = new URLSearchParams();
+        const keyword = String(keywordInput.value || '').trim();
+        const category = String(categoryValue != null ? categoryValue : categorySelect.value || '').trim();
+
+        if (keyword) {
+            params.set('q', keyword);
         }
 
-        sidebar.style.display = 'block';
-        sidebar.style.position = 'fixed';
-        sidebar.style.top = '64px';
-        sidebar.style.left = '10px';
-        sidebar.style.right = '10px';
-        sidebar.style.zIndex = '65';
-        sidebar.style.maxHeight = '70vh';
-        sidebar.style.overflow = 'auto';
-
-        overlay.style.display = 'block';
-      });
-    }
-    
-    /* List/Grid toggle (default is GRID, button offers List) */
-    if (viewToggle){
-      viewToggle.textContent = '☰ List';
-      viewToggle.setAttribute('aria-pressed', 'true'); // we are in grid by default
-      viewToggle.addEventListener('click', ()=>{
-        const grid = !list.classList.contains('grid-mode'); // toggle desired
-        list.classList.toggle('grid-mode', grid);
-        list.classList.toggle('list-mode', !grid);
-        viewToggle.textContent = grid ? '☰ List' : '▦ Grid';
-        viewToggle.setAttribute('aria-pressed', grid ? 'true' : 'false');
-      });
-    }
-
-    /* Drawer controls */
-    function openDrawer(){ overlay.style.display='block'; requestAnimationFrame(()=>drawer.classList.add('open')); refreshCart(); }
-    function closeDrawer(){
-      drawer.classList.remove('open');
-
-      // also hide mobile filters if open
-      if (sidebar && getComputedStyle(sidebar).display !== 'none' && window.innerWidth <= 480) {
-        sidebar.style.display = 'none';
-      }
-
-      setTimeout(()=>{
-        // only hide overlay when neither drawer nor mobile filters are open
-        const drawerOpen = drawer.classList.contains('open');
-        const filtersOpen = sidebar && getComputedStyle(sidebar).display !== 'none' && window.innerWidth <= 480;
-        if (!drawerOpen && !filtersOpen) overlay.style.display = 'none';
-      }, 280);
-    }
-
-    if (cartBtn) cartBtn.addEventListener('click', openDrawer);
-    overlay.addEventListener('click', closeDrawer);
-    drawerClose.addEventListener('click', closeDrawer);
-
-    /* ===== Ratings (real from DB, optional per-product API fetch) ===== */
-    function setStarsFill(ratingEl, avg){
-      const fill = ratingEl.querySelector('.stars-fill');
-      if (!fill) return;
-      
-      // Ensure avg is a valid number between 0 and 5
-      const a = Math.max(0, Math.min(5, Number(avg || 0)));
-      
-      // Only show gold stars if avg is greater than 0
-      // But note: this function is now called with 0 when count is 0
-      const pct = (a / 5) * 100;
-      fill.style.width = pct.toFixed(2) + '%';
-    }
-
-    async function hydrateRatings(){
-      const nodes = $$('.rating[data-pid]');
-      if (!nodes.length) return;
-
-      // FIRST: Set stars for ALL products using whatever avg they have (but only if count > 0)
-      nodes.forEach(el => {
-        // Get avg and count
-        const avgAttr = el.getAttribute('data-avg');
-        const cntAttr = el.getAttribute('data-count');
-        const avg = avgAttr !== null ? Number(avgAttr) : 0;
-        const cnt = cntAttr !== null ? Number(cntAttr) : 0;
-        
-        // Only show gold stars if there are actual ratings (count > 0)
-        if (cnt > 0) {
-          setStarsFill(el, avg);
-        } else {
-          // If no ratings, set stars fill to 0%
-          setStarsFill(el, 0);
-        }
-        
-        // Update the rating number display
-        const numEl = el.querySelector('.rating-num');
-        if (numEl) {
-          numEl.textContent = (cnt > 0 && avg > 0) ? avg.toFixed(1) : '—';
-        }
-        
-        // Update count display
-        const cntEl = el.querySelector('.rating-count');
-        if (cntEl) cntEl.textContent = String(cnt);
-      });
-      // ... rest of function remains the same
-    }
-
-    /* Fetch helpers */
-    async function getJSON(url){
-      try{
-        const r = await fetch(url, { credentials:'same-origin' });
-        if(!r.ok) return {};
-        const ct=r.headers.get('content-type')||'';
-        if(!ct.includes('application/json')) return {};
-        return await r.json();
-      }catch{
-        return {};
-      }
-    }
-
-    async function fetchCart(){
-      let data = await getJSON('/api/cart');
-
-      // /api/cart => { items: [...] }
-      if (data && Array.isArray(data.items)) {
-        return { items: data.items };
-      }
-
-      // fallback legacy /api/cart/items => [...]
-      data = await getJSON('/api/cart/items');
-      if (Array.isArray(data)) return { items: data };
-
-      // fallback safe
-      return { items: [] };
-    }
-
-    function renderCart(items){
-      if (!items || !items.length){
-        cartList.innerHTML = '<p class="muted">Your cart is empty.</p>';
-        cartSubtotal.textContent = 'R 0.00';
-        cartCountTop.textContent = '0';
-
-        // ✅ reset mini bar values too (prevents "ghost" numbers)
-        miniSubtotal.textContent = 'R 0.00';
-        miniCount.textContent = '0';
-
-        miniBar.hidden = true;
-        return;
-      }
-
-      let subtotal = 0;
-      let count    = 0;
-
-      cartList.innerHTML = items.map(it=>{
-        const qty   = Number(it.quantity || it.qty || 1);
-        const price = Number(it.price || it.product?.price || 0);
-        const name  = it.name || it.product?.name || 'Item';
-        const image = it.imageUrl || it.product?.imageUrl || '';
-
-        const variants = it.variants || {};
-        const size  = variants.size  || it.size  || it.variantSize  || '';
-        const color = variants.color || it.color || it.variantColor || '';
-
-        subtotal += price * qty;
-        count    += qty;
-
-        const metaParts = [];
-        metaParts.push(`R ${price.toFixed(2)} × ${qty}`);
-        if (size)  metaParts.push(`Size: ${size}`);
-        if (color) metaParts.push(`Color: ${color}`);
-        const meta = metaParts.join(' • ');
-
-        return `
-          <div class="drawer-item">
-            <img src="${esc(image)}" alt="${esc(name)}">
-            <div>
-              <div class="drawer-item-name">${esc(name)}</div>
-              <div class="muted">${meta}</div>
-            </div>
-            <span></span>
-          </div>
-        `;
-      }).join('');
-
-      cartSubtotal.textContent = 'R ' + subtotal.toFixed(2);
-      cartCountTop.textContent = String(count);
-      miniSubtotal.textContent = 'R ' + subtotal.toFixed(2);
-      miniCount.textContent = String(count);
-      miniBar.hidden = false;
-    }
-
-    async function clearCart(){
-      const r = await fetch('/api/cart/clear', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({})
-      });
-      if (!r.ok) throw new Error('Could not clear cart.');
-      return true;
-    }
-
-    policyToastClearBtn?.addEventListener('click', async ()=>{
-      try{
-        policyToastClearBtn.disabled = true;
-        policyToastClearBtn.textContent = 'Clearing…';
-        await clearCart();
-        await refreshCart();
-        PAGE.page = 1;
-        applyFilters();
-        showPolicyToast('Cart cleared. You can now shop any products.', { showClear:false });
-      }catch(e){
-        alert(e?.message || 'Could not clear cart.');
-      }finally{
-        if (policyToastClearBtn){
-          policyToastClearBtn.disabled = false;
-          policyToastClearBtn.textContent = 'Clear cart';
-        }
-      }
-    });
-
-    async function refreshCart(){
-      // ✅ Mark this call as the newest refresh
-      const seq = ++CART_REFRESH_SEQ;
-
-      const data = await fetchCart();
-
-      // ✅ If a newer refresh started while this one was waiting, ignore this stale result
-      if (seq !== CART_REFRESH_SEQ) return;
-
-      const items = Array.isArray(data?.items) ? data.items : [];
-
-      renderCart(items);
-
-      const state = getCartLockState(items);
-      LOCK.mode = state.mode;
-      LOCK.lockBizId = state.lockBizId;
-
-      enforceSecondhandLockOnCards();
-      applyFilters(); // ✅ IMPORTANT: hide non-allowed products after refresh/load
-
-      if (LOCK.mode === 'secondhand'){
-        showPolicyToast(
-          'Second-hand cart locked: you can ONLY add second-hand items from the same business/location. Clear cart to shop other products or businesses.',
-          { showClear:true }
-        );
-      } else {
-        // ✅ hide stale policy toast after cart becomes normal/empty
-        hidePolicyToast();
-      }
-    }
-    
-    /* Add to cart inline (handles clothes + shoes variants) */
-    function wireAddButtons(){
-      $$('.btn.add').forEach(btn=>{
-        btn.addEventListener('click', async (e)=>{
-          e.preventDefault();
-          if (btn.hasAttribute('aria-disabled')) return;
-
-          const pid      = btn.getAttribute('data-pid');
-          const original = btn.textContent;
-
-          const card = btn.closest('.amz-item');
-          let size = '';
-          let color = '';
-
-          if (card) {
-            const type = (card.getAttribute('data-type') || '').toLowerCase();
-            const cat  = (card.getAttribute('data-category') || '').toLowerCase();
-
-            const isClothes =
-              cat === 'clothes' ||
-              cat === 'second-hand-clothes' ||
-              cat === 'fashion' ||
-              type === 'clothes';
-
-            const isShoes =
-              cat === 'shoes' ||
-              type === 'shoes';
-
-            if (isClothes || isShoes) {
-              if (!card.classList.contains('show-variants')) {
-                card.classList.add('show-variants');
-                const sizeSelFirst = card.querySelector('.variant-size');
-                if (sizeSelFirst) sizeSelFirst.focus();
-                return;
-              }
-
-              const sizeSel  = card.querySelector('.variant-size');
-              const colorSel = card.querySelector('.variant-color');
-
-              size  = sizeSel ? sizeSel.value.trim() : '';
-              color = colorSel ? colorSel.value.trim() : '';
-
-              if (!size || !color) {
-                showVariantToast('Please choose size and color before adding to cart.');
-                return;
-              }
-            }
-          }
-
-          // ✅ Second-hand rule (client)
-          const cartData = await fetchCart();
-          const itemsNow = cartData.items || [];
-
-          const stateNow = getCartLockState(itemsNow); // secondhand lock if exists
-          const hasNormal = (Array.isArray(itemsNow) ? itemsNow : []).some(it=>{
-            const cat = String(it.category || it.product?.category || '').trim().toLowerCase();
-            return cat && !isSecondhandCat(cat);
-          });
-
-          const cardBiz = String(card?.getAttribute('data-bizid') || '').trim();
-          const cardCat = String(card?.getAttribute('data-category') || '').trim().toLowerCase();
-          const cardIsSecondhand = isSecondhandCat(cardCat);
-
-          if (stateNow.mode === 'secondhand'){
-            if (!cardIsSecondhand){
-              showPolicyToast('This cart is locked for second-hand items only. Clear cart to add normal products.', { showClear:true });
-              return;
-            }
-            if (stateNow.lockBizId && cardBiz && cardBiz !== stateNow.lockBizId){
-              showPolicyToast('Second-hand cart locked to one business/location. Clear cart to shop another business.', { showClear:true });
-              return;
-            }
-          } else {
-            if (hasNormal && cardIsSecondhand){
-              showPolicyToast('You already have normal items in cart. Clear cart to shop second-hand items (single business/location).', { showClear:true });
-              return;
-            }
-          }
-
-          try{
-            btn.textContent = '⏳ Adding…';
-            btn.setAttribute('aria-disabled','true');
-
-            const params = new URLSearchParams();
-            params.set('pid', pid);
-            params.set('json', '1');
-            if (size)  params.set('size', size);
-            if (color) params.set('color', color);
-
-            const r = await fetch(`/api/cart/add?${params.toString()}`, { credentials:'same-origin' });
-            if(!r.ok){
-              let m='Add failed';
-              try{
-                const j=await r.json();
-                if(j?.message) m=j.message;
-              }catch{}
-              throw new Error(m);
-            }
-
-            btn.textContent = '✅ Added';
-
-            const cardAfter = btn.closest('.amz-item');
-            if (cardAfter) {
-              const typeA = (cardAfter.getAttribute('data-type') || '').toLowerCase();
-              const catA  = (cardAfter.getAttribute('data-category') || '').toLowerCase();
-
-              const isClothesA =
-                catA === 'clothes' ||
-                catA === 'second-hand-clothes' ||
-                catA === 'fashion' ||
-                typeA === 'clothes';
-
-              const isShoesA =
-                catA === 'shoes' ||
-                typeA === 'shoes';
-
-              if (isClothesA || isShoesA) {
-                const sizeSelA  = cardAfter.querySelector('.variant-size');
-                const colorSelA = cardAfter.querySelector('.variant-color');
-
-                if (sizeSelA)  sizeSelA.value  = '';
-                if (colorSelA) colorSelA.value = '';
-                cardAfter.classList.remove('show-variants');
-              }
-            }
-
-            setTimeout(()=>{
-              btn.textContent = original;
-              btn.removeAttribute('aria-disabled');
-            }, 900);
-
-            await refreshCart();
-            PAGE.page = 1;
-            applyFilters();
-          }catch(err){
-            btn.textContent = original;
-            btn.removeAttribute('aria-disabled');
-
-            // Prefer toast for policy-type errors, fallback to button popup
-            const msg = err?.message || 'Rejected.';
-            showPolicyToast(msg, { showClear: /second-hand|secondhand|business|location|clear|locked/i.test(msg) });
-          }
-        });
-      });
-    }
-
-    /* ===== Delivery Options (live) ===== */
-    async function loadDeliveryOptions(region=''){
-      const qs = new URLSearchParams();
-      if (region) qs.set('region', region);
-      qs.set('sort','price'); qs.set('order','asc'); qs.set('limit','100');
-      const data = await getJSON(`/api/delivery-options?${qs.toString()}`);
-      const items = Array.isArray(data.options) ? data.options : [];
-
-      const regions = Array.from(new Set(items.map(it=>it.region).filter(Boolean))).sort();
-      const current = regionSelect.value;
-      regionSelect.innerHTML = `<option value="">All regions</option>` +
-        regions.map(r=>`<option ${r===current?'selected':''} value="${r}">${r}</option>`).join('');
-
-      if (items.length){
-        const cheapest = items.reduce((a,b)=> a.price < b.price ? a : b);
-        const fastest  = items.reduce((a,b)=> a.deliveryDays < b.deliveryDays ? a : b);
-        shipSummary.textContent = `From R ${cheapest.price.toFixed(2)} • as fast as ${fastest.deliveryDays} day(s)`;
-      } else {
-        shipSummary.textContent = 'No delivery options available';
-      }
-    }
-
-    /* Search + Filters + Sort */
-    function normalize(s){ return String(s||'').toLowerCase().trim(); }
-    function flagsMatch(card, req){
-      try{
-        const f = JSON.parse(card.getAttribute('data-flags')||'{}');
-        if (req.isNew && !f.isNew) return false;
-        if (req.sale && !f.sale) return false;
-        if (req.popular && !f.popular) return false;
-        return true;
-      }catch{
-        return true;
-      }
-    }
-
-    function applyFilters(){
-      const q     = normalize(searchInput.value);
-      const cat   = normalize(catSelect.value);
-      const tAttr = normalize(typeFilter.value);
-      const only  = !!inStockOnly?.checked;
-      
-      let minP = minPrice.value.trim() !== '' ? Number(minPrice.value) : -Infinity;
-      let maxP = maxPrice.value.trim() !== '' ? Number(maxPrice.value) : Infinity;
-
-      if (!Number.isFinite(minP)) minP = -Infinity;
-      if (!Number.isFinite(maxP)) maxP = Infinity;
-
-      /* If user enters Min bigger than Max, swap them safely */
-      if (minP > maxP){
-        const temp = minP;
-        minP = maxP;
-        maxP = temp;
-      }
-
-      const reqFlags = {
-        isNew:  !!$$('input[data-attr="isNew"]', sidebar).find(i=>i.checked),
-        sale:   !!$$('input[data-attr="sale"]', sidebar).find(i=>i.checked),
-        popular:!!$$('input[data-attr="popular"]', sidebar).find(i=>i.checked),
-      };
-
-      let visible = 0;
-      CARD().forEach(li=>{
-        const searchable = normalize(li.getAttribute('data-search'));
-        const price = Number(li.getAttribute('data-price')||0);
-        const stock = li.getAttribute('data-stock') === '1';
-        const ccat  = normalize(li.getAttribute('data-category'));
-        const type  = normalize(li.getAttribute('data-type'));
-
-        let show = true;
-        if (q && !searchable.includes(q)) show = false;
-        if (cat && ccat !== cat) show = false;
-        if (tAttr && !type.includes(tAttr)) show = false;
-        if (only && !stock) show = false;
-        if (!(price >= minP && price <= maxP)) show = false;
-        if (!flagsMatch(li, reqFlags)) show = false;
-
-        // ✅ Second-hand lock enforcement (hard UI filter)
-        if (LOCK.mode === 'secondhand'){
-          if (li.dataset.lockOk !== '1') show = false;
+        if (category) {
+            params.set('cat', category);
         }
 
-        li.style.display = show ? '' : 'none';
-        if (show) visible++;
-      });
+        const queryString = params.toString();
+        window.location.href = queryString ? '/products/sales?' + queryString : '/products/sales';
+        }
 
-      function keywordTokens(value){
-        return normalize(value)
-          .split(/\s+/)
-          .map(s => s.trim())
-          .filter(Boolean);
-      }
-
-      function relevanceScore(card, query){
-        const q = normalize(query);
-        if (!q) return 0;
-
-        const tokens = keywordTokens(q);
-
-        const name = normalize(card.getAttribute('data-name'));
-        const searchable = normalize(card.getAttribute('data-search'));
-        const categoryRaw = normalize(card.getAttribute('data-category-raw'));
-        const category = normalize(card.getAttribute('data-category'));
-        const type = normalize(card.getAttribute('data-type'));
-
-        let score = 0;
-
-        // strongest signals
-        if (name === q) score += 1000;
-        if (name.startsWith(q)) score += 400;
-        if (name.includes(q)) score += 250;
-
-        if (categoryRaw === q || category === q) score += 220;
-        if (type === q) score += 180;
-
-        if (searchable.includes(q)) score += 120;
-
-        // token-based scoring
-        tokens.forEach(token => {
-          if (!token) return;
-
-          if (name === token) score += 180;
-          else if (name.startsWith(token)) score += 90;
-          else if (name.includes(token)) score += 50;
-
-          if (categoryRaw === token || category === token) score += 45;
-          if (type === token) score += 35;
-
-          if (searchable.includes(token)) score += 20;
+        categorySelect.addEventListener('change', function () {
+        goToSales(categorySelect.value);
         });
 
-        // small bonus for popular products when relevance ties are close
-        try {
-          const flags = JSON.parse(card.getAttribute('data-flags') || '{}');
-          if (flags && flags.popular) score += 5;
-        } catch {}
+        keywordInput.addEventListener('input', function () {
+        const keyword = String(keywordInput.value || '').trim();
+        const category = String(categorySelect.value || '').trim();
 
-        return score;
-      }
-
-      const sort = sortSelect?.value || 'relevance';
-      const items = CARD().filter(li => li.style.display !== 'none');
-
-      items.sort((a, b) => {
-        const pa = Number(a.getAttribute('data-price') || 0);
-        const pb = Number(b.getAttribute('data-price') || 0);
-        const na = a.getAttribute('data-name') || '';
-        const nb = b.getAttribute('data-name') || '';
-
-        const ca = Date.parse(a.getAttribute('data-created') || '') || 0;
-        const cb = Date.parse(b.getAttribute('data-created') || '') || 0;
-
-        const ia = a.getAttribute('data-sort-id') || '';
-        const ib = b.getAttribute('data-sort-id') || '';
-
-        if (sort === 'price-asc') return pa - pb;
-        if (sort === 'price-desc') return pb - pa;
-        if (sort === 'name') return na.localeCompare(nb);
-        if (sort === 'new') {
-          if (cb !== ca) return cb - ca;
-          return ib.localeCompare(ia);
+        if (!keyword) {
+            if (category) {
+            goToSales(category);
+            } else {
+            window.location.href = '/products/sales';
+            }
         }
+        });
 
-        // real relevance sorting
-        const q = normalize(searchInput.value);
-        const ra = relevanceScore(a, q);
-        const rb = relevanceScore(b, q);
-
-        if (rb !== ra) return rb - ra;
-
-        // tie-breakers for relevance
-        if (cb !== ca) return cb - ca;
-        return ib.localeCompare(ia);
-      });
-
-      const frag = document.createDocumentFragment();
-      items.forEach(el => frag.appendChild(el));
-      list.appendChild(frag);
-
-      PAGE.pages = Math.max(1, Math.ceil(visible / PAGE.size));
-      PAGE.page = Math.min(PAGE.page, PAGE.pages);
-      pager.hidden = PAGE.pages <= 1;
-
-      renderPage();
-      if (resultMeta) {
-        resultMeta.textContent = `${visible} results`;
-      }
-    }
-
-    function renderPage(){
-      const visible = CARD().filter(li=>li.style.display!=='none');
-      visible.forEach((li,i)=>{
-        const start = (PAGE.page-1)*PAGE.size;
-        const end   = start + PAGE.size - 1;
-        const ok = (i>=start && i<=end);
-        li.style.visibility = ok ? 'visible' : 'hidden';
-        li.style.position   = ok ? '' : 'absolute';
-        li.style.pointerEvents = ok ? '' : 'none';
-      });
-      pgNow && (pgNow.textContent = String(PAGE.page));
-      pgTotal && (pgTotal.textContent = String(PAGE.pages));
-    }
-
-    function jumpToResultsTop(){
-      const el = document.getElementById('results');
-      if (!el) return;
-      const offset = 120;
-      const y = el.getBoundingClientRect().top + window.scrollY - offset;
-      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-    }
-
-    pager && pager.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.pg-btn');
-      if (!btn) return;
-
-      const dir  = Number(btn.getAttribute('data-dir') || 0);
-      const next = PAGE.page + dir;
-
-      if (next >= 1 && next <= PAGE.pages){
-        PAGE.page = next;
-        renderPage();
-        jumpToResultsTop();
-      }
-    });
-
-    // events
-    function goToSalesSearch(){
-      const params = new URLSearchParams();
-
-      const q = normalize(searchInput?.value || '');
-      const cat = String(catSelect?.value || '').trim();
-
-      if (q) params.set('q', q);
-      if (cat) params.set('cat', cat);
-
-      const qs = params.toString();
-      window.location.href = qs ? `/products/sales?${qs}#results` : '/products/sales#results';
-    }
-
-    searchForm.addEventListener('submit', (e)=>{
-      e.preventDefault();
-      goToSalesSearch();
-    });
-
-    if (catSelect) {
-      catSelect.addEventListener('change', ()=>{
-        goToSalesSearch();
-      });
-    }
-
-    if (searchInput) {
-      searchInput.addEventListener('input', ()=>{
-        const q = normalize(searchInput.value || '');
-        const cat = String(catSelect?.value || '').trim();
-
-        if (!q) {
-          const params = new URLSearchParams();
-
-          if (cat) {
-            params.set('cat', cat);
-          }
-
-          const qs = params.toString();
-          window.location.href = qs ? `/products/sales?${qs}#results` : '/products/sales#results';
+        keywordInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            goToSales(categorySelect.value);
         }
-      });
-    }
+        });
 
-    [sortSelect, inStockOnly, typeFilter].forEach(el=>{
-      el?.addEventListener('input', ()=>{
-        PAGE.page=1;
-        applyFilters();
-      });
-      if (el && el.tagName==='SELECT') el.addEventListener('change', ()=>{
-        PAGE.page=1;
-        applyFilters();
-      });
-    });
-
-    function applyPriceFilter(){
-      PAGE.page = 1;
-      applyFilters();
-    }
-
-    applyPriceBtn.addEventListener('click', applyPriceFilter);
-
-    [minPrice, maxPrice].forEach(el=>{
-      el?.addEventListener('keydown', (e)=>{
-        if (e.key === 'Enter'){
-          e.preventDefault();
-          applyPriceFilter();
+        if (keywordBtn) {
+        keywordBtn.addEventListener('click', function () {
+            goToSales(categorySelect.value);
+        });
         }
-      });
-
-      el?.addEventListener('input', ()=>{
-        /* Optional live filtering when user clears or edits values */
-        PAGE.page = 1;
-        applyFilters();
-      });
-    });
-
-    $$('input[data-attr]', sidebar).forEach(chk=>
-      chk.addEventListener('change', ()=>{
-        PAGE.page=1;
-        applyFilters();
-      })
-    );
-
-    regionSelect.addEventListener('change', ()=>{
-      loadDeliveryOptions(regionSelect.value);
-    });
-
-    // Wire buttons & init
-    wireAddButtons();
-    applyFilters();
-    refreshCart();
-    loadDeliveryOptions('');
-    hydrateRatings();
-  })();
-</script>
+    })();
+    </script>
+</section>

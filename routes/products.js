@@ -392,6 +392,74 @@ router.get('/sales', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     const cat = String(req.query.cat || '').trim();
+    const requestedPage = Number(req.query.page || 1);
+    const perPage = 20;
+
+    const salesQuery = {
+      stock: { $gt: 0 },
+    };
+
+    if (cat) {
+      salesQuery.category = cat;
+    }
+
+    if (q) {
+      const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const qRegex = new RegExp(escapedQ, 'i');
+
+      salesQuery.$or = [
+        { name: qRegex },
+        { category: qRegex },
+        { type: qRegex },
+        { manufacturer: qRegex },
+        { description: qRegex },
+        { keywords: qRegex },
+      ];
+    }
+
+    const totalProducts = await Product.countDocuments(salesQuery);
+    const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
+    const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
+    const skip = (currentPage - 1) * perPage;
+
+    const products = await Product.find(salesQuery)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(perPage)
+      .lean();
+
+    products.forEach((p) => {
+      p.sale = !!p.isOnSale;
+      p.popular = !!p.isPopular;
+    });
+
+    res.render('sales-products', {
+      title: 'Shop Products',
+      products,
+      selectedQ: q,
+      selectedCat: cat,
+      currentPage,
+      totalPages,
+      hasPrevPage: currentPage > 1,
+      hasNextPage: currentPage < totalPages,
+      themeCss: res.locals.themeCss,
+      success: req.flash('success'),
+      error: req.flash('error'),
+      nonce: res.locals.nonce,
+      vatRate: Number(process.env.VAT_RATE || 0.15),
+    });
+  } catch (err) {
+    console.error('❌ Failed to load sales page:', err);
+    req.flash('error', 'Could not load products.');
+    res.redirect('/');
+  }
+});
+
+// GET: Public sales products page
+/*router.get('/sales', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const cat = String(req.query.cat || '').trim();
 
     const salesQuery = {
       stock: { $gt: 0 },
@@ -440,7 +508,7 @@ router.get('/sales', async (req, res) => {
     req.flash('error', 'Could not load products.');
     res.redirect('/');
   }
-});
+});*/
 
 router.get('/out-of-stock', requireBusiness, async (req, res) => {
   try {
