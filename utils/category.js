@@ -55,10 +55,6 @@ const CATEGORIES = Object.freeze([
 
   // Optional / fallback
   { value: 'other', label: 'Other / Misc' },
-
-  // ✅ SECOND-HAND (KEEP THESE EXACT VALUES for your cart rule)
-  { value: 'second-hand-clothes', label: 'Second Hand Clothing' },
-  { value: 'uncategorized-second-hand-things', label: 'Uncategorized Second Hand Things' },
 ]);
 
 function isValidCategory(v) {

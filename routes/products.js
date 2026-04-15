@@ -411,7 +411,6 @@ router.get('/sales', async (req, res) => {
         { name: qRegex },
         { category: qRegex },
         { type: qRegex },
-        { manufacturer: qRegex },
         { description: qRegex },
         { keywords: qRegex },
       ];
@@ -455,10 +454,6 @@ router.get('/sales', async (req, res) => {
 
         if (firstProduct.type) {
           orConditions.push({ type: firstProduct.type });
-        }
-
-        if (firstProduct.manufacturer) {
-          orConditions.push({ manufacturer: firstProduct.manufacturer });
         }
 
         if (orConditions.length > 0) {
