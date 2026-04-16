@@ -32,20 +32,30 @@ function buildTopBestSellerItem(product, index) {
     : `<div class="rounded border d-flex align-items-center justify-content-center flex-shrink-0 bg-body-tertiary" style="width:48px;height:48px;">📦</div>`;
 
   return `
-    <div class="d-flex align-items-center justify-content-between gap-2 border rounded p-2">
-      <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
-        <div class="badge text-bg-success flex-shrink-0">${index + 1}</div>
-        ${imageHtml}
-        <div class="flex-grow-1 overflow-hidden">
-          <div class="fw-semibold text-truncate">${name}</div>
-          <div class="small text-body-secondary">Sold: ${soldCount}</div>
-          <div class="small text-success">Revenue: ${formatTopBestSellersCurrency(estRevenue)}</div>
+    <div class="border rounded p-2">
+      <div class="d-flex flex-column gap-2">
+        <div class="d-flex align-items-start gap-2">
+          <div class="badge text-bg-success flex-shrink-0 mt-1">${index + 1}</div>
+          ${imageHtml}
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="fw-semibold text-truncate">${name}</div>
+
+            <div class="small text-body-secondary">
+              <div>Sold in last 30 days: ${soldCount}</div>
+            </div>
+
+            <div class="small text-success">
+              <div>Revenue in last 30 days: ${formatTopBestSellersCurrency(estRevenue)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <a href="/store/product/${encodeURIComponent(String(product?.customId || ''))}" class="btn btn-sm btn-success w-100">
+            View
+          </a>
         </div>
       </div>
-
-      <a href="/store/product/${encodeURIComponent(String(product?.customId || ''))}" class="btn btn-sm btn-success flex-shrink-0">
-        View
-      </a>
     </div>
   `;
 }
@@ -78,8 +88,8 @@ async function loadSellerTopBestSellersCard() {
     if (products.length === 0) {
       listEl.innerHTML = `
         <div class="text-center py-3">
-          <div class="fw-semibold text-body-secondary">No best sellers yet</div>
-          <div class="small text-body-secondary">Your sold products will appear here.</div>
+          <div class="fw-semibold text-body-secondary">No best sellers in the last 30 days</div>
+          <div class="small text-body-secondary">Your last 30 days sold products will appear here.</div>
         </div>
       `;
       return;

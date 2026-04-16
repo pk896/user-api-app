@@ -297,7 +297,7 @@ const OrderSchema = new Schema(
 
     raw: { type: Schema.Types.Mixed },
 
-   // ✅ idempotency guard for inventory adjustment after capture
+    // ✅ idempotency guard for inventory adjustment after capture
     inventoryAdjusted: { type: Boolean, default: false },
 
     // ✅ track what we deducted (so restore is correct & idempotent)
@@ -307,6 +307,10 @@ const OrderSchema = new Schema(
         quantity: { type: Number, min: 1, default: 1 },
       },
     ],
+
+    // ✅ idempotency guard for seller daily analytics aggregation
+    sellerDailyStatsAdjusted: { type: Boolean, default: false },
+    sellerDailyStatsAdjustedAt: { type: Date, default: null },
 
     // ✅ idempotency guard for restoring stock on full refund
     inventoryRestored: { type: Boolean, default: false }, 

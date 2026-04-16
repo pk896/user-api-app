@@ -83,6 +83,20 @@ try {
   Business = null;
 }
 
+let SellerProductDailyStat = null;
+try {
+  const SellerProductDailyStatMod = require('../models/SellerProductDailyStat');
+  SellerProductDailyStat =
+    SellerProductDailyStatMod?.SellerProductDailyStat || SellerProductDailyStatMod;
+
+  if (!SellerProductDailyStat || typeof SellerProductDailyStat.bulkWrite !== 'function') {
+    throw new Error('Invalid SellerProductDailyStat model export (missing .bulkWrite)');
+  }
+} catch (e) {
+  console.error('[payment.js] Failed to load SellerProductDailyStat model:', e?.stack || e);
+  SellerProductDailyStat = null;
+}
+
 let buildShippoAddressFromBusiness = null;
 try {
   ({ buildShippoAddressFromBusiness } = require('../utils/shippo/buildShippoAddressFromBusiness'));
@@ -1156,6 +1170,152 @@ function buildStockAppliedItemsFromOrder(orderDoc) {
       quantity: Number(it?.quantity || 1),
     }))
     .filter((x) => x.productId && Number.isFinite(x.quantity) && x.quantity > 0);
+}
+
+function getOrderDayKey(orderDoc) {
+  const baseDate = orderDoc?.createdAt ? new Date(orderDoc.createdAt) : new Date();
+
+  const year = baseDate.getUTCFullYear();
+  const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(baseDate.getUTCDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function buildSellerDailyStatItemsFromOrder(orderDoc) {
+  const items = Array.isArray(orderDoc?.items) ? orderDoc.items : [];
+  const grouped = new Map();
+
+  for (const item of items) {
+    const productCustomId = String(
+      item?.productId || item?.customId || item?.pid || item?.sku || ''
+    ).trim();
+
+    const quantity = Number(item?.quantity || 0);
+
+    if (!productCustomId) continue;
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+    const unitPrice =
+      Number(
+        item?.priceGross?.value ??
+        item?.price?.value ??
+        item?.price ??
+        item?.unitPrice ??
+        0
+      ) || 0;
+
+    const productObjectId =
+      mongoose.Types.ObjectId.isValid(item?.product?._id)
+        ? new mongoose.Types.ObjectId(item.product._id)
+        : null;
+
+    if (!grouped.has(productCustomId)) {
+      grouped.set(productCustomId, {
+        productCustomId,
+        product: productObjectId,
+        productName: String(item?.name || '').trim(),
+        soldCount: 0,
+        soldOrders: 0,
+        revenue: 0,
+      });
+    }
+
+    const entry = grouped.get(productCustomId);
+    entry.soldCount += quantity;
+    entry.revenue += unitPrice * quantity;
+  }
+
+  for (const entry of grouped.values()) {
+    entry.soldOrders = 1;
+    entry.revenue = Number(entry.revenue.toFixed(2));
+  }
+
+  return Array.from(grouped.values());
+}
+
+async function applySellerDailyStatsOnPaidOrder(orderDoc) {
+  if (!orderDoc || !Order) return { ok: false, reason: 'NO_ORDERDOC' };
+  if (!SellerProductDailyStat) return { ok: false, reason: 'NO_DAILY_STAT_MODEL' };
+
+  if (orderDoc.sellerDailyStatsAdjusted) {
+    return { ok: true, skipped: true, reason: 'ALREADY_ADJUSTED' };
+  }
+
+  const businessMap = new Map();
+  const productCustomIds = Array.from(
+    new Set(
+      (Array.isArray(orderDoc?.items) ? orderDoc.items : [])
+        .map((item) => String(item?.productId || item?.customId || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (productCustomIds.length === 0) {
+    return { ok: false, reason: 'NO_ITEMS_TO_APPLY' };
+  }
+
+  const products = await Product.find({
+    customId: { $in: productCustomIds },
+  })
+    .select('_id customId name business')
+    .lean();
+
+  for (const product of products) {
+    businessMap.set(String(product.customId), {
+      business: product.business,
+      productId: product._id,
+      productName: product.name || '',
+    });
+  }
+
+  const dayKey = getOrderDayKey(orderDoc);
+  const statItems = buildSellerDailyStatItemsFromOrder(orderDoc);
+
+  const bulkOps = [];
+
+  for (const item of statItems) {
+    const owner = businessMap.get(item.productCustomId);
+    if (!owner?.business) continue;
+
+    bulkOps.push({
+      updateOne: {
+        filter: {
+          business: owner.business,
+          productCustomId: item.productCustomId,
+          dayKey,
+        },
+        update: {
+          $setOnInsert: {
+            product: owner.productId || null,
+            productName: owner.productName || item.productName || '',
+          },
+          $inc: {
+            soldCount: item.soldCount,
+            soldOrders: item.soldOrders,
+            revenue: item.revenue,
+          },
+        },
+        upsert: true,
+      },
+    });
+  }
+
+  if (bulkOps.length === 0) {
+    return { ok: false, reason: 'NO_VALID_ITEMS_TO_APPLY' };
+  }
+
+  const writeResult = await SellerProductDailyStat.bulkWrite(bulkOps, { ordered: false });
+
+  orderDoc.sellerDailyStatsAdjusted = true;
+  orderDoc.sellerDailyStatsAdjustedAt = new Date();
+  await orderDoc.save();
+
+  return {
+    ok: true,
+    changed: Number(writeResult?.modifiedCount || 0) + Number(writeResult?.upsertedCount || 0),
+    dayKey,
+  };
 }
 
 async function applyInventoryOnPaidOrder(orderDoc) {
@@ -2379,15 +2539,19 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
           console.error('⚠️ Seller crediting failed (checkout continues):', e?.message || e);
         }
 
-        // ✅ stock decrement (IDEMPOTENT)
+        // ✅ stock decrement + seller daily stats (IDEMPOTENT)
         try {
           const paidStatus = String(capture?.status || doc?.status || '').toUpperCase();
+
           if (doc && (paidStatus === 'COMPLETED' || paidStatus === 'PAID')) {
             const invOut = await applyInventoryOnPaidOrder(doc);
             if (!invOut.ok) console.warn('⚠️ Inventory decrement failed:', invOut);
+
+            const statsOut = await applySellerDailyStatsOnPaidOrder(doc);
+            if (!statsOut.ok) console.warn('⚠️ Seller daily stats update failed:', statsOut);
           }
         } catch (invErr) {
-          console.warn('⚠️ Inventory decrement exception:', invErr?.message || String(invErr));
+          console.warn('⚠️ Inventory/stats exception:', invErr?.message || invErr);
         }
       }
     } catch (e) {
@@ -3005,6 +3169,179 @@ router.get('/fx-test', requireAdmin, async (req, res) => {
       fxProvider: FX_PROVIDER,
       error: e?.message || String(e),
       code: e?.code || 'FX_TEST_FAILED',
+    });
+  }
+});
+
+// ======================================================
+// ✅ TEMP BACKFILL: seller daily stats for last 30 days
+// REMOVE AFTER RUNNING ONCE
+// ======================================================
+router.get('/admin/backfill-seller-daily-stats-30d', async (req, res) => {
+  try {
+    if (!Order || !Product || !SellerProductDailyStat) {
+      return res.status(500).json({
+        ok: false,
+        message: 'Required models not loaded',
+      });
+    }
+
+    const now = new Date();
+    const start = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate()
+    ));
+    start.setUTCDate(start.getUTCDate() - 29);
+
+    const orders = await Order.find({
+      status: { $in: ['COMPLETED', 'PAID'] },
+      createdAt: { $gte: start },
+    })
+      .select('createdAt items')
+      .lean();
+
+    const productCustomIds = Array.from(
+      new Set(
+        orders.flatMap((order) =>
+          (Array.isArray(order.items) ? order.items : [])
+            .map((item) => String(item?.productId || item?.customId || '').trim())
+            .filter(Boolean)
+        )
+      )
+    );
+
+    const products = await Product.find({
+      customId: { $in: productCustomIds },
+    })
+      .select('_id customId name business')
+      .lean();
+
+    const productMap = new Map(
+      products.map((product) => [
+        String(product.customId),
+        {
+          business: product.business,
+          productId: product._id,
+          productName: product.name || '',
+        }
+      ])
+    );
+
+    const aggregateMap = new Map();
+
+    for (const order of orders) {
+      const orderDate = order?.createdAt ? new Date(order.createdAt) : new Date();
+      const year = orderDate.getUTCFullYear();
+      const month = String(orderDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(orderDate.getUTCDate()).padStart(2, '0');
+      const dayKey = `${year}-${month}-${day}`;
+
+      const groupedPerOrder = new Map();
+      const items = Array.isArray(order.items) ? order.items : [];
+
+      for (const item of items) {
+        const productCustomId = String(item?.productId || item?.customId || '').trim();
+        const quantity = Number(item?.quantity || 0);
+
+        if (!productCustomId) continue;
+        if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+        const owner = productMap.get(productCustomId);
+        if (!owner?.business) continue;
+
+        const unitPrice =
+          Number(
+            item?.priceGross?.value ??
+            item?.price?.value ??
+            item?.price ??
+            item?.unitPrice ??
+            0
+          ) || 0;
+
+        if (!groupedPerOrder.has(productCustomId)) {
+          groupedPerOrder.set(productCustomId, {
+            productCustomId,
+            soldCount: 0,
+            soldOrders: 0,
+            revenue: 0,
+          });
+        }
+
+        const perOrderEntry = groupedPerOrder.get(productCustomId);
+        perOrderEntry.soldCount += quantity;
+        perOrderEntry.revenue += unitPrice * quantity;
+      }
+
+      for (const [productCustomId, item] of groupedPerOrder.entries()) {
+        const owner = productMap.get(productCustomId);
+        const mapKey = `${String(owner.business)}::${productCustomId}::${dayKey}`;
+
+        if (!aggregateMap.has(mapKey)) {
+          aggregateMap.set(mapKey, {
+            business: owner.business,
+            product: owner.productId || null,
+            productCustomId,
+            productName: owner.productName || '',
+            dayKey,
+            soldCount: 0,
+            soldOrders: 0,
+            revenue: 0,
+          });
+        }
+
+        const entry = aggregateMap.get(mapKey);
+        entry.soldCount += item.soldCount;
+        entry.soldOrders += 1;
+        entry.revenue += item.revenue;
+      }
+    }
+
+    const bulkOps = [];
+
+    for (const entry of aggregateMap.values()) {
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            business: entry.business,
+            productCustomId: entry.productCustomId,
+            dayKey: entry.dayKey,
+          },
+          update: {
+            $set: {
+              product: entry.product,
+              productName: entry.productName,
+              soldCount: Number(entry.soldCount || 0),
+              soldOrders: Number(entry.soldOrders || 0),
+              revenue: Number(Number(entry.revenue || 0).toFixed(2)),
+            },
+          },
+          upsert: true,
+        },
+      });
+    }
+
+    if (!bulkOps.length) {
+      return res.json({
+        ok: true,
+        message: 'No last-30-days paid orders found to backfill',
+        updated: 0,
+      });
+    }
+
+    const result = await SellerProductDailyStat.bulkWrite(bulkOps, { ordered: false });
+
+    return res.json({
+      ok: true,
+      message: 'Seller daily stats backfill complete',
+      updated: Number(result?.modifiedCount || 0) + Number(result?.upsertedCount || 0),
+      ordersScanned: orders.length,
+    });
+  } catch (err) {
+    console.error('❌ backfill seller daily stats error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: 'Backfill failed',
     });
   }
 });
