@@ -1160,6 +1160,7 @@ function buildStockAppliedItemsFromOrder(orderDoc) {
 
 async function applyInventoryOnPaidOrder(orderDoc) {
   if (!orderDoc || !Order) return { ok: false, reason: 'NO_ORDERDOC' };
+  if (!Product) return { ok: false, reason: 'NO_PRODUCT_MODEL' };
 
   if (orderDoc.inventoryAdjusted) {
     return { ok: true, skipped: true, reason: 'ALREADY_ADJUSTED' };
@@ -1168,20 +1169,55 @@ async function applyInventoryOnPaidOrder(orderDoc) {
   const appliedItems = buildStockAppliedItemsFromOrder(orderDoc);
   if (appliedItems.length === 0) return { ok: false, reason: 'NO_ITEMS_TO_APPLY' };
 
-  const out = await applyStockDelta(appliedItems, -1);
+  const bulkOps = [];
+  const soldOrdersSeen = new Set();
 
-  if (out.ok) {
-    // ✅ requires these fields in Order model:
-    // inventoryAdjustedItems: [{ productId, quantity }]
-    orderDoc.inventoryAdjusted = true;
-    orderDoc.inventoryAdjustedItems = appliedItems.map((x) => ({
-      productId: x.productId,
-      quantity: x.quantity,
-    }));
-    await orderDoc.save();
+  for (const item of appliedItems) {
+    const productId = String(item?.productId || '').trim();
+    const quantity = Number(item?.quantity || 0);
+
+    if (!productId) continue;
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+    const shouldIncSoldOrders = !soldOrdersSeen.has(productId);
+    soldOrdersSeen.add(productId);
+
+    const inc = {
+      stock: -quantity,
+      soldCount: quantity,
+    };
+
+    if (shouldIncSoldOrders) {
+      inc.soldOrders = 1;
+    }
+
+    bulkOps.push({
+      updateOne: {
+        filter: { customId: productId },
+        update: {
+          $inc: inc,
+        },
+      },
+    });
   }
 
-  return out;
+  if (bulkOps.length === 0) {
+    return { ok: false, reason: 'NO_VALID_ITEMS_TO_APPLY' };
+  }
+
+  const writeResult = await Product.bulkWrite(bulkOps, { ordered: false });
+
+  orderDoc.inventoryAdjusted = true;
+  orderDoc.inventoryAdjustedItems = appliedItems.map((x) => ({
+    productId: x.productId,
+    quantity: x.quantity,
+  }));
+  await orderDoc.save();
+
+  return {
+    ok: true,
+    changed: Number(writeResult?.modifiedCount || 0),
+  };
 }
 
 async function restoreInventoryOnRefundedOrder(orderDoc, reason = 'refund') {
