@@ -5,6 +5,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const Business = require('../models/Business');
 const Payout = require('../models/Payout');
 const SellerBalanceLedger = require('../models/SellerBalanceLedger');
@@ -281,7 +284,12 @@ async function runCreatePayoutBatch({
  * Admin UI routes (manual)
  * --------------------------- */
 
-router.get('/payouts', requireAdmin, async (req, res) => {
+router.get(
+  '/payouts',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'payout_admin']),
+  requireAdminPermission('payouts.read'),
+  async (req, res) => {
   try {
     const payouts = await Payout.find({})
       .sort({ createdAt: -1 })
@@ -383,7 +391,12 @@ router.get('/payouts', requireAdmin, async (req, res) => {
  * POST /admin/payouts/create (manual admin click)
  * Supports autoSync checkbox from UI.
  */
-router.post('/payouts/create', requireAdmin, async (req, res) => {
+router.post(
+  '/payouts/create',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'payout_admin']),
+  requireAdminPermission('payouts.approve'),
+  async (req, res) => {
   try {
     const baseCurrency = getBaseCurrency();
     const currency = String(req.body.currency || baseCurrency).toUpperCase().trim() || baseCurrency;
@@ -434,7 +447,12 @@ router.post('/payouts/create', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/payouts/:id/sync', requireAdmin, async (req, res) => {
+router.post(
+  '/payouts/:id/sync',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'payout_admin']),
+  requireAdminPermission('payouts.reconcile'),
+  async (req, res) => {
   try {
     const payoutId = req.params.id;
 
@@ -457,7 +475,12 @@ router.post('/payouts/:id/sync', requireAdmin, async (req, res) => {
  * Admin-only helper: sync recent batches (no cron secret)
  * POST /admin/payouts/sync-recent
  */
-router.post('/payouts/sync-recent', requireAdmin, async (req, res) => {
+router.post(
+  '/payouts/sync-recent',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'payout_admin']),
+  requireAdminPermission('payouts.reconcile'),
+  async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(30, Number(req.body.limit || 10)));
 
@@ -495,7 +518,12 @@ router.post('/payouts/sync-recent', requireAdmin, async (req, res) => {
 router.post('/payouts/auto-run', requireCronSecret, async (_req, _res) => { /* unchanged */ });
 router.post('/payouts/auto-sync-recent', requireCronSecret, async (_req, _res) => { /* unchanged */ });
 
-router.get('/payouts/_ping', requireAdmin, (req, res) => {
+router.get(
+  '/payouts/_ping',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'payout_admin']),
+  requireAdminPermission('payouts.read'),
+  (req, res) => {
   res.send('payouts route OK');
 });
 

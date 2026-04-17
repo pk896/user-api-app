@@ -1,70 +1,50 @@
 // routes/admin.js
 'use strict';
+
 const express = require('express');
-const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const router = express.Router();
 
 const requireAdmin = require('../middleware/requireAdmin');
-
-/* -------------------------------------------
-   Optional Models (safe requires)
-------------------------------------------- */
-let _Business = null;
-let _Order = null;
-// try { checkMailerConfigBusiness = require('../models/Business'); } catch { /* optional */ }
-// try { Order = require('../models/Order'); } catch { /* optional */ }
+const requireAdminRole = require('../middleware/requireAdminRole');
+const Admin = require('../models/Admin');
+const { ADMIN_ROLES, getPermissionsForRole } = require('../utils/adminRoles');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 /* -------------------------------------------
    Helpers
 ------------------------------------------- */
-function _checkMailerConfig() {
-  const host = (process.env.SMTP_HOST || '').trim();
-  const user = (process.env.SMTP_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || '').trim();
-  const from = (process.env.SMTP_FROM || '').trim();
-  return Boolean(host && user && pass && from);
-}
-
 function themeCssFromSession(req) {
   const theme = req.session?.theme || 'light';
   return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
 }
 
-/**
- * Constant-time string compare to reduce timing leaks.
- * (Still rely on bcrypt hash in production for best safety.)
- */
-function safeEqual(a, b) {
-  const aa = Buffer.from(String(a || ''), 'utf8');
-  const bb = Buffer.from(String(b || ''), 'utf8');
-  if (aa.length !== bb.length) {
-    // Compare against itself to keep timing similar
-    return crypto.timingSafeEqual(aa, aa) && false;
-  }
-  return crypto.timingSafeEqual(aa, bb);
+function normalizeIdentifier(v) {
+  return String(v || '').trim().toLowerCase();
 }
 
 /* -------------------------------------------
    Admin-only login attempt limiter (in-memory)
-   (Good basic protection. For multi-instance, use Redis.)
+   Good basic protection. For multi-instance, use Redis later.
 ------------------------------------------- */
 const ATTEMPT_WINDOW_MS = 10 * 60 * 1000; // 10 min
 const MAX_ATTEMPTS = 8;
 
 const attemptsByKey = new Map();
+
 function adminLoginThrottle(req, res, next) {
   try {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
-    const user = String(req.body?.username || '').trim().toLowerCase();
-    const key = `${ip}:${user}`;
+    const identifier = normalizeIdentifier(req.body?.username || req.body?.identifier || '');
+    const key = `${ip}:${identifier}`;
 
     const now = Date.now();
     const rec = attemptsByKey.get(key) || { count: 0, firstAt: now };
 
-    // reset window
     if (now - rec.firstAt > ATTEMPT_WINDOW_MS) {
       attemptsByKey.set(key, { count: 0, firstAt: now });
+      req._adminAttemptKey = key;
+      req._adminAttemptRec = { count: 0, firstAt: now };
       return next();
     }
 
@@ -77,7 +57,7 @@ function adminLoginThrottle(req, res, next) {
     req._adminAttemptRec = rec;
     return next();
   } catch {
-    return next(); // fail open (don’t block login if limiter breaks)
+    return next();
   }
 }
 
@@ -96,12 +76,12 @@ function clearAttempt(req) {
 }
 
 /* -------------------------------------------
-   ✅ /admin -> /admin/dashboard (protected)
+   /admin -> /admin/dashboard
 ------------------------------------------- */
 router.get('/', requireAdmin, (req, res) => res.redirect('/admin/dashboard'));
 
 /* -------------------------------------------
-   ✅ GET /admin/login
+   GET /admin/login
 ------------------------------------------- */
 router.get('/login', (req, res) => {
   const themeCss = themeCssFromSession(req);
@@ -121,42 +101,73 @@ router.get('/login', (req, res) => {
 });
 
 /* -------------------------------------------
-   ✅ POST /admin/login (production-ready)
-   - supports bcrypt hash (ADMIN_PASS_HASH)
-   - constant-time compare for fallback (ADMIN_PASS)
-   - session regeneration to prevent fixation
-   - simple brute-force throttling
+   POST /admin/login
+   - DB-backed admin account
+   - individual admin identity
+   - session regeneration
+   - audit logging
 ------------------------------------------- */
 router.post('/login', adminLoginThrottle, async (req, res) => {
-  const usernameInput = String(req.body?.username || '').trim().toLowerCase();
+  const identifierInput = normalizeIdentifier(req.body?.username || req.body?.identifier || '');
   const passwordInput = String(req.body?.password || '').trim();
 
-  const ADMIN_USER = String(process.env.ADMIN_USER || 'admin').trim().toLowerCase();
-  const ADMIN_PASS = String(process.env.ADMIN_PASS || '').trim(); // fallback dev only
-  const ADMIN_PASS_HASH = String(process.env.ADMIN_PASS_HASH || '').trim(); // recommended
-
   try {
-    const userOk = usernameInput === ADMIN_USER;
-
-    let passOk = false;
-    if (ADMIN_PASS_HASH) {
-      // bcrypt hash match
-      passOk = await bcrypt.compare(passwordInput, ADMIN_PASS_HASH);
-    } else {
-      // fallback constant-time compare
-      passOk = safeEqual(passwordInput, ADMIN_PASS || ''); // if empty, always fails
+    if (!identifierInput || !passwordInput) {
+      bumpAttempt(req);
+      req.flash('error', '❌ Invalid credentials. Please try again.');
+      return res.redirect('/admin/login');
     }
 
-    if (!userOk || !passOk) {
+    const admin = await Admin.findOne({
+      $or: [
+        { username: identifierInput },
+        { email: identifierInput },
+      ],
+    });
+
+    if (!admin || admin.isActive !== true) {
       bumpAttempt(req);
+
+      await logAdminAction(req, {
+        adminIdentifier: identifierInput,
+        action: 'admin.login',
+        entityType: 'admin_auth',
+        status: 'failure',
+        meta: { reason: 'invalid_credentials_or_inactive' },
+      });
+
+      req.flash('error', '❌ Invalid credentials. Please try again.');
+      return res.redirect('/admin/login');
+    }
+
+    const passOk = await bcrypt.compare(passwordInput, admin.passwordHash);
+
+    if (!passOk) {
+      bumpAttempt(req);
+
+      await logAdminAction(req, {
+        adminId: admin._id,
+        adminIdentifier: admin.username,
+        adminName: admin.fullName,
+        adminEmail: admin.email,
+        adminRole: admin.role,
+        action: 'admin.login',
+        entityType: 'admin_auth',
+        status: 'failure',
+        meta: { reason: 'wrong_password' },
+      });
+
       req.flash('error', '❌ Invalid credentials. Please try again.');
       return res.redirect('/admin/login');
     }
 
     clearAttempt(req);
 
-    // Regenerate session to prevent fixation
-    req.session.regenerate((err) => {
+    admin.lastLoginAt = new Date();
+    admin.lastLoginIp = String(req.ip || '').trim();
+    await admin.save();
+
+    req.session.regenerate(async (err) => {
       if (err) {
         console.error('Session regenerate error:', err);
         req.flash('error', 'Session error. Please try again.');
@@ -164,11 +175,28 @@ router.post('/login', adminLoginThrottle, async (req, res) => {
       }
 
       req.session.admin = {
-        name: process.env.ADMIN_USER || 'Admin',
+        _id: String(admin._id),
+        fullName: String(admin.fullName || '').trim(),
+        name: String(admin.fullName || '').trim(),
+        email: String(admin.email || '').trim().toLowerCase(),
+        username: String(admin.username || '').trim().toLowerCase(),
+        role: String(admin.role || '').trim(),
+        permissions: Array.isArray(admin.permissions) ? admin.permissions : [],
         at: Date.now(),
       };
 
-      req.flash('success', `Welcome back, ${req.session.admin.name}!`);
+      await logAdminAction(req, {
+        adminId: admin._id,
+        adminIdentifier: admin.username,
+        adminName: admin.fullName,
+        adminEmail: admin.email,
+        adminRole: admin.role,
+        action: 'admin.login',
+        entityType: 'admin_auth',
+        status: 'success',
+      });
+
+      req.flash('success', `Welcome back, ${admin.fullName}!`);
 
       req.session.save((err2) => {
         if (err2) console.error('Session save error:', err2);
@@ -178,11 +206,23 @@ router.post('/login', adminLoginThrottle, async (req, res) => {
   } catch (e) {
     console.error('Admin login error:', e);
     bumpAttempt(req);
+
+    await logAdminAction(req, {
+      adminIdentifier: identifierInput,
+      action: 'admin.login',
+      entityType: 'admin_auth',
+      status: 'failure',
+      meta: { reason: 'server_error' },
+    });
+
     req.flash('error', 'Login failed. Please try again.');
     return res.redirect('/admin/login');
   }
 });
 
+/* -------------------------------------------
+   GET /admin/dashboard
+------------------------------------------- */
 router.get('/dashboard', requireAdmin, (req, res) => {
   try {
     const themeCss = themeCssFromSession(req);
@@ -191,7 +231,7 @@ router.get('/dashboard', requireAdmin, (req, res) => {
       title: 'Admin Dashboard',
       nonce: res.locals.nonce,
       themeCss,
-      admin: req.session.admin,
+      admin: req.admin || req.session.admin,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
@@ -205,62 +245,301 @@ router.get('/dashboard', requireAdmin, (req, res) => {
 });
 
 /* -------------------------------------------
-   ✅ GET /admin/dashboard (protected)
+   Super Admin: Admin Management
 ------------------------------------------- */
-/*router.get('/dashboard', requireAdmin, async (req, res) => {
-  try {
-    const themeCss = themeCssFromSession(req);
-    const mailerOk = checkMailerConfig();
+router.get(
+  '/admins',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const admins = await Admin.find({})
+        .select('fullName email username role isActive lastLoginAt createdAt')
+        .sort({ createdAt: -1 })
+        .lean();
 
-    let pendingBusinessVerifications = undefined;
-    let pendingOrders = undefined;
-
-    if (Business) {
-      pendingBusinessVerifications = await Business.countDocuments({
-        'verification.status': 'pending',
+      return res.render('admin/admins-index', {
+        title: 'Admin Management',
+        nonce: res.locals.nonce,
+        themeCss: themeCssFromSession(req),
+        admins,
+        admin: req.admin || req.session.admin,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
       });
+    } catch (err) {
+      console.error('❌ Failed to load admin list:', err);
+      req.flash('error', 'Could not load admin list.');
+      return res.redirect('/admin/dashboard');
     }
+  }
+);
 
-    if (Order) {
-      pendingOrders = await Order.countDocuments({
-        status: { $in: ['Pending', 'Paid', 'Completed'] },
-      }).catch(() => undefined);
-    }
-
-    return res.render('admin-dashboard', {
-      title: 'Admin Dashboard',
+router.get(
+  '/admins/new',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  (req, res) => {
+    return res.render('admin/admins-new', {
+      title: 'Create Admin',
       nonce: res.locals.nonce,
-      themeCss,
-      admin: req.session.admin,
-      mailerOk,
-      pendingBusinessVerifications,
-      pendingOrders,
+      themeCss: themeCssFromSession(req),
+      roles: ADMIN_ROLES.filter((r) => r !== 'super_admin'),
+      admin: req.admin || req.session.admin,
       success: req.flash('success'),
       error: req.flash('error'),
       info: req.flash('info'),
       warning: req.flash('warning'),
     });
-  } catch (err) {
-    console.error('❌ Error loading admin dashboard:', err);
-    req.flash('error', '❌ Could not load dashboard data.');
-    return res.redirect('/admin/login');
   }
-});*/
+);
+
+router.post(
+  '/admins/new',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const fullName = String(req.body?.fullName || '').trim();
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const username = String(req.body?.username || '').trim().toLowerCase();
+      const password = String(req.body?.password || '').trim();
+      const role = String(req.body?.role || '').trim();
+
+      if (!fullName || !email || !username || !password || !role) {
+        req.flash('error', 'All fields are required.');
+        return res.redirect('/admin/admins/new');
+      }
+
+      if (!ADMIN_ROLES.includes(role) || role === 'super_admin') {
+        req.flash('error', 'Invalid admin role.');
+        return res.redirect('/admin/admins/new');
+      }
+
+      const existing = await Admin.findOne({
+        $or: [{ email }, { username }],
+      }).lean();
+
+      if (existing) {
+        req.flash('error', 'Admin with that email or username already exists.');
+        return res.redirect('/admin/admins/new');
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const adminDoc = await Admin.create({
+        fullName,
+        email,
+        username,
+        passwordHash,
+        role,
+        permissions: getPermissionsForRole(role),
+        isActive: true,
+        mustChangePassword: false,
+        createdBy: req.admin?._id || null,
+        updatedBy: req.admin?._id || null,
+      });
+
+      await logAdminAction(req, {
+        action: 'admin.create',
+        entityType: 'admin',
+        entityId: String(adminDoc._id),
+        status: 'success',
+        after: {
+          fullName: adminDoc.fullName,
+          email: adminDoc.email,
+          username: adminDoc.username,
+          role: adminDoc.role,
+          isActive: adminDoc.isActive,
+        },
+      });
+
+      req.flash('success', `Admin ${adminDoc.fullName} created successfully.`);
+      return res.redirect('/admin/admins');
+    } catch (err) {
+      console.error('❌ Failed to create admin:', err);
+      req.flash('error', 'Could not create admin.');
+      return res.redirect('/admin/admins/new');
+    }
+  }
+);
+
+router.post(
+  '/admins/:id/toggle-active',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const targetId = String(req.params.id || '').trim();
+
+      const adminDoc = await Admin.findById(targetId);
+      if (!adminDoc) {
+        req.flash('error', 'Admin not found.');
+        return res.redirect('/admin/admins');
+      }
+
+      if (String(adminDoc.role) === 'super_admin') {
+        req.flash('error', 'Super admin cannot be disabled here.');
+        return res.redirect('/admin/admins');
+      }
+
+      const before = {
+        isActive: adminDoc.isActive,
+      };
+
+      adminDoc.isActive = !adminDoc.isActive;
+      adminDoc.updatedBy = req.admin?._id || null;
+      await adminDoc.save();
+
+      await logAdminAction(req, {
+        action: 'admin.toggle_active',
+        entityType: 'admin',
+        entityId: String(adminDoc._id),
+        status: 'success',
+        before,
+        after: {
+          isActive: adminDoc.isActive,
+        },
+        meta: {
+          targetEmail: adminDoc.email,
+          targetUsername: adminDoc.username,
+        },
+      });
+
+      req.flash(
+        'success',
+        `Admin ${adminDoc.fullName} is now ${adminDoc.isActive ? 'active' : 'disabled'}.`
+      );
+      return res.redirect('/admin/admins');
+    } catch (err) {
+      console.error('❌ Failed to toggle admin active status:', err);
+      req.flash('error', 'Could not update admin status.');
+      return res.redirect('/admin/admins');
+    }
+  }
+);
+
+router.get(
+  '/admins/:id/reset-password',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const adminTarget = await Admin.findById(req.params.id)
+        .select('fullName email username role')
+        .lean();
+
+      if (!adminTarget) {
+        req.flash('error', 'Admin not found.');
+        return res.redirect('/admin/admins');
+      }
+
+      return res.render('admin/admins-reset-password', {
+        title: 'Reset Admin Password',
+        nonce: res.locals.nonce,
+        themeCss: themeCssFromSession(req),
+        adminTarget,
+        admin: req.admin || req.session.admin,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ Failed to load admin reset-password page:', err);
+      req.flash('error', 'Could not load reset-password page.');
+      return res.redirect('/admin/admins');
+    }
+  }
+);
+
+router.post(
+  '/admins/:id/reset-password',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const targetId = String(req.params.id || '').trim();
+      const password = String(req.body?.password || '').trim();
+
+      if (!password || password.length < 8) {
+        req.flash('error', 'Password must be at least 8 characters.');
+        return res.redirect(`/admin/admins/${targetId}/reset-password`);
+      }
+
+      const adminDoc = await Admin.findById(targetId);
+      if (!adminDoc) {
+        req.flash('error', 'Admin not found.');
+        return res.redirect('/admin/admins');
+      }
+
+      adminDoc.passwordHash = await bcrypt.hash(password, 12);
+      adminDoc.mustChangePassword = false;
+      adminDoc.updatedBy = req.admin?._id || null;
+      await adminDoc.save();
+
+      await logAdminAction(req, {
+        action: 'admin.reset_password',
+        entityType: 'admin',
+        entityId: String(adminDoc._id),
+        status: 'success',
+        meta: {
+          targetEmail: adminDoc.email,
+          targetUsername: adminDoc.username,
+        },
+      });
+
+      req.flash('success', `Password updated for ${adminDoc.fullName}.`);
+      return res.redirect('/admin/admins');
+    } catch (err) {
+      console.error('❌ Failed to reset admin password:', err);
+      req.flash('error', 'Could not reset admin password.');
+      return res.redirect('/admin/admins');
+    }
+  }
+);
 
 /* -------------------------------------------
-   ✅ Logout (ONLY one GET + one POST)
+   Logout
 ------------------------------------------- */
-router.post('/logout', requireAdmin, (req, res) => {
+router.post('/logout', requireAdmin, async (req, res) => {
+  try {
+    await logAdminAction(req, {
+      action: 'admin.logout',
+      entityType: 'admin_auth',
+      status: 'success',
+    });
+  } catch {
+    // ignore audit failure on logout
+  }
+
   req.flash('info', '👋 You have been logged out successfully.');
-  delete req.session.admin;
-  req.session.save(() => res.redirect('/admin/login'));
+
+  req.session.destroy(() => {
+    res.clearCookie('sid');
+    return res.redirect('/admin/login');
+  });
 });
 
-// Backwards compatible GET
-router.get('/logout', requireAdmin, (req, res) => {
+router.get('/logout', requireAdmin, async (req, res) => {
+  try {
+    await logAdminAction(req, {
+      action: 'admin.logout',
+      entityType: 'admin_auth',
+      status: 'success',
+    });
+  } catch {
+    // ignore audit failure on logout
+  }
+
   req.flash('info', '👋 You have been logged out successfully.');
-  delete req.session.admin;
-  req.session.save(() => res.redirect('/admin/login'));
+
+  req.session.destroy(() => {
+    res.clearCookie('sid');
+    return res.redirect('/admin/login');
+  });
 });
 
 module.exports = router;
