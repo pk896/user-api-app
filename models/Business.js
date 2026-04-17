@@ -120,6 +120,8 @@ const businessSchema = new mongoose.Schema(
       idNumber: { type: String, required: [true, 'Representative ID number is required'], trim: true },
     },
 
+    logoUrl: { type: String, required: [true, 'Business logo is required'], trim: true },
+
     bankDetails: {
       accountHolderName: { type: String, trim: true },
       bankName: { type: String, trim: true },

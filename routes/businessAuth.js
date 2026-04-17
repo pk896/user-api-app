@@ -5,6 +5,9 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
+const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const Business = require('../models/Business');
 const Product = require('../models/Product');
@@ -18,6 +21,76 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 
 const router = express.Router();
+
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const BUCKET = process.env.AWS_BUCKET_NAME;
+
+if (!BUCKET) {
+  console.warn('⚠️ AWS_BUCKET_NAME missing — business logo uploads will fail.');
+}
+
+const s3 = new S3Client({
+  region: AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
+const businessLogoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(png|jpe?g|webp|gif|bmp)$/.test(file.mimetype);
+    if (!ok) return cb(new Error('Only PNG/JPG/WEBP/GIF/BMP images are allowed'));
+    cb(null, true);
+  },
+});
+
+const buildS3ImageUrl = (key) => `https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
+
+function extFromFilename(name) {
+  const dot = name.lastIndexOf('.');
+  return dot === -1 ? 'bin' : name.substring(dot + 1);
+}
+
+function randomBusinessLogoKey(ext) {
+  return `business-logos/${uuidv4()}.${ext}`;
+}
+
+async function uploadBusinessLogoToS3(file) {
+  const { originalname, buffer, mimetype } = file;
+  const ext = extFromFilename(originalname);
+  const key = randomBusinessLogoKey(ext);
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: mimetype,
+    })
+  );
+
+  return buildS3ImageUrl(key);
+}
+
+async function deleteS3ImageByUrl(imageUrl) {
+  try {
+    if (!imageUrl || !imageUrl.includes('.amazonaws.com/')) return;
+    const key = imageUrl.split('.amazonaws.com/')[1];
+    if (!key) return;
+
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+      })
+    );
+  } catch (err) {
+    console.warn('⚠️ Failed to delete business logo from S3:', err.message);
+  }
+}
 
 // Normalize emails (main business email)
 function normalizeEmail(email) {
@@ -789,6 +862,7 @@ router.post(
 router.post(
   '/signup',
   redirectIfLoggedIn,
+  businessLogoUpload.single('logo'),
   [
     body('name').trim().notEmpty().withMessage('Business name is required'),
 
@@ -821,6 +895,13 @@ router.post(
     // Business contact/location
     body('phone').trim().notEmpty().withMessage('Phone number is required'),
     body('country').trim().notEmpty().withMessage('Country name is required'),
+
+    body('logo').custom((_, { req }) => {
+      if (!req.file) {
+        throw new Error('Business logo is required');
+      }
+      return true;
+    }),
 
     // Shippo-ready business address fields
     body('countryCode')
@@ -977,6 +1058,25 @@ router.post(
         });
       }
 
+      if (!req.file) {
+        req.flash('error', 'Business logo is required.');
+        return renderSignup(400, {
+          errors: [{ msg: 'Business logo is required', param: 'logo' }],
+        });
+      }
+
+      let logoUrl = '';
+
+      try {
+        logoUrl = await uploadBusinessLogoToS3(req.file);
+      } catch (err) {
+        console.error('❌ Business logo upload failed:', err);
+        req.flash('error', 'Business logo upload failed. Please try again.');
+        return renderSignup(400, {
+          errors: [{ msg: 'Business logo upload failed', param: 'logo' }],
+        });
+      }
+
       const hashed = await bcrypt.hash(String(password), 12);
 
       // ✅ Email verification token + expiry
@@ -1023,6 +1123,8 @@ router.post(
           idNumber: repIdNumber,
         },
 
+        logoUrl,
+
         // email verification fields
         isVerified: false,
         emailVerificationToken: token,
@@ -1056,6 +1158,8 @@ router.post(
       try {
         await business.save();
       } catch (e) {
+        await deleteS3ImageByUrl(logoUrl);
+
         if (e && e.code === 11000 && (e?.keyPattern?.email || e?.keyValue?.email)) {
           req.flash('error', 'An account with that email already exists.');
           return renderSignup(409, {
@@ -2423,6 +2527,7 @@ router.get('/profile', requireBusiness, async (req, res) => {
         'name email role phone country city address createdAt',
         'officialNumber officialNumberType',
         'verification isVerified',
+        'logoUrl',
         'bankDetails',
         // ✅ PayPal payouts
         'payouts',
@@ -2496,6 +2601,7 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
           'name email role phone country countryCode city state postalCode addressLine1 addressLine2 address',
           'officialNumber officialNumberType',
           'verification isVerified',
+          'logoUrl',
           'payouts',
         ].join(' ')
       )
@@ -2535,7 +2641,7 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
  * - officialNumber, officialNumberType
  * - payouts.enabled + payouts.paypalEmail (via applyPaypalPayouts)
  * -------------------------------------------------------- */
-router.post('/profile/update-details', requireBusiness, async (req, res) => {
+router.post('/profile/update-details', requireBusiness, businessLogoUpload.single('logo'), async (req, res) => {
   try {
     const bizId = String(req.business?._id || '').trim();
     if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
@@ -2546,7 +2652,7 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
     // Load business doc (this is the single source of truth)
     const business = await Business.findById(bizId).select(
       [
-        'name email phone',
+        'name email phone logoUrl',
         'country countryCode city state postalCode addressLine1 addressLine2 address',
         'officialNumber officialNumberType',
         'payouts verification isVerified',
@@ -2658,6 +2764,20 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
     const currentOfficial = String(business.officialNumber || '').trim();
     const officialChanged = officialNumber !== currentOfficial;
 
+    // ---- Optional logo replacement ----
+    let newLogoUrl = '';
+    const oldLogoUrl = String(business.logoUrl || '').trim();
+
+    if (req.file) {
+      try {
+        newLogoUrl = await uploadBusinessLogoToS3(req.file);
+      } catch (err) {
+        console.error('❌ Business logo upload failed during edit-details:', err);
+        req.flash('error', 'Business logo upload failed. Please try again.');
+        return res.redirect('/business/profile/edit-details');
+      }
+    }
+
     // ---- PayPal payouts: use the SAME helper as /signup ----
     const applied = applyPaypalPayouts(business, paypalEmailRaw, payoutsOn);
     if (!applied || applied.ok !== true) {
@@ -2684,6 +2804,10 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
     business.officialNumber = officialNumber;
     business.officialNumberType = officialNumberType;
 
+    if (newLogoUrl) {
+      business.logoUrl = newLogoUrl;
+    }
+
     // ---- If email changed: require re-verify + set token (DECLARE ONCE) ----
     let token = null;
     if (emailChanged) {
@@ -2708,6 +2832,10 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
 
     // Save
     await business.save();
+
+    if (newLogoUrl && oldLogoUrl && oldLogoUrl !== newLogoUrl) {
+      await deleteS3ImageByUrl(oldLogoUrl);
+    }
 
     // ---- Keep session in sync ----
     if (!req.session.business) req.session.business = {};
@@ -2752,6 +2880,10 @@ router.post('/profile/update-details', requireBusiness, async (req, res) => {
     req.flash('success', '✅ Business details updated.');
     return res.redirect('/business/profile');
   } catch (err) {
+    if (typeof newLogoUrl !== 'undefined' && newLogoUrl) {
+      await deleteS3ImageByUrl(newLogoUrl);
+    }
+
     console.error('❌ POST /business/profile/update-details error:', err);
     req.flash('error', err?.message || 'Failed to update business details.');
     return res.redirect('/business/profile/edit-details');
@@ -3260,8 +3392,34 @@ router.get(
   }
 );
 
-router.get('/_ping', (req, res) => res.send('business router OK'));
+router.use((err, req, res, next) => {
+  if (!err) return next();
 
+  console.error('❌ businessAuth upload error:', err.message);
+
+  if (
+    err instanceof multer.MulterError ||
+    String(err.message || '').includes('Only PNG/JPG/WEBP/GIF/BMP images are allowed')
+  ) {
+    req.flash('error', err.message || 'Business logo upload failed.');
+
+    return res.status(400).render('business-signup', {
+      title: 'Business Sign Up',
+      active: 'business-signup',
+      errors: [{ msg: err.message || 'Business logo upload failed.', param: 'logo' }],
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+      ...req.body,
+      representative: {
+        fullName: pickField(req.body, 'representative.fullName', ''),
+        phone: pickField(req.body, 'representative.phone', ''),
+        idNumber: pickField(req.body, 'representative.idNumber', ''),
+      },
+    });
+  }
+
+  return next(err);
+});
 
 module.exports = router;
 

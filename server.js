@@ -626,6 +626,7 @@ const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
 const businessAuthRoutes = require('./routes/businessAuth');
 const businessSidebarApiRoutes = require('./routes/businessSidebarApi');
+const businessLogoApiRoutes = require('./routes/businessLogoApi');
 const staticPagesRoutes = require('./routes/staticPages');
 const someLinksRoutes = require('./routes/someRoute');
 const storePagesRoutes = require('./routes/storePages');
@@ -678,6 +679,7 @@ app.use('/api', productRatingsApiRoutes);
 app.use('/users', usersRouter);
 app.use('/business', businessAuthRoutes);
 app.use('/business/api', businessSidebarApiRoutes);
+app.use('/business/api', businessLogoApiRoutes);
 
 // Business/admin pages
 app.use('/admin', adminRoutes);
