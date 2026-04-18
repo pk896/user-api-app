@@ -258,11 +258,14 @@ router.get(
         .sort({ createdAt: -1 })
         .lean();
 
+      const currentAdminId = String(req.admin?._id || req.session?.admin?._id || '').trim();
+
       return res.render('admin/admins-index', {
         title: 'Admin Management',
         nonce: res.locals.nonce,
         themeCss: themeCssFromSession(req),
         admins,
+        currentAdminId,
         admin: req.admin || req.session.admin,
         success: req.flash('success'),
         error: req.flash('error'),
@@ -500,6 +503,94 @@ router.post(
     }
   }
 );
+
+router.post(
+  '/admins/:id/delete',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const targetId = String(req.params.id || '').trim();
+      const currentAdminId = String(req.admin?._id || req.session?.admin?._id || '').trim();
+
+      const adminDoc = await Admin.findById(targetId);
+      if (!adminDoc) {
+        req.flash('error', 'Admin not found.');
+        return res.redirect('/admin/admins');
+      }
+
+      if (String(adminDoc.role || '').trim() === 'super_admin') {
+        req.flash('error', 'Super admin cannot be deleted.');
+        return res.redirect('/admin/admins');
+      }
+
+      if (String(adminDoc._id) === currentAdminId) {
+        req.flash('error', 'You cannot delete your own admin account.');
+        return res.redirect('/admin/admins');
+      }
+
+      if (adminDoc.isActive === true) {
+        req.flash('error', 'Only disabled admins can be permanently deleted. Disable this admin first.');
+        return res.redirect('/admin/admins');
+      }
+
+      const before = {
+        fullName: adminDoc.fullName,
+        email: adminDoc.email,
+        username: adminDoc.username,
+        role: adminDoc.role,
+        isActive: adminDoc.isActive,
+        lastLoginAt: adminDoc.lastLoginAt,
+        createdAt: adminDoc.createdAt,
+        updatedAt: adminDoc.updatedAt,
+      };
+
+      await logAdminAction(req, {
+        action: 'admin.delete',
+        entityType: 'admin',
+        entityId: String(adminDoc._id),
+        status: 'success',
+        before,
+        meta: {
+          targetEmail: adminDoc.email,
+          targetUsername: adminDoc.username,
+        },
+      });
+
+      await Admin.deleteOne({ _id: adminDoc._id });
+
+      req.flash('success', `Admin ${adminDoc.fullName} was permanently deleted.`);
+      return res.redirect('/admin/admins');
+    } catch (err) {
+      console.error('❌ Failed to delete admin:', err);
+      req.flash('error', 'Could not delete admin.');
+      return res.redirect('/admin/admins');
+    }
+  }
+);
+
+/* -------------------------------------------
+   GET /admin/me
+   - current authenticated admin (safe JSON for admin-ui)
+------------------------------------------- */
+router.get('/me', requireAdmin, (req, res) => {
+  const admin = req.admin || req.session?.admin || null;
+
+  return res.json({
+    ok: true,
+    admin: admin
+      ? {
+          _id: String(admin._id || ''),
+          fullName: String(admin.fullName || admin.name || '').trim(),
+          name: String(admin.name || admin.fullName || '').trim(),
+          email: String(admin.email || '').trim().toLowerCase(),
+          username: String(admin.username || '').trim().toLowerCase(),
+          role: String(admin.role || '').trim(),
+          permissions: Array.isArray(admin.permissions) ? admin.permissions : [],
+        }
+      : null,
+  });
+});
 
 /* -------------------------------------------
    Logout

@@ -5,6 +5,9 @@ const express = require('express');
 const router = express.Router();
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const HomePromoOffer = require('../models/HomePromoOffer');
 const Product = require('../models/Product');
 
@@ -25,7 +28,12 @@ function normalizePayload(body) {
 }
 
 /* DASHBOARD */
-router.get('/home-promo-offers', requireAdmin, async (req, res) => {
+router.get(
+  '/home-promo-offers',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const offers = await HomePromoOffer.find({})
       .sort({ sortOrder: 1, createdAt: 1 })
@@ -66,7 +74,12 @@ router.get('/home-promo-offers', requireAdmin, async (req, res) => {
 });
 
 /* NEW / EDIT PAGE BY SLOT */
-router.get('/home-promo-offers/:slot/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/home-promo-offers/:slot/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 
@@ -111,7 +124,12 @@ router.get('/home-promo-offers/:slot/edit', requireAdmin, async (req, res) => {
 });
 
 /* SEARCH PRODUCTS FOR HOME PROMO OFFERS */
-router.get('/home-promo-offers/products/search', requireAdmin, async (req, res) => {
+router.get(
+  '/home-promo-offers/products/search',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
 
@@ -145,7 +163,12 @@ router.get('/home-promo-offers/products/search', requireAdmin, async (req, res) 
 });
 
 /* SAVE SLOT */
-router.post('/home-promo-offers/:slot', requireAdmin, async (req, res) => {
+router.post(
+  '/home-promo-offers/:slot',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 
@@ -199,7 +222,12 @@ router.post('/home-promo-offers/:slot', requireAdmin, async (req, res) => {
 });
 
 /* TOGGLE */
-router.get('/home-promo-offers/:slot/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/home-promo-offers/:slot/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 

@@ -5,6 +5,10 @@ const express = require('express');
 const router = express.Router();
 const { fetch } = require('undici');
 
+const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const Order = require('../models/Order');
 const { createLabelForOrder } = require('../utils/shippo/createLabelForOrder');
 const { addTrackingToPaypalOrder } = require('../utils/paypal/addTrackingToPaypalOrder');
@@ -115,17 +119,6 @@ async function shippoPollShipmentRates(shipmentId, { tries = 10, delayMs = 1500 
 }
 
 // ------------------------------------------------------
-// Admin guard (PROD SAFE)
-// ------------------------------------------------------
-let requireAdmin = null;
-try {
-  requireAdmin = require('../middleware/requireAdmin');
-} catch {
-  requireAdmin = (req, res, next) =>
-    req.session?.admin ? next() : res.status(401).json({ ok: false, message: 'Unauthorized' });
-}
-
-// ------------------------------------------------------
 // Enum-safe mapping for shippingTracking.status + fulfillmentStatus
 // (we keep this because those fields can still be enums)
 // ------------------------------------------------------
@@ -167,7 +160,12 @@ function mapToEnum(desired, enumValues) {
 // ✅ Admin page: Shippo labels dashboard
 // GET /admin/shippo
 // ======================================================
-router.get('/admin/shippo', requireAdmin, async (req, res) => {
+router.get(
+  '/admin/shippo',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'shipping_admin']),
+  requireAdminPermission('shipping.read'),
+  async (req, res) => {
   try {
     const orders = await Order.find({})
       .sort({ createdAt: -1 })
@@ -284,7 +282,12 @@ router.get('/admin/shippo', requireAdmin, async (req, res) => {
 // ✅ Get rates for an order (ADMIN)
 // GET /admin/orders/:orderId/shippo/rates
 // ======================================================
-router.get('/admin/orders/:orderId/shippo/rates', requireAdmin, async (req, res) => {
+router.get(
+  '/admin/orders/:orderId/shippo/rates',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'shipping_admin']),
+  requireAdminPermission('shipping.read'),
+  async (req, res) => {
   try {
     const orderId = String(req.params.orderId || '').trim();
     const order = await Order.findOne({ orderId });
@@ -357,7 +360,12 @@ router.get('/admin/orders/:orderId/shippo/rates', requireAdmin, async (req, res)
 // ✅ Create label for a specific paid order (ADMIN)
 // POST /admin/orders/:orderId/shippo/create-label
 // ======================================================
-router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (req, res) => {
+router.post(
+  '/admin/orders/:orderId/shippo/create-label',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'shipping_admin']),
+  requireAdminPermission('shipping.labels.manage'),
+  async (req, res) => {
   try {
     const orderId = String(req.params.orderId || '').trim();
     const order = await Order.findOne({ orderId });
@@ -661,7 +669,11 @@ router.post('/admin/orders/:orderId/shippo/create-label', requireAdmin, async (r
 // ✅ Update address for an order (ADMIN)
 // POST /admin/orders/:orderId/shippo/update-address
 // ======================================================
-router.post('/admin/orders/:orderId/shippo/update-address', requireAdmin, async (req, res) => {
+router.post(
+  '/admin/orders/:orderId/shippo/update-address',
+  requireAdmin, requireAdminRole(['super_admin', 'shipping_admin']),
+  requireAdminPermission('shipping.update'),
+  async (req, res) => {
   try {
     const orderId = String(req.params.orderId || '').trim();
     const order = await Order.findOne({ orderId });

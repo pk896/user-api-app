@@ -5,6 +5,9 @@ const express = require('express');
 const router = express.Router();
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const BestsellerCard = require('../models/BestsellerCard');
 const Product = require('../models/Product');
 
@@ -25,7 +28,12 @@ function normalizePayload(body) {
 }
 
 /* INDEX */
-router.get('/bestseller-cards', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-cards',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const cards = await BestsellerCard.find({})
       .sort({ sortOrder: 1, createdAt: 1 })
@@ -66,7 +74,12 @@ router.get('/bestseller-cards', requireAdmin, async (req, res) => {
 });
 
 /* EDIT */
-router.get('/bestseller-cards/:slot/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-cards/:slot/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 
@@ -111,7 +124,12 @@ router.get('/bestseller-cards/:slot/edit', requireAdmin, async (req, res) => {
 });
 
 /* SEARCH PRODUCTS FOR BESTSELLER CARD */
-router.get('/bestseller-cards/products/search', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-cards/products/search',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
 
@@ -145,7 +163,12 @@ router.get('/bestseller-cards/products/search', requireAdmin, async (req, res) =
 });
 
 /* SAVE */
-router.post('/bestseller-cards/:slot', requireAdmin, async (req, res) => {
+router.post(
+  '/bestseller-cards/:slot',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 
@@ -199,7 +222,12 @@ router.post('/bestseller-cards/:slot', requireAdmin, async (req, res) => {
 });
 
 /* TOGGLE */
-router.get('/bestseller-cards/:slot/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-cards/:slot/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 

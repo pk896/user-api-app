@@ -5,6 +5,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const Order = require('../models/Order');
 const Business = require('../models/Business');
 
@@ -104,7 +107,12 @@ function buildOrderSummary(order, businessMap) {
  *   page           -> default 1
  *   limit          -> default 20 max 100
  */
-router.get('/orders', requireAdmin, async (req, res) => {
+router.get(
+  '/orders',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'orders_admin']),
+  requireAdminPermission('orders.read'),
+  async (req, res) => {
   try {
     const q = safeStr(req.query.q, 160);
     const businessName = safeStr(req.query.businessName, 160);
@@ -271,7 +279,12 @@ router.get('/orders', requireAdmin, async (req, res) => {
  *   - orderId
  *   - Mongo _id
  */
-router.get('/orders/:id', requireAdmin, async (req, res) => {
+router.get(
+  '/orders/:id',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'orders_admin']),
+  requireAdminPermission('orders.read'),
+  async (req, res) => {
   try {
     const id = safeStr(req.params.id, 160);
     if (!id) {

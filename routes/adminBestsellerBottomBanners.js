@@ -8,6 +8,9 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 const Product = require('../models/Product');
 
@@ -95,7 +98,12 @@ function normalizePayload(body) {
 }
 
 /* INDEX */
-router.get('/bestseller-bottom-banners', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-bottom-banners',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const banners = await BestsellerBottomBanner.find({})
       .sort({ sortOrder: 1, createdAt: 1 })
@@ -136,7 +144,12 @@ router.get('/bestseller-bottom-banners', requireAdmin, async (req, res) => {
 });
 
 /* EDIT */
-router.get('/bestseller-bottom-banners/:slot/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-bottom-banners/:slot/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 
@@ -181,7 +194,12 @@ router.get('/bestseller-bottom-banners/:slot/edit', requireAdmin, async (req, re
 });
 
 /* SEARCH PRODUCTS FOR BESTSELLER BOTTOM BANNER */
-router.get('/bestseller-bottom-banners/products/search', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-bottom-banners/products/search',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
 
@@ -218,6 +236,8 @@ router.get('/bestseller-bottom-banners/products/search', requireAdmin, async (re
 router.post(
   '/bestseller-bottom-banners/:slot',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
   upload.single('imageFile'),
   async (req, res) => {
     try {
@@ -295,7 +315,12 @@ router.post(
 );
 
 /* TOGGLE */
-router.get('/bestseller-bottom-banners/:slot/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/bestseller-bottom-banners/:slot/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 

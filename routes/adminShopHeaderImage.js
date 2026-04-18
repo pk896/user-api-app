@@ -8,6 +8,8 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
 const ShopHeaderImage = require('../models/ShopHeaderImage');
 
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -81,7 +83,12 @@ function themeCssFromSession(req) {
 }
 
 /* INDEX */
-router.get('/shop-header-image', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-header-image',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const headerImage = await ShopHeaderImage.findOne({}).sort({ updatedAt: -1 }).lean();
 
@@ -103,7 +110,12 @@ router.get('/shop-header-image', requireAdmin, async (req, res) => {
 });
 
 /* EDIT */
-router.get('/shop-header-image/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-header-image/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const headerImage = await ShopHeaderImage.findOne({}).sort({ updatedAt: -1 }).lean();
 
@@ -128,6 +140,8 @@ router.get('/shop-header-image/edit', requireAdmin, async (req, res) => {
 router.post(
   '/shop-header-image',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
   upload.single('imageFile'),
   async (req, res) => {
     try {
@@ -170,7 +184,12 @@ router.post(
 );
 
 /* TOGGLE */
-router.get('/shop-header-image/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-header-image/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const headerImage = await ShopHeaderImage.findOne({});
 

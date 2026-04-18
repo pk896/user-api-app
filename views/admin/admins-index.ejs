@@ -2,6 +2,7 @@
 <%
   const NONCE = typeof nonce !== 'undefined' ? nonce : '';
   const adminsList = Array.isArray(admins) ? admins : [];
+  const currentId = typeof currentAdminId !== 'undefined' ? String(currentAdminId) : '';
 %>
 
 <div class="container py-4">
@@ -69,11 +70,26 @@
                       Reset Password
                     </a>
 
-                    <form action="/admin/admins/<%= a._id %>/toggle-active" method="POST" class="m-0">
-                      <button type="submit" class="btn btn-sm <%= a.isActive ? 'btn-outline-danger' : 'btn-outline-success' %>">
-                        <%= a.isActive ? 'Disable' : 'Enable' %>
-                      </button>
-                    </form>
+                    <% if (a.role !== 'super_admin') { %>
+                      <form action="/admin/admins/<%= a._id %>/toggle-active" method="POST" class="m-0">
+                        <button type="submit" class="btn btn-sm <%= a.isActive ? 'btn-outline-danger' : 'btn-outline-success' %>">
+                          <%= a.isActive ? 'Disable' : 'Enable' %>
+                        </button>
+                      </form>
+                    <% } %>
+
+                    <% if (!a.isActive && a.role !== 'super_admin' && String(a._id) !== currentId) { %>
+                      <form
+                        action="/admin/admins/<%= a._id %>/delete"
+                        method="POST"
+                        class="m-0"
+                        onsubmit="return confirm('This will permanently delete this disabled admin account. This cannot be undone. Continue?');"
+                      >
+                        <button type="submit" class="btn btn-sm btn-danger">
+                          Delete
+                        </button>
+                      </form>
+                    <% } %>
                   </div>
                 </td>
               </tr>

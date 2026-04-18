@@ -8,6 +8,9 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
 const Product = require('../models/Product');
@@ -95,7 +98,12 @@ async function deleteS3ImageByUrl(imageUrl) {
 }
 
 /* HOME BANNERS DASHBOARD */
-router.get('/home-banners', requireAdmin, async (req, res) => {
+router.get(
+  '/home-banners',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slides = await HeroSlide.find({}).sort({ sortOrder: 1, createdAt: 1 }).lean();
     const featuredBanner = await FeaturedBanner.findOne({}).sort({ updatedAt: -1 }).lean();
@@ -125,7 +133,12 @@ router.get('/home-banners', requireAdmin, async (req, res) => {
 });
 
 /* ADD HERO SLIDE PAGE */
-router.get('/home-banners/slides/new', requireAdmin, (req, res) => {
+router.get(
+  '/home-banners/slides/new',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  (req, res) => {
   return res.render('admin/home-banners/add-slide', {
     title: 'Add Hero Slide',
     themeCss: themeCssFromSession(req),
@@ -141,6 +154,8 @@ router.get('/home-banners/slides/new', requireAdmin, (req, res) => {
 router.post(
   '/home-banners/slides',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
   upload.single('imageFile'),
   async (req, res) => {
     try {
@@ -174,7 +189,12 @@ router.post(
 );
 
 /* EDIT HERO SLIDE PAGE */
-router.get('/home-banners/slides/:id/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/home-banners/slides/:id/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slide = await HeroSlide.findById(req.params.id).lean();
 
@@ -204,6 +224,8 @@ router.get('/home-banners/slides/:id/edit', requireAdmin, async (req, res) => {
 router.post(
   '/home-banners/slides/:id',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
   upload.single('imageFile'),
   async (req, res) => {
     try {
@@ -247,7 +269,12 @@ router.post(
 );
 
 /* DELETE HERO SLIDE */
-router.get('/home-banners/slides/:id/delete', requireAdmin, async (req, res) => {
+router.get(
+  '/home-banners/slides/:id/delete',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slide = await HeroSlide.findByIdAndDelete(req.params.id);
 
@@ -265,7 +292,12 @@ router.get('/home-banners/slides/:id/delete', requireAdmin, async (req, res) => 
 });
 
 /* TOGGLE HERO SLIDE */
-router.get('/home-banners/slides/:id/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/home-banners/slides/:id/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slide = await HeroSlide.findById(req.params.id);
 
@@ -287,7 +319,12 @@ router.get('/home-banners/slides/:id/toggle', requireAdmin, async (req, res) => 
 });
 
 /* FEATURED BANNER PAGE */
-router.get('/home-banners/featured-banner', requireAdmin, async (req, res) => {
+router.get(
+  '/home-banners/featured-banner',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const banner = await FeaturedBanner.findOne({}).sort({ updatedAt: -1 }).lean();
 
@@ -318,7 +355,12 @@ router.get('/home-banners/featured-banner', requireAdmin, async (req, res) => {
 });
 
 /* SEARCH PRODUCTS FOR FEATURED BANNER */
-router.get('/home-banners/products/search', requireAdmin, async (req, res) => {
+router.get(
+  '/home-banners/products/search',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
 
@@ -352,7 +394,12 @@ router.get('/home-banners/products/search', requireAdmin, async (req, res) => {
 });
 
 /* SAVE FEATURED BANNER */
-router.post('/home-banners/featured-banner', requireAdmin, async (req, res) => {
+router.post(
+  '/home-banners/featured-banner',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const productCustomId = String(req.body.productCustomId || '').trim();
     const badgeText = String(req.body.badgeText || '').trim();

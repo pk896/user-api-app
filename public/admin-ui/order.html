@@ -114,7 +114,7 @@ IMPORTANT DOM IDS USED BY JS:
         <li class="nav-title">Admin</li>
 
         <li class="nav-item">
-          <a class="nav-link active" href="orders.html">
+          <a class="nav-link active" href="orders.html" data-admin-link="1" data-roles="super_admin,orders_admin" data-permission="orders.read">
             <svg class="nav-icon">
               <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-cart"></use>
             </svg>
@@ -123,7 +123,7 @@ IMPORTANT DOM IDS USED BY JS:
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="/admin/business-verifications">
+          <a class="nav-link" href="/admin/business-verifications" data-admin-link="1" data-roles="super_admin,verification_admin" data-permission="verification.read">
             <svg class="nav-icon">
               <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-check-circle"></use>
             </svg>
@@ -132,7 +132,7 @@ IMPORTANT DOM IDS USED BY JS:
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="/admin/delivery-options">
+          <a class="nav-link" href="/admin/delivery-options" data-admin-link="1" data-roles="super_admin,shipping_admin" data-permission="delivery_options.manage">
             <svg class="nav-icon">
               <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-truck"></use>
             </svg>
@@ -141,7 +141,7 @@ IMPORTANT DOM IDS USED BY JS:
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="/admin/payouts">
+          <a class="nav-link" href="/admin/payouts" data-admin-link="1" data-roles="super_admin,payout_admin" data-permission="payouts.read">
             <svg class="nav-icon">
               <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-money"></use>
             </svg>
@@ -150,7 +150,7 @@ IMPORTANT DOM IDS USED BY JS:
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="/admin/shippo">
+          <a class="nav-link" href="/admin/shippo" data-admin-link="1" data-roles="super_admin,shipping_admin" data-permission="shipping.labels.manage">
             <svg class="nav-icon">
               <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-paper-plane"></use>
             </svg>
@@ -195,7 +195,11 @@ IMPORTANT DOM IDS USED BY JS:
 
           <ul class="header-nav d-none d-lg-flex">
             <li class="nav-item"><a class="nav-link" href="index.html">Dashboard</a></li>
-            <li class="nav-item"><a class="nav-link active" href="orders.html">Orders</a></li>
+            <li class="nav-item">
+              <a class="nav-link active" href="orders.html" data-admin-link="1" data-roles="super_admin,orders_admin" data-permission="orders.read">
+                Orders
+              </a>
+            </li>
           </ul>
 
           <ul class="header-nav ms-auto">
@@ -206,35 +210,35 @@ IMPORTANT DOM IDS USED BY JS:
                 </svg>
               </a>
               <div class="dropdown-menu dropdown-menu-end">
-                <a class="dropdown-item" href="/admin/business-verifications">
+                <a class="dropdown-item" href="/admin/business-verifications" data-admin-link="1" data-roles="super_admin,verification_admin" data-permission="verification.read">
                   <svg class="icon me-2">
                     <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-check-circle"></use>
                   </svg>
                   Business Verifications
                 </a>
 
-                <a class="dropdown-item" href="orders.html">
+                <a class="dropdown-item" href="orders.html" data-admin-link="1" data-roles="super_admin,orders_admin" data-permission="orders.read">
                   <svg class="icon me-2">
                     <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-cart"></use>
                   </svg>
                   Manage Orders
                 </a>
 
-                <a class="dropdown-item" href="/admin/delivery-options">
+                <a class="dropdown-item" href="/admin/delivery-options" data-admin-link="1" data-roles="super_admin,shipping_admin" data-permission="delivery_options.manage">
                   <svg class="icon me-2">
                     <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-truck"></use>
                   </svg>
                   Delivery Options
                 </a>
 
-                <a class="dropdown-item" href="/admin/payouts">
+                <a class="dropdown-item" href="/admin/payouts" data-admin-link="1" data-roles="super_admin,payout_admin" data-permission="payouts.read">
                   <svg class="icon me-2">
                     <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-money"></use>
                   </svg>
                   Payouts
                 </a>
 
-                <a class="dropdown-item" href="/admin/shippo">
+                <a class="dropdown-item" href="/admin/shippo" data-admin-link="1" data-roles="super_admin,shipping_admin" data-permission="shipping.labels.manage">
                   <svg class="icon me-2">
                     <use xlink:href="vendors/@coreui/icons/svg/free.svg#cil-paper-plane"></use>
                   </svg>
@@ -365,5 +369,59 @@ IMPORTANT DOM IDS USED BY JS:
     <script src="js/main.js"></script>
     <script src="js/admin-header-sidebar-toggle.js"></script>
     <script src="js/admin-order-details.js"></script>
+
+    <script>
+      (async function () {
+        try {
+          const res = await fetch('/admin/me', {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          });
+
+          if (!res.ok) return;
+
+          const data = await res.json();
+          const admin = data && data.admin ? data.admin : null;
+          if (!admin) return;
+
+          const role = String(admin.role || '').trim();
+          const permissions = Array.isArray(admin.permissions) ? admin.permissions : [];
+
+          function hasPermission(permission) {
+            if (!permission) return true;
+            if (permissions.includes('*')) return true;
+            return permissions.includes(permission);
+          }
+
+          function hasRole(allowedRolesRaw) {
+            const allowedRoles = String(allowedRolesRaw || '')
+              .split(',')
+              .map((v) => v.trim())
+              .filter(Boolean);
+
+            if (!allowedRoles.length) return true;
+            return allowedRoles.includes(role);
+          }
+
+          document.querySelectorAll('[data-admin-link="1"]').forEach(function (el) {
+            const allowed = hasRole(el.dataset.roles) && hasPermission(el.dataset.permission);
+
+            if (allowed) return;
+
+            const removable =
+              el.closest('.nav-item') ||
+              el.closest('.dropdown-item') ||
+              el;
+
+            if (removable) {
+              removable.remove();
+            }
+          });
+        } catch (err) {
+          console.warn('Admin UI link filter failed:', err);
+        }
+      })();
+    </script>
   </body>
 </html>
+

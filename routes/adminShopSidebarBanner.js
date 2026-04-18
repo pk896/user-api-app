@@ -8,6 +8,8 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
 const ShopSidebarBanner = require('../models/ShopSidebarBanner');
 const Product = require('../models/Product');
 
@@ -92,7 +94,12 @@ function normalizePayload(body) {
 }
 
 /* INDEX */
-router.get('/shop-sidebar-banner', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-sidebar-banner',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const bannerRaw = await ShopSidebarBanner.findOne({}).sort({ updatedAt: -1 }).lean();
 
@@ -127,7 +134,12 @@ router.get('/shop-sidebar-banner', requireAdmin, async (req, res) => {
 });
 
 /* EDIT */
-router.get('/shop-sidebar-banner/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-sidebar-banner/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const bannerRaw = await ShopSidebarBanner.findOne({}).sort({ updatedAt: -1 }).lean();
 
@@ -164,7 +176,12 @@ router.get('/shop-sidebar-banner/edit', requireAdmin, async (req, res) => {
 });
 
 /* SEARCH PRODUCTS FOR SHOP SIDEBAR BANNER */
-router.get('/shop-sidebar-banner/products/search', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-sidebar-banner/products/search',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
 
@@ -201,6 +218,8 @@ router.get('/shop-sidebar-banner/products/search', requireAdmin, async (req, res
 router.post(
   '/shop-sidebar-banner',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
   upload.single('imageFile'),
   async (req, res) => {
     try {
@@ -264,7 +283,12 @@ router.post(
 );
 
 /* TOGGLE */
-router.get('/shop-sidebar-banner/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/shop-sidebar-banner/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const banner = await ShopSidebarBanner.findOne({});
 

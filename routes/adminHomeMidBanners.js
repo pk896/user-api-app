@@ -8,6 +8,9 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+
 const HomeMidBanner = require('../models/HomeMidBanner');
 const Product = require('../models/Product');
 
@@ -94,7 +97,12 @@ async function deleteS3ImageByUrl(imageUrl) {
 }
 
 /* DASHBOARD */
-router.get('/home-mid-banners', requireAdmin, async (req, res) => {
+router.get(
+  '/home-mid-banners',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const banners = await HomeMidBanner.find({})
       .sort({ sortOrder: 1, createdAt: 1 })
@@ -135,7 +143,12 @@ router.get('/home-mid-banners', requireAdmin, async (req, res) => {
 });
 
 /* EDIT PAGE */
-router.get('/home-mid-banners/:slot/edit', requireAdmin, async (req, res) => {
+router.get(
+  '/home-mid-banners/:slot/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 
@@ -180,7 +193,12 @@ router.get('/home-mid-banners/:slot/edit', requireAdmin, async (req, res) => {
 });
 
 /* SEARCH PRODUCTS FOR HOME MID BANNERS */
-router.get('/home-mid-banners/products/search', requireAdmin, async (req, res) => {
+router.get(
+  '/home-mid-banners/products/search',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
 
@@ -217,6 +235,8 @@ router.get('/home-mid-banners/products/search', requireAdmin, async (req, res) =
 router.post(
   '/home-mid-banners/:slot',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
   upload.single('imageFile'),
   async (req, res) => {
     try {
@@ -288,7 +308,12 @@ router.post(
 );
 
 /* TOGGLE */
-router.get('/home-mid-banners/:slot/toggle', requireAdmin, async (req, res) => {
+router.get(
+  '/home-mid-banners/:slot/toggle',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin']),
+  requireAdminPermission('store.content.manage'),
+  async (req, res) => {
   try {
     const slot = String(req.params.slot || '').trim().toLowerCase();
 

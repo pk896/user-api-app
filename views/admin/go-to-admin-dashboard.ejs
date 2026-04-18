@@ -1,4 +1,46 @@
 <!--views/admin/go-to-admin-dashboard.ejs-->
+<%
+  const role = String(admin?.role || '').trim();
+  const permissions = Array.isArray(admin?.permissions) ? admin.permissions : [];
+  const hasPerm = (perm) => permissions.includes('*') || permissions.includes(perm);
+
+  const isSuper = role === 'super_admin';
+
+  const canOrders = isSuper || (role === 'orders_admin' && hasPerm('orders.read'));
+  const canShipping = isSuper || (role === 'shipping_admin' && (hasPerm('shipping.read') || hasPerm('delivery_options.manage') || hasPerm('shipping.labels.manage')));
+  const canStore = isSuper || (role === 'store_admin' && (hasPerm('store.read') || hasPerm('store.content.manage') || hasPerm('store.banners.manage') || hasPerm('store.promotions.manage')));
+  const canPayouts = isSuper || (role === 'payout_admin' && hasPerm('payouts.read'));
+  const canVerification = isSuper || (role === 'verification_admin' && hasPerm('verification.read'));
+  const canInventory = isSuper || (role === 'inventory_admin' && hasPerm('inventory.read'));
+  const canSupport = isSuper || (role === 'support_admin' && hasPerm('support.read'));
+
+  let primaryHref = '/admin/dashboard';
+  let primaryText = 'Open My Admin Area';
+
+  if (canOrders) {
+    primaryHref = '/admin-ui/orders.html';
+    primaryText = 'Open Orders Admin';
+  } else if (canPayouts) {
+    primaryHref = '/admin/payouts';
+    primaryText = 'Open Payout Admin';
+  } else if (canVerification) {
+    primaryHref = '/admin/business-verifications';
+    primaryText = 'Open Verification Admin';
+  } else if (canShipping) {
+    primaryHref = '/admin/delivery-options';
+    primaryText = 'Open Shipping Admin';
+  } else if (canStore) {
+    primaryHref = '/admin/home-banners';
+    primaryText = 'Open Store Admin';
+  } else if (canInventory) {
+    primaryHref = '/admin/dashboard';
+    primaryText = 'Open Inventory Admin';
+  } else if (canSupport) {
+    primaryHref = '/admin/dashboard';
+    primaryText = 'Open Support Admin';
+  }
+%>
+
 <div class="row justify-content-center">
   <div class="col-12 col-xl-10">
     <div class="card shadow-sm border-0 mt-4">
@@ -7,12 +49,12 @@
         <h1 class="h3 mb-3 text-primary">Admin Dashboard Access</h1>
 
         <p class="text-body-secondary mb-4">
-          Use the links below to open the admin dashboard interface and manage admin operations safely.
+          Open only the admin area assigned to your role.
         </p>
 
         <div class="d-grid gap-2 d-sm-flex flex-wrap mb-4">
-          <a href="/admin-ui/" class="btn btn-primary btn-lg">
-            Open Admin Dashboard
+          <a href="<%= primaryHref %>" class="btn btn-primary btn-lg">
+            <%= primaryText %>
           </a>
 
           <form action="/admin/logout" method="POST" class="m-0">
@@ -21,7 +63,7 @@
             </button>
           </form>
 
-          <% if (admin && admin.role === 'super_admin') { %>
+          <% if (isSuper) { %>
             <a href="/admin/admins" class="btn btn-outline-primary btn-lg">
               Manage Admins
             </a>
@@ -31,29 +73,59 @@
             </a>
           <% } %>
 
-          <a href="/admin/home-banners" class="btn btn-outline-primary btn-lg">
-            Manage Homepage Banners & Edit Promo Offers
-          </a>
+          <% if (canVerification) { %>
+            <a href="/admin/business-verifications" class="btn btn-outline-primary btn-lg">
+              Business Verification
+            </a>
+          <% } %>
 
-          <a href="/admin/bestseller-cards" class="btn btn-outline-primary btn-lg">
-            Manage Bestseller Cards
-          </a>
+          <% if (canOrders) { %>
+            <a href="/admin-ui/orders.html" class="btn btn-outline-primary btn-lg">
+              Manage Orders
+            </a>
+          <% } %>
 
-          <a href="/admin/bestseller-bottom-banners" class="btn btn-outline-primary btn-lg">
-            Manage Bestseller Bottom Banners
-          </a>
+          <% if (canShipping) { %>
+            <a href="/admin/delivery-options" class="btn btn-outline-primary btn-lg">
+              Delivery Options
+            </a>
 
-          <a href="/admin/shop-sidebar-banner" class="btn btn-outline-primary btn-lg">
-            Manage Shop Sidebar Banner
-          </a>
+            <a href="/admin/shippo" class="btn btn-outline-primary btn-lg">
+              Shippo Labels
+            </a>
+          <% } %>
 
-          <a href="/admin/shop-main-banner" class="btn btn-outline-primary btn-lg">
-            Manage Shop Main Banner
-          </a>
+          <% if (canPayouts) { %>
+            <a href="/admin/payouts" class="btn btn-outline-primary btn-lg">
+              Payouts
+            </a>
+          <% } %>
 
-          <a href="/admin/shop-header-image" class="btn btn-outline-primary btn-lg">
-            Manage Shop Header Image
-          </a>
+          <% if (canStore) { %>
+            <a href="/admin/home-banners" class="btn btn-outline-primary btn-lg">
+              Manage Homepage Banners & Edit Promo Offers
+            </a>
+
+            <a href="/admin/bestseller-cards" class="btn btn-outline-primary btn-lg">
+              Manage Bestseller Cards
+            </a>
+
+            <a href="/admin/bestseller-bottom-banners" class="btn btn-outline-primary btn-lg">
+              Manage Bestseller Bottom Banners
+            </a>
+
+            <a href="/admin/shop-sidebar-banner" class="btn btn-outline-primary btn-lg">
+              Manage Shop Sidebar Banner
+            </a>
+
+            <a href="/admin/shop-main-banner" class="btn btn-outline-primary btn-lg">
+              Manage Shop Main Banner
+            </a>
+
+            <a href="/admin/shop-header-image" class="btn btn-outline-primary btn-lg">
+              Manage Shop Header Image
+            </a>
+          <% } %>
         </div>
 
         <% if (admin) { %>
@@ -66,10 +138,14 @@
           </div>
         <% } %>
 
-        <% if (admin && admin.role === 'super_admin') { %>
+        <% if (isSuper) { %>
           <div class="alert alert-success mb-3" role="alert">
-            <strong>Super Admin:</strong> You can now create admins, reset admin passwords, and enable or disable admin accounts from
+            <strong>Super Admin:</strong> You can create admins, reset passwords, and manage access from
             <a href="/admin/admins" class="alert-link">Manage Admins</a>.
+          </div>
+        <% } else { %>
+          <div class="alert alert-secondary mb-3" role="alert">
+            <strong>Role Scope:</strong> Your account should only see and open the pages allowed for your assigned admin role.
           </div>
         <% } %>
 

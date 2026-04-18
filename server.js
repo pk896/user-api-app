@@ -735,37 +735,85 @@ const adminDistPath = path.join(__dirname, 'public', 'admin-ui');
 const sellerUiPath = path.join(__dirname, 'public', 'seller-ui');
 
 // ✅ Protect admin-ui pages using shared middleware
-app.use('/admin-ui', (req, res, next) => {
-  const isAsset =
-    req.path.startsWith('/assets/') ||
-    req.path.startsWith('/css/') ||
-    req.path.startsWith('/js/') ||
-    req.path.startsWith('/vendors/') ||
-    req.path.startsWith('/img/') ||
-    req.path.startsWith('/images/') ||
-    req.path.startsWith('/fonts/') ||
-    req.path.endsWith('.map') ||
-    req.path.endsWith('.ico') ||
-    req.path.endsWith('.png') ||
-    req.path.endsWith('.jpg') ||
-    req.path.endsWith('.jpeg') ||
-    req.path.endsWith('.svg') ||
-    req.path.endsWith('.webp') ||
-    req.path.endsWith('.woff') ||
-    req.path.endsWith('.woff2') ||
-    req.path.endsWith('.ttf') ||
-    req.path.endsWith('.eot');
+const { hasPermission } = require('./utils/adminRoles');
 
-  if (isAsset) return next();
-  return requireAdmin(req, res, next);
+function isAdminUiAssetPath(reqPath = '') {
+  return (
+    reqPath.startsWith('/assets/') ||
+    reqPath.startsWith('/css/') ||
+    reqPath.startsWith('/js/') ||
+    reqPath.startsWith('/vendors/') ||
+    reqPath.startsWith('/img/') ||
+    reqPath.startsWith('/images/') ||
+    reqPath.startsWith('/fonts/') ||
+    reqPath.startsWith('/icons/') ||
+    reqPath.endsWith('.map') ||
+    reqPath.endsWith('.ico') ||
+    reqPath.endsWith('.png') ||
+    reqPath.endsWith('.jpg') ||
+    reqPath.endsWith('.jpeg') ||
+    reqPath.endsWith('.svg') ||
+    reqPath.endsWith('.webp') ||
+    reqPath.endsWith('.woff') ||
+    reqPath.endsWith('.woff2') ||
+    reqPath.endsWith('.ttf') ||
+    reqPath.endsWith('.eot')
+  );
+}
+
+const ADMIN_UI_PAGE_RULES = {
+  '/orders.html': {
+    roles: ['super_admin', 'orders_admin'],
+    permission: 'orders.read',
+  },
+  '/order.html': {
+    roles: ['super_admin', 'orders_admin'],
+    permission: 'orders.read',
+  },
+};
+
+app.use('/admin-ui', (req, res, next) => {
+  if (isAdminUiAssetPath(req.path)) {
+    return next();
+  }
+
+  return requireAdmin(req, res, () => {
+    const normalizedPath =
+      req.path === '' || req.path === '/' ? '/index.html' : req.path;
+
+    const rule = ADMIN_UI_PAGE_RULES[normalizedPath];
+
+    if (!rule) {
+      return next();
+    }
+
+    const admin = req.admin || req.session?.admin || null;
+    const role = String(admin?.role || '').trim();
+
+    const roleAllowed = Array.isArray(rule.roles) && rule.roles.includes(role);
+    const permissionAllowed = hasPermission(admin, rule.permission);
+
+    if (roleAllowed && permissionAllowed) {
+      return next();
+    }
+
+    if (req.flash) {
+      req.flash('error', 'You do not have access to that admin page.');
+    }
+    return res.redirect('/admin/dashboard');
+  });
 });
 
-// ✅ serve CoreUI static files
-app.use('/admin-ui', express.static(adminDistPath));
+app.use(
+  '/admin-ui',
+  express.static(adminDistPath, {
+    extensions: ['html'],
+    index: 'index.html',
+  })
+);
 
-// ✅ /admin-ui -> index.html
-app.get('/admin-ui', (req, res) => {
-  res.sendFile(path.join(adminDistPath, 'index.html'));
+app.get('/admin-ui', requireAdmin, (req, res) => {
+  res.redirect('/admin-ui/');
 });
 
 const requireBusiness = require('./middleware/requireBusiness');

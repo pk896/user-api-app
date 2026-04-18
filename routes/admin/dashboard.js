@@ -4,17 +4,7 @@
 const express = require('express');
 const router = express.Router();
 
-// Use your existing admin middleware
-let requireAdmin = null;
-try {
-  requireAdmin = require('../../middleware/requireAdmin');
-} catch {
-  // DEV fallback only
-  requireAdmin = (req, res, next) => {
-    if (req.session?.admin) return next();
-    return res.status(401).json({ ok: false, message: 'Unauthorized (admin only).' });
-  };
-}
+const requireAdmin = require('../../middleware/requireAdmin');
 
 // Load Order model
 let Order = null;
