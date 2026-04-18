@@ -425,6 +425,119 @@ router.post(
 );
 
 router.get(
+  '/admins/:id/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const adminTarget = await Admin.findById(req.params.id)
+        .select('fullName email username role isActive')
+        .lean();
+
+      if (!adminTarget) {
+        req.flash('error', 'Admin not found.');
+        return res.redirect('/admin/admins');
+      }
+
+      return res.render('admin/admins-edit', {
+        title: 'Edit Admin',
+        nonce: res.locals.nonce,
+        themeCss: themeCssFromSession(req),
+        adminTarget,
+        admin: req.admin || req.session.admin,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ Failed to load admin edit page:', err);
+      req.flash('error', 'Could not load admin edit page.');
+      return res.redirect('/admin/admins');
+    }
+  }
+);
+
+router.post(
+  '/admins/:id/edit',
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+  async (req, res) => {
+    try {
+      const targetId = String(req.params.id || '').trim();
+      const fullName = String(req.body?.fullName || '').trim();
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const username = String(req.body?.username || '').trim().toLowerCase();
+
+      if (!fullName || !email || !username) {
+        req.flash('error', 'Full name, email, and username are required.');
+        return res.redirect(`/admin/admins/${targetId}/edit`);
+      }
+
+      const adminDoc = await Admin.findById(targetId);
+      if (!adminDoc) {
+        req.flash('error', 'Admin not found.');
+        return res.redirect('/admin/admins');
+      }
+
+      const existing = await Admin.findOne({
+        _id: { $ne: adminDoc._id },
+        $or: [{ email }, { username }],
+      }).lean();
+
+      if (existing) {
+        req.flash('error', 'Another admin already uses that email or username.');
+        return res.redirect(`/admin/admins/${targetId}/edit`);
+      }
+
+      const before = {
+        fullName: adminDoc.fullName,
+        email: adminDoc.email,
+        username: adminDoc.username,
+      };
+
+      adminDoc.fullName = fullName;
+      adminDoc.email = email;
+      adminDoc.username = username;
+      adminDoc.updatedBy = req.admin?._id || null;
+      await adminDoc.save();
+
+      await logAdminAction(req, {
+        action: 'admin.update_profile',
+        entityType: 'admin',
+        entityId: String(adminDoc._id),
+        status: 'success',
+        before,
+        after: {
+          fullName: adminDoc.fullName,
+          email: adminDoc.email,
+          username: adminDoc.username,
+        },
+        meta: {
+          targetRole: adminDoc.role,
+        },
+      });
+
+      const currentAdminId = String(req.admin?._id || req.session?.admin?._id || '').trim();
+
+      if (String(adminDoc._id) === currentAdminId && req.session?.admin) {
+        req.session.admin.fullName = String(adminDoc.fullName || '').trim();
+        req.session.admin.name = String(adminDoc.fullName || '').trim();
+        req.session.admin.email = String(adminDoc.email || '').trim().toLowerCase();
+        req.session.admin.username = String(adminDoc.username || '').trim().toLowerCase();
+      }
+
+      req.flash('success', `Admin ${adminDoc.fullName} updated successfully.`);
+      return res.redirect('/admin/admins');
+    } catch (err) {
+      console.error('❌ Failed to update admin profile:', err);
+      req.flash('error', 'Could not update admin profile.');
+      return res.redirect(`/admin/admins/${req.params.id}/edit`);
+    }
+  }
+);
+
+router.get(
   '/admins/:id/reset-password',
   requireAdmin,
   requireAdminRole(['super_admin']),
