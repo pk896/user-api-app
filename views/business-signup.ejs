@@ -1,11 +1,11 @@
 <!-- views/business-signup.ejs -->
 
-<div class="min-vh-100 brand-page-bg py-4">
+<div class="min-vh-100 brand-page-bg pt-0 pb-4 pt-lg-4">
   <div class="container-fluid px-0 px-md-1">
     <div class="mx-auto col-12 col-lg-11 col-xl-10">
 
       <!-- Header -->
-      <header class="bg-white border-bottom shadow-sm px-3 px-md-4 py-4 text-center mb-3 brand-header">
+      <header class="bg-white border-bottom shadow-sm px-3 px-md-4 py-4 text-center mb-0 brand-header">
         <div class="d-inline-flex align-items-center gap-2 px-3 py-2 bg-white border rounded-pill shadow-sm brand-pill">
           <span class="d-inline-flex align-items-center justify-content-center rounded-circle text-white p-2 brand-pill-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -25,7 +25,7 @@
       <div class="row g-0 g-lg-4 align-items-start">
 
         <!-- Left: Benefits -->
-        <div class="col-12 col-lg-5">
+        <div class="col-12 col-lg-5" id="signupIntroBlock">
           <section class="text-white shadow-sm px-3 px-md-4 py-4 h-100 brand-hero">
             <h3 class="h5 mb-2 fw-bold text-white">Join Our Business Network</h3>
             <p class="mb-4 text-white-50">
@@ -73,19 +73,19 @@
             <div class="row text-center mt-4 g-2">
               <div class="col-4">
                 <div class="p-2 rounded brand-stat-card">
-                  <div class="fw-bold text-white">10K+</div>
+                  <div class="fw-bold text-white"><%= Number(businessesCount || 0).toLocaleString() %></div>
                   <div class="small text-white-50">Businesses</div>
                 </div>
               </div>
               <div class="col-4">
                 <div class="p-2 rounded brand-stat-card">
-                  <div class="fw-bold text-white">50+</div>
+                  <div class="fw-bold text-white"><%= Number(countriesCount || 0).toLocaleString() %></div>
                   <div class="small text-white-50">Countries</div>
                 </div>
               </div>
               <div class="col-4">
                 <div class="p-2 rounded brand-stat-card">
-                  <div class="fw-bold text-white">99%</div>
+                  <div class="fw-bold text-white">100%</div>
                   <div class="small text-white-50">Satisfaction</div>
                 </div>
               </div>
@@ -93,6 +93,12 @@
           </section>
 
           <section class="bg-white border-top shadow-sm px-3 px-md-4 py-3">
+            <div class="d-grid d-lg-none gap-2 mb-3">
+              <button type="button" class="btn btn-brand-green fw-semibold" id="showSignupFormBtn">
+                Create Account
+              </button>
+            </div>
+
             <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center justify-content-sm-between">
               <div class="text-secondary">Already have an account?</div>
               <a href="/business/login" class="btn fw-semibold brand-outline-purple">
@@ -106,8 +112,13 @@
         </div>
 
         <!-- Right: Form -->
-        <div class="col-12 col-lg-7">
+        <div class="col-12 col-lg-7 d-none" id="signupFormBlock">
           <section class="bg-white shadow-sm px-3 px-md-4 py-4">
+            <div class="d-lg-none mb-3">
+              <button type="button" class="btn btn-outline-primary btn-sm" id="showSignupIntroBtn">
+                Back
+              </button>
+            </div>
 
             <!-- Progress -->
             <div class="d-flex gap-2 flex-wrap justify-content-between mb-3">
@@ -667,6 +678,60 @@
 <script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   document.addEventListener("DOMContentLoaded", () => {
     console.log("✅ Business signup loaded with CSP nonce");
+
+    const signupIntroBlock = document.getElementById('signupIntroBlock');
+    const signupFormBlock = document.getElementById('signupFormBlock');
+    const showSignupFormBtn = document.getElementById('showSignupFormBtn');
+    const showSignupIntroBtn = document.getElementById('showSignupIntroBtn');
+
+    function isMobileSignupView() {
+      return window.innerWidth < 992;
+    }
+
+    function showSignupFormMobile() {
+      if (!isMobileSignupView()) return;
+      if (signupIntroBlock) signupIntroBlock.classList.add('d-none');
+      if (signupFormBlock) signupFormBlock.classList.remove('d-none');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showSignupIntroMobile() {
+      if (!isMobileSignupView()) return;
+      if (signupIntroBlock) signupIntroBlock.classList.remove('d-none');
+      if (signupFormBlock) signupFormBlock.classList.add('d-none');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (showSignupFormBtn) {
+      showSignupFormBtn.addEventListener('click', showSignupFormMobile);
+    }
+
+    if (showSignupIntroBtn) {
+      showSignupIntroBtn.addEventListener('click', showSignupIntroMobile);
+    }
+
+    function syncSignupLayout() {
+      if (!signupIntroBlock || !signupFormBlock) return;
+
+      const hasErrors = <%= Array.isArray(errors) && errors.length > 0 ? 'true' : 'false' %>;
+
+      if (isMobileSignupView()) {
+        if (hasErrors) {
+          signupIntroBlock.classList.add('d-none');
+          signupFormBlock.classList.remove('d-none');
+        } else {
+          signupIntroBlock.classList.remove('d-none');
+          signupFormBlock.classList.add('d-none');
+        }
+      } else {
+        signupIntroBlock.classList.remove('d-none');
+        signupFormBlock.classList.remove('d-none');
+      }
+    }
+
+    syncSignupLayout();
+
+    window.addEventListener('resize', syncSignupLayout);
 
     // -----------------------------
     // ✅ Country Dropdown Logic (Bootstrap-only UI; keep same IDs/classes)

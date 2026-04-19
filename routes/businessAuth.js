@@ -580,14 +580,57 @@ async function computeSupplierKpis(businessId) {
 /* ----------------------------------------------------------
  * 📝 GET: Business Signup
  * -------------------------------------------------------- */
-router.get('/signup', redirectIfLoggedIn, (req, res) => {
-  res.render('business-signup', {
-    title: 'Business Sign Up',
-    active: 'business-signup',
-    errors: [],
-    themeCss: res.locals.themeCss,
-    nonce: res.locals.nonce,
-  });
+router.get('/signup', redirectIfLoggedIn, async (req, res) => {
+  try {
+    const businessesCount = await Business.countDocuments({});
+
+    const countriesAgg = await Business.aggregate([
+      {
+        $project: {
+          country: {
+            $trim: { input: { $ifNull: ['$country', ''] } }
+          }
+        }
+      },
+      {
+        $match: {
+          country: { $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: { $toLower: '$country' }
+        }
+      },
+      {
+        $count: 'total'
+      }
+    ]);
+
+    const countriesCount = countriesAgg[0]?.total || 0;
+
+    res.render('business-signup', {
+      title: 'Business Sign Up',
+      active: 'business-signup',
+      errors: [],
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+      businessesCount,
+      countriesCount,
+    });
+  } catch (err) {
+    console.error('❌ GET /business/signup stats error:', err);
+
+    res.render('business-signup', {
+      title: 'Business Sign Up',
+      active: 'business-signup',
+      errors: [],
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+      businessesCount: 0,
+      countriesCount: 0,
+    });
+  }
 });
 
 /* ----------------------------------------------------------
