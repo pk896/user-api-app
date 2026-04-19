@@ -1,925 +1,305 @@
 <!-- views/all-products.ejs -->
-<div class="ap <%= themeCss.includes('dark') ? 'dark-theme' : 'light-theme' %>">
-  <h1 class="ap-title">📦 My Products</h1>
-
-  <!-- Toast Container -->
-  <div id="ap-toast-container" class="ap-toast-container"></div>
-
-  <!-- Flash Data -->
-  <div id="flash-data" data-success="<%= success && success.length > 0 ? success : '' %>"
-       data-error="<%= error && error.length > 0 ? error : '' %>" hidden>
-  </div>
-
-  <!-- Delete Modal -->
-  <div id="ap-delete-modal" class="ap-modal">
-    <div class="ap-modal-content">
-      <div class="ap-modal-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.268-.833-3.036 0L4.33 16.5c-.77.833.192 2.5 1.732 2.5z" 
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <h3>Delete Product</h3>
-      <p>This action cannot be undone. The product will be permanently removed.</p>
-      <div class="ap-modal-actions">
-        <button id="ap-confirm-delete" class="ap-btn ap-btn-danger">Delete</button>
-        <button id="ap-cancel-delete" class="ap-btn ap-btn-secondary">Cancel</button>
-      </div>
+<div class="container-fluid px-0">
+  <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1 text-primary">My Products</h1>
+      <% if (business && business.name) { %>
+        <p class="text-body-secondary mb-0">Manage products for <strong><%= business.name %></strong></p>
+      <% } %>
     </div>
-  </div>
 
-  <!-- Main Content -->
-  <div class="ap-content">
-    <% if (!business) { %>
-      <div class="ap-unauthorized">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" 
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <p>You must be logged in with a business account to view products.</p>
-        <a href="/business/login" class="ap-btn ap-btn-primary">Login to Business Account</a>
-      </div>
-    <% } else if (!products || products.length === 0) { %>
-      <div class="ap-empty">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <h3>No Products Found</h3>
-        <p>No products found for <strong><%= business.name %></strong>.</p>
-        <% if (["seller", "supplier"].includes(business.role)) { %>
-          <a href="/products/add" class="ap-btn ap-btn-primary">Add Your First Product</a>
-        <% } %>
-      </div>
-    <% } else { %>
-      <!-- Stats Bar -->
-      <div class="ap-stats">
-        <div class="ap-stat">
-          <span class="ap-stat-label">Total Products</span>
-          <span class="ap-stat-value"><%= products.length %></span>
-        </div>
-        <div class="ap-stat">
-          <span class="ap-stat-label">In Stock</span>
-          <span class="ap-stat-value ap-stat-success">
-            <%= products.filter(p => p.stock > 0).length %>
-          </span>
-        </div>
-        <div class="ap-stat">
-          <span class="ap-stat-label">Out of Stock</span>
-          <span class="ap-stat-value ap-stat-danger">
-            <%= products.filter(p => p.stock <= 0).length %>
-          </span>
-        </div>
-      </div>
-
-      <!-- Products Grid -->
-      <div class="ap-grid">
-        <% products.forEach(product => { %>
-          <div class="ap-card" data-product-id="<%= product.customId %>">
-            <!-- Product Image -->
-            <a href="/store/product/<%= product.customId %>" class="ap-card-image">
-              <img src="<%= product.imageUrl %>" alt="<%= product.name %>" loading="lazy" />
-              <% if (product.stock <= 0) { %>
-                <div class="ap-card-badge ap-card-badge-danger">Out of Stock</div>
-              <% } %>
-            </a>
-
-            <!-- Product Info -->
-            <div class="ap-card-content">
-              <h3 class="ap-card-title">
-                <a href="/store/product/<%= product.customId %>"><%= product.name %></a>
-              </h3>
-              
-              <div class="ap-card-meta">
-                <span class="ap-card-price">R <%= Number(product.price).toFixed(2) %></span>
-                <span class="ap-card-stock <%= product.stock > 0 ? 'in' : 'out' %>">
-                  <%= product.stock > 0 ? `${product.stock} in stock` : 'Out of stock' %>
-                </span>
-              </div>
-
-              <% if (product.category) { %>
-                <div class="ap-card-category">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M2 5l6-4 6 4v6a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  <%= product.category %>
-                </div>
-              <% } %>
-            </div>
-
-            <!-- Product Actions -->
-            <div class="ap-card-actions">
-              <% if (["seller", "supplier"].includes(business.role)) { %>
-                <a href="/store/product/<%= product.customId %>" class="ap-btn ap-btn-sm ap-btn-view">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M8 3C5 3 2.5 5 1 8c1.5 3 4 5 7 5s5.5-2 7-5c-1.5-3-4-5-7-5z" stroke="currentColor" stroke-width="1.5"/>
-                    <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
-                  </svg>
-                  View
-                </a>
-                <a href="/products/edit/<%= product.customId %>" class="ap-btn ap-btn-sm ap-btn-edit">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M11.5 2.5l2 2L5.5 13.5H3.5v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  Edit
-                </a>
-                <button class="ap-btn ap-btn-sm ap-btn-delete" 
-                        data-delete-url="/products/delete/<%= product.customId %>">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-                  Delete
-                </button>
-              <% } else if (business.role === "buyer") { %>
-                <a href="/store/product/<%= product.customId %>" class="ap-btn ap-btn-sm ap-btn-view">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M8 3C5 3 2.5 5 1 8c1.5 3 4 5 7 5s5.5-2 7-5c-1.5-3-4-5-7-5z" stroke="currentColor" stroke-width="1.5"/>
-                    <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
-                  </svg>
-                  View Details
-                </a>
-                <a href="/api/cart/add?pid=<%= product.customId %>" 
-                   class="ap-btn ap-btn-sm ap-btn-cart <%= product.stock <= 0 ? 'disabled' : '' %>"
-                   <%= product.stock <= 0 ? 'onclick="return false;"' : '' %>>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M2 2h2l.8 4m1 6h8l2-8H4.8M5 10l-.6 1.8c-.2.6.1 1.2.7 1.2h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <circle cx="6.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-                    <circle cx="12.5" cy="13.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-                  </svg>
-                  Add to Cart
-                </a>
-              <% } %>
-            </div>
-          </div>
-        <% }) %>
+    <% if (business && ["seller", "supplier"].includes(business.role)) { %>
+      <div class="d-flex justify-content-md-end">
+        <a href="/products/add" class="btn btn-primary">
+          <i class="fa-solid fa-plus me-2"></i>Add Product
+        </a>
       </div>
     <% } %>
   </div>
 
-  <!-- Floating Add Button -->
-  <% if (business && ["seller", "supplier"].includes(business.role)) { %>
-    <div class="ap-float-btn-container">
-      <a href="/products/add" class="ap-float-btn" aria-label="Add New Product">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </a>
-      <span class="ap-float-tooltip">Add Product</span>
+  <div id="flash-data"
+       data-success="<%= success && success.length > 0 ? success : '' %>"
+       data-error="<%= error && error.length > 0 ? error : '' %>"
+       hidden>
+  </div>
+
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" id="ap-toast-container"></div>
+
+  <% if (!business) { %>
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body text-center p-4 p-md-5">
+            <div class="mb-3 text-warning fs-2">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <h2 class="h4 text-primary mb-3">Business Account Required</h2>
+            <p class="text-body-secondary mb-4">
+              You must be logged in with a business account to view products.
+            </p>
+            <a href="/business/login" class="btn btn-primary">
+              Login to Business Account
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <% } else if (!products || products.length === 0) { %>
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body text-center p-4 p-md-5">
+            <div class="mb-3 text-brand-green fs-2">
+              <i class="fa-solid fa-box-open"></i>
+            </div>
+            <h2 class="h4 text-primary mb-3">No Products Found</h2>
+            <p class="text-body-secondary mb-4">
+              No products found for <strong><%= business.name %></strong>.
+            </p>
+
+            <% if (["seller", "supplier"].includes(business.role)) { %>
+              <a href="/products/add" class="btn btn-primary">
+                Add Your First Product
+              </a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <% } else { %>
+
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="small text-body-secondary mb-1">Total Products</div>
+            <div class="h3 mb-0 text-primary"><%= products.length %></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="small text-body-secondary mb-1">In Stock</div>
+            <div class="h3 mb-0 text-brand-green">
+              <%= products.filter(p => p.stock > 0).length %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="small text-body-secondary mb-1">Out of Stock</div>
+            <div class="h3 mb-0 text-danger">
+              <%= products.filter(p => p.stock <= 0).length %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <% products.forEach(product => { %>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+          <div class="card h-100 border-0 shadow-sm">
+            <a href="/store/product/<%= product.customId %>" class="text-decoration-none">
+              <div class="bg-body-tertiary d-flex align-items-center justify-content-center position-relative" style="height: 240px;">
+                <img
+                  src="<%= product.imageUrl %>"
+                  alt="<%= product.name %>"
+                  loading="lazy"
+                  class="img-fluid p-3"
+                  style="max-height: 100%; object-fit: contain;"
+                />
+
+                <% if (product.stock <= 0) { %>
+                  <span class="badge bg-danger position-absolute top-0 end-0 m-2">Out of Stock</span>
+                <% } %>
+              </div>
+            </a>
+
+            <div class="card-body d-flex flex-column">
+              <h2 class="h6 mb-2">
+                <a href="/store/product/<%= product.customId %>" class="text-decoration-none text-primary">
+                  <%= product.name %>
+                </a>
+              </h2>
+
+              <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                <span class="fw-bold text-primary">R <%= Number(product.price).toFixed(2) %></span>
+
+                <% if (product.stock > 0) { %>
+                  <span class="small text-brand-green fw-semibold"><%= product.stock %> in stock</span>
+                <% } else { %>
+                  <span class="small text-danger fw-semibold">Out of stock</span>
+                <% } %>
+              </div>
+
+              <% if (product.category) { %>
+                <div class="small text-body-secondary mb-3">
+                  <i class="fa-solid fa-tag me-1"></i><%= product.category %>
+                </div>
+              <% } %>
+
+              <div class="mt-auto d-grid gap-2">
+                <% if (["seller", "supplier"].includes(business.role)) { %>
+                  <a href="/store/product/<%= product.customId %>" class="btn btn-outline-primary btn-sm">
+                    <i class="fa-regular fa-eye me-1"></i>View
+                  </a>
+
+                  <a href="/products/edit/<%= product.customId %>" class="btn btn-outline-secondary btn-sm">
+                    <i class="fa-regular fa-pen-to-square me-1"></i>Edit
+                  </a>
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-danger btn-sm ap-btn-delete"
+                    data-delete-url="/products/delete/<%= product.customId %>"
+                    data-product-name="<%= product.name %>">
+                    <i class="fa-regular fa-trash-can me-1"></i>Delete
+                  </button>
+
+                <% } else if (business.role === "buyer") { %>
+                  <a href="/store/product/<%= product.customId %>" class="btn btn-outline-primary btn-sm">
+                    <i class="fa-regular fa-eye me-1"></i>View Details
+                  </a>
+
+                  <a
+                    href="/api/cart/add?pid=<%= product.customId %>"
+                    class="btn btn-brand-green btn-sm <%= product.stock <= 0 ? 'disabled' : '' %>"
+                    <%= product.stock <= 0 ? 'aria-disabled="true" tabindex="-1" onclick="return false;"' : '' %>>
+                    <i class="fa-solid fa-cart-plus me-1"></i>Add to Cart
+                  </a>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% }) %>
     </div>
   <% } %>
 </div>
 
-<style>
-  /* ===== COMPANY COLORS & VARIABLES ===== */
-  .ap {
-    --blue: #2563EB;
-    --purple: #7C3AED;
-    --green: #22C55E;
-    --black: #0F172A;
-    --radius: 10px;
-    --transition: all 0.2s ease;
-  }
-
-  /* ===== MAIN CONTAINER ===== */
-  .ap {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 16px;
-    min-height: 100vh;
-  }
-
-  /* ===== TITLE ===== */
-  .ap-title {
-    font-size: 20px;
-    font-weight: 700;
-    text-align: center;
-    margin: 0 0 24px 0;
-    color: var(--black);
-    padding-bottom: 12px;
-    border-bottom: 2px solid #D1FAE5;
-  }
-
-  .dark-theme .ap-title {
-    color: #F1F5F9;
-    border-bottom-color: #2D5A2D;
-  }
-
-  /* ===== CONTENT AREA ===== */
-  .ap-content {
-    margin-bottom: 40px;
-  }
-
-  /* ===== UNAUTHORIZED STATE ===== */
-  .ap-unauthorized,
-  .ap-empty {
-    text-align: center;
-    padding: 40px 20px;
-    background: rgba(34, 197, 94, 0.05);
-    border-radius: var(--radius);
-    border: 1px solid #D1FAE5;
-    max-width: 400px;
-    margin: 0 auto;
-  }
-
-  .ap-unauthorized svg,
-  .ap-empty svg {
-    color: #F59E0B;
-    margin-bottom: 16px;
-  }
-
-  .ap-unauthorized p,
-  .ap-empty p {
-    margin: 0 0 20px 0;
-    color: var(--black);
-    line-height: 1.5;
-  }
-
-  .dark-theme .ap-unauthorized,
-  .dark-theme .ap-empty {
-    background: rgba(34, 197, 94, 0.1);
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .ap-unauthorized p,
-  .dark-theme .ap-empty p {
-    color: #E2E8F0;
-  }
-
-  /* ===== STATS BAR ===== */
-  .ap-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-
-  .ap-stat {
-    background: #FFFFFF;
-    border: 1px solid #D1FAE5;
-    border-radius: var(--radius);
-    padding: 12px;
-    text-align: center;
-  }
-
-  .ap-stat-label {
-    display: block;
-    font-size: 12px;
-    color: #64748B;
-    font-weight: 500;
-    margin-bottom: 4px;
-  }
-
-  .ap-stat-value {
-    display: block;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--black);
-  }
-
-  .ap-stat-success {
-    color: var(--green);
-  }
-
-  .ap-stat-danger {
-    color: #EF4444;
-  }
-
-  .dark-theme .ap-stat {
-    background: #132813;
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .ap-stat-value {
-    color: #F1F5F9;
-  }
-
-  /* ===== PRODUCTS GRID ===== */
-  .ap-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
-  }
-
-  @media (max-width: 360px) {
-    .ap-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* ===== PRODUCT CARD ===== */
-  .ap-card {
-    background: #FFFFFF;
-    border: 1px solid #D1FAE5;
-    border-radius: var(--radius);
-    overflow: hidden;
-    transition: var(--transition);
-    display: flex;
-    flex-direction: column;
-  }
-
-  .ap-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.12);
-    border-color: var(--green);
-  }
-
-  .dark-theme .ap-card {
-    background: #132813;
-    border-color: #2D5A2D;
-  }
-
-  /* ===== CARD IMAGE ===== */
-  .ap-card-image {
-    position: relative;
-    display: block;
-    overflow: hidden;
-    background: #F8FAFC;
-    aspect-ratio: 4 / 3;
-  }
-
-  .ap-card-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
-    display: block;
-    padding: 8px;
-    box-sizing: border-box;
-    transition: var(--transition);
-  }
-
-  .ap-card:hover .ap-card-image img {
-    transform: scale(1.03);
-  }
-
-  .ap-card-badge {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .ap-card-badge-danger {
-    background: #EF4444;
-    color: white;
-  }
-
-  /* ===== CARD CONTENT ===== */
-  .ap-card-content {
-    padding: 12px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .ap-card-title {
-    margin: 0 0 8px 0;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.3;
-  }
-
-  .ap-card-title a {
-    color: var(--black);
-    text-decoration: none;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .ap-card-title a:hover {
-    color: var(--blue);
-  }
-
-  .dark-theme .ap-card-title a {
-    color: #F1F5F9;
-  }
-
-  .dark-theme .ap-card-title a:hover {
-    color: #60A5FA;
-  }
-
-  .ap-card-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-
-  .ap-card-price {
-    font-weight: 700;
-    color: var(--blue);
-    font-size: 16px;
-  }
-
-  .ap-card-stock {
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .ap-card-stock.in {
-    color: var(--green);
-  }
-
-  .ap-card-stock.out {
-    color: #EF4444;
-  }
-
-  .ap-card-category {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: #64748B;
-    margin-top: auto;
-  }
-
-  .dark-theme .ap-card-category {
-    color: #94A3B8;
-  }
-
-  /* ===== CARD ACTIONS ===== */
-  .ap-card-actions {
-    padding: 0 12px 12px;
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  /* ===== BUTTONS ===== */
-  .ap-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 600;
-    text-decoration: none;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: var(--transition);
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-  }
-
-  .ap-btn-sm {
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-
-  .ap-btn-view {
-    background: #F0FDF4;
-    color: var(--green);
-    border-color: #D1FAE5;
-  }
-
-  .ap-btn-view:hover {
-    background: #DCFCE7;
-    border-color: var(--green);
-  }
-
-  .ap-btn-edit {
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--blue);
-    border-color: rgba(37, 99, 235, 0.2);
-  }
-
-  .ap-btn-edit:hover {
-    background: rgba(37, 99, 235, 0.2);
-    border-color: var(--blue);
-  }
-
-  .ap-btn-delete {
-    background: rgba(239, 68, 68, 0.1);
-    color: #EF4444;
-    border-color: rgba(239, 68, 68, 0.2);
-  }
-
-  .ap-btn-delete:hover {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: #EF4444;
-  }
-
-  .ap-btn-cart {
-    background: var(--green);
-    color: white;
-    border-color: var(--green);
-  }
-
-  .ap-btn-cart:hover {
-    background: #16A34A;
-    border-color: #16A34A;
-    transform: translateY(-1px);
-  }
-
-  .ap-btn-cart.disabled {
-    background: #94A3B8;
-    border-color: #94A3B8;
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-
-  .dark-theme .ap-btn-view {
-    background: #1A341A;
-    color: #22C55E;
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .ap-btn-view:hover {
-    background: #2D5A2D;
-    border-color: #22C55E;
-  }
-
-  /* ===== MODAL ===== */
-  .ap-modal {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 16px;
-  }
-
-  .ap-modal.show {
-    display: flex;
-    animation: apFadeIn 0.3s ease-out;
-  }
-
-  .ap-modal-content {
-    background: #FFFFFF;
-    border-radius: var(--radius);
-    padding: 24px;
-    max-width: 320px;
-    width: 100%;
-    text-align: center;
-    border: 1px solid #D1FAE5;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  }
-
-  .ap-modal-icon {
-    color: #EF4444;
-    margin-bottom: 16px;
-  }
-
-  .ap-modal-content h3 {
-    margin: 0 0 8px 0;
-    font-size: 18px;
-    color: var(--black);
-  }
-
-  .ap-modal-content p {
-    margin: 0 0 24px 0;
-    color: #64748B;
-    font-size: 14px;
-    line-height: 1.5;
-  }
-
-  .ap-modal-actions {
-    display: flex;
-    gap: 12px;
-  }
-
-  .ap-modal .ap-btn {
-    flex: 1;
-    padding: 12px;
-    font-size: 14px;
-  }
-
-  .ap-btn-danger {
-    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
-    color: white;
-  }
-
-  .ap-btn-danger:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-  }
-
-  .ap-btn-secondary {
-    background: #FFFFFF;
-    color: var(--black);
-    border-color: #D1FAE5;
-  }
-
-  .ap-btn-secondary:hover {
-    background: #F8FAFC;
-  }
-
-  .dark-theme .ap-modal-content {
-    background: #132813;
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .ap-modal-content h3 {
-    color: #F1F5F9;
-  }
-
-  .dark-theme .ap-modal-content p {
-    color: #94A3B8;
-  }
-
-  .dark-theme .ap-btn-secondary {
-    background: #1A341A;
-    color: #E2E8F0;
-    border-color: #2D5A2D;
-  }
-
-  .dark-theme .ap-btn-secondary:hover {
-    background: #2D5A2D;
-  }
-
-  /* ===== TOAST NOTIFICATIONS ===== */
-  .ap-toast-container {
-    position: fixed;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    pointer-events: none;
-  }
-
-  .ap-toast {
-    padding: 12px 16px;
-    border-radius: var(--radius);
-    font-size: 13px;
-    font-weight: 500;
-    color: white;
-    background: linear-gradient(135deg, var(--green) 0%, #16A34A 100%);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    animation: apToastSlideIn 0.3s ease-out;
-    max-width: 320px;
-    text-align: center;
-  }
-
-  .ap-toast.ap-toast-error {
-    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
-  }
-
-  @keyframes apToastSlideIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px) translateX(-50%);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) translateX(-50%);
-    }
-  }
-
-  @keyframes apFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  /* ===== FLOATING BUTTON ===== */
-  .ap-float-btn-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    z-index: 100;
-  }
-
-  .ap-float-btn {
-    width: 56px;
-    height: 56px;
-    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-    transition: var(--transition);
-  }
-
-  .ap-float-btn:hover {
-    transform: scale(1.1) rotate(90deg);
-    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
-  }
-
-  .ap-float-tooltip {
-    background: var(--black);
-    color: white;
-    font-size: 12px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    opacity: 0;
-    transform: translateX(-10px);
-    transition: var(--transition);
-    white-space: nowrap;
-  }
-
-  .ap-float-btn-container:hover .ap-float-tooltip {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  /* ===== COMPACT MOBILE DESIGN ===== */
-  @media (max-width: 360px) {
-    .ap {
-      padding: 12px;
-    }
-    
-    .ap-title {
-      font-size: 18px;
-      margin-bottom: 20px;
-    }
-    
-    .ap-stats {
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-    
-    .ap-card-actions {
-      flex-direction: column;
-    }
-    
-    .ap-float-btn {
-      width: 48px;
-      height: 48px;
-    }
-  }
-
-  @media (min-width: 361px) and (max-width: 720px) {
-    .ap {
-      padding: 16px;
-    }
-    
-    .ap-grid {
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-    }
-  }
-
-  /* ===== ANIMATIONS ===== */
-  @keyframes apCardEnter {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .ap-card {
-    animation: apCardEnter 0.4s ease-out forwards;
-  }
-
-  .ap-card:nth-child(1) { animation-delay: 0.1s; }
-  .ap-card:nth-child(2) { animation-delay: 0.2s; }
-  .ap-card:nth-child(3) { animation-delay: 0.3s; }
-  .ap-card:nth-child(4) { animation-delay: 0.4s; }
-</style>
+<div class="modal fade" id="apDeleteModal" tabindex="-1" aria-labelledby="apDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header">
+        <h5 class="modal-title text-primary" id="apDeleteModalLabel">Delete Product</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <p class="mb-2">This action cannot be undone.</p>
+        <p class="mb-0 text-body-secondary">
+          The product <strong id="apDeleteProductName">this product</strong> will be permanently removed.
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="apConfirmDelete">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script nonce="<%= nonce %>">
 document.addEventListener("DOMContentLoaded", () => {
-  // Toast notifications
   const toastContainer = document.getElementById("ap-toast-container");
   const flashData = document.getElementById("flash-data");
-  const modal = document.getElementById("ap-delete-modal");
-  const confirmBtn = document.getElementById("ap-confirm-delete");
-  const cancelBtn = document.getElementById("ap-cancel-delete");
+  const deleteModalEl = document.getElementById("apDeleteModal");
+  const confirmDeleteBtn = document.getElementById("apConfirmDelete");
+  const deleteProductNameEl = document.getElementById("apDeleteProductName");
+
   let deleteUrl = null;
+  let deleteModal = null;
 
-  // Show toast function
-  function showToast(message, type = "success") {
-    const toast = document.createElement("div");
-    toast.className = `ap-toast ${type === "error" ? "ap-toast-error" : ""}`;
-    toast.textContent = message;
-    toastContainer.appendChild(toast);
-
-    // Haptic feedback on mobile
-    if (navigator.vibrate) navigator.vibrate(40);
-
-    // Remove toast after 4 seconds
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      toast.style.transform = "translateY(20px) translateX(-50%)";
-      setTimeout(() => toast.remove(), 300);
-    }, 4000);
+  if (deleteModalEl && window.bootstrap) {
+    deleteModal = new bootstrap.Modal(deleteModalEl);
   }
 
-  // Show any server-side flash messages
+  function showToast(message, type = "success") {
+    if (!toastContainer || !message) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "toast align-items-center border-0 text-bg-" + (type === "error" ? "danger" : "success");
+    wrapper.setAttribute("role", "alert");
+    wrapper.setAttribute("aria-live", "assertive");
+    wrapper.setAttribute("aria-atomic", "true");
+
+    wrapper.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">${message}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    `;
+
+    toastContainer.appendChild(wrapper);
+
+    if (window.bootstrap) {
+      const toast = new bootstrap.Toast(wrapper, { delay: 4000 });
+      toast.show();
+
+      wrapper.addEventListener("hidden.bs.toast", () => {
+        wrapper.remove();
+      });
+    }
+
+    if (navigator.vibrate) navigator.vibrate(40);
+  }
+
   if (flashData) {
     const successMsg = flashData.dataset.success?.trim();
     const errorMsg = flashData.dataset.error?.trim();
+
     if (successMsg) showToast(successMsg, "success");
     if (errorMsg) showToast(errorMsg, "error");
   }
 
-  // Delete modal functionality
-  document.querySelectorAll(".ap-btn-delete").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
+  document.querySelectorAll(".ap-btn-delete").forEach((btn) => {
+    btn.addEventListener("click", () => {
       deleteUrl = btn.dataset.deleteUrl;
-      modal.classList.add("show");
-      document.body.style.overflow = "hidden";
-    });
-  });
+      const productName = btn.dataset.productName || "this product";
 
-  // Modal button handlers
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", () => {
-      modal.classList.remove("show");
-      document.body.style.overflow = "";
-    });
-  }
-
-  if (confirmBtn) {
-    confirmBtn.addEventListener("click", () => {
-      if (deleteUrl) {
-        // Add loading state
-        confirmBtn.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="20"/>
-          </svg>
-          Deleting...
-        `;
-        confirmBtn.disabled = true;
-        
-        // Navigate to delete URL
-        setTimeout(() => {
-          window.location.href = deleteUrl;
-        }, 500);
+      if (deleteProductNameEl) {
+        deleteProductNameEl.textContent = productName;
       }
-    });
-  }
 
-  // Close modal on background click
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      modal.classList.remove("show");
-      document.body.style.overflow = "";
-    }
-  });
-
-  // Close modal on Escape key
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal.classList.contains("show")) {
-      modal.classList.remove("show");
-      document.body.style.overflow = "";
-    }
-  });
-
-  // Add visual feedback to card buttons
-  document.querySelectorAll(".ap-card-actions .ap-btn").forEach(btn => {
-    btn.addEventListener("click", function(e) {
-      if (!this.classList.contains("disabled")) {
-        // Add click animation
-        this.style.transform = "scale(0.95)";
-        setTimeout(() => {
-          this.style.transform = "";
-        }, 150);
+      if (deleteModal) {
+        deleteModal.show();
       }
     });
   });
 
-  // Add to cart button feedback
-  document.querySelectorAll(".ap-btn-cart:not(.disabled)").forEach(btn => {
-    btn.addEventListener("click", function(e) {
-      // If it's not disabled, show loading state
-      const originalHTML = this.innerHTML;
-      this.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M2 2h2l.8 4m1 6h8l2-8H4.8M5 10l-.6 1.8c-.2.6.1 1.2.7 1.2h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Adding...
-      `;
-      this.disabled = true;
-      
-      // Reset after 2 seconds
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener("click", () => {
+      if (!deleteUrl) return;
+
+      confirmDeleteBtn.disabled = true;
+      confirmDeleteBtn.innerHTML = "Deleting...";
+
+      window.location.href = deleteUrl;
+    });
+  }
+
+  document.querySelectorAll('a.btn-brand-green:not(.disabled)').forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const originalHtml = this.innerHTML;
+      this.classList.add("disabled");
+      this.setAttribute("aria-disabled", "true");
+      this.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Adding...';
+
       setTimeout(() => {
-        this.innerHTML = originalHTML;
-        this.disabled = false;
+        this.classList.remove("disabled");
+        this.removeAttribute("aria-disabled");
+        this.innerHTML = originalHtml;
       }, 2000);
     });
-  });
-
-  // Initialize animations
-  const cards = document.querySelectorAll(".ap-card");
-  cards.forEach((card, index) => {
-    card.style.animationDelay = `${index * 0.05}s`;
   });
 });
 </script>
