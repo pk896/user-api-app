@@ -2685,6 +2685,8 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
  * - payouts.enabled + payouts.paypalEmail (via applyPaypalPayouts)
  * -------------------------------------------------------- */
 router.post('/profile/update-details', requireBusiness, businessLogoUpload.single('logo'), async (req, res) => {
+  let newLogoUrl = '';
+
   try {
     const bizId = String(req.business?._id || '').trim();
     if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
@@ -2808,7 +2810,6 @@ router.post('/profile/update-details', requireBusiness, businessLogoUpload.singl
     const officialChanged = officialNumber !== currentOfficial;
 
     // ---- Optional logo replacement ----
-    let newLogoUrl = '';
     const oldLogoUrl = String(business.logoUrl || '').trim();
 
     if (req.file) {
@@ -2923,7 +2924,7 @@ router.post('/profile/update-details', requireBusiness, businessLogoUpload.singl
     req.flash('success', '✅ Business details updated.');
     return res.redirect('/business/profile');
   } catch (err) {
-    if (typeof newLogoUrl !== 'undefined' && newLogoUrl) {
+    if (newLogoUrl) {
       await deleteS3ImageByUrl(newLogoUrl);
     }
 
