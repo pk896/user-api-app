@@ -60,7 +60,8 @@ router.get('/ping', requireAdmin, (req, res) => {
 // GET /_danger/products?limit=200
 router.get('/products', requireAdmin, async (req, res) => {
   try {
-    if (!Product) return res.status(500).json({ ok: false, message: 'Product model not available.' });
+    if (!Product)
+      return res.status(500).json({ ok: false, message: 'Product model not available.' });
 
     const limit = Math.min(500, Math.max(1, safeInt(req.query.limit, 200)));
 
@@ -230,7 +231,10 @@ router.get('/orders/stats', requireAdmin, async (req, res) => {
     if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
 
     const count = await Order.countDocuments({});
-    const latest = await Order.find({}, { _id: 1, orderId: 1, status: 1, paymentStatus: 1, createdAt: 1 })
+    const latest = await Order.find(
+      {},
+      { _id: 1, orderId: 1, status: 1, paymentStatus: 1, createdAt: 1 },
+    )
       .sort({ createdAt: -1 })
       .limit(5)
       .lean();
@@ -255,9 +259,7 @@ router.get('/orders', requireAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const sortStr = String(req.query.sort || '-createdAt');
-    const sort = sortStr.startsWith('-')
-      ? { [sortStr.slice(1)]: -1 }
-      : { [sortStr]: 1 };
+    const sort = sortStr.startsWith('-') ? { [sortStr.slice(1)]: -1 } : { [sortStr]: 1 };
 
     const q = String(req.query.q || '').trim();
     const status = String(req.query.status || '').trim();
