@@ -98,7 +98,7 @@ function extractRefundAmount(body) {
   return body?.resource?.amount?.value ?? body?.resource?.refund_amount?.value ?? null;
 }
 
-function extractRefundCurrency(body, fallback = 'USD') {
+function extractRefundCurrency(body, fallback = process.env.BASE_CURRENCY || 'USD') {
   return (
     safeStr(body?.resource?.amount?.currency_code, 8).toUpperCase() ||
     safeStr(body?.resource?.refund_amount?.currency_code, 8).toUpperCase() ||
@@ -261,7 +261,7 @@ router.post(
     const captureId = extractCaptureId(body);
     const refundId = extractRefundId(body);
     const refundAmount = extractRefundAmount(body);
-    const refundCurrency = extractRefundCurrency(body, 'USD');
+    const refundCurrency = extractRefundCurrency(body);
 
     console.log('[PAYPAL] Refund payload:', {
       captureId,

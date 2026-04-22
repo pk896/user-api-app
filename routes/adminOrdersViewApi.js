@@ -37,6 +37,26 @@ function moneyNumber(v) {
   return 0;
 }
 
+function resolveOrderCurrency(order) {
+  return (
+    safeStr(
+      order?.amount?.currency ||
+      order?.amount?.currency_code ||
+      order?.total?.currency ||
+      order?.total?.currency_code ||
+      order?.breakdown?.itemTotal?.currency ||
+      order?.breakdown?.itemTotal?.currency_code ||
+      order?.breakdown?.taxTotal?.currency ||
+      order?.breakdown?.taxTotal?.currency_code ||
+      order?.breakdown?.shipping?.currency ||
+      order?.breakdown?.shipping?.currency_code ||
+      process.env.BASE_CURRENCY ||
+      'USD',
+      10
+    ).toUpperCase() || 'USD'
+  );
+}
+
 function escapeRegex(input) {
   return String(input || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -84,7 +104,7 @@ function buildOrderSummary(order, businessMap) {
     paymentStatus: safeStr(order?.paymentStatus, 120),
     fulfillmentStatus: safeStr(order?.fulfillmentStatus, 120),
     amount: Number(amountValue.toFixed(2)),
-    currency: safeStr(order?.amount?.currency || 'USD', 10).toUpperCase() || 'USD',
+    currency: resolveOrderCurrency(order),
     refundedTotal: Number(refundedTotal.toFixed(2)),
     refundedAt: order?.refundedAt || null,
     captureId,
@@ -311,7 +331,7 @@ router.get(
         .lean();
     }
 
-    const currency = safeStr(order?.amount?.currency || 'USD', 10).toUpperCase() || 'USD';
+    const currency = resolveOrderCurrency(order);
 
     const detailed = {
       _id: String(order._id),

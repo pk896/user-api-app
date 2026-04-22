@@ -14,7 +14,10 @@ const SellerBalanceLedger = require('../models/SellerBalanceLedger');
 const router = express.Router();
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD'
+  );
 }
 
 function centsToAmount(cents) {
@@ -83,7 +86,7 @@ router.get('/pending-stats', requireBusiness, requireVerifiedBusiness, async (re
       });
     }
 
-    const currency = getBaseCurrency();
+    const currency = String(getBaseCurrency()).toUpperCase();
     const businessObjectId = new mongoose.Types.ObjectId(String(business._id));
 
     /**
@@ -143,7 +146,7 @@ router.get('/pending-stats', requireBusiness, requireVerifiedBusiness, async (re
      */
     const latestRefundRow = await SellerBalanceLedger.findOne({
       businessId: businessObjectId,
-      currency,
+      currency: currency,
       type: 'REFUND_DEBIT',
     })
       .sort({ createdAt: -1, _id: -1 })
@@ -198,7 +201,7 @@ router.get('/pending-stats', requireBusiness, requireVerifiedBusiness, async (re
       stats: {
         pendingEarnings: centsToAmount(pendingEarningsCents),
         refundedAmount: centsToAmount(refundedCents),
-        currency,
+        currency: currency,
       },
       chart: {
         labels: chartLabels,

@@ -50,7 +50,12 @@
   function formatMoney(amount, currency) {
     const numeric = Number(amount || 0);
     const safeAmount = Number.isFinite(numeric) ? numeric : 0;
-    return `${escapeHtml(currency || 'USD')} ${safeAmount.toFixed(2)}`;
+
+    const resolvedCurrency =
+      String(currency || '').trim().toUpperCase() ||
+      'USD';
+
+    return `${escapeHtml(resolvedCurrency)} ${safeAmount.toFixed(2)}`;
   }
 
   function formatDate(value) {

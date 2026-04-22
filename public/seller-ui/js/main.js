@@ -143,23 +143,12 @@ async function loadSellerCard1Stats() {
   }
 }
 
-function formatCurrency(value) {
+function formatCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
 
-  return new Intl.NumberFormat('en-ZA', {
+  return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: 'ZAR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
-}
-
-function formatUsdCurrency(value) {
-  const amount = Number(value || 0);
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+    currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
@@ -174,14 +163,23 @@ function formatCompactNumber(value) {
   }).format(amount);
 }
 
-function formatAxisCurrency(value) {
+let sellerDashboardCurrency = 'USD';
+
+function formatAxisCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
 
+  const symbol = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(0).replace(/[0-9.,\s]/g, '');
+
   if (Math.abs(amount) >= 1000) {
-    return `R${formatCompactNumber(amount)}`;
+    return `${symbol}${formatCompactNumber(amount)}`;
   }
 
-  return `R${amount.toFixed(0)}`;
+  return `${symbol}${amount.toFixed(0)}`;
 }
 
 async function loadSellerInventoryValue() {
@@ -210,8 +208,9 @@ async function loadSellerInventoryValue() {
     const inventoryValueEl = document.getElementById('seller-inventory-value');
     const inventoryUnitsEl = document.getElementById('seller-inventory-units');
 
+    const currency = payload?.data?.currency || 'USD';
     if (inventoryValueEl) {
-      inventoryValueEl.textContent = formatCurrency(inventoryValue);
+      inventoryValueEl.textContent = formatCurrency(inventoryValue, currency);
     }
 
     if (inventoryUnitsEl) {
@@ -327,13 +326,11 @@ async function loadSellerEarnings() {
     const paidEarningsEl = document.getElementById('seller-paid-earnings');
     const eligibilityEl = document.getElementById('seller-eligibility');
 
-    if (paidEarningsEl) {
-      paidEarningsEl.textContent = formatUsdCurrency(paidEarnings);
-    }
+    const currency = payload?.stats?.currency || 'USD';
+    sellerDashboardCurrency = currency;
 
-    if (eligibilityEl) {
-      eligibilityEl.textContent = formatUsdCurrency(eligibility);
-    }
+    paidEarningsEl.textContent = formatCurrency(paidEarnings, currency);
+    eligibilityEl.textContent = formatCurrency(eligibility, currency);
 
     const chartLabels = Array.isArray(payload?.chart?.labels)
       ? payload.chart.labels
@@ -429,13 +426,10 @@ async function loadSellerPendingStats() {
     const pendingEarningsEl = document.getElementById('seller-pending-earnings');
     const refundedAmountEl = document.getElementById('seller-refunded-amount');
 
-    if (pendingEarningsEl) {
-      pendingEarningsEl.textContent = formatUsdCurrency(pendingEarnings);
-    }
+    const currency = payload?.stats?.currency || 'USD';
 
-    if (refundedAmountEl) {
-      refundedAmountEl.textContent = formatUsdCurrency(refundedAmount);
-    }
+    pendingEarningsEl.textContent = formatCurrency(pendingEarnings, currency);
+    refundedAmountEl.textContent = formatCurrency(refundedAmount, currency);
 
     const chartLabels = Array.isArray(payload?.chart?.labels)
       ? payload.chart.labels
@@ -658,7 +652,7 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
             const rawValue = Number(context.raw || 0);
 
             if (datasetLabel === 'Sales Amount') {
-              return `${datasetLabel}: ${formatCurrency(rawValue)}`;
+              return `${datasetLabel}: ${formatCurrency(rawValue, sellerDashboardCurrency)}`;
             }
 
             if (datasetLabel === 'Stock Movement') {
@@ -695,7 +689,7 @@ const mainChart = new Chart(document.getElementById('main-chart'), {
           color: '#7C3AED',
           maxTicksLimit: 6,
           callback(value) {
-            return formatAxisCurrency(value);
+            return formatAxisCurrency(value, sellerDashboardCurrency);
           }
         },
         title: {

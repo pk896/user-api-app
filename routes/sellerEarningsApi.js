@@ -14,7 +14,10 @@ const { getSellerAvailableCents } = require('../utils/payouts/getSellerAvailable
 const router = express.Router();
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD'
+  );
 }
 
 function centsToAmount(cents) {
@@ -83,7 +86,7 @@ router.get('/earnings', requireBusiness, requireVerifiedBusiness, async (req, re
       });
     }
 
-    const currency = getBaseCurrency();
+    const currency = String(getBaseCurrency()).toUpperCase();
     const businessObjectId = new mongoose.Types.ObjectId(String(business._id));
     const eligibilityCents = await getSellerAvailableCents(business._id, currency);
 
@@ -197,7 +200,7 @@ router.get('/earnings', requireBusiness, requireVerifiedBusiness, async (req, re
       stats: {
         paidEarnings: centsToAmount(recentPaidAmountCents),
         eligibility: centsToAmount(eligibilityCents),
-        currency,
+        currency: currency,
       },
       chart: {
         labels: chartLabels,

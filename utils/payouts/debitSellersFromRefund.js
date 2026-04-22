@@ -6,7 +6,10 @@ const SellerBalanceLedger = require('../../models/SellerBalanceLedger');
 const { moneyToCents } = require('../money');
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD'
+  );
 }
 
 function getCapturedGrossCentsFromOrder(order) {

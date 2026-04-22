@@ -126,6 +126,20 @@ function maskEmail(email = '') {
   return `${maskedName}@${maskedDomain}.${domExt || ''}`;
 }
 
+function resolveCurrency(order, capture) {
+  return String(
+    (capture?.amount && (capture.amount.currency_code || capture.amount.currency)) ||
+    (order?.amount && (order.amount.currency_code || order.amount.currency)) ||
+    order?.currency ||
+    order?.total?.currency ||
+    order?.breakdown?.itemTotal?.currency ||
+    order?.breakdown?.taxTotal?.currency ||
+    order?.breakdown?.shipping?.currency ||
+    process.env.BASE_CURRENCY ||
+    'USD'
+  ).toUpperCase();
+}
+
 /* =======================================================
    AUTH PAGES
 ======================================================= */
@@ -844,11 +858,7 @@ router.get('/payments', ensureVerifiedUser, async (req, res) => {
         (o.amount && (o.amount.total || o.amount.value)) ||
         o.total ||
         0;
-      const currency =
-        (c.amount && (c.amount.currency_code || c.amount.currency)) ||
-        (o.amount && (o.amount.currency_code || o.amount.currency)) ||
-        o.currency ||
-        'USD';
+      const currency = resolveCurrency(o, c);
       const valueNum = Number(rawValue) || 0;
 
       payments.push({
@@ -871,10 +881,7 @@ router.get('/payments', ensureVerifiedUser, async (req, res) => {
         (o.amount && (o.amount.total || o.amount.value)) ||
         o.total ||
         0;
-      const currency =
-        (o.amount && (o.amount.currency_code || o.amount.currency)) ||
-        o.currency ||
-        'USD';
+      const currency = resolveCurrency(o);
       const valueNum = Number(rawValue) || 0;
 
       payments.push({

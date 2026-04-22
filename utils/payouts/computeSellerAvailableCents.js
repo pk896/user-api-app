@@ -27,8 +27,10 @@ async function fallbackCompute(businessId, currency = null) {
 
   const ccy =
     normCcy(currency) ||
-    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
-    'USD';
+    (
+      String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+      'USD'
+    );
 
   const now = new Date();
 
@@ -63,8 +65,10 @@ async function computeSellerAvailableCents(businessId, opts = {}) {
   // ✅ Use requested currency, else BASE_CURRENCY, else USD fallback
   const currency =
     normCcy(opts?.currency) ||
-    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
-    'USD';
+    (
+      String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+      'USD'
+    );
 
   // Prefer the dedicated function if present
   try {

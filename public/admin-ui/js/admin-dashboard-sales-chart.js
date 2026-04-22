@@ -24,18 +24,19 @@ console.log('[admin-dashboard-sales-chart] loaded');
 
   let chart = null;
   let cache = { day: [], month: [], year: [] };
+  let adminChartCurrency = 'USD';
 
   function toMoney(n) {
     const x = Number(n || 0);
     return Math.round(x * 100) / 100;
   }
 
-  function formatCurrency(value) {
+  function formatCurrency(value, currency = 'USD') {
     const amount = Number(value || 0);
 
-    return new Intl.NumberFormat('en-ZA', {
+    return new Intl.NumberFormat(undefined, {
       style: 'currency',
-      currency: 'ZAR',
+      currency: currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount);
@@ -50,14 +51,21 @@ console.log('[admin-dashboard-sales-chart] loaded');
     }).format(amount);
   }
 
-  function formatAxisCurrency(value) {
+  function formatAxisCurrency(value, currency = 'USD') {
     const amount = Number(value || 0);
 
+    const symbol = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(0).replace(/[0-9.,\s]/g, '');
+
     if (Math.abs(amount) >= 1000) {
-      return `R${formatCompactNumber(amount)}`;
+      return `${symbol}${formatCompactNumber(amount)}`;
     }
 
-    return `R${amount.toFixed(0)}`;
+    return `${symbol}${amount.toFixed(0)}`;
   }
 
   function formatWholeNumber(value) {
@@ -156,7 +164,7 @@ console.log('[admin-dashboard-sales-chart] loaded');
                 const rawValue = Number(context.raw || 0);
 
                 if (datasetLabel === 'Sales Amount') {
-                  return `${datasetLabel}: ${formatCurrency(rawValue)}`;
+                  return `${datasetLabel}: ${formatCurrency(rawValue, adminChartCurrency)}`;
                 }
 
                 if (datasetLabel === 'Orders') {
@@ -193,7 +201,7 @@ console.log('[admin-dashboard-sales-chart] loaded');
               color: '#7C3AED',
               maxTicksLimit: 6,
               callback(value) {
-                return formatAxisCurrency(value);
+                return formatAxisCurrency(value, adminChartCurrency);
               }
             },
             title: {
@@ -283,6 +291,10 @@ console.log('[admin-dashboard-sales-chart] loaded');
 
     const data = await res.json();
     if (!data?.ok) throw new Error(data?.message || 'Bad response');
+
+    adminChartCurrency =
+      String(data?.currency || '').trim().toUpperCase() ||
+      'USD';
 
     cache.day = Array.isArray(data.day) ? data.day : [];
     cache.month = Array.isArray(data.month) ? data.month : [];

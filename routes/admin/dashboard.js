@@ -608,6 +608,9 @@ router.get('/sales-series', requireAdmin, async (req, res) => {
 
     return res.json({
       ok: true,
+      currency:
+        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+        'USD',
       day: daySeries,
       month: monthSeries,
       year: yearSeries,

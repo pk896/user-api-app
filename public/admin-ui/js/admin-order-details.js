@@ -22,7 +22,12 @@
   function formatMoney(value, currency) {
     const num = Number(value || 0);
     const safe = Number.isFinite(num) ? num : 0;
-    return `${escapeHtml(currency || 'USD')} ${safe.toFixed(2)}`;
+
+    const resolvedCurrency =
+      String(currency || '').trim().toUpperCase() ||
+      'USD';
+
+    return `${escapeHtml(resolvedCurrency)} ${safe.toFixed(2)}`;
   }
 
   function formatDate(value) {
@@ -167,7 +172,9 @@
   }
 
   function renderOrder(order) {
-    const currency = order?.amount?.currency || 'USD';
+    const currency =
+      String(order?.amount?.currency || '').trim().toUpperCase() ||
+      'USD';
     const amountValue = order?.amount?.value || 0;
     const refundedTotal = Number(order?.refundedTotal || 0);
     const availableValue = Number(amountValue || 0) - refundedTotal;

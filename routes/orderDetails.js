@@ -90,7 +90,13 @@ function moneyToNumber(v) {
 function currencyVal(order) {
   return String(
     (order?.amount && typeof order.amount === 'object' && order.amount.currency) ||
+      order?.amount?.currency_code ||
       order?.currency ||
+      order?.total?.currency ||
+      order?.breakdown?.itemTotal?.currency ||
+      order?.breakdown?.taxTotal?.currency ||
+      order?.breakdown?.shipping?.currency ||
+      process.env.BASE_CURRENCY ||
       'USD'
   ).toUpperCase();
 }

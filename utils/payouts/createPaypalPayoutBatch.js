@@ -15,7 +15,10 @@ const PP_API =
     : 'https://api-m.sandbox.paypal.com';
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD'
+  );
 }
 
 function mustEnv(name, v) {
@@ -117,7 +120,9 @@ async function createPayoutBatch({
 
   const normalizedItems = items.map((it, idx) => {
     const receiver = String(it?.receiver || '').trim().toLowerCase();
-    const currency = String(it?.currency || getBaseCurrency()).toUpperCase().trim() || getBaseCurrency();
+    const currency =
+      String(it?.currency || '').trim().toUpperCase() ||
+      getBaseCurrency(); 
     const note = clampStr(it?.note || '', 255);
     const senderItemId = clampStr(it?.senderItemId || '', 127);
 

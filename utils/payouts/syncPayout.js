@@ -7,7 +7,10 @@ const SellerBalanceLedger = require('../../models/SellerBalanceLedger');
 const { getPayoutBatch } = require('./createPaypalPayoutBatch');
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+    'USD'
+  );
 }
 
 function toMoneyString(cents) {
