@@ -10,12 +10,12 @@ function escapeFastestGrowingHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function formatFastestGrowingCurrency(value) {
+function formatFastestGrowingCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
 
-  return new Intl.NumberFormat('en-ZA', {
+  return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: 'ZAR',
+    currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
@@ -39,7 +39,7 @@ function formatGrowthPercent(value, previousSoldCount = 0) {
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
-function buildFastestGrowingProductItem(product, index) {
+function buildFastestGrowingProductItem(product, index, currency) {
   const name = escapeFastestGrowingHtml(product?.name || 'Unnamed product');
   const imageUrl = String(product?.imageUrl || '').trim();
 
@@ -70,7 +70,7 @@ function buildFastestGrowingProductItem(product, index) {
             <div class="small text-success">Growth: +${growthCount} units</div>
 
             <div class="small text-body-secondary">
-              <div>Revenue growth: ${formatFastestGrowingCurrency(growthRevenue)}</div>
+              <div>Revenue growth: ${formatFastestGrowingCurrency(growthRevenue, currency)}</div>
               <div>Growth rate: ${formatGrowthPercent(growthPercent, previousSoldCount)}</div>
             </div>
           </div>
@@ -110,6 +110,7 @@ async function loadSellerFastestGrowingProductsCard() {
     if (!listEl) return;
 
     const products = Array.isArray(payload?.products) ? payload.products : [];
+    const currency = String(payload?.currency || '').trim().toUpperCase() || 'USD';
 
     if (products.length === 0) {
       listEl.innerHTML = `
@@ -121,7 +122,7 @@ async function loadSellerFastestGrowingProductsCard() {
       return;
     }
 
-    listEl.innerHTML = products.map((product, index) => buildFastestGrowingProductItem(product, index)).join('');
+    listEl.innerHTML = products.map((product, index) => buildFastestGrowingProductItem(product, index, currency)).join('');
   } catch (error) {
     console.error('❌ Failed to load seller fastest growing products card:', error);
 

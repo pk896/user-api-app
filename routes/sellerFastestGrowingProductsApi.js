@@ -180,6 +180,9 @@ router.get('/fastest-growing-products', requireBusiness, async (req, res) => {
 
     return res.json({
       ok: true,
+      currency:
+        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+        'USD',
       stats: {
         total: normalizedProducts.length,
         currentRangeLabel: 'Last 7 days',
