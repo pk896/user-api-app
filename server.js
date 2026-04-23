@@ -945,6 +945,7 @@ app.use('/', staticPagesRoutes);
 --------------------------------------- */
 app.use(async (req, res) => {
   let shopHeaderImage = null;
+  const baseCurrency = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 
   try {
     const ShopHeaderImage = require('./models/ShopHeaderImage');
@@ -962,6 +963,7 @@ app.use(async (req, res) => {
     active: '',
     dbAvailable: dbConnectionEstablished,
     shopHeaderImage,
+    baseCurrency,
   });
 });
 

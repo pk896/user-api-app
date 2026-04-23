@@ -14,6 +14,7 @@ const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 const ShopSidebarBanner = require('../models/ShopSidebarBanner');
 const ShopMainBanner = require('../models/ShopMainBanner');
 const ShopHeaderImage = require('../models/ShopHeaderImage');
+const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 
 function mapStoreProduct(p) {
   const vatRate = Number(process.env.VAT_RATE || 0.15);
@@ -399,6 +400,7 @@ router.get('/store', async (req, res) => {
       midBannerRight,
       selectedKeyword: keyword,
       selectedCategory: category,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -419,6 +421,7 @@ router.get('/store', async (req, res) => {
       midBannerRight: null,
       selectedKeyword: '',
       selectedCategory: '',
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
@@ -609,6 +612,7 @@ router.get('/store/shop', async (req, res) => {
       totalProducts,
       hasPrevPage: currentPage > 1,
       hasNextPage: currentPage < totalPages,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -634,6 +638,7 @@ router.get('/store/shop', async (req, res) => {
       totalProducts: 0,
       hasPrevPage: false,
       hasNextPage: false,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
@@ -734,6 +739,7 @@ router.get('/store/product/:id', async (req, res) => {
       relatedProducts,
       shopSidebarBanner,
       shopHeaderImage,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -769,6 +775,7 @@ router.get('/store/cart', async (req, res) => {
       cartItems,
       cartSubtotal,
       cartCount,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -780,47 +787,11 @@ router.get('/store/cart', async (req, res) => {
       cartItems: [],
       cartSubtotal: 0,
       cartCount: 0,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
 });
-
-/*router.get('/store/checkout', async (req, res) => {
-  try {
-    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
-      .sort({ updatedAt: -1 })
-      .lean();
-
-    const cartItems = Array.isArray(req.session?.cart?.items)
-      ? req.session.cart.items
-      : [];
-
-    const cartSubtotal = cartItems.reduce((sum, item) => {
-      const price = Number(item.price || 0);
-      const quantity = Number(item.quantity || 0);
-      return sum + (price * quantity);
-    }, 0);
-
-    res.render('store/checkout', {
-      layout: 'layouts/store',
-      title: 'Checkout',
-      shopHeaderImage,
-      cartItems,
-      cartSubtotal,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
-    });
-  } catch (err) {
-    console.error('❌ store checkout error:', err);
-    res.render('store/checkout', {
-      layout: 'layouts/store',
-      title: 'Checkout',
-      shopHeaderImage: null,
-      cartItems: [],
-      cartSubtotal: 0,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
-    });
-  }
-});*/
 
 router.get('/store/contact', async (req, res) => {
   try {
@@ -832,6 +803,7 @@ router.get('/store/contact', async (req, res) => {
       layout: 'layouts/store',
       title: 'Contact',
       shopHeaderImage,
+      baseCurrency: BASE_CURRENCY,
     });
   } catch (err) {
     console.error('❌ store contact error:', err);
@@ -839,6 +811,7 @@ router.get('/store/contact', async (req, res) => {
       layout: 'layouts/store',
       title: 'Contact',
       shopHeaderImage: null,
+      baseCurrency: BASE_CURRENCY,
     });
   }
 });
@@ -977,6 +950,7 @@ router.get('/store/bestseller', async (req, res) => {
       shopHeaderImage,
       selectedKeyword: keyword,
       selectedCategory: category,
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   } catch (err) {
@@ -997,6 +971,7 @@ router.get('/store/bestseller', async (req, res) => {
       shopHeaderImage: null,
       selectedKeyword: '',
       selectedCategory: '',
+      baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
     });
   }
@@ -1012,6 +987,7 @@ router.get('/store/404', async (req, res) => {
       layout: 'layouts/store',
       title: 'The product you search for is not found',
       shopHeaderImage,
+      baseCurrency: BASE_CURRENCY,
     });
   } catch (err) {
     console.error('❌ store 404 error:', err);
@@ -1019,6 +995,7 @@ router.get('/store/404', async (req, res) => {
       layout: 'layouts/store',
       title: 'Product Not Found',
       shopHeaderImage: null,
+      baseCurrency: BASE_CURRENCY,
     });
   }
 });

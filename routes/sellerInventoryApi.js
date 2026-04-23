@@ -143,6 +143,9 @@ router.get('/inventory-value', requireBusiness, async (req, res) => {
     return res.json({
       success: true,
       data: {
+        currency:
+          String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+          'USD',
         inventoryValue: Number(inventoryValue.toFixed(2)),
         totalProducts,
         totalUnits,

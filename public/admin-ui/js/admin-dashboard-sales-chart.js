@@ -31,17 +31,6 @@ console.log('[admin-dashboard-sales-chart] loaded');
     return Math.round(x * 100) / 100;
   }
 
-  function formatCurrency(value, currency = 'USD') {
-    const amount = Number(value || 0);
-
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
-  }
-
   function formatCompactNumber(value) {
     const amount = Number(value || 0);
 
@@ -51,21 +40,50 @@ console.log('[admin-dashboard-sales-chart] loaded');
     }).format(amount);
   }
 
+  function normalizeAdminCurrencyText(text, currency) {
+    const safeText = String(text || '');
+    const safeCurrency = String(currency || '').trim().toUpperCase();
+
+    if (safeCurrency === 'ZAR') {
+      return safeText.replace(/^ZAR\s?/, 'R');
+    }
+
+    return safeText;
+  }
+
   function formatAxisCurrency(value, currency = 'USD') {
     const amount = Number(value || 0);
+    const safeCurrency = String(currency || '').trim().toUpperCase();
 
-    const symbol = new Intl.NumberFormat(undefined, {
+    let symbol = new Intl.NumberFormat(undefined, {
       style: 'currency',
-      currency: currency,
+      currency: safeCurrency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(0).replace(/[0-9.,\s]/g, '');
+
+    if (safeCurrency === 'ZAR') {
+      symbol = 'R';
+    }
 
     if (Math.abs(amount) >= 1000) {
       return `${symbol}${formatCompactNumber(amount)}`;
     }
 
     return `${symbol}${amount.toFixed(0)}`;
+  }
+
+  function formatCurrency(value, currency = 'USD') {
+    const amount = Number(value || 0);
+
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+
+    return normalizeAdminCurrencyText(formatted, currency);
   }
 
   function formatWholeNumber(value) {

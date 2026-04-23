@@ -10,12 +10,12 @@ function escapeRecentOrdersHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function formatRecentOrdersCurrency(value) {
+function formatRecentOrdersCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
 
-  return new Intl.NumberFormat('en-ZA', {
+  return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: 'ZAR',
+    currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
@@ -51,13 +51,13 @@ function getRecentOrdersStatusBadgeClass(status) {
   return 'text-bg-secondary';
 }
 
-function buildRecentOrderItem(order) {
+function buildRecentOrderItem(order, currency) {
   const fullOrderId = String(order?.orderId || order?._id || '').trim();
   const shortOrderId = fullOrderId ? `#${fullOrderId.slice(-8)}` : '#N/A';
   const safeShortOrderId = escapeRecentOrdersHtml(shortOrderId);
   const safeStatus = escapeRecentOrdersHtml(order?.status || 'PENDING');
   const safeDate = escapeRecentOrdersHtml(formatRecentOrdersDate(order?.createdAt));
-  const amountText = formatRecentOrdersCurrency(order?.amount || 0);
+  const amountText = formatRecentOrdersCurrency(order?.amount || 0, currency);
   const badgeClass = getRecentOrdersStatusBadgeClass(order?.status);
 
   return `
@@ -103,6 +103,7 @@ async function loadSellerRecentOrdersCard() {
     if (!listEl) return;
 
     const orders = Array.isArray(payload?.orders) ? payload.orders : [];
+    const currency = String(payload?.currency || '').trim().toUpperCase() || 'USD';
 
     if (orders.length === 0) {
       listEl.innerHTML = `
@@ -114,7 +115,7 @@ async function loadSellerRecentOrdersCard() {
       return;
     }
 
-    listEl.innerHTML = orders.map((order) => buildRecentOrderItem(order)).join('');
+    listEl.innerHTML = orders.map((order) => buildRecentOrderItem(order, currency)).join('');
   } catch (error) {
     console.error('❌ Failed to load seller recent orders card:', error);
 

@@ -4,6 +4,25 @@
     ? Number(vatRate)
     : 0.15;
 
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function formatMoney(amount) {
+    const n = Number(amount || 0);
+
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+
+    if (CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  }
+
   const cartGrossTotal = Number(cartSubtotal || 0);
   const cartNetSubtotal = VAT > 0 ? (cartGrossTotal / (1 + VAT)) : cartGrossTotal;
   const cartVatAmount = cartGrossTotal - cartNetSubtotal;
@@ -36,7 +55,7 @@
         <div class="col-lg-4 text-center text-lg-end">
             <div class="d-inline-flex align-items-center" style="height: 45px;">
                 <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small>USD</small></a>
+                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small><%= CURRENCY === 'ZAR' ? 'R' : CURRENCY %></small></a>
                     <div class="dropdown-menu rounded">
                         <a href="#" class="dropdown-item"> Euro</a>
                         <a href="#" class="dropdown-item"> Dolar</a>
@@ -117,7 +136,7 @@
                     <span class="rounded-circle btn-md-square border">
                         <i class="fas fa-shopping-cart"></i>
                     </span>
-                    <span class="text-dark ms-2 store-cart-total">$<%= cartGrossTotal.toFixed(2) %></span>
+                    <span class="text-dark ms-2 store-cart-total"><%= formatMoney(cartGrossTotal) %></span>
                 </a>
             </div>
         </div>
@@ -286,7 +305,7 @@
                                 </div>
                             </td>
                             <td>
-                                <p class="mb-0 py-4">$<%= Number(item.price || 0).toFixed(2) %></p>
+                               <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0)) %></p> 
                             </td>
                             <td>
                                 <div class="input-group quantity py-4" style="width: 100px;">
@@ -309,7 +328,7 @@
                                 </div>
                             </td>
                             <td>
-                                <p class="mb-0 py-4">$<%= (Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2) %></p>
+                                <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %></p>
                             </td>
                             <td class="py-4">
                                 <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">
@@ -336,17 +355,17 @@
 
                         <div class="d-flex justify-content-between mb-3">
                             <h5 class="mb-0 me-4">Subtotal (excl. VAT):</h5>
-                            <p class="mb-0" id="cartSubtotal">$<%= cartNetSubtotal.toFixed(2) %></p>
+                            <p class="mb-0" id="cartSubtotal"><%= formatMoney(cartNetSubtotal) %></p>
                         </div>
 
                         <div class="d-flex justify-content-between mb-3">
                             <h5 class="mb-0 me-4">VAT (<%= (VAT * 100).toFixed(0) %>%):</h5>
-                            <p class="mb-0" id="cartVatTotal">$<%= cartVatAmount.toFixed(2) %></p>
+                            <p class="mb-0" id="cartVatTotal"><%= formatMoney(cartVatAmount) %></p>
                         </div>
 
                         <div class="d-flex justify-content-between mb-0">
                             <h5 class="mb-0 me-4">Total (incl. VAT):</h5>
-                            <p class="mb-0 fw-bold" id="cartGrandTotal">$<%= cartGrossTotal.toFixed(2) %></p>
+                            <p class="mb-0 fw-bold" id="cartGrandTotal"><%= formatMoney(cartGrossTotal) %></p>
                         </div>
 
                         <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">

@@ -4,6 +4,25 @@
     ? Number(vatRate)
     : 0.15;
 
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function formatMoney(amount) {
+    const n = Number(amount || 0);
+
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+
+    if (CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  }
+
   const avgRating = Number((product && product.avgRating) || 0);
   const ratingsCount = Number((product && product.ratingsCount) || 0);
   const ratingSummaryText =
@@ -50,7 +69,7 @@
         <div class="col-lg-4 text-center text-lg-end">
             <div class="d-inline-flex align-items-center" style="height: 45px;">
                 <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small>USD</small></a>
+                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small><%= CURRENCY === 'ZAR' ? 'R' : CURRENCY %></small></a>
                     <div class="dropdown-menu rounded">
                         <a href="#" class="dropdown-item"> Euro</a>
                         <a href="#" class="dropdown-item"> Dolar</a>
@@ -131,7 +150,7 @@
                     <span class="rounded-circle btn-md-square border">
                         <i class="fas fa-shopping-cart"></i>
                     </span>
-                    <span class="text-dark ms-2 store-cart-total">$0.00</span>
+                    <span class="text-dark ms-2 store-cart-total">0.00</span>
                 </a>
             </div>
         </div>
@@ -298,7 +317,7 @@
                     <div class="col-xl-6 js-single-product-card">
                         <h4 class="fw-bold mb-3"><%= product.name %></h4>
                         <p class="mb-3">Category: <%= product.category %></p>
-                        <h5 class="fw-bold mb-1">$<%= (Number(product.price || 0) * (1 + VAT)).toFixed(2) %></h5>
+                        <h5 class="fw-bold mb-1"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></h5>
                         <p class="text-muted mb-3">incl. VAT</p>   
                         <div class="d-flex mb-4">
                             <%- include('../partials/rating-stars', {
@@ -413,9 +432,9 @@
                         <a href="<%= item.url %>" class="d-block mb-2"><%= item.category %></a>
                         <a href="<%= item.url %>" class="d-block h4"><%= item.name %></a>
                         <% if (item.oldPrice) { %>
-                            <del class="me-2 fs-5">$<%= item.oldPrice.toFixed(2) %></del>
+                            <del class="me-2 fs-5"><%= formatMoney(item.oldPrice) %></del>
                         <% } %>
-                        <span class="text-primary fs-5">$<%= (Number(item.price || 0) * (1 + VAT)).toFixed(2) %></span>
+                        <span class="text-primary fs-5"><%= formatMoney(Number(item.price || 0) * (1 + VAT)) %></span>
                         <small class="text-muted ms-2">incl. VAT</small>
                     </div>
                 </div>
@@ -498,10 +517,10 @@
                                 }) %>
                             </div>
                             <div class="d-flex mb-2 align-items-center flex-wrap">
-                                <h5 class="fw-bold me-2 mb-0">$<%= (Number(item.price || 0) * (1 + VAT)).toFixed(2) %></h5>
+                                <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(item.price || 0) * (1 + VAT)) %></h5>
                                 <small class="text-muted me-2">incl. VAT</small>
                                 <% if (item.oldPrice) { %>
-                                    <h5 class="text-danger text-decoration-line-through mb-0">$<%= item.oldPrice.toFixed(2) %></h5>
+                                    <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(item.oldPrice) %></h5>
                                 <% } %>
                             </div>
                         </div>
@@ -777,7 +796,7 @@
         >
             <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
         </span>
-        <span class="store-cart-total text-white fw-semibold">$0.00</span>
+        <span class="store-cart-total text-white fw-semibold">0.00</span>
     </a>
 </div>
 <!-- Mobile Floating Cart End -->

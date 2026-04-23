@@ -338,6 +338,9 @@ router.get('/trend-overview', requireBusiness, async (req, res) => {
 
     return res.json({
       ok: true,
+      currency:
+        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+        'USD',
       range,
       rangeLabel,
       chart: {

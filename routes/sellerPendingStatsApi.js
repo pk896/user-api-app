@@ -86,7 +86,10 @@ router.get('/pending-stats', requireBusiness, requireVerifiedBusiness, async (re
       });
     }
 
-    const currency = String(getBaseCurrency()).toUpperCase();
+    const currency =
+      String(getBaseCurrency() || '').trim().toUpperCase() ||
+      'USD';
+
     const businessObjectId = new mongoose.Types.ObjectId(String(business._id));
 
     /**

@@ -130,6 +130,9 @@ router.get('/recent-orders-card', requireAdmin, async (req, res) => {
 
     return res.json({
       ok: true,
+      currency:
+        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+        'USD',
       orders: normalizedOrders,
     });
   } catch (error) {

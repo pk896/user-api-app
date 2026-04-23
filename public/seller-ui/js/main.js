@@ -146,12 +146,14 @@ async function loadSellerCard1Stats() {
 function formatCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
 
-  return new Intl.NumberFormat(undefined, {
+  const formatted = new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
+
+  return normalizeUiCurrencyText(formatted, currency);
 }
 
 function formatCompactNumber(value) {
@@ -163,17 +165,33 @@ function formatCompactNumber(value) {
   }).format(amount);
 }
 
+function normalizeUiCurrencyText(text, currency) {
+  const safeText = String(text || '');
+  const safeCurrency = String(currency || '').trim().toUpperCase();
+
+  if (safeCurrency === 'ZAR') {
+    return safeText.replace(/^ZAR\s?/, 'R');
+  }
+
+  return safeText;
+}
+
 let sellerDashboardCurrency = 'USD';
 
 function formatAxisCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
+  const safeCurrency = String(currency || '').trim().toUpperCase();
 
-  const symbol = new Intl.NumberFormat(undefined, {
+  let symbol = new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: currency,
+    currency: safeCurrency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(0).replace(/[0-9.,\s]/g, '');
+
+  if (safeCurrency === 'ZAR') {
+    symbol = 'R';
+  }
 
   if (Math.abs(amount) >= 1000) {
     return `${symbol}${formatCompactNumber(amount)}`;
@@ -534,6 +552,13 @@ async function loadSellerMainChart(range = sellerMainChartRange) {
     const stockData = Array.isArray(payload?.chart?.stock)
       ? payload.chart.stock.map((value) => Number(value || 0))
       : [];
+
+    const trendCurrency =
+      String(payload?.currency || '').trim().toUpperCase() ||
+      sellerDashboardCurrency ||
+      'USD';
+
+    sellerDashboardCurrency = trendCurrency;
 
     const rangeEl = document.getElementById('seller-main-chart-range');
     if (rangeEl) {

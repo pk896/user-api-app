@@ -123,6 +123,9 @@ router.get('/top-best-sellers', requireBusiness, async (req, res) => {
 
     return res.json({
       ok: true,
+      currency:
+        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
+        'USD',
       stats: {
         total: normalizedProducts.length,
         rangeLabel: 'Last 30 days',

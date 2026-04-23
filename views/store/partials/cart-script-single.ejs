@@ -2,6 +2,24 @@
 <script nonce="<%= nonce %>">
   (function () {
     let activeChooserCard = null;
+    const CURRENCY = "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD' %>";
+
+    function formatMoney(amount) {
+      const n = Number(amount || 0);
+
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    }
 
     function round2(n) {
       return Math.round(Number(n || 0) * 100) / 100;
@@ -26,7 +44,7 @@
       const mobileFloatingCart = document.getElementById('mobileFloatingCart');
 
       totalEls.forEach(function (el) {
-        el.textContent = '$' + round2(summary.total).toFixed(2);
+        el.textContent = formatMoney(summary.total);
       });
 
       if (mobileFloatingCart) {

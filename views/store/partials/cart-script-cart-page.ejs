@@ -2,6 +2,25 @@
 
 <script nonce="<%= nonce %>">
   (function () {
+    const CURRENCY = "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD' %>";
+
+    function formatMoney(amount) {
+      const n = Number(amount || 0);
+
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    }
+
     function round2(n) {
       return Math.round(Number(n || 0) * 100) / 100;
     }
@@ -50,11 +69,11 @@
       const list = Array.isArray(items) ? items : [];
       const summary = getCartSummary(list);
 
-      if (subtotalEl) subtotalEl.textContent = '$' + round2(summary.total).toFixed(2);
-      if (totalEl) totalEl.textContent = '$' + round2(summary.total).toFixed(2);
+      if (subtotalEl) subtotalEl.textContent = formatMoney(summary.total);
+      if (totalEl) totalEl.textContent = formatMoney(summary.total);
 
       headerTotals.forEach(function (el) {
-        el.textContent = '$' + round2(summary.total).toFixed(2);
+        el.textContent = formatMoney(summary.total);
       });
 
       if (!list.length) {
@@ -89,7 +108,7 @@
           '    </div>',
           '  </th>',
           '  <td><p class="mb-0 py-4">' + escapeHtml(item.customId || 'N/A') + '</p></td>',
-          '  <td><p class="mb-0 py-4">$' + Number(item.price || 0).toFixed(2) + '</p></td>',
+          '  <td><p class="mb-0 py-4">' + formatMoney(Number(item.price || 0)) + '</p></td>',
           '  <td>',
           '    <div class="input-group quantity py-4" style="width: 100px;">',
           '      <div class="input-group-btn">',
@@ -101,7 +120,7 @@
           '      </div>',
           '    </div>',
           '  </td>',
-          '  <td><p class="mb-0 py-4">$' + Number(lineTotal || 0).toFixed(2) + '</p></td>',
+          '  <td><p class="mb-0 py-4">' + formatMoney(Number(lineTotal || 0)) + '</p></td>',
           '  <td class="py-4">',
           '    <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">',
           '      <i class="fa fa-times text-danger"></i>',

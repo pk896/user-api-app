@@ -10,18 +10,18 @@ function escapeTopBestSellersHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function formatTopBestSellersCurrency(value) {
+function formatTopBestSellersCurrency(value, currency = 'USD') {
   const amount = Number(value || 0);
 
-  return new Intl.NumberFormat('en-ZA', {
+  return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: 'ZAR',
+    currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
 }
 
-function buildTopBestSellerItem(product, index) {
+function buildTopBestSellerItem(product, index, currency) {
   const name = escapeTopBestSellersHtml(product?.name || 'Unnamed product');
   const imageUrl = String(product?.imageUrl || '').trim();
   const soldCount = Number(product?.soldCount || 0);
@@ -45,7 +45,7 @@ function buildTopBestSellerItem(product, index) {
             </div>
 
             <div class="small text-success">
-              <div>Revenue in last 30 days: ${formatTopBestSellersCurrency(estRevenue)}</div>
+              <div>Revenue in last 30 days: ${formatTopBestSellersCurrency(estRevenue, currency)}</div>
             </div>
           </div>
         </div>
@@ -84,6 +84,7 @@ async function loadSellerTopBestSellersCard() {
     if (!listEl) return;
 
     const products = Array.isArray(payload?.products) ? payload.products : [];
+    const currency = String(payload?.currency || '').trim().toUpperCase() || 'USD';
 
     if (products.length === 0) {
       listEl.innerHTML = `
@@ -95,7 +96,7 @@ async function loadSellerTopBestSellersCard() {
       return;
     }
 
-    listEl.innerHTML = products.map((product, index) => buildTopBestSellerItem(product, index)).join('');
+    listEl.innerHTML = products.map((product, index) => buildTopBestSellerItem(product, index, currency)).join('');
   } catch (error) {
     console.error('❌ Failed to load seller top best sellers card:', error);
 
