@@ -151,12 +151,12 @@
                   </span>
               </a>
 
-                <a href="/store/cart" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+                <a href="/store/cart" id="storeTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
                     <span class="rounded-circle btn-md-square border">
                         <i class="fas fa-shopping-cart"></i>
                     </span>
                     <span class="text-dark ms-2 store-cart-total">0.00</span>
-                </a>
+                </a> 
           </div>
         </div>
     </div>
@@ -1138,6 +1138,43 @@
 </script>
 
 <%- include('partials/cart-script-listing') %>
+
+<script nonce="<%= nonce %>">
+  (function () {
+    const topCart = document.getElementById('storeTopCartAmount');
+    if (!topCart) return;
+
+    const topCartTotal = topCart.querySelector('.store-cart-total');
+    if (!topCartTotal) return;
+
+    function cartAmountNumber() {
+      const raw = String(topCartTotal.textContent || '').replace(/[^0-9.-]/g, '');
+      const amount = Number(raw);
+      return Number.isFinite(amount) ? amount : 0;
+    }
+
+    function syncTopCartSticky() {
+      if (cartAmountNumber() > 0) {
+        topCart.classList.add('position-fixed', 'top-0', 'end-0', 'mt-5', 'me-5');
+        topCart.style.zIndex = '1080';
+      } else {
+        topCart.classList.remove('position-fixed', 'top-0', 'end-0', 'mt-5', 'me-5');
+        topCart.style.zIndex = '';
+      }
+    }
+
+    syncTopCartSticky();
+
+    const observer = new MutationObserver(syncTopCartSticky);
+    observer.observe(topCartTotal, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+
+    window.addEventListener('pageshow', syncTopCartSticky);
+  })();
+</script>
 
 <!-- Mobile Floating Cart Start -->
 <div

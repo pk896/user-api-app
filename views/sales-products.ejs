@@ -1,4 +1,28 @@
 <!--views/sales-products.ejs-->
+<%
+  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
+    ? Number(vatRate)
+    : 0.15;
+
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function formatMoney(amount) {
+    const n = Number(amount || 0);
+
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+
+    if (CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  }
+%>
 <section class="sales-ministore py-3">
   <style nonce="<%= nonce %>">
     :root{
@@ -377,7 +401,7 @@
           <%
             const image = product.imageUrl || '/images/no-image.png';
             const basePrice = Number(product.price || 0);
-            const vatPrice = basePrice * (1 + Number(vatRate || 0));
+            const vatPrice = basePrice * (1 + VAT);
           %>
 
           <div class="col-6 col-md-4 col-lg-3">
@@ -400,7 +424,7 @@
                   <h3 class="card-title text-uppercase">
                     <span><%= product.name || 'Untitled Product' %></span>
                   </h3>
-                  <span class="item-price text-primary">R<%= vatPrice.toFixed(2) %></span>
+                  <span class="item-price text-primary"><%= formatMoney(vatPrice) %></span>
                 </div>
               </div>
             </a>
@@ -457,7 +481,7 @@
             <%
               const relatedImage = product.imageUrl || '/images/no-image.png';
               const relatedBasePrice = Number(product.price || 0);
-              const relatedVatPrice = relatedBasePrice * (1 + Number(vatRate || 0));
+              const relatedVatPrice = relatedBasePrice * (1 + VAT);
             %>
 
             <div class="col-6 col-md-4 col-lg-3">
@@ -480,7 +504,7 @@
                     <h3 class="card-title text-uppercase">
                       <span><%= product.name || 'Untitled Product' %></span>
                     </h3>
-                    <span class="item-price text-primary">R<%= relatedVatPrice.toFixed(2) %></span>
+                    <span class="item-price text-primary"><%= formatMoney(relatedVatPrice) %></span>
                   </div>
                 </div>
               </a>
@@ -491,12 +515,37 @@
     <% } %>
   </div>
 
+  <!-- Floating Cart Total Start -->
+  <div
+    id="salesFloatingCart"
+    class="d-none position-fixed bottom-0 start-0 mb-3 ms-3"
+    style="z-index: 1080;"
+  >
+    <a
+      href="/store/cart"
+      class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1"
+      style="font-size: 0.85rem;"
+    >
+      <span
+        class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1"
+        style="width: 24px; height: 24px;"
+      >
+        <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
+      </span>
+      <span id="salesFloatingCartTotal" class="text-white fw-semibold">0.00</span>
+    </a>
+  </div>
+  <!-- Floating Cart Total End -->
+
   <script nonce="<%= nonce %>">
     (function () {
       const keywordInput = document.getElementById('salesKeywordInput');
       const categorySelect = document.getElementById('salesCategorySelect');
       const keywordBtn = document.getElementById('salesKeywordSearchBtn');
       const pageLoader = document.getElementById('salesPageLoader');
+      const floatingCart = document.getElementById('salesFloatingCart');
+      const floatingCartTotal = document.getElementById('salesFloatingCartTotal');
+      const salesCartCurrency = '<%= CURRENCY %>';
 
       function showLoader() {
         if (!pageLoader) return;
@@ -511,6 +560,52 @@
           pageLoader.classList.add('is-hidden');
           document.body.classList.remove('sales-loading');
         }, Number(delay) || 0);
+      }
+
+      function formatSalesCartMoney(amount) {
+        const formatted = new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: salesCartCurrency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(Number(amount || 0));
+
+        if (salesCartCurrency === 'ZAR') {
+          return formatted.replace(/^ZAR\s?/, 'R');
+        }
+
+        return formatted;
+      }
+
+      async function loadSalesFloatingCart() {
+        if (!floatingCart || !floatingCartTotal) return;
+
+        try {
+          const response = await fetch('/api/cart', {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin'
+          });
+
+          if (!response.ok) throw new Error('Could not load cart.');
+
+          const data = await response.json();
+          const items = Array.isArray(data.items) ? data.items : [];
+
+          const total = items.reduce(function (sum, item) {
+            const price = Number(item.price || 0);
+            const quantity = Number(item.quantity || item.qty || 0);
+            return sum + (price * quantity);
+          }, 0);
+
+          if (total > 0) {
+            floatingCartTotal.textContent = formatSalesCartMoney(total);
+            floatingCart.classList.remove('d-none');
+          } else {
+            floatingCart.classList.add('d-none');
+          }
+        } catch (err) {
+          floatingCart.classList.add('d-none');
+        }
       }
 
       function goToSales(categoryValue) {
@@ -535,10 +630,12 @@
 
       window.addEventListener('load', function () {
         hideLoader(1200);
+        loadSalesFloatingCart();
       });
 
       window.addEventListener('pageshow', function () {
         hideLoader(300);
+        loadSalesFloatingCart();
       });
 
       if (!keywordInput || !categorySelect) {

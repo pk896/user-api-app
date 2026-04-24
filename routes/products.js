@@ -27,6 +27,7 @@ router.use((req, _res, next) => {
  * ------------------------------------------- */
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const BUCKET = process.env.AWS_BUCKET_NAME;
+const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 
 if (!BUCKET) {
   console.warn('⚠️ AWS_BUCKET_NAME missing — uploads will fail.');
@@ -487,6 +488,7 @@ router.get('/sales', async (req, res) => {
       error: req.flash('error'),
       nonce: res.locals.nonce,
       vatRate: Number(process.env.VAT_RATE || 0.15),
+      baseCurrency: BASE_CURRENCY,
     });
   } catch (err) {
     console.error('❌ Failed to load sales page:', err);
