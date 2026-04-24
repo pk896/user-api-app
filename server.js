@@ -891,12 +891,25 @@ app.post('/theme-toggle', (req, res) => {
 /* ---------------------------------------
    Home + Debug + Health
 --------------------------------------- */
-app.get('/home', (req, res) => {
+app.get('/home', async (req, res) => {
+  let shopHeaderImage = null;
+
+  try {
+    const ShopHeaderImage = require('./models/ShopHeaderImage');
+
+    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+  } catch (err) {
+    console.warn('⚠️ Failed to load shopHeaderImage for home page:', err.message);
+  }
+
   res.render('home', {
     layout: 'layout',
     title: 'Home',
     active: 'home',
     dbAvailable: dbConnectionEstablished,
+    shopHeaderImage,
   });
 });
 
