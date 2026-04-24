@@ -1267,13 +1267,26 @@ router.post(
 /* ----------------------------------------------------------
  * 🔐 GET: Business Login
  * -------------------------------------------------------- */
-router.get('/login', redirectIfLoggedIn, (req, res) => {
+router.get('/login', redirectIfLoggedIn, async (req, res) => {
+  let shopHeaderImage = null;
+
+  try {
+    const ShopHeaderImage = require('../models/ShopHeaderImage');
+
+    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+  } catch (err) {
+    console.warn('⚠️ Failed to load shopHeaderImage for business login:', err.message);
+  }
+
   res.render('business-login', {
     title: 'Business Login',
     active: 'business-login',
     errors: [],
     themeCss: res.locals.themeCss,
     nonce: res.locals.nonce,
+    shopHeaderImage,
   });
 });
 
