@@ -577,11 +577,16 @@ async function computeSupplierKpis(businessId) {
   };
 }
 
-/* ----------------------------------------------------------
- * 📝 GET: Business Signup
- * -------------------------------------------------------- */
 router.get('/signup', redirectIfLoggedIn, async (req, res) => {
+  let shopHeaderImage = null;
+
   try {
+    const ShopHeaderImage = require('../models/ShopHeaderImage');
+
+    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+
     const businessesCount = await Business.countDocuments({});
 
     const countriesAgg = await Business.aggregate([
@@ -592,19 +597,9 @@ router.get('/signup', redirectIfLoggedIn, async (req, res) => {
           }
         }
       },
-      {
-        $match: {
-          country: { $ne: '' }
-        }
-      },
-      {
-        $group: {
-          _id: { $toLower: '$country' }
-        }
-      },
-      {
-        $count: 'total'
-      }
+      { $match: { country: { $ne: '' } } },
+      { $group: { _id: { $toLower: '$country' } } },
+      { $count: 'total' }
     ]);
 
     const countriesCount = countriesAgg[0]?.total || 0;
@@ -617,6 +612,7 @@ router.get('/signup', redirectIfLoggedIn, async (req, res) => {
       nonce: res.locals.nonce,
       businessesCount,
       countriesCount,
+      shopHeaderImage,
     });
   } catch (err) {
     console.error('❌ GET /business/signup stats error:', err);
@@ -629,6 +625,7 @@ router.get('/signup', redirectIfLoggedIn, async (req, res) => {
       nonce: res.locals.nonce,
       businessesCount: 0,
       countriesCount: 0,
+      shopHeaderImage,
     });
   }
 });
