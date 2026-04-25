@@ -1,6 +1,18 @@
 <!-- views/admin-business-verifications.ejs -->
 <% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
 
+<!-- Spinner Start -->
+<div
+  id="spinner"
+  class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center"
+  style="z-index: 9999;"
+>
+  <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+</div>
+<!-- Spinner End -->
+
 <%
   const f = filters || { status: 'pending', q: '', country: '', page: 1, totalPages: 1, total: 0 };
   const safe = (v, d='') => (typeof v === 'string' ? v : (v == null ? d : String(v)));
@@ -465,16 +477,32 @@
 %>
 
 <script nonce="<%= NONCE %>">
-  // Status auto-submit
-  document.getElementById('status')?.addEventListener('change', function () {
-    document.getElementById('filterForm')?.submit();
-  });
+  document.addEventListener('DOMContentLoaded', function () {
+    // Status auto-submit
+    document.getElementById('status')?.addEventListener('change', function () {
+      document.getElementById('filterForm')?.submit();
+    });
 
-  // Export CSV (keeps your current filters)
-  document.getElementById('exportBtn')?.addEventListener('click', function () {
-    const params = new URLSearchParams(window.location.search);
-    params.set('export', 'csv');
-    window.location.href = '/admin/business-verifications?' + params.toString();
+    // Export CSV (keeps your current filters)
+    document.getElementById('exportBtn')?.addEventListener('click', function () {
+      const params = new URLSearchParams(window.location.search);
+      params.set('export', 'csv');
+      window.location.href = '/admin/business-verifications?' + params.toString();
+    });
+
+    const pageSpinner = document.getElementById('spinner');
+
+    if (pageSpinner) {
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          pageSpinner.classList.remove('show');
+
+          setTimeout(function () {
+            pageSpinner.classList.add('d-none');
+          }, 300);
+        }, 700);
+      });
+    }
   });
 </script>
 

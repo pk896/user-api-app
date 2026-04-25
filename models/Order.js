@@ -4,6 +4,10 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 // ✅ Single canonical paid-like list (always compare UPPERCASE)
 const PAID_STATES = ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
 
@@ -11,7 +15,7 @@ const PAID_STATES = ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
 const MoneySchema = new Schema(
   {
     value: { type: String, required: true }, // keep as string to avoid FP drift
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: getBaseCurrency },
   },
   { _id: false }
 );
@@ -19,7 +23,7 @@ const MoneySchema = new Schema(
 const BreakdownMoneySchema = new Schema(
   {
     value: { type: String, required: true },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: getBaseCurrency },
   },
   { _id: false }
 );

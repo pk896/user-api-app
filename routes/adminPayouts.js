@@ -100,13 +100,12 @@ function requireCronSecret(req, res, next) {
 
 async function runCreatePayoutBatch({
   createdByAdminId = null,
-  currency = null,
   minCents = 0,
   note = 'Seller payout',
   senderBatchPrefix = 'payout',
 }) {
   const baseCurrency = getBaseCurrency();
-  const cur = String(currency || baseCurrency).toUpperCase().trim() || baseCurrency;
+  const cur = baseCurrency;
   const min = Math.max(0, Number(minCents || 0));
   const noteClean = String(note || 'Seller payout').trim() || 'Seller payout';
 
@@ -309,8 +308,7 @@ router.get(
     }
 
     const baseCurrency = getBaseCurrency();
-    const currencyPreview =
-      String(req.query.currency || baseCurrency).toUpperCase().trim() || baseCurrency;
+    const currencyPreview = baseCurrency;
 
     const sellers = await Business.find({ role: 'seller' })
       .select('_id name payouts.enabled payouts.paypalEmail')
@@ -398,8 +396,6 @@ router.post(
   requireAdminPermission('payouts.approve'),
   async (req, res) => {
   try {
-    const baseCurrency = getBaseCurrency();
-    const currency = String(req.body.currency || baseCurrency).toUpperCase().trim() || baseCurrency;
     const minCents = Math.max(0, Number(req.body.minCents || 0));
     const note = String(req.body.note || 'Seller payout').trim();
     const autoSyncRaw = String(req.body.autoSync || '').trim().toLowerCase();
@@ -411,7 +407,6 @@ router.post(
 
     const out = await runCreatePayoutBatch({
       createdByAdminId: safeObjectId(req.session?.admin?._id) || null,
-      currency,
       minCents,
       note,
       senderBatchPrefix: 'payout',

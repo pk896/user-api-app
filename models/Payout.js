@@ -3,6 +3,10 @@
 
 const mongoose = require('mongoose');
 
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 const payoutItemSchema = new mongoose.Schema(
   {
     businessId: {
@@ -23,10 +27,10 @@ const payoutItemSchema = new mongoose.Schema(
 
     amountCents: { type: Number, required: true },
 
-    // keep currency consistent (USD not usd)
+    // keep currency consistent
     currency: {
       type: String,
-      default: 'USD',
+      default: getBaseCurrency,
       trim: true,
       uppercase: true,
       index: true,
@@ -81,7 +85,7 @@ const payoutSchema = new mongoose.Schema(
 
     currency: {
       type: String,
-      default: 'USD',
+      default: getBaseCurrency,
       trim: true,
       uppercase: true,
       index: true,

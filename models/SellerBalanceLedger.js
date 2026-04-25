@@ -3,6 +3,10 @@
 
 const mongoose = require('mongoose');
 
+function getBaseCurrency() {
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+}
+
 const sellerBalanceLedgerSchema = new mongoose.Schema(
   {
     businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
@@ -10,7 +14,7 @@ const sellerBalanceLedgerSchema = new mongoose.Schema(
     amountCents: { type: Number, required: true }, // + for earning, - for debits
     currency: {
       type: String,
-      default: () => String(process.env.BASE_CURRENCY || 'USD').trim().toUpperCase(),
+      default: getBaseCurrency,
       trim: true,
       uppercase: true,
       index: true,
