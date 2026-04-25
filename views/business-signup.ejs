@@ -7,6 +7,18 @@
       : '/images/branding/logo-unincorporate.png';
 %>
 
+<!-- Spinner Start -->
+<div
+  id="spinner"
+  class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center"
+  style="z-index: 9999;"
+>
+  <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+</div>
+<!-- Spinner End -->
+
 <div class="business-signup-full-bleed brand-page-bg">
   <div class="container-fluid px-0 px-md-1">
     <div class="col-12 col-lg-11 col-xl-10 mx-lg-auto px-0">
@@ -543,13 +555,25 @@
               </section>
 
               <!-- Submit -->
-              <button type="submit" class="btn w-100 py-2 text-white fw-semibold brand-btn-success border-0">
-                <span class="me-2">
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <path fill="currentColor" d="M9 16.17L4.83 12 3.41 13.41 9 19 21 7l-1.41-1.41z" />
-                  </svg>
+              <button
+                id="businessSignupSubmitBtn"
+                type="submit"
+                class="btn w-100 py-2 text-white fw-semibold brand-btn-success border-0 d-flex align-items-center justify-content-center gap-2"
+              >
+                <span
+                  id="businessSignupSpinner"
+                  class="spinner-border spinner-border-sm d-none"
+                  aria-hidden="true"
+                ></span>
+
+                <span id="businessSignupSubmitText">
+                  <span class="me-2">
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                      <path fill="currentColor" d="M9 16.17L4.83 12 3.41 13.41 9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                  </span>
+                  Create Business Account
                 </span>
-                Create Business Account
               </button>
 
               <div class="text-center mt-3 text-secondary">
@@ -932,6 +956,10 @@
 
     // Basic validation (Bootstrap is-invalid)
     const form = document.getElementById('businessSignupForm');
+    const submitBtn = document.getElementById('businessSignupSubmitBtn');
+    const submitSpinner = document.getElementById('businessSignupSpinner');
+    const submitText = document.getElementById('businessSignupSubmitText');
+
     if (form) {
       form.addEventListener('submit', function(e) {
         let isValid = true;
@@ -966,7 +994,28 @@
           if (firstErrorField) {
             (firstErrorField.closest('.btn') || firstErrorField).scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
+          return;
         }
+
+        if (submitBtn && submitSpinner && submitText) {
+          submitBtn.disabled = true;
+          submitSpinner.classList.remove('d-none');
+          submitText.textContent = 'Creating account...';
+        }
+      });
+    }
+
+    const pageSpinner = document.getElementById('spinner');
+
+    if (pageSpinner) {
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          pageSpinner.classList.remove('show');
+
+          setTimeout(function () {
+            pageSpinner.classList.add('d-none');
+          }, 300);
+        }, 700);
       });
     }
   });
