@@ -90,7 +90,7 @@
                           value="<%= valueOf('id') %>"
                           class="form-control pf-input <%= hasError('id') ? 'is-invalid' : '' %>"
                         />
-                        <div class="form-text">Custom ID must be unique, 10-36 characters, include both letters and numbers, and may use hyphens.</div>
+                        <div class="form-text">We auto-generate a unique Custom ID for you (recommended). You may edit it. Must be 10–36 characters, include letters and numbers, and may use hyphens.</div>
                         <% if (hasError('id')) { %>
                           <div class="invalid-feedback d-block"><%= errors.id %></div>
                         <% } %>
@@ -104,7 +104,7 @@
                           id="productName"
                           type="text"
                           name="name"
-                          placeholder="e.g., Orange Juice 1L"
+                          placeholder="e.g., Orange Juice"
                           required
                           value="<%= valueOf('name') %>"
                           class="form-control pf-input <%= hasError('name') ? 'is-invalid' : '' %>"
@@ -392,14 +392,11 @@
 
                             <div id="colorImageRows" class="d-flex flex-column gap-2">
                               <div class="pf-color-row row g-2 align-items-center">
-                                <div class="col-12 col-md-3">
+                                <div class="col-12 col-md-5">
                                   <input type="text" name="colorImageColors" placeholder="Color" class="form-control pf-input" />
                                 </div>
-                                <div class="col-12 col-md-4">
-                                  <input type="text" name="colorImageUrls" placeholder="Image URL" class="form-control pf-input" />
-                                </div>
-                                <div class="col-12 col-md-3">
-                                  <input type="file" name="colorImageFiles" class="form-control pf-input" />
+                                <div class="col-12 col-md-5">
+                                  <input type="file" name="colorImageFiles" accept="image/*" class="form-control pf-input" />
                                 </div>
                                 <div class="col-12 col-md-2 d-grid">
                                   <button type="button" class="btn btn-outline-secondary js-remove-color-row">Remove</button>
@@ -774,6 +771,18 @@
     const madeSelectedText = document.getElementById('madeSelectedText');
     const madeSelectedFlagImg = document.getElementById('madeSelectedFlagImg');
 
+    const productCustomIdInput = document.getElementById('productCustomId');
+
+    function generateProductCustomId() {
+      const nowPart = Date.now().toString(36).toUpperCase();
+      const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+      return `PROD-${nowPart}-${randomPart}`;
+    }
+
+    if (productCustomIdInput && !String(productCustomIdInput.value || '').trim()) {
+      productCustomIdInput.value = generateProductCustomId();
+    }
+
     function showToast(message, type) {
       if (!toastContainer) return;
 
@@ -808,6 +817,42 @@
       if (previewWrapper) previewWrapper.classList.add('d-none');
     };
 
+    function updateColorImagePreview(input) {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      const row = input.closest('.pf-color-row');
+      if (!row) return;
+
+      let preview = row.querySelector('.js-color-image-preview');
+
+      if (!file) {
+        if (preview) preview.remove();
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        if (!preview) {
+          preview = document.createElement('div');
+          preview.className = 'js-color-image-preview mt-2';
+          input.closest('.col-12').appendChild(preview);
+        }
+
+        preview.innerHTML = `
+          <img src="${event.target.result}" alt="Color image preview" class="img-fluid rounded border" style="max-height: 90px;">
+        `;
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    if (colorImageRows) {
+      colorImageRows.addEventListener('change', function (event) {
+        const input = event.target.closest('input[name="colorImageFiles"]');
+        if (!input) return;
+        updateColorImagePreview(input);
+      });
+    }
+
     if (imageInput) {
       imageInput.addEventListener('change', function () {
         const file = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
@@ -819,14 +864,11 @@
       const row = document.createElement('div');
       row.className = 'pf-color-row row g-2 align-items-center';
       row.innerHTML = `
-        <div class="col-12 col-md-3">
+        <div class="col-12 col-md-5">
           <input type="text" name="colorImageColors" placeholder="Color" class="form-control pf-input" />
         </div>
-        <div class="col-12 col-md-4">
-          <input type="text" name="colorImageUrls" placeholder="Image URL" class="form-control pf-input" />
-        </div>
-        <div class="col-12 col-md-3">
-          <input type="file" name="colorImageFiles" class="form-control pf-input" />
+        <div class="col-12 col-md-5">
+          <input type="file" name="colorImageFiles" accept="image/*" class="form-control pf-input" />
         </div>
         <div class="col-12 col-md-2 d-grid">
           <button type="button" class="btn btn-outline-secondary js-remove-color-row">Remove</button>
@@ -837,6 +879,13 @@
 
     if (addColorImageRowBtn && colorImageRows) {
       addColorImageRowBtn.addEventListener('click', function () {
+        const rows = colorImageRows.querySelectorAll('.pf-color-row');
+
+        if (rows.length >= 7) {
+          showToast('You can add a maximum of 7 color images.', 'error');
+          return;
+        }
+
         colorImageRows.appendChild(buildColorRow());
       });
 
@@ -1007,6 +1056,24 @@
       const submitBtn = form.querySelector('button[type="submit"]');
       const submitLabel = submitBtn ? submitBtn.querySelector('.pf-submit-label') : null;
       const submitLoading = submitBtn ? submitBtn.querySelector('.pf-submit-loading') : null;
+
+      const colorRows = colorImageRows ? Array.from(colorImageRows.querySelectorAll('.pf-color-row')) : [];
+      const hasAtLeastOneColorImage = colorRows.some(function (row) {
+        const colorInput = row.querySelector('input[name="colorImageColors"]');
+        const fileInput = row.querySelector('input[name="colorImageFiles"]');
+
+        return String(colorInput?.value || '').trim() && fileInput?.files && fileInput.files.length > 0;
+      });
+
+      if (!hasAtLeastOneColorImage) {
+        event.preventDefault();
+        showToast('Add at least one color image. Enter a color name and upload its image file.', 'error');
+
+        const firstColorInput = colorImageRows ? colorImageRows.querySelector('input[name="colorImageColors"]') : null;
+        if (firstColorInput) firstColorInput.focus();
+
+        return;
+      }
 
       if (!madeHidden.value) {
         event.preventDefault();

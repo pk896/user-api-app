@@ -103,7 +103,6 @@ function parseListField(value, options = {}) {
 
 function normalizeColorImageInputs(body) {
   const colorsRaw = body.colorImageColors;
-  const urlsRaw = body.colorImageUrls;
 
   const colors = Array.isArray(colorsRaw)
     ? colorsRaw
@@ -111,24 +110,12 @@ function normalizeColorImageInputs(body) {
       ? [colorsRaw]
       : [];
 
-  const urls = Array.isArray(urlsRaw)
-    ? urlsRaw
-    : urlsRaw !== undefined
-      ? [urlsRaw]
-      : [];
-
-  const maxLen = Math.max(colors.length, urls.length);
-  const rows = [];
-
-  for (let i = 0; i < maxLen; i += 1) {
-    rows.push({
-      color: String(colors[i] || '').trim(),
-      imageUrl: String(urls[i] || '').trim(),
-      index: i,
-    });
-  }
-
-  return rows.filter((row) => row.color || row.imageUrl);
+  return colors
+    .map((color, index) => ({
+      color: String(color || '').trim(),
+      index,
+    }))
+    .filter((row) => row.color);
 }
 
 async function uploadSingleFileToS3(file) {
@@ -195,13 +182,9 @@ async function buildColorImagesFromRequest(req) {
     const row = rows[i];
     const uploadedFile = uploadedFiles[i];
 
-    let finalImageUrl = row.imageUrl;
+    if (!row.color || !uploadedFile) continue;
 
-    if (uploadedFile) {
-      finalImageUrl = await uploadSingleFileToS3(uploadedFile);
-    }
-
-    if (!row.color || !finalImageUrl) continue;
+    const finalImageUrl = await uploadSingleFileToS3(uploadedFile);
 
     result.push({
       color: row.color,
@@ -574,7 +557,7 @@ router.post(
   requireOfficialNumberVerified,
   upload.fields([
     { name: 'imageFile', maxCount: 1 },
-    { name: 'colorImageFiles', maxCount: 20 },
+    { name: 'colorImageFiles', maxCount: 7 },
   ]),
   async (req, res) => {
     const oldInput = buildAddProductOldInput(req.body);
@@ -682,6 +665,37 @@ router.post(
       }
 
       const numericPrice = Number(price);
+
+      const colorRows = normalizeColorImageInputs(req.body);
+      const colorImageFiles = Array.isArray(req.files?.colorImageFiles) ? req.files.colorImageFiles : [];
+
+      if (colorRows.length > 7 || colorImageFiles.length > 7) {
+        stashAddProductFormState(
+          req,
+          oldInput,
+          {
+            colors: 'You can upload a maximum of 7 color images.',
+          },
+          'You can upload a maximum of 7 color images.'
+        );
+        return res.redirect('/products/add');
+      }
+
+      const hasAtLeastOneColorImage = colorRows.some((row, index) => {
+        return row.color && colorImageFiles[index];
+      });
+
+      if (!hasAtLeastOneColorImage) {
+        stashAddProductFormState(
+          req,
+          oldInput,
+          {
+            colors: 'Add at least one color image. Enter a color name and upload its image file.',
+          },
+          'Please add at least one color image before saving.'
+        );
+        return res.redirect('/products/add');
+      }
 
       uploadedMainImageUrl = await uploadSingleFileToS3(mainImageFile);
 
@@ -1081,7 +1095,7 @@ router.post(
   requireVerifiedBusiness,
   upload.fields([
     { name: 'imageFile', maxCount: 1 },
-    { name: 'colorImageFiles', maxCount: 20 },
+    { name: 'colorImageFiles', maxCount: 7 },
   ]),
   async (req, res) => {
     try {

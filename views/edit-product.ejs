@@ -698,39 +698,33 @@
                   </div>
 
                   <div class="form-hint" style="margin-bottom:10px;">
-                    Add one row per color. Upload a new image file or keep/use an image URL for that color.
+                    Add one row per color and upload an image file. Only uploaded files are saved to your S3 bucket.
                   </div>
 
                   <div id="colorImageRows" class="color-image-rows">
                     <% const existingColorImages = Array.isArray(product.colorImages) ? product.colorImages : []; %>
 
-                    <% if (existingColorImages.length > 0) { %>
-                      <% existingColorImages.forEach(function(entry) { %>
-                        <div class="color-image-row">
-                          <input
-                            type="text"
-                            name="colorImageColors"
-                            value="<%= entry.color || '' %>"
-                            placeholder="Color"
-                            class="form-input"
-                          />
-                          <input
-                            type="text"
-                            name="colorImageUrls"
-                            value="<%= entry.imageUrl || '' %>"
-                            placeholder="Image URL"
-                            class="form-input"
-                          />
-                          <input
-                            type="file"
-                            name="colorImageFiles"
-                            accept="image/*"
-                            class="form-input"
-                          />
-                          <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
-                        </div>
-                      <% }) %>
-                    <% } else { %>
+                      <% if (existingColorImages.length > 0) { %>
+                        <% existingColorImages.forEach(function(entry) { %>
+                          <div class="color-image-row">
+                            <input
+                              type="text"
+                              name="colorImageColors"
+                              value="<%= entry.color || '' %>"
+                              placeholder="Color"
+                              class="form-input"
+                            />
+                            <input
+                              type="file"
+                              name="colorImageFiles"
+                              accept="image/*"
+                              class="form-input js-color-image-file"
+                            />
+                            <div class="js-color-image-preview" style="display:none;"></div>
+                            <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
+                          </div>
+                        <% }) %>
+                      <% } else { %>
                       <div class="color-image-row">
                         <input
                           type="text"
@@ -740,18 +734,12 @@
                           class="form-input"
                         />
                         <input
-                          type="text"
-                          name="colorImageUrls"
-                          value=""
-                          placeholder="Image URL"
-                          class="form-input"
-                        />
-                        <input
                           type="file"
                           name="colorImageFiles"
                           accept="image/*"
-                          class="form-input"
+                          class="form-input js-color-image-file"
                         />
+                        <div class="js-color-image-preview" style="display:none;"></div>
                         <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
                       </div>
                     <% } %>
@@ -2101,7 +2089,7 @@
     const addColorRowBtn = document.getElementById('addColorImageRow');
     const colorsInput = document.getElementById('colors');
 
-    function createColorImageRow(color = '', imageUrl = '') {
+    function createColorImageRow(color = '') {
       if (!colorRowsWrapper) return;
 
       const row = document.createElement('div');
@@ -2116,18 +2104,12 @@
           class="form-input"
         />
         <input
-          type="text"
-          name="colorImageUrls"
-          value="${String(imageUrl || '').replace(/"/g, '&quot;')}"
-          placeholder="Image URL"
-          class="form-input"
-        />
-        <input
           type="file"
           name="colorImageFiles"
           accept="image/*"
-          class="form-input"
+          class="form-input js-color-image-file"
         />
+        <div class="js-color-image-preview" style="display:none;"></div>
         <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
       `;
 
@@ -2136,6 +2118,43 @@
 
     if (addColorRowBtn) {
       addColorRowBtn.addEventListener('click', () => createColorImageRow());
+    }
+
+    function updateColorImagePreview(input) {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      const row = input.closest('.color-image-row');
+      if (!row) return;
+
+      const preview = row.querySelector('.js-color-image-preview');
+      if (!preview) return;
+
+      if (!file) {
+        preview.innerHTML = '';
+        preview.style.display = 'none';
+        return;
+      }
+
+      if (!file.type.startsWith('image/')) {
+        input.value = '';
+        preview.innerHTML = '';
+        preview.style.display = 'none';
+        alert('Please select an image file.');
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `
+        <img src="${url}" alt="Color image preview" class="current-image-preview" style="margin-top:8px; max-height:120px;">
+      `;
+      preview.style.display = 'block';
+    }
+
+    if (colorRowsWrapper) {
+      colorRowsWrapper.addEventListener('change', (e) => {
+        const input = e.target.closest('input[name="colorImageFiles"]');
+        if (!input) return;
+        updateColorImagePreview(input);
+      });
     }
 
     if (colorRowsWrapper) {
@@ -2149,6 +2168,13 @@
           rows[0].querySelectorAll('input').forEach((input) => {
             input.value = '';
           });
+
+          const preview = rows[0].querySelector('.js-color-image-preview');
+          if (preview) {
+            preview.innerHTML = '';
+            preview.style.display = 'none';
+          }
+
           return;
         }
 
