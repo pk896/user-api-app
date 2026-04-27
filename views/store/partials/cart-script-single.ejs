@@ -129,7 +129,21 @@
 
     function requiresChooser(product) {
       if (!product) return false;
-      return (product.sizes && product.sizes.length > 0) || (product.colors && product.colors.length > 0);
+
+      const colorCount = Array.isArray(product.colors) ? product.colors.length : 0;
+      const sizeCount = Array.isArray(product.sizes) ? product.sizes.length : 0;
+
+      return colorCount > 1 || sizeCount > 0;
+    }
+
+    function getAutomaticVariants(product) {
+      const variants = {};
+
+      if (product && Array.isArray(product.colors) && product.colors.length === 1) {
+        variants.color = product.colors[0];
+      }
+
+      return variants;
     }
 
     function getColorImage(product, color) {
@@ -192,11 +206,6 @@
       const confirmBtn = chooser.querySelector('.js-variant-confirm');
       if (confirmBtn) {
         confirmBtn.className = 'btn btn-sm rounded-pill js-variant-confirm';
-      }
-
-      const viewBtn = chooser.querySelector('.js-variant-view');
-      if (viewBtn) {
-        viewBtn.className = 'btn btn-sm rounded-pill js-variant-view';
       }
 
       if (isMobile || !button) {
@@ -278,9 +287,6 @@
         '    <button type="button" class="btn btn-sm rounded-pill js-variant-confirm" disabled style="background-color: #7C3AED; border-color: #7C3AED; color: #fff;">',
         '      <i class="fas fa-shopping-cart me-1"></i>Add To Cart',
         '    </button>',
-        '    <a href="#" class="btn btn-sm rounded-pill js-variant-view" style="border-color: #D4AF37; color: #7C3AED; background-color: #fff;">',
-        '      <i class="fas fa-eye me-1"></i>View Product',
-        '    </a>',
         '  </div>',
         '</div>'
       ].join('');
@@ -356,16 +362,11 @@
       const sizeWrap = chooser.querySelector('.js-size-wrap');
       const sizeOptions = chooser.querySelector('.js-size-options');
       const confirmBtn = chooser.querySelector('.js-variant-confirm');
-      const viewLink = chooser.querySelector('.js-variant-view');
 
       chooser.setAttribute('data-pid', product.customId || '');
       chooser.setAttribute('data-selected-color', '');
       chooser.setAttribute('data-selected-size', '');
       chooser.setAttribute('data-is-single', isSingle ? '1' : '0');
-
-      if (viewLink) {
-        viewLink.setAttribute('href', '/store/product/' + encodeURIComponent(product.customId || ''));
-      }
 
       if (preview) preview.src = product.image || '';
       if (title) title.textContent = product.name || 'Product';
@@ -768,6 +769,7 @@
       }
 
       const qty = isSingle ? getSingleQuantity() : 1;
+      const automaticVariants = getAutomaticVariants(product);
 
       const originalHtml = button.innerHTML;
       button.classList.add('disabled');
@@ -775,10 +777,10 @@
       button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
 
       try {
-        const data = await addToCart(pid, qty);
+        const data = await addToCart(pid, qty, automaticVariants);
 
         if (isSingle) {
-          const emptyVariants = {};
+          const emptyVariants = automaticVariants;
           const cartItems = (data && data.cart && Array.isArray(data.cart.items)) ? data.cart.items : [];
 
           button.setAttribute('data-in-cart', '1');

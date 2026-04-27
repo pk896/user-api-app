@@ -42,9 +42,18 @@
       const summary = getCartSummary(items);
       const totalEls = document.querySelectorAll('.store-cart-total');
       const mobileFloatingCart = document.getElementById('mobileFloatingCart');
+      const cartLinks = document.querySelectorAll('.store-cart-link');
 
       totalEls.forEach(function (el) {
         el.textContent = formatMoney(summary.total);
+      });
+
+      cartLinks.forEach(function (link) {
+        if (summary.count > 0) {
+          link.classList.add('cart-flash-active');
+        } else {
+          link.classList.remove('cart-flash-active');
+        }
       });
 
       if (mobileFloatingCart) {
@@ -129,7 +138,21 @@
 
     function requiresChooser(product) {
       if (!product) return false;
-      return (product.sizes && product.sizes.length > 0) || (product.colors && product.colors.length > 0);
+
+      const colorCount = Array.isArray(product.colors) ? product.colors.length : 0;
+      const sizeCount = Array.isArray(product.sizes) ? product.sizes.length : 0;
+
+      return colorCount > 1 || sizeCount > 0;
+    }
+
+    function getAutomaticVariants(product) {
+      const variants = {};
+
+      if (product && Array.isArray(product.colors) && product.colors.length === 1) {
+        variants.color = product.colors[0];
+      }
+
+      return variants;
     }
 
     function getColorImage(product, color) {
@@ -611,7 +634,7 @@
       button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Adding...';
 
       try {
-        const data = await addToCart(pid, 1, {});
+        const data = await addToCart(pid, 1, getAutomaticVariants(product));
         showCartMessage(data.message || 'Added to cart.', 'success');
       } catch (err) {
         showCartMessage(err.message || 'Failed to add to cart.', 'danger');

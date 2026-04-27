@@ -691,64 +691,122 @@
                   </div>
                 </div>
 
-                <div class="color-images-card">
-                  <div class="image-card-header">
-                    <h4>Images Per Color</h4>
-                    <span class="image-optional">Optional</span>
+                <div class="card border-0 shadow-sm mt-4">
+                  <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                      <h4 class="mb-0 text-white">Edit Images Per Color</h4>
+                      <small class="text-white-50">Change the color name or replace the image for each color.</small>
+                    </div>
+                    <span class="badge text-bg-success">Optional</span>
                   </div>
 
-                  <div class="form-hint" style="margin-bottom:10px;">
-                    Add one row per color and upload an image file. Only uploaded files are saved to your S3 bucket.
-                  </div>
+                  <div class="card-body">
+                    <div class="alert alert-light border mb-3">
+                      <strong class="text-primary">How this works:</strong>
+                      Keep the current image if you do not upload a new one. To replace a color image, choose a new file on that color row.
+                    </div>
 
-                  <div id="colorImageRows" class="color-image-rows">
-                    <% const existingColorImages = Array.isArray(product.colorImages) ? product.colorImages : []; %>
+                    <div id="colorImageRows" class="d-grid gap-3">
+                      <% const existingColorImages = Array.isArray(product.colorImages) ? product.colorImages : []; %>
 
                       <% if (existingColorImages.length > 0) { %>
-                        <% existingColorImages.forEach(function(entry) { %>
-                          <div class="color-image-row">
-                            <input
-                              type="text"
-                              name="colorImageColors"
-                              value="<%= entry.color || '' %>"
-                              placeholder="Color"
-                              class="form-input"
-                            />
-                            <input
-                              type="file"
-                              name="colorImageFiles"
-                              accept="image/*"
-                              class="form-input js-color-image-file"
-                            />
-                            <div class="js-color-image-preview" style="display:none;"></div>
-                            <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
+                        <% existingColorImages.forEach(function(entry, index) { %>
+                          <div class="color-image-row border rounded-3 p-3 bg-light">
+                            <input type="hidden" name="colorImageRowIndexes" value="<%= index %>" />
+                            <input type="hidden" name="colorImageExistingUrls" value="<%= entry.imageUrl || '' %>" />
+
+                            <div class="d-flex flex-column flex-lg-row gap-3 align-items-stretch align-items-lg-end">
+                              <div class="flex-fill">
+                                <label class="form-label text-primary fw-semibold">Color name</label>
+                                <input
+                                  type="text"
+                                  name="colorImageColors"
+                                  value="<%= entry.color || '' %>"
+                                  placeholder="e.g., Black"
+                                  class="form-control"
+                                />
+                              </div>
+
+                              <div class="flex-fill">
+                                <label class="form-label text-primary fw-semibold">Replace this image</label>
+                                <input
+                                  type="file"
+                                  name="colorImageFile_<%= index %>"
+                                  accept="image/*"
+                                  class="form-control js-color-image-file"
+                                />
+                                <div class="form-text">Leave empty to keep the current image.</div>
+                              </div>
+
+                              <div class="flex-fill">
+                                <label class="form-label text-primary fw-semibold">Current / New preview</label>
+                                <div class="js-color-image-preview border rounded-3 bg-white p-2" style="<%= entry.imageUrl ? '' : 'display:none;' %>">
+                                  <% if (entry.imageUrl) { %>
+                                    <img
+                                      src="<%= entry.imageUrl %>"
+                                      alt="<%= entry.color || 'Color image' %>"
+                                      class="img-fluid rounded"
+                                      style="max-height:120px;"
+                                    />
+                                  <% } %>
+                                </div>
+                              </div>
+
+                              <div class="d-grid">
+                                <button type="button" class="btn btn-outline-danger js-remove-color-row">
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         <% }) %>
                       <% } else { %>
-                      <div class="color-image-row">
-                        <input
-                          type="text"
-                          name="colorImageColors"
-                          value=""
-                          placeholder="Color"
-                          class="form-input"
-                        />
-                        <input
-                          type="file"
-                          name="colorImageFiles"
-                          accept="image/*"
-                          class="form-input js-color-image-file"
-                        />
-                        <div class="js-color-image-preview" style="display:none;"></div>
-                        <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
-                      </div>
-                    <% } %>
-                  </div>
+                        <div class="color-image-row border rounded-3 p-3 bg-light">
+                          <input type="hidden" name="colorImageRowIndexes" value="0" />
+                          <input type="hidden" name="colorImageExistingUrls" value="" />
 
-                  <div style="margin-top:10px;">
-                    <button type="button" id="addColorImageRow" class="btn btn-secondary">
-                      Add another color image
-                    </button>
+                          <div class="d-flex flex-column flex-lg-row gap-3 align-items-stretch align-items-lg-end">
+                            <div class="flex-fill">
+                              <label class="form-label text-primary fw-semibold">Color name</label>
+                              <input
+                                type="text"
+                                name="colorImageColors"
+                                value=""
+                                placeholder="e.g., Black"
+                                class="form-control"
+                              />
+                            </div>
+
+                            <div class="flex-fill">
+                              <label class="form-label text-primary fw-semibold">Upload color image</label>
+                              <input
+                                type="file"
+                                name="colorImageFile_0"
+                                accept="image/*"
+                                class="form-control js-color-image-file"
+                              />
+                            </div>
+
+                            <div class="flex-fill">
+                              <label class="form-label text-primary fw-semibold">Preview</label>
+                              <div class="js-color-image-preview border rounded-3 bg-white p-2" style="display:none;"></div>
+                            </div>
+
+                            <div class="d-grid">
+                              <button type="button" class="btn btn-outline-danger js-remove-color-row">
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      <% } %>
+                    </div>
+
+                    <div class="mt-3">
+                      <button type="button" id="addColorImageRow" class="btn btn-success">
+                        Add another color image
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1534,13 +1592,30 @@
   }
 
   .color-image-row{
-    display:grid;
-    grid-template-columns:1fr;
-    gap:8px;
-    padding:10px;
+    display:block;
+    width:100%;
+    padding:16px;
     border-radius:14px;
     border:1px solid rgba(124,58,237,.16);
     background:rgba(124,58,237,.05);
+  }
+
+  .color-image-row > .d-flex{
+    width:100%;
+  }
+
+  .color-image-row .flex-fill{
+    min-width:0;
+  }
+
+  @media (min-width: 992px){
+    .color-image-row .flex-fill{
+      flex:1 1 0;
+    }
+
+    .color-image-row .d-grid{
+      flex:0 0 140px;
+    }
   }
 
   .dark-theme .color-image-row{
@@ -2089,28 +2164,56 @@
     const addColorRowBtn = document.getElementById('addColorImageRow');
     const colorsInput = document.getElementById('colors');
 
+    let colorImageRowCounter = colorRowsWrapper
+      ? colorRowsWrapper.querySelectorAll('.color-image-row').length
+      : 0;
+
     function createColorImageRow(color = '') {
       if (!colorRowsWrapper) return;
 
+      const rowIndex = colorImageRowCounter;
+      colorImageRowCounter += 1;
+
       const row = document.createElement('div');
-      row.className = 'color-image-row';
+      row.className = 'color-image-row border rounded-3 p-3 bg-light';
 
       row.innerHTML = `
-        <input
-          type="text"
-          name="colorImageColors"
-          value="${String(color || '').replace(/"/g, '&quot;')}"
-          placeholder="Color"
-          class="form-input"
-        />
-        <input
-          type="file"
-          name="colorImageFiles"
-          accept="image/*"
-          class="form-input js-color-image-file"
-        />
-        <div class="js-color-image-preview" style="display:none;"></div>
-        <button type="button" class="btn btn-danger btn-row-remove js-remove-color-row">Remove</button>
+        <input type="hidden" name="colorImageRowIndexes" value="${rowIndex}" />
+        <input type="hidden" name="colorImageExistingUrls" value="" />
+
+        <div class="d-flex flex-column flex-lg-row gap-3 align-items-stretch align-items-lg-end">
+          <div class="flex-fill">
+            <label class="form-label text-primary fw-semibold">Color name</label>
+            <input
+              type="text"
+              name="colorImageColors"
+              value="${String(color || '').replace(/"/g, '&quot;')}"
+              placeholder="e.g., Black"
+              class="form-control"
+            />
+          </div>
+
+          <div class="flex-fill">
+            <label class="form-label text-primary fw-semibold">Upload color image</label>
+            <input
+              type="file"
+              name="colorImageFile_${rowIndex}"
+              accept="image/*"
+              class="form-control js-color-image-file"
+            />
+          </div>
+
+          <div class="flex-fill">
+            <label class="form-label text-primary fw-semibold">Preview</label>
+            <div class="js-color-image-preview border rounded-3 bg-white p-2" style="display:none;"></div>
+          </div>
+
+          <div class="d-grid">
+            <button type="button" class="btn btn-outline-danger js-remove-color-row">
+              Remove
+            </button>
+          </div>
+        </div>
       `;
 
       colorRowsWrapper.appendChild(row);
@@ -2144,14 +2247,14 @@
 
       const url = URL.createObjectURL(file);
       preview.innerHTML = `
-        <img src="${url}" alt="Color image preview" class="current-image-preview" style="margin-top:8px; max-height:120px;">
+        <img src="${url}" alt="Color image preview" class="img-fluid rounded" style="max-height:120px;">
       `;
       preview.style.display = 'block';
     }
 
     if (colorRowsWrapper) {
       colorRowsWrapper.addEventListener('change', (e) => {
-        const input = e.target.closest('input[name="colorImageFiles"]');
+        const input = e.target.closest('.js-color-image-file');
         if (!input) return;
         updateColorImagePreview(input);
       });

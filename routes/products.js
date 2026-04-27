@@ -172,6 +172,42 @@ async function cleanupUploadedProductAssets({ mainImageUrl = '', colorImages = [
   }
 }
 
+function getProductImageUrls(product) {
+  const urls = [];
+
+  if (product && product.imageUrl) {
+    urls.push(String(product.imageUrl).trim());
+  }
+
+  const colorImages = Array.isArray(product?.colorImages) ? product.colorImages : [];
+  colorImages.forEach((entry) => {
+    if (entry && entry.imageUrl) {
+      urls.push(String(entry.imageUrl).trim());
+    }
+  });
+
+  return [...new Set(urls.filter(Boolean))];
+}
+
+async function deleteProductImagesFromS3(product) {
+  const urls = getProductImageUrls(product);
+
+  for (const url of urls) {
+    await deleteSingleFileFromS3ByUrl(url);
+  }
+}
+
+async function deleteS3UrlsNotStillUsed(oldUrls, keptUrls) {
+  const kept = new Set((keptUrls || []).map((url) => String(url || '').trim()).filter(Boolean));
+
+  for (const oldUrl of [...new Set(oldUrls || [])]) {
+    const cleanUrl = String(oldUrl || '').trim();
+    if (cleanUrl && !kept.has(cleanUrl)) {
+      await deleteSingleFileFromS3ByUrl(cleanUrl);
+    }
+  }
+}
+
 async function buildColorImagesFromRequest(req) {
   const rows = normalizeColorImageInputs(req.body);
   const uploadedFiles = Array.isArray(req.files?.colorImageFiles) ? req.files.colorImageFiles : [];
@@ -193,6 +229,61 @@ async function buildColorImagesFromRequest(req) {
   }
 
   const seen = new Set();
+  return result.filter((entry) => {
+    const key = entry.color.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function toArrayField(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null) return [];
+  return [value];
+}
+
+async function buildEditedColorImagesFromRequest(req, currentColorImages = []) {
+  const colors = toArrayField(req.body.colorImageColors);
+  const existingUrls = toArrayField(req.body.colorImageExistingUrls);
+  const rowIndexes = toArrayField(req.body.colorImageRowIndexes);
+
+  const files = Array.isArray(req.files) ? req.files : [];
+  const currentByColor = new Map();
+
+  (Array.isArray(currentColorImages) ? currentColorImages : []).forEach((entry) => {
+    const colorKey = String(entry && entry.color ? entry.color : '').trim().toLowerCase();
+    if (colorKey && entry.imageUrl) {
+      currentByColor.set(colorKey, entry.imageUrl);
+    }
+  });
+
+  const result = [];
+
+  for (let i = 0; i < colors.length; i += 1) {
+    const color = String(colors[i] || '').trim();
+    if (!color) continue;
+
+    const rowIndex = String(rowIndexes[i] !== undefined ? rowIndexes[i] : i).trim();
+    const uploadedFile = files.find((file) => file.fieldname === `colorImageFile_${rowIndex}`);
+
+    let imageUrl = String(existingUrls[i] || '').trim();
+
+    if (uploadedFile) {
+      imageUrl = await uploadSingleFileToS3(uploadedFile);
+    }
+
+    if (!imageUrl) {
+      imageUrl = currentByColor.get(color.toLowerCase()) || '';
+    }
+
+    if (!imageUrl) continue;
+
+    result.push({ color, imageUrl });
+  }
+
+  const seen = new Set();
+
   return result.filter((entry) => {
     const key = entry.color.toLowerCase();
     if (seen.has(key)) return false;
@@ -898,7 +989,7 @@ router.get('/debug-created-order', requireAdmin, async (_req, res) => {
   }
 });
 
-router.get('/admin/backfill-missing-createdat', requireAdmin, async (_req, res) => {
+/*router.get('/admin/backfill-missing-createdat', requireAdmin, async (_req, res) => {
   try {
     const products = await Product.find({
       $or: [
@@ -940,9 +1031,9 @@ router.get('/admin/backfill-missing-createdat', requireAdmin, async (_req, res) 
       message: err.message
     });
   }
-});
+});*/
 
-router.get('/admin/delete-by-customid/:id', requireAdmin, async (req, res) => {
+/*router.get('/admin/delete-by-customid/:id', requireAdmin, async (req, res) => {
   try {
     const customId = String(req.params.id || '').trim();
 
@@ -956,23 +1047,16 @@ router.get('/admin/delete-by-customid/:id', requireAdmin, async (req, res) => {
       return res.status(404).send(`Product not found: ${customId}`);
     }
 
-    try {
-      const imageKey = getS3KeyFromUrl(product.imageUrl);
-      if (imageKey) {
-        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }));
-      }
-    } catch (err) {
-      console.warn('⚠️ Could not delete image from S3:', err.message);
-    }
+    await deleteProductImagesFromS3(product);
 
     return res.send(`Deleted product: ${product.customId} - ${product.name}`);
   } catch (err) {
     console.error('❌ delete-by-customid error:', err);
     return res.status(500).send(err.message);
   }
-});
+});*/
 
-router.get('/admin/delete-many', requireAdmin, async (req, res) => {
+/*router.get('/admin/delete-many', requireAdmin, async (req, res) => {
   try {
     const ids = String(req.query.ids || '')
       .split(',')
@@ -985,7 +1069,7 @@ router.get('/admin/delete-many', requireAdmin, async (req, res) => {
 
     const products = await Product.find({
       customId: { $in: ids },
-    }).select('_id customId name imageUrl').lean();
+    }).select('_id customId name imageUrl colorImages').lean();
 
     if (!products.length) {
       return res.status(404).send('No matching products found.');
@@ -998,14 +1082,7 @@ router.get('/admin/delete-many', requireAdmin, async (req, res) => {
     });
 
     for (const product of products) {
-      try {
-        const imageKey = getS3KeyFromUrl(product.imageUrl);
-        if (imageKey) {
-          await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }));
-        }
-      } catch (err) {
-        console.warn('⚠️ Could not delete image from S3:', err.message);
-      }
+      await deleteProductImagesFromS3(product);
     }
 
     return res.json({
@@ -1020,9 +1097,84 @@ router.get('/admin/delete-many', requireAdmin, async (req, res) => {
     console.error('❌ delete-many error:', err);
     return res.status(500).send(err.message);
   }
-});
+});*/
 
-// routes/products.js
+// TEMP: Delete S3 orphan product images not used by any product
+// Use in browser: /products/admin/delete-orphan-s3-images
+/*router.get('/admin/delete-orphan-s3-images', requireAdmin, async (_req, res) => {
+  try {
+    const {
+      ListObjectsV2Command,
+      DeleteObjectsCommand,
+    } = require('@aws-sdk/client-s3');
+
+    const products = await Product.find({})
+      .select('imageUrl colorImages')
+      .lean();
+
+    const usedUrls = new Set();
+
+    products.forEach((product) => {
+      getProductImageUrls(product).forEach((url) => {
+        usedUrls.add(String(url || '').trim());
+      });
+    });
+
+    const orphanKeys = [];
+    let ContinuationToken;
+
+    do {
+      const listed = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: BUCKET,
+          Prefix: 'products/',
+          ContinuationToken,
+        })
+      );
+
+      const objects = Array.isArray(listed.Contents) ? listed.Contents : [];
+
+      objects.forEach((object) => {
+        if (!object.Key) return;
+
+        const imageUrl = buildImageUrl(object.Key);
+
+        if (!usedUrls.has(imageUrl)) {
+          orphanKeys.push(object.Key);
+        }
+      });
+
+      ContinuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (ContinuationToken);
+
+    if (orphanKeys.length === 0) {
+      return res.send('No orphan S3 product images found.');
+    }
+
+    for (let i = 0; i < orphanKeys.length; i += 1000) {
+      const batch = orphanKeys.slice(i, i + 1000);
+
+      await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: BUCKET,
+          Delete: {
+            Objects: batch.map((Key) => ({ Key })),
+            Quiet: false,
+          },
+        })
+      );
+    }
+
+    return res.json({
+      ok: true,
+      deletedCount: orphanKeys.length,
+      deletedKeys: orphanKeys,
+    });
+  } catch (err) {
+    console.error('❌ delete-orphan-s3-images error:', err);
+    return res.status(500).send(err.message);
+  }
+});*/
 
 // --- PUBLIC: view a product by customId (no auth)
 // PLACE THIS ABOVE the business-only "/:id" route
@@ -1093,11 +1245,10 @@ router.post(
   '/edit/:id',
   requireBusiness,
   requireVerifiedBusiness,
-  upload.fields([
-    { name: 'imageFile', maxCount: 1 },
-    { name: 'colorImageFiles', maxCount: 7 },
-  ]),
+  upload.any(),
   async (req, res) => {
+    let newlyUploadedEditUrls = [];
+
     try {
       const business = req.business || req.session.business;
       const product = await Product.findOne({
@@ -1109,6 +1260,8 @@ router.post(
         req.flash('error', '❌ Product not found or unauthorized.');
         return res.redirect('/products/all');
       }
+
+      const oldProductImageUrls = getProductImageUrls(product);
 
       const source = String(req.body.source || '').trim();
 
@@ -1201,8 +1354,6 @@ router.post(
         product.colors = parseListField(req.body.colors);
       }
 
-      product.colorImages = await buildColorImagesFromRequest(req);
-
       if (!product.color && product.colors && product.colors.length > 0) {
         product.color = product.colors[0];
       }
@@ -1276,21 +1427,43 @@ router.post(
       }
 
       // ---------- OPTIONAL NEW IMAGE ----------
-      const mainImageFile = Array.isArray(req.files?.imageFile) ? req.files.imageFile[0] : null;
+      const uploadedFiles = Array.isArray(req.files) ? req.files : [];
+      const mainImageFile = uploadedFiles.find((file) => file.fieldname === 'imageFile') || null;
 
       if (mainImageFile) {
         try {
-          product.imageUrl = await uploadSingleFileToS3(mainImageFile);
+          const newMainImageUrl = await uploadSingleFileToS3(mainImageFile);
+          newlyUploadedEditUrls.push(newMainImageUrl);
+          product.imageUrl = newMainImageUrl;
         } catch (err) {
           throw new Error(err.message);
         }
       }
 
+      const beforeColorImageUrls = getProductImageUrls(product);
+
+      product.colorImages = await buildEditedColorImagesFromRequest(req, product.colorImages || []);
+
+      const afterBuildImageUrls = getProductImageUrls(product);
+      newlyUploadedEditUrls = [...new Set(newlyUploadedEditUrls.concat(
+        afterBuildImageUrls.filter((url) => !beforeColorImageUrls.includes(url))
+      ))];
+
       await product.save();
+
+      const keptProductImageUrls = getProductImageUrls(product);
+      await deleteS3UrlsNotStillUsed(oldProductImageUrls, keptProductImageUrls);
       req.flash('success', '✅ Product updated successfully!');
       return res.redirect('/products/all');
     } catch (err) {
       console.error('❌ Error updating product:', err);
+      
+      if (Array.isArray(newlyUploadedEditUrls)) {
+        for (const url of newlyUploadedEditUrls) {
+          await deleteSingleFileFromS3ByUrl(url);
+        }
+      }
+
       req.flash('error', `❌ Failed to update: ${err.message}`);
 
       const source = String(req.body.source || '').trim();
@@ -1318,13 +1491,7 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
       return res.redirect('/products/all');
     }
 
-    // Delete from S3
-    try {
-      const imageKey = product.imageUrl.split('.com/')[1];
-      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }));
-    } catch (err) {
-      console.warn('⚠️ Could not delete image from S3:', err.message);
-    }
+    await deleteProductImagesFromS3(product);
 
     req.flash('success', '🗑️ Product deleted successfully!');
     res.redirect('/products/all');
