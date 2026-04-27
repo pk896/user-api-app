@@ -637,6 +637,7 @@ const wishlistRoutes = require('./routes/wishlist');
 const passwordResetRoutes = require('./routes/passwordReset');
 const ratingsRouter = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
+const publicOrderTrackingRoutes = require('./routes/publicOrderTracking');
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
 const debugDangerRoutes = require('./routes/debugDanger');
@@ -704,6 +705,7 @@ app.use('/payment', paymentRouter);
 // Public pages
 app.use('/contact', contactRoutes);
 app.use('/links', someLinksRoutes);
+app.use('/', publicOrderTrackingRoutes);
 app.use('/', storePagesRoutes);
 
 // Demands & Matches
