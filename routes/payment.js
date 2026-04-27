@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOrder');
+const { sendOrderConfirmationEmail } = require('../utils/emails/orderConfirmation');
 const { convertMoneyAmount, FX_PROVIDER } = require('../utils/fx/getFxRate');
 const { resolveShippoFromAddressForCart } = require('../utils/payment/resolveShippoFromAddressForCart');
 const { shippoCreateCustomsDeclaration } = require('../utils/payment/shippoCreateCustomsDeclaration');
@@ -271,6 +272,22 @@ function themeCssFrom(req) {
 }
 function safeStr(v, max = 2000) {
   return String(v || '').trim().slice(0, max);
+}
+
+function publicBaseUrlFromReq(req) {
+  const fromEnv =
+    String(process.env.PUBLIC_BASE_URL || '').trim() ||
+    String(process.env.APP_URL || '').trim() ||
+    String(process.env.FRONTEND_URL || '').trim();
+
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, '');
+  }
+
+  const host = req.get('host');
+  if (!host) return '';
+
+  return `${req.protocol}://${host}`.replace(/\/+$/, '');
 }
 
 function normalizeMoneyNumber(v) {
@@ -2428,6 +2445,22 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         // if (paidLike) doc.fulfillmentStatus = 'PAID';
 
         await doc.save();
+
+        if (!doc.customerConfirmationEmailSentAt) {
+          try {
+            await sendOrderConfirmationEmail(doc, publicBaseUrlFromReq(req));
+
+            doc.customerConfirmationEmailSentAt = new Date();
+            await doc.save();
+          } catch (emailErr) {
+            console.error('❌ Order confirmation email failed:', {
+              orderId: doc.orderId,
+              to: doc.payer?.email || doc.shipping?.email || '',
+              message: emailErr?.message || String(emailErr),
+              details: emailErr?.response?.body || undefined,
+            });
+          }
+        }
 
         // ======================================================
         // ✅ Persist Shippo payer-selected rateId for Admin Shippo

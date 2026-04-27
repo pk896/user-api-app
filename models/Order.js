@@ -301,6 +301,9 @@ const OrderSchema = new Schema(
 
     raw: { type: Schema.Types.Mixed },
 
+    // ✅ customer confirmation email sent after successful payment
+    customerConfirmationEmailSentAt: { type: Date, default: null },
+
     // ✅ idempotency guard for inventory adjustment after capture
     inventoryAdjusted: { type: Boolean, default: false },
 
