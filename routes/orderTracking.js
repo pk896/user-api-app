@@ -6,6 +6,10 @@ const router = express.Router();
 const axios = require('axios');
 
 const { getShippoTracking } = require('../utils/shippo/getShippoTracking');
+const {
+  sendOrderShippedEmail,
+  sendOrderDeliveredEmail,
+} = require('../utils/emails/orderStatusEmail');
 
 let Order = null;
 try {
@@ -47,16 +51,12 @@ function mapToEnum(desired, enumValues) {
   }
 
   // safe fallbacks
-  const fallbackOrder = [
-    'DELIVERED',
-    'OUT_FOR_DELIVERY',
-    'IN_TRANSIT',
-    'SHIPPED',
-    'LABEL_CREATED',
-    'PROCESSING',
-    'PENDING',
-    'UNKNOWN',
-  ];
+  const fallbackOrder =
+    want === _norm('OUT_FOR_DELIVERY')
+      ? ['SHIPPED', 'IN_TRANSIT', 'PROCESSING', 'PENDING', 'UNKNOWN']
+      : want === _norm('LABEL_CREATED')
+      ? ['PROCESSING', 'PENDING', 'UNKNOWN']
+      : ['PROCESSING', 'PENDING', 'UNKNOWN'];
 
   for (const fb of fallbackOrder) {
     for (const ev of enumValues) {
@@ -76,6 +76,31 @@ function liveStatusToFulfillment(liveStatus) {
   if (s === 'PROCESSING') return 'LABEL_CREATED';
   if (s === 'CANCELLED') return 'CANCELLED';
   return null;
+}
+
+function isShippedLikeStatus(value) {
+  const s = String(value || '').trim().toUpperCase();
+  return s === 'SHIPPED' || s === 'IN_TRANSIT' || s === 'OUT_FOR_DELIVERY';
+}
+
+async function sendTrackingStatusEmailIfNeeded(order) {
+  if (!order) return;
+
+  const status = String(
+    order?.shippingTracking?.liveStatus ||
+      order?.shippingTracking?.status ||
+      order?.fulfillmentStatus ||
+      '',
+  ).trim().toUpperCase();
+
+  if (status === 'DELIVERED') {
+    await sendOrderDeliveredEmail(order);
+    return;
+  }
+
+  if (isShippedLikeStatus(status)) {
+    await sendOrderShippedEmail(order);
+  }
 }
 
 async function findOrderByParam(param, lean = false) {
@@ -364,6 +389,13 @@ async function cacheLiveTracking(orderIdOrOrderIdField, liveTracking) {
   if (String(liveTracking.status || '').toUpperCase() === 'DELIVERED') update.status = 'DELIVERED';
 
   await Order.findByIdAndUpdate(realMongoId, update).catch(() => {});
+
+  try {
+    const updatedOrder = await Order.findById(realMongoId);
+    await sendTrackingStatusEmailIfNeeded(updatedOrder);
+  } catch (e) {
+    console.warn('⚠️ Tracking status email failed (non-fatal):', e?.message || e);
+  }
 }
 
 /* ---------------------------------------
@@ -517,7 +549,7 @@ router.post('/:orderId', async (req, res, next) => {
     }
 
     const trackingEnums = getTrackingStatusEnumValues(order);
-    const safeStatus = mapToEnum(status || order.shippingTracking.status || 'SHIPPED', trackingEnums);
+    const safeStatus = mapToEnum(status || order.shippingTracking.status || 'PROCESSING', trackingEnums);
     if (safeStatus) order.shippingTracking.status = safeStatus;
 
     // Auto-fetch live tracking (Shippo-first when carrier is a Shippo token)
@@ -552,6 +584,12 @@ router.post('/:orderId', async (req, res, next) => {
     }
 
     await order.save();
+
+    try {
+      await sendTrackingStatusEmailIfNeeded(order);
+    } catch (e) {
+      console.warn('⚠️ Manual tracking status email failed (non-fatal):', e?.message || e);
+    }
 
     req.flash('success', 'Tracking updated.' + (liveTracking ? ' Live tracking data fetched.' : ''));
 
@@ -611,6 +649,12 @@ router.get('/:orderId/refresh', async (req, res) => {
       order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery;
 
       await order.save();
+
+      try {
+        await sendTrackingStatusEmailIfNeeded(order);
+      } catch (e) {
+        console.warn('⚠️ Refresh tracking status email failed (non-fatal):', e?.message || e);
+      }
 
       return res.json({ ok: true, liveTracking });
     }

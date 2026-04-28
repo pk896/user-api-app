@@ -43,6 +43,35 @@ function niceDate(value) {
   }
 }
 
+function deliveryEstimateText(order) {
+  const tracking = order?.shippingTracking || {};
+
+  const exactCarrierDate = niceDate(tracking.estimatedDelivery);
+  if (exactCarrierDate) {
+    return exactCarrierDate;
+  }
+
+  const durationTerms = normalize(order?.shippo?.chosenRate?.durationTerms);
+  if (durationTerms) {
+    return durationTerms;
+  }
+
+  const rawDays =
+    order?.shippo?.chosenRate?.estimatedDays ??
+    order?.delivery?.deliveryDays ??
+    null;
+
+  const days = Number(rawDays);
+
+  if (Number.isFinite(days) && days > 0) {
+    const cleanDays = Math.floor(days);
+    const dayWord = cleanDays === 1 ? 'day' : 'days';
+    return `Expected delivery is about ${cleanDays} ${dayWord}.`;
+  }
+
+  return 'Waiting for carrier ETA';
+}
+
 function prettyStatus(value) {
   const status = normalize(value).toUpperCase();
 
@@ -160,7 +189,7 @@ function publicOrderView(order) {
     trackingNumber,
     trackingUrl,
 
-    estimatedDelivery: niceDate(tracking.estimatedDelivery),
+    estimatedDelivery: deliveryEstimateText(order),
     lastTrackingUpdate: niceDate(tracking.lastTrackingUpdate || tracking.lastUpdate),
 
     items: Array.isArray(order.items)

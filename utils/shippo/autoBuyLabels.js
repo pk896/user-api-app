@@ -3,6 +3,7 @@
 
 const Order = require('../../models/Order');
 const { createLabelForOrder } = require('./createLabelForOrder');
+const { sendOrderProcessingEmail } = require('../emails/orderStatusEmail');
 
 const PAID_LIKE_STATUS = ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'];
 const PAID_LIKE_PAYMENT_STATUS = ['paid', 'completed', 'captured'];
@@ -172,6 +173,14 @@ async function runAutoBuyOnce() {
       }
 
       await freshOrder.save();
+
+      // ✅ Send customer processing email after auto-buy label purchase (non-fatal)
+      try {
+        await sendOrderProcessingEmail(freshOrder);
+      } catch (e) {
+        console.warn('⚠️ Auto-buy order processing email failed (non-fatal):', e?.message || e);
+      }
+
       success++;
     } catch (e) {
       const expired = isExpiredOrNotPurchasableRateError(e);

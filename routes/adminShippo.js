@@ -12,6 +12,21 @@ const requireAdminPermission = require('../middleware/requireAdminPermission');
 const Order = require('../models/Order');
 const { createLabelForOrder } = require('../utils/shippo/createLabelForOrder');
 const { addTrackingToPaypalOrder } = require('../utils/paypal/addTrackingToPaypalOrder');
+const { sendOrderProcessingEmail } = require('../utils/emails/orderStatusEmail');
+
+function publicBaseUrlFromReq(req) {
+  const fromEnv =
+    String(process.env.PUBLIC_BASE_URL || '').trim() ||
+    String(process.env.APP_URL || '').trim() ||
+    String(process.env.FRONTEND_URL || '').trim();
+
+  if (fromEnv) return fromEnv.replace(/\/+$/, '');
+
+  const host = req.get('host');
+  if (!host) return '';
+
+  return `${req.protocol}://${host}`.replace(/\/+$/, '');
+}
 
 // ------------------------------------------------------
 // Small helpers (safe + simple)
@@ -591,6 +606,15 @@ router.post(
     if (safeFulfillment) order.fulfillmentStatus = safeFulfillment;
 
     await order.save();
+
+    // ======================================================
+    // ✅ Send customer processing email after label purchase (non-fatal)
+    // ======================================================
+    try {
+      await sendOrderProcessingEmail(order, publicBaseUrlFromReq(req));
+    } catch (e) {
+      console.warn('⚠️ Order processing email failed (non-fatal):', e?.message || e);
+    }
 
     // ======================================================
     // ✅ Send tracking to PayPal immediately after label purchase (non-fatal)

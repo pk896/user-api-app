@@ -304,6 +304,11 @@ const OrderSchema = new Schema(
     // ✅ customer confirmation email sent after successful payment
     customerConfirmationEmailSentAt: { type: Date, default: null },
 
+    // ✅ customer status emails - idempotency guards
+    orderProcessingEmailSentAt: { type: Date, default: null },
+    orderShippedEmailSentAt: { type: Date, default: null },
+    orderDeliveredEmailSentAt: { type: Date, default: null },
+
     // ✅ idempotency guard for inventory adjustment after capture
     inventoryAdjusted: { type: Boolean, default: false },
 
