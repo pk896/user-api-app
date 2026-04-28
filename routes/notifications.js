@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
     const filter = getRecipientFilter(req);
     if (!filter.recipientUser && !filter.recipientBusiness) {
       req.flash('error', 'Sign in to view notifications.');
-      return res.redirect('/users/login');
+      return res.redirect('/business/login');
     }
 
     const page = Math.max(1, Number(req.query.page || 1));

@@ -31,7 +31,7 @@ function requireAnyAccountPage(req, res, next) {
   const p = getPrincipal(req);
   if (!p) {
     req.flash?.('error', 'Please sign in to use your wishlist.');
-    return res.redirect('/users/login');
+    return res.redirect('/business/login');
   }
   req.principal = p;
   next();

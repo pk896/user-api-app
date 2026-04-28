@@ -418,7 +418,7 @@ router.get('/:orderId', async (req, res, next) => {
       req.flash('error', 'Please log in to view order tracking.');
       // If they were trying from admin area, send them to admin login, otherwise users login.
       const backToAdmin = String(req.get('referer') || '').includes('/admin');
-      return res.redirect(backToAdmin ? '/admin/login' : '/users/login');
+      return res.redirect(backToAdmin ? '/admin/login' : '/business/login');
     }
 
     const order = await findOrderByParam(req.params.orderId, true);
@@ -501,7 +501,7 @@ router.post('/:orderId', async (req, res, next) => {
 
     if (!hasBusiness(req) && !hasAdmin(req)) {
       req.flash('error', 'Only business or admin accounts can update tracking.');
-      return res.redirect('/users/login');
+      return res.redirect('/business/login');
     }
 
     const order = await findOrderByParam(req.params.orderId, false);

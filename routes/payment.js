@@ -242,7 +242,7 @@ function requireAnyAuth(req, res, next) {
   } catch {
     // placeholding
   }
-  return res.redirect('/users/login');
+  return res.redirect('/business/login');
 }
 
 function requireAnyAuthJson(req, res, next) {
@@ -2703,10 +2703,17 @@ router.get('/receipt/:id', async (req, res) => {
     const loggedIn = isAnyLoggedIn(req);
     const ownerOk = loggedIn && docOwnedByRequester(req, doc);
 
-    if (!tokenOk && !ownerOk) {
+    // ✅ Guest checkout receipt access for the same browser/session only.
+    // This lets the guest view/print the receipt from the thank-you page
+    // without opening all receipts publicly.
+    const snap = req.session?.lastOrderSnapshot || null;
+    const docOrderId = String(doc?.orderId || wantedId || '').trim();
+    const sessionOk = !!snap && String(snap.id || '').trim() === docOrderId;
+
+    if (!tokenOk && !ownerOk && !sessionOk) {
       if (!loggedIn) {
         req.flash?.('error', 'Please login to view your receipt.');
-        return res.redirect('/users/login');
+        return res.redirect('/business/login');
       }
       return res.status(403).send('Forbidden.');
     }
@@ -2718,7 +2725,7 @@ router.get('/receipt/:id', async (req, res) => {
       order: doc,
       brandName: BRAND_NAME_N,
       currency: doc?.amount?.currency || doc?.currency || upperCcy,
-      publicMode: tokenOk && !loggedIn,
+      publicMode: (tokenOk || sessionOk) && !loggedIn,
       shareLink: doc?.orderId ? buildReceiptLink(doc.orderId) : null,
       success: req.flash?.('success') || [],
       error: req.flash?.('error') || [],

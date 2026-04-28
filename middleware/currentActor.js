@@ -7,7 +7,7 @@ module.exports = function currentActor(required = true) {
     if (!user && !biz) {
       if (!required) {return next();}
       req.flash('error', 'Please log in to rate products.');
-      return res.redirect('/users/login');
+      return res.redirect('/business/login');
     }
 
     if (user) {
