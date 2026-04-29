@@ -525,11 +525,11 @@
                 </div>
             </div>
             <div id="homeProductsSection" class="tab-content">
-                <div id="tab-1" class="tab-pane fade show p-0 active">
-                    <div class="row g-4 product">
+                <div id="tab-1" class="products tab-pane fade show p-0 active">
+                    <div class="row g-4 product products-mini">
                         <% (allProducts || []).forEach(function(product) { %>
                             <div
-                                class="col-md-6 col-lg-3 wow fadeInUp store-filter-card"
+                                class="col-12 col-md-6 col-lg-3 wow fadeInUp store-filter-card"
                                 data-wow-delay="0.1s"
                                 data-category="<%= String(product.category || '').trim().toLowerCase() %>"
                                 data-search="<%= [
@@ -541,30 +541,38 @@
                                     Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
                                 ].filter(Boolean).join(' ').toLowerCase() %>"
                             >
-                                <div class="product-item rounded js-store-product-card">
+                                <!-- Desktop/tablet product card -->
+                                <div class="product-item rounded js-store-product-card d-none d-md-block">
                                     <div class="product-item-inner border rounded">
                                         <div class="product-item-inner-item">
                                             <img src="<%= product.image %>" class="img-fluid w-100 rounded-top" alt="<%= product.name %>">
+
                                             <% if (product.isNew) { %>
                                                 <div class="product-new">New</div>
                                             <% } %>
+
                                             <% if (product.sale && !product.isNew) { %>
                                                 <div class="product-sale">Sale</div>
                                             <% } %>
+
                                             <div class="product-details">
                                                 <a href="<%= product.url %>"><i class="fa fa-eye fa-1x"></i></a>
                                             </div>
                                         </div>
+
                                         <div class="text-center rounded-bottom p-4">
                                             <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
                                             <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
+
                                             <% if (product.oldPrice) { %>
                                                 <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                                             <% } %>
+
                                             <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
                                             <small class="text-muted ms-2">incl. VAT</small>
                                         </div>
                                     </div>
+
                                     <div class="product-item-add border border-top-0 rounded-bottom text-center p-4 pt-0">
                                         <a
                                             href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
@@ -574,14 +582,16 @@
                                         >
                                             <i class="fas fa-shopping-cart me-2"></i> Add To Cart
                                         </a>
+
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div class="d-flex">
                                                 <%- include('../partials/rating-stars', {
-                                                avg: Number(product.avgRating || 0),
-                                                count: Number(product.ratingsCount || 0),
-                                                nonce
+                                                    avg: Number(product.avgRating || 0),
+                                                    count: Number(product.ratingsCount || 0),
+                                                    nonce
                                                 }) %>
                                             </div>
+
                                             <div class="d-flex">
                                                 <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
                                                     <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
@@ -590,6 +600,62 @@
                                                     <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
                                                 </a>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Mobile mini/list product card -->
+                                <div class="products-mini-item border js-store-product-card d-block d-md-none">
+                                    <div class="row g-0">
+                                        <div class="col-5">
+                                            <div class="products-mini-img border-end h-100">
+                                                <img src="<%= product.image %>" class="img-fluid w-100 h-100" alt="<%= product.name %>">
+                                                <div class="products-mini-icon rounded-circle bg-primary">
+                                                    <a href="<%= product.url %>"><i class="fa fa-eye fa-1x text-white"></i></a>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-7">
+                                            <div class="products-mini-content p-3">
+                                                <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
+                                                <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
+
+                                                <% if (product.oldPrice) { %>
+                                                    <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                                                <% } %>
+
+                                                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                                                <small class="text-muted ms-2">incl. VAT</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="products-mini-add border p-3">
+                                        <a
+                                            href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
+                                            class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart"
+                                            data-pid="<%= product.customId %>"
+                                            data-product='<%- storeProductPayload(product) %>'
+                                        >
+                                            <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                                        </a>
+
+                                        <div class="my-3">
+                                            <%- include('../partials/rating-stars', {
+                                                avg: Number(product.avgRating || 0),
+                                                count: Number(product.ratingsCount || 0),
+                                                nonce
+                                            }) %>
+                                        </div>
+
+                                        <div class="d-flex">
+                                            <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                                                <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
+                                            </a>
+                                            <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                                                <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
@@ -741,11 +807,11 @@
                     </div>
                 </div>
 
-                <div id="tab-4" class="tab-pane fade show p-0">
-                    <div class="row g-4 product">
+                <div id="tab-4" class="products tab-pane fade show p-0">
+                    <div class="row g-4 product products-mini">
                         <% (bestSellerProducts || []).forEach(function(product) { %>
                             <div
-                                class="col-md-6 col-lg-3 wow fadeInUp store-filter-card"
+                                class="col-12 col-md-6 col-lg-3 wow fadeInUp store-filter-card"
                                 data-wow-delay="0.1s"
                                 data-category="<%= String(product.category || '').trim().toLowerCase() %>"
                                 data-search="<%= [
@@ -757,47 +823,57 @@
                                     Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
                                 ].filter(Boolean).join(' ').toLowerCase() %>"
                             >
-                                <div class="product-item rounded js-store-product-card">
+                                <!-- Desktop/tablet product card -->
+                                <div class="product-item rounded js-store-product-card d-none d-md-block">
                                     <div class="product-item-inner border rounded">
                                         <div class="product-item-inner-item">
                                             <img src="<%= product.image %>" class="img-fluid w-100 rounded-top" alt="<%= product.name %>">
+
                                             <% if (product.isNew) { %>
                                                 <div class="product-new">New</div>
                                             <% } %>
+
                                             <% if (product.sale && !product.isNew) { %>
                                                 <div class="product-sale">Sale</div>
                                             <% } %>
+
                                             <div class="product-details">
                                                 <a href="<%= product.url %>"><i class="fa fa-eye fa-1x"></i></a>
                                             </div>
                                         </div>
+
                                         <div class="text-center rounded-bottom p-4">
                                             <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
                                             <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
+
                                             <% if (product.oldPrice) { %>
                                                 <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                                             <% } %>
+
                                             <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
                                             <small class="text-muted ms-2">incl. VAT</small>
                                         </div>
                                     </div>
+
                                     <div class="product-item-add border border-top-0 rounded-bottom text-center p-4 pt-0">
                                         <a
                                             href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
-                                            class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart"
+                                            class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cart"
                                             data-pid="<%= product.customId %>"
                                             data-product='<%- storeProductPayload(product) %>'
                                         >
                                             <i class="fas fa-shopping-cart me-2"></i> Add To Cart
                                         </a>
+
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div class="d-flex">
                                                 <%- include('../partials/rating-stars', {
-                                                avg: Number(product.avgRating || 0),
-                                                count: Number(product.ratingsCount || 0),
-                                                nonce
+                                                    avg: Number(product.avgRating || 0),
+                                                    count: Number(product.ratingsCount || 0),
+                                                    nonce
                                                 }) %>
                                             </div>
+
                                             <div class="d-flex">
                                                 <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
                                                     <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
@@ -806,6 +882,62 @@
                                                     <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
                                                 </a>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Mobile mini/list product card -->
+                                <div class="products-mini-item border js-store-product-card d-block d-md-none">
+                                    <div class="row g-0">
+                                        <div class="col-5">
+                                            <div class="products-mini-img border-end h-100">
+                                                <img src="<%= product.image %>" class="img-fluid w-100 h-100" alt="<%= product.name %>">
+                                                <div class="products-mini-icon rounded-circle bg-primary">
+                                                    <a href="<%= product.url %>"><i class="fa fa-eye fa-1x text-white"></i></a>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-7">
+                                            <div class="products-mini-content p-3">
+                                                <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
+                                                <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
+
+                                                <% if (product.oldPrice) { %>
+                                                    <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                                                <% } %>
+
+                                                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                                                <small class="text-muted ms-2">incl. VAT</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="products-mini-add border p-3">
+                                        <a
+                                            href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
+                                            class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart"
+                                            data-pid="<%= product.customId %>"
+                                            data-product='<%- storeProductPayload(product) %>'
+                                        >
+                                            <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                                        </a>
+
+                                        <div class="my-3">
+                                            <%- include('../partials/rating-stars', {
+                                                avg: Number(product.avgRating || 0),
+                                                count: Number(product.ratingsCount || 0),
+                                                nonce
+                                            }) %>
+                                        </div>
+
+                                        <div class="d-flex">
+                                            <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                                                <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
+                                            </a>
+                                            <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                                                <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
