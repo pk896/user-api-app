@@ -1751,7 +1751,17 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       Array.isArray(q.rates) &&
       q.rates.length
     ) {
-      return res.json({ ok: true, shipmentId: q.shipmentId, rates: q.rates, cached: true });
+      return res.json({
+        ok: true,
+        shipmentId: q.shipmentId,
+        rates: q.rates,
+        cached: true,
+
+        // UI notice only
+        isInternational: !!q.isInternational,
+        fromCountry: q.fromCountry || '',
+        toCountry: q.toCountry || '',
+      });
     }
 
     if (!Array.isArray(cart.items) || cart.items.length === 0) {
@@ -1825,7 +1835,16 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
 
     await saveSession(req);
 
-    return res.json({ ok: true, shipmentId, rates });
+    return res.json({
+      ok: true,
+      shipmentId,
+      rates,
+
+      // UI notice only
+      isInternational,
+      fromCountry,
+      toCountry,
+    });
   } catch (err) {
     console.error('POST /payment/shippo/quote error:', err?.message || err);
 
@@ -3391,4 +3410,3 @@ router.get('/admin/backfill-seller-daily-stats-30d', async (req, res) => {
 // ======================================================
 router.computeTotalsFromSession = computeTotalsFromSession;
 module.exports = router;
-
