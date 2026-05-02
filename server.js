@@ -621,6 +621,7 @@ const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBann
 const adminShopSidebarBanner = require('./routes/adminShopSidebarBanner');
 const adminShopMainBanner = require('./routes/adminShopMainBanner');
 const adminShopHeaderImage = require('./routes/adminShopHeaderImage');
+const warehousingDispenseRoutes = require('./routes/warehousingDispense');
 const cartRoutes = require('./routes/cart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
@@ -692,7 +693,9 @@ app.use('/admin', adminBestsellerBottomBanners);
 app.use('/admin', adminShopSidebarBanner);
 app.use('/admin', adminShopMainBanner);
 app.use('/admin', adminShopHeaderImage);
+app.use('/admin', warehousingDispenseRoutes);
 app.use('/admin', adminBizVerifyRoutes);
+
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);
 app.use(adminShippoRoutes);

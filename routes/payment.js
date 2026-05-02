@@ -84,6 +84,18 @@ try {
   Business = null;
 }
 
+let Warehouse = null;
+try {
+  const WarehouseMod = require('../models/Warehouse');
+  Warehouse = WarehouseMod?.Warehouse || WarehouseMod;
+  if (!Warehouse || typeof Warehouse.findOne !== 'function') {
+    throw new Error('Invalid Warehouse model export (missing .findOne)');
+  }
+} catch (e) {
+  console.error('[payment.js] Failed to load Warehouse model:', e?.stack || e);
+  Warehouse = null;
+}
+
 let SellerProductDailyStat = null;
 try {
   const SellerProductDailyStatMod = require('../models/SellerProductDailyStat');
@@ -103,6 +115,13 @@ try {
   ({ buildShippoAddressFromBusiness } = require('../utils/shippo/buildShippoAddressFromBusiness'));
 } catch {
   buildShippoAddressFromBusiness = null;
+}
+
+let buildShippoAddressFromWarehouse = null;
+try {
+  ({ buildShippoAddressFromWarehouse } = require('../utils/shippo/buildShippoAddressFromWarehouse'));
+} catch {
+  buildShippoAddressFromWarehouse = null;
 }
 
 const {
@@ -637,13 +656,19 @@ function getShippoFromAddress() {
 
 async function shippoCreateShipment({ to, cart }) {
   const from = await resolveShippoFromAddressForCart(cart, {
+    to,
     Product,
     Business,
+    Warehouse,
     buildShippoAddressFromBusiness,
+    buildShippoAddressFromWarehouse,
     getShippoFromAddress,
   });
 
   console.log('[Shippo FROM selected]', {
+    source: from?._fromMeta?.source || 'unknown',
+    warehouse: from?._fromMeta?.warehouse || null,
+    reason: from?._fromMeta?.reason || null,
     name: from?.name,
     city: from?.city,
     state: from?.state,
