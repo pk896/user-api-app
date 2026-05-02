@@ -923,55 +923,86 @@
 <!-- Product List End -->
 
 <!-- Bestseller Products Start -->
-<div class="container-fluid products pb-5">
+<div class="container-fluid products pt-5">
     <div class="container products-mini py-5">
         <div class="mx-auto text-center mb-5" style="max-width: 700px;">
             <h4 class="text-primary mb-4 border-bottom border-primary border-2 d-inline-block p-2 title-border-radius wow fadeInUp"
                 data-wow-delay="0.1s">Bestseller Products</h4>
-            <p class="mb-0 wow fadeInUp" data-wow-delay="0.2s">
-                Explore our best-selling products loved by customers for their quality, performance, and value. Find top-rated essentials and must-have deals in one collection.
-            </p>
+            <p class="mb-0 wow fadeInUp" data-wow-delay="0.2s">Discover our top-selling products, chosen for their quality, reliability, and customer satisfaction. Shop the most popular items trusted by our customers for everyday performance and exceptional value.</p>
         </div>
-        <div class="row g-4 products-mini">
-            <% (bestSellerProducts || []).forEach(function(product) { %>
-                <div class="col-lg-6 col-xl-4 wow fadeInUp store-filter-card" data-wow-delay="0.1s" data-category="<%= (product.category || '').toLowerCase() %>">
+
+        <div class="row g-4">
+            <% (bestSellerProducts || []).forEach(function(product, index) { %>
+                <div
+                    class="col-md-6 col-lg-6 col-xl-4 wow fadeInUp store-filter-card"
+                    data-wow-delay="<%= ['0.1s','0.3s','0.5s','0.1s','0.3s','0.5s'][index % 6] %>"
+                    data-category="<%= String(product.category || '').trim().toLowerCase() %>"
+                    data-search="<%= [
+                        product.name,
+                        product.category,
+                        product.type,
+                        product.manufacturer,
+                        product.description,
+                        Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
+                    ].filter(Boolean).join(' ').toLowerCase() %>"
+                >
                     <div class="products-mini-item border js-store-product-card">
                         <div class="row g-0">
                             <div class="col-5">
                                 <div class="products-mini-img border-end h-100 d-flex align-items-center">
                                     <img src="<%= product.image %>" class="img-fluid w-100 h-auto" alt="<%= product.name %>">
                                     <div class="products-mini-icon rounded-circle bg-primary">
-                                        <a href="<%= product.url %>"><i class="fa fa-eye fa-1x text-white"></i></a>
+                                        <a href="<%= product.url %>">
+                                            <i class="fa fa-eye fa-1x text-white"></i>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
+
                             <div class="col-7">
                                 <div class="products-mini-content p-3">
                                     <span class="d-block mb-2" style="color: #f28b00;"><%= product.category %></span>
                                     <span class="d-block h4"><%= product.name %></span>
+
                                     <% if (product.oldPrice) { %>
                                         <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                                     <% } %>
+
                                     <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
                                     <small class="text-muted ms-2">incl. VAT</small>
                                 </div>
                             </div>
                         </div>
+
                         <div class="products-mini-add border p-3">
                             <a
                                 href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
                                 class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart"
                                 data-pid="<%= product.customId %>"
-                                data-product='<%- storeProductPayload(product) %>'
+                                data-product="<%= storeProductPayload(product) %>"
                             >
-                                <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                                <i class="fas fa-shopping-cart me-2"></i> Buy
                             </a>
+
+                            <div class="my-3">
+                                <%- include('../partials/rating-stars', {
+                                    avg: Number(product.avgRating || 0),
+                                    count: Number(product.ratingsCount || 0),
+                                    nonce
+                                }) %>
+                            </div>
+
                             <div class="d-flex">
                                 <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                                    <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
+                                    <span class="rounded-circle btn-sm-square border">
+                                        <i class="fas fa-random"></i>
+                                    </span>
                                 </a>
+
                                 <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                                    <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
+                                    <span class="rounded-circle btn-sm-square border">
+                                        <i class="fas fa-heart"></i>
+                                    </span>
                                 </a>
                             </div>
                         </div>
