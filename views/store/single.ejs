@@ -323,11 +323,47 @@
                                 nonce
                             }) %> 
                         </div>
-                        <div class="mb-3">
-                            <div class="btn btn-primary d-inline-block rounded text-white py-1 px-4 me-2"><i
-                                    class="fab fa-facebook-f me-1"></i> Share</div>
-                            <div class="btn btn-secondary d-inline-block rounded text-white py-1 px-4 ms-2"><i
-                                    class="fab fa-twitter ms-1"></i> Share</div>
+                        <div class="mb-3 d-flex flex-wrap gap-2">
+                            <a
+                                href="https://www.facebook.com/sharer/sharer.php?u=<%= encodeURIComponent(product.url || '') %>"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="btn btn-primary d-inline-block rounded text-white py-1 px-4"
+                                aria-label="Share <%= product.name %> on Facebook"
+                            >
+                                <i class="fab fa-facebook-f me-1"></i> Facebook
+                            </a>
+
+                            <a
+                                href="https://twitter.com/intent/tweet?url=<%= encodeURIComponent(product.url || '') %>&text=<%= encodeURIComponent('Check out ' + (product.name || 'this product')) %>"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="btn btn-secondary d-inline-block rounded text-white py-1 px-4"
+                                aria-label="Share <%= product.name %> on X"
+                            >
+                                <i class="fab fa-twitter me-1"></i> X
+                            </a>
+
+                            <a
+                                href="https://api.whatsapp.com/send?text=<%= encodeURIComponent('Check out ' + (product.name || 'this product') + ': ' + (product.url || '')) %>"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="btn btn-success d-inline-block rounded text-white py-1 px-4"
+                                aria-label="Share <%= product.name %> on WhatsApp"
+                            >
+                                <i class="fab fa-whatsapp me-1"></i> WhatsApp
+                            </a>
+
+                            <button
+                                type="button"
+                                class="btn btn-dark d-inline-block rounded text-white py-1 px-4 js-product-native-share"
+                                data-share-title="<%= product.name || 'Product' %>"
+                                data-share-text="<%= 'Check out ' + (product.name || 'this product') %>"
+                                data-share-url="<%= product.url || '' %>"
+                                aria-label="Share <%= product.name %> to other apps"
+                            >
+                                <i class="fas fa-share-alt me-1"></i> More
+                            </button>
                         </div>
                         <div class="d-flex flex-column mb-3">
                             <small>Product SKU: <%= product.customId || 'N/A' %></small>
@@ -950,6 +986,47 @@
 
   loadRatings();
 })();
+</script>
+
+<script nonce="<%= nonce %>">
+  (function () {
+    const shareButtons = Array.from(document.querySelectorAll('.js-product-native-share'));
+
+    shareButtons.forEach(function (button) {
+      button.addEventListener('click', async function () {
+        const title = button.getAttribute('data-share-title') || document.title;
+        const text = button.getAttribute('data-share-text') || '';
+        const rawUrl = button.getAttribute('data-share-url') || window.location.href;
+        const url = new URL(rawUrl, window.location.origin).href;
+
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: title,
+              text: text,
+              url: url
+            });
+            return;
+          } catch (error) {
+            if (error && error.name === 'AbortError') return;
+          }
+        }
+
+        try {
+          await navigator.clipboard.writeText(url);
+          const originalText = button.innerHTML;
+
+          button.innerHTML = '<i class="fas fa-check me-1"></i> Link Copied';
+
+          setTimeout(function () {
+            button.innerHTML = originalText;
+          }, 2000);
+        } catch (error) {
+          window.prompt('Copy this product link:', url);
+        }
+      });
+    });
+  })();
 </script>
 
 <%- include('partials/cart-script-single') %>
