@@ -10,6 +10,8 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
+
 const ShopHeaderImage = require('../models/ShopHeaderImage');
 
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -48,6 +50,20 @@ function randomKey(folder, ext) {
   return `${folder}/${uuidv4()}.${ext}`;
 }
 
+function themeCssFromSession(req) {
+  const theme = req.session?.theme || 'light';
+  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
+}
+
+function shopHeaderImageSnapshot(headerImage) {
+  if (!headerImage) return null;
+
+  return {
+    image: headerImage.image || '',
+    active: !!headerImage.active,
+  };
+}
+
 async function uploadImageToS3(file, folder) {
   const { originalname, buffer, mimetype } = file;
   const ext = extFromFilename(originalname);
@@ -77,11 +93,6 @@ async function deleteS3ImageByUrl(imageUrl) {
   }
 }
 
-function themeCssFromSession(req) {
-  const theme = req.session?.theme || 'light';
-  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
-}
-
 /* INDEX */
 router.get(
   '/shop-header-image',
@@ -89,25 +100,26 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const headerImage = await ShopHeaderImage.findOne({}).sort({ updatedAt: -1 }).lean();
+    try {
+      const headerImage = await ShopHeaderImage.findOne({}).sort({ updatedAt: -1 }).lean();
 
-    return res.render('admin/shop-header-image/index', {
-      title: 'Shop Header Image',
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      headerImage,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ admin shop header image index error:', err);
-    req.flash('error', 'Could not load shop header image.');
-    return res.redirect('/admin/dashboard');
+      return res.render('admin/shop-header-image/index', {
+        title: 'Shop Header Image',
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        headerImage,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ admin shop header image index error:', err);
+      req.flash('error', 'Could not load shop header image.');
+      return res.redirect('/admin/dashboard');
+    }
   }
-});
+);
 
 /* EDIT */
 router.get(
@@ -116,25 +128,26 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const headerImage = await ShopHeaderImage.findOne({}).sort({ updatedAt: -1 }).lean();
+    try {
+      const headerImage = await ShopHeaderImage.findOne({}).sort({ updatedAt: -1 }).lean();
 
-    return res.render('admin/shop-header-image/edit', {
-      title: 'Edit Shop Header Image',
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      headerImage,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ shop header image edit page error:', err);
-    req.flash('error', 'Could not load shop header image.');
-    return res.redirect('/admin/shop-header-image');
+      return res.render('admin/shop-header-image/edit', {
+        title: 'Edit Shop Header Image',
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        headerImage,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ shop header image edit page error:', err);
+      req.flash('error', 'Could not load shop header image.');
+      return res.redirect('/admin/shop-header-image');
+    }
   }
-});
+);
 
 /* SAVE */
 router.post(
@@ -146,6 +159,9 @@ router.post(
   async (req, res) => {
     try {
       let headerImage = await ShopHeaderImage.findOne({});
+      const before = shopHeaderImageSnapshot(headerImage);
+      const isCreate = !headerImage;
+      const hadImageUpload = !!req.file;
 
       if (!headerImage) {
         headerImage = new ShopHeaderImage({
@@ -157,10 +173,11 @@ router.post(
       }
 
       if (req.file) {
+        const oldImage = headerImage.image;
         const newImage = await uploadImageToS3(req.file, 'shop-header-image');
 
-        if (headerImage.image) {
-          await deleteS3ImageByUrl(headerImage.image);
+        if (oldImage) {
+          await deleteS3ImageByUrl(oldImage);
         }
 
         headerImage.image = newImage;
@@ -172,6 +189,19 @@ router.post(
       }
 
       await headerImage.save();
+
+      await logAdminAction(req, {
+        action: isCreate ? 'store.shop_header_image.create' : 'store.shop_header_image.update',
+        entityType: 'shop_header_image',
+        entityId: String(headerImage._id),
+        status: 'success',
+        before,
+        after: shopHeaderImageSnapshot(headerImage),
+        meta: {
+          section: 'shop_header_image',
+          uploadedImage: hadImageUpload,
+        },
+      });
 
       req.flash('success', 'Shop header image saved successfully.');
       return res.redirect('/admin/shop-header-image');
@@ -190,29 +220,44 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const headerImage = await ShopHeaderImage.findOne({});
+    try {
+      const headerImage = await ShopHeaderImage.findOne({});
 
-    if (!headerImage) {
-      req.flash('error', 'Shop header image not found.');
+      if (!headerImage) {
+        req.flash('error', 'Shop header image not found.');
+        return res.redirect('/admin/shop-header-image');
+      }
+
+      const before = shopHeaderImageSnapshot(headerImage);
+
+      headerImage.active = !headerImage.active;
+      await headerImage.save();
+
+      await logAdminAction(req, {
+        action: headerImage.active ? 'store.shop_header_image.activate' : 'store.shop_header_image.deactivate',
+        entityType: 'shop_header_image',
+        entityId: String(headerImage._id),
+        status: 'success',
+        before,
+        after: shopHeaderImageSnapshot(headerImage),
+        meta: {
+          section: 'shop_header_image',
+        },
+      });
+
+      req.flash(
+        'success',
+        `Shop header image ${headerImage.active ? 'activated' : 'deactivated'} successfully.`
+      );
+
+      return res.redirect('/admin/shop-header-image');
+    } catch (err) {
+      console.error('❌ toggle shop header image error:', err);
+      req.flash('error', 'Failed to toggle shop header image.');
       return res.redirect('/admin/shop-header-image');
     }
-
-    headerImage.active = !headerImage.active;
-    await headerImage.save();
-
-    req.flash(
-      'success',
-      `Shop header image ${headerImage.active ? 'activated' : 'deactivated'} successfully.`
-    );
-
-    return res.redirect('/admin/shop-header-image');
-  } catch (err) {
-    console.error('❌ toggle shop header image error:', err);
-    req.flash('error', 'Failed to toggle shop header image.');
-    return res.redirect('/admin/shop-header-image');
   }
-});
+);
 
 /* MULTER ERROR HANDLER */
 router.use((err, req, res, _next) => {

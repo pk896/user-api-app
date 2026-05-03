@@ -10,6 +10,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
@@ -65,6 +66,32 @@ function normalizeSlidePayload(body) {
     buttonUrl: String(body.buttonUrl || '').trim() || '/store/shop',
     active: String(body.active || '') === 'on',
     sortOrder: Number(body.sortOrder || 0),
+  };
+}
+
+function heroSlideSnapshot(slide) {
+  if (!slide) return null;
+
+  return {
+    title: slide.title || '',
+    subtitle: slide.subtitle || '',
+    description: slide.description || '',
+    buttonText: slide.buttonText || '',
+    buttonUrl: slide.buttonUrl || '',
+    image: slide.image || '',
+    active: !!slide.active,
+    sortOrder: Number(slide.sortOrder || 0),
+  };
+}
+
+function featuredBannerSnapshot(banner) {
+  if (!banner) return null;
+
+  return {
+    productCustomId: banner.productCustomId || '',
+    badgeText: banner.badgeText || '',
+    offerText: banner.offerText || '',
+    active: !!banner.active,
   };
 }
 
@@ -173,9 +200,21 @@ router.post(
 
       const image = await uploadImageToS3(req.file, 'homepage-banners/hero-slides');
 
-      await HeroSlide.create({
+      const slide = await HeroSlide.create({
         ...payload,
         image,
+      });
+
+      await logAdminAction(req, {
+        action: 'store.hero_slide.create',
+        entityType: 'hero_slide',
+        entityId: String(slide._id),
+        status: 'success',
+        after: heroSlideSnapshot(slide),
+        meta: {
+          section: 'home_banners',
+          uploadedImage: true,
+        },
       });
 
       req.flash('success', 'Hero slide created successfully.');
@@ -242,6 +281,9 @@ router.post(
         return res.redirect('/admin/home-banners');
       }
 
+      const before = heroSlideSnapshot(slide);
+      const hadImageUpload = !!req.file;
+
       slide.title = payload.title;
       slide.subtitle = payload.subtitle;
       slide.description = payload.description;
@@ -251,12 +293,26 @@ router.post(
       slide.sortOrder = payload.sortOrder;
 
       if (req.file) {
+        const oldImage = slide.image;
         const newImage = await uploadImageToS3(req.file, 'homepage-banners/hero-slides');
-        await deleteS3ImageByUrl(slide.image);
+        await deleteS3ImageByUrl(oldImage);
         slide.image = newImage;
       }
 
       await slide.save();
+
+      await logAdminAction(req, {
+        action: 'store.hero_slide.update',
+        entityType: 'hero_slide',
+        entityId: String(slide._id),
+        status: 'success',
+        before,
+        after: heroSlideSnapshot(slide),
+        meta: {
+          section: 'home_banners',
+          uploadedImage: hadImageUpload,
+        },
+      });
 
       req.flash('success', 'Hero slide updated successfully.');
       return res.redirect('/admin/home-banners');
@@ -276,11 +332,32 @@ router.get(
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
   try {
-    const slide = await HeroSlide.findByIdAndDelete(req.params.id);
+    const slide = await HeroSlide.findById(req.params.id);
 
-    if (slide?.image) {
+    if (!slide) {
+      req.flash('error', 'Hero slide not found.');
+      return res.redirect('/admin/home-banners');
+    }
+
+    const before = heroSlideSnapshot(slide);
+
+    await HeroSlide.deleteOne({ _id: slide._id });
+
+    if (slide.image) {
       await deleteS3ImageByUrl(slide.image);
     }
+
+    await logAdminAction(req, {
+      action: 'store.hero_slide.delete',
+      entityType: 'hero_slide',
+      entityId: String(slide._id),
+      status: 'success',
+      before,
+      meta: {
+        section: 'home_banners',
+        deletedImage: !!slide.image,
+      },
+    });
 
     req.flash('success', 'Hero slide deleted successfully.');
     return res.redirect('/admin/home-banners');
@@ -306,8 +383,22 @@ router.get(
       return res.redirect('/admin/home-banners');
     }
 
+    const before = heroSlideSnapshot(slide);
+
     slide.active = !slide.active;
     await slide.save();
+
+    await logAdminAction(req, {
+      action: slide.active ? 'store.hero_slide.activate' : 'store.hero_slide.deactivate',
+      entityType: 'hero_slide',
+      entityId: String(slide._id),
+      status: 'success',
+      before,
+      after: heroSlideSnapshot(slide),
+      meta: {
+        section: 'home_banners',
+      },
+    });
 
     req.flash('success', `Hero slide ${slide.active ? 'activated' : 'deactivated'} successfully.`);
     return res.redirect('/admin/home-banners');
@@ -418,6 +509,9 @@ router.post(
     }
 
     let banner = await FeaturedBanner.findOne({});
+    const before = featuredBannerSnapshot(banner);
+    const isCreate = !banner;
+
     if (!banner) {
       banner = new FeaturedBanner({
         productCustomId,
@@ -433,6 +527,20 @@ router.post(
     }
 
     await banner.save();
+
+    await logAdminAction(req, {
+      action: isCreate ? 'store.featured_banner.create' : 'store.featured_banner.update',
+      entityType: 'featured_banner',
+      entityId: String(banner._id),
+      status: 'success',
+      before,
+      after: featuredBannerSnapshot(banner),
+      meta: {
+        section: 'home_banners',
+        productCustomId,
+        productName: product.name || '',
+      },
+    });
 
     req.flash('success', 'Featured banner updated successfully.');
     return res.redirect('/admin/home-banners');

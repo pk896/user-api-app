@@ -1,10 +1,12 @@
-// routes/warehousingDispense.js
+// routes/adminWarehousingDispense.js
 'use strict';
 
 const express = require('express');
 const router = express.Router();
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const { logAdminAction } = require('../utils/logAdminAction');
 const Warehouse = require('../models/Warehouse');
 
 function normalizeCountryCode(value, fallback = 'ZA') {
@@ -39,38 +41,10 @@ function splitList(value, { upper = false } = {}) {
   return [...new Set(items.map((item) => (upper ? item.toUpperCase() : item)))];
 }
 
-function adminCanManageWarehouses(req) {
-  const admin = req.admin || req.session?.admin || null;
-  const role = String(admin?.role || '').trim();
-  const permissions = Array.isArray(admin?.permissions) ? admin.permissions : [];
-
-  const hasPerm = (perm) => permissions.includes('*') || permissions.includes(perm);
-
-  if (role === 'super_admin') return true;
-
-  if (
-    role === 'shipping_admin' &&
-    (
-      hasPerm('shipping.read') ||
-      hasPerm('delivery_options.manage') ||
-      hasPerm('shipping.labels.manage') ||
-      hasPerm('warehouses.manage')
-    )
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-function requireWarehouseAdmin(req, res, next) {
-  return requireAdmin(req, res, () => {
-    if (adminCanManageWarehouses(req)) return next();
-
-    req.flash?.('error', 'You do not have permission to manage warehouses.');
-    return res.redirect('/admin/dashboard');
-  });
-}
+const requireWarehouseSuperAdmin = [
+  requireAdmin,
+  requireAdminRole(['super_admin']),
+];
 
 function warehousePayloadFromBody(body) {
   const country = normalizeCountryCode(body.country, 'ZA');
@@ -144,7 +118,7 @@ async function makeDefaultIfNeeded(payload, excludeId = null) {
   await Warehouse.updateMany(filter, { $set: { isDefault: false } });
 }
 
-router.get('/warehouses', requireWarehouseAdmin, async (req, res) => {
+router.get('/warehouses', requireWarehouseSuperAdmin, async (req, res) => {
   try {
     const warehouses = await Warehouse.find({})
       .sort({ country: 1, provinceCode: 1, priority: 1, name: 1 })
@@ -168,7 +142,7 @@ router.get('/warehouses', requireWarehouseAdmin, async (req, res) => {
   }
 });
 
-router.get('/warehouses/new', requireWarehouseAdmin, async (req, res) => {
+router.get('/warehouses/new', requireWarehouseSuperAdmin, async (req, res) => {
   return res.render('admin/warehousingDispense', {
     layout: 'layout',
     title: 'Create Warehouse',
@@ -182,7 +156,7 @@ router.get('/warehouses/new', requireWarehouseAdmin, async (req, res) => {
   });
 });
 
-router.post('/warehouses', requireWarehouseAdmin, async (req, res) => {
+router.post('/warehouses', requireWarehouseSuperAdmin, async (req, res) => {
   try {
     const payload = warehousePayloadFromBody(req.body);
     validatePayload(payload);
@@ -195,7 +169,24 @@ router.post('/warehouses', requireWarehouseAdmin, async (req, res) => {
 
     await makeDefaultIfNeeded(payload);
 
-    await Warehouse.create(payload);
+    const warehouseDoc = await Warehouse.create(payload);
+
+    await logAdminAction(req, {
+      action: 'warehouse.create',
+      entityType: 'warehouse',
+      entityId: String(warehouseDoc._id),
+      status: 'success',
+      after: {
+        name: warehouseDoc.name,
+        code: warehouseDoc.code,
+        country: warehouseDoc.country,
+        province: warehouseDoc.province,
+        provinceCode: warehouseDoc.provinceCode,
+        isActive: warehouseDoc.isActive,
+        isDefault: warehouseDoc.isDefault,
+        priority: warehouseDoc.priority,
+      },
+    });
 
     req.flash?.('success', 'Warehouse created successfully.');
     return res.redirect('/admin/warehouses');
@@ -206,7 +197,7 @@ router.post('/warehouses', requireWarehouseAdmin, async (req, res) => {
   }
 });
 
-router.get('/warehouses/:id/edit', requireWarehouseAdmin, async (req, res) => {
+router.get('/warehouses/:id/edit', requireWarehouseSuperAdmin, async (req, res) => {
   try {
     const warehouse = await Warehouse.findById(req.params.id).lean();
 
@@ -233,7 +224,7 @@ router.get('/warehouses/:id/edit', requireWarehouseAdmin, async (req, res) => {
   }
 });
 
-router.post('/warehouses/:id/update', requireWarehouseAdmin, async (req, res) => {
+router.post('/warehouses/:id/update', requireWarehouseSuperAdmin, async (req, res) => {
   try {
     const warehouse = await Warehouse.findById(req.params.id);
 
@@ -255,10 +246,51 @@ router.post('/warehouses/:id/update', requireWarehouseAdmin, async (req, res) =>
       return res.redirect(`/admin/warehouses/${encodeURIComponent(String(warehouse._id))}/edit`);
     }
 
+    const before = {
+      name: warehouse.name,
+      code: warehouse.code,
+      country: warehouse.country,
+      province: warehouse.province,
+      provinceCode: warehouse.provinceCode,
+      address: warehouse.address,
+      phone: warehouse.phone,
+      email: warehouse.email,
+      isActive: warehouse.isActive,
+      isDefault: warehouse.isDefault,
+      priority: warehouse.priority,
+      supportedCountries: warehouse.supportedCountries,
+      supportedProvinces: warehouse.supportedProvinces,
+      notes: warehouse.notes,
+    };
+
     await makeDefaultIfNeeded(payload, warehouse._id);
 
     warehouse.set(payload);
     await warehouse.save();
+
+    await logAdminAction(req, {
+      action: 'warehouse.update',
+      entityType: 'warehouse',
+      entityId: String(warehouse._id),
+      status: 'success',
+      before,
+      after: {
+        name: warehouse.name,
+        code: warehouse.code,
+        country: warehouse.country,
+        province: warehouse.province,
+        provinceCode: warehouse.provinceCode,
+        address: warehouse.address,
+        phone: warehouse.phone,
+        email: warehouse.email,
+        isActive: warehouse.isActive,
+        isDefault: warehouse.isDefault,
+        priority: warehouse.priority,
+        supportedCountries: warehouse.supportedCountries,
+        supportedProvinces: warehouse.supportedProvinces,
+        notes: warehouse.notes,
+      },
+    });
 
     req.flash?.('success', 'Warehouse updated successfully.');
     return res.redirect('/admin/warehouses');
@@ -269,9 +301,37 @@ router.post('/warehouses/:id/update', requireWarehouseAdmin, async (req, res) =>
   }
 });
 
-router.post('/warehouses/:id/enable', requireWarehouseAdmin, async (req, res) => {
+router.post('/warehouses/:id/enable', requireWarehouseSuperAdmin, async (req, res) => {
   try {
-    await Warehouse.findByIdAndUpdate(req.params.id, { $set: { isActive: true } });
+    const warehouse = await Warehouse.findById(req.params.id);
+
+    if (!warehouse) {
+      req.flash?.('error', 'Warehouse not found.');
+      return res.redirect('/admin/warehouses');
+    }
+
+    const before = {
+      isActive: warehouse.isActive,
+    };
+
+    warehouse.isActive = true;
+    await warehouse.save();
+
+    await logAdminAction(req, {
+      action: 'warehouse.enable',
+      entityType: 'warehouse',
+      entityId: String(warehouse._id),
+      status: 'success',
+      before,
+      after: {
+        isActive: warehouse.isActive,
+      },
+      meta: {
+        code: warehouse.code,
+        name: warehouse.name,
+      },
+    });
+
     req.flash?.('success', 'Warehouse enabled.');
   } catch (err) {
     console.error('[warehouses] enable error:', err);
@@ -281,7 +341,7 @@ router.post('/warehouses/:id/enable', requireWarehouseAdmin, async (req, res) =>
   return res.redirect('/admin/warehouses');
 });
 
-router.post('/warehouses/:id/disable', requireWarehouseAdmin, async (req, res) => {
+router.post('/warehouses/:id/disable', requireWarehouseSuperAdmin, async (req, res) => {
   try {
     const warehouse = await Warehouse.findById(req.params.id);
 
@@ -290,6 +350,11 @@ router.post('/warehouses/:id/disable', requireWarehouseAdmin, async (req, res) =
       return res.redirect('/admin/warehouses');
     }
 
+    const before = {
+      isActive: warehouse.isActive,
+      isDefault: warehouse.isDefault,
+    };
+
     warehouse.isActive = false;
 
     if (warehouse.isDefault) {
@@ -297,6 +362,22 @@ router.post('/warehouses/:id/disable', requireWarehouseAdmin, async (req, res) =
     }
 
     await warehouse.save();
+
+    await logAdminAction(req, {
+      action: 'warehouse.disable',
+      entityType: 'warehouse',
+      entityId: String(warehouse._id),
+      status: 'success',
+      before,
+      after: {
+        isActive: warehouse.isActive,
+        isDefault: warehouse.isDefault,
+      },
+      meta: {
+        code: warehouse.code,
+        name: warehouse.name,
+      },
+    });
 
     req.flash?.('success', 'Warehouse disabled.');
   } catch (err) {
@@ -307,7 +388,7 @@ router.post('/warehouses/:id/disable', requireWarehouseAdmin, async (req, res) =
   return res.redirect('/admin/warehouses');
 });
 
-router.post('/warehouses/:id/delete', requireWarehouseAdmin, async (req, res) => {
+router.post('/warehouses/:id/delete', requireWarehouseSuperAdmin, async (req, res) => {
   try {
     const warehouse = await Warehouse.findById(req.params.id);
 
@@ -315,6 +396,37 @@ router.post('/warehouses/:id/delete', requireWarehouseAdmin, async (req, res) =>
       req.flash?.('error', 'Warehouse not found.');
       return res.redirect('/admin/warehouses');
     }
+
+    const before = {
+      name: warehouse.name,
+      code: warehouse.code,
+      country: warehouse.country,
+      province: warehouse.province,
+      provinceCode: warehouse.provinceCode,
+      address: warehouse.address,
+      phone: warehouse.phone,
+      email: warehouse.email,
+      isActive: warehouse.isActive,
+      isDefault: warehouse.isDefault,
+      priority: warehouse.priority,
+      supportedCountries: warehouse.supportedCountries,
+      supportedProvinces: warehouse.supportedProvinces,
+      notes: warehouse.notes,
+      createdAt: warehouse.createdAt,
+      updatedAt: warehouse.updatedAt,
+    };
+
+    await logAdminAction(req, {
+      action: 'warehouse.delete',
+      entityType: 'warehouse',
+      entityId: String(warehouse._id),
+      status: 'success',
+      before,
+      meta: {
+        code: warehouse.code,
+        name: warehouse.name,
+      },
+    });
 
     await Warehouse.deleteOne({ _id: warehouse._id });
 

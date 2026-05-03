@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const Business = require('../models/Business');
 const Payout = require('../models/Payout');
@@ -75,6 +76,47 @@ function safeObjectId(v) {
 
 function normEmail(v) {
   return String(v || '').trim().toLowerCase();
+}
+
+function payoutSnapshot(payout) {
+  if (!payout) return null;
+
+  const items = Array.isArray(payout.items) ? payout.items : [];
+
+  return {
+    payoutId: String(payout._id || ''),
+    mode: payout.mode || '',
+    senderBatchId: payout.senderBatchId || '',
+    batchId: payout.batchId || '',
+    currency: payout.currency || '',
+    totalCents: Number(payout.totalCents || 0),
+    totalAmount: toMoneyString(payout.totalCents || 0),
+    status: payout.status || '',
+    note: payout.note || '',
+    itemCount: items.length,
+    itemStatusCounts: items.reduce((acc, item) => {
+      const status = String(item.status || 'UNKNOWN').toUpperCase();
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {}),
+    createdAt: payout.createdAt || null,
+    updatedAt: payout.updatedAt || null,
+  };
+}
+
+function syncResultSnapshot(out) {
+  if (!out) return null;
+
+  return {
+    ok: !!out.ok,
+    error: out.error || '',
+    message: out.message || '',
+    status: out.status || '',
+    payoutId: out.payoutId ? String(out.payoutId) : '',
+    batchId: out.batchId || '',
+    count: Number(out.count || 0),
+    totalCents: Number(out.totalCents || 0),
+  };
 }
 
 /* -----------------------------
@@ -289,101 +331,102 @@ router.get(
   requireAdminRole(['super_admin', 'payout_admin']),
   requireAdminPermission('payouts.read'),
   async (req, res) => {
-  try {
-    const payouts = await Payout.find({})
-      .sort({ createdAt: -1 })
-      .limit(30)
-      .lean();
+    try {
+      const payouts = await Payout.find({})
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .lean();
 
-    const totalBatches = payouts.length;
+      const totalBatches = payouts.length;
 
-    let totalPaidOutCents = 0;
-    for (const p of payouts) {
-      const items = Array.isArray(p.items) ? p.items : [];
-      for (const it of items) {
-        if (String(it.status || '').toUpperCase() === 'SENT') {
-          totalPaidOutCents += Math.max(0, Number(it.amountCents || 0));
+      let totalPaidOutCents = 0;
+      for (const p of payouts) {
+        const items = Array.isArray(p.items) ? p.items : [];
+        for (const it of items) {
+          if (String(it.status || '').toUpperCase() === 'SENT') {
+            totalPaidOutCents += Math.max(0, Number(it.amountCents || 0));
+          }
         }
       }
-    }
 
-    const baseCurrency = getBaseCurrency();
-    const currencyPreview = baseCurrency;
+      const baseCurrency = getBaseCurrency();
+      const currencyPreview = baseCurrency;
 
-    const sellers = await Business.find({ role: 'seller' })
-      .select('_id name payouts.enabled payouts.paypalEmail')
-      .lean();
+      const sellers = await Business.find({ role: 'seller' })
+        .select('_id name payouts.enabled payouts.paypalEmail')
+        .lean();
 
-    const preview = [];
-    let previewEligibleCount = 0;
-    let previewEligibleTotalCents = 0;
+      const preview = [];
+      let previewEligibleCount = 0;
+      let previewEligibleTotalCents = 0;
 
-    for (const s of sellers) {
-      const enabled = Boolean(s?.payouts?.enabled);
-      const paypalEmail = normEmail(s?.payouts?.paypalEmail);
-      const hasPaypal = Boolean(paypalEmail);
+      for (const s of sellers) {
+        const enabled = Boolean(s?.payouts?.enabled);
+        const paypalEmail = normEmail(s?.payouts?.paypalEmail);
+        const hasPaypal = Boolean(paypalEmail);
 
-      let availableCents = 0;
-      if (enabled && hasPaypal) {
-        availableCents = await getSellerAvailableCents(s._id, currencyPreview);
+        let availableCents = 0;
+        if (enabled && hasPaypal) {
+          availableCents = await getSellerAvailableCents(s._id, currencyPreview);
 
-        console.log('[admin/payouts preview seller]', {
-          sellerName: s.name,
+          console.log('[admin/payouts preview seller]', {
+            sellerName: s.name,
+            businessId: String(s._id),
+            enabled,
+            hasPaypal,
+            paypalEmail: paypalEmail ? '[set]' : '[missing]',
+            currencyPreview,
+            availableCents,
+          });
+        }
+
+        const eligible = enabled && hasPaypal && availableCents > 0;
+
+        if (eligible) {
+          previewEligibleCount += 1;
+          previewEligibleTotalCents += Math.max(0, Number(availableCents || 0));
+        }
+
+        preview.push({
           businessId: String(s._id),
+          name: s.name || '—',
           enabled,
+          paypalEmailMasked: hasPaypal ? maskEmail(paypalEmail) : '',
           hasPaypal,
-          paypalEmail: paypalEmail ? '[set]' : '[missing]',
-          currencyPreview,
-          availableCents,
+          availableCents: Number(availableCents || 0),
+          eligible,
         });
       }
 
-      const eligible = enabled && hasPaypal && availableCents > 0;
+      preview.sort((a, b) => (b.availableCents || 0) - (a.availableCents || 0));
 
-      if (eligible) {
-        previewEligibleCount += 1;
-        previewEligibleTotalCents += Math.max(0, Number(availableCents || 0));
-      }
+      const kpis = {
+        totalBatches,
+        totalPaidOut: totalPaidOutCents ? toMoneyString(totalPaidOutCents) : '—',
+        lastStatus: payouts[0]?.status || '—',
+        previewCurrency: currencyPreview,
+        eligibleSellers: previewEligibleCount,
+        eligibleTotal: previewEligibleTotalCents ? toMoneyString(previewEligibleTotalCents) : '0.00',
+      };
 
-      preview.push({
-        businessId: String(s._id),
-        name: s.name || '—',
-        enabled,
-        paypalEmailMasked: hasPaypal ? maskEmail(paypalEmail) : '',
-        hasPaypal,
-        availableCents: Number(availableCents || 0),
-        eligible,
+      return res.render('admin-payouts', {
+        title: 'Seller Payouts',
+        nonce: resNonce(req),
+        payouts,
+        kpis,
+        previewSellers: preview,
+        success: req.flash?.('success') || [],
+        error: req.flash?.('error') || [],
+        info: req.flash?.('info') || [],
+        warning: req.flash?.('warning') || [],
       });
+    } catch (err) {
+      console.error(err);
+      req.flash('error', `Failed to load payouts: ${err.message}`);
+      return res.redirect('/admin/dashboard');
     }
-
-    preview.sort((a, b) => (b.availableCents || 0) - (a.availableCents || 0));
-
-    const kpis = {
-      totalBatches,
-      totalPaidOut: totalPaidOutCents ? toMoneyString(totalPaidOutCents) : '—',
-      lastStatus: payouts[0]?.status || '—',
-      previewCurrency: currencyPreview,
-      eligibleSellers: previewEligibleCount,
-      eligibleTotal: previewEligibleTotalCents ? toMoneyString(previewEligibleTotalCents) : '0.00',
-    };
-
-    return res.render('admin-payouts', {
-      title: 'Seller Payouts',
-      nonce: resNonce(req),
-      payouts,
-      kpis,
-      previewSellers: preview,
-      success: req.flash?.('success') || [],
-      error: req.flash?.('error') || [],
-      info: req.flash?.('info') || [],
-      warning: req.flash?.('warning') || [],
-    });
-  } catch (err) {
-    console.error(err);
-    req.flash('error', `Failed to load payouts: ${err.message}`);
-    return res.redirect('/admin/dashboard');
   }
-});
+);
 
 /**
  * POST /admin/payouts/create (manual admin click)
@@ -395,7 +438,6 @@ router.post(
   requireAdminRole(['super_admin', 'payout_admin']),
   requireAdminPermission('payouts.approve'),
   async (req, res) => {
-  try {
     const minCents = Math.max(0, Number(req.body.minCents || 0));
     const note = String(req.body.note || 'Seller payout').trim();
     const autoSyncRaw = String(req.body.autoSync || '').trim().toLowerCase();
@@ -405,42 +447,169 @@ router.post(
       autoSyncRaw === 'yes' ||
       autoSyncRaw === 'on';
 
-    const out = await runCreatePayoutBatch({
-      createdByAdminId: safeObjectId(req.session?.admin?._id) || null,
-      minCents,
-      note,
-      senderBatchPrefix: 'payout',
-    });
+    try {
+      const out = await runCreatePayoutBatch({
+        createdByAdminId: safeObjectId(req.session?.admin?._id) || null,
+        minCents,
+        note,
+        senderBatchPrefix: 'payout',
+      });
 
-    if (!out.ok && out.error === 'payout-run-already-in-progress') {
-      req.flash('warning', out.message || 'Another payout run is already in progress.');
-      return res.redirect('/admin/payouts');
-    }
+      if (!out.ok && out.error === 'payout-run-already-in-progress') {
+        await logAdminAction(req, {
+          action: 'payout.batch.create_blocked',
+          entityType: 'payout',
+          entityId: '',
+          status: 'failure',
+          meta: {
+            section: 'payouts',
+            reason: out.error,
+            message: out.message || '',
+            minCents,
+            note,
+            autoSync,
+          },
+        });
 
-    if (out.ok && out.skippedReason === 'no-eligible-sellers') {
-      req.flash('info', 'No sellers are eligible for payout yet.');
-      return res.redirect('/admin/payouts');
-    }
-
-    // Best-effort immediate sync
-    if (autoSync && out.payoutId) {
-      try {
-        await runSyncPayoutById(out.payoutId);
-        req.flash('success', `Payout batch created + synced (${out.count} sellers).`);
-      } catch (e) {
-        req.flash('warning', `Payout created (${out.count} sellers) but sync failed: ${e.message}`);
+        req.flash('warning', out.message || 'Another payout run is already in progress.');
+        return res.redirect('/admin/payouts');
       }
+
+      if (out.ok && out.skippedReason === 'no-eligible-sellers') {
+        await logAdminAction(req, {
+          action: 'payout.batch.create_skipped',
+          entityType: 'payout',
+          entityId: '',
+          status: 'success',
+          meta: {
+            section: 'payouts',
+            reason: out.skippedReason,
+            minCents,
+            note,
+            autoSync,
+          },
+        });
+
+        req.flash('info', 'No sellers are eligible for payout yet.');
+        return res.redirect('/admin/payouts');
+      }
+
+      let syncAttempted = false;
+      let syncSuccess = false;
+      let syncError = '';
+
+      // Best-effort immediate sync
+      if (autoSync && out.payoutId) {
+        syncAttempted = true;
+
+        try {
+          await runSyncPayoutById(out.payoutId);
+          syncSuccess = true;
+
+          await logAdminAction(req, {
+            action: 'payout.batch.create',
+            entityType: 'payout',
+            entityId: String(out.payoutId),
+            status: 'success',
+            after: {
+              payoutId: String(out.payoutId),
+              batchId: out.batchId || '',
+              count: Number(out.count || 0),
+              totalCents: Number(out.totalCents || 0),
+              totalAmount: toMoneyString(out.totalCents || 0),
+              currency: getBaseCurrency(),
+            },
+            meta: {
+              section: 'payouts',
+              minCents,
+              note,
+              autoSync,
+              syncAttempted,
+              syncSuccess,
+            },
+          });
+
+          req.flash('success', `Payout batch created + synced (${out.count} sellers).`);
+        } catch (e) {
+          syncError = String(e?.message || e || '').slice(0, 500);
+
+          await logAdminAction(req, {
+            action: 'payout.batch.create',
+            entityType: 'payout',
+            entityId: String(out.payoutId),
+            status: 'success',
+            after: {
+              payoutId: String(out.payoutId),
+              batchId: out.batchId || '',
+              count: Number(out.count || 0),
+              totalCents: Number(out.totalCents || 0),
+              totalAmount: toMoneyString(out.totalCents || 0),
+              currency: getBaseCurrency(),
+            },
+            meta: {
+              section: 'payouts',
+              minCents,
+              note,
+              autoSync,
+              syncAttempted,
+              syncSuccess,
+              syncError,
+            },
+          });
+
+          req.flash('warning', `Payout created (${out.count} sellers) but sync failed: ${e.message}`);
+        }
+
+        return res.redirect('/admin/payouts');
+      }
+
+      await logAdminAction(req, {
+        action: 'payout.batch.create',
+        entityType: 'payout',
+        entityId: String(out.payoutId || ''),
+        status: 'success',
+        after: {
+          payoutId: String(out.payoutId || ''),
+          batchId: out.batchId || '',
+          count: Number(out.count || 0),
+          totalCents: Number(out.totalCents || 0),
+          totalAmount: toMoneyString(out.totalCents || 0),
+          currency: getBaseCurrency(),
+        },
+        meta: {
+          section: 'payouts',
+          minCents,
+          note,
+          autoSync,
+          syncAttempted,
+          syncSuccess,
+        },
+      });
+
+      req.flash('success', `Payout batch created (${out.count} sellers).`);
+      return res.redirect('/admin/payouts');
+    } catch (err) {
+      console.error(err);
+
+      await logAdminAction(req, {
+        action: 'payout.batch.create',
+        entityType: 'payout',
+        entityId: '',
+        status: 'failure',
+        meta: {
+          section: 'payouts',
+          minCents,
+          note,
+          autoSync,
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
+      req.flash('error', `Payout create failed: ${err.message}`);
       return res.redirect('/admin/payouts');
     }
-
-    req.flash('success', `Payout batch created (${out.count} sellers).`);
-    return res.redirect('/admin/payouts');
-  } catch (err) {
-    console.error(err);
-    req.flash('error', `Payout create failed: ${err.message}`);
-    return res.redirect('/admin/payouts');
   }
-});
+);
 
 router.post(
   '/payouts/:id/sync',
@@ -448,23 +617,71 @@ router.post(
   requireAdminRole(['super_admin', 'payout_admin']),
   requireAdminPermission('payouts.reconcile'),
   async (req, res) => {
-  try {
-    const payoutId = req.params.id;
+    try {
+      const payoutId = req.params.id;
 
-    const out = await runSyncPayoutById(payoutId);
-    if (!out.ok) {
-      req.flash('error', `Payout sync failed: ${out.error}`);
+      const beforeDoc = mongoose.isValidObjectId(payoutId)
+        ? await Payout.findById(payoutId).lean()
+        : null;
+
+      const out = await runSyncPayoutById(payoutId);
+
+      const afterDoc = mongoose.isValidObjectId(payoutId)
+        ? await Payout.findById(payoutId).lean()
+        : null;
+
+      if (!out.ok) {
+        await logAdminAction(req, {
+          action: 'payout.batch.sync',
+          entityType: 'payout',
+          entityId: String(payoutId || ''),
+          status: 'failure',
+          before: payoutSnapshot(beforeDoc),
+          after: payoutSnapshot(afterDoc),
+          meta: {
+            section: 'payouts',
+            result: syncResultSnapshot(out),
+          },
+        });
+
+        req.flash('error', `Payout sync failed: ${out.error}`);
+        return res.redirect('/admin/payouts');
+      }
+
+      await logAdminAction(req, {
+        action: 'payout.batch.sync',
+        entityType: 'payout',
+        entityId: String(payoutId || ''),
+        status: 'success',
+        before: payoutSnapshot(beforeDoc),
+        after: payoutSnapshot(afterDoc),
+        meta: {
+          section: 'payouts',
+          result: syncResultSnapshot(out),
+        },
+      });
+
+      req.flash('success', 'Payout sync complete (failed items credited back automatically).');
+      return res.redirect('/admin/payouts');
+    } catch (err) {
+      console.error(err);
+
+      await logAdminAction(req, {
+        action: 'payout.batch.sync',
+        entityType: 'payout',
+        entityId: String(req.params.id || ''),
+        status: 'failure',
+        meta: {
+          section: 'payouts',
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
+      req.flash('error', `Payout sync failed: ${err.message}`);
       return res.redirect('/admin/payouts');
     }
-
-    req.flash('success', 'Payout sync complete (failed items credited back automatically).');
-    return res.redirect('/admin/payouts');
-  } catch (err) {
-    console.error(err);
-    req.flash('error', `Payout sync failed: ${err.message}`);
-    return res.redirect('/admin/payouts');
   }
-});
+);
 
 /**
  * Admin-only helper: sync recent batches (no cron secret)
@@ -476,35 +693,73 @@ router.post(
   requireAdminRole(['super_admin', 'payout_admin']),
   requireAdminPermission('payouts.reconcile'),
   async (req, res) => {
-  try {
     const limit = Math.max(1, Math.min(30, Number(req.body.limit || 10)));
 
-    const recent = await Payout.find({
-      status: { $in: ['CREATED', 'PROCESSING', 'FAILED'] },
-      batchId: { $exists: true, $ne: '' },
-    })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .select('_id status batchId')
-      .lean();
+    try {
+      const recent = await Payout.find({
+        status: { $in: ['CREATED', 'PROCESSING', 'FAILED'] },
+        batchId: { $exists: true, $ne: '' },
+      })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .select('_id status batchId')
+        .lean();
 
-    let okCount = 0;
-    let failCount = 0;
+      let okCount = 0;
+      let failCount = 0;
+      const syncedPayouts = [];
 
-    for (const p of recent) {
-      const r = await runSyncPayoutById(p._id);
-      if (r.ok) okCount += 1;
-      else failCount += 1;
+      for (const p of recent) {
+        const r = await runSyncPayoutById(p._id);
+        syncedPayouts.push({
+          payoutId: String(p._id),
+          batchId: p.batchId || '',
+          beforeStatus: p.status || '',
+          ok: !!r.ok,
+          error: r.error || '',
+        });
+
+        if (r.ok) okCount += 1;
+        else failCount += 1;
+      }
+
+      await logAdminAction(req, {
+        action: 'payout.batch.sync_recent',
+        entityType: 'payout',
+        entityId: '',
+        status: failCount > 0 ? 'failure' : 'success',
+        meta: {
+          section: 'payouts',
+          limit,
+          checkedCount: recent.length,
+          okCount,
+          failCount,
+          syncedPayouts,
+        },
+      });
+
+      req.flash('success', `Synced recent batches: ok=${okCount}, failed=${failCount}.`);
+      return res.redirect('/admin/payouts');
+    } catch (err) {
+      console.error(err);
+
+      await logAdminAction(req, {
+        action: 'payout.batch.sync_recent',
+        entityType: 'payout',
+        entityId: '',
+        status: 'failure',
+        meta: {
+          section: 'payouts',
+          limit,
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
+      req.flash('error', `Sync recent failed: ${err.message}`);
+      return res.redirect('/admin/payouts');
     }
-
-    req.flash('success', `Synced recent batches: ok=${okCount}, failed=${failCount}.`);
-    return res.redirect('/admin/payouts');
-  } catch (err) {
-    console.error(err);
-    req.flash('error', `Sync recent failed: ${err.message}`);
-    return res.redirect('/admin/payouts');
   }
-});
+);
 
 /* -----------------------------
  * AUTO payouts routes (Cron) (unchanged)
@@ -519,8 +774,8 @@ router.get(
   requireAdminRole(['super_admin', 'payout_admin']),
   requireAdminPermission('payouts.read'),
   (req, res) => {
-  res.send('payouts route OK');
-});
+    res.send('payouts route OK');
+  }
+);
 
 module.exports = router;
-

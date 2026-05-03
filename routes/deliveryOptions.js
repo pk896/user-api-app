@@ -1,24 +1,27 @@
 // routes/deliveryOptions.js
 'use strict';
+
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+
 const DeliveryOption = require('../models/DeliveryOption');
+const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const router = express.Router();
 
 /* -----------------------------------------------------------
- * 🔐 Admin gate (supports both admin + ordersAdmin)
+ * 🔐 Admin gate
+ * Only super_admin and shipping_admin with delivery_options.manage
+ * can manage delivery options.
  * --------------------------------------------------------- */
-function requireAdminDelivery(req, res, next) {
-  // ✅ main admin session (your admin dashboard login)
-  if (req.session?.admin) return next();
-
-  // ✅ optional: allow orders admin too (if you still use it)
-  if (req.session?.ordersAdmin) return next();
-
-  req.flash('error', 'You must be logged in as Admin to manage delivery options.');
-  return res.redirect('/admin/login');
-}
+const requireDeliveryOptionsAdmin = [
+  requireAdmin,
+  requireAdminRole(['super_admin', 'shipping_admin']),
+  requireAdminPermission('delivery_options.manage'),
+];
 
 /* -----------------------------------------------------------
  * 🧰 Helpers
@@ -41,8 +44,22 @@ function parsePriceToCents(input) {
   const n = Number(str);
   if (!Number.isFinite(n)) return 0;
 
-  // protect from negative
   return Math.max(0, Math.round(n * 100));
+}
+
+function deliveryOptionSnapshot(option) {
+  if (!option) return null;
+
+  return {
+    name: option.name || '',
+    deliveryDays: Number(option.deliveryDays || 0),
+    priceCents: Number(option.priceCents || 0),
+    active: !!option.active,
+    description: option.description || '',
+    region: option.region || '',
+    createdAt: option.createdAt || null,
+    updatedAt: option.updatedAt || null,
+  };
 }
 
 /* -----------------------------------------------------------
@@ -54,13 +71,13 @@ function parsePriceToCents(input) {
 /* -----------------------------------------------------------
  * 📃 LIST: GET /admin/delivery-options
  * --------------------------------------------------------- */
-router.get('/delivery-options', requireAdminDelivery, async (req, res) => {
+router.get('/delivery-options', requireDeliveryOptionsAdmin, async (req, res) => {
   try {
     const nonce = resNonce(req);
     const themeCss = themeCssFrom(req);
 
     const q = String(req.query.q || '').trim();
-    const status = String(req.query.status || '').trim(); // '' | 'active' | 'inactive'
+    const status = String(req.query.status || '').trim();
 
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(50, Math.max(5, Number(req.query.limit || 10)));
@@ -101,7 +118,7 @@ router.get('/delivery-options', requireAdminDelivery, async (req, res) => {
 /* -----------------------------------------------------------
  * ➕ NEW FORM: GET /admin/delivery-options/new
  * --------------------------------------------------------- */
-router.get('/delivery-options/new', requireAdminDelivery, (req, res) => {
+router.get('/delivery-options/new', requireDeliveryOptionsAdmin, (req, res) => {
   const nonce = resNonce(req);
   const themeCss = themeCssFrom(req);
 
@@ -130,7 +147,7 @@ router.get('/delivery-options/new', requireAdminDelivery, (req, res) => {
  * --------------------------------------------------------- */
 router.post(
   '/delivery-options',
-  requireAdminDelivery,
+  requireDeliveryOptionsAdmin,
   express.urlencoded({ extended: true }),
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
@@ -170,11 +187,38 @@ router.post(
     }
 
     try {
-      await DeliveryOption.create(doc);
+      const created = await DeliveryOption.create(doc);
+
+      await logAdminAction(req, {
+        action: 'delivery_options.create',
+        entityType: 'delivery_option',
+        entityId: String(created._id),
+        status: 'success',
+        after: deliveryOptionSnapshot(created),
+        meta: {
+          section: 'delivery_options',
+          name: created.name || '',
+          region: created.region || '',
+        },
+      });
+
       req.flash('success', 'Delivery option created.');
       return res.redirect('/admin/delivery-options');
     } catch (err) {
       console.error('[deliveryOptions:create] error:', err);
+
+      await logAdminAction(req, {
+        action: 'delivery_options.create',
+        entityType: 'delivery_option',
+        entityId: '',
+        status: 'failure',
+        meta: {
+          section: 'delivery_options',
+          attempted: doc,
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
       return res.status(500).render('delivery-options/form', {
         title: 'New Delivery Option',
         themeCss,
@@ -193,7 +237,7 @@ router.post(
 /* -----------------------------------------------------------
  * ✏️ EDIT FORM: GET /admin/delivery-options/:id/edit
  * --------------------------------------------------------- */
-router.get('/delivery-options/:id/edit', requireAdminDelivery, async (req, res) => {
+router.get('/delivery-options/:id/edit', requireDeliveryOptionsAdmin, async (req, res) => {
   try {
     const nonce = resNonce(req);
     const themeCss = themeCssFrom(req);
@@ -227,7 +271,7 @@ router.get('/delivery-options/:id/edit', requireAdminDelivery, async (req, res) 
  * --------------------------------------------------------- */
 router.post(
   '/delivery-options/:id',
-  requireAdminDelivery,
+  requireDeliveryOptionsAdmin,
   express.urlencoded({ extended: true }),
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
@@ -268,15 +312,55 @@ router.post(
     }
 
     try {
-      const updated = await DeliveryOption.findByIdAndUpdate(id, doc, { new: true });
-      if (!updated) {
+      const existing = await DeliveryOption.findById(id);
+
+      if (!existing) {
         req.flash('error', 'Delivery option not found.');
         return res.redirect('/admin/delivery-options');
       }
+
+      const before = deliveryOptionSnapshot(existing);
+
+      existing.name = doc.name;
+      existing.deliveryDays = doc.deliveryDays;
+      existing.priceCents = doc.priceCents;
+      existing.active = doc.active;
+      existing.description = doc.description;
+      existing.region = doc.region;
+
+      await existing.save();
+
+      await logAdminAction(req, {
+        action: 'delivery_options.update',
+        entityType: 'delivery_option',
+        entityId: String(existing._id),
+        status: 'success',
+        before,
+        after: deliveryOptionSnapshot(existing),
+        meta: {
+          section: 'delivery_options',
+          name: existing.name || '',
+          region: existing.region || '',
+        },
+      });
+
       req.flash('success', 'Delivery option updated.');
       return res.redirect('/admin/delivery-options');
     } catch (err) {
       console.error('[deliveryOptions:update] error:', err);
+
+      await logAdminAction(req, {
+        action: 'delivery_options.update',
+        entityType: 'delivery_option',
+        entityId: String(id || ''),
+        status: 'failure',
+        meta: {
+          section: 'delivery_options',
+          attempted: doc,
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
       return res.status(500).render('delivery-options/form', {
         title: 'Edit Delivery Option',
         themeCss,
@@ -297,22 +381,53 @@ router.post(
  * --------------------------------------------------------- */
 router.post(
   '/delivery-options/:id/toggle',
-  requireAdminDelivery,
+  requireDeliveryOptionsAdmin,
   express.urlencoded({ extended: true }),
   async (req, res) => {
     try {
       const id = req.params.id;
       const opt = await DeliveryOption.findById(id);
+
       if (!opt) {
         req.flash('error', 'Delivery option not found.');
         return res.redirect('/admin/delivery-options');
       }
+
+      const before = deliveryOptionSnapshot(opt);
+
       opt.active = !opt.active;
       await opt.save();
+
+      await logAdminAction(req, {
+        action: opt.active ? 'delivery_options.activate' : 'delivery_options.deactivate',
+        entityType: 'delivery_option',
+        entityId: String(opt._id),
+        status: 'success',
+        before,
+        after: deliveryOptionSnapshot(opt),
+        meta: {
+          section: 'delivery_options',
+          name: opt.name || '',
+          region: opt.region || '',
+        },
+      });
+
       req.flash('success', `Delivery option ${opt.active ? 'activated' : 'deactivated'}.`);
       return res.redirect('/admin/delivery-options');
     } catch (err) {
       console.error('[deliveryOptions:toggle] error:', err);
+
+      await logAdminAction(req, {
+        action: 'delivery_options.toggle',
+        entityType: 'delivery_option',
+        entityId: String(req.params.id || ''),
+        status: 'failure',
+        meta: {
+          section: 'delivery_options',
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
       req.flash('error', 'Failed to toggle delivery option.');
       return res.redirect('/admin/delivery-options');
     }
@@ -324,19 +439,50 @@ router.post(
  * --------------------------------------------------------- */
 router.post(
   '/delivery-options/:id/delete',
-  requireAdminDelivery,
+  requireDeliveryOptionsAdmin,
   express.urlencoded({ extended: true }),
   async (req, res) => {
     try {
-      const deleted = await DeliveryOption.findByIdAndDelete(req.params.id);
-      if (!deleted) {
+      const existing = await DeliveryOption.findById(req.params.id).lean();
+
+      if (!existing) {
         req.flash('error', 'Delivery option not found.');
         return res.redirect('/admin/delivery-options');
       }
+
+      const before = deliveryOptionSnapshot(existing);
+
+      await DeliveryOption.deleteOne({ _id: existing._id });
+
+      await logAdminAction(req, {
+        action: 'delivery_options.delete',
+        entityType: 'delivery_option',
+        entityId: String(existing._id),
+        status: 'success',
+        before,
+        meta: {
+          section: 'delivery_options',
+          name: existing.name || '',
+          region: existing.region || '',
+        },
+      });
+
       req.flash('success', 'Delivery option deleted.');
       return res.redirect('/admin/delivery-options');
     } catch (err) {
       console.error('[deliveryOptions:delete] error:', err);
+
+      await logAdminAction(req, {
+        action: 'delivery_options.delete',
+        entityType: 'delivery_option',
+        entityId: String(req.params.id || ''),
+        status: 'failure',
+        meta: {
+          section: 'delivery_options',
+          error: String(err?.message || err || '').slice(0, 500),
+        },
+      });
+
       req.flash('error', 'Failed to delete delivery option.');
       return res.redirect('/admin/delivery-options');
     }

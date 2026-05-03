@@ -10,6 +10,8 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
+
 const ShopSidebarBanner = require('../models/ShopSidebarBanner');
 const Product = require('../models/Product');
 
@@ -49,6 +51,34 @@ function randomKey(folder, ext) {
   return `${folder}/${uuidv4()}.${ext}`;
 }
 
+function themeCssFromSession(req) {
+  const theme = req.session?.theme || 'light';
+  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
+}
+
+function normalizePayload(body) {
+  return {
+    productCustomId: String(body.productCustomId || '').trim(),
+    title: String(body.title || '').trim(),
+    subtitle: String(body.subtitle || '').trim(),
+    buttonText: String(body.buttonText || '').trim() || 'Shop Now',
+    active: String(body.active || '') === 'on',
+  };
+}
+
+function shopSidebarBannerSnapshot(banner) {
+  if (!banner) return null;
+
+  return {
+    productCustomId: banner.productCustomId || '',
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    buttonText: banner.buttonText || '',
+    image: banner.image || '',
+    active: !!banner.active,
+  };
+}
+
 async function uploadImageToS3(file, folder) {
   const { originalname, buffer, mimetype } = file;
   const ext = extFromFilename(originalname);
@@ -78,21 +108,6 @@ async function deleteS3ImageByUrl(imageUrl) {
   }
 }
 
-function themeCssFromSession(req) {
-  const theme = req.session?.theme || 'light';
-  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
-}
-
-function normalizePayload(body) {
-  return {
-    productCustomId: String(body.productCustomId || '').trim(),
-    title: String(body.title || '').trim(),
-    subtitle: String(body.subtitle || '').trim(),
-    buttonText: String(body.buttonText || '').trim() || 'Shop Now',
-    active: String(body.active || '') === 'on',
-  };
-}
-
 /* INDEX */
 router.get(
   '/shop-sidebar-banner',
@@ -100,38 +115,39 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const bannerRaw = await ShopSidebarBanner.findOne({}).sort({ updatedAt: -1 }).lean();
+    try {
+      const bannerRaw = await ShopSidebarBanner.findOne({}).sort({ updatedAt: -1 }).lean();
 
-    let banner = bannerRaw;
+      let banner = bannerRaw;
 
-    if (bannerRaw && bannerRaw.productCustomId) {
-      const product = await Product.findOne({ customId: bannerRaw.productCustomId })
-        .select('customId name imageUrl category type price stock')
-        .lean();
+      if (bannerRaw && bannerRaw.productCustomId) {
+        const product = await Product.findOne({ customId: bannerRaw.productCustomId })
+          .select('customId name imageUrl category type price stock')
+          .lean();
 
-      banner = {
-        ...bannerRaw,
-        product: product || null,
-      };
+        banner = {
+          ...bannerRaw,
+          product: product || null,
+        };
+      }
+
+      return res.render('admin/shop-sidebar-banner/index', {
+        title: 'Shop Sidebar Banner',
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        banner,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ admin shop sidebar banner index error:', err);
+      req.flash('error', 'Could not load shop sidebar banner.');
+      return res.redirect('/admin/dashboard');
     }
-
-    return res.render('admin/shop-sidebar-banner/index', {
-      title: 'Shop Sidebar Banner',
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      banner,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ admin shop sidebar banner index error:', err);
-    req.flash('error', 'Could not load shop sidebar banner.');
-    return res.redirect('/admin/dashboard');
   }
-});
+);
 
 /* EDIT */
 router.get(
@@ -140,40 +156,41 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const bannerRaw = await ShopSidebarBanner.findOne({}).sort({ updatedAt: -1 }).lean();
+    try {
+      const bannerRaw = await ShopSidebarBanner.findOne({}).sort({ updatedAt: -1 }).lean();
 
-    let selectedProduct = null;
-    let banner = bannerRaw;
+      let selectedProduct = null;
+      let banner = bannerRaw;
 
-    if (bannerRaw && bannerRaw.productCustomId) {
-      selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
-        .select('customId name imageUrl category type price stock isOnSale')
-        .lean();
+      if (bannerRaw && bannerRaw.productCustomId) {
+        selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
+          .select('customId name imageUrl category type price stock isOnSale')
+          .lean();
 
-      banner = {
-        ...bannerRaw,
-        product: selectedProduct || null,
-      };
+        banner = {
+          ...bannerRaw,
+          product: selectedProduct || null,
+        };
+      }
+
+      return res.render('admin/shop-sidebar-banner/edit', {
+        title: 'Edit Shop Sidebar Banner',
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        banner,
+        selectedProduct,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ shop sidebar banner edit page error:', err);
+      req.flash('error', 'Could not load shop sidebar banner.');
+      return res.redirect('/admin/shop-sidebar-banner');
     }
-
-    return res.render('admin/shop-sidebar-banner/edit', {
-      title: 'Edit Shop Sidebar Banner',
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      banner,
-      selectedProduct,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ shop sidebar banner edit page error:', err);
-    req.flash('error', 'Could not load shop sidebar banner.');
-    return res.redirect('/admin/shop-sidebar-banner');
   }
-});
+);
 
 /* SEARCH PRODUCTS FOR SHOP SIDEBAR BANNER */
 router.get(
@@ -182,37 +199,38 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const q = String(req.query.q || '').trim();
+    try {
+      const q = String(req.query.q || '').trim();
 
-    if (!q) {
-      return res.json({ success: true, products: [] });
+      if (!q) {
+        return res.json({ success: true, products: [] });
+      }
+
+      const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const products = await Product.find({
+        stock: { $gt: 0 },
+        $or: [
+          { customId: { $regex: safeQ, $options: 'i' } },
+          { name: { $regex: safeQ, $options: 'i' } },
+        ],
+      })
+        .select('customId name imageUrl category type price stock isOnSale')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      return res.json({ success: true, products });
+    } catch (err) {
+      console.error('❌ shop sidebar banner product search error:', err);
+      return res.status(500).json({
+        success: false,
+        products: [],
+        message: 'Failed to search products.',
+      });
     }
-
-    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    const products = await Product.find({
-      stock: { $gt: 0 },
-      $or: [
-        { customId: { $regex: safeQ, $options: 'i' } },
-        { name: { $regex: safeQ, $options: 'i' } },
-      ],
-    })
-      .select('customId name imageUrl category type price stock isOnSale')
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
-
-    return res.json({ success: true, products });
-  } catch (err) {
-    console.error('❌ shop sidebar banner product search error:', err);
-    return res.status(500).json({
-      success: false,
-      products: [],
-      message: 'Failed to search products.',
-    });
   }
-});
+);
 
 /* SAVE */
 router.post(
@@ -241,6 +259,9 @@ router.post(
       }
 
       let banner = await ShopSidebarBanner.findOne({});
+      const before = shopSidebarBannerSnapshot(banner);
+      const isCreate = !banner;
+      const hadImageUpload = !!req.file;
 
       if (!banner) {
         banner = new ShopSidebarBanner({
@@ -256,10 +277,11 @@ router.post(
       }
 
       if (req.file) {
+        const oldImage = banner.image;
         const newImage = await uploadImageToS3(req.file, 'shop-sidebar-banner');
 
-        if (banner.image) {
-          await deleteS3ImageByUrl(banner.image);
+        if (oldImage) {
+          await deleteS3ImageByUrl(oldImage);
         }
 
         banner.image = newImage;
@@ -271,6 +293,21 @@ router.post(
       }
 
       await banner.save();
+
+      await logAdminAction(req, {
+        action: isCreate ? 'store.shop_sidebar_banner.create' : 'store.shop_sidebar_banner.update',
+        entityType: 'shop_sidebar_banner',
+        entityId: String(banner._id),
+        status: 'success',
+        before,
+        after: shopSidebarBannerSnapshot(banner),
+        meta: {
+          section: 'shop_sidebar_banner',
+          productCustomId: payload.productCustomId,
+          productName: product.name || '',
+          uploadedImage: hadImageUpload,
+        },
+      });
 
       req.flash('success', 'Shop sidebar banner saved successfully.');
       return res.redirect('/admin/shop-sidebar-banner');
@@ -289,29 +326,44 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const banner = await ShopSidebarBanner.findOne({});
+    try {
+      const banner = await ShopSidebarBanner.findOne({});
 
-    if (!banner) {
-      req.flash('error', 'Shop sidebar banner not found.');
+      if (!banner) {
+        req.flash('error', 'Shop sidebar banner not found.');
+        return res.redirect('/admin/shop-sidebar-banner');
+      }
+
+      const before = shopSidebarBannerSnapshot(banner);
+
+      banner.active = !banner.active;
+      await banner.save();
+
+      await logAdminAction(req, {
+        action: banner.active ? 'store.shop_sidebar_banner.activate' : 'store.shop_sidebar_banner.deactivate',
+        entityType: 'shop_sidebar_banner',
+        entityId: String(banner._id),
+        status: 'success',
+        before,
+        after: shopSidebarBannerSnapshot(banner),
+        meta: {
+          section: 'shop_sidebar_banner',
+        },
+      });
+
+      req.flash(
+        'success',
+        `Shop sidebar banner ${banner.active ? 'activated' : 'deactivated'} successfully.`
+      );
+
+      return res.redirect('/admin/shop-sidebar-banner');
+    } catch (err) {
+      console.error('❌ toggle shop sidebar banner error:', err);
+      req.flash('error', 'Failed to toggle shop sidebar banner.');
       return res.redirect('/admin/shop-sidebar-banner');
     }
-
-    banner.active = !banner.active;
-    await banner.save();
-
-    req.flash(
-      'success',
-      `Shop sidebar banner ${banner.active ? 'activated' : 'deactivated'} successfully.`
-    );
-
-    return res.redirect('/admin/shop-sidebar-banner');
-  } catch (err) {
-    console.error('❌ toggle shop sidebar banner error:', err);
-    req.flash('error', 'Failed to toggle shop sidebar banner.');
-    return res.redirect('/admin/shop-sidebar-banner');
   }
-});
+);
 
 /* MULTER ERROR HANDLER */
 router.use((err, req, res, _next) => {

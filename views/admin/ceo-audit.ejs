@@ -1,0 +1,345 @@
+<!-- views/admin/ceo-audit.ejs -->
+<%
+  const logsList = Array.isArray(logs) ? logs : [];
+  const f = filters || {};
+
+  function qsFor(overrides) {
+    const params = new URLSearchParams();
+
+    if (f.q) params.set('q', f.q);
+    if (f.adminRole) params.set('adminRole', f.adminRole);
+    if (f.status) params.set('status', f.status);
+    if (f.action) params.set('action', f.action);
+    if (f.entityType) params.set('entityType', f.entityType);
+    if (f.from) params.set('from', f.from);
+    if (f.to) params.set('to', f.to);
+
+    Object.keys(overrides || {}).forEach(function (key) {
+      const value = overrides[key];
+
+      if (value === null || value === undefined || value === '') {
+        params.delete(key);
+      } else {
+        params.set(key, String(value));
+      }
+    });
+
+    const out = params.toString();
+    return out ? `?${out}` : '';
+  }
+
+  function prettyJson(value) {
+    if (value === null || value === undefined || value === '') return '';
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  function shortText(value, max) {
+    const text = String(value || '').trim();
+    if (!text) return '—';
+    if (text.length <= max) return text;
+    return text.slice(0, max) + '...';
+  }
+%>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1 text-primary">CEO Admin Audit Log</h1>
+      <p class="text-muted mb-0">
+        Super admin view of admin activity recorded through AdminAuditLog.
+      </p>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="/admin/dashboard" class="btn btn-outline-primary">
+        Back to Dashboard
+      </a>
+
+      <a href="/admin/admins" class="btn btn-primary">
+        Manage Admins
+      </a>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+      <form action="/admin/ceo-audit" method="GET" class="row g-3">
+        <div class="col-12 col-lg-4">
+          <label class="form-label text-primary">Search</label>
+          <input
+            type="search"
+            name="q"
+            value="<%= f.q || '' %>"
+            class="form-control"
+            placeholder="Admin, email, action, entity, IP..."
+          >
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-2">
+          <label class="form-label text-primary">Role</label>
+          <select name="adminRole" class="form-select">
+            <option value="">All roles</option>
+            <% (roleOptions || []).forEach(function(role) { %>
+              <option value="<%= role %>" <%= f.adminRole === role ? 'selected' : '' %>>
+                <%= role %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-2">
+          <label class="form-label text-primary">Status</label>
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            <option value="success" <%= f.status === 'success' ? 'selected' : '' %>>Success</option>
+            <option value="failure" <%= f.status === 'failure' ? 'selected' : '' %>>Failure</option>
+          </select>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-2">
+          <label class="form-label text-primary">From</label>
+          <input type="date" name="from" value="<%= f.from || '' %>" class="form-control">
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-2">
+          <label class="form-label text-primary">To</label>
+          <input type="date" name="to" value="<%= f.to || '' %>" class="form-control">
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label text-primary">Action</label>
+          <select name="action" class="form-select">
+            <option value="">All actions</option>
+            <% (actionOptions || []).forEach(function(action) { %>
+              <option value="<%= action %>" <%= f.action === action ? 'selected' : '' %>>
+                <%= action %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label text-primary">Entity Type</label>
+          <select name="entityType" class="form-select">
+            <option value="">All entity types</option>
+            <% (entityTypeOptions || []).forEach(function(entityType) { %>
+              <option value="<%= entityType %>" <%= f.entityType === entityType ? 'selected' : '' %>>
+                <%= entityType %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="col-12 d-flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary">
+            Apply Filters
+          </button>
+
+          <a href="/admin/ceo-audit" class="btn btn-outline-primary">
+            Clear Filters
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="text-muted small">Matching Logs</div>
+          <div class="h4 mb-0 text-primary"><%= total || 0 %></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="text-muted small">Current Page</div>
+          <div class="h4 mb-0 text-primary"><%= page %> / <%= totalPages %></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="text-muted small">Rows Per Page</div>
+          <div class="h4 mb-0 text-primary"><%= limit %></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Admin</th>
+              <th>Role</th>
+              <th>Action</th>
+              <th>Entity</th>
+              <th>Status</th>
+              <th>IP</th>
+              <th class="text-end">Details</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <% if (!logsList.length) { %>
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                  No audit logs found.
+                </td>
+              </tr>
+            <% } %>
+
+            <% logsList.forEach(function(log) { %>
+              <tr>
+                <td>
+                  <div><%= log.createdAt ? new Date(log.createdAt).toLocaleString() : '—' %></div>
+                  <div class="small text-muted"><%= log._id %></div>
+                </td>
+
+                <td>
+                  <div class="fw-semibold">
+                    <%= log.adminName || log.adminIdentifier || 'Unknown admin' %>
+                  </div>
+                  <div class="small text-muted">
+                    <%= log.adminEmail || log.adminIdentifier || '—' %>
+                  </div>
+                </td>
+
+                <td>
+                  <% if (log.adminRole) { %>
+                    <span class="badge bg-primary"><%= log.adminRole %></span>
+                  <% } else { %>
+                    <span class="text-muted">—</span>
+                  <% } %>
+                </td>
+
+                <td>
+                  <code><%= log.action || '—' %></code>
+                </td>
+
+                <td>
+                  <div><%= log.entityType || '—' %></div>
+                  <div class="small text-muted"><%= shortText(log.entityId, 36) %></div>
+                </td>
+
+                <td>
+                  <% if (log.status === 'failure') { %>
+                    <span class="badge bg-danger">Failure</span>
+                  <% } else { %>
+                    <span class="badge bg-success">Success</span>
+                  <% } %>
+                </td>
+
+                <td>
+                  <div><%= log.ipAddress || '—' %></div>
+                  <div class="small text-muted"><%= shortText(log.userAgent, 50) %></div>
+                </td>
+
+                <td class="text-end">
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#auditDetails<%= log._id %>"
+                    aria-expanded="false"
+                    aria-controls="auditDetails<%= log._id %>"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
+
+              <tr class="collapse" id="auditDetails<%= log._id %>">
+                <td colspan="8" class="bg-light">
+                  <div class="row g-3 p-3">
+                    <div class="col-12 col-lg-4">
+                      <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                          <h2 class="h6 text-primary">Before</h2>
+                          <% if (prettyJson(log.before)) { %>
+                            <pre class="small mb-0 text-break"><%= prettyJson(log.before) %></pre>
+                          <% } else { %>
+                            <p class="text-muted mb-0">No before data.</p>
+                          <% } %>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="col-12 col-lg-4">
+                      <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                          <h2 class="h6 text-primary">After</h2>
+                          <% if (prettyJson(log.after)) { %>
+                            <pre class="small mb-0 text-break"><%= prettyJson(log.after) %></pre>
+                          <% } else { %>
+                            <p class="text-muted mb-0">No after data.</p>
+                          <% } %>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="col-12 col-lg-4">
+                      <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                          <h2 class="h6 text-primary">Meta</h2>
+                          <% if (prettyJson(log.meta)) { %>
+                            <pre class="small mb-0 text-break"><%= prettyJson(log.meta) %></pre>
+                          <% } else { %>
+                            <p class="text-muted mb-0">No meta data.</p>
+                          <% } %>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mt-4" aria-label="Audit log pagination">
+    <ul class="pagination justify-content-center flex-wrap">
+      <li class="page-item <%= page <= 1 ? 'disabled' : '' %>">
+        <a class="page-link" href="/admin/ceo-audit<%= qsFor({ page: page - 1 }) %>">
+          Previous
+        </a>
+      </li>
+
+      <li class="page-item disabled">
+        <span class="page-link">
+          Page <%= page %> of <%= totalPages %>
+        </span>
+      </li>
+
+      <li class="page-item <%= page >= totalPages ? 'disabled' : '' %>">
+        <a class="page-link" href="/admin/ceo-audit<%= qsFor({ page: page + 1 }) %>">
+          Next
+        </a>
+      </li>
+    </ul>
+  </nav>
+</div>

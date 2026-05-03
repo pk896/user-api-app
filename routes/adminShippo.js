@@ -8,6 +8,7 @@ const { fetch } = require('undici');
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const Order = require('../models/Order');
 const { createLabelForOrder } = require('../utils/shippo/createLabelForOrder');
@@ -43,6 +44,56 @@ function inferCarrierLabelFromUrl(url) {
 
 function _normCarrier(v) {
   return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function shippingSnapshot(order) {
+  if (!order) return null;
+
+  return {
+    orderId: order.orderId || '',
+    paymentStatus: order.paymentStatus || '',
+    fulfillmentStatus: order.fulfillmentStatus || '',
+    status: order.status || '',
+    shipping: {
+      address_line_1: order.shipping?.address_line_1 || '',
+      address_line_2: order.shipping?.address_line_2 || '',
+      admin_area_2: order.shipping?.admin_area_2 || '',
+      admin_area_1: order.shipping?.admin_area_1 || '',
+      postal_code: order.shipping?.postal_code || '',
+      country_code: order.shipping?.country_code || '',
+    },
+    shippingTracking: {
+      trackingNumber: order.shippingTracking?.trackingNumber || '',
+      trackingUrl: order.shippingTracking?.trackingUrl || '',
+      labelUrl: order.shippingTracking?.labelUrl || '',
+      carrierToken: order.shippingTracking?.carrierToken || null,
+      carrierLabel: order.shippingTracking?.carrierLabel || '',
+      status: order.shippingTracking?.status || '',
+    },
+    shippo: {
+      payerRateId: order.shippo?.payerRateId || '',
+      payerShipmentId: order.shippo?.payerShipmentId || '',
+      shipmentId: order.shippo?.shipmentId || '',
+      transactionId: order.shippo?.transactionId || '',
+      rateId: order.shippo?.rateId || '',
+      labelUrl: order.shippo?.labelUrl || '',
+      carrier: order.shippo?.carrier || null,
+      trackingStatus: order.shippo?.trackingStatus || null,
+      paypalTrackingPushedAt: order.shippo?.paypalTrackingPushedAt || null,
+      paypalTrackingLastError: order.shippo?.paypalTrackingLastError || '',
+    },
+  };
+}
+
+function orderAuditMeta(order, extra = {}) {
+  return {
+    section: 'shippo_labels',
+    orderId: order?.orderId || '',
+    orderMongoId: String(order?._id || ''),
+    paymentStatus: order?.paymentStatus || '',
+    fulfillmentStatus: order?.fulfillmentStatus || '',
+    ...extra,
+  };
 }
 
 // ------------------------------------------------------
@@ -398,6 +449,8 @@ router.post(
         !!String(order?.shippingTracking?.trackingUrl || '').trim();
 
       if (!hasTracking) {
+        const before = shippingSnapshot(order);
+
         try {
           const tx = await shippoGetTransaction(order.shippo.transactionId);
 
@@ -424,8 +477,34 @@ router.post(
             '';
 
           await order.save();
+
+          await logAdminAction(req, {
+            action: 'shipping.label.recover_tracking',
+            entityType: 'order',
+            entityId: String(order._id),
+            status: 'success',
+            before,
+            after: shippingSnapshot(order),
+            meta: orderAuditMeta(order, {
+              transactionId: order.shippo?.transactionId || '',
+              labelUrl: order.shippo?.labelUrl || '',
+            }),
+          });
         } catch (err) {
           console.warn(`⚠️ Failed to recover tracking for existing label ${order.orderId}:`, err.message);
+
+          await logAdminAction(req, {
+            action: 'shipping.label.recover_tracking',
+            entityType: 'order',
+            entityId: String(order._id),
+            status: 'failure',
+            before,
+            meta: orderAuditMeta(order, {
+              error: String(err?.message || err || '').slice(0, 500),
+              transactionId: order.shippo?.transactionId || '',
+              labelUrl: order.shippo?.labelUrl || '',
+            }),
+          });
         }
       }
 
@@ -444,6 +523,8 @@ router.post(
     // MUST buy payerRateId from payerShipmentId only
     // ======================================================
     let shipment, chosenRate, transaction, carrierToken;
+
+    const beforeLabelPurchase = shippingSnapshot(order);
 
     const bodyRateId = req.body?.rateId ? String(req.body.rateId).trim() : null;
 
@@ -631,47 +712,67 @@ router.post(
 
       // ✅ carrier best-effort: your util will normalize again, so pass a decent value
       const carrierInput =
-      String(order?.shippingTracking?.carrierToken || '').trim() ||
-      String(order?.shippingTracking?.carrier || '').trim() ||
-      String(order?.shippingTracking?.carrierLabel || '').trim() ||
-      String(rawProvider || '').trim() ||
-      inferCarrierLabelFromUrl(order?.shippingTracking?.trackingUrl) ||
-      'OTHER';
+        String(order?.shippingTracking?.carrierToken || '').trim() ||
+        String(order?.shippingTracking?.carrier || '').trim() ||
+        String(order?.shippingTracking?.carrierLabel || '').trim() ||
+        String(rawProvider || '').trim() ||
+        inferCarrierLabelFromUrl(order?.shippingTracking?.trackingUrl) ||
+        'OTHER';
 
-    if (captureId && trackingNumber) {
-      const paypalResp = await addTrackingToPaypalOrder({
-        transactionId: captureId,
-        trackingNumber,
-        carrier: carrierInput,
-        status: 'SHIPPED',
-      });
+      if (captureId && trackingNumber) {
+        const paypalResp = await addTrackingToPaypalOrder({
+          transactionId: captureId,
+          trackingNumber,
+          carrier: carrierInput,
+          status: 'SHIPPED',
+        });
 
-      await Order.updateOne(
-        { _id: order._id },
-        {
-          $set: {
-            'shippo.paypalTrackingPushedAt': new Date(),
-            'shippo.paypalTrackingLastError': '',
-            'shippo.paypalTrackingLastResponse': paypalResp || null,
-          },
-        }
-      ).catch(() => {});
-    } else {
-      console.warn('⚠️ Skipping PayPal tracking update (missing fields):', {
-        captureId: !!captureId,
-        trackingNumber: !!trackingNumber,
-        carrierInput: !!carrierInput,
-      });
-    }
+        await Order.updateOne(
+          { _id: order._id },
+          {
+            $set: {
+              'shippo.paypalTrackingPushedAt': new Date(),
+              'shippo.paypalTrackingLastError': '',
+              'shippo.paypalTrackingLastResponse': paypalResp || null,
+            },
+          }
+        ).catch(() => {});
+      } else {
+        console.warn('⚠️ Skipping PayPal tracking update (missing fields):', {
+          captureId: !!captureId,
+          trackingNumber: !!trackingNumber,
+          carrierInput: !!carrierInput,
+        });
+      }
     } catch (e) {
       console.warn('⚠️ PayPal tracking update failed (non-fatal):', e.message);
 
       // ✅ store last error (optional)
-        await Order.updateOne(
-          { _id: order._id },
-          { $set: { 'shippo.paypalTrackingLastError': String(e?.message || 'PayPal tracking error') } }
-        ).catch(() => {});
+      await Order.updateOne(
+        { _id: order._id },
+        { $set: { 'shippo.paypalTrackingLastError': String(e?.message || 'PayPal tracking error') } }
+      ).catch(() => {});
     }
+
+    await logAdminAction(req, {
+      action: 'shipping.label.create',
+      entityType: 'order',
+      entityId: String(order._id),
+      status: 'success',
+      before: beforeLabelPurchase,
+      after: shippingSnapshot(order),
+      meta: orderAuditMeta(order, {
+        payerRateId,
+        payerShipmentId,
+        shipmentId: shipment?.object_id || null,
+        transactionId: transaction?.object_id || null,
+        labelUrl: transaction?.label_url || '',
+        trackingNumber: transaction?.tracking_number || '',
+        trackingUrl: transaction?.tracking_url_provider || '',
+        carrierToken: order.shippingTracking?.carrierToken || null,
+        carrierLabel: order.shippingTracking?.carrierLabel || '',
+      }),
+    });
 
     return res.json({
       ok: true,
@@ -685,6 +786,19 @@ router.post(
     });
   } catch (e) {
     console.error('Shippo label error:', e);
+
+    await logAdminAction(req, {
+      action: 'shipping.label.create',
+      entityType: 'order',
+      entityId: '',
+      status: 'failure',
+      meta: {
+        section: 'shippo_labels',
+        orderId: String(req.params.orderId || '').trim(),
+        error: String(e?.message || e || '').slice(0, 500),
+      },
+    });
+
     return res.status(500).json({ ok: false, message: e.message || 'Shippo error' });
   }
 });
@@ -704,6 +818,8 @@ router.post(
 
     if (!order) return res.status(404).json({ ok: false, message: 'Order not found' });
 
+    const before = shippingSnapshot(order);
+
     const b = req.body || {};
     order.shipping = order.shipping || {};
 
@@ -715,9 +831,42 @@ router.post(
     order.shipping.country_code = String(b.country || '').trim().toUpperCase();
 
     await order.save();
+
+    await logAdminAction(req, {
+      action: 'shipping.address.update',
+      entityType: 'order',
+      entityId: String(order._id),
+      status: 'success',
+      before,
+      after: shippingSnapshot(order),
+      meta: orderAuditMeta(order, {
+        updatedFields: [
+          'shipping.address_line_1',
+          'shipping.address_line_2',
+          'shipping.admin_area_2',
+          'shipping.admin_area_1',
+          'shipping.postal_code',
+          'shipping.country_code',
+        ],
+      }),
+    });
+
     return res.json({ ok: true });
   } catch (e) {
     console.error('Update address failed:', e);
+
+    await logAdminAction(req, {
+      action: 'shipping.address.update',
+      entityType: 'order',
+      entityId: '',
+      status: 'failure',
+      meta: {
+        section: 'shippo_labels',
+        orderId: String(req.params.orderId || '').trim(),
+        error: String(e?.message || e || '').slice(0, 500),
+      },
+    });
+
     return res.status(500).json({ ok: false, message: e.message || 'Update address failed' });
   }
 });

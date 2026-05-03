@@ -10,6 +10,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const HomeMidBanner = require('../models/HomeMidBanner');
 const Product = require('../models/Product');
@@ -67,6 +68,22 @@ function normalizePayload(body) {
   };
 }
 
+function midBannerSnapshot(banner) {
+  if (!banner) return null;
+
+  return {
+    slot: banner.slot || '',
+    productCustomId: banner.productCustomId || '',
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    priceText: banner.priceText || '',
+    buttonText: banner.buttonText || '',
+    image: banner.image || '',
+    active: !!banner.active,
+    sortOrder: Number(banner.sortOrder || 0),
+  };
+}
+
 async function uploadImageToS3(file, folder) {
   const { originalname, buffer, mimetype } = file;
   const ext = extFromFilename(originalname);
@@ -103,44 +120,45 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const banners = await HomeMidBanner.find({})
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .lean();
+    try {
+      const banners = await HomeMidBanner.find({})
+        .sort({ sortOrder: 1, createdAt: 1 })
+        .lean();
 
-    const bannersWithProducts = await Promise.all(
-      banners.map(async (banner) => {
-        let product = null;
+      const bannersWithProducts = await Promise.all(
+        banners.map(async (banner) => {
+          let product = null;
 
-        if (banner.productCustomId) {
-          product = await Product.findOne({ customId: banner.productCustomId })
-            .select('customId name imageUrl category type price stock')
-            .lean();
-        }
+          if (banner.productCustomId) {
+            product = await Product.findOne({ customId: banner.productCustomId })
+              .select('customId name imageUrl category type price stock')
+              .lean();
+          }
 
-        return {
-          ...banner,
-          product,
-        };
-      })
-    );
+          return {
+            ...banner,
+            product,
+          };
+        })
+      );
 
-    return res.render('admin/home-mid-banners/index', {
-      title: 'Homepage Mid Banners',
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      banners: bannersWithProducts,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ admin home mid banners index error:', err);
-    req.flash('error', 'Could not load homepage mid banners.');
-    return res.redirect('/admin/dashboard');
+      return res.render('admin/home-mid-banners/index', {
+        title: 'Homepage Mid Banners',
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        banners: bannersWithProducts,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ admin home mid banners index error:', err);
+      req.flash('error', 'Could not load homepage mid banners.');
+      return res.redirect('/admin/dashboard');
+    }
   }
-});
+);
 
 /* EDIT PAGE */
 router.get(
@@ -149,48 +167,49 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const slot = String(req.params.slot || '').trim().toLowerCase();
+    try {
+      const slot = String(req.params.slot || '').trim().toLowerCase();
 
-    if (!['left', 'right'].includes(slot)) {
-      req.flash('error', 'Invalid banner slot.');
+      if (!['left', 'right'].includes(slot)) {
+        req.flash('error', 'Invalid banner slot.');
+        return res.redirect('/admin/home-mid-banners');
+      }
+
+      const bannerRaw = await HomeMidBanner.findOne({ slot }).lean();
+
+      let selectedProduct = null;
+      let banner = bannerRaw;
+
+      if (bannerRaw?.productCustomId) {
+        selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
+          .select('customId name imageUrl category type price stock isOnSale')
+          .lean();
+
+        banner = {
+          ...bannerRaw,
+          product: selectedProduct || null,
+        };
+      }
+
+      return res.render('admin/home-mid-banners/edit', {
+        title: `Edit ${slot === 'left' ? 'Left' : 'Right'} Mid Banner`,
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        slot,
+        banner,
+        selectedProduct,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ home mid banner edit page error:', err);
+      req.flash('error', 'Could not load home mid banner.');
       return res.redirect('/admin/home-mid-banners');
     }
-
-    const bannerRaw = await HomeMidBanner.findOne({ slot }).lean();
-
-    let selectedProduct = null;
-    let banner = bannerRaw;
-
-    if (bannerRaw?.productCustomId) {
-      selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
-        .select('customId name imageUrl category type price stock isOnSale')
-        .lean();
-
-      banner = {
-        ...bannerRaw,
-        product: selectedProduct || null,
-      };
-    }
-
-    return res.render('admin/home-mid-banners/edit', {
-      title: `Edit ${slot === 'left' ? 'Left' : 'Right'} Mid Banner`,
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      slot,
-      banner,
-      selectedProduct,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ home mid banner edit page error:', err);
-    req.flash('error', 'Could not load home mid banner.');
-    return res.redirect('/admin/home-mid-banners');
   }
-});
+);
 
 /* SEARCH PRODUCTS FOR HOME MID BANNERS */
 router.get(
@@ -199,37 +218,38 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const q = String(req.query.q || '').trim();
+    try {
+      const q = String(req.query.q || '').trim();
 
-    if (!q) {
-      return res.json({ success: true, products: [] });
+      if (!q) {
+        return res.json({ success: true, products: [] });
+      }
+
+      const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const products = await Product.find({
+        stock: { $gt: 0 },
+        $or: [
+          { customId: { $regex: safeQ, $options: 'i' } },
+          { name: { $regex: safeQ, $options: 'i' } },
+        ],
+      })
+        .select('customId name imageUrl category type price stock isOnSale')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      return res.json({ success: true, products });
+    } catch (err) {
+      console.error('❌ home mid banners product search error:', err);
+      return res.status(500).json({
+        success: false,
+        products: [],
+        message: 'Failed to search products.',
+      });
     }
-
-    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    const products = await Product.find({
-      stock: { $gt: 0 },
-      $or: [
-        { customId: { $regex: safeQ, $options: 'i' } },
-        { name: { $regex: safeQ, $options: 'i' } },
-      ],
-    })
-      .select('customId name imageUrl category type price stock isOnSale')
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
-
-    return res.json({ success: true, products });
-  } catch (err) {
-    console.error('❌ home mid banners product search error:', err);
-    return res.status(500).json({
-      success: false,
-      products: [],
-      message: 'Failed to search products.',
-    });
   }
-});
+);
 
 /* SAVE */
 router.post(
@@ -265,6 +285,9 @@ router.post(
       }
 
       let banner = await HomeMidBanner.findOne({ slot });
+      const before = midBannerSnapshot(banner);
+      const isCreate = !banner;
+      const hadImageUpload = !!req.file;
 
       if (!banner) {
         if (!req.file) {
@@ -289,13 +312,30 @@ router.post(
         banner.sortOrder = payload.sortOrder;
 
         if (req.file) {
+          const oldImage = banner.image;
           const newImage = await uploadImageToS3(req.file, 'homepage-banners/mid-banners');
-          await deleteS3ImageByUrl(banner.image);
+          await deleteS3ImageByUrl(oldImage);
           banner.image = newImage;
         }
       }
 
       await banner.save();
+
+      await logAdminAction(req, {
+        action: isCreate ? 'store.home_mid_banner.create' : 'store.home_mid_banner.update',
+        entityType: 'home_mid_banner',
+        entityId: String(banner._id),
+        status: 'success',
+        before,
+        after: midBannerSnapshot(banner),
+        meta: {
+          section: 'home_mid_banners',
+          slot,
+          productCustomId: payload.productCustomId,
+          productName: product.name || '',
+          uploadedImage: hadImageUpload,
+        },
+      });
 
       req.flash('success', `${slot === 'left' ? 'Left' : 'Right'} mid banner saved successfully.`);
       return res.redirect('/admin/home-mid-banners');
@@ -314,37 +354,53 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const slot = String(req.params.slot || '').trim().toLowerCase();
+    try {
+      const slot = String(req.params.slot || '').trim().toLowerCase();
 
-    if (!['left', 'right'].includes(slot)) {
-      req.flash('error', 'Invalid banner slot.');
+      if (!['left', 'right'].includes(slot)) {
+        req.flash('error', 'Invalid banner slot.');
+        return res.redirect('/admin/home-mid-banners');
+      }
+
+      const banner = await HomeMidBanner.findOne({ slot });
+
+      if (!banner) {
+        req.flash('error', 'Banner not found for that slot.');
+        return res.redirect('/admin/home-mid-banners');
+      }
+
+      const before = midBannerSnapshot(banner);
+
+      banner.active = !banner.active;
+      await banner.save();
+
+      await logAdminAction(req, {
+        action: banner.active ? 'store.home_mid_banner.activate' : 'store.home_mid_banner.deactivate',
+        entityType: 'home_mid_banner',
+        entityId: String(banner._id),
+        status: 'success',
+        before,
+        after: midBannerSnapshot(banner),
+        meta: {
+          section: 'home_mid_banners',
+          slot,
+        },
+      });
+
+      req.flash(
+        'success',
+        `${slot === 'left' ? 'Left' : 'Right'} mid banner ${
+          banner.active ? 'activated' : 'deactivated'
+        } successfully.`
+      );
+      return res.redirect('/admin/home-mid-banners');
+    } catch (err) {
+      console.error('❌ toggle home mid banner error:', err);
+      req.flash('error', 'Failed to update banner status.');
       return res.redirect('/admin/home-mid-banners');
     }
-
-    const banner = await HomeMidBanner.findOne({ slot });
-
-    if (!banner) {
-      req.flash('error', 'Banner not found for that slot.');
-      return res.redirect('/admin/home-mid-banners');
-    }
-
-    banner.active = !banner.active;
-    await banner.save();
-
-    req.flash(
-      'success',
-      `${slot === 'left' ? 'Left' : 'Right'} mid banner ${
-        banner.active ? 'activated' : 'deactivated'
-      } successfully.`
-    );
-    return res.redirect('/admin/home-mid-banners');
-  } catch (err) {
-    console.error('❌ toggle home mid banner error:', err);
-    req.flash('error', 'Failed to update banner status.');
-    return res.redirect('/admin/home-mid-banners');
   }
-});
+);
 
 /* ERROR HANDLER */
 router.use((err, req, res, _next) => {

@@ -7,6 +7,7 @@ const router = express.Router();
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const HomePromoOffer = require('../models/HomePromoOffer');
 const Product = require('../models/Product');
@@ -24,6 +25,20 @@ function normalizePayload(body) {
     discountText: String(body.discountText || '').trim(),
     active: String(body.active || '') === 'on',
     sortOrder: Number(body.sortOrder || 0),
+  };
+}
+
+function promoOfferSnapshot(offer) {
+  if (!offer) return null;
+
+  return {
+    slot: offer.slot || '',
+    productCustomId: offer.productCustomId || '',
+    eyebrowText: offer.eyebrowText || '',
+    titleOverride: offer.titleOverride || '',
+    discountText: offer.discountText || '',
+    active: !!offer.active,
+    sortOrder: Number(offer.sortOrder || 0),
   };
 }
 
@@ -195,6 +210,8 @@ router.post(
     }
 
     let offer = await HomePromoOffer.findOne({ slot });
+    const before = promoOfferSnapshot(offer);
+    const isCreate = !offer;
 
     if (!offer) {
       offer = new HomePromoOffer({
@@ -211,6 +228,21 @@ router.post(
     }
 
     await offer.save();
+
+    await logAdminAction(req, {
+      action: isCreate ? 'store.home_promo_offer.create' : 'store.home_promo_offer.update',
+      entityType: 'home_promo_offer',
+      entityId: String(offer._id),
+      status: 'success',
+      before,
+      after: promoOfferSnapshot(offer),
+      meta: {
+        section: 'home_promo_offers',
+        slot,
+        productCustomId: payload.productCustomId,
+        productName: product.name || '',
+      },
+    });
 
     req.flash('success', `${slot === 'left' ? 'Left' : 'Right'} promo offer saved successfully.`);
     return res.redirect('/admin/home-promo-offers');
@@ -243,8 +275,23 @@ router.get(
       return res.redirect('/admin/home-promo-offers');
     }
 
+    const before = promoOfferSnapshot(offer);
+
     offer.active = !offer.active;
     await offer.save();
+
+    await logAdminAction(req, {
+      action: offer.active ? 'store.home_promo_offer.activate' : 'store.home_promo_offer.deactivate',
+      entityType: 'home_promo_offer',
+      entityId: String(offer._id),
+      status: 'success',
+      before,
+      after: promoOfferSnapshot(offer),
+      meta: {
+        section: 'home_promo_offers',
+        slot,
+      },
+    });
 
     req.flash(
       'success',

@@ -3,10 +3,12 @@
 
 const express = require('express');
 const mongoose = require('mongoose');
+
 const Business = require('../models/Business');
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const {
   sendOfficialNumberVerifiedEmail,
@@ -43,6 +45,28 @@ const safeInt = (v, def) => {
 };
 
 const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function verificationSnapshot(business) {
+  if (!business) return null;
+
+  return {
+    businessName: business.name || '',
+    businessEmail: business.email || '',
+    role: business.role || '',
+    country: business.country || '',
+    officialNumber: business.officialNumber || '',
+    officialNumberType: business.officialNumberType || '',
+    internalBusinessId: business.internalBusinessId || '',
+    verification: {
+      status: business.verification?.status || '',
+      method: business.verification?.method || '',
+      provider: business.verification?.provider || '',
+      checkedAt: business.verification?.checkedAt || null,
+      verifiedAt: business.verification?.verifiedAt || null,
+      reason: business.verification?.reason || '',
+    },
+  };
+}
 
 // -------------------------------
 // GET: List businesses for review
@@ -207,6 +231,15 @@ router.post(
         return res.redirect('/admin/business-verifications');
       }
 
+      const beforeDoc = await Business.findById(id)
+        .select('name email role country officialNumber officialNumberType verification internalBusinessId')
+        .lean();
+
+      if (!beforeDoc) {
+        req.flash('error', 'Business not found.');
+        return res.redirect('/admin/business-verifications');
+      }
+
       const now = new Date();
       const reason = String(req.body.reason || '').trim() || 'Approved by admin';
 
@@ -224,7 +257,7 @@ router.post(
         },
         { new: true },
       )
-        .select('name email officialNumber officialNumberType verification internalBusinessId role')
+        .select('name email officialNumber officialNumberType verification internalBusinessId role country')
         .lean();
 
       if (!updated) {
@@ -233,16 +266,39 @@ router.post(
       }
 
       const baseUrl = getBaseUrl(req);
+      let emailSent = false;
+      let emailError = '';
 
       try {
         await sendOfficialNumberVerifiedEmail(updated, baseUrl);
+        emailSent = true;
       } catch (mailErr) {
+        emailError = String(mailErr?.response?.body || mailErr?.message || mailErr || '').slice(0, 500);
         console.error(
           '❌ OfficialNumber verified email failed:',
           mailErr?.response?.body || mailErr?.message || mailErr,
         );
         req.flash('warning', 'Approved, but email could not be sent (check SendGrid/SMTP env).');
       }
+
+      await logAdminAction(req, {
+        action: 'verification.business.approve',
+        entityType: 'business',
+        entityId: String(updated._id),
+        status: 'success',
+        before: verificationSnapshot(beforeDoc),
+        after: verificationSnapshot(updated),
+        meta: {
+          section: 'business_verifications',
+          reason,
+          emailSent,
+          emailError,
+          businessName: updated.name || '',
+          businessEmail: updated.email || '',
+          officialNumberType: updated.officialNumberType || '',
+          internalBusinessId: updated.internalBusinessId || '',
+        },
+      });
 
       req.flash('success', `✅ Approved verification for ${updated.name}.`);
       return res.redirect(`/admin/business-verifications/${updated._id}`);
@@ -274,6 +330,15 @@ router.post(
         return res.redirect(`/admin/business-verifications/${id}`);
       }
 
+      const beforeDoc = await Business.findById(id)
+        .select('name email role country officialNumber officialNumberType verification internalBusinessId')
+        .lean();
+
+      if (!beforeDoc) {
+        req.flash('error', 'Business not found.');
+        return res.redirect('/admin/business-verifications');
+      }
+
       const now = new Date();
 
       const updated = await Business.findByIdAndUpdate(
@@ -290,7 +355,7 @@ router.post(
         },
         { new: true },
       )
-        .select('name email officialNumber officialNumberType verification internalBusinessId role')
+        .select('name email officialNumber officialNumberType verification internalBusinessId role country')
         .lean();
 
       if (!updated) {
@@ -299,16 +364,39 @@ router.post(
       }
 
       const baseUrl = getBaseUrl(req);
+      let emailSent = false;
+      let emailError = '';
 
       try {
         await sendOfficialNumberRejectedEmail(updated, baseUrl, reason);
+        emailSent = true;
       } catch (mailErr) {
+        emailError = String(mailErr?.response?.body || mailErr?.message || mailErr || '').slice(0, 500);
         console.error(
           '❌ OfficialNumber rejected email failed:',
           mailErr?.response?.body || mailErr?.message || mailErr,
         );
         req.flash('warning', 'Rejected, but email could not be sent (check SendGrid/SMTP env).');
       }
+
+      await logAdminAction(req, {
+        action: 'verification.business.reject',
+        entityType: 'business',
+        entityId: String(updated._id),
+        status: 'success',
+        before: verificationSnapshot(beforeDoc),
+        after: verificationSnapshot(updated),
+        meta: {
+          section: 'business_verifications',
+          reason,
+          emailSent,
+          emailError,
+          businessName: updated.name || '',
+          businessEmail: updated.email || '',
+          officialNumberType: updated.officialNumberType || '',
+          internalBusinessId: updated.internalBusinessId || '',
+        },
+      });
 
       req.flash('success', `❌ Rejected verification for ${updated.name}.`);
       return res.redirect(`/admin/business-verifications/${updated._id}`);

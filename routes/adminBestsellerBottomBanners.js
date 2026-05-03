@@ -10,6 +10,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const requireAdmin = require('../middleware/requireAdmin');
 const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
+const { logAdminAction } = require('../utils/logAdminAction');
 
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 const Product = require('../models/Product');
@@ -50,6 +51,41 @@ function randomKey(folder, ext) {
   return `${folder}/${uuidv4()}.${ext}`;
 }
 
+function themeCssFromSession(req) {
+  const theme = req.session?.theme || 'light';
+  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
+}
+
+function normalizePayload(body) {
+  return {
+    productCustomId: String(body.productCustomId || '').trim(),
+    title: String(body.title || '').trim(),
+    subtitle: String(body.subtitle || '').trim(),
+    priceText: String(body.priceText || '').trim(),
+    buttonText: String(body.buttonText || '').trim() || 'Shop Now',
+    overlayStyle: String(body.overlayStyle || '').trim(),
+    active: String(body.active || '') === 'on',
+    sortOrder: Number(body.sortOrder || 0),
+  };
+}
+
+function bestsellerBottomBannerSnapshot(banner) {
+  if (!banner) return null;
+
+  return {
+    slot: banner.slot || '',
+    productCustomId: banner.productCustomId || '',
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    priceText: banner.priceText || '',
+    buttonText: banner.buttonText || '',
+    overlayStyle: banner.overlayStyle || '',
+    image: banner.image || '',
+    active: !!banner.active,
+    sortOrder: Number(banner.sortOrder || 0),
+  };
+}
+
 async function uploadImageToS3(file, folder) {
   const { originalname, buffer, mimetype } = file;
   const ext = extFromFilename(originalname);
@@ -79,24 +115,6 @@ async function deleteS3ImageByUrl(imageUrl) {
   }
 }
 
-function themeCssFromSession(req) {
-  const theme = req.session?.theme || 'light';
-  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
-}
-
-function normalizePayload(body) {
-  return {
-    productCustomId: String(body.productCustomId || '').trim(),
-    title: String(body.title || '').trim(),
-    subtitle: String(body.subtitle || '').trim(),
-    priceText: String(body.priceText || '').trim(),
-    buttonText: String(body.buttonText || '').trim() || 'Shop Now',
-    overlayStyle: String(body.overlayStyle || '').trim(),
-    active: String(body.active || '') === 'on',
-    sortOrder: Number(body.sortOrder || 0),
-  };
-}
-
 /* INDEX */
 router.get(
   '/bestseller-bottom-banners',
@@ -104,44 +122,45 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const banners = await BestsellerBottomBanner.find({})
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .lean();
+    try {
+      const banners = await BestsellerBottomBanner.find({})
+        .sort({ sortOrder: 1, createdAt: 1 })
+        .lean();
 
-    const bannersWithProducts = await Promise.all(
-      banners.map(async (banner) => {
-        let product = null;
+      const bannersWithProducts = await Promise.all(
+        banners.map(async (banner) => {
+          let product = null;
 
-        if (banner.productCustomId) {
-          product = await Product.findOne({ customId: banner.productCustomId })
-            .select('customId name imageUrl category type price stock')
-            .lean();
-        }
+          if (banner.productCustomId) {
+            product = await Product.findOne({ customId: banner.productCustomId })
+              .select('customId name imageUrl category type price stock')
+              .lean();
+          }
 
-        return {
-          ...banner,
-          product,
-        };
-      })
-    );
+          return {
+            ...banner,
+            product,
+          };
+        })
+      );
 
-    return res.render('admin/bestseller-bottom-banners/index', {
-      title: 'Bestseller Bottom Banners',
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      banners: bannersWithProducts,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ admin bestseller bottom banners index error:', err);
-    req.flash('error', 'Could not load bestseller bottom banners.');
-    return res.redirect('/admin/dashboard');
+      return res.render('admin/bestseller-bottom-banners/index', {
+        title: 'Bestseller Bottom Banners',
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        banners: bannersWithProducts,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ admin bestseller bottom banners index error:', err);
+      req.flash('error', 'Could not load bestseller bottom banners.');
+      return res.redirect('/admin/dashboard');
+    }
   }
-});
+);
 
 /* EDIT */
 router.get(
@@ -150,48 +169,49 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const slot = String(req.params.slot || '').trim().toLowerCase();
+    try {
+      const slot = String(req.params.slot || '').trim().toLowerCase();
 
-    if (!['left', 'right'].includes(slot)) {
-      req.flash('error', 'Invalid bestseller bottom banner slot.');
+      if (!['left', 'right'].includes(slot)) {
+        req.flash('error', 'Invalid bestseller bottom banner slot.');
+        return res.redirect('/admin/bestseller-bottom-banners');
+      }
+
+      const bannerRaw = await BestsellerBottomBanner.findOne({ slot }).lean();
+
+      let selectedProduct = null;
+      let banner = bannerRaw;
+
+      if (bannerRaw && bannerRaw.productCustomId) {
+        selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
+          .select('customId name imageUrl category type price stock isOnSale')
+          .lean();
+
+        banner = {
+          ...bannerRaw,
+          product: selectedProduct || null,
+        };
+      }
+
+      return res.render('admin/bestseller-bottom-banners/edit', {
+        title: `Edit ${slot === 'left' ? 'Left' : 'Right'} Bestseller Bottom Banner`,
+        themeCss: themeCssFromSession(req),
+        nonce: res.locals.nonce,
+        slot,
+        banner,
+        selectedProduct,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        info: req.flash('info'),
+        warning: req.flash('warning'),
+      });
+    } catch (err) {
+      console.error('❌ bestseller bottom banner edit page error:', err);
+      req.flash('error', 'Could not load bestseller bottom banner.');
       return res.redirect('/admin/bestseller-bottom-banners');
     }
-
-    const bannerRaw = await BestsellerBottomBanner.findOne({ slot }).lean();
-
-    let selectedProduct = null;
-    let banner = bannerRaw;
-
-    if (bannerRaw && bannerRaw.productCustomId) {
-      selectedProduct = await Product.findOne({ customId: bannerRaw.productCustomId })
-        .select('customId name imageUrl category type price stock isOnSale')
-        .lean();
-
-      banner = {
-        ...bannerRaw,
-        product: selectedProduct || null,
-      };
-    }
-
-    return res.render('admin/bestseller-bottom-banners/edit', {
-      title: `Edit ${slot === 'left' ? 'Left' : 'Right'} Bestseller Bottom Banner`,
-      themeCss: themeCssFromSession(req),
-      nonce: res.locals.nonce,
-      slot,
-      banner,
-      selectedProduct,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      info: req.flash('info'),
-      warning: req.flash('warning'),
-    });
-  } catch (err) {
-    console.error('❌ bestseller bottom banner edit page error:', err);
-    req.flash('error', 'Could not load bestseller bottom banner.');
-    return res.redirect('/admin/bestseller-bottom-banners');
   }
-});
+);
 
 /* SEARCH PRODUCTS FOR BESTSELLER BOTTOM BANNER */
 router.get(
@@ -200,37 +220,38 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const q = String(req.query.q || '').trim();
+    try {
+      const q = String(req.query.q || '').trim();
 
-    if (!q) {
-      return res.json({ success: true, products: [] });
+      if (!q) {
+        return res.json({ success: true, products: [] });
+      }
+
+      const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const products = await Product.find({
+        stock: { $gt: 0 },
+        $or: [
+          { customId: { $regex: safeQ, $options: 'i' } },
+          { name: { $regex: safeQ, $options: 'i' } },
+        ],
+      })
+        .select('customId name imageUrl category type price stock isOnSale')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      return res.json({ success: true, products });
+    } catch (err) {
+      console.error('❌ bestseller bottom banner product search error:', err);
+      return res.status(500).json({
+        success: false,
+        products: [],
+        message: 'Failed to search products.',
+      });
     }
-
-    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    const products = await Product.find({
-      stock: { $gt: 0 },
-      $or: [
-        { customId: { $regex: safeQ, $options: 'i' } },
-        { name: { $regex: safeQ, $options: 'i' } },
-      ],
-    })
-      .select('customId name imageUrl category type price stock isOnSale')
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
-
-    return res.json({ success: true, products });
-  } catch (err) {
-    console.error('❌ bestseller bottom banner product search error:', err);
-    return res.status(500).json({
-      success: false,
-      products: [],
-      message: 'Failed to search products.',
-    });
   }
-});
+);
 
 /* SAVE */
 router.post(
@@ -266,6 +287,9 @@ router.post(
       }
 
       let banner = await BestsellerBottomBanner.findOne({ slot });
+      const before = bestsellerBottomBannerSnapshot(banner);
+      const isCreate = !banner;
+      const hadImageUpload = !!req.file;
 
       if (!banner) {
         banner = new BestsellerBottomBanner({
@@ -285,10 +309,11 @@ router.post(
       }
 
       if (req.file) {
+        const oldImage = banner.image;
         const newImage = await uploadImageToS3(req.file, 'bestseller-bottom-banners');
 
-        if (banner.image) {
-          await deleteS3ImageByUrl(banner.image);
+        if (oldImage) {
+          await deleteS3ImageByUrl(oldImage);
         }
 
         banner.image = newImage;
@@ -300,6 +325,24 @@ router.post(
       }
 
       await banner.save();
+
+      await logAdminAction(req, {
+        action: isCreate
+          ? 'store.bestseller_bottom_banner.create'
+          : 'store.bestseller_bottom_banner.update',
+        entityType: 'bestseller_bottom_banner',
+        entityId: String(banner._id),
+        status: 'success',
+        before,
+        after: bestsellerBottomBannerSnapshot(banner),
+        meta: {
+          section: 'bestseller_bottom_banners',
+          slot,
+          productCustomId: payload.productCustomId,
+          productName: product.name || '',
+          uploadedImage: hadImageUpload,
+        },
+      });
 
       req.flash(
         'success',
@@ -321,38 +364,56 @@ router.get(
   requireAdminRole(['super_admin', 'store_admin']),
   requireAdminPermission('store.content.manage'),
   async (req, res) => {
-  try {
-    const slot = String(req.params.slot || '').trim().toLowerCase();
+    try {
+      const slot = String(req.params.slot || '').trim().toLowerCase();
 
-    if (!['left', 'right'].includes(slot)) {
-      req.flash('error', 'Invalid bestseller bottom banner slot.');
+      if (!['left', 'right'].includes(slot)) {
+        req.flash('error', 'Invalid bestseller bottom banner slot.');
+        return res.redirect('/admin/bestseller-bottom-banners');
+      }
+
+      const banner = await BestsellerBottomBanner.findOne({ slot });
+
+      if (!banner) {
+        req.flash('error', 'Bestseller bottom banner not found for that slot.');
+        return res.redirect('/admin/bestseller-bottom-banners');
+      }
+
+      const before = bestsellerBottomBannerSnapshot(banner);
+
+      banner.active = !banner.active;
+      await banner.save();
+
+      await logAdminAction(req, {
+        action: banner.active
+          ? 'store.bestseller_bottom_banner.activate'
+          : 'store.bestseller_bottom_banner.deactivate',
+        entityType: 'bestseller_bottom_banner',
+        entityId: String(banner._id),
+        status: 'success',
+        before,
+        after: bestsellerBottomBannerSnapshot(banner),
+        meta: {
+          section: 'bestseller_bottom_banners',
+          slot,
+        },
+      });
+
+      req.flash(
+        'success',
+        `${slot === 'left' ? 'Left' : 'Right'} bestseller bottom banner ${
+          banner.active ? 'activated' : 'deactivated'
+        } successfully.`
+      );
+
+      return res.redirect('/admin/bestseller-bottom-banners');
+    } catch (err) {
+      console.error('❌ toggle bestseller bottom banner error:', err);
+      req.flash('error', 'Failed to toggle bestseller bottom banner.');
       return res.redirect('/admin/bestseller-bottom-banners');
     }
-
-    const banner = await BestsellerBottomBanner.findOne({ slot });
-
-    if (!banner) {
-      req.flash('error', 'Bestseller bottom banner not found for that slot.');
-      return res.redirect('/admin/bestseller-bottom-banners');
-    }
-
-    banner.active = !banner.active;
-    await banner.save();
-
-    req.flash(
-      'success',
-      `${slot === 'left' ? 'Left' : 'Right'} bestseller bottom banner ${
-        banner.active ? 'activated' : 'deactivated'
-      } successfully.`
-    );
-
-    return res.redirect('/admin/bestseller-bottom-banners');
-  } catch (err) {
-    console.error('❌ toggle bestseller bottom banner error:', err);
-    req.flash('error', 'Failed to toggle bestseller bottom banner.');
-    return res.redirect('/admin/bestseller-bottom-banners');
   }
-});
+);
 
 /* MULTER ERROR HANDLER */
 router.use((err, req, res, _next) => {
