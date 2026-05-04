@@ -14,8 +14,13 @@ const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 const ShopSidebarBanner = require('../models/ShopSidebarBanner');
 const ShopMainBanner = require('../models/ShopMainBanner');
 const ShopHeaderImage = require('../models/ShopHeaderImage');
+const sharp = require('sharp');
+const http = require('http');
+const https = require('https');
+
 const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 const APP_URL = String(process.env.APP_URL || 'http://localhost:3000').trim().replace(/\/+$/, '');
+const VAT_RATE = Number(process.env.VAT_RATE || 0.15);
 
 function mapStoreProduct(p) {
   const vatRate = Number(process.env.VAT_RATE || 0.15);
@@ -235,6 +240,87 @@ function getGuestKeyFromReq(req) {
   } catch {
     return null;
   }
+}
+
+function storeMoney(amount) {
+  const n = Number(amount || 0);
+
+  try {
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: BASE_CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+
+    if (BASE_CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  } catch {
+    return BASE_CURRENCY + ' ' + n.toFixed(2);
+  }
+}
+
+function publicUrl(value) {
+  const raw = String(value || '').trim();
+
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  return APP_URL + '/' + raw.replace(/^\/+/, '');
+}
+
+function xmlSafe(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fitText(value, maxLength) {
+  const text = String(value || '').trim();
+
+  if (text.length <= maxLength) return text;
+
+  return text.slice(0, Math.max(0, maxLength - 1)).trim() + '…';
+}
+
+function downloadImageBuffer(url) {
+  return new Promise((resolve) => {
+    try {
+      const safeUrl = String(url || '').trim();
+
+      if (!safeUrl) {
+        return resolve(null);
+      }
+
+      const client = safeUrl.startsWith('https://') ? https : http;
+
+      const request = client.get(safeUrl, (response) => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          response.resume();
+          return resolve(null);
+        }
+
+        const chunks = [];
+
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+      });
+
+      request.setTimeout(10000, () => {
+        request.destroy();
+        resolve(null);
+      });
+
+      request.on('error', () => resolve(null));
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 router.get('/store', async (req, res) => {
@@ -645,6 +731,85 @@ router.get('/store/shop', async (req, res) => {
   }
 });
 
+router.get('/store/product/:id/share-image', async (req, res) => {
+  try {
+    const rawProduct = await Product.findOne({
+      customId: req.params.id,
+      stock: { $gt: 0 },
+    }).lean();
+
+    if (!rawProduct) {
+      return res.status(404).send('Product not found');
+    }
+
+    const product = mapStoreProduct(rawProduct);
+    const productImageUrl = publicUrl(product.image || product.imageUrl || '');
+    const productName = fitText(product.name || 'Product', 48);
+    const productCategory = fitText(product.category || 'Product', 34);
+    const productPrice = storeMoney(Number(product.price || 0) * (1 + VAT_RATE));
+
+    const productImageBuffer = await downloadImageBuffer(productImageUrl);
+
+    const productImage = productImageBuffer
+      ? await sharp(productImageBuffer)
+          .resize(520, 520, {
+            fit: 'contain',
+            background: '#ffffff'
+          })
+          .png()
+          .toBuffer()
+      : await sharp({
+          create: {
+            width: 520,
+            height: 520,
+            channels: 4,
+            background: '#ffffff'
+          }
+        })
+          .png()
+          .toBuffer();
+
+    const svg = `
+      <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+        <rect width="1200" height="630" fill="#f8f9fa"/>
+        <rect x="40" y="40" width="1120" height="550" rx="36" fill="#ffffff"/>
+        <rect x="40" y="40" width="1120" height="550" rx="36" fill="none" stroke="#7C3AED" stroke-width="8"/>
+        <rect x="80" y="80" width="520" height="470" rx="28" fill="#ffffff"/>
+        <rect x="650" y="105" width="420" height="42" rx="21" fill="#22C55E"/>
+        <text x="680" y="134" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">UNICOPORATE STORE</text>
+        <text x="650" y="230" font-family="Arial, sans-serif" font-size="58" font-weight="800" fill="#7C3AED">${xmlSafe(productName)}</text>
+        <text x="650" y="305" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#212529">Category: ${xmlSafe(productCategory)}</text>
+        <text x="650" y="380" font-family="Arial, sans-serif" font-size="46" font-weight="800" fill="#22C55E">${xmlSafe(productPrice)} incl. VAT</text>
+        <text x="650" y="470" font-family="Arial, sans-serif" font-size="28" font-weight="600" fill="#6c757d">Tap to view this product</text>
+      </svg>
+    `;
+
+    const finalImage = await sharp(Buffer.from(svg))
+      .composite([
+        {
+          input: productImage,
+          left: 80,
+          top: 80
+        }
+      ])
+      .jpeg({
+        quality: 92,
+        progressive: true
+      })
+      .toBuffer();
+
+    res.set({
+      'Content-Type': 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400'
+    });
+
+    return res.send(finalImage);
+  } catch (err) {
+    console.error('❌ product share image error:', err);
+    return res.status(500).send('Could not generate share image');
+  }
+});
+
 router.get('/store/product/:id', async (req, res) => {
   try {
     const rawProduct = await Product.findOne({
@@ -734,14 +899,17 @@ router.get('/store/product/:id', async (req, res) => {
     return res.render('store/single', {
       layout: 'layouts/store',
       title: product.name || 'Single Product',
-      product,
+      product: {
+        ...product,
+        shareImageUrl: `/store/product/${product.customId}/share-image`
+      },
       myRating,
       featuredSidebarProducts,
       relatedProducts,
       shopSidebarBanner,
       shopHeaderImage,
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
       siteUrl: APP_URL,
     });
   } catch (err) {
