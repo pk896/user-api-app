@@ -15,6 +15,7 @@ const ShopSidebarBanner = require('../models/ShopSidebarBanner');
 const ShopMainBanner = require('../models/ShopMainBanner');
 const ShopHeaderImage = require('../models/ShopHeaderImage');
 const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+const APP_URL = String(process.env.APP_URL || 'http://localhost:3000').trim().replace(/\/+$/, '');
 
 function mapStoreProduct(p) {
   const vatRate = Number(process.env.VAT_RATE || 0.15);
@@ -741,6 +742,7 @@ router.get('/store/product/:id', async (req, res) => {
       shopHeaderImage,
       baseCurrency: BASE_CURRENCY,
       vatRate: Number(process.env.VAT_RATE || 0.15),
+      siteUrl: APP_URL,
     });
   } catch (err) {
     console.error('❌ store single product error:', err);

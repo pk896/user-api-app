@@ -323,32 +323,34 @@
                                 nonce
                             }) %> 
                         </div>
-                        <div class="mb-3 d-flex flex-wrap gap-2">
+                        <div class="mb-3 d-flex flex-wrap gap-2 js-product-share-wrap"
+                            data-share-title="<%= product.name || 'Product' %>"
+                            data-share-text="<%= 'Check out ' + (product.name || 'this product') + ' - Category: ' + (product.category || 'Product') + ' - Price: ' + formatMoney(Number(product.price || 0) * (1 + VAT)) + ' incl. VAT' %>"
+                            data-share-url="<%= product.url || '' %>"
+                            data-share-image="<%= product.image || product.imageUrl || '' %>"
+                        >
                             <a
-                                href="https://www.facebook.com/sharer/sharer.php?u=<%= encodeURIComponent(product.url || '') %>"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-primary d-inline-block rounded text-white py-1 px-4"
+                                href="#"
+                                class="btn btn-primary d-inline-block rounded text-white py-1 px-4 js-product-social-share"
+                                data-share-channel="facebook"
                                 aria-label="Share <%= product.name %> on Facebook"
                             >
                                 <i class="fab fa-facebook-f me-1"></i> Facebook
                             </a>
 
                             <a
-                                href="https://twitter.com/intent/tweet?url=<%= encodeURIComponent(product.url || '') %>&text=<%= encodeURIComponent('Check out ' + (product.name || 'this product')) %>"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-secondary d-inline-block rounded text-white py-1 px-4"
+                                href="#"
+                                class="btn btn-dark d-inline-block rounded text-white py-1 px-4 js-product-social-share"
+                                data-share-channel="x"
                                 aria-label="Share <%= product.name %> on X"
                             >
                                 <i class="fab fa-twitter me-1"></i> X
                             </a>
 
                             <a
-                                href="https://api.whatsapp.com/send?text=<%= encodeURIComponent('Check out ' + (product.name || 'this product') + ': ' + (product.url || '')) %>"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-success d-inline-block rounded text-white py-1 px-4"
+                                href="#"
+                                class="btn btn-success d-inline-block rounded text-white py-1 px-4 js-product-social-share"
+                                data-share-channel="whatsapp"
                                 aria-label="Share <%= product.name %> on WhatsApp"
                             >
                                 <i class="fab fa-whatsapp me-1"></i> WhatsApp
@@ -356,10 +358,7 @@
 
                             <button
                                 type="button"
-                                class="btn btn-dark d-inline-block rounded text-white py-1 px-4 js-product-native-share"
-                                data-share-title="<%= product.name || 'Product' %>"
-                                data-share-text="<%= 'Check out ' + (product.name || 'this product') %>"
-                                data-share-url="<%= product.url || '' %>"
+                                class="btn btn-primary d-inline-block rounded text-white py-1 px-4 js-product-native-share"
                                 aria-label="Share <%= product.name %> to other apps"
                             >
                                 <i class="fas fa-share-alt me-1"></i> More
@@ -990,21 +989,91 @@
 
 <script nonce="<%= nonce %>">
   (function () {
-    const shareButtons = Array.from(document.querySelectorAll('.js-product-native-share'));
+    const shareWrap = document.querySelector('.js-product-share-wrap');
+    if (!shareWrap) return;
 
-    shareButtons.forEach(function (button) {
+    function cleanText(value) {
+      return String(value || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function absoluteUrl(rawValue) {
+      const raw = cleanText(rawValue);
+
+      try {
+        return new URL(raw || window.location.href, window.location.origin).href;
+      } catch (error) {
+        return window.location.href;
+      }
+    }
+
+    function productShareData() {
+      const title = cleanText(shareWrap.getAttribute('data-share-title')) || document.title;
+      const text = cleanText(shareWrap.getAttribute('data-share-text')) || title;
+      const url = absoluteUrl(shareWrap.getAttribute('data-share-url'));
+      const image = absoluteUrl(shareWrap.getAttribute('data-share-image'));
+
+      return {
+        title: title,
+        text: text,
+        url: url,
+        image: image,
+        fullText: cleanText(text + ' - View product: ' + url)
+      };
+    }
+
+    function sharePopup(url) {
+      const width = 640;
+      const height = 520;
+      const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+      const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+
+      const popup = window.open(
+        url,
+        'productShareWindow',
+        'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',noopener,noreferrer'
+      );
+
+      if (!popup) {
+        window.location.href = url;
+      }
+    }
+
+    document.querySelectorAll('.js-product-social-share').forEach(function (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+
+        const share = productShareData();
+        const channel = link.getAttribute('data-share-channel') || '';
+        let shareUrl = '';
+
+        if (channel === 'facebook') {
+          shareUrl = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(share.url);
+        }
+
+        if (channel === 'x') {
+          shareUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(share.text) + '&url=' + encodeURIComponent(share.url);
+        }
+
+        if (channel === 'whatsapp') {
+          shareUrl = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(share.fullText);
+        }
+
+        if (!shareUrl) return;
+
+        sharePopup(shareUrl);
+      });
+    });
+
+    document.querySelectorAll('.js-product-native-share').forEach(function (button) {
       button.addEventListener('click', async function () {
-        const title = button.getAttribute('data-share-title') || document.title;
-        const text = button.getAttribute('data-share-text') || '';
-        const rawUrl = button.getAttribute('data-share-url') || window.location.href;
-        const url = new URL(rawUrl, window.location.origin).href;
+        const share = productShareData();
 
         if (navigator.share) {
           try {
             await navigator.share({
-              title: title,
-              text: text,
-              url: url
+              title: share.title,
+              text: share.text,
+              url: share.url
             });
             return;
           } catch (error) {
@@ -1013,16 +1082,16 @@
         }
 
         try {
-          await navigator.clipboard.writeText(url);
-          const originalText = button.innerHTML;
+          await navigator.clipboard.writeText(share.fullText);
 
-          button.innerHTML = '<i class="fas fa-check me-1"></i> Link Copied';
+          const originalText = button.innerHTML;
+          button.innerHTML = '<i class="fas fa-check me-1"></i> Product Copied';
 
           setTimeout(function () {
             button.innerHTML = originalText;
           }, 2000);
         } catch (error) {
-          window.prompt('Copy this product link:', url);
+          window.prompt('Copy this product share text:', share.fullText);
         }
       });
     });

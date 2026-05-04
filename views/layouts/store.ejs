@@ -3,10 +3,73 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title><%= title || 'Uni Store' %></title>
+
+  <%
+    const layoutProduct = (typeof product !== 'undefined' && product) ? product : null;
+    const layoutVatRate = (typeof vatRate !== 'undefined' && vatRate !== null) ? Number(vatRate) : 0.15;
+    const layoutCurrency = String(typeof baseCurrency !== 'undefined' ? baseCurrency : 'USD').trim().toUpperCase() || 'USD';
+    const layoutSiteUrl = String(typeof siteUrl !== 'undefined' ? siteUrl : '').replace(/\/+$/, '');
+
+    function layoutMoney(amount) {
+      const n = Number(amount || 0);
+
+      try {
+        const formatted = new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: layoutCurrency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(n);
+
+        if (layoutCurrency === 'ZAR') {
+          return formatted.replace(/^ZAR\s?/, 'R');
+        }
+
+        return formatted;
+      } catch (error) {
+        return layoutCurrency + ' ' + n.toFixed(2);
+      }
+    }
+
+    function layoutAbsoluteUrl(value) {
+      const raw = String(value || '').trim();
+
+      if (!raw) return '';
+      if (/^https?:\/\//i.test(raw)) return raw;
+      if (!layoutSiteUrl) return raw;
+
+      return layoutSiteUrl + '/' + raw.replace(/^\/+/, '');
+    }
+
+    const layoutProductName = layoutProduct ? String(layoutProduct.name || 'Product').trim() : '';
+    const layoutProductCategory = layoutProduct ? String(layoutProduct.category || 'Product').trim() : '';
+    const layoutProductPrice = layoutProduct ? layoutMoney(Number(layoutProduct.price || 0) * (1 + layoutVatRate)) : '';
+    const layoutProductUrl = layoutProduct ? layoutAbsoluteUrl(layoutProduct.url || '') : '';
+    const layoutProductImage = layoutProduct ? layoutAbsoluteUrl(layoutProduct.image || layoutProduct.imageUrl || '') : '';
+    const layoutProductDescription = layoutProduct
+      ? `Category: ${layoutProductCategory} - Price: ${layoutProductPrice} incl. VAT`
+      : '';
+  %>
+
+  <title><%= layoutProduct ? layoutProductName + ' | Uni Store' : (title || 'Uni Store') %></title>
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
   <meta content="" name="keywords">
-  <meta content="" name="description">
+  <meta name="description" content="<%= layoutProduct ? layoutProductDescription : '' %>">
+
+  <% if (layoutProduct) { %>
+    <meta property="og:type" content="product">
+    <meta property="og:title" content="<%= layoutProductName %>">
+    <meta property="og:description" content="<%= layoutProductDescription %>">
+    <meta property="og:url" content="<%= layoutProductUrl %>">
+    <meta property="og:image" content="<%= layoutProductImage %>">
+    <meta property="product:price:amount" content="<%= Number(layoutProduct.price || 0) * (1 + layoutVatRate) %>">
+    <meta property="product:price:currency" content="<%= layoutCurrency %>">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<%= layoutProductName %>">
+    <meta name="twitter:description" content="<%= layoutProductDescription %>">
+    <meta name="twitter:image" content="<%= layoutProductImage %>">
+  <% } %>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
