@@ -12,4 +12,26 @@ document.addEventListener('DOMContentLoaded', () => {
       amount.textContent = rangeInput.value;
     });
   }
+
+  const hideStoreProductActionsOnScroll = () => {
+    document.body.classList.add('store-is-scrolling');
+
+    if (
+      document.activeElement &&
+      typeof document.activeElement.blur === 'function' &&
+      document.activeElement.closest('.js-store-product-card')
+    ) {
+      document.activeElement.blur();
+    }
+
+    window.clearTimeout(window.storeProductScrollTimer);
+
+    window.storeProductScrollTimer = window.setTimeout(() => {
+      document.body.classList.remove('store-is-scrolling');
+    }, 150);
+  };
+
+  window.addEventListener('scroll', hideStoreProductActionsOnScroll, { passive: true });
+  window.addEventListener('touchmove', hideStoreProductActionsOnScroll, { passive: true });
+  window.addEventListener('wheel', hideStoreProductActionsOnScroll, { passive: true });
 });
