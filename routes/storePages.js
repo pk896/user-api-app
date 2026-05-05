@@ -896,12 +896,17 @@ router.get('/store/product/:id', async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
+    const shareVersion = rawProduct.updatedAt
+      ? new Date(rawProduct.updatedAt).getTime()
+      : Date.now();
+
     return res.render('store/single', {
       layout: 'layouts/store',
       title: product.name || 'Single Product',
       product: {
         ...product,
-        shareImageUrl: `/store/product/${product.customId}/share-image`
+        shareUrl: `/store/product/${product.customId}?share=${shareVersion}`,
+        shareImageUrl: `/store/product/${product.customId}/share-image?v=${shareVersion}`
       },
       myRating,
       featuredSidebarProducts,
