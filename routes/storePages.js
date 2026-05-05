@@ -288,6 +288,53 @@ function fitText(value, maxLength) {
   return text.slice(0, Math.max(0, maxLength - 1)).trim() + '…';
 }
 
+function svgTextLines(value, maxLength, maxLines) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+
+    if (nextLine.length <= maxLength) {
+      currentLine = nextLine;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    currentLine = word;
+
+    if (lines.length >= maxLines) {
+      break;
+    }
+  }
+
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+  }
+
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
+    lines[maxLines - 1] = fitText(lines[maxLines - 1], Math.max(1, maxLength - 1));
+  }
+
+  return lines.length ? lines : ['Product'];
+}
+
+function renderSvgTextLines(lines, x, firstY, fontSize, lineGap, color, weight) {
+  return lines.map((line, index) => {
+    const y = firstY + (index * lineGap);
+
+    return `<text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${color}">${xmlSafe(line)}</text>`;
+  }).join('');
+}
+
 function downloadImageBuffer(url) {
   return new Promise((resolve) => {
     try {
@@ -744,8 +791,8 @@ router.get('/store/product/:id/share-image', async (req, res) => {
 
     const product = mapStoreProduct(rawProduct);
     const productImageUrl = publicUrl(product.image || product.imageUrl || '');
-    const productName = fitText(product.name || 'Product', 48);
-    const productCategory = fitText(product.category || 'Product', 34);
+    const productNameLines = svgTextLines(product.name || 'Product', 24, 2);
+    const productCategory = fitText(product.category || 'Product', 28);
     const productPrice = storeMoney(Number(product.price || 0) * (1 + VAT_RATE));
 
     const productImageBuffer = await downloadImageBuffer(productImageUrl);
@@ -777,10 +824,10 @@ router.get('/store/product/:id/share-image', async (req, res) => {
         <rect x="80" y="80" width="520" height="470" rx="28" fill="#ffffff"/>
         <rect x="650" y="105" width="420" height="42" rx="21" fill="#22C55E"/>
         <text x="680" y="134" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">UNICOPORATE STORE</text>
-        <text x="650" y="230" font-family="Arial, sans-serif" font-size="58" font-weight="800" fill="#7C3AED">${xmlSafe(productName)}</text>
-        <text x="650" y="305" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#212529">Category: ${xmlSafe(productCategory)}</text>
-        <text x="650" y="380" font-family="Arial, sans-serif" font-size="46" font-weight="800" fill="#22C55E">${xmlSafe(productPrice)} incl. VAT</text>
-        <text x="650" y="470" font-family="Arial, sans-serif" font-size="28" font-weight="600" fill="#6c757d">Tap to view this product</text>
+        ${renderSvgTextLines(productNameLines, 650, 215, 50, 58, '#7C3AED', 800)}
+        <text x="650" y="340" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#212529">Category: ${xmlSafe(productCategory)}</text>
+        <text x="650" y="410" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="#22C55E">${xmlSafe(productPrice)} incl. VAT</text>
+        <text x="650" y="500" font-family="Arial, sans-serif" font-size="28" font-weight="600" fill="#6c757d">Tap to view this product</text>
       </svg>
     `;
 
