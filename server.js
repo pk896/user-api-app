@@ -585,6 +585,13 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get('/dashboards/supp', (req, res) => {
+  res.render('dashboards/supp', {
+    layout: false,
+    title: 'Supplier Dashboard',
+  });
+});
+
 /* ---------------------------------------
    Import and Register Routers
 --------------------------------------- */
