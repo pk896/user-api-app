@@ -1,0 +1,171 @@
+<!--views/wholesale/product.ejs-->
+<div class="container py-4">
+  <div class="mb-4">
+    <a href="/wholesale" class="text-decoration-none text-primary">
+      ← Back to Wholesale Marketplace
+    </a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="alert alert-danger">
+      <strong>Please fix these errors:</strong>
+      <ul class="mb-0 mt-2">
+        <% errors.forEach((error) => { %>
+          <li><%= error.msg %></li>
+        <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 shadow-sm">
+        <% if (product.imageUrl) { %>
+          <img src="<%= product.imageUrl %>" class="card-img-top" alt="<%= product.name %>" style="max-height: 420px; object-fit: cover;">
+        <% } else { %>
+          <div class="bg-light d-flex align-items-center justify-content-center" style="height: 320px;">
+            <span class="text-muted">No image</span>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+          <h1 class="h3 fw-bold text-primary"><%= product.name %></h1>
+
+          <p class="text-muted">
+            <%= product.description || 'No description provided.' %>
+          </p>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <div class="border rounded p-3">
+                <div class="text-muted small">Wholesale Price</div>
+                <div class="fw-bold">R <%= Number(product.wholesalePrice || 0).toFixed(2) %></div>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <div class="border rounded p-3">
+                <div class="text-muted small">Minimum Order</div>
+                <div class="fw-bold"><%= product.minimumOrderQuantity || 1 %> <%= product.unit || 'units' %></div>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <div class="border rounded p-3">
+                <div class="text-muted small">Available</div>
+                <div class="fw-bold"><%= product.availableQuantity || 0 %> <%= product.unit || 'units' %></div>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <div class="border rounded p-3">
+                <div class="text-muted small">Lead Time</div>
+                <div class="fw-bold"><%= product.leadTimeDays || 0 %> days</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="border rounded p-3">
+            <div class="fw-bold text-primary mb-1">Supplier</div>
+            <div><%= product.supplier?.name || 'Supplier' %></div>
+            <div class="small text-muted">
+              <%= product.supplier?.city || '' %>
+              <%= product.supplier?.country ? ', ' + product.supplier.country : '' %>
+            </div>
+            <% if (product.supplier?._id) { %>
+              <a href="/wholesale/suppliers/<%= product.supplier._id %>" class="btn btn-outline-primary btn-sm mt-3">
+                View Supplier
+              </a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <% if (business && business.role === 'seller') { %>
+        <form method="POST" action="/wholesale/products/<%= product._id %>/request" class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white fw-bold">
+            Send Supply Request
+          </div>
+
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold text-primary">Requested Quantity</label>
+              <input
+                type="number"
+                min="<%= product.minimumOrderQuantity || 1 %>"
+                name="requestedQuantity"
+                class="form-control"
+                value="<%= form.requestedQuantity || product.minimumOrderQuantity || 1 %>"
+                required
+              >
+              <div class="form-text">
+                Minimum order quantity: <%= product.minimumOrderQuantity || 1 %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold text-primary">Message to Supplier</label>
+              <textarea
+                name="message"
+                rows="4"
+                class="form-control"
+                placeholder="Tell the supplier what you need..."
+              ><%= form.message || '' %></textarea>
+            </div>
+
+            <div class="row g-2">
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-semibold text-primary">Contact Name</label>
+                <input type="text" name="contactName" class="form-control" value="<%= form.contactName || business.name || '' %>">
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-semibold text-primary">Contact Email</label>
+                <input type="email" name="contactEmail" class="form-control" value="<%= form.contactEmail || business.email || '' %>">
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-semibold text-primary">Contact Phone</label>
+                <input type="text" name="contactPhone" class="form-control" value="<%= form.contactPhone || '' %>">
+              </div>
+
+              <div class="col-12 col-md-3">
+                <label class="form-label fw-semibold text-primary">Delivery Country</label>
+                <input type="text" name="deliveryCountry" class="form-control" value="<%= form.deliveryCountry || '' %>">
+              </div>
+
+              <div class="col-12 col-md-3">
+                <label class="form-label fw-semibold text-primary">Delivery City</label>
+                <input type="text" name="deliveryCity" class="form-control" value="<%= form.deliveryCity || '' %>">
+              </div>
+            </div>
+          </div>
+
+          <div class="card-footer bg-white">
+            <button type="submit" class="btn btn-primary w-100">
+              Send Request
+            </button>
+          </div>
+        </form>
+      <% } else if (business && business.role === 'supplier') { %>
+        <div class="alert alert-info">
+          You are logged in as a supplier. Only seller accounts can send supply requests.
+        </div>
+      <% } else { %>
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <h2 class="h6 fw-bold text-primary">Want to request this supply?</h2>
+            <p class="text-muted mb-3">Log in with a seller account to send a supply request.</p>
+            <a href="/business/login" class="btn btn-primary">
+              Business Login
+            </a>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>

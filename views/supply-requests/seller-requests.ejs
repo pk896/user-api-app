@@ -1,0 +1,85 @@
+<!--views/supply-requests/seller-requests.ejs-->
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 fw-bold text-primary mb-1">My Supply Requests</h1>
+      <p class="text-muted mb-0">Track requests you sent to suppliers.</p>
+    </div>
+
+    <a href="/wholesale" class="btn btn-primary">
+      Find Products
+    </a>
+  </div>
+
+  <% if (!requests || requests.length === 0) { %>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <h2 class="h5 fw-bold text-primary">No supply requests yet</h2>
+        <p class="text-muted mb-4">Search wholesale products and send your first request.</p>
+        <a href="/wholesale" class="btn btn-primary">
+          Browse Wholesale
+        </a>
+      </div>
+    </div>
+  <% } else { %>
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Product</th>
+              <th>Supplier</th>
+              <th>Quantity</th>
+              <th>Status</th>
+              <th>Response</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% requests.forEach((request) => { %>
+              <tr>
+                <td>
+                  <div class="fw-semibold text-primary">
+                    <%= request.supplierProduct?.name || 'Product' %>
+                  </div>
+                  <div class="small text-muted">
+                    R <%= Number(request.supplierProduct?.wholesalePrice || 0).toFixed(2) %>
+                  </div>
+                </td>
+
+                <td>
+                  <div class="fw-semibold"><%= request.supplier?.name || 'Supplier' %></div>
+                  <div class="small text-muted">
+                    <%= request.supplier?.email || '' %>
+                  </div>
+                </td>
+
+                <td><%= request.requestedQuantity %></td>
+
+                <td>
+                  <% if (request.status === 'approved') { %>
+                    <span class="badge text-bg-success">Approved</span>
+                  <% } else if (request.status === 'rejected') { %>
+                    <span class="badge text-bg-danger">Rejected</span>
+                  <% } else if (request.status === 'cancelled') { %>
+                    <span class="badge text-bg-secondary">Cancelled</span>
+                  <% } else { %>
+                    <span class="badge text-bg-warning">Pending</span>
+                  <% } %>
+                </td>
+
+                <td class="small">
+                  <%= request.supplierResponse || 'No response yet' %>
+                </td>
+
+                <td class="small text-muted">
+                  <%= request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '' %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</div>

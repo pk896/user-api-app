@@ -1,0 +1,1515 @@
+<!-- views/dashboards/old-supplier-dashboard.ejs -->
+<% const NONCE = typeof nonce !== 'undefined' ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '') %>
+
+<%
+  // Helper functions
+  function fmtDate(d) {
+    try {
+      if (!d) return '';
+      const dd = (d instanceof Date) ? d : new Date(d);
+      return dd.toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    } catch { return String(d); }
+  }
+
+  function fmtCurrency(amount) {
+    return 'R ' + Number(amount || 0).toFixed(2);
+  }
+
+  // Use the actual data from your router
+  const supplierProducts = Array.isArray(products) ? products : [];
+  const supplierTotals = totals || {};
+  const supplierKpis = kpis || {};
+  const supplierOrders = (orders && orders.recent) ? orders.recent : [];
+  const supplierTrackingStats = trackingStats || {};
+
+  // Calculate real stats
+  const totalProducts = supplierTotals.totalProducts || 0;
+  const totalStock = supplierTotals.totalStock || 0;
+  const inStockCount = supplierTotals.inStock || 0;
+  const lowStockCount = supplierTotals.lowStock || 0;
+  const outOfStockCount = supplierTotals.outOfStock || 0;
+
+  // Calculate inventory value from products
+  const inventoryValue = supplierProducts.reduce((sum, p) => {
+    const price = Number(p.price) || 0;
+    const stock = Number(p.stock) || 0;
+    return sum + (price * stock);
+  }, 0);
+
+  // Top 10
+  const topProducts = Array.isArray(supplierKpis.perProduct)
+    ? supplierKpis.perProduct.slice(0, 10)
+    : [];
+
+  // In-stock samples
+  const availableProducts = supplierProducts
+    .filter(p => (Number(p.stock) || 0) > 0)
+    .slice(0, 3);
+
+  // Low stock (actual stock < 20)
+  const lowStockProducts = supplierProducts
+    .filter(p => {
+      const stock = Number(p.stock) || 0;
+      return stock > 0 && stock < 20;
+    })
+    .slice(0, 5);
+
+  // Out of stock
+  const outOfStockProducts = supplierProducts
+    .filter(p => (Number(p.stock) || 0) <= 0)
+    .slice(0, 5);
+%>
+
+<section class="supDash">
+  <div class="supDash__wrap">
+
+    <!-- Header -->
+    <header class="sdCard sdHeader">
+      <div class="sdHeader__row">
+        <div class="sdHeader__user">
+          <div class="sdAvatar" aria-hidden="true">
+            <% if (business && business.name) { %>
+              <%= business.name.charAt(0).toUpperCase() %>
+            <% } else { %>
+              <span>S</span>
+            <% } %>
+          </div>
+
+          <div class="sdHeader__meta">
+            <h1 class="sdHeader__title">
+              Welcome,
+              <span class="sdHeader__titleStrong">
+                <% if (business && business.name) { %>
+                  <%= business.name %>
+                <% } else { %>
+                  Supplier
+                <% } %>
+              </span>
+            </h1>
+
+            <div class="sdHeader__badges">
+              <span class="sdBadge sdBadge--dark">SUPPLIER ACCOUNT</span>
+
+              <span class="sdActive">
+                <span class="sdDot <%= mailerOk ? 'is-on' : 'is-off' %>" aria-hidden="true"></span>
+                <%= mailerOk ? 'Mail Service Active' : 'Mail Service Offline' %>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sdHeader__stats">
+          <div class="sdMiniStat">
+            <small>Today</small>
+            <strong><%= new Date().toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' }) %></strong>
+          </div>
+
+          <div class="sdMiniStat">
+            <small>Store ID</small>
+            <strong>
+              <% if (business && business._id) { %>
+                <%= business._id.toString().slice(-6).toUpperCase() %>
+              <% } else { %>
+                N/A
+              <% } %>
+            </strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Notifications -->
+    <% if (success && success.length > 0) { %>
+      <div class="sdNotices">
+        <% success.forEach(msg => { %>
+          <div class="sdNotice sdNotice--success notification success">
+            <span class="sdNotice__ico" aria-hidden="true">✓</span>
+            <div class="sdNotice__text"><%= msg %></div>
+            <button class="sdNotice__close close" type="button" aria-label="Close">&times;</button>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <% if (error && error.length > 0) { %>
+      <div class="sdNotices">
+        <% error.forEach(msg => { %>
+          <div class="sdNotice sdNotice--error notification error">
+            <span class="sdNotice__ico" aria-hidden="true">!</span>
+            <div class="sdNotice__text"><%= msg %></div>
+            <button class="sdNotice__close close" type="button" aria-label="Close">&times;</button>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <!-- Overview KPIs -->
+    <section class="sdCard sdSection sdSection--purple">
+      <div class="sdSection__head">
+        <h2 class="sdSection__title">
+          <span class="sdSection__bar" aria-hidden="true"></span>
+          Supplier Overview
+        </h2>
+      </div>
+
+      <div class="sdStats sdStats--five">
+        <div class="sdStat sdStat--blue">
+          <a href="/products/all" class="sdStat__link">
+            <div class="sdIcon sdIcon--blue" aria-hidden="true">📦</div>
+            <div class="sdStat__body">
+              <h3>Total Products</h3>
+              <p class="sdValue" data-kpi="totalProducts"><%= totalProducts %></p>
+              <small><%= inStockCount %> in stock</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--purple">
+          <a href="/products/low-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--purple" aria-hidden="true">🔢</div>
+            <div class="sdStat__body">
+              <h3>Total Stock</h3>
+              <p class="sdValue" data-kpi="totalStock"><%= totalStock %></p>
+              <small>Units available</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--green">
+          <div class="sdStat__link">
+            <div class="sdIcon sdIcon--green" aria-hidden="true">💰</div>
+            <div class="sdStat__body">
+              <h3>Inventory Value</h3>
+              <p class="sdValue sdValue--green"><%= fmtCurrency(inventoryValue) %></p>
+              <small>Current stock value</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="sdStat sdStat--orange">
+          <a href="/products/low-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--orange" aria-hidden="true">⚠️</div>
+            <div class="sdStat__body">
+              <h3>Low Stock</h3>
+              <p class="sdValue sdValue--orange" data-kpi="lowStock"><%= lowStockCount %></p>
+              <small>Stock &lt; 20 units</small>
+            </div>
+          </a>
+        </div>
+
+        <div class="sdStat sdStat--dark">
+          <a href="/products/out-of-stock" class="sdStat__link">
+            <div class="sdIcon sdIcon--dark" aria-hidden="true">🚨</div>
+            <div class="sdStat__body">
+              <h3>Out of Stock</h3>
+              <p class="sdValue" data-kpi="outOfStock"><%= outOfStockCount %></p>
+              <small>Products to restock</small>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Grid -->
+    <div class="sdGrid">
+      <!-- Left -->
+      <div class="sdCol">
+
+        <!-- Low Stock -->
+        <% if (lowStockCount > 0) { %>
+          <section class="sdCard sdSection sdSection--orange">
+            <div class="sdSection__row">
+              <h2 class="sdSection__titlePlain">Low Stock Products (<%= lowStockCount %>)</h2>
+              <a href="/products?filter=low_stock" class="sdLink">View All</a>
+            </div>
+
+            <div class="sdList">
+              <% lowStockProducts.forEach(p => {
+                const stock = Number(p.stock) || 0;
+                const price = Number(p.price) || 0;
+              %>
+                <div class="sdItem sdItem--orange">
+                  <div class="sdItem__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdItem__meta">
+                      <h4 class="sdItem__title"><%= p.name || 'Unnamed Product' %></h4>
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--green"><%= fmtCurrency(price) %></span>
+                        <span class="sdChip sdChip--orange">Stock: <%= stock %></span>
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdItem__actions">
+                    <a href="/products/edit/<%= p._id || p.customId %>" class="sdBtn sdBtn--orange">Restock</a>
+                    <a href="/products/view/<%= p._id || p.customId %>" class="sdBtn sdBtn--blue">View</a>
+                  </div>
+                </div>
+              <% }) %>
+
+              <% if (lowStockCount > 5) { %>
+                <div class="sdMore">
+                  <span>+<%= lowStockCount - 5 %> more low stock products</span>
+                  <a href="/products?filter=low_stock" class="sdLink">View All</a>
+                </div>
+              <% } %>
+            </div>
+          </section>
+        <% } %>
+
+        <!-- Quick Actions -->
+        <section class="sdCard sdSection sdSection--blue">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Quick Actions</h2>
+          </div>
+
+          <div class="sdActions">
+            <a href="/products/add" class="sdAction sdAction--purple">
+              <span class="sdAction__ico" aria-hidden="true">➕</span>
+              <span class="sdAction__txt">Add Product</span>
+            </a>
+
+            <a href="/payment/orders" class="sdAction sdAction--blue">
+              <span class="sdAction__ico" aria-hidden="true">📦</span>
+              <span class="sdAction__txt">View Orders</span>
+            </a>
+
+            <a href="/products/all" class="sdAction sdAction--dark">
+              <span class="sdAction__ico" aria-hidden="true">📋</span>
+              <span class="sdAction__txt">All Products</span>
+            </a>
+
+            <a href="/users/wishlist" class="sdAction sdAction--purple">
+              <span class="sdAction__ico" aria-hidden="true">💜</span>
+              <span class="sdAction__txt">Wishlist</span>
+            </a>
+
+            <a href="/business/analytics/chart" class="sdAction sdAction--green">
+              <span class="sdAction__ico" aria-hidden="true">📈</span>
+              <span class="sdAction__txt">Analytics</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- Top 10 -->
+        <section class="sdCard sdSection sdSection--green">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Top 10 Best Sellers</h2>
+            <a href="/products/performance" class="sdLink">View All</a>
+          </div>
+
+          <% if (topProducts.length > 0) { %>
+            <div class="sdList sdScroll">
+              <% topProducts.forEach((p, index) => { %>
+                <div class="sdSellerRow">
+                  <div class="sdRank" aria-hidden="true"><%= index + 1 %></div>
+
+                  <div class="sdSellerRow__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdSellerRow__meta">
+                      <div class="sdItem__title"><%= p.name || 'Unnamed Product' %></div>
+                      <div class="sdMuted"><%= p.category || 'General' %></div>
+                    </div>
+                  </div>
+
+                  <div class="sdSellerRow__stats">
+                    <div class="sdMini">
+                      <small>Sold</small>
+                      <strong><%= p.qty || 0 %></strong>
+                    </div>
+                    <div class="sdMini">
+                      <small>Revenue</small>
+                      <strong class="sdGreen"><%= fmtCurrency(p.estRevenue || 0) %></strong>
+                    </div>
+                  </div>
+
+                  <div class="sdSellerRow__act">
+                    <a href="/products/view/<%= p.productId || '#' %>" class="sdBtn sdBtn--purple">View</a>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty">
+              <div class="sdEmpty__ico" aria-hidden="true">📊</div>
+              <div class="sdEmpty__title">No sales data available yet</div>
+              <div class="sdEmpty__sub">Start selling to see your best sellers</div>
+            </div>
+          <% } %>
+        </section>
+      </div>
+
+      <!-- Right -->
+      <div class="sdCol">
+
+        <!-- Sales Trend -->
+        <section class="sdCard sdSection sdSection--purple">
+          <div class="sdSection__row sdSection__row--top">
+            <div>
+              <h2 class="sdSection__titlePlain">Sales Trend</h2>
+              <div class="sdToggle">
+                <button class="sdToggle__btn is-active" id="daily-btn" type="button">Last 7 Days</button>
+                <button class="sdToggle__btn" id="monthly-btn" type="button">Last 30 Days</button>
+                <button class="sdToggle__btn" id="yearly-btn" type="button">Last 12 Months</button>
+              </div>
+            </div>
+
+            <div class="sdTrend">
+              <small>Current: <span id="current-sales" class="sdGreen">R 0.00</span></small>
+              <small>Avg: <span id="avg-sales" class="sdBlue">R 0.00</span></small>
+              <small>Total: <span id="total-sales" class="sdPurple">R 0.00</span></small>
+            </div>
+          </div>
+
+          <div class="sdChart">
+            <div id="simple-chart" class="sdChart__bars" aria-label="Sales chart"></div>
+            <div id="chart-labels" class="sdChart__labels"></div>
+
+            <div class="sdTrendStats">
+              <div class="sdKpi">
+                <small>Peak</small>
+                <strong id="peak-sales">R 0.00</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Lowest</small>
+                <strong id="lowest-sales">R 0.00</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Growth</small>
+                <strong id="growth-trend" class="positive">0%</strong>
+              </div>
+              <div class="sdKpi">
+                <small>Projection</small>
+                <strong id="projection" class="positive">+0%</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Out of Stock -->
+        <section class="sdCard sdSection sdSection--red">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Out of Stock Products (<%= outOfStockCount %>)</h2>
+            <% if (outOfStockCount > 0) { %>
+              <a href="/products?filter=out_of_stock" class="sdLink">Restock All</a>
+            <% } %>
+          </div>
+
+          <% if (outOfStockProducts.length > 0) { %>
+            <div class="sdList">
+              <% outOfStockProducts.forEach(p => { const price = Number(p.price) || 0; %>
+                <div class="sdItem sdItem--red">
+                  <div class="sdItem__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdItem__meta">
+                      <h4 class="sdItem__title"><%= p.name || 'Unnamed Product' %></h4>
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--green"><%= fmtCurrency(price) %></span>
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdItem__actions">
+                    <a href="/products/edit/<%= p._id || p.customId %>" class="sdBtn sdBtn--red">Restock</a>
+                    <a href="/products/view/<%= p._id || p.customId %>" class="sdBtn sdBtn--blue">View</a>
+                  </div>
+                </div>
+              <% }) %>
+
+              <% if (outOfStockCount > 5) { %>
+                <div class="sdMore">
+                  <span>+<%= outOfStockCount - 5 %> more products out of stock</span>
+                  <a href="/products?filter=out_of_stock" class="sdLink">View All</a>
+                </div>
+              <% } %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty sdEmpty--good">
+              <div class="sdEmpty__ico" aria-hidden="true">✅</div>
+              <div class="sdEmpty__title">All products are in stock!</div>
+              <div class="sdEmpty__sub">Great job managing your inventory</div>
+            </div>
+          <% } %>
+        </section>
+
+        <!-- Available products -->
+        <section class="sdCard sdSection sdSection--dark">
+          <div class="sdSection__row">
+            <h2 class="sdSection__titlePlain">Available Products</h2>
+            <a href="/products/all" class="sdLink">View All</a>
+          </div>
+
+          <% if (availableProducts.length > 0) { %>
+            <div class="sdList">
+              <% availableProducts.forEach(p => {
+                const stock = Number(p.stock) || 0;
+                const price = Number(p.price) || 0;
+              %>
+                <div class="sdProdRow">
+                  <div class="sdProdRow__left">
+                    <% if (p.imageUrl && p.imageUrl.trim() !== '') { %>
+                      <img src="<%= p.imageUrl %>" alt="<%= p.name %>" class="sdThumb">
+                    <% } else { %>
+                      <div class="sdThumb sdThumb--ph" aria-hidden="true">📦</div>
+                    <% } %>
+
+                    <div class="sdProdRow__meta">
+                      <div class="sdItem__title"><%= p.name || 'Unnamed Product' %></div>
+                      <div class="sdMuted">Price: <span class="sdGreen"><%= fmtCurrency(price) %></span></div>
+
+                      <div class="sdChips">
+                        <span class="sdChip sdChip--purple"><%= p.category || 'General' %></span>
+
+                        <% if (stock <= 0) { %>
+                          <span class="sdChip sdChip--red">Out of Stock</span>
+                        <% } else if (stock < 20) { %>
+                          <span class="sdChip sdChip--orange">Low Stock</span>
+                        <% } else { %>
+                          <span class="sdChip sdChip--green">In Stock</span>
+                        <% } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sdProdRow__right">
+                    <span class="sdQty"><%= stock %></span>
+                    <span class="sdMuted">units</span>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <div class="sdEmpty">
+              <div class="sdEmpty__ico" aria-hidden="true">📦</div>
+              <div class="sdEmpty__title">No products in stock</div>
+              <div class="sdEmpty__sub">
+                <a href="/products/add" class="sdBtn sdBtn--purple">Add First Product</a>
+              </div>
+            </div>
+          <% } %>
+        </section>
+      </div>
+    </div>
+
+    <!-- Recent Orders -->
+    <section class="sdCard sdSection sdSection--green">
+      <div class="sdSection__row">
+        <h2 class="sdSection__titlePlain">Recent Orders</h2>
+        <a href="/payment/orders" class="sdLink">View All</a>
+      </div>
+
+      <div class="sdList sdScroll">
+        <% if (supplierOrders.length > 0) { %>
+          <% supplierOrders.forEach(o => {
+            const status = o.status || 'pending';
+            const statusClass = String(status).toLowerCase().replace(/\s+/g, '-');
+          %>
+            <div class="sdOrder">
+              <div class="sdOrder__top">
+                <span class="sdMono">
+                  <% if (o.orderId) { %>
+                    #<%= o.orderId.slice(-8) %>
+                  <% } else if (o._id) { %>
+                    #<%= o._id.toString().slice(-8) %>
+                  <% } else { %>
+                    #N/A
+                  <% } %>
+                </span>
+
+                <span class="sdOrder__amt sdGreen">
+                  <% if (o.amount && o.amount.value) { %>
+                    <%= fmtCurrency(o.amount.value) %>
+                  <% } else if (o.total) { %>
+                    <%= fmtCurrency(o.total) %>
+                  <% } else { %>
+                    <%= fmtCurrency(0) %>
+                  <% } %>
+                </span>
+              </div>
+
+              <div class="sdOrder__bottom">
+                <span class="sdPill <%= statusClass %>">
+                  <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+                </span>
+                <span class="sdMuted"><%= fmtDate(o.createdAt) %></span>
+              </div>
+            </div>
+          <% }) %>
+        <% } else { %>
+          <div class="sdEmpty">
+            <div class="sdEmpty__ico" aria-hidden="true">📋</div>
+            <div class="sdEmpty__title">No recent orders</div>
+            <div class="sdEmpty__sub">Orders will appear here</div>
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <!-- Shipping Tracking Stats -->
+    <% if (supplierTrackingStats && Object.keys(supplierTrackingStats).length > 0) { %>
+      <section class="sdCard sdSection sdSection--blue">
+        <div class="sdSection__row">
+          <h2 class="sdSection__titlePlain">Shipping Status</h2>
+          <a href="payment/orders" class="sdLink">Track All</a>
+        </div>
+
+        <div class="sdShipGrid">
+          <div class="sdShipCard <%= (supplierTrackingStats.pending || 0) > 0 ? 'is-warn' : '' %>">
+            <div class="sdShipIcon is-blue" aria-hidden="true">⏳</div>
+            <div class="sdShipMeta">
+              <small>Pending</small>
+              <strong><%= supplierTrackingStats.pending || 0 %></strong>
+            </div>
+          </div>
+
+          <div class="sdShipCard <%= (supplierTrackingStats.processing || 0) > 0 ? 'is-warn' : '' %>">
+            <div class="sdShipIcon is-purple" aria-hidden="true">⚙️</div>
+            <div class="sdShipMeta">
+              <small>Processing</small>
+              <strong><%= supplierTrackingStats.processing || 0 %></strong>
+            </div>
+          </div>
+
+          <div class="sdShipCard <%= (supplierTrackingStats.shipped || 0) > 0 ? 'is-good' : '' %>">
+            <div class="sdShipIcon is-green" aria-hidden="true">🚚</div>
+            <div class="sdShipMeta">
+              <small>Shipped</small>
+              <strong><%= supplierTrackingStats.shipped || 0 %></strong>
+            </div>
+          </div>
+
+          <div class="sdShipCard <%= (supplierTrackingStats.delivered || 0) > 0 ? 'is-good' : '' %>">
+            <div class="sdShipIcon is-dark" aria-hidden="true">✅</div>
+            <div class="sdShipMeta">
+              <small>Delivered</small>
+              <strong><%= supplierTrackingStats.delivered || 0 %></strong>
+            </div>
+          </div>
+        </div>
+      </section>
+    <% } %>
+
+    <!-- Footer -->
+    <footer class="sdFooter">
+      <div class="sdFooter__top">
+        <h4>Quick Links</h4>
+
+        <div class="sdFooter__links">
+          <a href="/products/add">➕ Add Product</a>
+          <a href="/products/all">📋 View Products</a>
+          <a href="/products/out-of-stock">🚨 View Out of Stock</a>
+          <a href="/payment/orders">📦 Orders</a>
+          <a href="/business/profile">👤 Profile</a>
+          <a href="/business/analytics/chart">📈 Analytics</a>
+
+          <form action="/business/logout" method="post" class="sdLogout">
+            <button type="submit">🚪 Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="sdFooter__bottom">
+        <small>© <%= new Date().getFullYear() %> <%= business && business.name ? business.name : 'Your Business' %></small>
+      </div>
+    </footer>
+
+  </div>
+</section>
+
+<style nonce="<%= NONCE %>">
+  :root{
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --green:#22C55E;
+    --dark:#0F172A;
+
+    --bg:#F8FAFC;
+    --text:#0F172A;
+    --muted:#64748B;
+    --line:#E2E8F0;
+
+    --r12:12px;
+    --r10:10px;
+  }
+
+  /* ✅ stop “bigger than phone” */
+  .supDash, .supDash *{ box-sizing:border-box; }
+  .supDash{ background: var(--bg); min-height: 100vh; overflow-x: hidden; }
+  .supDash__wrap{ width:100%; max-width:1100px; margin:0 auto; padding: 12px; }
+  .supDash img{ max-width:100%; display:block; }
+  .sdHeader__meta, .sdStat__body, .sdItem__meta{ min-width:0; }
+  .sdHeader__titleStrong, .sdItem__title, .sdMono{ overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sdCard{
+    background:#fff;
+    border-radius: var(--r12);
+    box-shadow: 0 2px 10px rgba(15,23,42,.06);
+    overflow:hidden;
+  }
+
+  /* header */
+  .sdHeader{
+    background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+    color:#fff;
+    padding: 14px;
+  }
+  .sdHeader__row{ display:flex; flex-direction: column; gap: 12px; }
+  .sdHeader__user{ display:flex; gap: 12px; align-items: center; }
+  .sdAvatar{
+    width: 48px; height: 48px; border-radius: 999px;
+    background: var(--green);
+    display:flex; align-items:center; justify-content:center;
+    font-weight: 900; font-size: 18px;
+    flex: 0 0 auto;
+  }
+  .sdHeader__title{ margin:0; font-size: 16px; line-height: 1.2; }
+  .sdHeader__titleStrong{ font-weight: 1000; }
+  .sdHeader__badges{ display:flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; align-items:center; }
+  .sdBadge{
+    display:inline-flex;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .02em;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.18);
+    color:#fff;
+  }
+  .sdBadge--dark{ background: var(--dark); border-color: rgba(255,255,255,.12); }
+
+  .sdActive{ display:inline-flex; align-items:center; gap: 6px; font-size: 12px; opacity: .95; }
+  .sdDot{ width: 8px; height: 8px; border-radius: 999px; background: #EF4444; }
+  .sdDot.is-on{ background: var(--green); }
+  .sdDot.is-off{ background: #EF4444; }
+
+  .sdHeader__stats{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sdMiniStat{
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: var(--r10);
+    padding: 10px;
+    text-align:center;
+  }
+  .sdMiniStat small{ display:block; opacity:.92; font-size: 12px; margin-bottom: 2px; }
+  .sdMiniStat strong{ font-size: 13px; }
+
+  /* notices */
+  .sdNotices{ margin: 12px 0; display:flex; flex-direction: column; gap: 8px; }
+  .sdNotice{
+    display:flex; align-items:center; gap: 10px;
+    padding: 12px;
+    border-radius: var(--r10);
+    color:#fff;
+  }
+  .sdNotice__text{ flex:1; font-size: 13px; line-height: 1.35; }
+  .sdNotice__close{
+    margin-left:auto; background: transparent; border: 0;
+    color:#fff; font-size: 18px; cursor:pointer; padding: 0 6px;
+  }
+  .sdNotice--success{ background: var(--green); }
+  .sdNotice--error{ background: #EF4444; }
+
+  /* sections */
+  .sdSection{ padding: 12px; }
+  .sdSection--purple{ border-top: 4px solid var(--purple); }
+  .sdSection--blue{ border-top: 4px solid var(--blue); }
+  .sdSection--green{ border-top: 4px solid var(--green); }
+  .sdSection--dark{ border-top: 4px solid var(--dark); }
+  .sdSection--orange{ border-top: 4px solid #F97316; }
+  .sdSection--red{ border-top: 4px solid #EF4444; }
+
+  .sdSection__head{ margin-bottom: 10px; }
+  .sdSection__title{
+    margin:0;
+    display:flex; align-items:center; gap: 8px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 1000;
+  }
+  .sdSection__bar{ width: 4px; height: 18px; background: var(--purple); border-radius: 999px; }
+  .sdSection__titlePlain{ margin:0; color: var(--text); font-size: 14px; font-weight: 1000; }
+  .sdSection__row{
+    display:flex; align-items:center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .sdSection__row--top{ align-items:flex-start; }
+  .sdLink{ color: var(--purple); text-decoration:none; font-weight: 1000; font-size: 12px; white-space: nowrap; }
+
+  /* stats */
+  .sdStats{ display:grid; grid-template-columns: 1fr; gap: 10px; }
+  .sdStats--five{ grid-template-columns: 1fr; }
+  .sdStat{ border-radius: var(--r12); overflow:hidden; border: 1px solid var(--line); }
+  .sdStat--blue{ background: rgba(37,99,235,.07); border-color: rgba(37,99,235,.18); }
+  .sdStat--purple{ background: rgba(124,58,237,.07); border-color: rgba(124,58,237,.18); }
+  .sdStat--green{ background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.18); }
+  .sdStat--orange{ background: rgba(249,115,22,.07); border-color: rgba(249,115,22,.18); }
+  .sdStat--dark{ background: rgba(15,23,42,.06); border-color: rgba(15,23,42,.16); }
+
+  .sdStat__link{
+    display:flex; align-items:center; gap: 10px;
+    padding: 12px; text-decoration:none; color: inherit;
+    width: 100%; min-width: 0;
+  }
+  .sdIcon{
+    width: 42px; height: 42px; border-radius: 12px;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 18px; color:#fff; flex: 0 0 auto;
+  }
+  .sdIcon--blue{ background: var(--blue); }
+  .sdIcon--purple{ background: var(--purple); }
+  .sdIcon--green{ background: var(--green); }
+  .sdIcon--orange{ background: #F97316; }
+  .sdIcon--dark{ background: var(--dark); }
+
+  .sdStat__body h3{ margin:0 0 2px; font-size: 12px; color: var(--muted); font-weight: 900; }
+  .sdValue{ margin:0; font-size: 20px; font-weight: 1000; color: var(--text); line-height:1.1; }
+  .sdValue--green{ color: var(--green); }
+  .sdValue--orange{ color: #F97316; }
+  .sdStat__body small{ color: var(--muted); font-size: 11px; }
+
+  /* layout grid */
+  .sdGrid{ display:grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
+  .sdCol{ display:flex; flex-direction: column; gap: 12px; }
+
+  /* lists/items */
+  .sdList{ display:flex; flex-direction: column; gap: 10px; }
+  .sdScroll{ max-height: 360px; overflow:auto; padding-right: 4px; }
+
+  .sdItem{
+    display:flex; align-items:flex-start; justify-content: space-between;
+    gap: 10px; padding: 12px;
+    border-radius: var(--r12);
+    border: 1px solid var(--line);
+    background: #fff;
+    flex-wrap: wrap; /* ✅ */
+  }
+  .sdItem--orange{ background: rgba(249,115,22,.05); border-color: rgba(249,115,22,.18); }
+  .sdItem--red{ background: rgba(239,68,68,.05); border-color: rgba(239,68,68,.18); }
+
+  .sdItem__left{ display:flex; gap: 10px; align-items:center; min-width:0; flex: 1; }
+  .sdThumb{
+    width: 44px; height: 44px; border-radius: 10px;
+    object-fit: cover; border: 1px solid var(--line);
+    flex: 0 0 auto;
+  }
+  .sdThumb--ph{ display:flex; align-items:center; justify-content:center; background:#EEF2FF; border-color:#E0E7FF; }
+  .sdItem__meta{ min-width:0; flex: 1; }
+  .sdItem__title{ margin:0; font-size: 13px; font-weight: 1000; color: var(--text); }
+
+  .sdChips{ margin-top: 6px; display:flex; gap: 6px; flex-wrap: wrap; }
+  .sdChip{
+    font-size: 11px; font-weight: 900;
+    padding: 4px 8px; border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1; white-space: nowrap;
+  }
+  .sdChip--green{ background: rgba(34,197,94,.10); color: #166534; border-color: rgba(34,197,94,.18); }
+  .sdChip--orange{ background: rgba(249,115,22,.10); color: #92400e; border-color: rgba(249,115,22,.18); }
+  .sdChip--purple{ background: rgba(124,58,237,.10); color: #5B21B6; border-color: rgba(124,58,237,.18); }
+  .sdChip--red{ background: rgba(239,68,68,.10); color: #b91c1c; border-color: rgba(239,68,68,.18); }
+
+  .sdItem__actions{ display:flex; gap: 8px; flex: 0 0 auto; }
+  .sdBtn{
+    display:inline-flex; align-items:center; justify-content:center;
+    text-decoration:none; border: 0;
+    border-radius: 10px; padding: 8px 10px;
+    font-size: 12px; font-weight: 1000; color:#fff;
+    white-space: nowrap;
+  }
+  .sdBtn--blue{ background: var(--blue); }
+  .sdBtn--purple{ background: var(--purple); }
+  .sdBtn--green{ background: var(--green); }
+  .sdBtn--orange{ background: #F97316; }
+  .sdBtn--red{ background: #EF4444; }
+
+  /* actions */
+  .sdActions{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sdAction{
+    border-radius: var(--r12);
+    padding: 14px 10px;
+    text-decoration:none; color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    gap: 10px; font-weight: 1000;
+    min-height: 56px;
+  }
+
+  @media (min-width: 720px){
+    .sdActions{ grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .sdAction__ico{ font-size: 18px; }
+  .sdAction__txt{ font-size: 12px; }
+  .sdAction--purple{ background: var(--purple); }
+  .sdAction--blue{ background: var(--blue); }
+  .sdAction--green{ background: var(--green); }
+  .sdAction--dark{ background: var(--dark); }
+  .sdAction:hover{ filter: brightness(.98); transform: translateY(-1px); box-shadow: 0 10px 18px rgba(15,23,42,.08); }
+
+  /* sellers row */
+  .sdSellerRow{
+    display:flex; align-items:center; justify-content: space-between;
+    gap: 10px; padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    background: #F8FAFC;
+    flex-wrap: wrap;
+  }
+  .sdRank{
+    width: 26px; height: 26px; border-radius: 999px;
+    background: #E2E8F0; display:flex; align-items:center; justify-content:center;
+    font-size: 11px; font-weight: 1000; color: var(--dark);
+    flex: 0 0 auto;
+  }
+  .sdSellerRow__left{ display:flex; align-items:center; gap: 10px; min-width:0; flex: 1; }
+  .sdSellerRow__meta{ min-width:0; }
+  .sdSellerRow__stats{ display:flex; gap: 10px; flex: 0 0 auto; }
+  .sdSellerRow__act{ flex: 0 0 auto; }
+
+  .sdMuted{ color: var(--muted); font-size: 11px; }
+  .sdGreen{ color: var(--green); font-weight: 1000; }
+  .sdBlue{ color: var(--blue); font-weight: 1000; }
+  .sdPurple{ color: var(--purple); font-weight: 1000; }
+
+  /* chart */
+  .sdToggle{ display:flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .sdToggle__btn{
+    border: 1px solid var(--line);
+    background: #F1F5F9;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 1000;
+    cursor:pointer;
+    flex: 1 1 auto;
+  }
+  .sdToggle__btn.is-active{ background: var(--purple); color:#fff; border-color: rgba(124,58,237,.35); }
+  .sdTrend{ display:flex; flex-direction: column; gap: 4px; font-size: 12px; text-align: left; color: var(--muted); width: 100%; }
+
+  .sdChart{ margin-top: 10px; }
+  .sdChart__bars{
+    width: 100%; height: 190px;
+    display:flex; align-items:flex-end; gap: 2px;
+    padding: 10px;
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    overflow:hidden;
+  }
+  .sdChart__labels{
+    display:flex; justify-content: space-between;
+    padding: 8px 6px 0;
+    font-size: 11px; color: var(--muted);
+    gap: 4px;
+  }
+  .sdTrendStats{
+    margin-top: 10px;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sdKpi{
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 10px;
+    text-align:center;
+  }
+  .sdKpi small{ display:block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .sdKpi strong{ display:block; color: var(--text); font-size: 14px; font-weight: 1000; }
+  .positive{ color: var(--green) !important; }
+  .negative{ color: #EF4444 !important; }
+
+  /* available products row */
+  .sdProdRow{
+    display:flex; align-items:center; justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    background: #F8FAFC;
+  }
+  .sdProdRow__left{ display:flex; align-items:center; gap: 10px; min-width:0; flex: 1; }
+  .sdProdRow__meta{ min-width:0; flex: 1; }
+  .sdProdRow__right{ text-align:center; flex: 0 0 auto; }
+  .sdQty{ display:block; font-weight: 1000; color: var(--dark); }
+
+  /* orders */
+  .sdOrder{
+    background: #F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 10px;
+  }
+  .sdOrder__top{ display:flex; justify-content: space-between; gap: 10px; align-items:center; }
+  .sdMono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; font-weight: 1000; color: var(--dark); }
+  .sdOrder__amt{ font-size: 12px; font-weight: 1000; white-space: nowrap; }
+  .sdOrder__bottom{ display:flex; justify-content: space-between; align-items:center; margin-top: 8px; gap: 8px; flex-wrap: wrap; }
+  .sdPill{
+    padding: 4px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 1000;
+    border: 1px solid transparent;
+    background: rgba(124,58,237,.08);
+    color: #5B21B6;
+    white-space: nowrap;
+  }
+  .sdPill.completed, .sdPill.delivered, .sdPill.shipped { background: rgba(34,197,94,.10); color:#166534; border-color: rgba(34,197,94,.18); }
+  .sdPill.pending, .sdPill.processing { background: rgba(249,115,22,.10); color:#92400e; border-color: rgba(249,115,22,.18); }
+  .sdPill.cancelled, .sdPill.refunded { background: rgba(239,68,68,.10); color:#b91c1c; border-color: rgba(239,68,68,.18); }
+
+  /* shipping */
+  .sdShipGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sdShipCard{
+    background:#F8FAFC;
+    border: 1px solid var(--line);
+    border-radius: var(--r12);
+    padding: 12px;
+    display:flex; align-items:center; gap: 10px;
+  }
+  .sdShipCard.is-warn{ background: rgba(249,115,22,.06); border-color: rgba(249,115,22,.18); }
+  .sdShipCard.is-good{ background: rgba(34,197,94,.06); border-color: rgba(34,197,94,.18); }
+  .sdShipIcon{
+    width: 44px; height: 44px; border-radius: 12px;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-size: 18px; flex: 0 0 auto;
+    background: var(--blue);
+  }
+  .sdShipIcon.is-blue{ background: var(--blue); }
+  .sdShipIcon.is-purple{ background: var(--purple); }
+  .sdShipIcon.is-green{ background: var(--green); }
+  .sdShipIcon.is-dark{ background: var(--dark); }
+  .sdShipMeta small{ display:block; color: var(--muted); font-size: 12px; font-weight: 800; }
+  .sdShipMeta strong{ display:block; color: var(--text); font-size: 18px; font-weight: 1000; }
+
+  /* empty */
+  .sdEmpty{
+    padding: 18px 10px;
+    border-radius: var(--r12);
+    text-align:center;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    background: #fff;
+  }
+  .sdEmpty--good{ background: rgba(34,197,94,.05); border-style: solid; }
+  .sdEmpty__ico{ font-size: 26px; opacity: .55; }
+  .sdEmpty__title{ font-weight: 1000; color: var(--text); margin-top: 6px; }
+  .sdEmpty__sub{ font-size: 12px; margin-top: 8px; }
+
+  /* footer */
+  .sdFooter{
+    margin-top: 12px;
+    background: var(--dark);
+    color:#fff;
+    border-radius: var(--r12);
+    padding: 14px;
+  }
+  .sdFooter__top h4{ margin:0 0 10px; font-size: 14px; font-weight: 1000; }
+  .sdFooter__links{ display:flex; flex-wrap: wrap; gap: 8px; }
+  .sdFooter__links a,
+  .sdLogout button{
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.12);
+    color: #E2E8F0;
+    text-decoration:none;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 900;
+    display:inline-flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .sdLogout{ display:inline; }
+  .sdLogout button{ cursor:pointer; }
+
+  .sdFooter__bottom{
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,.10);
+    text-align:center;
+  }
+  .sdFooter__bottom small{ color: #94A3B8; font-size: 12px; }
+
+  /* responsive */
+  @media (min-width: 720px){
+    .supDash__wrap{ padding: 16px; }
+    .sdHeader__row{ flex-direction: row; justify-content: space-between; align-items: center; }
+    .sdHeader__stats{ width: 340px; }
+    .sdStats{ grid-template-columns: repeat(2, 1fr); }
+    .sdGrid{ grid-template-columns: 1fr 1fr; }
+    .sdShipGrid{ grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 1024px){
+    .sdStats--five{ grid-template-columns: repeat(5, 1fr); }
+  }
+
+  /* ✅ Mobile overflow fix for supplier dashboard rows / cards */
+  @media (max-width: 480px){
+    .supDash__wrap{
+      padding: 10px;
+    }
+
+    .sdSection{
+      padding: 10px;
+    }
+
+    .sdSection__row{
+      gap: 8px;
+    }
+
+    .sdSection__titlePlain{
+      font-size: 13px;
+      line-height: 1.2;
+      min-width: 0;
+    }
+
+    .sdLink{
+      font-size: 11px;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    /* Low stock / out of stock cards */
+    .sdItem{
+      padding: 10px;
+      gap: 8px;
+    }
+
+    .sdItem__left{
+      width: 100%;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .sdThumb{
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      object-fit: contain;
+      background: #fff;
+      padding: 4px;
+    }
+
+    .sdItem__meta{
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .sdItem__title{
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sdChips{
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    .sdChip{
+      font-size: 10px;
+      padding: 4px 7px;
+      max-width: 100%;
+    }
+
+    .sdItem__actions{
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .sdBtn{
+      width: 100%;
+      min-width: 0;
+      padding: 9px 8px;
+      font-size: 11px;
+    }
+
+    /* Top sellers */
+    .sdSellerRow{
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 10px;
+    }
+
+    .sdRank{
+      width: 28px;
+      height: 28px;
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .sdSellerRow__left{
+      min-width: 0;
+      width: 100%;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sdSellerRow__meta{
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .sdSellerRow__meta .sdItem__title{
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sdSellerRow__stats{
+      grid-column: 2;
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .sdSellerRow__act{
+      grid-column: 2;
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    .sdSellerRow__act .sdBtn{
+      width: 100%;
+    }
+
+    .sdMuted{
+      font-size: 10px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Available products row */
+    .sdProdRow{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .sdProdRow__left{
+      width: 100%;
+      min-width: 0;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .sdProdRow__meta{
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .sdProdRow__right{
+      width: 100%;
+      text-align: left;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .sdQty{
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    /* Orders */
+    .sdOrder__top,
+    .sdOrder__bottom{
+      flex-wrap: wrap;
+    }
+
+    .sdOrder__amt,
+    .sdMono{
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Shipping status */
+    .sdShipGrid{
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .sdShipCard{
+      min-width: 0;
+      padding: 10px;
+      gap: 8px;
+    }
+
+    .sdShipIcon{
+      width: 40px;
+      height: 40px;
+      font-size: 16px;
+    }
+
+    .sdShipMeta{
+      min-width: 0;
+    }
+
+    .sdShipMeta small{
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sdShipMeta strong{
+      font-size: 16px;
+    }
+
+    /* Footer quick links */
+    .sdFooter__links{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .sdFooter__links a,
+    .sdLogout button{
+      width: 100%;
+      min-width: 0;
+      justify-content: center;
+      text-align: center;
+      font-size: 11px;
+      padding: 9px 8px;
+    }
+  }
+
+  @media print{
+    .sdHeader, .sdFooter{ display:none !important; }
+    .sdCard{ box-shadow:none !important; border: 1px solid #ddd !important; }
+  }
+</style>
+
+<script nonce="<%= NONCE %>">
+  // Close notifications
+  function setupNotifications() {
+    document.querySelectorAll('.notification .close').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const notification = e.target.closest('.notification');
+        if (!notification) return;
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(-10px)';
+        setTimeout(() => notification.remove(), 250);
+      });
+    });
+
+    setTimeout(() => {
+      document.querySelectorAll('.notification.success').forEach(notification => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(-10px)';
+        setTimeout(() => notification.remove(), 250);
+      });
+    }, 5000);
+  }
+
+  function fmtCurrency(amount) {
+    return 'R ' + Number(amount || 0).toFixed(2);
+  }
+
+  async function fetchChartData() {
+    try {
+      const res = await fetch('/business/analytics/chart-data', { headers: { 'Accept': 'application/json' }});
+      if (!res.ok) throw new Error('Failed to fetch chart data');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Failed to load chart data');
+      return data;
+    } catch (e) {
+      console.error('Chart fetch error:', e);
+      return null;
+    }
+  }
+
+  // ✅ init once, refresh without rebinding (prevents “slow phone” + memory leaks)
+  function initSimpleChart() {
+    const chartContainer = document.getElementById('simple-chart');
+    const labelsContainer = document.getElementById('chart-labels');
+    const dailyBtn = document.getElementById('daily-btn');
+    const monthlyBtn = document.getElementById('monthly-btn');
+    const yearlyBtn = document.getElementById('yearly-btn');
+
+    if (!chartContainer || !labelsContainer) return;
+
+    let datasets = { daily: [], monthly: [], yearly: [] };
+    let currentPeriod = 'daily';
+
+    function setActive(period) {
+      currentPeriod = period;
+      [dailyBtn, monthlyBtn, yearlyBtn].forEach(btn => btn && btn.classList.remove('is-active'));
+      if (period === 'daily') dailyBtn && dailyBtn.classList.add('is-active');
+      if (period === 'monthly') monthlyBtn && monthlyBtn.classList.add('is-active');
+      if (period === 'yearly') yearlyBtn && yearlyBtn.classList.add('is-active');
+      updateChart(datasets[currentPeriod] || [], currentPeriod);
+    }
+
+    function updateChart(data, period) {
+      chartContainer.innerHTML = '';
+      labelsContainer.innerHTML = '';
+
+      if (!Array.isArray(data) || data.length === 0) {
+        chartContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#64748B;font-weight:800;">No data available</div>';
+        return;
+      }
+
+      const salesValues = data.map(item => Number(item.sales || 0));
+      const totalSales = salesValues.reduce((sum, v) => sum + v, 0);
+      const avgSales = salesValues.length ? totalSales / salesValues.length : 0;
+      const maxSales = Math.max(...salesValues, 1);
+      const minSales = Math.min(...salesValues.filter(v => v > 0)) || 0;
+
+      document.getElementById('current-sales').textContent = fmtCurrency(salesValues[salesValues.length - 1] || 0);
+      document.getElementById('avg-sales').textContent = fmtCurrency(avgSales);
+      document.getElementById('total-sales').textContent = fmtCurrency(totalSales);
+      document.getElementById('peak-sales').textContent = fmtCurrency(maxSales);
+      document.getElementById('lowest-sales').textContent = fmtCurrency(minSales);
+
+      const firstValue = salesValues[0] || 0;
+      const lastValue = salesValues[salesValues.length - 1] || 0;
+      let growth = 0;
+      if (firstValue > 0) growth = ((lastValue - firstValue) / firstValue) * 100;
+
+      const growthEl = document.getElementById('growth-trend');
+      const projEl = document.getElementById('projection');
+
+      if (growthEl) {
+        growthEl.textContent = growth.toFixed(1) + '%';
+        growthEl.className = (growth >= 0 ? 'positive' : 'negative');
+      }
+      if (projEl) {
+        projEl.textContent = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+        projEl.className = (growth >= 0 ? 'positive' : 'negative');
+      }
+
+      const chartHeight = 150;
+      const showEvery = Math.ceil(data.length / 8);
+
+      data.forEach((item, index) => {
+        const value = Number(item.sales || 0);
+        const barHeight = (value / maxSales) * chartHeight;
+
+        const bar = document.createElement('div');
+        bar.style.cssText = `
+          height:${barHeight}px;
+          background-color:${period === 'daily' ? '#7C3AED' : period === 'monthly' ? '#2563EB' : '#22C55E'};
+          border-radius:4px 4px 0 0;
+          flex:1;
+          position:relative;
+          transition:height .25s ease;
+          cursor:pointer;
+          min-width: 8px;
+        `;
+
+        const labelText = (period === 'yearly') ? (item.month || '') : (item.date || '');
+        bar.title = `${labelText}: ${fmtCurrency(value)}${item.orders ? ` | ${item.orders} orders` : ''}`;
+
+        chartContainer.appendChild(bar);
+
+        const label = document.createElement('div');
+        label.style.cssText = 'text-align:center;flex:1;font-size:10px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const showLabel = (index % showEvery === 0) || (index === data.length - 1);
+        label.textContent = showLabel ? labelText : '';
+        labelsContainer.appendChild(label);
+      });
+    }
+
+    async function refreshDataAndRender() {
+      const chartData = await fetchChartData();
+      if (!chartData || !chartData.chartData) return;
+
+      const { daily, monthly, yearly } = chartData.chartData;
+      datasets = {
+        daily: Array.isArray(daily) ? daily : [],
+        monthly: Array.isArray(monthly) ? monthly : [],
+        yearly: Array.isArray(yearly) ? yearly : []
+      };
+      updateChart(datasets[currentPeriod] || [], currentPeriod);
+    }
+
+    // bind buttons ONCE
+    if (!document.documentElement.dataset.supChartBound) {
+      dailyBtn && dailyBtn.addEventListener('click', () => setActive('daily'));
+      monthlyBtn && monthlyBtn.addEventListener('click', () => setActive('monthly'));
+      yearlyBtn && yearlyBtn.addEventListener('click', () => setActive('yearly'));
+      document.documentElement.dataset.supChartBound = '1';
+    }
+
+    refreshDataAndRender();
+    setInterval(refreshDataAndRender, 60000);
+  }
+
+  // KPI refresh (safe)
+  async function refreshKPIs() {
+    try {
+      const res = await fetch('/business/api/supplier/kpis', {
+        credentials: 'same-origin',
+        headers: { 'Cache-Control': 'no-cache', 'Accept': 'application/json' }
+      });
+      if (!res.ok) return;
+
+      const data = await res.json().catch(() => ({}));
+      if (!data || data.ok === false) return;
+
+      const setText = (key, value) => {
+        document.querySelectorAll(`[data-kpi="${key}"]`).forEach(el => {
+          const v = (value ?? 0).toString();
+          if (el.textContent !== v) el.textContent = v;
+        });
+      };
+
+      setText('totalProducts', data.totalProducts);
+      setText('totalStock', data.totalStock);
+      setText('lowStock', data.lowStock);
+      setText('outOfStock', data.outOfStock);
+    } catch (e) {
+      console.warn('KPI refresh failed:', e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setupNotifications();
+    initSimpleChart();
+    refreshKPIs();
+
+    setInterval(refreshKPIs, 30000);
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        refreshKPIs();
+      }
+    });
+  });
+</script>

@@ -585,13 +585,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/dashboards/supp', (req, res) => {
-  res.render('dashboards/supp', {
-    layout: false,
-    title: 'Supplier Dashboard',
-  });
-});
-
 /* ---------------------------------------
    Import and Register Routers
 --------------------------------------- */
@@ -618,6 +611,7 @@ const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
+const wholesaleRoutes = require('./routes/wholesale');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
 const adminHomeBannersRoutes = require('./routes/adminHomeBanners');
@@ -712,6 +706,7 @@ app.use('/admin', adminPayoutsRoutes);
 
 // Commerce / catalog
 app.use('/products', productsRouter);
+app.use('/wholesale', wholesaleRoutes);
 app.use('/payment', paymentRouter);
 
 // Public pages
