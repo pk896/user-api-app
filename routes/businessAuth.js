@@ -1782,7 +1782,10 @@ router.get(
         return res.redirect('/business/dashboard');
       }
 
-      const supplierDoc = await Business.findById(sessionBusiness._id).lean();
+      const supplierDoc = await Business.findById(sessionBusiness._id)
+        .select('_id name email role isVerified logoUrl')
+        .lean();
+        
       if (!supplierDoc) {
         req.flash('error', 'Business not found. Please log in again.');
         return res.redirect('/business/login');
@@ -2093,9 +2096,16 @@ router.get(
         process.env.SMTP_URL
       );
 
+      const supplierAvatarUrl =
+        String(supplierDoc.logoUrl || '').trim() ||
+        '/images/branding/logo-unincorporate.png';
+
       return res.render('dashboards/supplier-dashboard', {
+        layout: false,
+
         title: 'Supplier Dashboard',
         business: supplierDoc,
+        supplierAvatarUrl,
         totals: {
           totalProducts,
           totalStock,
