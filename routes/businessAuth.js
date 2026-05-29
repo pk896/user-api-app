@@ -10,8 +10,10 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const Business = require('../models/Business');
-const Product = require('../models/Product');
-const DeliveryOption = require('../models/DeliveryOption');
+const Product = require('../models/Product'); // seller products - keep for seller/buyer flows
+const SupplierProduct = require('../models/SupplierProduct');
+const SupplyRequest = require('../models/SupplyRequest');
+const _DeliveryOption = require('../models/DeliveryOption');
 const requireBusiness = require('../middleware/requireBusiness');
 const redirectIfLoggedIn = require('../middleware/redirectIfLoggedIn');
 const BusinessResetToken = require('../models/BusinessResetToken');
@@ -188,32 +190,275 @@ function pickField(body, dottedPath, fallback = '') {
 }
 
 const LOW_STOCK_THRESHOLD = 10;
+const SUPPLIER_LOW_STOCK_THRESHOLD = 10;
+
+function startOfDaysAgo(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function normalizeSupplierProductForCard(product, extra = {}) {
+  return {
+    _id: product?._id,
+    customId: product?.customId || '',
+    name: product?.name || 'Wholesale Product',
+    imageUrl: product?.imageUrl || '',
+    category: product?.category || 'Uncategorized',
+    wholesalePrice: Number(product?.wholesalePrice || 0),
+    availableQuantity: Number(product?.availableQuantity || 0),
+    unit: product?.unit || 'units',
+    status: product?.status || 'active',
+
+    // Request/sales-style numbers from SupplyRequest
+    qty: Number(extra.qty || 0),
+    previousQty: Number(extra.previousQty || 0),
+    growth: Number(extra.growth || 0),
+  };
+}
+
+async function computeSupplierWholesaleDashboardData(supplierId) {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+
+  // ✅ Supplier products only. NO Product model here.
+  const products = await SupplierProduct.find({ supplier: supplierObjectId })
+    .select(
+      '_id customId name imageUrl category wholesalePrice availableQuantity unit status createdAt updatedAt'
+    )
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .lean();
+
+  const activeProducts = products.filter((p) => p.status !== 'archived');
+
+  const totalProducts = activeProducts.length;
+
+  const totalStock = activeProducts.reduce((sum, p) => {
+    return sum + (Number(p.availableQuantity) || 0);
+  }, 0);
+
+  const inStock = activeProducts.filter((p) => {
+    return (Number(p.availableQuantity) || 0) > 0;
+  }).length;
+
+  const lowStock = activeProducts.filter((p) => {
+    const qty = Number(p.availableQuantity) || 0;
+    return qty > 0 && qty <= SUPPLIER_LOW_STOCK_THRESHOLD;
+  }).length;
+
+  const outOfStock = activeProducts.filter((p) => {
+    return (Number(p.availableQuantity) || 0) <= 0;
+  }).length;
+
+  const inventoryValue = activeProducts.reduce((sum, p) => {
+    const price = Number(p.wholesalePrice) || 0;
+    const qty = Number(p.availableQuantity) || 0;
+    return sum + price * qty;
+  }, 0);
+
+  // ✅ Low stock products from SupplierProduct.availableQuantity
+  const supplierLowStockProducts = activeProducts
+    .filter((p) => {
+      const qty = Number(p.availableQuantity) || 0;
+      return qty > 0 && qty <= SUPPLIER_LOW_STOCK_THRESHOLD;
+    })
+    .sort((a, b) => Number(a.availableQuantity || 0) - Number(b.availableQuantity || 0))
+    .slice(0, 4)
+    .map((p) => normalizeSupplierProductForCard(p));
+
+  // ✅ Out of stock products from SupplierProduct.availableQuantity
+  const supplierOutOfStockProducts = activeProducts
+    .filter((p) => (Number(p.availableQuantity) || 0) <= 0)
+    .sort((a, b) => {
+      return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    })
+    .slice(0, 4)
+    .map((p) => normalizeSupplierProductForCard(p));
+
+  // ✅ Top selling = approved supply requests grouped by supplierProduct
+  const approvedRequestRows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+        status: 'approved',
+      },
+    },
+    {
+      $group: {
+        _id: '$supplierProduct',
+        qty: { $sum: '$requestedQuantity' },
+      },
+    },
+    { $sort: { qty: -1 } },
+    { $limit: 4 },
+  ]);
+
+  const topProductIds = approvedRequestRows.map((row) => row._id).filter(Boolean);
+
+  const topProductDocs = topProductIds.length
+    ? await SupplierProduct.find({
+        _id: { $in: topProductIds },
+        supplier: supplierObjectId,
+      })
+        .select(
+          '_id customId name imageUrl category wholesalePrice availableQuantity unit status'
+        )
+        .lean()
+    : [];
+
+  const topProductsById = new Map(
+    topProductDocs.map((product) => [String(product._id), product])
+  );
+
+  const supplierTopSellingProducts = approvedRequestRows
+    .map((row) => {
+      const product = topProductsById.get(String(row._id));
+      if (!product) return null;
+
+      return normalizeSupplierProductForCard(product, {
+        qty: row.qty,
+      });
+    })
+    .filter(Boolean);
+
+  // ✅ Fastest growing = approved requests this 7 days vs previous 7 days
+  const last7Start = startOfDaysAgo(7);
+  const previous14Start = startOfDaysAgo(14);
+
+  const currentGrowthRows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+        status: 'approved',
+        createdAt: { $gte: last7Start },
+      },
+    },
+    {
+      $group: {
+        _id: '$supplierProduct',
+        qty: { $sum: '$requestedQuantity' },
+      },
+    },
+  ]);
+
+  const previousGrowthRows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+        status: 'approved',
+        createdAt: {
+          $gte: previous14Start,
+          $lt: last7Start,
+        },
+      },
+    },
+    {
+      $group: {
+        _id: '$supplierProduct',
+        qty: { $sum: '$requestedQuantity' },
+      },
+    },
+  ]);
+
+  const previousByProductId = new Map(
+    previousGrowthRows.map((row) => [String(row._id), Number(row.qty || 0)])
+  );
+
+  const growthProductIds = currentGrowthRows.map((row) => row._id).filter(Boolean);
+
+  const growthProductDocs = growthProductIds.length
+    ? await SupplierProduct.find({
+        _id: { $in: growthProductIds },
+        supplier: supplierObjectId,
+      })
+        .select(
+          '_id customId name imageUrl category wholesalePrice availableQuantity unit status'
+        )
+        .lean()
+    : [];
+
+  const growthProductsById = new Map(
+    growthProductDocs.map((product) => [String(product._id), product])
+  );
+
+  const supplierFastestGrowingProducts = currentGrowthRows
+    .map((row) => {
+      const productId = String(row._id);
+      const product = growthProductsById.get(productId);
+      if (!product) return null;
+
+      const qty = Number(row.qty || 0);
+      const previousQty = previousByProductId.get(productId) || 0;
+
+      return normalizeSupplierProductForCard(product, {
+        qty,
+        previousQty,
+        growth: qty - previousQty,
+      });
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.growth - a.growth || b.qty - a.qty)
+    .slice(0, 4);
+
+  return {
+    products: activeProducts,
+
+    totals: {
+      totalProducts,
+      totalStock,
+      inStock,
+      lowStock,
+      outOfStock,
+    },
+
+    inventoryValue,
+
+    supplierTopSellingProducts,
+    supplierLowStockProducts,
+    supplierOutOfStockProducts,
+    supplierFastestGrowingProducts,
+  };
+}
 
 // -------------------------------------------------------
-// ✅ Helper: exclude refunded / canceled orders everywhere
+// ✅ Helper: exclude refunded / cancelled orders everywhere
+// ✅ Keep this because seller KPI + analytics still use it
 // -------------------------------------------------------
 function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
-    const RAW_PAID = Array.isArray(OrderModel?.PAID_STATES)
-      ? OrderModel.PAID_STATES
-      : ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
+  const RAW_PAID = Array.isArray(OrderModel?.PAID_STATES)
+    ? OrderModel.PAID_STATES
+    : ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
 
-    // ✅ include common case variants (Mongo is case-sensitive)
-    const PAID_STATES = Array.from(
-      new Set(
-        RAW_PAID.flatMap((s) => {
-          const v = String(s || '').trim();
-          if (!v) return [];
-          const lower = v.toLowerCase();
-          const title = lower.charAt(0).toUpperCase() + lower.slice(1);
-          return [v, v.toUpperCase(), v.toLowerCase(), title];
-        })
-      )
-    );
+  const PAID_STATES = Array.from(
+    new Set(
+      RAW_PAID.flatMap((s) => {
+        const v = String(s || '').trim();
+        if (!v) return [];
 
-  const CANCEL_STATES = ['Cancelled', 'Canceled', 'CANCELLED', 'CANCELED', 'VOIDED', 'Voided'];
+        const lower = v.toLowerCase();
+        const title = lower.charAt(0).toUpperCase() + lower.slice(1);
 
-  // Treat these as refunded (so they never count in seller/supplier charts + KPIs)
-  const REFUND_STATES = ['Refunded', 'REFUNDED', 'PARTIALLY_REFUNDED', 'Partially Refunded', 'REFUND_SUBMITTED'];
+        return [v, v.toUpperCase(), v.toLowerCase(), title];
+      })
+    )
+  );
+
+  const CANCEL_STATES = [
+    'Cancelled',
+    'Canceled',
+    'CANCELLED',
+    'CANCELED',
+    'VOIDED',
+    'Voided',
+  ];
+
+  const REFUND_STATES = [
+    'Refunded',
+    'REFUNDED',
+    'PARTIALLY_REFUNDED',
+    'Partially Refunded',
+    'REFUND_SUBMITTED',
+  ];
 
   const REFUND_PAYMENT_STATUSES = [
     'refunded',
@@ -225,7 +470,6 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
   const base = {
     status: { $in: PAID_STATES },
 
-    // ✅ hard excludes
     $and: [
       { status: { $nin: [...CANCEL_STATES, ...REFUND_STATES] } },
       { paymentStatus: { $nin: REFUND_PAYMENT_STATUSES } },
@@ -233,22 +477,24 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
       { isRefunded: { $ne: true } },
       { refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED', 'COMPLETED'] } },
 
-      { $or: [{ refundedAt: { $exists: false } }, { refundedAt: null }] },
+      {
+        $or: [
+          { refundedAt: { $exists: false } },
+          { refundedAt: null },
+        ],
+      },
     ],
   };
 
-  // ✅ Merge extra safely (append $and instead of overwriting)
   const extraAnd = Array.isArray(extra.$and) ? extra.$and : [];
-  const { ...rest } = extra || {};
+  const rest = { ...(extra || {}) };
+  delete rest.$and;
 
-  const merged = {
+  return {
     ...base,
     ...rest,
     $and: [...base.$and, ...extraAnd],
   };
-
-  return merged;
-
 }
 
 // -------------------------------------------------------
@@ -1772,6 +2018,7 @@ router.get(
   async (req, res) => {
     try {
       const sessionBusiness = getBiz(req);
+
       if (!sessionBusiness || !sessionBusiness._id) {
         req.flash('error', 'Session expired. Please log in again.');
         return res.redirect('/business/login');
@@ -1785,7 +2032,7 @@ router.get(
       const supplierDoc = await Business.findById(sessionBusiness._id)
         .select('_id name email role isVerified logoUrl')
         .lean();
-        
+
       if (!supplierDoc) {
         req.flash('error', 'Business not found. Please log in again.');
         return res.redirect('/business/login');
@@ -1796,309 +2043,24 @@ router.get(
         return res.redirect('/business/verify-pending');
       }
 
-      const OrderModel = Order;
-
-      // ✅ Helper: refunded/cancelled order detector (works even if fields don't exist)
-      function isRefundedOrCancelledOrder(o) {
-        if (!o) return true;
-
-        // explicit flags
-        if (o.isRefunded === true) return true;
-
-        const refundStatus = String(o.refundStatus || '').trim().toUpperCase();
-        if (refundStatus === 'REFUNDED' || refundStatus === 'FULL' || refundStatus === 'FULLY_REFUNDED') {
-          return true;
-        }
-
-        // Some schemas set refundedAt
-        if (o.refundedAt) return true;
-
-        // cancellation by status (covers most projects)
-        const st = String(o.status || '').trim().toUpperCase();
-        if (st === 'CANCELLED' || st === 'CANCELED' || st === 'VOIDED') return true;
-
-        return false;
-      }
-
-      // ✅ Helper: refunded item detector (safe if fields don't exist)
-      function isRefundedItem(item) {
-        if (!item) return false;
-        if (item.isRefunded === true) return true;
-
-        const rs = String(item.refundStatus || '').trim().toUpperCase();
-        if (rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED') return true;
-
-        if (item.refundedAt) return true;
-
-        return false;
-      }
-
-      // ✅ Helper: Convert MoneySchema to number
-      function moneyToNumber(m) {
-        if (!m) return 0;
-        if (typeof m === 'number') return m;
-        if (typeof m === 'string') return Number(m) || 0;
-        if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
-        return 0;
-      }
-
-      // 1) Products for this supplier
-      const products = await Product.find({ business: sessionBusiness._id })
-        .select('customId name price stock category imageUrl createdAt updatedAt')
-        .sort({ updatedAt: -1, createdAt: -1 })
-        .lean();
-
-      const totalProducts = products.length;
-      const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
-      const inStock = products.filter((p) => (Number(p.stock) || 0) > 0).length;
-
-      // keep your threshold (< 20)
-      const lowStock = products.filter((p) => {
-        const s = Number(p.stock) || 0;
-        return s > 0 && s < 20;
-      }).length;
-
-      const outOfStock = products.filter((p) => (Number(p.stock) || 0) <= 0).length;
-
-      // inventory value (NOT chart logic)
-      const inventoryValue = products.reduce((sum, p) => {
-        const price = Number(p.price) || 0;
-        const stock = Number(p.stock) || 0;
-        return sum + price * stock;
-      }, 0);
-
-      const productsByKey = new Map();
-      const allProductIdentifiers = [];
-
-      for (const p of products) {
-        if (p.customId) {
-          const customId = String(p.customId);
-          productsByKey.set(customId, p);
-          allProductIdentifiers.push(customId);
-        }
-        const objectId = String(p._id);
-        productsByKey.set(objectId, p);
-        allProductIdentifiers.push(objectId);
-      }
-
-      // 2) Recent orders — NOT chart logic
-      let ordersTotal = 0;
-      let ordersByStatus = {};
-      let recentOrders = [];
-
-      if (OrderModel && allProductIdentifiers.length) {
-        const idMatchOr = [
-          { 'items.productId': { $in: allProductIdentifiers } },
-          { 'items.customId': { $in: allProductIdentifiers } },
-          { 'items.pid': { $in: allProductIdentifiers } },
-          { 'items.sku': { $in: allProductIdentifiers } },
-        ];
-
-        const baseOrderMatch = buildNonRefundedPaidMatch(OrderModel, { $or: idMatchOr });
-
-        // ✅ Pull only minimal fields we need, then filter out refunded/cancelled orders in JS
-        const rawForCounts = await OrderModel.find(baseOrderMatch)
-          .select('status refundStatus isRefunded refundedAt')
-          .lean();
-
-        const nonRefundedOrders = rawForCounts.filter((o) => !isRefundedOrCancelledOrder(o));
-
-        ordersTotal = nonRefundedOrders.length;
-
-        ordersByStatus = nonRefundedOrders.reduce((m, o) => {
-          const k = o.status || 'Unknown';
-          m[k] = (m[k] || 0) + 1;
-          return m;
-        }, {});
-
-        // ✅ Recent orders list (also ignore refunded/cancelled)
-        const rawRecent = await OrderModel.find(baseOrderMatch)
-          .select('orderId status amount createdAt shippingTracking refundStatus isRefunded refundedAt')
-          .sort({ createdAt: -1 })
-          .limit(20) // fetch extra so we can filter and still show 5
-          .lean();
-
-        recentOrders = rawRecent
-          .filter((o) => !isRefundedOrCancelledOrder(o))
-          .slice(0, 5);
-      }
-
-      // 3) Shipping tracking stats — NOT chart logic
-      let trackingStats = {
-        pending: 0,
-        processing: 0,
-        shipped: 0,
-        inTransit: 0,
-        delivered: 0,
-      };
-
-      if (OrderModel && allProductIdentifiers.length) {
-        const rawForTracking = await OrderModel.find(
-          {
-            $or: [
-              { 'items.productId': { $in: allProductIdentifiers } },
-              { 'items.customId': { $in: allProductIdentifiers } },
-            ],
-          },
-          'shippingTracking status refundStatus isRefunded refundedAt'
-        ).lean();
-
-        const nonRefundedForTracking = rawForTracking.filter((o) => !isRefundedOrCancelledOrder(o));
-
-        for (const o of nonRefundedForTracking) {
-          const status = String(o?.shippingTracking?.status || 'PENDING').toUpperCase();
-          if (status === 'PENDING') trackingStats.pending += 1;
-          else if (status === 'PROCESSING') trackingStats.processing += 1;
-          else if (status === 'SHIPPED') trackingStats.shipped += 1;
-          else if (status === 'IN_TRANSIT') trackingStats.inTransit += 1;
-          else if (status === 'DELIVERED') trackingStats.delivered += 1;
-        }
-      }
-
-      // 4) 30-day KPIs (sold products + revenue) — keep (NOT charts)
-      const SINCE_DAYS = 30;
-      const since = new Date();
-      since.setDate(since.getDate() - SINCE_DAYS);
-
-      let soldPerProduct = [];
-      let last30Revenue = 0;
-      let last30Items = 0;
-
-      if (OrderModel && allProductIdentifiers.length) {
-        const PAID_STATES = Array.isArray(OrderModel?.PAID_STATES)
-          ? OrderModel.PAID_STATES
-          : ['Completed', 'Paid', 'Shipped', 'Delivered', 'COMPLETED'];
-
-        const idMatchOr = [
-          { 'items.productId': { $in: allProductIdentifiers } },
-          { 'items.customId': { $in: allProductIdentifiers } },
-          { 'items.pid': { $in: allProductIdentifiers } },
-          { 'items.sku': { $in: allProductIdentifiers } },
-        ];
-
-        const baseMatch = {
-          createdAt: { $gte: since },
-          status: { $in: PAID_STATES },
-          $or: idMatchOr,
-        };
-
-        // ✅ We fetch refund fields + item refund fields, then ignore them in JS
-        const recentPaidOrdersRaw = await OrderModel.find(baseMatch)
-          .select(
-            'items amount createdAt status shippingTracking refundStatus isRefunded refundedAt'
-          )
-          .lean();
-
-        const recentPaidOrders = recentPaidOrdersRaw.filter(
-          (o) => !isRefundedOrCancelledOrder(o)
-        );
-
-        const productSales = new Map();
-
-        for (const order of recentPaidOrders) {
-          const items = Array.isArray(order.items) ? order.items : [];
-
-          for (const item of items) {
-            // ✅ ignore refunded items
-            if (isRefundedItem(item)) continue;
-
-            let productId = null;
-            const possibleIds = [item.productId, item.customId, item.pid, item.sku];
-
-            for (const id of possibleIds) {
-              const sid = id ? String(id) : '';
-              if (sid && allProductIdentifiers.includes(sid)) {
-                productId = sid;
-                break;
-              }
-            }
-
-            if (!productId) continue;
-
-            const product = productsByKey.get(productId);
-            if (!product) continue;
-
-            const quantity = Number(item.quantity || 1);
-            if (!Number.isFinite(quantity) || quantity <= 0) continue;
-
-            // ✅ price from product OR from item money schema
-            const price =
-              Number(product.price || 0) ||
-              moneyToNumber(item.price) ||
-              0;
-
-            const revenue = quantity * price;
-
-            last30Items += quantity;
-            last30Revenue += revenue;
-
-            if (!productSales.has(productId)) {
-              productSales.set(productId, {
-                productId,
-                name: product.name || item.name || '(unknown)',
-                imageUrl: product.imageUrl || '',
-                category: product.category || '',
-                price,
-                qty: 0,
-                estRevenue: 0,
-              });
-            }
-
-            const productStat = productSales.get(productId);
-            productStat.qty += quantity;
-            productStat.estRevenue += revenue;
-          }
-        }
-
-        soldPerProduct = Array.from(productSales.values()).sort((a, b) => b.qty - a.qty);
-      }
-
-      // ✅ Fallback to computeSupplierKpis (your UPDATED version should also ignore refunds)
-      if (soldPerProduct.length === 0 && last30Items === 0) {
-        try {
-          const kpisRaw = await computeSupplierKpis(sessionBusiness._id);
-          if (kpisRaw) {
-            last30Items = kpisRaw.soldLast30 || 0;
-            last30Revenue = kpisRaw.revenueLast30 || 0;
-
-            if (Array.isArray(kpisRaw.perProduct) && kpisRaw.perProduct.length > 0) {
-              soldPerProduct = kpisRaw.perProduct;
-            }
-          }
-        } catch (fallbackError) {
-          console.error('❌ Supplier fallback also failed:', fallbackError);
-        }
-      }
-
-      const kpis = {
-        totalProducts,
-        totalStock,
-        inStock,
-        lowStock,
-        outOfStock,
-        soldLast30: last30Items,
-        revenueLast30: Number(last30Revenue.toFixed(2)),
-        last30Items,
-        last30Revenue: Number(last30Revenue.toFixed(2)),
-        perProduct: soldPerProduct.slice(0, 10),
-        perProductTotalQty: last30Items,
-        perProductEstRevenue: Number(last30Revenue.toFixed(2)),
-      };
-
-      const deliveryOptions = await DeliveryOption.find({ active: true })
-        .sort({ deliveryDays: 1, priceCents: 1 })
-        .lean();
-
-      const supportInbox = process.env.SUPPORT_INBOX || 'support@unicoporate.test';
-      const mailerOk = !!(
-        process.env.SENDGRID_API_KEY ||
-        process.env.SMTP_HOST ||
-        process.env.SMTP_URL
+      // ✅ Supplier dashboard data only.
+      // ✅ Uses SupplierProduct + SupplyRequest.
+      // ❌ Does NOT use Product.
+      const supplierDashboardData = await computeSupplierWholesaleDashboardData(
+        supplierDoc._id
       );
 
       const supplierAvatarUrl =
         String(supplierDoc.logoUrl || '').trim() ||
         '/images/branding/logo-unincorporate.png';
+
+      const supportInbox = process.env.SUPPORT_INBOX || 'support@unicoporate.test';
+
+      const mailerOk = !!(
+        process.env.SENDGRID_API_KEY ||
+        process.env.SMTP_HOST ||
+        process.env.SMTP_URL
+      );
 
       return res.render('dashboards/supplier-dashboard', {
         layout: false,
@@ -2106,33 +2068,60 @@ router.get(
         title: 'Supplier Dashboard',
         business: supplierDoc,
         supplierAvatarUrl,
-        totals: {
-          totalProducts,
-          totalStock,
-          inStock,
-          lowStock,
-          outOfStock,
+
+        // Supplier inventory totals
+        totals: supplierDashboardData.totals,
+        products: supplierDashboardData.products,
+        inventoryValue: supplierDashboardData.inventoryValue,
+
+        // ✅ The 4 new supplier product card groups
+        supplierTopSellingProducts:
+          supplierDashboardData.supplierTopSellingProducts || [],
+
+        supplierLowStockProducts:
+          supplierDashboardData.supplierLowStockProducts || [],
+
+        supplierOutOfStockProducts:
+          supplierDashboardData.supplierOutOfStockProducts || [],
+
+        supplierFastestGrowingProducts:
+          supplierDashboardData.supplierFastestGrowingProducts || [],
+
+        // Safe defaults for old dashboard sections that may still exist in the EJS
+        trackingStats: {
+          total: 0,
+          delivered: 0,
+          inTransit: 0,
+          processing: 0,
         },
-        products,
-        inventoryValue,
-        trackingStats,
+
         orders: {
-          total: ordersTotal,
-          byStatus: ordersByStatus,
-          recent: recentOrders,
+          total: 0,
+          byStatus: {},
+          recent: [],
         },
-        kpis,
-        deliveryOptions,
-        isOrdersAdmin: Boolean(req.session.ordersAdmin),
+
+        kpis: {
+          totalProducts: supplierDashboardData.totals.totalProducts,
+          totalStock: supplierDashboardData.totals.totalStock,
+          inStock: supplierDashboardData.totals.inStock,
+          lowStock: supplierDashboardData.totals.lowStock,
+          outOfStock: supplierDashboardData.totals.outOfStock,
+          inventoryValue: supplierDashboardData.inventoryValue,
+        },
+
+        deliveryOptions: [],
+        isOrdersAdmin: false,
         mailerOk,
         supportInbox,
+
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
       });
     } catch (err) {
       console.error('❌ Supplier dashboard error:', err);
       req.flash('error', '❌ Failed to load supplier dashboard.');
-      res.redirect('/business/login');
+      return res.redirect('/business/login');
     }
   }
 );
@@ -2140,18 +2129,46 @@ router.get(
 /* ----------------------------------------------------------
  * Supplier KPIs JSON for auto-refresh
  * -------------------------------------------------------- */
-router.get('/api/supplier/kpis', requireBusiness, async (req, res) => {
+router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const business = getBiz(req);
+
     if (!business || !business._id || business.role !== 'supplier') {
-      return res.status(403).json({ ok: false, message: 'Suppliers only' });
+      return res.status(403).json({
+        ok: false,
+        message: 'Suppliers only',
+      });
     }
 
-    const kpis = await computeSupplierKpis(business._id);
-    return res.json({ ok: true, ...kpis });
+    // ✅ Supplier KPI API must also use SupplierProduct + SupplyRequest only.
+    const supplierDashboardData = await computeSupplierWholesaleDashboardData(
+      business._id
+    );
+
+    return res.json({
+      ok: true,
+
+      totals: supplierDashboardData.totals,
+      inventoryValue: supplierDashboardData.inventoryValue,
+
+      supplierTopSellingProducts:
+        supplierDashboardData.supplierTopSellingProducts || [],
+
+      supplierLowStockProducts:
+        supplierDashboardData.supplierLowStockProducts || [],
+
+      supplierOutOfStockProducts:
+        supplierDashboardData.supplierOutOfStockProducts || [],
+
+      supplierFastestGrowingProducts:
+        supplierDashboardData.supplierFastestGrowingProducts || [],
+    });
   } catch (err) {
-    console.error('supplier KPI API error:', err);
-    return res.status(500).json({ ok: false, message: 'Failed to load KPIs' });
+    console.error('❌ Supplier KPI API error:', err);
+    return res.status(500).json({
+      ok: false,
+      message: 'Failed to load supplier KPIs',
+    });
   }
 });
 

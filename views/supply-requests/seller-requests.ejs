@@ -33,6 +33,7 @@
               <th>Status</th>
               <th>Response</th>
               <th>Date</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -74,6 +75,35 @@
 
                 <td class="small text-muted">
                   <%= request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '' %>
+                </td>
+
+                <td>
+                  <% if (request.status === 'approved') { %>
+                    <form method="POST" action="/wholesale/import/<%= request._id %>" class="d-grid gap-2">
+                      <input
+                        type="number"
+                        name="retailPrice"
+                        class="form-control form-control-sm"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="Retail price"
+                        value="<%= Number((Number(request.supplierProduct?.wholesalePrice || 0) * 1.35) || 1).toFixed(2) %>"
+                        required
+                      >
+
+                      <button type="submit" class="btn btn-sm btn-primary">
+                        Import Product
+                      </button>
+                    </form>
+
+                    <div class="small text-muted mt-1">
+                      Imported with stock 0 for review.
+                    </div>
+                  <% } else if (request.status === 'pending') { %>
+                    <span class="text-muted small">Waiting for supplier</span>
+                  <% } else { %>
+                    <span class="text-muted small">Not available</span>
+                  <% } %>
                 </td>
               </tr>
             <% }) %>

@@ -269,6 +269,49 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
 
+    // ==========================
+    // 🏭 Wholesale import tracking
+    // ==========================
+    // These fields are optional and do not disturb normal seller products.
+    sourceType: {
+      type: String,
+      enum: ['manual', 'wholesale_import'],
+      default: 'manual',
+      index: true,
+    },
+
+    sourceSupplier: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business',
+      default: null,
+      index: true,
+    },
+
+    sourceSupplierProduct: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SupplierProduct',
+      default: null,
+      index: true,
+    },
+
+    sourceSupplyRequest: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SupplyRequest',
+      default: null,
+      index: true,
+    },
+
+    wholesaleCostPrice: {
+      type: Number,
+      default: 0,
+      min: [0, 'Wholesale cost price cannot be negative'],
+    },
+
+    importedAt: {
+      type: Date,
+      default: null,
+    },
+
     // Hard timestamp fields (defensive fix)
     createdAt: {
       type: Date,

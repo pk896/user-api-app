@@ -1,0 +1,243 @@
+<!-- views/wholesale/checkout.ejs -->
+
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 fw-bold text-primary mb-1">Wholesale Checkout</h1>
+      <p class="text-muted mb-0">
+        Send stock requests to suppliers. The supplier must approve before payment/import.
+      </p>
+    </div>
+
+    <a href="/wholesale" class="btn btn-outline-primary">
+      Continue Browsing Wholesale
+    </a>
+  </div>
+
+  <% if (!items || !items.length) { %>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <div class="display-6 mb-3">🛒</div>
+        <h2 class="h5 fw-bold text-primary">Your wholesale cart is empty</h2>
+        <p class="text-muted mb-4">
+          Add wholesale products from suppliers before sending a request.
+        </p>
+        <a href="/wholesale" class="btn btn-primary">
+          Browse Wholesale Products
+        </a>
+      </div>
+    </div>
+  <% } else { %>
+    <div class="row g-4">
+      <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 mb-0">Wholesale Items</h2>
+          </div>
+
+          <div class="card-body p-0">
+            <% items.forEach((item) => { %>
+              <div class="p-3 p-md-4 border-bottom">
+                <div class="row g-3 align-items-center">
+                  <div class="col-auto">
+                    <img
+                      src="<%= item.imageUrl || '/images/branding/logo-unincorporate.png' %>"
+                      alt="<%= item.name %>"
+                      class="rounded border"
+                      style="width: 86px; height: 86px; object-fit: contain;"
+                      loading="lazy"
+                      decoding="async"
+                      onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';"
+                    >
+                  </div>
+
+                  <div class="col">
+                    <h3 class="h6 fw-bold mb-1 text-primary">
+                      <%= item.name %>
+                    </h3>
+
+                    <div class="small text-muted mb-1">
+                      Supplier:
+                      <strong>
+                        <%= item.supplier && item.supplier.name ? item.supplier.name : 'Supplier' %>
+                      </strong>
+                    </div>
+
+                    <div class="small text-muted">
+                      MOQ:
+                      <strong><%= item.minimumOrderQuantity %></strong>
+                      <%= item.unit || 'units' %>
+                      |
+                      Available:
+                      <strong><%= item.availableQuantity %></strong>
+                      <%= item.unit || 'units' %>
+                    </div>
+
+                    <div class="small text-muted mt-1">
+                      Wholesale price:
+                      <strong><%= Number(item.wholesalePrice || 0).toFixed(2) %></strong>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-md-3">
+                    <form
+                      action="/wholesale/cart/update/<%= item.supplierProduct %>"
+                      method="POST"
+                      class="d-flex gap-2"
+                    >
+                      <input
+                        type="number"
+                        name="quantity"
+                        class="form-control"
+                        min="<%= item.minimumOrderQuantity || 1 %>"
+                        max="<%= item.availableQuantity || 1 %>"
+                        value="<%= item.requestedQuantity || item.minimumOrderQuantity || 1 %>"
+                        required
+                      >
+
+                      <button type="submit" class="btn btn-outline-primary">
+                        Update
+                      </button>
+                    </form>
+                  </div>
+
+                  <div class="col-12 col-md-2 text-md-end">
+                    <div class="fw-bold text-primary">
+                      <%= Number(item.lineTotal || 0).toFixed(2) %>
+                    </div>
+
+                    <form
+                      action="/wholesale/cart/remove/<%= item.supplierProduct %>"
+                      method="POST"
+                      class="mt-2"
+                    >
+                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                        Remove
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 mb-0">Request Summary</h2>
+          </div>
+
+          <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Items</span>
+              <strong><%= items.length %></strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <span class="text-muted">Estimated subtotal</span>
+              <strong class="text-primary">
+                <%= Number(subtotal || 0).toFixed(2) %>
+              </strong>
+            </div>
+
+            <div class="alert alert-info small mb-0">
+              This is a request first. The supplier must approve before payment and import.
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 mb-0">Seller Contact & Delivery</h2>
+          </div>
+
+          <div class="card-body">
+            <form action="/wholesale/checkout/request" method="POST">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Contact name <span class="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="contactName"
+                  class="form-control"
+                  value="<%= business && business.name ? business.name : '' %>"
+                  required
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Contact email
+                </label>
+                <input
+                  type="email"
+                  name="contactEmail"
+                  class="form-control"
+                  value="<%= business && business.email ? business.email : '' %>"
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Contact phone <span class="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="contactPhone"
+                  class="form-control"
+                  value="<%= business && business.phone ? business.phone : '' %>"
+                  required
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Delivery country <span class="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="deliveryCountry"
+                  class="form-control"
+                  value="<%= business && business.country ? business.country : '' %>"
+                  required
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Delivery city <span class="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="deliveryCity"
+                  class="form-control"
+                  value="<%= business && business.city ? business.city : '' %>"
+                  required
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Message to supplier
+                </label>
+                <textarea
+                  name="message"
+                  class="form-control"
+                  rows="4"
+                  placeholder="Example: Please confirm availability, delivery time, and final wholesale cost."
+                ></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100">
+                Send Request to Supplier
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% } %>
+</div>

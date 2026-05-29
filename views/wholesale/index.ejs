@@ -12,6 +12,10 @@
       </a>
 
       <% if (business && business.role === 'seller') { %>
+        <a href="/wholesale/checkout" class="btn btn-outline-primary">
+          Wholesale Checkout
+        </a>
+
         <a href="/wholesale/my-requests" class="btn btn-primary">
           My Requests
         </a>
@@ -122,9 +126,47 @@
                 </div>
               </div>
 
-              <a href="/wholesale/products/<%= product._id %>" class="btn btn-primary w-100">
-                View Product
-              </a>
+              <% if (business && business.role === 'seller') { %>
+                <% const moq = Number(product.minimumOrderQuantity || 1); %>
+                <% const available = Number(product.availableQuantity || 0); %>
+
+                <% if (available > 0) { %>
+                  <form method="POST" action="/wholesale/cart/add/<%= product._id %>" class="d-grid gap-2">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">Qty</span>
+                      <input
+                        type="number"
+                        name="quantity"
+                        class="form-control"
+                        min="<%= moq %>"
+                        max="<%= available %>"
+                        value="<%= moq %>"
+                        required
+                      >
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                      Add to Wholesale Request
+                    </button>
+                  </form>
+
+                  <a href="/wholesale/products/<%= product._id %>" class="btn btn-outline-primary w-100 mt-2">
+                    View Product
+                  </a>
+                <% } else { %>
+                  <button type="button" class="btn btn-outline-secondary w-100" disabled>
+                    Out of Stock
+                  </button>
+
+                  <a href="/wholesale/products/<%= product._id %>" class="btn btn-outline-primary w-100 mt-2">
+                    View Product
+                  </a>
+                <% } %>
+              <% } else { %>
+                <a href="/wholesale/products/<%= product._id %>" class="btn btn-primary w-100">
+                  View Product
+                </a>
+              <% } %>
             </div>
           </div>
         </div>

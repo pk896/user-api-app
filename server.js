@@ -612,6 +612,7 @@ const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
 const productsRouter = require('./routes/products');
 const wholesaleRoutes = require('./routes/wholesale');
+const wholesaleCheckoutRoutes = require('./routes/wholesaleCheckout');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
 const adminHomeBannersRoutes = require('./routes/adminHomeBanners');
@@ -707,6 +708,7 @@ app.use('/admin', adminPayoutsRoutes);
 // Commerce / catalog
 app.use('/products', productsRouter);
 app.use('/wholesale', wholesaleRoutes);
+app.use('/wholesale', wholesaleCheckoutRoutes);
 app.use('/payment', paymentRouter);
 
 // Public pages
