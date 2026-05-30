@@ -481,7 +481,7 @@ router.post(
         `Wholesale request sent successfully. ${createdRequests.length} request(s) created.`
       );
 
-      return res.redirect('/wholesale/seller/requests');
+      return res.redirect('/wholesale/my-requests');
     } catch (err) {
       console.error('❌ Create wholesale request error:', err);
       req.flash('error', err.message || 'Could not send wholesale request.');
@@ -555,6 +555,16 @@ router.post(
 
       const wholesalePrice = Number(supplierProduct.wholesalePrice || 0);
 
+      const approvedQuantity = toPositiveInt(
+        supplyRequest.requestedQuantity,
+        0
+      );
+
+      if (approvedQuantity <= 0) {
+        req.flash('error', 'Cannot import this product because the approved request quantity is invalid.');
+        return res.redirect('/wholesale/my-requests');
+      }
+
       const suggestedRetailPrice =
         wholesalePrice > 0 ? Number((wholesalePrice * 1.35).toFixed(2)) : 1;
 
@@ -592,8 +602,8 @@ router.post(
         description: supplierProduct.description || '',
         imageUrl: supplierProduct.imageUrl,
 
-        // ✅ imported as safe stock 0 so seller reviews before selling
-        stock: 0,
+        // ✅ Import stock from approved supply request quantity
+        stock: approvedQuantity,
 
         role,
         type,
@@ -647,7 +657,7 @@ router.post(
 
       req.flash(
         'success',
-        'Product imported successfully. It was imported with stock 0 so you can review price and stock before selling.'
+        `Product imported successfully with ${approvedQuantity} item(s) in stock. Please review the retail price before selling.`
       );
 
       return res.redirect('/products/all');

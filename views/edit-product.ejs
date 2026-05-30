@@ -96,6 +96,11 @@
           const packagingHint = (ship.packagingHint ?? '');
           const shipSeparately = !!ship.shipSeparately;
           const fragile = !!ship.fragile;
+
+          const isWholesaleImportedProduct =
+            String(product.sourceType || '') === 'wholesale_import' ||
+            !!product.sourceSupplyRequest ||
+            !!product.sourceSupplierProduct;  
         %>
 
         <!-- FORM CARD (full width on mobile, no squeezed center) -->
@@ -173,17 +178,37 @@
 
                   <div class="form-group">
                     <label for="stock" class="form-label">Stock Quantity</label>
-                    <input
-                      id="stock"
-                      type="number"
-                      name="stock"
-                      min="0"
-                      value="<%= product.stock %>"
-                      class="form-input"
-                      placeholder="e.g., 25"
-                      inputmode="numeric"
-                    />
-                    <div class="form-hint">Use 0 for out of stock.</div>
+
+                    <% if (isWholesaleImportedProduct) { %>
+                      <input
+                        id="stock"
+                        type="number"
+                        min="0"
+                        value="<%= Number(product.stock || 0) %>"
+                        class="form-input"
+                        placeholder="Supplier controlled"
+                        inputmode="numeric"
+                        disabled
+                      />
+
+                      <div class="form-hint">
+                        Stock is locked because this product was imported from a supplier.
+                        To increase stock, send another wholesale request and import/receive more approved stock.
+                      </div>
+                    <% } else { %>
+                      <input
+                        id="stock"
+                        type="number"
+                        name="stock"
+                        min="0"
+                        value="<%= product.stock %>"
+                        class="form-input"
+                        placeholder="e.g., 25"
+                        inputmode="numeric"
+                      />
+
+                      <div class="form-hint">Use 0 for out of stock.</div>
+                    <% } %>
                   </div>
 
                   <div class="form-group">

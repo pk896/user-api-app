@@ -1278,12 +1278,31 @@ router.post(
           );
         }
 
+        const isWholesaleImportedProduct =
+          String(product.sourceType || '') === 'wholesale_import' ||
+          !!product.sourceSupplyRequest ||
+          !!product.sourceSupplierProduct;
+
+        if (isWholesaleImportedProduct) {
+          req.flash(
+            'warning',
+            'Stock was not changed because this product was imported from a supplier. Stock is controlled by approved wholesale requests.'
+          );
+
+          return res.redirect(
+            source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock'
+          );
+        }
+
         const nextStock = Math.floor(numStock);
 
         const result = await Product.updateOne(
           {
             customId: req.params.id,
             business: business._id,
+            sourceType: { $ne: 'wholesale_import' },
+            sourceSupplyRequest: { $in: [null, undefined] },
+            sourceSupplierProduct: { $in: [null, undefined] },
           },
           {
             $set: { stock: nextStock },
@@ -1330,10 +1349,24 @@ router.post(
         }
       }
 
+      const isWholesaleImportedProduct =
+        String(product.sourceType || '') === 'wholesale_import' ||
+        !!product.sourceSupplyRequest ||
+        !!product.sourceSupplierProduct;
+
       if (req.body.stock !== undefined && req.body.stock !== '') {
-        const numStock = Number(req.body.stock);
-        if (!Number.isNaN(numStock) && numStock >= 0) {
-          product.stock = Math.floor(numStock);
+        if (isWholesaleImportedProduct) {
+          // ✅ Do not allow sellers to manually edit stock for wholesale-imported products.
+          // Stock must come from approved supplier requests / wholesale purchases.
+          req.flash(
+            'warning',
+            'Stock was not changed because this product was imported from a supplier. Stock is controlled by approved wholesale requests.'
+          );
+        } else {
+          const numStock = Number(req.body.stock);
+          if (!Number.isNaN(numStock) && numStock >= 0) {
+            product.stock = Math.floor(numStock);
+          }
         }
       }
 
@@ -1477,10 +1510,15 @@ router.post(
 
 /* ===========================================================
  * 🗑️ GET: Delete Product (only own)
+ * ===========================================================
+ * Important:
+ * - Normal seller products own their S3 images, so deleting product deletes images.
+ * - Wholesale-imported products reuse supplier images, so seller delete must NOT delete S3 images.
  * =========================================================== */
 router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const business = req.business || req.session.business;
+
     const product = await Product.findOneAndDelete({
       customId: req.params.id,
       business: business._id,
@@ -1491,14 +1529,27 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
       return res.redirect('/products/all');
     }
 
-    await deleteProductImagesFromS3(product);
+    const isWholesaleImportedProduct =
+      String(product.sourceType || '') === 'wholesale_import' ||
+      !!product.sourceSupplyRequest ||
+      !!product.sourceSupplierProduct;
 
-    req.flash('success', '🗑️ Product deleted successfully!');
-    res.redirect('/products/all');
+    if (!isWholesaleImportedProduct) {
+      await deleteProductImagesFromS3(product);
+    }
+
+    req.flash(
+      'success',
+      isWholesaleImportedProduct
+        ? '🗑️ Imported product removed from your products. Supplier images were kept safe.'
+        : '🗑️ Product deleted successfully!'
+    );
+
+    return res.redirect('/products/all');
   } catch (err) {
     console.error('❌ Delete product error:', err);
     req.flash('error', '❌ Could not delete product.');
-    res.redirect('/products/all');
+    return res.redirect('/products/all');
   }
 });
 
