@@ -1,109 +1,515 @@
 <!--views/supply-requests/supplier-requests.ejs-->
-<div class="container py-4">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-    <div>
-      <h1 class="h3 fw-bold text-primary mb-1">Supply Requests</h1>
-      <p class="text-muted mb-0">Approve or reject seller supply requests.</p>
-    </div>
+<%
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
 
-    <a href="/wholesale/supplier/products" class="btn btn-primary">
-      My Wholesale Products
-    </a>
-  </div>
+  function money(amount) {
+    if (typeof formatMoney === 'function') {
+      return formatMoney(amount);
+    }
+
+    const n = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return CURRENCY + ' ' + n.toFixed(2);
+    }
+  }
+
+  function statusClass(status) {
+    if (status === 'approved') return 'supply-status-approved';
+    if (status === 'rejected') return 'supply-status-rejected';
+    if (status === 'cancelled') return 'supply-status-cancelled';
+    return 'supply-status-pending';
+  }
+
+  function statusLabel(status) {
+    if (status === 'approved') return 'Approved';
+    if (status === 'rejected') return 'Rejected';
+    if (status === 'cancelled') return 'Cancelled';
+    return 'Pending';
+  }
+%>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .supplier-requests-page {
+    background:
+      radial-gradient(circle at top left, rgba(124, 58, 237, 0.12), transparent 30%),
+      radial-gradient(circle at top right, rgba(255, 193, 7, 0.16), transparent 28%),
+      linear-gradient(180deg, #f7f8ff 0%, #ffffff 48%, #f8fafc 100%);
+    min-height: 100vh;
+  }
+
+  .supply-hero {
+    border-radius: 24px;
+    border: 1px solid rgba(124, 58, 237, 0.14);
+    background:
+      linear-gradient(135deg, rgba(55, 30, 120, 0.96), rgba(124, 58, 237, 0.94)),
+      radial-gradient(circle at top right, rgba(255, 193, 7, 0.34), transparent 32%);
+    color: #fff;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .supply-hero::after {
+    content: "";
+    position: absolute;
+    width: 230px;
+    height: 230px;
+    right: -90px;
+    top: -90px;
+    border-radius: 999px;
+    background: rgba(255, 193, 7, 0.26);
+  }
+
+  .supply-hero-content {
+    position: relative;
+    z-index: 2;
+  }
+
+  .supply-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.76rem;
+    font-weight: 900;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.13);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    backdrop-filter: blur(10px);
+  }
+
+  .supply-hero-title {
+    color: #fff;
+    letter-spacing: -0.04em;
+  }
+
+  .supply-hero-text {
+    color: rgba(255, 255, 255, 0.84);
+    max-width: 720px;
+  }
+
+  .supply-hero-btn {
+    border-radius: 999px;
+    font-weight: 900;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  }
+
+  .supply-empty-card,
+  .supply-request-card {
+    border-radius: 24px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .supply-empty-card {
+    border-style: dashed;
+    border-color: rgba(124, 58, 237, 0.24);
+  }
+
+  .supply-request-card {
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+
+  .supply-request-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(124, 58, 237, 0.2);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  .supply-product-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .supply-product-img {
+    width: 92px;
+    height: 92px;
+    object-fit: contain;
+    padding: 0.45rem;
+    border-radius: 18px;
+    border: 1px solid rgba(15, 23, 42, 0.09);
+    background:
+      radial-gradient(circle at center, rgba(124, 58, 237, 0.08), transparent 48%),
+      linear-gradient(135deg, #f8fbff, #eef5ff);
+    flex: 0 0 auto;
+  }
+
+  .supply-product-label {
+    color: #64748b;
+    font-size: 0.76rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .supply-product-name {
+    color: #7c3aed;
+    letter-spacing: -0.02em;
+  }
+
+  .supply-detail-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.6rem;
+    background: rgba(124, 58, 237, 0.08);
+    color: #5b21b6;
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
+  .supply-seller-line {
+    color: #475569;
+  }
+
+  .supply-status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.38rem 0.7rem;
+    font-size: 0.72rem;
+    line-height: 1;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .supply-status-pending {
+    color: #422006;
+    background: rgba(255, 193, 7, 0.95);
+    box-shadow: 0 8px 18px rgba(255, 193, 7, 0.22);
+  }
+
+  .supply-status-approved {
+    color: #fff;
+    background: rgba(25, 135, 84, 0.95);
+    box-shadow: 0 8px 18px rgba(25, 135, 84, 0.2);
+  }
+
+  .supply-status-rejected {
+    color: #fff;
+    background: rgba(220, 53, 69, 0.95);
+    box-shadow: 0 8px 18px rgba(220, 53, 69, 0.2);
+  }
+
+  .supply-status-cancelled {
+    color: #fff;
+    background: rgba(100, 116, 139, 0.95);
+    box-shadow: 0 8px 18px rgba(100, 116, 139, 0.16);
+  }
+
+  .supply-info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .supply-info-box {
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    padding: 0.75rem;
+    min-width: 0;
+  }
+
+  .supply-info-label {
+    color: #64748b;
+    font-size: 0.76rem;
+    font-weight: 800;
+    margin-bottom: 0.15rem;
+  }
+
+  .supply-info-value {
+    color: #0f172a;
+    font-size: 0.88rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+  }
+
+  .supply-message-box {
+    border-radius: 18px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background:
+      linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(255, 255, 255, 0.96));
+    padding: 0.9rem;
+  }
+
+  .supply-response-box {
+    border-radius: 18px;
+    border: 1px solid rgba(25, 135, 84, 0.18);
+    background: rgba(25, 135, 84, 0.07);
+    padding: 0.9rem;
+  }
+
+  .supply-form-section {
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    background: linear-gradient(180deg, #ffffff, #fbfdff);
+  }
+
+  .supply-form-label {
+    color: #6d28d9;
+    font-size: 0.84rem;
+    font-weight: 900;
+  }
+
+  .supply-form-control {
+    border-radius: 16px;
+    border-color: rgba(15, 23, 42, 0.13);
+    min-height: 104px;
+  }
+
+  .supply-form-control:focus {
+    border-color: rgba(124, 58, 237, 0.55);
+    box-shadow: 0 0 0 0.2rem rgba(124, 58, 237, 0.12);
+  }
+
+  .supply-action-btn {
+    border-radius: 14px;
+    font-weight: 900;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (max-width: 991.98px) {
+    .supply-info-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    .supplier-requests-page {
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+
+    .supply-hero,
+    .supply-empty-card,
+    .supply-request-card {
+      border-radius: 18px;
+    }
+
+    .supply-hero-title {
+      font-size: 1.45rem;
+    }
+
+    .supply-product-wrap {
+      gap: 0.75rem;
+    }
+
+    .supply-product-img {
+      width: 76px;
+      height: 76px;
+      border-radius: 16px;
+    }
+
+    .supply-info-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .supply-info-box {
+      padding: 0.7rem;
+    }
+  }
+</style>
+
+<div class="container-fluid px-2 px-sm-3 px-lg-4 py-3 supplier-requests-page">
+
+  <!-- Header -->
+  <section class="supply-hero shadow-sm mb-3 mb-lg-4">
+    <div class="supply-hero-content p-3 p-sm-4">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3">
+        <div class="min-w-0">
+          <span class="supply-hero-badge mb-2">
+            Seller Supply Requests
+          </span>
+
+          <h1 class="supply-hero-title h3 fw-bold mb-2">
+            Review incoming wholesale requests
+          </h1>
+
+          <p class="supply-hero-text mb-0 small">
+            See which product was requested, review seller contact details, then approve or reject the request.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-md-end">
+          <a href="/wholesale/supplier/products" class="btn btn-light btn-sm supply-hero-btn">
+            My Wholesale Products
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <% if (!requests || requests.length === 0) { %>
-    <div class="card border-0 shadow-sm">
+    <div class="card supply-empty-card shadow-sm">
       <div class="card-body text-center py-5">
-        <h2 class="h5 fw-bold text-primary">No supply requests yet</h2>
-        <p class="text-muted mb-0">When sellers request your products, they will appear here.</p>
+        <div
+          class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary"
+          style="width: 72px; height: 72px;"
+        >
+          <span class="fs-2">📩</span>
+        </div>
+
+        <h2 class="h5 fw-bold text-primary mb-2">
+          No supply requests yet
+        </h2>
+
+        <p class="text-muted mb-4">
+          When sellers request your wholesale products, they will appear here.
+        </p>
+
+        <a href="/wholesale/supplier/products" class="btn btn-primary supply-action-btn">
+          View My Wholesale Products
+        </a>
       </div>
     </div>
   <% } else { %>
+
+    <div class="d-flex justify-content-between align-items-end mb-3">
+      <div>
+        <h2 class="h6 fw-bold text-dark mb-0">
+          Request Inbox
+        </h2>
+        <p class="text-muted small mb-0">
+          <%= requests.length %> request<%= requests.length === 1 ? '' : 's' %> found
+        </p>
+      </div>
+    </div>
+
     <div class="row g-3">
       <% requests.forEach((request) => { %>
+        <% const status = request.status || 'pending'; %>
+
         <div class="col-12">
-          <div class="card border-0 shadow-sm">
-            <div class="card-body">
-              <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
-                <div>
-                  <h2 class="h5 fw-bold text-primary mb-1">
-                    <%= request.supplierProduct?.name || 'Wholesale Product' %>
-                  </h2>
+          <div class="card supply-request-card shadow-sm">
 
-                  <p class="text-muted mb-2">
-                    Seller: <strong><%= request.seller?.name || 'Seller' %></strong>
-                  </p>
+            <div class="card-body p-3 p-sm-4">
+              <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+                <div class="supply-product-wrap min-w-0">
+                  <img
+                    src="<%= request.supplierProduct?.imageUrl || '/images/branding/logo-unincorporate.png' %>"
+                    alt="<%= request.supplierProduct?.name || 'Wholesale Product' %>"
+                    class="supply-product-img"
+                    loading="lazy"
+                    decoding="async"
+                    onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';"
+                  >
 
-                  <div class="row g-2 small mb-3">
-                    <div class="col-12 col-md-3">
-                      <div class="border rounded p-2">
-                        <div class="text-muted">Quantity</div>
-                        <div class="fw-bold"><%= request.requestedQuantity %></div>
-                      </div>
+                  <div class="min-w-0">
+                    <div class="supply-product-label mb-1">
+                      Requested Product
                     </div>
 
-                    <div class="col-12 col-md-3">
-                      <div class="border rounded p-2">
-                        <div class="text-muted">Email</div>
-                        <div class="fw-bold"><%= request.contactEmail || request.seller?.email || '-' %></div>
-                      </div>
+                    <h2 class="h5 fw-bold supply-product-name mb-2">
+                      <%= request.supplierProduct?.name || 'Wholesale Product' %>
+                    </h2>
+
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                      <span class="supply-detail-pill">
+                        Price: <%= money(request.supplierProduct?.wholesalePrice || 0) %>
+                      </span>
+
+                      <span class="supply-detail-pill">
+                        MOQ:
+                        <%= request.supplierProduct?.minimumOrderQuantity || 1 %>
+                        <%= request.supplierProduct?.unit || 'units' %>
+                      </span>
                     </div>
 
-                    <div class="col-12 col-md-3">
-                      <div class="border rounded p-2">
-                        <div class="text-muted">Phone</div>
-                        <div class="fw-bold"><%= request.contactPhone || request.seller?.phone || '-' %></div>
-                      </div>
-                    </div>
-
-                    <div class="col-12 col-md-3">
-                      <div class="border rounded p-2">
-                        <div class="text-muted">Delivery</div>
-                        <div class="fw-bold">
-                          <%= request.deliveryCity || '-' %>
-                          <%= request.deliveryCountry ? ', ' + request.deliveryCountry : '' %>
-                        </div>
-                      </div>
-                    </div>
+                    <p class="supply-seller-line mb-0">
+                      Seller:
+                      <strong><%= request.seller?.name || 'Seller' %></strong>
+                    </p>
                   </div>
-
-                  <% if (request.message) { %>
-                    <div class="alert alert-light border small mb-3">
-                      <strong>Seller message:</strong><br>
-                      <%= request.message %>
-                    </div>
-                  <% } %>
-
-                  <% if (request.supplierResponse) { %>
-                    <div class="alert alert-light border small mb-3">
-                      <strong>Your response:</strong><br>
-                      <%= request.supplierResponse %>
-                    </div>
-                  <% } %>
                 </div>
 
                 <div class="text-lg-end">
-                  <% if (request.status === 'approved') { %>
-                    <span class="badge text-bg-success">Approved</span>
-                  <% } else if (request.status === 'rejected') { %>
-                    <span class="badge text-bg-danger">Rejected</span>
-                  <% } else if (request.status === 'cancelled') { %>
-                    <span class="badge text-bg-secondary">Cancelled</span>
-                  <% } else { %>
-                    <span class="badge text-bg-warning">Pending</span>
-                  <% } %>
+                  <span class="supply-status-pill <%= statusClass(status) %>">
+                    <%= statusLabel(status) %>
+                  </span>
                 </div>
               </div>
 
-              <% if (request.status === 'pending') { %>
-                <hr>
+              <div class="supply-info-grid mb-3">
+                <div class="supply-info-box">
+                  <div class="supply-info-label">Quantity</div>
+                  <div class="supply-info-value">
+                    <%= request.requestedQuantity || 0 %>
+                  </div>
+                </div>
 
+                <div class="supply-info-box">
+                  <div class="supply-info-label">Email</div>
+                  <div class="supply-info-value">
+                    <%= request.contactEmail || request.seller?.email || '-' %>
+                  </div>
+                </div>
+
+                <div class="supply-info-box">
+                  <div class="supply-info-label">Phone</div>
+                  <div class="supply-info-value">
+                    <%= request.contactPhone || request.seller?.phone || '-' %>
+                  </div>
+                </div>
+
+                <div class="supply-info-box">
+                  <div class="supply-info-label">Delivery</div>
+                  <div class="supply-info-value">
+                    <%= request.deliveryCity || '-' %>
+                    <%= request.deliveryCountry ? ', ' + request.deliveryCountry : '' %>
+                  </div>
+                </div>
+              </div>
+
+              <% if (request.message) { %>
+                <div class="supply-message-box small mb-3">
+                  <strong class="text-primary">Seller message:</strong><br>
+                  <%= request.message %>
+                </div>
+              <% } %>
+
+              <% if (request.supplierResponse) { %>
+                <div class="supply-response-box small mb-3">
+                  <strong class="text-success">Your response:</strong><br>
+                  <%= request.supplierResponse %>
+                </div>
+              <% } %>
+            </div>
+
+            <% if (request.status === 'pending') { %>
+              <div class="supply-form-section p-3 p-sm-4">
                 <div class="row g-3">
                   <div class="col-12 col-lg-6">
                     <form method="POST" action="/wholesale/supplier/requests/<%= request._id %>/approve">
-                      <label class="form-label fw-semibold text-primary">Approval Response</label>
-                      <textarea name="supplierResponse" rows="3" class="form-control mb-2" placeholder="Example: Approved. Please contact us on WhatsApp/email to finalize delivery."></textarea>
-                      <button type="submit" class="btn btn-success">
+                      <label class="form-label supply-form-label">
+                        Approval Response
+                      </label>
+
+                      <textarea
+                        name="supplierResponse"
+                        rows="3"
+                        class="form-control supply-form-control mb-2"
+                        placeholder="Example: Approved. Please contact us on WhatsApp/email to finalize delivery."
+                      ></textarea>
+
+                      <button type="submit" class="btn btn-success supply-action-btn">
                         Approve Request
                       </button>
                     </form>
@@ -111,16 +517,26 @@
 
                   <div class="col-12 col-lg-6">
                     <form method="POST" action="/wholesale/supplier/requests/<%= request._id %>/reject">
-                      <label class="form-label fw-semibold text-primary">Rejection Reason</label>
-                      <textarea name="supplierResponse" rows="3" class="form-control mb-2" placeholder="Example: Sorry, this product is currently unavailable."></textarea>
-                      <button type="submit" class="btn btn-outline-danger">
+                      <label class="form-label supply-form-label">
+                        Rejection Reason
+                      </label>
+
+                      <textarea
+                        name="supplierResponse"
+                        rows="3"
+                        class="form-control supply-form-control mb-2"
+                        placeholder="Example: Sorry, this product is currently unavailable."
+                      ></textarea>
+
+                      <button type="submit" class="btn btn-outline-danger supply-action-btn">
                         Reject Request
                       </button>
                     </form>
                   </div>
                 </div>
-              <% } %>
-            </div>
+              </div>
+            <% } %>
+
           </div>
         </div>
       <% }) %>

@@ -17,6 +17,29 @@ const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness')
 
 const router = express.Router();
 
+const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+
+function formatWholesaleMoney(amount) {
+  const n = Number(amount || 0);
+
+  try {
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: BASE_CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
+
+    if (BASE_CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  } catch {
+    return `${BASE_CURRENCY} ${n.toFixed(2)}`;
+  }
+}
+
 /* ---------------------------------------------
  * ☁️ AWS S3 Setup for Supplier Wholesale Images
  * ------------------------------------------- */
@@ -396,6 +419,8 @@ router.get(
         products,
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     } catch (err) {
       console.error('❌ Supplier wholesale products error:', err);
@@ -425,6 +450,8 @@ router.get(
       errors: [],
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatWholesaleMoney,
     });
   },
 );
@@ -479,6 +506,8 @@ router.post(
         errors: errors.array(),
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     }
 
@@ -497,6 +526,8 @@ router.post(
           errors: [{ msg: 'Product image is required.' }],
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
+          baseCurrency: BASE_CURRENCY,
+          formatMoney: formatWholesaleMoney,
         });
       }
 
@@ -528,6 +559,8 @@ router.post(
           errors: [{ msg: 'You can upload a maximum of 7 color images.' }],
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
+          baseCurrency: BASE_CURRENCY,
+          formatMoney: formatWholesaleMoney,
         });
       }
 
@@ -657,6 +690,8 @@ router.get(
         errors: [],
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     } catch (err) {
       console.error('❌ Edit wholesale product form error:', err);
@@ -722,6 +757,8 @@ router.post(
         errors: errors.array(),
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     }
 
@@ -947,6 +984,8 @@ router.get('/', async (req, res) => {
       business: getBusiness(req),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatWholesaleMoney,
     });
   } catch (err) {
     console.error('❌ Wholesale marketplace error:', err);
@@ -990,6 +1029,8 @@ router.get('/suppliers', async (req, res) => {
       business: getBusiness(req),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatWholesaleMoney,
     });
   } catch (err) {
     console.error('❌ Suppliers directory error:', err);
@@ -1039,6 +1080,8 @@ router.get('/suppliers/:supplierId', async (req, res) => {
       business: getBusiness(req),
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatWholesaleMoney,
     });
   } catch (err) {
     console.error('❌ Supplier profile error:', err);
@@ -1081,6 +1124,8 @@ router.get('/products/:id', async (req, res) => {
       form: {},
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatWholesaleMoney,
     });
   } catch (err) {
     console.error('❌ Wholesale product detail error:', err);
@@ -1145,6 +1190,8 @@ router.post(
           form: req.body,
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
+          baseCurrency: BASE_CURRENCY,
+          formatMoney: formatWholesaleMoney,
         });
       }
 
@@ -1164,6 +1211,8 @@ router.post(
           form: req.body,
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
+          baseCurrency: BASE_CURRENCY,
+          formatMoney: formatWholesaleMoney, 
         });
       }
 
@@ -1217,6 +1266,8 @@ router.get(
         requests,
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     } catch (err) {
       console.error('❌ Seller supply requests error:', err);
@@ -1252,6 +1303,8 @@ router.get(
         requests,
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     } catch (err) {
       console.error('❌ Supplier requests error:', err);

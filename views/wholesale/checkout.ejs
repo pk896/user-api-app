@@ -1,4 +1,32 @@
 <!-- views/wholesale/checkout.ejs -->
+<%
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function money(amount) {
+    if (typeof formatMoney === 'function') {
+      return formatMoney(amount);
+    }
+
+    const n = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return CURRENCY + ' ' + n.toFixed(2);
+    }
+  }
+%>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   .wholesale-checkout-page {
@@ -349,7 +377,7 @@
 
                     <div class="checkout-meta mt-1">
                       Wholesale price:
-                      <strong>R <%= Number(item.wholesalePrice || 0).toFixed(2) %> each</strong>
+                      <strong><%= money(item.wholesalePrice) %> each</strong>
                     </div>
                   </div>
 
@@ -381,7 +409,7 @@
                     </div>
 
                     <div class="checkout-line-total">
-                      R <%= Number(item.lineTotal || 0).toFixed(2) %>
+                      <%= money(item.lineTotal) %>
                     </div>
 
                     <form
@@ -422,7 +450,7 @@
               <div class="checkout-subtotal-box d-flex justify-content-between align-items-center mb-3">
                 <span class="text-muted fw-bold">Estimated subtotal</span>
                 <strong class="checkout-subtotal-value">
-                  R <%= Number(subtotal || 0).toFixed(2) %>
+                  <%= money(subtotal) %>
                 </strong>
               </div>
 

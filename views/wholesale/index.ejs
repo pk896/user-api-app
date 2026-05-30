@@ -1,4 +1,32 @@
 <!--views/wholesale/index.ejs-->
+<%
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function money(amount) {
+    if (typeof formatMoney === 'function') {
+      return formatMoney(amount);
+    }
+
+    const n = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return CURRENCY + ' ' + n.toFixed(2);
+    }
+  }
+%>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
   .wholesale-market-page {
@@ -466,7 +494,7 @@
                   Wholesale price
                 </span>
                 <strong class="wholesale-price d-block fs-6">
-                  R <%= Number(product.wholesalePrice || 0).toFixed(2) %>
+                  <%= money(product.wholesalePrice) %>
                 </strong>
               </div>
 

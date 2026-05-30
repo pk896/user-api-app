@@ -15,6 +15,29 @@ const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness')
 
 const router = express.Router();
 
+const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+
+function formatWholesaleMoney(amount) {
+  const n = Number(amount || 0);
+
+  try {
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: BASE_CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
+
+    if (BASE_CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  } catch {
+    return `${BASE_CURRENCY} ${n.toFixed(2)}`;
+  }
+}
+
 function getBusiness(req) {
   return req.business || req.session?.business || null;
 }
@@ -372,6 +395,8 @@ router.get(
         subtotal,
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
       });
     } catch (err) {
       console.error('❌ Wholesale checkout page error:', err);

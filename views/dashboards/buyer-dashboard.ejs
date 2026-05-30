@@ -1,5 +1,38 @@
 <!-- views/dashboards/buyer-dashboard.ejs -->
-<% const NONCE = typeof nonce !== 'undefined' ? nonce : '' %>
+<%
+  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
+
+  const CURRENCY = String(
+    typeof baseCurrency !== 'undefined' && baseCurrency
+      ? baseCurrency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
+
+  function money(amount) {
+    if (typeof formatMoney === 'function') {
+      return formatMoney(amount);
+    }
+
+    const n = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return CURRENCY + ' ' + n.toFixed(2);
+    }
+  }
+%>
 
 <section class="pg-buyer-dashboard">
   <!-- Header -->
@@ -191,7 +224,7 @@
                   <div class="bd-product__info">
                     <div class="bd-product__name"><%= p.name %></div>
                     <div class="bd-product__meta">
-                      <span class="bd-price">R <%= Number(p.price || 0).toFixed(2) %></span>
+                      <span class="bd-price"><%= money(p.price) %></span>
                       <% if (p.category) { %>
                         <span class="bd-muted"><%= p.category %></span>
                       <% } %>
@@ -279,7 +312,7 @@
                       const shownLabel = o.uiStatus || (o.status || 'Unknown');
                       const shownKey = o.uiStatusKey || String(shownLabel).toLowerCase().replace(/\s+/g,'-');
                       const oid = (o.orderId || o._id).toString().slice(-8);
-                      const amountVal = Number((o.amount && o.amount.value) || 0).toFixed(2);
+                      const amountVal = (o.amount && o.amount.value) || 0;
                       const dateVal = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-ZA', { month:'short', day:'numeric' }) : 'N/A';
                       const isRefunded = !!o._isRefunded;
                       const refundedNote = isRefunded
@@ -303,7 +336,7 @@
                       </td>
 
                       <td>
-                        <span class="bd-money">R <%= amountVal %></span>
+                        <span class="bd-money"><%= money(amountVal) %></span>
                       </td>
 
                       <td>
@@ -444,7 +477,7 @@
                     <div class="bd-match__name"><%= match.productName || 'Product Match' %></div>
                     <div class="bd-match__meta">
                       <span class="bd-muted">by <%= match.supplierName || 'Supplier' %></span>
-                      <span class="bd-price">R <%= Number(match.price || 0).toFixed(2) %></span>
+                      <span class="bd-price"><%= money(match.price) %></span>
                     </div>
                   </div>
                   <div>
