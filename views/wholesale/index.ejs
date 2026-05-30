@@ -1,36 +1,323 @@
 <!--views/wholesale/index.ejs-->
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .wholesale-market-page {
+    background:
+      radial-gradient(circle at top left, rgba(13, 110, 253, 0.12), transparent 30%),
+      radial-gradient(circle at top right, rgba(255, 193, 7, 0.16), transparent 28%),
+      linear-gradient(180deg, #f6f9ff 0%, #ffffff 46%, #f8fafc 100%);
+    min-height: 100vh;
+  }
+
+  .wholesale-hero {
+    border: 1px solid rgba(13, 110, 253, 0.12);
+    background:
+      linear-gradient(135deg, rgba(8, 31, 74, 0.96), rgba(13, 110, 253, 0.92)),
+      radial-gradient(circle at top right, rgba(255, 193, 7, 0.35), transparent 30%);
+    border-radius: 24px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .wholesale-hero::after {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    right: -80px;
+    top: -80px;
+    border-radius: 999px;
+    background: rgba(255, 193, 7, 0.28);
+  }
+
+  .wholesale-hero-content {
+    position: relative;
+    z-index: 2;
+  }
+
+  .wholesale-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    backdrop-filter: blur(10px);
+  }
+
+  .wholesale-hero-title {
+    color: #fff;
+    letter-spacing: -0.04em;
+  }
+
+  .wholesale-hero-text {
+    color: rgba(255, 255, 255, 0.82);
+    max-width: 680px;
+  }
+
+  .wholesale-action-btn {
+    border-radius: 999px;
+    font-weight: 700;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  }
+
+  .wholesale-search-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(14px);
+  }
+
+  .wholesale-search-card .form-control,
+  .wholesale-search-card .form-select {
+    border-radius: 14px;
+    border-color: rgba(15, 23, 42, 0.12);
+    background-color: #fff;
+  }
+
+  .wholesale-search-card .form-control:focus,
+  .wholesale-search-card .form-select:focus {
+    border-color: rgba(13, 110, 253, 0.55);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.12);
+  }
+
+  .wholesale-empty-card {
+    border-radius: 24px;
+    border: 1px dashed rgba(13, 110, 253, 0.25);
+    background: #fff;
+  }
+
+  .wholesale-product-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 20px;
+    background: #fff;
+    overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+
+  .wholesale-product-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(13, 110, 253, 0.22);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.13) !important;
+  }
+
+  .wholesale-img-wrap {
+    background: linear-gradient(135deg, #f8fbff, #eef5ff);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  }
+
+  .wholesale-img-wrap img {
+    transition: transform 0.2s ease;
+  }
+
+  .wholesale-product-card:hover .wholesale-img-wrap img {
+    transform: scale(1.035);
+  }
+
+  .wholesale-stock-pill {
+    position: absolute !important;
+    top: 0.55rem !important;
+    left: 0.55rem !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    height: auto !important;
+    z-index: 5;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.55rem;
+    font-size: 0.68rem;
+    line-height: 1;
+    font-weight: 800;
+    background: rgba(25, 135, 84, 0.92);
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(25, 135, 84, 0.24);
+  }
+
+  .wholesale-stock-pill.out {
+    background: rgba(108, 117, 125, 0.92);
+    box-shadow: 0 8px 18px rgba(108, 117, 125, 0.2);
+  }
+
+  .wholesale-price-box {
+    border-radius: 16px;
+    background:
+      linear-gradient(135deg, rgba(13, 110, 253, 0.08), rgba(255, 193, 7, 0.12));
+    border: 1px solid rgba(13, 110, 253, 0.1);
+  }
+
+  .wholesale-price {
+    color: #071f4a;
+    letter-spacing: -0.03em;
+  }
+
+  .wholesale-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.45rem;
+  }
+
+  .wholesale-meta-item {
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    padding: 0.5rem 0.35rem;
+    text-align: center;
+    min-width: 0;
+  }
+
+  .wholesale-meta-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .wholesale-meta-value {
+    display: block;
+    color: #0f172a;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .wholesale-supplier-link {
+    color: #0d6efd;
+    font-weight: 800;
+  }
+
+  .wholesale-product-title {
+    color: #0f172a;
+    line-height: 1.25;
+    min-height: 2.45em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .wholesale-card-btn {
+    border-radius: 14px;
+    font-weight: 800;
+  }
+
+  .wholesale-qty-group .input-group-text {
+    border-radius: 14px 0 0 14px;
+    font-weight: 800;
+    color: #0f172a;
+    background: #eef5ff;
+  }
+
+  .wholesale-qty-group .form-control {
+    border-radius: 0 14px 14px 0;
+    font-weight: 800;
+  }
+
+  @media (max-width: 575.98px) {
+    .wholesale-market-page {
+      padding-left: 0.45rem !important;
+      padding-right: 0.45rem !important;
+    }
+
+    .wholesale-hero {
+      border-radius: 18px;
+    }
+
+    .wholesale-hero-title {
+      font-size: 1.3rem;
+    }
+
+    .wholesale-hero-text {
+      font-size: 0.82rem;
+    }
+
+    .wholesale-product-card {
+      border-radius: 16px;
+    }
+
+    .wholesale-meta-grid {
+      gap: 0.3rem;
+    }
+
+    .wholesale-meta-item {
+      padding: 0.42rem 0.25rem;
+      border-radius: 12px;
+    }
+
+    .wholesale-meta-label {
+      font-size: 0.62rem;
+    }
+
+    .wholesale-meta-value {
+      font-size: 0.7rem;
+    }
+
+    .wholesale-card-btn {
+      font-size: 0.75rem;
+      padding-left: 0.4rem;
+      padding-right: 0.4rem;
+    }
+  }
+</style>
+
 <div class="container-fluid px-2 px-sm-3 px-lg-4 py-3 wholesale-market-page">
-  <!-- Header -->
-  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-2 gap-lg-3 mb-3">
-    <div class="min-w-0">
-      <h1 class="h4 fw-bold text-primary mb-1">Wholesale Marketplace</h1>
-      <p class="text-muted mb-0 small">
-        Find supplier products and send supply requests directly on the platform.
-      </p>
+
+  <!-- Polished Header -->
+  <section class="wholesale-hero shadow-sm mb-3 mb-lg-4">
+    <div class="wholesale-hero-content p-3 p-sm-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
+        <div class="min-w-0">
+          <span class="wholesale-hero-badge mb-2">
+            Wholesale Marketplace
+          </span>
+
+          <h1 class="wholesale-hero-title h3 fw-bold mb-2">
+            Source quality supplier products for your store
+          </h1>
+
+          <p class="wholesale-hero-text mb-0 small">
+            Find wholesale products, compare MOQ, check available stock, and send supply requests directly on the platform.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
+          <a href="/wholesale/suppliers" class="btn btn-light btn-sm wholesale-action-btn">
+            View Suppliers
+          </a>
+
+          <% if (business && business.role === 'seller') { %>
+            <a href="/wholesale/checkout" class="btn btn-warning btn-sm wholesale-action-btn text-dark">
+              Wholesale Checkout
+            </a>
+
+            <a href="/wholesale/my-requests" class="btn btn-outline-light btn-sm wholesale-action-btn">
+              My Requests
+            </a>
+          <% } %>
+        </div>
+      </div>
     </div>
+  </section>
 
-    <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
-      <a href="/wholesale/suppliers" class="btn btn-outline-primary btn-sm">
-        View Suppliers
-      </a>
-
-      <% if (business && business.role === 'seller') { %>
-        <a href="/wholesale/checkout" class="btn btn-outline-primary btn-sm">
-          Wholesale Checkout
-        </a>
-
-        <a href="/wholesale/my-requests" class="btn btn-primary btn-sm">
-          My Requests
-        </a>
-      <% } %>
-    </div>
-  </div>
-
-  <!-- Search -->
-  <form method="GET" action="/wholesale" class="card border-0 shadow-sm mb-3">
+  <!-- Search / Filter -->
+  <form method="GET" action="/wholesale" class="card wholesale-search-card shadow-sm mb-3 mb-lg-4">
     <div class="card-body p-2 p-sm-3">
       <div class="row g-2 align-items-center">
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-lg-6">
+          <label class="form-label small fw-bold text-muted mb-1">
+            Search products
+          </label>
           <input
             type="search"
             name="q"
@@ -40,7 +327,10 @@
           >
         </div>
 
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-sm-7 col-lg-4">
+          <label class="form-label small fw-bold text-muted mb-1">
+            Category
+          </label>
           <select name="category" class="form-select form-select-sm">
             <option value="">All categories</option>
             <% (categories || []).forEach((item) => { %>
@@ -51,8 +341,11 @@
           </select>
         </div>
 
-        <div class="col-12 col-md-2">
-          <button type="submit" class="btn btn-primary btn-sm w-100">
+        <div class="col-12 col-sm-5 col-lg-2">
+          <label class="form-label small fw-bold text-muted mb-1 d-none d-sm-block">
+            &nbsp;
+          </label>
+          <button type="submit" class="btn btn-primary btn-sm w-100 wholesale-card-btn">
             Search
           </button>
         </div>
@@ -61,13 +354,37 @@
   </form>
 
   <% if (!products || products.length === 0) { %>
-    <div class="card border-0 shadow-sm">
+    <div class="card wholesale-empty-card shadow-sm">
       <div class="card-body text-center py-5">
-        <h2 class="h6 fw-bold text-primary">No wholesale products found</h2>
-        <p class="text-muted mb-0 small">Try another search or category.</p>
+        <div
+          class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary"
+          style="width: 64px; height: 64px;"
+        >
+          <span class="fw-bold fs-4">0</span>
+        </div>
+
+        <h2 class="h6 fw-bold text-primary mb-1">
+          No wholesale products found
+        </h2>
+
+        <p class="text-muted mb-0 small">
+          Try another search word or choose a different category.
+        </p>
       </div>
     </div>
   <% } else { %>
+
+    <div class="d-flex justify-content-between align-items-center mb-2 mb-lg-3">
+      <div>
+        <h2 class="h6 fw-bold text-dark mb-0">
+          Available wholesale products
+        </h2>
+        <p class="text-muted small mb-0">
+          <%= products.length %> product<%= products.length === 1 ? '' : 's' %> found
+        </p>
+      </div>
+    </div>
+
     <!--
       Mobile: 2 columns
       Tablet: 3 columns
@@ -77,116 +394,142 @@
       <% products.forEach((product) => { %>
         <% const moq = Number(product.minimumOrderQuantity || 1); %>
         <% const available = Number(product.availableQuantity || 0); %>
+        <% const leadTime = Number(product.leadTimeDays || 0); %>
+        <% const supplierId = product.supplier?._id || product.supplier || ''; %>
+        <% const supplierName = product.supplier?.name || 'Supplier'; %>
 
         <div class="col">
-          <div class="card h-100 border-0 shadow-sm overflow-hidden">
+          <div class="card h-100 wholesale-product-card shadow-sm">
+
             <!-- Image -->
             <a href="/wholesale/products/<%= product._id %>" class="text-decoration-none">
-              <% if (product.imageUrl) { %>
-                <div class="ratio ratio-4x3 bg-light">
+              <div class="ratio ratio-4x3 wholesale-img-wrap position-relative">
+                <% if (available > 0) { %>
+                  <span class="wholesale-stock-pill">
+                    In stock
+                  </span>
+                <% } else { %>
+                  <span class="wholesale-stock-pill out">
+                    Sold out
+                  </span>
+                <% } %>
+
+                <% if (product.imageUrl) { %>
                   <img
                     src="<%= product.imageUrl %>"
-                    class="w-100 h-100 object-fit-contain p-1 p-sm-2"
+                    class="w-100 h-100 object-fit-contain p-2 p-sm-3"
                     alt="<%= product.name %>"
                     loading="lazy"
                     decoding="async"
                     onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';"
                   >
-                </div>
-              <% } else { %>
-                <div class="ratio ratio-4x3 bg-light">
+                <% } else { %>
                   <div class="d-flex align-items-center justify-content-center w-100 h-100">
-                    <span class="text-muted small">No image</span>
+                    <div class="text-center px-2">
+                      <div class="fw-bold text-primary small mb-1">
+                        No image
+                      </div>
+                      <div class="text-muted" style="font-size: 0.72rem;">
+                        Product preview unavailable
+                      </div>
+                    </div>
                   </div>
-                </div>
-              <% } %>
+                <% } %>
+              </div>
             </a>
 
             <!-- Body -->
-            <div class="card-body p-2">
-              <h2 class="small fw-bold text-primary mb-1 text-truncate">
+            <div class="card-body p-2 p-sm-3 d-flex flex-column">
+
+              <h2 class="small fw-bold wholesale-product-title mb-1">
                 <%= product.name %>
               </h2>
 
-              <p class="small text-muted mb-1 text-truncate">
-                <a
-                  href="/wholesale/suppliers/<%= product.supplier?._id %>"
-                  class="text-primary text-decoration-none fw-semibold"
-                >
-                  <%= product.supplier?.name || 'Supplier' %>
-                </a>
+              <p class="small text-muted mb-2 text-truncate">
+                <% if (supplierId) { %>
+                  <a
+                    href="/wholesale/suppliers/<%= supplierId %>"
+                    class="wholesale-supplier-link text-decoration-none"
+                  >
+                    <%= supplierName %>
+                  </a>
+                <% } else { %>
+                  <span class="fw-semibold">
+                    <%= supplierName %>
+                  </span>
+                <% } %>
               </p>
 
-              <!-- Compact product info -->
-              <div class="small mb-2">
-                <div class="d-flex justify-content-between align-items-center border-bottom py-1 gap-2">
-                  <span class="text-muted">Wholesale</span>
-                  <strong class="text-dark text-end">
-                    R <%= Number(product.wholesalePrice || 0).toFixed(2) %>
-                  </strong>
+              <!-- Price -->
+              <div class="wholesale-price-box p-2 mb-2">
+                <span class="d-block text-muted fw-bold" style="font-size: 0.68rem;">
+                  Wholesale price
+                </span>
+                <strong class="wholesale-price d-block fs-6">
+                  R <%= Number(product.wholesalePrice || 0).toFixed(2) %>
+                </strong>
+              </div>
+
+              <!-- Product stats -->
+              <div class="wholesale-meta-grid mb-2">
+                <div class="wholesale-meta-item">
+                  <span class="wholesale-meta-label">MOQ</span>
+                  <span class="wholesale-meta-value"><%= moq %></span>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-center border-bottom py-1 gap-2">
-                  <span class="text-muted">MOQ</span>
-                  <strong class="text-dark text-end">
-                    <%= product.minimumOrderQuantity || 1 %>
-                  </strong>
+                <div class="wholesale-meta-item">
+                  <span class="wholesale-meta-label">Stock</span>
+                  <span class="wholesale-meta-value"><%= available %></span>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-center border-bottom py-1 gap-2">
-                  <span class="text-muted">Available</span>
-                  <strong class="text-dark text-end">
-                    <%= product.availableQuantity || 0 %>
-                  </strong>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center py-1 gap-2">
-                  <span class="text-muted">Lead</span>
-                  <strong class="text-dark text-end">
-                    <%= product.leadTimeDays || 0 %>d
-                  </strong>
+                <div class="wholesale-meta-item">
+                  <span class="wholesale-meta-label">Lead</span>
+                  <span class="wholesale-meta-value"><%= leadTime %>d</span>
                 </div>
               </div>
 
-              <!-- Seller actions -->
-              <% if (business && business.role === 'seller') { %>
-                <% if (available > 0) { %>
-                  <form method="POST" action="/wholesale/cart/add/<%= product._id %>" class="d-grid gap-1">
-                    <div class="input-group input-group-sm">
-                      <span class="input-group-text px-2">Qty</span>
-                      <input
-                        type="number"
-                        name="quantity"
-                        class="form-control"
-                        min="<%= moq %>"
-                        max="<%= available %>"
-                        value="<%= moq %>"
-                        required
-                      >
-                    </div>
+              <!-- Actions -->
+              <div class="mt-auto">
+                <% if (business && business.role === 'seller') { %>
+                  <% if (available > 0) { %>
+                    <form method="POST" action="/wholesale/cart/add/<%= product._id %>" class="d-grid gap-2">
+                      <div class="input-group input-group-sm wholesale-qty-group">
+                        <span class="input-group-text px-2">Qty</span>
+                        <input
+                          type="number"
+                          name="quantity"
+                          class="form-control"
+                          min="<%= moq %>"
+                          max="<%= available %>"
+                          value="<%= moq %>"
+                          required
+                        >
+                      </div>
 
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                      Request
+                      <button type="submit" class="btn btn-primary btn-sm w-100 wholesale-card-btn">
+                        Request Supply
+                      </button>
+                    </form>
+
+                    <a href="/wholesale/products/<%= product._id %>" class="btn btn-outline-primary btn-sm w-100 mt-2 wholesale-card-btn">
+                      View Details
+                    </a>
+                  <% } else { %>
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 wholesale-card-btn" disabled>
+                      Out of Stock
                     </button>
-                  </form>
 
-                  <a href="/wholesale/products/<%= product._id %>" class="btn btn-outline-primary btn-sm w-100 mt-1">
-                    View
-                  </a>
+                    <a href="/wholesale/products/<%= product._id %>" class="btn btn-outline-primary btn-sm w-100 mt-2 wholesale-card-btn">
+                      View Details
+                    </a>
+                  <% } %>
                 <% } else { %>
-                  <button type="button" class="btn btn-outline-secondary btn-sm w-100" disabled>
-                    Out of Stock
-                  </button>
-
-                  <a href="/wholesale/products/<%= product._id %>" class="btn btn-outline-primary btn-sm w-100 mt-1">
-                    View
+                  <a href="/wholesale/products/<%= product._id %>" class="btn btn-primary btn-sm w-100 wholesale-card-btn">
+                    View Details
                   </a>
                 <% } %>
-              <% } else { %>
-                <a href="/wholesale/products/<%= product._id %>" class="btn btn-primary btn-sm w-100">
-                  View
-                </a>
-              <% } %>
+              </div>
+
             </div>
           </div>
         </div>

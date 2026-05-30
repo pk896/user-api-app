@@ -1,85 +1,359 @@
 <!-- views/wholesale/checkout.ejs -->
 
-<div class="container py-4">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-    <div>
-      <h1 class="h3 fw-bold text-primary mb-1">Wholesale Checkout</h1>
-      <p class="text-muted mb-0">
-        Send stock requests to suppliers. The supplier must approve before payment/import.
-      </p>
-    </div>
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .wholesale-checkout-page {
+    background:
+      radial-gradient(circle at top left, rgba(13, 110, 253, 0.11), transparent 30%),
+      radial-gradient(circle at top right, rgba(255, 193, 7, 0.14), transparent 28%),
+      linear-gradient(180deg, #f6f9ff 0%, #ffffff 48%, #f8fafc 100%);
+    min-height: 100vh;
+  }
 
-    <a href="/wholesale" class="btn btn-outline-primary">
-      Continue Browsing Wholesale
-    </a>
-  </div>
+  .checkout-hero {
+    border: 1px solid rgba(13, 110, 253, 0.12);
+    background:
+      linear-gradient(135deg, rgba(8, 31, 74, 0.96), rgba(13, 110, 253, 0.92)),
+      radial-gradient(circle at top right, rgba(255, 193, 7, 0.35), transparent 30%);
+    border-radius: 24px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .checkout-hero::after {
+    content: "";
+    position: absolute;
+    width: 230px;
+    height: 230px;
+    right: -90px;
+    top: -90px;
+    border-radius: 999px;
+    background: rgba(255, 193, 7, 0.28);
+  }
+
+  .checkout-hero-content {
+    position: relative;
+    z-index: 2;
+  }
+
+  .checkout-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.76rem;
+    font-weight: 900;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(10px);
+  }
+
+  .checkout-hero-title {
+    color: #fff;
+    letter-spacing: -0.04em;
+  }
+
+  .checkout-hero-text {
+    color: rgba(255, 255, 255, 0.82);
+    max-width: 760px;
+  }
+
+  .checkout-hero-btn {
+    border-radius: 999px;
+    font-weight: 800;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  }
+
+  .checkout-empty-card,
+  .checkout-items-card,
+  .checkout-summary-card,
+  .checkout-contact-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 24px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .checkout-empty-card {
+    border: 1px dashed rgba(13, 110, 253, 0.25);
+  }
+
+  .checkout-card-header {
+    background: linear-gradient(135deg, #071f4a, #0d6efd);
+    color: #fff;
+    border: 0;
+    padding: 1rem 1.25rem;
+  }
+
+  .checkout-card-header h2 {
+    font-size: 1rem;
+    font-weight: 900;
+  }
+
+  .checkout-item-row {
+    transition: background 0.18s ease;
+  }
+
+  .checkout-item-row:hover {
+    background: #f8fbff;
+  }
+
+  .checkout-item-img {
+    width: 88px;
+    height: 88px;
+    object-fit: contain;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #f8fbff, #eef5ff);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    padding: 0.35rem;
+  }
+
+  .checkout-item-title {
+    color: #0f172a;
+    line-height: 1.25;
+  }
+
+  .checkout-supplier-pill {
+    display: inline-flex;
+    max-width: 100%;
+    border-radius: 999px;
+    padding: 0.22rem 0.55rem;
+    background: rgba(13, 110, 253, 0.08);
+    color: #0d6efd;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .checkout-meta {
+    color: #64748b;
+    font-size: 0.82rem;
+  }
+
+  .checkout-line-total {
+    color: #071f4a;
+    font-weight: 900;
+    font-size: 1.05rem;
+  }
+
+  .checkout-form-control {
+    border-radius: 14px;
+    border-color: rgba(15, 23, 42, 0.12);
+  }
+
+  .checkout-form-control:focus {
+    border-color: rgba(13, 110, 253, 0.55);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.12);
+  }
+
+  .checkout-small-btn {
+    border-radius: 14px;
+    font-weight: 800;
+  }
+
+  .checkout-primary-btn {
+    border-radius: 16px;
+    font-weight: 900;
+    padding-top: 0.7rem;
+    padding-bottom: 0.7rem;
+    box-shadow: 0 12px 24px rgba(13, 110, 253, 0.2);
+  }
+
+  .checkout-remove-btn {
+    border-radius: 14px;
+    font-weight: 800;
+  }
+
+  .checkout-summary-line {
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    padding: 0.8rem;
+  }
+
+  .checkout-subtotal-box {
+    border-radius: 18px;
+    background:
+      linear-gradient(135deg, rgba(13, 110, 253, 0.09), rgba(255, 193, 7, 0.16));
+    border: 1px solid rgba(13, 110, 253, 0.13);
+    padding: 1rem;
+  }
+
+  .checkout-subtotal-value {
+    color: #071f4a;
+    font-weight: 900;
+    font-size: 1.2rem;
+  }
+
+  .checkout-info-box {
+    border-radius: 18px;
+    background: rgba(13, 202, 240, 0.1);
+    border: 1px solid rgba(13, 202, 240, 0.18);
+    color: #075160;
+  }
+
+  .checkout-form-label {
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .checkout-side-sticky {
+    position: sticky;
+    top: 1rem;
+  }
+
+  @media (max-width: 991.98px) {
+    .checkout-side-sticky {
+      position: static;
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    .wholesale-checkout-page {
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+
+    .checkout-hero,
+    .checkout-empty-card,
+    .checkout-items-card,
+    .checkout-summary-card,
+    .checkout-contact-card {
+      border-radius: 18px;
+    }
+
+    .checkout-hero-title {
+      font-size: 1.35rem;
+    }
+
+    .checkout-hero-text {
+      font-size: 0.84rem;
+    }
+
+    .checkout-item-img {
+      width: 74px;
+      height: 74px;
+      border-radius: 16px;
+    }
+
+    .checkout-line-total {
+      font-size: 1rem;
+    }
+  }
+</style>
+
+<div class="container py-4 wholesale-checkout-page">
+
+  <!-- Header -->
+  <section class="checkout-hero shadow-sm mb-3 mb-lg-4">
+    <div class="checkout-hero-content p-3 p-sm-4">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3">
+        <div class="min-w-0">
+          <span class="checkout-hero-badge mb-2">
+            Wholesale Checkout
+          </span>
+
+          <h1 class="checkout-hero-title h3 fw-bold mb-2">
+            Review your wholesale request cart
+          </h1>
+
+          <p class="checkout-hero-text mb-0 small">
+            Send stock requests to suppliers. The supplier must approve before payment, import, or final fulfilment.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-md-end">
+          <a href="/wholesale" class="btn btn-light btn-sm checkout-hero-btn">
+            Continue Browsing
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <% if (!items || !items.length) { %>
-    <div class="card border-0 shadow-sm">
+    <div class="card checkout-empty-card shadow-sm">
       <div class="card-body text-center py-5">
-        <div class="display-6 mb-3">🛒</div>
-        <h2 class="h5 fw-bold text-primary">Your wholesale cart is empty</h2>
+        <div
+          class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary"
+          style="width: 72px; height: 72px;"
+        >
+          <span class="fs-2">🛒</span>
+        </div>
+
+        <h2 class="h5 fw-bold text-primary mb-2">
+          Your wholesale cart is empty
+        </h2>
+
         <p class="text-muted mb-4">
           Add wholesale products from suppliers before sending a request.
         </p>
-        <a href="/wholesale" class="btn btn-primary">
+
+        <a href="/wholesale" class="btn btn-primary checkout-primary-btn">
           Browse Wholesale Products
         </a>
       </div>
     </div>
   <% } else { %>
-    <div class="row g-4">
+    <div class="row g-3 g-lg-4">
+
+      <!-- Cart Items -->
       <div class="col-12 col-lg-8">
-        <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-primary text-white">
-            <h2 class="h5 mb-0">Wholesale Items</h2>
+        <div class="card checkout-items-card shadow-sm mb-4">
+          <div class="card-header checkout-card-header">
+            <h2 class="mb-0">
+              Wholesale Items
+            </h2>
+            <div class="small opacity-75">
+              Check quantities before sending your request.
+            </div>
           </div>
 
           <div class="card-body p-0">
             <% items.forEach((item) => { %>
-              <div class="p-3 p-md-4 border-bottom">
+              <div class="checkout-item-row p-3 p-md-4 border-bottom">
                 <div class="row g-3 align-items-center">
+
                   <div class="col-auto">
                     <img
                       src="<%= item.imageUrl || '/images/branding/logo-unincorporate.png' %>"
                       alt="<%= item.name %>"
-                      class="rounded border"
-                      style="width: 86px; height: 86px; object-fit: contain;"
+                      class="checkout-item-img"
                       loading="lazy"
                       decoding="async"
                       onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';"
                     >
                   </div>
 
-                  <div class="col">
-                    <h3 class="h6 fw-bold mb-1 text-primary">
+                  <div class="col-12 col-sm">
+                    <h3 class="h6 fw-bold mb-2 checkout-item-title">
                       <%= item.name %>
                     </h3>
 
-                    <div class="small text-muted mb-1">
-                      Supplier:
-                      <strong>
+                    <div class="mb-2">
+                      <span class="checkout-supplier-pill text-truncate">
+                        Supplier:
                         <%= item.supplier && item.supplier.name ? item.supplier.name : 'Supplier' %>
-                      </strong>
+                      </span>
                     </div>
 
-                    <div class="small text-muted">
+                    <div class="checkout-meta">
                       MOQ:
                       <strong><%= item.minimumOrderQuantity %></strong>
                       <%= item.unit || 'units' %>
-                      |
+                      <span class="mx-1">•</span>
                       Available:
                       <strong><%= item.availableQuantity %></strong>
                       <%= item.unit || 'units' %>
                     </div>
 
-                    <div class="small text-muted mt-1">
+                    <div class="checkout-meta mt-1">
                       Wholesale price:
-                      <strong><%= Number(item.wholesalePrice || 0).toFixed(2) %></strong>
+                      <strong>R <%= Number(item.wholesalePrice || 0).toFixed(2) %> each</strong>
                     </div>
                   </div>
 
-                  <div class="col-12 col-md-3">
+                  <div class="col-12 col-md-4 col-xl-3">
                     <form
                       action="/wholesale/cart/update/<%= item.supplierProduct %>"
                       method="POST"
@@ -88,22 +362,26 @@
                       <input
                         type="number"
                         name="quantity"
-                        class="form-control"
+                        class="form-control checkout-form-control"
                         min="<%= item.minimumOrderQuantity || 1 %>"
                         max="<%= item.availableQuantity || 1 %>"
                         value="<%= item.requestedQuantity || item.minimumOrderQuantity || 1 %>"
                         required
                       >
 
-                      <button type="submit" class="btn btn-outline-primary">
+                      <button type="submit" class="btn btn-outline-primary checkout-small-btn">
                         Update
                       </button>
                     </form>
                   </div>
 
                   <div class="col-12 col-md-2 text-md-end">
-                    <div class="fw-bold text-primary">
-                      <%= Number(item.lineTotal || 0).toFixed(2) %>
+                    <div class="text-muted small fw-bold">
+                      Line total
+                    </div>
+
+                    <div class="checkout-line-total">
+                      R <%= Number(item.lineTotal || 0).toFixed(2) %>
                     </div>
 
                     <form
@@ -111,11 +389,12 @@
                       method="POST"
                       class="mt-2"
                     >
-                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                      <button type="submit" class="btn btn-sm btn-outline-danger checkout-remove-btn">
                         Remove
                       </button>
                     </form>
                   </div>
+
                 </div>
               </div>
             <% }) %>
@@ -123,119 +402,131 @@
         </div>
       </div>
 
+      <!-- Summary + Contact -->
       <div class="col-12 col-lg-4">
-        <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-primary text-white">
-            <h2 class="h5 mb-0">Request Summary</h2>
-          </div>
+        <div class="checkout-side-sticky">
 
-          <div class="card-body">
-            <div class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Items</span>
-              <strong><%= items.length %></strong>
+          <div class="card checkout-summary-card shadow-sm mb-3">
+            <div class="card-header checkout-card-header">
+              <h2 class="mb-0">
+                Request Summary
+              </h2>
             </div>
 
-            <div class="d-flex justify-content-between mb-3">
-              <span class="text-muted">Estimated subtotal</span>
-              <strong class="text-primary">
-                <%= Number(subtotal || 0).toFixed(2) %>
-              </strong>
+            <div class="card-body p-3 p-sm-4">
+              <div class="checkout-summary-line d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted fw-semibold">Items</span>
+                <strong><%= items.length %></strong>
+              </div>
+
+              <div class="checkout-subtotal-box d-flex justify-content-between align-items-center mb-3">
+                <span class="text-muted fw-bold">Estimated subtotal</span>
+                <strong class="checkout-subtotal-value">
+                  R <%= Number(subtotal || 0).toFixed(2) %>
+                </strong>
+              </div>
+
+              <div class="checkout-info-box small p-3 mb-0">
+                This is a request first. The supplier must approve before payment and import.
+              </div>
+            </div>
+          </div>
+
+          <div class="card checkout-contact-card shadow-sm">
+            <div class="card-header checkout-card-header">
+              <h2 class="mb-0">
+                Seller Contact & Delivery
+              </h2>
+              <div class="small opacity-75">
+                These details help the supplier respond correctly.
+              </div>
             </div>
 
-            <div class="alert alert-info small mb-0">
-              This is a request first. The supplier must approve before payment and import.
+            <div class="card-body p-3 p-sm-4">
+              <form action="/wholesale/checkout/request" method="POST">
+                <div class="mb-3">
+                  <label class="form-label checkout-form-label">
+                    Contact name <span class="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="contactName"
+                    class="form-control checkout-form-control"
+                    value="<%= business && business.name ? business.name : '' %>"
+                    required
+                  >
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label checkout-form-label">
+                    Contact email
+                  </label>
+                  <input
+                    type="email"
+                    name="contactEmail"
+                    class="form-control checkout-form-control"
+                    value="<%= business && business.email ? business.email : '' %>"
+                  >
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label checkout-form-label">
+                    Contact phone <span class="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="contactPhone"
+                    class="form-control checkout-form-control"
+                    value="<%= business && business.phone ? business.phone : '' %>"
+                    required
+                  >
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label checkout-form-label">
+                    Delivery country <span class="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="deliveryCountry"
+                    class="form-control checkout-form-control"
+                    value="<%= business && business.country ? business.country : '' %>"
+                    required
+                  >
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label checkout-form-label">
+                    Delivery city <span class="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="deliveryCity"
+                    class="form-control checkout-form-control"
+                    value="<%= business && business.city ? business.city : '' %>"
+                    required
+                  >
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label checkout-form-label">
+                    Message to supplier
+                  </label>
+                  <textarea
+                    name="message"
+                    class="form-control checkout-form-control"
+                    rows="4"
+                    placeholder="Example: Please confirm availability, delivery time, and final wholesale cost."
+                  ></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 checkout-primary-btn">
+                  Send Request to Supplier
+                </button>
+              </form>
             </div>
           </div>
-        </div>
 
-        <div class="card border-0 shadow-sm">
-          <div class="card-header bg-primary text-white">
-            <h2 class="h5 mb-0">Seller Contact & Delivery</h2>
-          </div>
-
-          <div class="card-body">
-            <form action="/wholesale/checkout/request" method="POST">
-              <div class="mb-3">
-                <label class="form-label fw-semibold">
-                  Contact name <span class="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="contactName"
-                  class="form-control"
-                  value="<%= business && business.name ? business.name : '' %>"
-                  required
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label fw-semibold">
-                  Contact email
-                </label>
-                <input
-                  type="email"
-                  name="contactEmail"
-                  class="form-control"
-                  value="<%= business && business.email ? business.email : '' %>"
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label fw-semibold">
-                  Contact phone <span class="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="contactPhone"
-                  class="form-control"
-                  value="<%= business && business.phone ? business.phone : '' %>"
-                  required
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label fw-semibold">
-                  Delivery country <span class="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="deliveryCountry"
-                  class="form-control"
-                  value="<%= business && business.country ? business.country : '' %>"
-                  required
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label fw-semibold">
-                  Delivery city <span class="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="deliveryCity"
-                  class="form-control"
-                  value="<%= business && business.city ? business.city : '' %>"
-                  required
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label fw-semibold">
-                  Message to supplier
-                </label>
-                <textarea
-                  name="message"
-                  class="form-control"
-                  rows="4"
-                  placeholder="Example: Please confirm availability, delivery time, and final wholesale cost."
-                ></textarea>
-              </div>
-
-              <button type="submit" class="btn btn-primary w-100">
-                Send Request to Supplier
-              </button>
-            </form>
-          </div>
         </div>
       </div>
     </div>
