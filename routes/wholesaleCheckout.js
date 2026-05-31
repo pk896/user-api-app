@@ -15,7 +15,10 @@ const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness')
 
 const router = express.Router();
 
-const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+const BASE_CURRENCY =
+  String(process.env.BASE_CURRENCY || '')
+    .trim()
+    .toUpperCase() || 'USD';
 
 function formatWholesaleMoney(amount) {
   const n = Number(amount || 0);
@@ -59,7 +62,9 @@ function requireSeller(req, res, next) {
 }
 
 function cleanString(value, max = 1000) {
-  return String(value || '').trim().slice(0, max);
+  return String(value || '')
+    .trim()
+    .slice(0, max);
 }
 
 function toPositiveInt(value, fallback = 1) {
@@ -151,7 +156,7 @@ router.post(
         status: 'active',
       })
         .select(
-          '_id supplier name imageUrl wholesalePrice minimumOrderQuantity availableQuantity unit status'
+          '_id supplier name imageUrl wholesalePrice minimumOrderQuantity availableQuantity unit status',
         )
         .lean();
 
@@ -170,7 +175,7 @@ router.post(
 
       const requestedQty = toPositiveInt(
         req.body.quantity || req.body.requestedQuantity,
-        Number(product.minimumOrderQuantity || 1)
+        Number(product.minimumOrderQuantity || 1),
       );
 
       const minimumOrderQuantity = Number(product.minimumOrderQuantity || 1);
@@ -179,7 +184,7 @@ router.post(
       if (requestedQty < minimumOrderQuantity) {
         req.flash(
           'error',
-          `Minimum order quantity is ${minimumOrderQuantity} ${product.unit || 'units'}.`
+          `Minimum order quantity is ${minimumOrderQuantity} ${product.unit || 'units'}.`,
         );
         return res.redirect(`/wholesale/products/${product._id}`);
       }
@@ -190,10 +195,7 @@ router.post(
       }
 
       if (requestedQty > availableQuantity) {
-        req.flash(
-          'error',
-          `Only ${availableQuantity} ${product.unit || 'units'} available.`
-        );
+        req.flash('error', `Only ${availableQuantity} ${product.unit || 'units'} available.`);
         return res.redirect(`/wholesale/products/${product._id}`);
       }
 
@@ -228,7 +230,7 @@ router.post(
       req.flash('error', 'Could not add wholesale product to cart.');
       return res.redirect('/wholesale');
     }
-  }
+  },
 );
 
 /* =========================================================
@@ -278,16 +280,13 @@ router.post(
       if (quantity < minimumOrderQuantity) {
         req.flash(
           'error',
-          `Minimum order quantity is ${minimumOrderQuantity} ${freshProduct.unit || 'units'}.`
+          `Minimum order quantity is ${minimumOrderQuantity} ${freshProduct.unit || 'units'}.`,
         );
         return res.redirect('/wholesale/checkout');
       }
 
       if (quantity > availableQuantity) {
-        req.flash(
-          'error',
-          `Only ${availableQuantity} ${freshProduct.unit || 'units'} available.`
-        );
+        req.flash('error', `Only ${availableQuantity} ${freshProduct.unit || 'units'} available.`);
         return res.redirect('/wholesale/checkout');
       }
 
@@ -305,7 +304,7 @@ router.post(
       req.flash('error', 'Could not update wholesale cart.');
       return res.redirect('/wholesale/checkout');
     }
-  }
+  },
 );
 
 /* =========================================================
@@ -335,7 +334,7 @@ router.post(
       req.flash('error', 'Could not remove wholesale product.');
       return res.redirect('/wholesale/checkout');
     }
-  }
+  },
 );
 
 /* =========================================================
@@ -353,11 +352,7 @@ router.get(
       const cart = getWholesaleCart(req);
 
       const supplierIds = [
-        ...new Set(
-          cart.items
-            .map((item) => String(item.supplier || '').trim())
-            .filter(Boolean)
-        ),
+        ...new Set(cart.items.map((item) => String(item.supplier || '').trim()).filter(Boolean)),
       ];
 
       const suppliers = supplierIds.length
@@ -366,9 +361,7 @@ router.get(
             .lean()
         : [];
 
-      const suppliersById = new Map(
-        suppliers.map((supplier) => [String(supplier._id), supplier])
-      );
+      const suppliersById = new Map(suppliers.map((supplier) => [String(supplier._id), supplier]));
 
       const items = cart.items.map((item) => {
         const supplier = suppliersById.get(String(item.supplier)) || null;
@@ -403,7 +396,7 @@ router.get(
       req.flash('error', 'Could not load wholesale checkout.');
       return res.redirect('/wholesale');
     }
-  }
+  },
 );
 
 /* =========================================================
@@ -435,7 +428,7 @@ router.post(
       if (!contactName || !contactPhone || !deliveryCountry || !deliveryCity) {
         req.flash(
           'error',
-          'Please enter contact name, phone, delivery country, and delivery city.'
+          'Please enter contact name, phone, delivery country, and delivery city.',
         );
         return res.redirect('/wholesale/checkout');
       }
@@ -449,9 +442,7 @@ router.post(
           _id: item.supplierProduct,
           status: 'active',
         })
-          .select(
-            '_id supplier name minimumOrderQuantity availableQuantity unit status'
-          )
+          .select('_id supplier name minimumOrderQuantity availableQuantity unit status')
           .lean();
 
         if (!product) {
@@ -464,7 +455,7 @@ router.post(
 
         if (requestedQuantity < minimumOrderQuantity) {
           throw new Error(
-            `${product.name} minimum order quantity is ${minimumOrderQuantity} ${product.unit || 'units'}.`
+            `${product.name} minimum order quantity is ${minimumOrderQuantity} ${product.unit || 'units'}.`,
           );
         }
 
@@ -474,7 +465,7 @@ router.post(
 
         if (requestedQuantity > availableQuantity) {
           throw new Error(
-            `${product.name} only has ${availableQuantity} ${product.unit || 'units'} available.`
+            `${product.name} only has ${availableQuantity} ${product.unit || 'units'} available.`,
           );
         }
 
@@ -503,7 +494,7 @@ router.post(
 
       req.flash(
         'success',
-        `Wholesale request sent successfully. ${createdRequests.length} request(s) created.`
+        `Wholesale request sent successfully. ${createdRequests.length} request(s) created.`,
       );
 
       return res.redirect('/wholesale/my-requests');
@@ -512,7 +503,7 @@ router.post(
       req.flash('error', err.message || 'Could not send wholesale request.');
       return res.redirect('/wholesale/checkout');
     }
-  }
+  },
 );
 
 /* =========================================================
@@ -525,6 +516,9 @@ router.post(
   requireVerifiedBusiness,
   requireSeller,
   async (req, res) => {
+    let reservedSupplierProductId = null;
+    let reservedQuantity = 0;
+
     try {
       const seller = getBusiness(req);
       const requestId = cleanString(req.params.requestId, 80);
@@ -563,40 +557,61 @@ router.post(
         .lean();
 
       if (duplicate) {
-        req.flash(
-          'info',
-          `This supply request is already imported as "${duplicate.name}".`
-        );
+        req.flash('info', `This supply request is already imported as "${duplicate.name}".`);
         return res.redirect('/products/all');
       }
 
       if (!supplierShippingIsComplete(supplierProduct)) {
         req.flash(
           'error',
-          'Cannot import this product yet. The supplier product is missing shipping weight or dimensions.'
+          'Cannot import this product yet. The supplier product is missing shipping weight or dimensions.',
         );
         return res.redirect('/wholesale/my-requests');
       }
 
       const wholesalePrice = Number(supplierProduct.wholesalePrice || 0);
 
-      const approvedQuantity = toPositiveInt(
-        supplyRequest.requestedQuantity,
-        0
-      );
+      const approvedQuantity = toPositiveInt(supplyRequest.requestedQuantity, 0);
 
       if (approvedQuantity <= 0) {
-        req.flash('error', 'Cannot import this product because the approved request quantity is invalid.');
+        req.flash(
+          'error',
+          'Cannot import this product because the approved request quantity is invalid.',
+        );
         return res.redirect('/wholesale/my-requests');
       }
+
+      const supplierId = supplyRequest.supplier?._id || supplyRequest.supplier;
+
+      const reservedSupplierProduct = await SupplierProduct.findOneAndUpdate(
+        {
+          _id: supplierProduct._id,
+          supplier: supplierId,
+          availableQuantity: { $gte: approvedQuantity },
+        },
+        {
+          $inc: { availableQuantity: -approvedQuantity },
+        },
+        {
+          new: true,
+        },
+      ).lean();
+
+      if (!reservedSupplierProduct) {
+        req.flash(
+          'error',
+          `Cannot import this product because the supplier no longer has ${approvedQuantity} item(s) available.`,
+        );
+        return res.redirect('/wholesale/my-requests');
+      }
+
+      reservedSupplierProductId = supplierProduct._id;
+      reservedQuantity = approvedQuantity;
 
       const suggestedRetailPrice =
         wholesalePrice > 0 ? Number((wholesalePrice * 1.35).toFixed(2)) : 1;
 
-      const retailPrice = toPositiveMoney(
-        req.body.retailPrice,
-        suggestedRetailPrice
-      );
+      const retailPrice = toPositiveMoney(req.body.retailPrice, suggestedRetailPrice);
 
       const customId = await createUniqueImportedCustomId();
 
@@ -644,9 +659,7 @@ router.post(
         made: supplierProduct.made || supplierProduct.countryOfOrigin || '',
         madeCode: supplierProduct.madeCode || '',
         manufacturer: supplierProduct.manufacturer || '',
-        keywords: Array.isArray(supplierProduct.keywords)
-          ? supplierProduct.keywords
-          : [],
+        keywords: Array.isArray(supplierProduct.keywords) ? supplierProduct.keywords : [],
 
         shipping: {
           weight: {
@@ -682,21 +695,29 @@ router.post(
 
       req.flash(
         'success',
-        `Product imported successfully with ${approvedQuantity} item(s) in stock. Please review the retail price before selling.`
+        `Product imported successfully with ${approvedQuantity} item(s) in stock. Please review the retail price before selling.`,
       );
 
       return res.redirect('/products/all');
     } catch (err) {
       console.error('❌ Wholesale import error:', err);
 
-      req.flash(
-        'error',
-        err.message || 'Could not import this wholesale product.'
-      );
+      if (reservedSupplierProductId && reservedQuantity > 0) {
+        try {
+          await SupplierProduct.updateOne(
+            { _id: reservedSupplierProductId },
+            { $inc: { availableQuantity: reservedQuantity } },
+          );
+        } catch (rollbackErr) {
+          console.error('❌ Failed to rollback supplier stock reservation:', rollbackErr);
+        }
+      }
+
+      req.flash('error', err.message || 'Could not import this wholesale product.');
 
       return res.redirect('/wholesale/my-requests');
     }
-  }
+  },
 );
 
 module.exports = router;

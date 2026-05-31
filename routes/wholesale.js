@@ -11,13 +11,18 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const Business = require('../models/Business');
 const SupplierProduct = require('../models/SupplierProduct');
 const SupplyRequest = require('../models/SupplyRequest');
+const Product = require('../models/Product');
+const Order = require('../models/Order');
 
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
 
 const router = express.Router();
 
-const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+const BASE_CURRENCY =
+  String(process.env.BASE_CURRENCY || '')
+    .trim()
+    .toUpperCase() || 'USD';
 
 function formatWholesaleMoney(amount) {
   const n = Number(amount || 0);
@@ -187,6 +192,244 @@ function safeNumber(value, fallback = 0) {
 
 function cleanString(value) {
   return String(value || '').trim();
+}
+
+function orderPaidStatusValues() {
+  const rawPaidStates = Array.isArray(Order?.PAID_STATES)
+    ? Order.PAID_STATES
+    : ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'];
+
+  const values = new Set();
+
+  rawPaidStates.forEach((status) => {
+    const clean = String(status || '').trim();
+    if (!clean) return;
+
+    const lower = clean.toLowerCase();
+    const upper = clean.toUpperCase();
+    const title = lower.charAt(0).toUpperCase() + lower.slice(1);
+
+    values.add(clean);
+    values.add(lower);
+    values.add(upper);
+    values.add(title);
+  });
+
+  return Array.from(values);
+}
+
+function getOrderItemProductKey(item) {
+  return String(item?.productId || item?.customId || item?.pid || item?.sku || '').trim();
+}
+
+function getOrderItemQty(item) {
+  const qty = Number(item?.quantity || item?.qty || 0);
+  return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
+function moneyValue(value) {
+  if (value === null || value === undefined || value === '') return 0;
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === 'object') {
+    return moneyValue(value.value ?? value.amount ?? value.price ?? 0);
+  }
+
+  const n = Number(String(value).trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getOrderItemUnitPrice(item) {
+  return moneyValue(
+    item?.priceGross?.value ?? item?.price?.value ?? item?.price ?? item?.unitPrice ?? 0,
+  );
+}
+
+function isRefundedOrCancelledOrder(order) {
+  const status = String(order?.status || '')
+    .trim()
+    .toUpperCase();
+  const paymentStatus = String(order?.paymentStatus || '')
+    .trim()
+    .toUpperCase();
+  const refundStatus = String(order?.refundStatus || '')
+    .trim()
+    .toUpperCase();
+
+  if (order?.isRefunded === true) return true;
+  if (order?.refundedAt) return true;
+
+  return (
+    status.includes('REFUND') ||
+    status.includes('CANCEL') ||
+    paymentStatus.includes('REFUND') ||
+    paymentStatus.includes('CANCEL') ||
+    refundStatus.includes('REFUND') ||
+    refundStatus.includes('CANCEL')
+  );
+}
+
+async function buildSupplierImportedTrackingData(supplierId) {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+
+  const importedProducts = await Product.find({
+    sourceType: 'wholesale_import',
+    sourceSupplier: supplierObjectId,
+  })
+    .select(
+      '_id customId name imageUrl stock soldCount soldOrders price business sourceSupplierProduct sourceSupplyRequest wholesaleCostPrice importedAt createdAt updatedAt',
+    )
+    .populate('business', 'name email logoUrl')
+    .populate('sourceSupplierProduct', 'name imageUrl wholesalePrice availableQuantity unit')
+    .sort({ updatedAt: -1, importedAt: -1, createdAt: -1 })
+    .lean();
+
+  const importedCustomIds = [
+    ...new Set(
+      importedProducts.map((product) => String(product.customId || '').trim()).filter(Boolean),
+    ),
+  ];
+
+  const productByCustomId = new Map(
+    importedProducts.map((product) => [String(product.customId || '').trim(), product]),
+  );
+
+  const paidStatuses = orderPaidStatusValues();
+
+  const paidOrders = importedCustomIds.length
+    ? await Order.find({
+        status: { $in: paidStatuses },
+        $or: [
+          { 'items.productId': { $in: importedCustomIds } },
+          { 'items.customId': { $in: importedCustomIds } },
+          { 'items.pid': { $in: importedCustomIds } },
+          { 'items.sku': { $in: importedCustomIds } },
+        ],
+      })
+        .select(
+          'orderId status paymentStatus refundStatus isRefunded refundedAt createdAt items amount shipping shippingTracking shippo',
+        )
+        .sort({ createdAt: -1 })
+        .limit(150)
+        .lean()
+    : [];
+
+  const productStatsMap = new Map();
+
+  importedProducts.forEach((product) => {
+    const customId = String(product.customId || '').trim();
+
+    productStatsMap.set(customId, {
+      product,
+      customId,
+      seller: product.business || null,
+      currentSellerStock: Number(product.stock || 0),
+      soldCount: Number(product.soldCount || 0),
+      soldOrders: Number(product.soldOrders || 0),
+      paidOrderQty: 0,
+      paidOrderRevenue: 0,
+      supplierValueEstimate: 0,
+      latestPaidOrderAt: null,
+    });
+  });
+
+  const orderRows = [];
+
+  paidOrders.forEach((order) => {
+    if (isRefundedOrCancelledOrder(order)) return;
+
+    const items = Array.isArray(order.items) ? order.items : [];
+
+    items.forEach((item) => {
+      const customId = getOrderItemProductKey(item);
+      if (!customId || !productByCustomId.has(customId)) return;
+
+      const importedProduct = productByCustomId.get(customId);
+      const qty = getOrderItemQty(item);
+      if (qty <= 0) return;
+
+      const unitPrice = getOrderItemUnitPrice(item);
+      const lineTotal = unitPrice * qty;
+      const wholesaleCostPrice = Number(importedProduct.wholesaleCostPrice || 0);
+      const supplierValue = wholesaleCostPrice * qty;
+
+      const stat = productStatsMap.get(customId);
+      if (stat) {
+        stat.paidOrderQty += qty;
+        stat.paidOrderRevenue += lineTotal;
+        stat.supplierValueEstimate += supplierValue;
+
+        const createdAt = order.createdAt ? new Date(order.createdAt) : null;
+        if (
+          createdAt &&
+          (!stat.latestPaidOrderAt || createdAt > new Date(stat.latestPaidOrderAt))
+        ) {
+          stat.latestPaidOrderAt = createdAt;
+        }
+      }
+
+      orderRows.push({
+        orderId: order.orderId || order._id,
+        createdAt: order.createdAt,
+        status: order.status || order.paymentStatus || 'PAID',
+        paymentStatus: order.paymentStatus || '',
+        product: importedProduct,
+        seller: importedProduct.business || null,
+        quantity: qty,
+        unitPrice,
+        lineTotal,
+        wholesaleCostPrice,
+        supplierValue,
+        shipping: order.shipping || {},
+        tracking: order.shippingTracking || {},
+        shippo: order.shippo || {},
+      });
+    });
+  });
+
+  const productStats = Array.from(productStatsMap.values()).map((row) => {
+    const soldCount = Number(row.soldCount || 0);
+    const currentSellerStock = Number(row.currentSellerStock || 0);
+
+    return {
+      ...row,
+      estimatedImportedQuantity: soldCount + currentSellerStock,
+      paidOrderRevenue: Number(row.paidOrderRevenue.toFixed(2)),
+      supplierValueEstimate: Number(row.supplierValueEstimate.toFixed(2)),
+    };
+  });
+
+  const totals = productStats.reduce(
+    (acc, row) => {
+      acc.importedProducts += 1;
+      acc.currentSellerStock += Number(row.currentSellerStock || 0);
+      acc.soldCount += Number(row.soldCount || 0);
+      acc.paidOrderQty += Number(row.paidOrderQty || 0);
+      acc.paidOrderRevenue += Number(row.paidOrderRevenue || 0);
+      acc.supplierValueEstimate += Number(row.supplierValueEstimate || 0);
+      return acc;
+    },
+    {
+      importedProducts: 0,
+      currentSellerStock: 0,
+      soldCount: 0,
+      paidOrderQty: 0,
+      paidOrderRevenue: 0,
+      supplierValueEstimate: 0,
+    },
+  );
+
+  totals.paidOrderRevenue = Number(totals.paidOrderRevenue.toFixed(2));
+  totals.supplierValueEstimate = Number(totals.supplierValueEstimate.toFixed(2));
+
+  return {
+    totals,
+    productStats,
+    orderRows,
+  };
 }
 
 function checkboxOn(v) {
@@ -1212,7 +1455,7 @@ router.post(
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
           baseCurrency: BASE_CURRENCY,
-          formatMoney: formatWholesaleMoney, 
+          formatMoney: formatWholesaleMoney,
         });
       }
 
@@ -1412,6 +1655,41 @@ router.post(
       console.error('❌ Reject request error:', err);
       req.flash('error', 'Failed to reject request.');
       return res.redirect('/wholesale/supplier/requests');
+    }
+  },
+);
+
+/* =========================================================
+ * SUPPLIER: Track products imported by sellers
+ * GET /wholesale/supplier/imported-sales
+ * ======================================================= */
+router.get(
+  '/supplier/imported-sales',
+  requireBusiness,
+  requireVerifiedBusiness,
+  requireRole('supplier'),
+  async (req, res) => {
+    try {
+      const business = getBusiness(req);
+
+      const trackingData = await buildSupplierImportedTrackingData(business._id);
+
+      return res.render('supplier-products/imported-sales', {
+        title: 'Imported Product Tracking',
+        active: 'supplier-imported-sales',
+        business,
+        totals: trackingData.totals,
+        productStats: trackingData.productStats,
+        orderRows: trackingData.orderRows,
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatWholesaleMoney,
+      });
+    } catch (err) {
+      console.error('❌ Supplier imported sales tracking error:', err);
+      req.flash('error', 'Failed to load imported product tracking.');
+      return res.redirect('/wholesale/supplier/products');
     }
   },
 );

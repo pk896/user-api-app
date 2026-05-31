@@ -1,0 +1,467 @@
+<!--views/supplier-products/imported-sales.ejs-->
+<%
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function money(amount) {
+    if (typeof formatMoney === 'function') {
+      return formatMoney(amount);
+    }
+
+    const n = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return CURRENCY + ' ' + n.toFixed(2);
+    }
+  }
+
+  function niceDate(value) {
+    if (!value) return 'Not recorded';
+
+    try {
+      return new Date(value).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Not recorded';
+    }
+  }
+
+  function shortText(value, fallback = 'Not provided') {
+    const clean = String(value || '').trim();
+    return clean || fallback;
+  }
+
+  function trackingLabel(row) {
+    const tracking = row?.tracking || {};
+    const shippo = row?.shippo || {};
+
+    return (
+      tracking.trackingNumber ||
+      shippo.trackingNumber ||
+      'No tracking yet'
+    );
+  }
+
+  function trackingStatus(row) {
+    const tracking = row?.tracking || {};
+    const shippo = row?.shippo || {};
+
+    return (
+      tracking.status ||
+      tracking.liveStatus ||
+      shippo.status ||
+      'Pending'
+    );
+  }
+%>
+
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .supplier-imported-page {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, rgba(124, 58, 237, 0.14), transparent 30%),
+      radial-gradient(circle at top right, rgba(34, 197, 94, 0.12), transparent 28%),
+      linear-gradient(180deg, #f6f2ff 0%, #ffffff 48%, #f8fafc 100%);
+  }
+
+  .supplier-imported-hero {
+    border-radius: 24px;
+    background:
+      linear-gradient(135deg, rgba(91, 33, 182, 0.98), rgba(124, 58, 237, 0.96)),
+      radial-gradient(circle at top right, rgba(34, 197, 94, 0.26), transparent 32%);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .supplier-imported-hero::after {
+    content: "";
+    position: absolute;
+    width: 230px;
+    height: 230px;
+    right: -90px;
+    top: -90px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.18);
+  }
+
+  .supplier-imported-hero-content {
+    position: relative;
+    z-index: 2;
+  }
+
+  .supplier-imported-card {
+    border-radius: 22px;
+    border: 1px solid rgba(124, 58, 237, 0.14);
+    overflow: hidden;
+  }
+
+  .supplier-imported-img {
+    width: 82px;
+    height: 82px;
+    object-fit: contain;
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at center, rgba(124, 58, 237, 0.08), transparent 48%),
+      linear-gradient(135deg, #ffffff, #f3efff);
+    border: 1px solid rgba(124, 58, 237, 0.14);
+  }
+
+  .supplier-imported-green {
+    color: #22C55E !important;
+  }
+
+  .supplier-imported-green-bg {
+    background-color: #22C55E !important;
+  }
+
+  .supplier-imported-box {
+    border-radius: 18px;
+    border: 1px solid rgba(124, 58, 237, 0.12);
+    background: rgba(124, 58, 237, 0.045);
+  }
+
+  @media (max-width: 575.98px) {
+    .supplier-imported-page {
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+
+    .supplier-imported-hero,
+    .supplier-imported-card {
+      border-radius: 18px;
+    }
+
+    .supplier-imported-img {
+      width: 68px;
+      height: 68px;
+      border-radius: 16px;
+    }
+  }
+</style>
+
+<div class="container-fluid px-2 px-sm-3 px-lg-4 py-3 supplier-imported-page">
+
+  <!-- Header -->
+  <section class="supplier-imported-hero shadow-sm mb-3 mb-lg-4">
+    <div class="supplier-imported-hero-content p-3 p-sm-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
+        <div class="min-w-0">
+          <span class="badge rounded-pill text-bg-light text-primary px-3 py-2 mb-2">
+            Supplier Tracking
+          </span>
+
+          <h1 class="h3 fw-bold text-white mb-2">
+            Imported Product Tracking
+          </h1>
+
+          <p class="text-white-50 small mb-0">
+            See which sellers imported your wholesale products, remaining seller-side stock, paid sales, and delivery tracking.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
+          <a href="/wholesale/supplier/products" class="btn btn-light btn-sm rounded-pill fw-bold px-3">
+            My Wholesale Products
+          </a>
+
+          <a href="/wholesale/supplier/requests" class="btn btn-outline-light btn-sm rounded-pill fw-bold px-3">
+            Supply Requests
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KPI cards -->
+  <div class="row g-2 g-lg-3 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="card supplier-imported-card shadow-sm h-100">
+        <div class="card-body p-3">
+          <div class="small text-muted fw-bold mb-1">Imported Products</div>
+          <div class="h4 fw-bold text-primary mb-0">
+            <%= totals?.importedProducts || 0 %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="card supplier-imported-card shadow-sm h-100">
+        <div class="card-body p-3">
+          <div class="small text-muted fw-bold mb-1">Seller Stock Left</div>
+          <div class="h4 fw-bold text-primary mb-0">
+            <%= totals?.currentSellerStock || 0 %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="card supplier-imported-card shadow-sm h-100">
+        <div class="card-body p-3">
+          <div class="small text-muted fw-bold mb-1">Sold Units</div>
+          <div class="h4 fw-bold supplier-imported-green mb-0">
+            <%= totals?.soldCount || 0 %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="card supplier-imported-card shadow-sm h-100">
+        <div class="card-body p-3">
+          <div class="small text-muted fw-bold mb-1">Wholesale Value</div>
+          <div class="h5 fw-bold text-primary mb-0">
+            <%= money(totals?.supplierValueEstimate || 0) %>
+          </div>
+          <div class="small text-muted">
+            Tracking only
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <% if (!productStats || productStats.length === 0) { %>
+  <div class="card supplier-imported-card shadow-sm">
+    <div class="card-body text-center py-5">
+      <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary" style="width: 76px; height: 76px;">
+        <span class="fs-2">📦</span>
+      </div>
+
+      <h2 class="h5 fw-bold text-primary mb-2">
+        No imported seller products yet
+      </h2>
+
+      <p class="text-muted mb-4">
+        When a seller imports one of your approved wholesale products, it will appear here.
+      </p>
+
+      <a href="/wholesale/supplier/requests" class="btn btn-primary rounded-pill fw-bold px-4">
+        View Supply Requests
+      </a>
+    </div>
+  </div>
+  <% } else { %>
+
+  <!-- Imported product stock summary -->
+  <div class="card supplier-imported-card shadow-sm mb-3">
+    <div class="card-header bg-primary text-white border-0">
+      <div class="fw-bold">
+        Seller-side stock for your imported products
+      </div>
+      <div class="small text-white-50">
+        This stock is from the seller's imported Product records.
+      </div>
+    </div>
+
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Product</th>
+              <th>Seller</th>
+              <th>Imported Qty</th>
+              <th>Stock Left</th>
+              <th>Sold</th>
+              <th>Wholesale Value</th>
+              <th>Latest Paid Sale</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <% productStats.forEach((row) => { %>
+            <% const product = row.product || {}; %>
+            <% const seller = row.seller || {}; %>
+
+            <tr>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <img src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= product.name || 'Imported product' %>" class="supplier-imported-img p-2" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+
+                  <div class="min-w-0">
+                    <div class="fw-bold text-primary">
+                      <%= product.name || 'Imported Product' %>
+                    </div>
+                    <div class="small text-muted">
+                      <%= product.customId || '' %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <td>
+                <div class="fw-bold">
+                  <%= seller.name || 'Seller' %>
+                </div>
+                <div class="small text-muted">
+                  <%= seller.email || '' %>
+                </div>
+              </td>
+
+              <td class="fw-bold">
+                <%= row.estimatedImportedQuantity || 0 %>
+              </td>
+
+              <td>
+                <% if (Number(row.currentSellerStock || 0) > 0) { %>
+                <span class="badge rounded-pill bg-primary px-3 py-2">
+                  <%= row.currentSellerStock || 0 %> left
+                </span>
+                <% } else { %>
+                <span class="badge rounded-pill text-bg-danger px-3 py-2">
+                  Out of stock
+                </span>
+                <% } %>
+              </td>
+
+              <td>
+                <span class="badge rounded-pill text-white supplier-imported-green-bg px-3 py-2">
+                  <%= row.soldCount || 0 %> sold
+                </span>
+              </td>
+
+              <td class="fw-bold text-primary">
+                <%= money(row.supplierValueEstimate || 0) %>
+              </td>
+
+              <td class="small text-muted">
+                <%= niceDate(row.latestPaidOrderAt) %>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Paid order rows -->
+  <div class="card supplier-imported-card shadow-sm">
+    <div class="card-header bg-white border-0">
+      <div class="d-flex flex-column flex-sm-row justify-content-between gap-2">
+        <div>
+          <h2 class="h6 fw-bold text-primary mb-1">
+            Paid orders containing your imported products
+          </h2>
+          <p class="small text-muted mb-0">
+            These are paid customer orders where the seller sold an imported product that came from you.
+          </p>
+        </div>
+
+        <span class="badge rounded-pill bg-primary align-self-start px-3 py-2">
+          <%= orderRows?.length || 0 %> order item<%= (orderRows?.length || 0) === 1 ? '' : 's' %>
+        </span>
+      </div>
+    </div>
+
+    <% if (!orderRows || orderRows.length === 0) { %>
+    <div class="card-body text-center py-5">
+      <h3 class="h6 fw-bold text-primary mb-2">
+        No paid sales yet
+      </h3>
+
+      <p class="text-muted mb-0">
+        Imported products exist, but no paid customer order has been found yet.
+      </p>
+    </div>
+    <% } else { %>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Order</th>
+              <th>Product</th>
+              <th>Seller</th>
+              <th>Qty</th>
+              <th>Retail Total</th>
+              <th>Supplier Value</th>
+              <th>Tracking</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <% orderRows.forEach((row) => { %>
+            <% const product = row.product || {}; %>
+            <% const seller = row.seller || {}; %>
+
+            <tr>
+              <td class="small text-muted">
+                <%= niceDate(row.createdAt) %>
+              </td>
+
+              <td>
+                <div class="fw-bold text-primary">
+                  <%= row.orderId || 'Order' %>
+                </div>
+                <div class="small text-muted">
+                  <%= row.status || row.paymentStatus || 'Paid' %>
+                </div>
+              </td>
+
+              <td>
+                <div class="fw-bold">
+                  <%= product.name || 'Imported product' %>
+                </div>
+                <div class="small text-muted">
+                  <%= product.customId || '' %>
+                </div>
+              </td>
+
+              <td>
+                <div class="fw-bold">
+                  <%= seller.name || 'Seller' %>
+                </div>
+                <div class="small text-muted">
+                  <%= seller.email || '' %>
+                </div>
+              </td>
+
+              <td class="fw-bold">
+                <%= row.quantity || 0 %>
+              </td>
+
+              <td class="fw-bold text-primary">
+                <%= money(row.lineTotal || 0) %>
+              </td>
+
+              <td class="fw-bold supplier-imported-green">
+                <%= money(row.supplierValue || 0) %>
+              </td>
+
+              <td>
+                <div class="fw-bold small">
+                  <%= trackingLabel(row) %>
+                </div>
+                <div class="small text-muted">
+                  <%= trackingStatus(row) %>
+                </div>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+</div>
