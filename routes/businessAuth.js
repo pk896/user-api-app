@@ -24,7 +24,31 @@ const Order = require('../models/Order');
 
 const router = express.Router();
 
+const BASE_CURRENCY =
+  String(process.env.BASE_CURRENCY || '')
+    .trim()
+    .toUpperCase() || 'USD';
 
+function formatBusinessMoney(amount) {
+  const n = Number(amount || 0);
+
+  try {
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: BASE_CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
+
+    if (BASE_CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  } catch {
+    return `${BASE_CURRENCY} ${n.toFixed(2)}`;
+  }
+}
 
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const BUCKET = process.env.AWS_BUCKET_NAME;
@@ -73,7 +97,7 @@ async function uploadBusinessLogoToS3(file) {
       Key: key,
       Body: buffer,
       ContentType: mimetype,
-    })
+    }),
   );
 
   return buildS3ImageUrl(key);
@@ -89,7 +113,7 @@ async function deleteS3ImageByUrl(imageUrl) {
       new DeleteObjectCommand({
         Bucket: BUCKET,
         Key: key,
-      })
+      }),
     );
   } catch (err) {
     console.warn('⚠️ Failed to delete business logo from S3:', err.message);
@@ -98,12 +122,17 @@ async function deleteS3ImageByUrl(imageUrl) {
 
 // Normalize emails (main business email)
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 // Normalize PayPal email (same rules as normal email)
 function normalizePaypalEmail(v) {
-  return String(v || '').trim().replace(/\s+/g, '').toLowerCase();
+  return String(v || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .toLowerCase();
 }
 
 // Loose but safe email check (good enough for PayPal email field)
@@ -129,7 +158,9 @@ function applyPaypalPayouts(businessDoc, paypalEmailRaw, payoutsEnabled) {
 
   businessDoc.payouts = businessDoc.payouts || {};
 
-  const prevEmail = String(businessDoc.payouts.paypalEmail || '').trim().toLowerCase();
+  const prevEmail = String(businessDoc.payouts.paypalEmail || '')
+    .trim()
+    .toLowerCase();
   const prevEnabled = Boolean(businessDoc.payouts.enabled);
 
   const wantEnabled = Boolean(payoutsEnabled);
@@ -143,7 +174,7 @@ function applyPaypalPayouts(businessDoc, paypalEmailRaw, payoutsEnabled) {
       return { ok: false, error: 'PayPal email must be a valid email address.' };
     }
 
-    const changed = (prevEmail !== norm) || (prevEnabled !== true);
+    const changed = prevEmail !== norm || prevEnabled !== true;
 
     businessDoc.payouts.paypalEmail = norm;
     businessDoc.payouts.enabled = true;
@@ -160,7 +191,7 @@ function applyPaypalPayouts(businessDoc, paypalEmailRaw, payoutsEnabled) {
 
   // If empty: remove field for cleanliness
   if (!norm) {
-    const changed = (prevEnabled !== false) || (prevEmail !== '');
+    const changed = prevEnabled !== false || prevEmail !== '';
     businessDoc.payouts.paypalEmail = undefined;
     businessDoc.payouts.enabled = false;
     if (changed) businessDoc.payouts.updatedAt = new Date();
@@ -168,7 +199,7 @@ function applyPaypalPayouts(businessDoc, paypalEmailRaw, payoutsEnabled) {
   }
 
   // Checkbox OFF but email provided (store email, keep enabled false)
-  const changed = (prevEmail !== norm) || (prevEnabled !== false);
+  const changed = prevEmail !== norm || prevEnabled !== false;
 
   businessDoc.payouts.paypalEmail = norm;
   businessDoc.payouts.enabled = false;
@@ -226,7 +257,7 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
   // ✅ Supplier products only. NO Product model here.
   const products = await SupplierProduct.find({ supplier: supplierObjectId })
     .select(
-      '_id customId name imageUrl category wholesalePrice availableQuantity unit status createdAt updatedAt'
+      '_id customId name imageUrl category wholesalePrice availableQuantity unit status createdAt updatedAt',
     )
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
@@ -302,15 +333,11 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
         _id: { $in: topProductIds },
         supplier: supplierObjectId,
       })
-        .select(
-          '_id customId name imageUrl category wholesalePrice availableQuantity unit status'
-        )
+        .select('_id customId name imageUrl category wholesalePrice availableQuantity unit status')
         .lean()
     : [];
 
-  const topProductsById = new Map(
-    topProductDocs.map((product) => [String(product._id), product])
-  );
+  const topProductsById = new Map(topProductDocs.map((product) => [String(product._id), product]));
 
   const supplierTopSellingProducts = approvedRequestRows
     .map((row) => {
@@ -363,7 +390,7 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
   ]);
 
   const previousByProductId = new Map(
-    previousGrowthRows.map((row) => [String(row._id), Number(row.qty || 0)])
+    previousGrowthRows.map((row) => [String(row._id), Number(row.qty || 0)]),
   );
 
   const growthProductIds = currentGrowthRows.map((row) => row._id).filter(Boolean);
@@ -373,14 +400,12 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
         _id: { $in: growthProductIds },
         supplier: supplierObjectId,
       })
-        .select(
-          '_id customId name imageUrl category wholesalePrice availableQuantity unit status'
-        )
+        .select('_id customId name imageUrl category wholesalePrice availableQuantity unit status')
         .lean()
     : [];
 
   const growthProductsById = new Map(
-    growthProductDocs.map((product) => [String(product._id), product])
+    growthProductDocs.map((product) => [String(product._id), product]),
   );
 
   const supplierFastestGrowingProducts = currentGrowthRows
@@ -441,18 +466,11 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
         const title = lower.charAt(0).toUpperCase() + lower.slice(1);
 
         return [v, v.toUpperCase(), v.toLowerCase(), title];
-      })
-    )
+      }),
+    ),
   );
 
-  const CANCEL_STATES = [
-    'Cancelled',
-    'Canceled',
-    'CANCELLED',
-    'CANCELED',
-    'VOIDED',
-    'Voided',
-  ];
+  const CANCEL_STATES = ['Cancelled', 'Canceled', 'CANCELLED', 'CANCELED', 'VOIDED', 'Voided'];
 
   const REFUND_STATES = [
     'Refunded',
@@ -480,10 +498,7 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
       { refundStatus: { $nin: ['REFUNDED', 'FULL', 'FULLY_REFUNDED', 'COMPLETED'] } },
 
       {
-        $or: [
-          { refundedAt: { $exists: false } },
-          { refundedAt: null },
-        ],
+        $or: [{ refundedAt: { $exists: false } }, { refundedAt: null }],
       },
     ],
   };
@@ -503,7 +518,9 @@ function buildNonRefundedPaidMatch(OrderModel, extra = {}) {
 // Helper: resolve base URL (Render-safe)
 // -------------------------------------------------------
 function resolveBaseUrl(req) {
-  const env = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  const env = String(process.env.PUBLIC_BASE_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
   if (env) return env;
 
   // fallback to current request host
@@ -841,13 +858,13 @@ router.get('/signup', redirectIfLoggedIn, async (req, res) => {
       {
         $project: {
           country: {
-            $trim: { input: { $ifNull: ['$country', ''] } }
-          }
-        }
+            $trim: { input: { $ifNull: ['$country', ''] } },
+          },
+        },
       },
       { $match: { country: { $ne: '' } } },
       { $group: { _id: { $toLower: '$country' } } },
-      { $count: 'total' }
+      { $count: 'total' },
     ]);
 
     const countriesCount = countriesAgg[0]?.total || 0;
@@ -935,7 +952,9 @@ router.post('/verify/resend', requireBusiness, async (req, res) => {
     }
 
     // ✅ 60s cooldown (prevents spam + “refuse” confusion)
-    const lastSent = business.verificationEmailSentAt ? new Date(business.verificationEmailSentAt).getTime() : 0;
+    const lastSent = business.verificationEmailSentAt
+      ? new Date(business.verificationEmailSentAt).getTime()
+      : 0;
     const now = Date.now();
     const cooldownMs = 60 * 1000;
 
@@ -955,7 +974,10 @@ router.post('/verify/resend', requireBusiness, async (req, res) => {
       await sendBusinessVerificationEmail(business, token, req);
       req.flash('success', `A new verification link was sent to ${business.email}.`);
     } catch (mailErr) {
-      console.error('❌ Resend verification email failed:', mailErr?.response?.body || mailErr?.message || mailErr);
+      console.error(
+        '❌ Resend verification email failed:',
+        mailErr?.response?.body || mailErr?.message || mailErr,
+      );
       req.flash('error', 'Could not send verification email. Please try again later.');
     }
 
@@ -1009,10 +1031,7 @@ router.get('/verify-email/:token', async (req, res) => {
       };
     }
 
-    req.flash(
-      'success',
-      '✅ Your email has been verified. Welcome to your dashboard.',
-    );
+    req.flash('success', '✅ Your email has been verified. Welcome to your dashboard.');
     return res.redirect('/business/dashboard');
   } catch (err) {
     console.error('❌ verify-email error:', err);
@@ -1077,7 +1096,9 @@ router.post(
 
     try {
       const bizId = req.session.business?._id;
-      const newEmail = String(req.body.newEmail || '').trim().toLowerCase();
+      const newEmail = String(req.body.newEmail || '')
+        .trim()
+        .toLowerCase();
       const password = String(req.body.password || '');
 
       const business = await Business.findById(bizId);
@@ -1094,7 +1115,9 @@ router.post(
       }
 
       // ✅ No change?
-      const currentEmail = String(business.email || '').trim().toLowerCase();
+      const currentEmail = String(business.email || '')
+        .trim()
+        .toLowerCase();
       if (newEmail === currentEmail) {
         req.flash('info', 'That is already your current email.');
         return res.redirect('/business/change-email');
@@ -1124,10 +1147,16 @@ router.post(
       // ✅ send verification to the NEW email
       try {
         await sendBusinessVerificationEmail(business, token, req);
-        req.flash('success', `Verification email sent to ${business.email}. Please check your inbox.`);
+        req.flash(
+          'success',
+          `Verification email sent to ${business.email}. Please check your inbox.`,
+        );
       } catch (mailErr) {
         console.error('❌ Change-email send failed:', mailErr);
-        req.flash('error', 'Email updated, but we could not send the verification email. Try Resend.');
+        req.flash(
+          'error',
+          'Email updated, but we could not send the verification email. Try Resend.',
+        );
       }
 
       return res.redirect('/business/verify-pending');
@@ -1154,26 +1183,16 @@ router.post(
   [
     body('name').trim().notEmpty().withMessage('Business name is required'),
 
-    body('email')
-      .trim()
-      .isEmail()
-      .withMessage('Valid email is required')
-      .bail()
-      .normalizeEmail(),
+    body('email').trim().isEmail().withMessage('Valid email is required').bail().normalizeEmail(),
 
-    body('password')
-      .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
 
     body('role')
       .isIn(['seller', 'supplier', 'buyer'])
       .withMessage('Role must be seller, supplier, or buyer'),
 
     // ✅ Business registration details
-    body('officialNumber')
-      .trim()
-      .notEmpty()
-      .withMessage('Business number is required'),
+    body('officialNumber').trim().notEmpty().withMessage('Business number is required'),
 
     body('officialNumberType')
       .optional({ checkFalsy: true })
@@ -1200,7 +1219,11 @@ router.post(
       .isLength({ min: 2, max: 2 })
       .withMessage('Country code must be 2 letters (ISO 2), e.g., ZA, US')
       .bail()
-      .customSanitizer((v) => String(v || '').trim().toUpperCase()),
+      .customSanitizer((v) =>
+        String(v || '')
+          .trim()
+          .toUpperCase(),
+      ),
 
     body('city').trim().notEmpty().withMessage('City is required'),
 
@@ -1208,7 +1231,9 @@ router.post(
       .optional({ checkFalsy: true })
       .trim()
       .custom((v, { req }) => {
-        const cc = String(req.body.countryCode || '').trim().toUpperCase();
+        const cc = String(req.body.countryCode || '')
+          .trim()
+          .toUpperCase();
         if (cc === 'US' && !String(v || '').trim()) {
           throw new Error('State is required for US addresses');
         }
@@ -1224,7 +1249,12 @@ router.post(
     // ✅ PayPal email optional but if provided must be valid
     body('paypalEmail')
       .optional({ checkFalsy: true })
-      .customSanitizer((v) => String(v || '').trim().replace(/\s+/g, '').toLowerCase())
+      .customSanitizer((v) =>
+        String(v || '')
+          .trim()
+          .replace(/\s+/g, '')
+          .toLowerCase(),
+      )
       .isEmail()
       .withMessage('PayPal email must be a valid email address'),
 
@@ -1232,7 +1262,9 @@ router.post(
     body('payoutsEnabled')
       .optional({ checkFalsy: true })
       .customSanitizer((v) => {
-        const s = String(v ?? '').trim().toLowerCase();
+        const s = String(v ?? '')
+          .trim()
+          .toLowerCase();
         if (s === 'on' || s === 'true') return '1';
         if (s === 'off' || s === 'false') return '0';
         if (s === '1' || s === '0') return s;
@@ -1242,31 +1274,26 @@ router.post(
       .withMessage('Invalid payoutsEnabled value'),
 
     // ✅ Authorized Representative (validator checks dotted name; pickField supports both dotted + nested)
-    body('representative.fullName')
-      .custom((_, { req }) => {
-        const v = pickField(req.body, 'representative.fullName', '');
-        if (!v) throw new Error('Authorized representative full name is required');
-        return true;
-      }),
+    body('representative.fullName').custom((_, { req }) => {
+      const v = pickField(req.body, 'representative.fullName', '');
+      if (!v) throw new Error('Authorized representative full name is required');
+      return true;
+    }),
 
-    body('representative.phone')
-      .custom((_, { req }) => {
-        const v = pickField(req.body, 'representative.phone', '');
-        if (!v) throw new Error('Authorized representative cellphone number is required');
-        return true;
-      }),
+    body('representative.phone').custom((_, { req }) => {
+      const v = pickField(req.body, 'representative.phone', '');
+      if (!v) throw new Error('Authorized representative cellphone number is required');
+      return true;
+    }),
 
-    body('representative.idNumber')
-      .custom((_, { req }) => {
-        const v = pickField(req.body, 'representative.idNumber', '');
-        if (!v) throw new Error('Authorized representative ID number is required');
-        return true;
-      }),
+    body('representative.idNumber').custom((_, { req }) => {
+      const v = pickField(req.body, 'representative.idNumber', '');
+      if (!v) throw new Error('Authorized representative ID number is required');
+      return true;
+    }),
 
     // Terms agreement
-    body('terms')
-      .equals('on')
-      .withMessage('You must accept the terms and conditions'),
+    body('terms').equals('on').withMessage('You must accept the terms and conditions'),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -1315,7 +1342,7 @@ router.post(
         postalCode,
         addressLine1,
         addressLine2,
-        payoutsEnabled,  // "1"/"0"/"on"
+        payoutsEnabled, // "1"/"0"/"on"
       } = req.body;
 
       // ✅ pull representative from either dotted or nested style
@@ -1329,13 +1356,18 @@ router.post(
       const peRaw = payoutsEnabled;
       const payoutsOn = Array.isArray(peRaw)
         ? peRaw.includes('1') || peRaw.includes('on') || peRaw.includes('true')
-        : ['1', 'on', 'true', 'yes'].includes(String(peRaw || '').trim().toLowerCase());
+        : ['1', 'on', 'true', 'yes'].includes(
+            String(peRaw || '')
+              .trim()
+              .toLowerCase(),
+          );
 
       // ✅ paypalEmail may be missing if the input was disabled on the client
-      const paypalFromBodyExists = Object.prototype.hasOwnProperty.call(req.body || {}, 'paypalEmail');
-      const paypalEmailRaw = paypalFromBodyExists
-        ? String(req.body.paypalEmail || '').trim()
-        : '';
+      const paypalFromBodyExists = Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        'paypalEmail',
+      );
+      const paypalEmailRaw = paypalFromBodyExists ? String(req.body.paypalEmail || '').trim() : '';
 
       // ✅ quick duplicate check (DB unique index is still the final authority)
       const existing = await Business.findOne({ email: emailNorm }).select('_id').lean();
@@ -1390,7 +1422,9 @@ router.post(
         /**
          * ✅ Shippo-ready structured fields
          */
-        countryCode: String(countryCode || '').trim().toUpperCase(),
+        countryCode: String(countryCode || '')
+          .trim()
+          .toUpperCase(),
         city: String(city || '').trim(),
         state: String(state || '').trim(),
         postalCode: String(postalCode || '').trim(),
@@ -1475,16 +1509,16 @@ router.post(
         await sendBusinessVerificationEmail(business, token, req);
         req.flash(
           'success',
-          `🎉 Welcome ${business.name}! Check your inbox at ${business.email} to verify your email.`
+          `🎉 Welcome ${business.name}! Check your inbox at ${business.email} to verify your email.`,
         );
       } catch (mailErr) {
         console.error(
           '❌ Failed to send business verification email:',
-          mailErr?.response?.body || mailErr?.message || mailErr
+          mailErr?.response?.body || mailErr?.message || mailErr,
         );
         req.flash(
           'error',
-          'Your account was created but we could not send a verification email. Please use “Resend verification” from the verification page.'
+          'Your account was created but we could not send a verification email. Please use “Resend verification” from the verification page.',
         );
       }
 
@@ -1506,7 +1540,7 @@ router.post(
         },
       });
     }
-  }
+  },
 );
 
 /* ----------------------------------------------------------
@@ -1545,7 +1579,10 @@ router.post(
     body('password').notEmpty().withMessage('Password is required'),
   ],
   async (req, res) => {
-    console.log('✅ Business login attempt:', { hasSession: !!req.session, hasBiz: !!req.session?.business });
+    console.log('✅ Business login attempt:', {
+      hasSession: !!req.session,
+      hasBiz: !!req.session?.business,
+    });
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       req.flash('error', 'Please fix the errors and try again.');
@@ -1586,7 +1623,6 @@ router.post(
 
       // If not verified: resend link + send to verify page
       if (!business.isVerified) {
-
         const lastSent = business.verificationEmailSentAt
           ? new Date(business.verificationEmailSentAt).getTime()
           : 0;
@@ -1594,7 +1630,10 @@ router.post(
         const cooldownMs = 60 * 1000;
         if (lastSent && Date.now() - lastSent < cooldownMs) {
           const secs = Math.ceil((cooldownMs - (Date.now() - lastSent)) / 1000);
-          req.flash('warning', `Please wait ${secs}s before requesting another verification email.`);
+          req.flash(
+            'warning',
+            `Please wait ${secs}s before requesting another verification email.`,
+          );
           return req.session.save(() => res.redirect('/business/verify-pending'));
         }
 
@@ -1607,9 +1646,7 @@ router.post(
         if (!token || expired) {
           token = crypto.randomBytes(32).toString('hex');
           business.emailVerificationToken = token;
-          business.emailVerificationExpires = new Date(
-            Date.now() + 24 * 60 * 60 * 1000,
-          );
+          business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
         }
         business.verificationEmailSentAt = now;
         await business.save();
@@ -1729,11 +1766,7 @@ router.post('/profile/update-bank', requireBusiness, async (req, res, next) => {
     const bd = req.body?.bankDetails || {};
 
     const pick = (key) => {
-      const v =
-        bd?.[key] ??
-        req.body?.[`bankDetails.${key}`] ??
-        req.body?.[key] ??
-        '';
+      const v = bd?.[key] ?? req.body?.[`bankDetails.${key}`] ?? req.body?.[key] ?? '';
       return String(v ?? '').trim();
     };
 
@@ -1770,7 +1803,7 @@ router.post('/profile/update-bank', requireBusiness, async (req, res, next) => {
           accountType ||
           currency ||
           swiftCode ||
-          iban
+          iban,
       );
 
       if (submittedAnyBankField) {
@@ -1981,9 +2014,7 @@ router.get(
         return res.redirect('/business/dashboard');
       }
 
-      const sellerDoc = await Business.findById(getBizId(req))
-        .select('_id role isVerified')
-        .lean();
+      const sellerDoc = await Business.findById(getBizId(req)).select('_id role isVerified').lean();
 
       if (!sellerDoc) {
         req.flash('error', 'Business not found. Please log in again.');
@@ -2006,7 +2037,7 @@ router.get(
       req.flash('error', 'Failed to open seller dashboard.');
       return res.redirect('/business/login');
     }
-  }
+  },
 );
 
 /* ----------------------------------------------------------
@@ -2048,13 +2079,10 @@ router.get(
       // ✅ Supplier dashboard data only.
       // ✅ Uses SupplierProduct + SupplyRequest.
       // ❌ Does NOT use Product.
-      const supplierDashboardData = await computeSupplierWholesaleDashboardData(
-        supplierDoc._id
-      );
+      const supplierDashboardData = await computeSupplierWholesaleDashboardData(supplierDoc._id);
 
       const supplierAvatarUrl =
-        String(supplierDoc.logoUrl || '').trim() ||
-        '/images/branding/logo-unincorporate.png';
+        String(supplierDoc.logoUrl || '').trim() || '/images/branding/logo-unincorporate.png';
 
       const supportInbox = process.env.SUPPORT_INBOX || 'support@unicoporate.test';
 
@@ -2077,17 +2105,13 @@ router.get(
         inventoryValue: supplierDashboardData.inventoryValue,
 
         // ✅ The 4 new supplier product card groups
-        supplierTopSellingProducts:
-          supplierDashboardData.supplierTopSellingProducts || [],
+        supplierTopSellingProducts: supplierDashboardData.supplierTopSellingProducts || [],
 
-        supplierLowStockProducts:
-          supplierDashboardData.supplierLowStockProducts || [],
+        supplierLowStockProducts: supplierDashboardData.supplierLowStockProducts || [],
 
-        supplierOutOfStockProducts:
-          supplierDashboardData.supplierOutOfStockProducts || [],
+        supplierOutOfStockProducts: supplierDashboardData.supplierOutOfStockProducts || [],
 
-        supplierFastestGrowingProducts:
-          supplierDashboardData.supplierFastestGrowingProducts || [],
+        supplierFastestGrowingProducts: supplierDashboardData.supplierFastestGrowingProducts || [],
 
         // Safe defaults for old dashboard sections that may still exist in the EJS
         trackingStats: {
@@ -2119,13 +2143,15 @@ router.get(
 
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
+        baseCurrency: BASE_CURRENCY,
+        formatMoney: formatBusinessMoney,
       });
     } catch (err) {
       console.error('❌ Supplier dashboard error:', err);
       req.flash('error', '❌ Failed to load supplier dashboard.');
       return res.redirect('/business/login');
     }
-  }
+  },
 );
 
 /* ----------------------------------------------------------
@@ -2143,9 +2169,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
     }
 
     // ✅ Supplier KPI API must also use SupplierProduct + SupplyRequest only.
-    const supplierDashboardData = await computeSupplierWholesaleDashboardData(
-      business._id
-    );
+    const supplierDashboardData = await computeSupplierWholesaleDashboardData(business._id);
 
     return res.json({
       ok: true,
@@ -2153,17 +2177,13 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
       totals: supplierDashboardData.totals,
       inventoryValue: supplierDashboardData.inventoryValue,
 
-      supplierTopSellingProducts:
-        supplierDashboardData.supplierTopSellingProducts || [],
+      supplierTopSellingProducts: supplierDashboardData.supplierTopSellingProducts || [],
 
-      supplierLowStockProducts:
-        supplierDashboardData.supplierLowStockProducts || [],
+      supplierLowStockProducts: supplierDashboardData.supplierLowStockProducts || [],
 
-      supplierOutOfStockProducts:
-        supplierDashboardData.supplierOutOfStockProducts || [],
+      supplierOutOfStockProducts: supplierDashboardData.supplierOutOfStockProducts || [],
 
-      supplierFastestGrowingProducts:
-        supplierDashboardData.supplierFastestGrowingProducts || [],
+      supplierFastestGrowingProducts: supplierDashboardData.supplierFastestGrowingProducts || [],
     });
   } catch (err) {
     console.error('❌ Supplier KPI API error:', err);
@@ -2240,12 +2260,16 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
       if (!o) return false;
       if (o.isRefunded === true) return true;
       if (o.refundedAt) return true;
-      const rs = String(o.refundStatus || '').trim().toUpperCase();
+      const rs = String(o.refundStatus || '')
+        .trim()
+        .toUpperCase();
       return rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED';
     }
 
     function isCancelledOrder(o) {
-      const st = String(o?.status || '').trim().toUpperCase();
+      const st = String(o?.status || '')
+        .trim()
+        .toUpperCase();
       return st === 'CANCELLED' || st === 'CANCELED' || st === 'VOIDED';
     }
 
@@ -2253,7 +2277,9 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
       if (!it) return false;
       if (it.isRefunded === true) return true;
       if (it.refundedAt) return true;
-      const rs = String(it.refundStatus || '').trim().toUpperCase();
+      const rs = String(it.refundStatus || '')
+        .trim()
+        .toUpperCase();
       return rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED';
     }
 
@@ -2269,11 +2295,7 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
       const refunded = isRefundedOrder(o);
       const cancelled = !refunded && isCancelledOrder(o);
 
-      const uiStatus = refunded
-        ? 'Refunded'
-        : cancelled
-        ? 'Cancelled'
-        : (o.status || 'Unknown');
+      const uiStatus = refunded ? 'Refunded' : cancelled ? 'Cancelled' : o.status || 'Unknown';
 
       const uiStatusKey = String(uiStatus).toLowerCase().replace(/\s+/g, '-');
 
@@ -2308,7 +2330,9 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
 
     const pendingOrders = await OrderModel.countDocuments({
       ...nonRefundedCancelMatch,
-      status: { $in: ['Pending', 'PENDING', 'Processing', 'PROCESSING', 'PAID', 'Shipped', 'SHIPPED'] },
+      status: {
+        $in: ['Pending', 'PENDING', 'Processing', 'PROCESSING', 'PAID', 'Shipped', 'SHIPPED'],
+      },
     });
 
     const refundedOrders = await OrderModel.countDocuments({
@@ -2387,7 +2411,11 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
     // ----------------------------
     // 6) Mailer status
     // ----------------------------
-    const mailerOk = !!(process.env.SENDGRID_API_KEY || process.env.SMTP_HOST || process.env.SMTP_URL);
+    const mailerOk = !!(
+      process.env.SENDGRID_API_KEY ||
+      process.env.SMTP_HOST ||
+      process.env.SMTP_URL
+    );
 
     // Table wants 6 items
     const recentOrders = ordersWithUi.slice(0, 6);
@@ -2414,6 +2442,9 @@ router.get('/dashboards/buyer-dashboard', requireBusiness, async (req, res) => {
       mailerOk,
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatBusinessMoney,
     });
   } catch (err) {
     console.error('❌ Buyer dashboard error:', err);
@@ -2430,7 +2461,8 @@ router.get('/api/buyer/stats', requireBusiness, async (req, res) => {
   try {
     const sessionBusiness = getBiz(req);
     if (!sessionBusiness?._id) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    if (sessionBusiness.role !== 'buyer') return res.status(403).json({ ok: false, error: 'Forbidden' });
+    if (sessionBusiness.role !== 'buyer')
+      return res.status(403).json({ ok: false, error: 'Forbidden' });
 
     const business = await Business.findById(sessionBusiness._id).select('_id isVerified').lean();
     if (!business) return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -2455,7 +2487,9 @@ router.get('/api/buyer/stats', requireBusiness, async (req, res) => {
 
     const pendingOrders = await OrderModel.countDocuments({
       ...nonRefundedCancelMatch,
-      status: { $in: ['Pending', 'PENDING', 'Processing', 'PROCESSING', 'PAID', 'Shipped', 'SHIPPED'] },
+      status: {
+        $in: ['Pending', 'PENDING', 'Processing', 'PROCESSING', 'PAID', 'Shipped', 'SHIPPED'],
+      },
     });
 
     // Shipping stats from active orders (recent window = last 30 days optional)
@@ -2522,7 +2556,7 @@ router.post('/logout', (req, res) => {
     return res.redirect('/business/login');
   }
 
-  req.flash('success', 'You\'ve been logged out successfully.');
+  req.flash('success', "You've been logged out successfully.");
 
   req.session.destroy((err) => {
     if (err) {
@@ -2605,15 +2639,17 @@ router.get('/profile', requireBusiness, async (req, res) => {
     // ✅ OWNER VIEW: fetch full doc fields needed for the profile page
     // ❌ do NOT use toSafeJSON() here (it hides bank details by design)
     const business = await Business.findById(bizId)
-      .select([
-        'name email role phone country city address createdAt',
-        'officialNumber officialNumberType',
-        'verification isVerified',
-        'logoUrl',
-        'bankDetails',
-        // ✅ PayPal payouts
-        'payouts',
-      ].join(' '))
+      .select(
+        [
+          'name email role phone country city address createdAt',
+          'officialNumber officialNumberType',
+          'verification isVerified',
+          'logoUrl',
+          'bankDetails',
+          // ✅ PayPal payouts
+          'payouts',
+        ].join(' '),
+      )
       .lean();
 
     if (!business) {
@@ -2626,22 +2662,16 @@ router.get('/profile', requireBusiness, async (req, res) => {
 
     // Try multiple possible saved shapes (old/new)
     const rawAcc = String(
-      bd.accountNumber || '' // preferred (unmasked)
+      bd.accountNumber || '', // preferred (unmasked)
     ).replace(/\s+/g, '');
 
     const maskedFromDb = String(bd.accountNumberMasked || '').trim();
     const last4FromDb = String(bd.accountNumberLast4 || '').trim();
 
-    const last4 =
-      rawAcc.length >= 4
-        ? rawAcc.slice(-4)
-        : (last4FromDb ? last4FromDb.slice(-4) : '');
+    const last4 = rawAcc.length >= 4 ? rawAcc.slice(-4) : last4FromDb ? last4FromDb.slice(-4) : '';
 
     // If DB already has a masked value, keep it; otherwise generate it from last4
-    const finalMasked =
-      maskedFromDb
-        ? maskedFromDb
-        : (last4 ? `****${last4}` : '—');
+    const finalMasked = maskedFromDb ? maskedFromDb : last4 ? `****${last4}` : '—';
 
     business.bankDetails = {
       ...bd,
@@ -2654,6 +2684,8 @@ router.get('/profile', requireBusiness, async (req, res) => {
       business,
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatBusinessMoney,
     });
   } catch (err) {
     console.error('❌ Business profile error:', err);
@@ -2685,7 +2717,7 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
           'verification isVerified',
           'logoUrl',
           'payouts',
-        ].join(' ')
+        ].join(' '),
       )
       .lean();
 
@@ -2714,7 +2746,6 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
   }
 });
 
-
 /* ----------------------------------------------------------
  * 📝 Update Business Details ONLY (POST)
  * action="/business/profile/update-details"
@@ -2723,255 +2754,271 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
  * - officialNumber, officialNumberType
  * - payouts.enabled + payouts.paypalEmail (via applyPaypalPayouts)
  * -------------------------------------------------------- */
-router.post('/profile/update-details', requireBusiness, businessLogoUpload.single('logo'), async (req, res) => {
-  let newLogoUrl = '';
+router.post(
+  '/profile/update-details',
+  requireBusiness,
+  businessLogoUpload.single('logo'),
+  async (req, res) => {
+    let newLogoUrl = '';
 
-  try {
-    const bizId = String(req.business?._id || '').trim();
-    if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
-      console.log('✅ HIT POST /business/profile/update-details');
-      console.log('BODY:', req.body);
-    }
+    try {
+      const bizId = String(req.business?._id || '').trim();
+      if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
+        console.log('✅ HIT POST /business/profile/update-details');
+        console.log('BODY:', req.body);
+      }
 
-    // Load business doc (this is the single source of truth)
-    const business = await Business.findById(bizId).select(
-      [
-        'name email phone logoUrl',
-        'country countryCode city state postalCode addressLine1 addressLine2 address',
-        'officialNumber officialNumberType',
-        'payouts verification isVerified',
-        'emailVerifiedAt emailVerificationToken emailVerificationExpires verificationEmailSentAt',
-      ].join(' ')
-    );
+      // Load business doc (this is the single source of truth)
+      const business = await Business.findById(bizId).select(
+        [
+          'name email phone logoUrl',
+          'country countryCode city state postalCode addressLine1 addressLine2 address',
+          'officialNumber officialNumberType',
+          'payouts verification isVerified',
+          'emailVerifiedAt emailVerificationToken emailVerificationExpires verificationEmailSentAt',
+        ].join(' '),
+      );
 
-    if (!business) {
-      req.flash('error', 'Business not found. Please log in again.');
-      return res.redirect('/business/login');
-    }
+      if (!business) {
+        req.flash('error', 'Business not found. Please log in again.');
+        return res.redirect('/business/login');
+      }
 
-    // Use existing values from the loaded doc
-    const existingEmail = normalizeEmail(business.email);
-    const existingPaypalEmail = String(business?.payouts?.paypalEmail || '').trim();
+      // Use existing values from the loaded doc
+      const existingEmail = normalizeEmail(business.email);
+      const existingPaypalEmail = String(business?.payouts?.paypalEmail || '').trim();
 
-    // ---- Pick + sanitize (BODY first, fallback to DB so form can still save) ----
-    const name = String(req.body?.name ?? business.name ?? '').trim();
+      // ---- Pick + sanitize (BODY first, fallback to DB so form can still save) ----
+      const name = String(req.body?.name ?? business.name ?? '').trim();
 
-    const emailRaw = String(req.body?.email ?? business.email ?? '').trim();
-    const email = normalizeEmail(emailRaw);
+      const emailRaw = String(req.body?.email ?? business.email ?? '').trim();
+      const email = normalizeEmail(emailRaw);
 
-    const phone = String(req.body?.phone ?? business.phone ?? '').trim();
+      const phone = String(req.body?.phone ?? business.phone ?? '').trim();
 
-    // ✅ Human readable (legacy)
-    const country = String(req.body?.country ?? business.country ?? '').trim();
+      // ✅ Human readable (legacy)
+      const country = String(req.body?.country ?? business.country ?? '').trim();
 
-    // ✅ Shippo-ready structured fields (fallback to DB values)
-    const countryCode = String(req.body?.countryCode ?? business.countryCode ?? '')
-      .trim()
-      .toUpperCase();
+      // ✅ Shippo-ready structured fields (fallback to DB values)
+      const countryCode = String(req.body?.countryCode ?? business.countryCode ?? '')
+        .trim()
+        .toUpperCase();
 
-    const city = String(req.body?.city ?? business.city ?? '').trim();
-    const state = String(req.body?.state ?? business.state ?? '').trim();
-    const postalCode = String(req.body?.postalCode ?? business.postalCode ?? '').trim();
+      const city = String(req.body?.city ?? business.city ?? '').trim();
+      const state = String(req.body?.state ?? business.state ?? '').trim();
+      const postalCode = String(req.body?.postalCode ?? business.postalCode ?? '').trim();
 
-    // Accept BOTH naming styles:
-    // - new: addressLine1/addressLine2
-    // - EJS: street1/street2
-    const addressLine1 = String(
-      req.body?.addressLine1 ?? req.body?.street1 ?? business.addressLine1 ?? ''
-    ).trim();
+      // Accept BOTH naming styles:
+      // - new: addressLine1/addressLine2
+      // - EJS: street1/street2
+      const addressLine1 = String(
+        req.body?.addressLine1 ?? req.body?.street1 ?? business.addressLine1 ?? '',
+      ).trim();
 
-    const addressLine2 = String(
-      req.body?.addressLine2 ?? req.body?.street2 ?? business.addressLine2 ?? ''
-    ).trim();
+      const addressLine2 = String(
+        req.body?.addressLine2 ?? req.body?.street2 ?? business.addressLine2 ?? '',
+      ).trim();
 
-    // ✅ Legacy combined address
-    const address = `${addressLine1}${addressLine2 ? `, ${addressLine2}` : ''}`.trim();
+      // ✅ Legacy combined address
+      const address = `${addressLine1}${addressLine2 ? `, ${addressLine2}` : ''}`.trim();
 
-    const officialNumber = String(req.body?.officialNumber ?? business.officialNumber ?? '').trim();
-    const officialNumberType = String(req.body?.officialNumberType ?? business.officialNumberType ?? 'OTHER').trim();
+      const officialNumber = String(
+        req.body?.officialNumber ?? business.officialNumber ?? '',
+      ).trim();
+      const officialNumberType = String(
+        req.body?.officialNumberType ?? business.officialNumberType ?? 'OTHER',
+      ).trim();
 
-    // payoutsEnabled comes as "0", "1", or ["0","1"]
-    const peRaw = req.body?.payoutsEnabled;
-    const payoutsOn = Array.isArray(peRaw)
-      ? peRaw.includes('1') || peRaw.includes('on') || peRaw.includes('true')
-      : ['1', 'on', 'true', 'yes'].includes(String(peRaw || '').trim().toLowerCase());
+      // payoutsEnabled comes as "0", "1", or ["0","1"]
+      const peRaw = req.body?.payoutsEnabled;
+      const payoutsOn = Array.isArray(peRaw)
+        ? peRaw.includes('1') || peRaw.includes('on') || peRaw.includes('true')
+        : ['1', 'on', 'true', 'yes'].includes(
+            String(peRaw || '')
+              .trim()
+              .toLowerCase(),
+          );
 
-    // paypalEmail may be missing when input is disabled
-    const paypalFromBodyExists = Object.prototype.hasOwnProperty.call(req.body || {}, 'paypalEmail');
-    const paypalEmailRaw = paypalFromBodyExists
-      ? String(req.body.paypalEmail || '').trim()
-      : existingPaypalEmail;
+      // paypalEmail may be missing when input is disabled
+      const paypalFromBodyExists = Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        'paypalEmail',
+      );
+      const paypalEmailRaw = paypalFromBodyExists
+        ? String(req.body.paypalEmail || '').trim()
+        : existingPaypalEmail;
 
-    // ---- Required field checks ----
-        // ✅ Required (Shippo-ready + legacy)
-    if (!name || !email || !phone || !country || !officialNumber) {
-      req.flash('error', 'Please fill in all required fields.');
-      return res.redirect('/business/profile/edit-details');
-    }
-
-    // ✅ Shippo-ready required fields
-    if (!countryCode || countryCode.length !== 2) {
-      req.flash('error', 'Country code must be 2 letters (ISO 2), e.g., ZA, US.');
-      return res.redirect('/business/profile/edit-details');
-    }
-
-    if (!city || !postalCode || !addressLine1) {
-      req.flash('error', 'Please fill in your City, Postal Code, and Address Line 1.');
-      return res.redirect('/business/profile/edit-details');
-    }
-
-    // ✅ Same rule as /signup
-    if (countryCode === 'US' && !state) {
-      req.flash('error', 'State is required for US addresses.');
-      return res.redirect('/business/profile/edit-details');
-    }
-
-    // ---- Validate officialNumberType ----
-    const allowedTypes = ['CIPC_REG', 'VAT', 'TIN', 'OTHER'];
-    if (!allowedTypes.includes(officialNumberType)) {
-      req.flash('error', 'Invalid official number type.');
-      return res.redirect('/business/profile/edit-details');
-    }
-
-    // ---- Email uniqueness if changed ----
-    const emailChanged = email !== existingEmail;
-
-    if (emailChanged) {
-      const exists = await Business.findOne({ email, _id: { $ne: bizId } }).lean();
-      if (exists) {
-        req.flash('error', 'That email is already used by another business account.');
+      // ---- Required field checks ----
+      // ✅ Required (Shippo-ready + legacy)
+      if (!name || !email || !phone || !country || !officialNumber) {
+        req.flash('error', 'Please fill in all required fields.');
         return res.redirect('/business/profile/edit-details');
       }
-    }
 
-    // ---- Official number change => reset verification status ----
-    const currentOfficial = String(business.officialNumber || '').trim();
-    const officialChanged = officialNumber !== currentOfficial;
-
-    // ---- Optional logo replacement ----
-    const oldLogoUrl = String(business.logoUrl || '').trim();
-
-    if (req.file) {
-      try {
-        newLogoUrl = await uploadBusinessLogoToS3(req.file);
-      } catch (err) {
-        console.error('❌ Business logo upload failed during edit-details:', err);
-        req.flash('error', 'Business logo upload failed. Please try again.');
+      // ✅ Shippo-ready required fields
+      if (!countryCode || countryCode.length !== 2) {
+        req.flash('error', 'Country code must be 2 letters (ISO 2), e.g., ZA, US.');
         return res.redirect('/business/profile/edit-details');
       }
-    }
 
-    // ---- PayPal payouts: use the SAME helper as /signup ----
-    const applied = applyPaypalPayouts(business, paypalEmailRaw, payoutsOn);
-    if (!applied || applied.ok !== true) {
-      req.flash('error', applied?.error || 'Invalid PayPal payouts settings.');
+      if (!city || !postalCode || !addressLine1) {
+        req.flash('error', 'Please fill in your City, Postal Code, and Address Line 1.');
+        return res.redirect('/business/profile/edit-details');
+      }
+
+      // ✅ Same rule as /signup
+      if (countryCode === 'US' && !state) {
+        req.flash('error', 'State is required for US addresses.');
+        return res.redirect('/business/profile/edit-details');
+      }
+
+      // ---- Validate officialNumberType ----
+      const allowedTypes = ['CIPC_REG', 'VAT', 'TIN', 'OTHER'];
+      if (!allowedTypes.includes(officialNumberType)) {
+        req.flash('error', 'Invalid official number type.');
+        return res.redirect('/business/profile/edit-details');
+      }
+
+      // ---- Email uniqueness if changed ----
+      const emailChanged = email !== existingEmail;
+
+      if (emailChanged) {
+        const exists = await Business.findOne({ email, _id: { $ne: bizId } }).lean();
+        if (exists) {
+          req.flash('error', 'That email is already used by another business account.');
+          return res.redirect('/business/profile/edit-details');
+        }
+      }
+
+      // ---- Official number change => reset verification status ----
+      const currentOfficial = String(business.officialNumber || '').trim();
+      const officialChanged = officialNumber !== currentOfficial;
+
+      // ---- Optional logo replacement ----
+      const oldLogoUrl = String(business.logoUrl || '').trim();
+
+      if (req.file) {
+        try {
+          newLogoUrl = await uploadBusinessLogoToS3(req.file);
+        } catch (err) {
+          console.error('❌ Business logo upload failed during edit-details:', err);
+          req.flash('error', 'Business logo upload failed. Please try again.');
+          return res.redirect('/business/profile/edit-details');
+        }
+      }
+
+      // ---- PayPal payouts: use the SAME helper as /signup ----
+      const applied = applyPaypalPayouts(business, paypalEmailRaw, payoutsOn);
+      if (!applied || applied.ok !== true) {
+        req.flash('error', applied?.error || 'Invalid PayPal payouts settings.');
+        return res.redirect('/business/profile/edit-details');
+      }
+
+      // ---- Apply allowed fields on the doc ----
+      business.name = name;
+      business.phone = phone;
+
+      // ✅ Shippo-ready structured address (single source of truth for shipping)
+      business.countryCode = countryCode;
+      business.city = city;
+      business.state = state; // may be empty for non-US
+      business.postalCode = postalCode;
+      business.addressLine1 = addressLine1;
+      business.addressLine2 = addressLine2;
+
+      // ✅ Legacy fields (do NOT break other pages)
+      business.country = country; // human readable legacy
+      business.address = address; // combined legacy
+
+      business.officialNumber = officialNumber;
+      business.officialNumberType = officialNumberType;
+
+      if (newLogoUrl) {
+        business.logoUrl = newLogoUrl;
+      }
+
+      // ---- If email changed: require re-verify + set token (DECLARE ONCE) ----
+      let token = null;
+      if (emailChanged) {
+        token = crypto.randomBytes(32).toString('hex');
+        business.email = email;
+
+        business.isVerified = false;
+        business.emailVerifiedAt = null;
+
+        business.emailVerificationToken = token;
+        business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        business.verificationEmailSentAt = new Date();
+      }
+
+      // ---- Official number change => reset verification status ----
+      if (officialChanged) {
+        business.verification = business.verification || {};
+        business.verification.status = 'pending';
+        business.verification.reason = '';
+        business.verification.updatedAt = new Date();
+      }
+
+      // Save
+      await business.save();
+
+      if (newLogoUrl && oldLogoUrl && oldLogoUrl !== newLogoUrl) {
+        await deleteS3ImageByUrl(oldLogoUrl);
+      }
+
+      // ---- Keep session in sync ----
+      if (!req.session.business) req.session.business = {};
+
+      req.session.business.name = business.name;
+      req.session.business.email = business.email;
+      req.session.business.phone = business.phone || '';
+      req.session.business.isVerified = business.isVerified;
+      req.session.business.payouts = {
+        enabled: business.payouts?.enabled === true,
+        paypalEmail: business.payouts?.paypalEmail || '',
+      };
+
+      // ✅ keep address fields in session too (prevents “old profile data” issues)
+      req.session.business.country = business.country || '';
+      req.session.business.countryCode = business.countryCode || '';
+      req.session.business.city = business.city || '';
+      req.session.business.state = business.state || '';
+      req.session.business.postalCode = business.postalCode || '';
+      req.session.business.addressLine1 = business.addressLine1 || '';
+      req.session.business.addressLine2 = business.addressLine2 || '';
+      req.session.business.address = business.address || '';
+
+      // ---- If email changed, send verification mail ----
+      if (emailChanged) {
+        try {
+          await sendBusinessVerificationEmail(business, token, req);
+          req.flash('success', '✅ Details saved. Please verify your new email address.');
+        } catch (mailErr) {
+          console.error(
+            '❌ send verification after email change failed:',
+            mailErr?.response?.body || mailErr?.message || mailErr,
+          );
+          req.flash(
+            'warning',
+            'Details saved, but we could not send the verification email. Use “Resend verification”.',
+          );
+        }
+        return res.redirect('/business/verify-pending');
+      }
+
+      req.flash('success', '✅ Business details updated.');
+      return res.redirect('/business/profile');
+    } catch (err) {
+      if (newLogoUrl) {
+        await deleteS3ImageByUrl(newLogoUrl);
+      }
+
+      console.error('❌ POST /business/profile/update-details error:', err);
+      req.flash('error', err?.message || 'Failed to update business details.');
       return res.redirect('/business/profile/edit-details');
     }
-
-    // ---- Apply allowed fields on the doc ----
-    business.name = name;
-    business.phone = phone;
-
-    // ✅ Shippo-ready structured address (single source of truth for shipping)
-    business.countryCode = countryCode;
-    business.city = city;
-    business.state = state; // may be empty for non-US
-    business.postalCode = postalCode;
-    business.addressLine1 = addressLine1;
-    business.addressLine2 = addressLine2;
-
-    // ✅ Legacy fields (do NOT break other pages)
-    business.country = country; // human readable legacy
-    business.address = address; // combined legacy
-
-    business.officialNumber = officialNumber;
-    business.officialNumberType = officialNumberType;
-
-    if (newLogoUrl) {
-      business.logoUrl = newLogoUrl;
-    }
-
-    // ---- If email changed: require re-verify + set token (DECLARE ONCE) ----
-    let token = null;
-    if (emailChanged) {
-      token = crypto.randomBytes(32).toString('hex');
-      business.email = email;
-
-      business.isVerified = false;
-      business.emailVerifiedAt = null;
-
-      business.emailVerificationToken = token;
-      business.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      business.verificationEmailSentAt = new Date();
-    }
-
-    // ---- Official number change => reset verification status ----
-    if (officialChanged) {
-      business.verification = business.verification || {};
-      business.verification.status = 'pending';
-      business.verification.reason = '';
-      business.verification.updatedAt = new Date();
-    }
-
-    // Save
-    await business.save();
-
-    if (newLogoUrl && oldLogoUrl && oldLogoUrl !== newLogoUrl) {
-      await deleteS3ImageByUrl(oldLogoUrl);
-    }
-
-    // ---- Keep session in sync ----
-    if (!req.session.business) req.session.business = {};
-
-    req.session.business.name = business.name;
-    req.session.business.email = business.email;
-    req.session.business.phone = business.phone || '';
-    req.session.business.isVerified = business.isVerified;
-    req.session.business.payouts = {
-      enabled: business.payouts?.enabled === true,
-      paypalEmail: business.payouts?.paypalEmail || '',
-    };
-
-    // ✅ keep address fields in session too (prevents “old profile data” issues)
-    req.session.business.country = business.country || '';
-    req.session.business.countryCode = business.countryCode || '';
-    req.session.business.city = business.city || '';
-    req.session.business.state = business.state || '';
-    req.session.business.postalCode = business.postalCode || '';
-    req.session.business.addressLine1 = business.addressLine1 || '';
-    req.session.business.addressLine2 = business.addressLine2 || '';
-    req.session.business.address = business.address || '';
-
-    // ---- If email changed, send verification mail ----
-    if (emailChanged) {
-      try {
-        await sendBusinessVerificationEmail(business, token, req);
-        req.flash('success', '✅ Details saved. Please verify your new email address.');
-      } catch (mailErr) {
-        console.error(
-          '❌ send verification after email change failed:',
-          mailErr?.response?.body || mailErr?.message || mailErr
-        );
-        req.flash(
-          'warning',
-          'Details saved, but we could not send the verification email. Use “Resend verification”.'
-        );
-      }
-      return res.redirect('/business/verify-pending');
-    }
-
-    req.flash('success', '✅ Business details updated.');
-    return res.redirect('/business/profile');
-  } catch (err) {
-    if (newLogoUrl) {
-      await deleteS3ImageByUrl(newLogoUrl);
-    }
-
-    console.error('❌ POST /business/profile/update-details error:', err);
-    req.flash('error', err?.message || 'Failed to update business details.');
-    return res.redirect('/business/profile/edit-details');
-  }
-});
+  },
+);
 
 /* ----------------------------------------------------------
  * 🗑️ Delete Profile
@@ -3012,9 +3059,7 @@ router.get('/profile/delete', requireBusiness, async (req, res) => {
 router.post('/profile/delete', requireBusiness, async (req, res) => {
   try {
     const businessId =
-      req.session.business && req.session.business._id
-        ? req.session.business._id
-        : null;
+      req.session.business && req.session.business._id ? req.session.business._id : null;
 
     if (!businessId) {
       req.flash('error', 'Session expired. Please log in again.');
@@ -3026,7 +3071,7 @@ router.post('/profile/delete', requireBusiness, async (req, res) => {
     if (hasProducts) {
       req.flash(
         'error',
-        'Deletion failed: your account still have products. If you really want to delete this account you must go to your dashboard delete its product first here: /products/all'
+        'Deletion failed: your account still have products. If you really want to delete this account you must go to your dashboard delete its product first here: /products/all',
       );
       return res.redirect('/business/profile/delete');
     }
@@ -3076,404 +3121,398 @@ router.post('/profile/delete', requireBusiness, async (req, res) => {
  * 📊 ANALYTICS CHART DASHBOARD (per business)
  * -------------------------------------------------------- */
 
-router.get(
-  '/analytics/chart',
-  requireBusiness,
-  requireVerifiedBusiness,
-  async (req, res) => {
-    try {
-      const sessionBusiness = getBiz(req);
-      if (!sessionBusiness || !sessionBusiness._id) {
-        req.flash('error', 'Business not found. Please log in again.');
-        return res.redirect('/business/login');
-      }
-
-      const business = await Business.findById(sessionBusiness._id).lean();
-      if (!business) {
-        req.flash('error', 'Business not found. Please log in again.');
-        return res.redirect('/business/login');
-      }
-
-      const activeProducts = await Product.countDocuments({
-        business: business._id,
-        stock: { $gt: 0 },
-      });
-
-      res.render('business-chart', {
-        title: `${business.name} - Analytics Dashboard`,
-        business: {
-          ...business,
-          activeProducts,
-        },
-        active: 'analytics',
-        themeCss: res.locals.themeCss,
-        nonce: res.locals.nonce,
-      });
-    } catch (err) {
-      console.error('❌ Analytics chart dashboard error:', err);
-      req.flash('error', 'Failed to load analytics dashboard.');
-      res.redirect('/business/dashboard');
+router.get('/analytics/chart', requireBusiness, requireVerifiedBusiness, async (req, res) => {
+  try {
+    const sessionBusiness = getBiz(req);
+    if (!sessionBusiness || !sessionBusiness._id) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
     }
+
+    const business = await Business.findById(sessionBusiness._id).lean();
+    if (!business) {
+      req.flash('error', 'Business not found. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const activeProducts = await Product.countDocuments({
+      business: business._id,
+      stock: { $gt: 0 },
+    });
+
+    res.render('business-chart', {
+      title: `${business.name} - Analytics Dashboard`,
+      business: {
+        ...business,
+        activeProducts,
+      },
+      active: 'analytics',
+      themeCss: res.locals.themeCss,
+      nonce: res.locals.nonce,
+      baseCurrency: BASE_CURRENCY,
+      formatMoney: formatBusinessMoney,
+    });
+  } catch (err) {
+    console.error('❌ Analytics chart dashboard error:', err);
+    req.flash('error', 'Failed to load analytics dashboard.');
+    res.redirect('/business/dashboard');
   }
-);
+});
 
 // ----------------------------------------------------------
 // 📊 ANALYTICS CHART DATA API (per business only)
 // ✅ IGNORES refunded/cancelled orders AND refunded items
 // ✅ Uses buildNonRefundedPaidMatch(OrderModel, extra) that exists ONCE above
 // ----------------------------------------------------------
-router.get(
-  '/analytics/chart-data',
-  requireBusiness,
-  requireVerifiedBusiness,
-  async (req, res) => {
-    try {
-      const sessionBusiness = getBiz(req);
-      if (!sessionBusiness || !sessionBusiness._id) {
-        return res.status(401).json({ success: false, message: 'Unauthorized' });
-      }
+router.get('/analytics/chart-data', requireBusiness, requireVerifiedBusiness, async (req, res) => {
+  try {
+    const sessionBusiness = getBiz(req);
+    if (!sessionBusiness || !sessionBusiness._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
 
-      const OrderModel = Order;
-      if (!OrderModel) {
-        return res.status(500).json({ success: false, message: 'Order model not available' });
-      }
+    const OrderModel = Order;
+    if (!OrderModel) {
+      return res.status(500).json({ success: false, message: 'Order model not available' });
+    }
 
-      const businessId = sessionBusiness._id;
-      const now = new Date();
+    const businessId = sessionBusiness._id;
+    const now = new Date();
 
-      // ----------------------------
-      // 1) Load THIS business products
-      // ----------------------------
-      const products = await Product.find({ business: businessId })
-        .select('customId name price stock soldCount _id')
-        .lean();
+    // ----------------------------
+    // 1) Load THIS business products
+    // ----------------------------
+    const products = await Product.find({ business: businessId })
+      .select('customId name price stock soldCount _id')
+      .lean();
 
-      // Build keys set (supports BOTH customId and _id matching)
-      const productKeys = products
-        .flatMap((p) => {
-          const keys = [];
-          if (p?.customId) keys.push(String(p.customId).trim());
-          if (p?._id) keys.push(String(p._id).trim());
-          return keys;
-        })
-        .filter(Boolean);
+    // Build keys set (supports BOTH customId and _id matching)
+    const productKeys = products
+      .flatMap((p) => {
+        const keys = [];
+        if (p?.customId) keys.push(String(p.customId).trim());
+        if (p?._id) keys.push(String(p._id).trim());
+        return keys;
+      })
+      .filter(Boolean);
 
-      const productKeySet = new Set(productKeys);
+    const productKeySet = new Set(productKeys);
 
-      // Active products count (stock > 0)
-      const activeProducts = products.filter((p) => (Number(p.stock) || 0) > 0).length;
+    // Active products count (stock > 0)
+    const activeProducts = products.filter((p) => (Number(p.stock) || 0) > 0).length;
 
-      // Price lookup map for fast revenue calculation
-      const productPriceByKey = new Map();
-      for (const p of products) {
-        const price = Number(p?.price || 0) || 0;
-        if (p?.customId) productPriceByKey.set(String(p.customId).trim(), price);
-        if (p?._id) productPriceByKey.set(String(p._id).trim(), price);
-      }
+    // Price lookup map for fast revenue calculation
+    const productPriceByKey = new Map();
+    for (const p of products) {
+      const price = Number(p?.price || 0) || 0;
+      if (p?.customId) productPriceByKey.set(String(p.customId).trim(), price);
+      if (p?._id) productPriceByKey.set(String(p._id).trim(), price);
+    }
 
-      // If no products, return zero chart
-      if (productKeys.length === 0) {
-        const dailyData = [];
-        const monthlyData = [];
-        const yearlyData = [];
-
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(now);
-          d.setDate(d.getDate() - i);
-          dailyData.push({
-            date: d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }),
-            sales: 0,
-            orders: 0,
-          });
-        }
-
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now);
-          d.setDate(d.getDate() - i);
-          monthlyData.push({
-            date: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }),
-            sales: 0,
-            orders: 0,
-          });
-        }
-
-        for (let i = 11; i >= 0; i--) {
-          const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          yearlyData.push({
-            month: m.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' }),
-            sales: 0,
-            orders: 0,
-          });
-        }
-
-        return res.json({
-          success: true,
-          chartData: { daily: dailyData, monthly: monthlyData, yearly: yearlyData, custom: [] },
-          metrics: {
-            totalRevenue: 0,
-            totalOrders: 0,
-            avgOrderValue: 0,
-            activeProducts,
-            revenueChange: 0,
-            ordersChange: 0,
-            avgOrderChange: 0,
-          },
-          productPerformance: [],
-          lastUpdated: new Date().toISOString(),
-        });
-      }
-
-      // ----------------------------
-      // 2) Helpers
-      // ----------------------------
-      const idMatchOr = [
-        { 'items.productId': { $in: productKeys } },
-        { 'items.customId': { $in: productKeys } },
-        { 'items.pid': { $in: productKeys } },
-        { 'items.sku': { $in: productKeys } },
-      ];
-
-      function moneyToNumber(m) {
-        if (!m) return 0;
-        if (typeof m === 'number') return m;
-        if (typeof m === 'string') return Number(m) || 0;
-        if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
-        return 0;
-      }
-
-      function isRefundedItem(item) {
-        if (!item) return false;
-        if (item.isRefunded === true) return true;
-
-        const rs = String(item.refundStatus || '').trim().toUpperCase();
-        if (rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED' || rs === 'COMPLETED')
-          return true;
-
-        if (item.refundedAt) return true;
-        return false;
-      }
-
-      // revenue for THIS business from an order (ignore refunded items)
-      function computeSellerAmount(order) {
-        let sellerAmount = 0;
-        if (!Array.isArray(order.items)) return 0;
-
-        for (const item of order.items) {
-          if (isRefundedItem(item)) continue;
-
-          const pid = String(item.productId || item.customId || item.pid || item.sku || '').trim();
-          if (!pid || !productKeySet.has(pid)) continue;
-
-          const qty = Number(item.quantity || 1);
-          if (!Number.isFinite(qty) || qty <= 0) continue;
-
-          const unitFromItem = moneyToNumber(item.price);
-          const unitFromProduct = productPriceByKey.get(pid) || 0;
-
-          const unit = unitFromItem || unitFromProduct;
-          const line = qty * unit;
-
-          if (line > 0) sellerAmount += line;
-        }
-
-        return sellerAmount;
-      }
-
-      // Use your shared refund/cancel exclusion helper
-      function buildBaseMatch(extra = {}) {
-        return buildNonRefundedPaidMatch(OrderModel, {
-          ...extra,
-          $or: idMatchOr,
-        });
-      }
-
-      // Date keys (UTC-based, stable)
-      const dayKey = (d) => new Date(d).toISOString().slice(0, 10); // YYYY-MM-DD
-      const monthKey = (d) => new Date(d).toISOString().slice(0, 7); // YYYY-MM
-
-      // ----------------------------
-      // 3) Pull orders ONCE for last 30 days (covers daily + monthly)
-      // ----------------------------
-      const start30 = new Date(now);
-      start30.setDate(start30.getDate() - 29);
-      start30.setHours(0, 0, 0, 0);
-
-      const orders30 = await OrderModel.find(buildBaseMatch({ createdAt: { $gte: start30 } }))
-        .select('createdAt items status refundStatus isRefunded refundedAt')
-        .lean();
-
-      const salesByDay = new Map();   // YYYY-MM-DD -> { sales, orders }
-      for (const o of orders30) {
-        const amt = computeSellerAmount(o);
-        if (amt <= 0) continue; // if all items refunded, don’t count order
-
-        const k = dayKey(o.createdAt || now);
-        const cur = salesByDay.get(k) || { sales: 0, orders: 0 };
-        cur.sales += amt;
-        cur.orders += 1;
-        salesByDay.set(k, cur);
-      }
-
-      // Build monthlyData (last 30 days)
-      const monthlyData = [];
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - i);
-        const k = dayKey(d);
-        const v = salesByDay.get(k) || { sales: 0, orders: 0 };
-
-        monthlyData.push({
-          date: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }),
-          sales: Math.round((v.sales || 0) * 100) / 100,
-          orders: Number(v.orders || 0),
-        });
-      }
-
-      // Build dailyData (last 7 days)
+    // If no products, return zero chart
+    if (productKeys.length === 0) {
       const dailyData = [];
+      const monthlyData = [];
+      const yearlyData = [];
+
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
-        const k = dayKey(d);
-        const v = salesByDay.get(k) || { sales: 0, orders: 0 };
-
         dailyData.push({
           date: d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }),
-          sales: Math.round((v.sales || 0) * 100) / 100,
-          orders: Number(v.orders || 0),
+          sales: 0,
+          orders: 0,
         });
       }
 
-      // ----------------------------
-      // 4) Pull orders ONCE for last 12 months (yearly)
-      // ----------------------------
-      const start12 = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-      start12.setHours(0, 0, 0, 0);
-
-      const orders12 = await OrderModel.find(buildBaseMatch({ createdAt: { $gte: start12 } }))
-        .select('createdAt items status refundStatus isRefunded refundedAt')
-        .lean();
-
-      const salesByMonth = new Map(); // YYYY-MM -> { sales, orders }
-      for (const o of orders12) {
-        const amt = computeSellerAmount(o);
-        if (amt <= 0) continue;
-
-        const k = monthKey(o.createdAt || now);
-        const cur = salesByMonth.get(k) || { sales: 0, orders: 0 };
-        cur.sales += amt;
-        cur.orders += 1;
-        salesByMonth.set(k, cur);
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        monthlyData.push({
+          date: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }),
+          sales: 0,
+          orders: 0,
+        });
       }
 
-      const yearlyData = [];
       for (let i = 11; i >= 0; i--) {
         const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const k = monthKey(m);
-        const v = salesByMonth.get(k) || { sales: 0, orders: 0 };
-
         yearlyData.push({
           month: m.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' }),
-          sales: Math.round((v.sales || 0) * 100) / 100,
-          orders: Number(v.orders || 0),
+          sales: 0,
+          orders: 0,
         });
       }
 
-      // ----------------------------
-      // 5) Metrics
-      // ----------------------------
-      const totalRevenue = yearlyData.reduce((sum, m) => sum + (Number(m.sales) || 0), 0);
-      const totalOrders = yearlyData.reduce((sum, m) => sum + (Number(m.orders) || 0), 0);
-      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-      const lastIdx = yearlyData.length - 1;
-      const prevIdx = lastIdx - 1;
-
-      const currentMonthRevenue = lastIdx >= 0 ? yearlyData[lastIdx].sales : 0;
-      const previousMonthRevenue = prevIdx >= 0 ? yearlyData[prevIdx].sales : 0;
-
-      const revenueChange =
-        previousMonthRevenue > 0
-          ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100
-          : 0;
-
-      const currentMonthOrders = lastIdx >= 0 ? yearlyData[lastIdx].orders : 0;
-      const previousMonthOrders = prevIdx >= 0 ? yearlyData[prevIdx].orders : 0;
-
-      const ordersChange =
-        previousMonthOrders > 0
-          ? ((currentMonthOrders - previousMonthOrders) / previousMonthOrders) * 100
-          : 0;
-
-      const currentAvg = currentMonthOrders > 0 ? currentMonthRevenue / currentMonthOrders : 0;
-      const previousAvg = previousMonthOrders > 0 ? previousMonthRevenue / previousMonthOrders : 0;
-
-      const avgOrderChange = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
-
-      // ----------------------------
-      // 6) Product performance (top 5) - same behavior as before
-      // ----------------------------
-      const productPerformance = [];
-
-      if (products.length > 0) {
-        const topProducts = products
-          .filter((p) => (p.soldCount || 0) > 0)
-          .sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0))
-          .slice(0, 5);
-
-        if (topProducts.length > 0) {
-          topProducts.forEach((product) => {
-            const nm = String(product.name || '');
-            const name = nm.length > 15 ? nm.substring(0, 15) + '...' : nm;
-            productPerformance.push({ name, sales: product.soldCount || 0 });
-          });
-        } else {
-          const inStockProducts = products
-            .filter((p) => (Number(p.stock) || 0) > 0)
-            .sort((a, b) => (Number(b.stock) || 0) - (Number(a.stock) || 0))
-            .slice(0, 5);
-
-          if (inStockProducts.length > 0) {
-            inStockProducts.forEach((product) => {
-              const nm = String(product.name || '');
-              const name = nm.length > 15 ? nm.substring(0, 15) + '...' : nm;
-              productPerformance.push({ name, sales: Number(product.stock) || 0 });
-            });
-          } else {
-            productPerformance.push(
-              { name: 'No products yet', sales: 1 },
-              { name: 'Add products', sales: 1 }
-            );
-          }
-        }
-      }
-
-      // Final response
       return res.json({
         success: true,
         chartData: { daily: dailyData, monthly: monthlyData, yearly: yearlyData, custom: [] },
         metrics: {
-          totalRevenue: Math.round(totalRevenue * 100) / 100,
-          totalOrders,
-          avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+          totalRevenue: 0,
+          totalOrders: 0,
+          avgOrderValue: 0,
           activeProducts,
-          revenueChange: Math.round(revenueChange * 10) / 10,
-          ordersChange: Math.round(ordersChange * 10) / 10,
-          avgOrderChange: Math.round(avgOrderChange * 10) / 10,
+          revenueChange: 0,
+          ordersChange: 0,
+          avgOrderChange: 0,
         },
-        productPerformance,
+        productPerformance: [],
         lastUpdated: new Date().toISOString(),
       });
-    } catch (error) {
-      console.error('❌ Chart data API error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to fetch chart data',
-        error: error.message,
+    }
+
+    // ----------------------------
+    // 2) Helpers
+    // ----------------------------
+    const idMatchOr = [
+      { 'items.productId': { $in: productKeys } },
+      { 'items.customId': { $in: productKeys } },
+      { 'items.pid': { $in: productKeys } },
+      { 'items.sku': { $in: productKeys } },
+    ];
+
+    function moneyToNumber(m) {
+      if (!m) return 0;
+      if (typeof m === 'number') return m;
+      if (typeof m === 'string') return Number(m) || 0;
+      if (typeof m === 'object' && m.value !== undefined) return Number(m.value) || 0;
+      return 0;
+    }
+
+    function isRefundedItem(item) {
+      if (!item) return false;
+      if (item.isRefunded === true) return true;
+
+      const rs = String(item.refundStatus || '')
+        .trim()
+        .toUpperCase();
+      if (rs === 'REFUNDED' || rs === 'FULL' || rs === 'FULLY_REFUNDED' || rs === 'COMPLETED')
+        return true;
+
+      if (item.refundedAt) return true;
+      return false;
+    }
+
+    // revenue for THIS business from an order (ignore refunded items)
+    function computeSellerAmount(order) {
+      let sellerAmount = 0;
+      if (!Array.isArray(order.items)) return 0;
+
+      for (const item of order.items) {
+        if (isRefundedItem(item)) continue;
+
+        const pid = String(item.productId || item.customId || item.pid || item.sku || '').trim();
+        if (!pid || !productKeySet.has(pid)) continue;
+
+        const qty = Number(item.quantity || 1);
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+
+        const unitFromItem = moneyToNumber(item.price);
+        const unitFromProduct = productPriceByKey.get(pid) || 0;
+
+        const unit = unitFromItem || unitFromProduct;
+        const line = qty * unit;
+
+        if (line > 0) sellerAmount += line;
+      }
+
+      return sellerAmount;
+    }
+
+    // Use your shared refund/cancel exclusion helper
+    function buildBaseMatch(extra = {}) {
+      return buildNonRefundedPaidMatch(OrderModel, {
+        ...extra,
+        $or: idMatchOr,
       });
     }
+
+    // Date keys (UTC-based, stable)
+    const dayKey = (d) => new Date(d).toISOString().slice(0, 10); // YYYY-MM-DD
+    const monthKey = (d) => new Date(d).toISOString().slice(0, 7); // YYYY-MM
+
+    // ----------------------------
+    // 3) Pull orders ONCE for last 30 days (covers daily + monthly)
+    // ----------------------------
+    const start30 = new Date(now);
+    start30.setDate(start30.getDate() - 29);
+    start30.setHours(0, 0, 0, 0);
+
+    const orders30 = await OrderModel.find(buildBaseMatch({ createdAt: { $gte: start30 } }))
+      .select('createdAt items status refundStatus isRefunded refundedAt')
+      .lean();
+
+    const salesByDay = new Map(); // YYYY-MM-DD -> { sales, orders }
+    for (const o of orders30) {
+      const amt = computeSellerAmount(o);
+      if (amt <= 0) continue; // if all items refunded, don’t count order
+
+      const k = dayKey(o.createdAt || now);
+      const cur = salesByDay.get(k) || { sales: 0, orders: 0 };
+      cur.sales += amt;
+      cur.orders += 1;
+      salesByDay.set(k, cur);
+    }
+
+    // Build monthlyData (last 30 days)
+    const monthlyData = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const k = dayKey(d);
+      const v = salesByDay.get(k) || { sales: 0, orders: 0 };
+
+      monthlyData.push({
+        date: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }),
+        sales: Math.round((v.sales || 0) * 100) / 100,
+        orders: Number(v.orders || 0),
+      });
+    }
+
+    // Build dailyData (last 7 days)
+    const dailyData = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const k = dayKey(d);
+      const v = salesByDay.get(k) || { sales: 0, orders: 0 };
+
+      dailyData.push({
+        date: d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }),
+        sales: Math.round((v.sales || 0) * 100) / 100,
+        orders: Number(v.orders || 0),
+      });
+    }
+
+    // ----------------------------
+    // 4) Pull orders ONCE for last 12 months (yearly)
+    // ----------------------------
+    const start12 = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    start12.setHours(0, 0, 0, 0);
+
+    const orders12 = await OrderModel.find(buildBaseMatch({ createdAt: { $gte: start12 } }))
+      .select('createdAt items status refundStatus isRefunded refundedAt')
+      .lean();
+
+    const salesByMonth = new Map(); // YYYY-MM -> { sales, orders }
+    for (const o of orders12) {
+      const amt = computeSellerAmount(o);
+      if (amt <= 0) continue;
+
+      const k = monthKey(o.createdAt || now);
+      const cur = salesByMonth.get(k) || { sales: 0, orders: 0 };
+      cur.sales += amt;
+      cur.orders += 1;
+      salesByMonth.set(k, cur);
+    }
+
+    const yearlyData = [];
+    for (let i = 11; i >= 0; i--) {
+      const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = monthKey(m);
+      const v = salesByMonth.get(k) || { sales: 0, orders: 0 };
+
+      yearlyData.push({
+        month: m.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' }),
+        sales: Math.round((v.sales || 0) * 100) / 100,
+        orders: Number(v.orders || 0),
+      });
+    }
+
+    // ----------------------------
+    // 5) Metrics
+    // ----------------------------
+    const totalRevenue = yearlyData.reduce((sum, m) => sum + (Number(m.sales) || 0), 0);
+    const totalOrders = yearlyData.reduce((sum, m) => sum + (Number(m.orders) || 0), 0);
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    const lastIdx = yearlyData.length - 1;
+    const prevIdx = lastIdx - 1;
+
+    const currentMonthRevenue = lastIdx >= 0 ? yearlyData[lastIdx].sales : 0;
+    const previousMonthRevenue = prevIdx >= 0 ? yearlyData[prevIdx].sales : 0;
+
+    const revenueChange =
+      previousMonthRevenue > 0
+        ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100
+        : 0;
+
+    const currentMonthOrders = lastIdx >= 0 ? yearlyData[lastIdx].orders : 0;
+    const previousMonthOrders = prevIdx >= 0 ? yearlyData[prevIdx].orders : 0;
+
+    const ordersChange =
+      previousMonthOrders > 0
+        ? ((currentMonthOrders - previousMonthOrders) / previousMonthOrders) * 100
+        : 0;
+
+    const currentAvg = currentMonthOrders > 0 ? currentMonthRevenue / currentMonthOrders : 0;
+    const previousAvg = previousMonthOrders > 0 ? previousMonthRevenue / previousMonthOrders : 0;
+
+    const avgOrderChange = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
+
+    // ----------------------------
+    // 6) Product performance (top 5) - same behavior as before
+    // ----------------------------
+    const productPerformance = [];
+
+    if (products.length > 0) {
+      const topProducts = products
+        .filter((p) => (p.soldCount || 0) > 0)
+        .sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0))
+        .slice(0, 5);
+
+      if (topProducts.length > 0) {
+        topProducts.forEach((product) => {
+          const nm = String(product.name || '');
+          const name = nm.length > 15 ? nm.substring(0, 15) + '...' : nm;
+          productPerformance.push({ name, sales: product.soldCount || 0 });
+        });
+      } else {
+        const inStockProducts = products
+          .filter((p) => (Number(p.stock) || 0) > 0)
+          .sort((a, b) => (Number(b.stock) || 0) - (Number(a.stock) || 0))
+          .slice(0, 5);
+
+        if (inStockProducts.length > 0) {
+          inStockProducts.forEach((product) => {
+            const nm = String(product.name || '');
+            const name = nm.length > 15 ? nm.substring(0, 15) + '...' : nm;
+            productPerformance.push({ name, sales: Number(product.stock) || 0 });
+          });
+        } else {
+          productPerformance.push(
+            { name: 'No products yet', sales: 1 },
+            { name: 'Add products', sales: 1 },
+          );
+        }
+      }
+    }
+
+    // Final response
+    return res.json({
+      success: true,
+      chartData: { daily: dailyData, monthly: monthlyData, yearly: yearlyData, custom: [] },
+      metrics: {
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalOrders,
+        avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+        activeProducts,
+        revenueChange: Math.round(revenueChange * 10) / 10,
+        ordersChange: Math.round(ordersChange * 10) / 10,
+        avgOrderChange: Math.round(avgOrderChange * 10) / 10,
+      },
+      productPerformance,
+      lastUpdated: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Chart data API error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch chart data',
+      error: error.message,
+    });
   }
-);
+});
 
 router.use((err, req, res, next) => {
   if (!err) return next();
@@ -3505,5 +3544,3 @@ router.use((err, req, res, next) => {
 });
 
 module.exports = router;
-
-

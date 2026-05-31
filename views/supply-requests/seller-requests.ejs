@@ -26,119 +26,475 @@
       return CURRENCY + ' ' + n.toFixed(2);
     }
   }
+
+  function statusLabel(status) {
+    if (status === 'approved') return 'Approved';
+    if (status === 'rejected') return 'Rejected';
+    if (status === 'cancelled') return 'Cancelled';
+    return 'Pending';
+  }
+
+  function statusBadgeClass(status) {
+    if (status === 'approved') return 'text-white seller-request-badge-green';
+    if (status === 'rejected') return 'text-bg-danger';
+    if (status === 'cancelled') return 'text-bg-secondary';
+    return 'text-dark bg-warning';
+  }
+
+  function niceDate(value) {
+    if (!value) return 'Not recorded';
+
+    try {
+      return new Date(value).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return '';
+    }
+  }
+
+  function shortText(value, fallback = 'Not provided') {
+    const text = String(value || '').trim();
+    return text || fallback;
+  }
 %>
 
-<div class="container py-4">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-    <div>
-      <h1 class="h3 fw-bold text-primary mb-1">My Supply Requests</h1>
-      <p class="text-muted mb-0">Track requests you sent to suppliers.</p>
-    </div>
+<style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  .seller-requests-page {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, rgba(124, 58, 237, 0.14), transparent 30%),
+      radial-gradient(circle at top right, rgba(34, 197, 94, 0.12), transparent 28%),
+      linear-gradient(180deg, #f6f2ff 0%, #ffffff 48%, #f8fafc 100%);
+  }
 
-    <a href="/wholesale" class="btn btn-primary">
-      Find Products
-    </a>
-  </div>
+  .seller-requests-hero {
+    border-radius: 24px;
+    background:
+      linear-gradient(135deg, rgba(91, 33, 182, 0.98), rgba(124, 58, 237, 0.96)),
+      radial-gradient(circle at top right, rgba(34, 197, 94, 0.28), transparent 32%);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .seller-requests-hero::after {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    right: -90px;
+    top: -90px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.18);
+  }
+
+  .seller-requests-hero-content {
+    position: relative;
+    z-index: 2;
+  }
+
+  .seller-requests-card {
+    border-radius: 22px;
+    border: 1px solid rgba(124, 58, 237, 0.14);
+    overflow: hidden;
+  }
+
+  .seller-request-product-image {
+    width: 112px;
+    height: 112px;
+    object-fit: contain;
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at center, rgba(124, 58, 237, 0.08), transparent 48%),
+      linear-gradient(135deg, #ffffff, #f3efff);
+    border: 1px solid rgba(124, 58, 237, 0.14);
+  }
+
+  .seller-request-mini-box {
+    border-radius: 16px;
+    border: 1px solid rgba(124, 58, 237, 0.12);
+    background: rgba(124, 58, 237, 0.045);
+  }
+
+  .seller-request-badge-green {
+    background-color: #22C55E !important;
+  }
+
+  .seller-request-green-text {
+    color: #22C55E !important;
+  }
+
+  .seller-request-purple-text {
+    color: #7C3AED !important;
+  }
+
+  .seller-request-response-box {
+    border-radius: 16px;
+    border: 1px solid rgba(34, 197, 94, 0.18);
+    background: rgba(34, 197, 94, 0.06);
+  }
+
+  .seller-request-import-box {
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(34, 197, 94, 0.08));
+    border: 1px solid rgba(124, 58, 237, 0.14);
+  }
+
+  .seller-request-product-title {
+    line-height: 1.25;
+  }
+
+  @media (max-width: 575.98px) {
+    .seller-requests-page {
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+
+    .seller-requests-hero,
+    .seller-requests-card {
+      border-radius: 18px;
+    }
+
+    .seller-request-product-image {
+      width: 86px;
+      height: 86px;
+      border-radius: 16px;
+    }
+  }
+</style>
+
+<div class="container-fluid px-2 px-sm-3 px-lg-4 py-3 seller-requests-page">
+
+  <!-- Header -->
+  <section class="seller-requests-hero shadow-sm mb-3 mb-lg-4">
+    <div class="seller-requests-hero-content p-3 p-sm-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
+        <div class="min-w-0">
+          <span class="badge rounded-pill text-bg-light text-primary px-3 py-2 mb-2">
+            Seller Supply Requests
+          </span>
+
+          <h1 class="h3 fw-bold text-white mb-2">
+            My Supply Requests
+          </h1>
+
+          <p class="text-white-50 small mb-0">
+            Track the wholesale products you requested, see supplier responses, and import approved products into your store.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
+          <a href="/wholesale" class="btn btn-light btn-sm rounded-pill fw-bold px-3">
+            Find Products
+          </a>
+
+          <a href="/wholesale/suppliers" class="btn btn-outline-light btn-sm rounded-pill fw-bold px-3">
+            View Suppliers
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <% if (!requests || requests.length === 0) { %>
-    <div class="card border-0 shadow-sm">
+    <!-- Empty state -->
+    <div class="card seller-requests-card shadow-sm">
       <div class="card-body text-center py-5">
-        <h2 class="h5 fw-bold text-primary">No supply requests yet</h2>
-        <p class="text-muted mb-4">Search wholesale products and send your first request.</p>
-        <a href="/wholesale" class="btn btn-primary">
-          Browse Wholesale
+        <div
+          class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary"
+          style="width: 76px; height: 76px;"
+        >
+          <span class="fs-2">📦</span>
+        </div>
+
+        <h2 class="h5 fw-bold text-primary mb-2">
+          No supply requests yet
+        </h2>
+
+        <p class="text-muted mb-4">
+          Search wholesale products and send your first request to a supplier.
+        </p>
+
+        <a href="/wholesale" class="btn btn-primary rounded-pill fw-bold px-4">
+          Browse Wholesale Products
         </a>
       </div>
     </div>
   <% } else { %>
-    <div class="card border-0 shadow-sm">
-      <div class="table-responsive">
-        <table class="table align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Product</th>
-              <th>Supplier</th>
-              <th>Quantity</th>
-              <th>Status</th>
-              <th>Response</th>
-              <th>Date</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% requests.forEach((request) => { %>
-              <tr>
-                <td>
-                  <div class="fw-semibold text-primary">
-                    <%= request.supplierProduct?.name || 'Product' %>
-                  </div>
-                  <div class="small text-muted">
-                    <%= money(request.supplierProduct?.wholesalePrice || 0) %>
-                  </div>
-                </td>
 
-                <td>
-                  <div class="fw-semibold"><%= request.supplier?.name || 'Supplier' %></div>
-                  <div class="small text-muted">
-                    <%= request.supplier?.email || '' %>
-                  </div>
-                </td>
-
-                <td><%= request.requestedQuantity %></td>
-
-                <td>
-                  <% if (request.status === 'approved') { %>
-                    <span class="badge text-bg-success">Approved</span>
-                  <% } else if (request.status === 'rejected') { %>
-                    <span class="badge text-bg-danger">Rejected</span>
-                  <% } else if (request.status === 'cancelled') { %>
-                    <span class="badge text-bg-secondary">Cancelled</span>
-                  <% } else { %>
-                    <span class="badge text-bg-warning">Pending</span>
-                  <% } %>
-                </td>
-
-                <td class="small">
-                  <%= request.supplierResponse || 'No response yet' %>
-                </td>
-
-                <td class="small text-muted">
-                  <%= request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '' %>
-                </td>
-
-                <td>
-                  <% if (request.status === 'approved') { %>
-                    <form method="POST" action="/wholesale/import/<%= request._id %>" class="d-grid gap-2">
-                      <input
-                        type="number"
-                        name="retailPrice"
-                        class="form-control form-control-sm"
-                        min="0.01"
-                        step="0.01"
-                        placeholder="Retail price"
-                        value="<%= Number((Number(request.supplierProduct?.wholesalePrice || 0) * 1.35) || 1).toFixed(2) %>"
-                        required
-                      >
-
-                      <button type="submit" class="btn btn-sm btn-primary">
-                        Import Product
-                      </button>
-                    </form>
-
-                    <div class="small text-muted mt-1">
-                      Imported with stock 0 for review.
-                    </div>
-                  <% } else if (request.status === 'pending') { %>
-                    <span class="text-muted small">Waiting for supplier</span>
-                  <% } else { %>
-                    <span class="text-muted small">Not available</span>
-                  <% } %>
-                </td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
+    <!-- Summary row -->
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end gap-2 mb-3">
+      <div>
+        <h2 class="h6 fw-bold text-primary mb-1">
+          Request History
+        </h2>
+        <p class="text-muted small mb-0">
+          <%= requests.length %> request<%= requests.length === 1 ? '' : 's' %> found
+        </p>
       </div>
+
+      <span class="badge rounded-pill bg-primary px-3 py-2">
+        <%= CURRENCY %> pricing
+      </span>
+    </div>
+
+    <div class="row g-3">
+      <% requests.forEach((request) => { %>
+        <% const product = request.supplierProduct || {}; %>
+        <% const supplier = request.supplier || {}; %>
+        <% const status = request.status || 'pending'; %>
+        <% const requestedQty = Number(request.requestedQuantity || 0); %>
+        <% const wholesalePrice = Number(product.wholesalePrice || 0); %>
+        <% const estimatedWholesaleTotal = requestedQty * wholesalePrice; %>
+        <% const productId = product._id || product.id || ''; %>
+
+        <div class="col-12">
+          <div class="card seller-requests-card shadow-sm">
+            <div class="card-body p-3 p-sm-4">
+
+              <!-- Top section: image + product + status -->
+              <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+                <div class="d-flex gap-3 min-w-0">
+                  <a
+                    href="<%= productId ? `/wholesale/products/${productId}` : '/wholesale' %>"
+                    class="text-decoration-none flex-shrink-0"
+                    aria-label="View requested product"
+                  >
+                    <img
+                      src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>"
+                      alt="<%= product.name || 'Requested wholesale product' %>"
+                      class="seller-request-product-image p-2"
+                      loading="lazy"
+                      decoding="async"
+                      onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';"
+                    >
+                  </a>
+
+                  <div class="min-w-0">
+                    <div class="small fw-bold text-uppercase text-muted mb-1">
+                      Requested Product
+                    </div>
+
+                    <h3 class="h5 fw-bold seller-request-product-title mb-2">
+                      <a
+                        href="<%= productId ? `/wholesale/products/${productId}` : '/wholesale' %>"
+                        class="text-decoration-none text-primary"
+                      >
+                        <%= product.name || 'Wholesale Product' %>
+                      </a>
+                    </h3>
+
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                      <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2">
+                        Price: <%= money(wholesalePrice) %>
+                      </span>
+
+                      <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2">
+                        MOQ:
+                        <%= product.minimumOrderQuantity || 1 %>
+                        <%= product.unit || 'units' %>
+                      </span>
+
+                      <span class="badge rounded-pill text-white seller-request-badge-green px-3 py-2">
+                        Requested:
+                        <%= requestedQty %>
+                        <%= product.unit || 'units' %>
+                      </span>
+                    </div>
+
+                    <p class="small text-muted mb-0">
+                      Sent to
+                      <strong class="text-dark"><%= supplier.name || 'Supplier' %></strong>
+                      on <%= niceDate(request.createdAt) %>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="text-lg-end">
+                  <span class="badge rounded-pill <%= statusBadgeClass(status) %> px-3 py-2">
+                    <%= statusLabel(status) %>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Details grid -->
+              <div class="row g-2 mb-3">
+                <div class="col-6 col-lg-3">
+                  <div class="seller-request-mini-box p-3 h-100">
+                    <div class="small text-muted fw-bold mb-1">Supplier</div>
+                    <div class="fw-bold text-dark text-truncate">
+                      <%= supplier.name || 'Supplier' %>
+                    </div>
+                    <div class="small text-muted text-truncate">
+                      <%= supplier.email || 'No email' %>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-6 col-lg-3">
+                  <div class="seller-request-mini-box p-3 h-100">
+                    <div class="small text-muted fw-bold mb-1">Quantity</div>
+                    <div class="fw-bold text-dark">
+                      <%= requestedQty %>
+                    </div>
+                    <div class="small text-muted">
+                      <%= product.unit || 'units' %>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-6 col-lg-3">
+                  <div class="seller-request-mini-box p-3 h-100">
+                    <div class="small text-muted fw-bold mb-1">Wholesale Total</div>
+                    <div class="fw-bold seller-request-purple-text">
+                      <%= money(estimatedWholesaleTotal) %>
+                    </div>
+                    <div class="small text-muted">
+                      Estimate only
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-6 col-lg-3">
+                  <div class="seller-request-mini-box p-3 h-100">
+                    <div class="small text-muted fw-bold mb-1">Delivery Area</div>
+                    <div class="fw-bold text-dark text-truncate">
+                      <%= shortText(request.deliveryCity, 'City not set') %>
+                    </div>
+                    <div class="small text-muted text-truncate">
+                      <%= shortText(request.deliveryCountry, 'Country not set') %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Message / response -->
+              <div class="row g-3 align-items-stretch">
+                <div class="col-12 col-lg-7">
+                  <div class="border rounded-4 p-3 h-100 bg-light">
+                    <div class="small fw-bold text-primary mb-2">
+                      Your message to supplier
+                    </div>
+
+                    <p class="small text-muted mb-0">
+                      <%= shortText(request.message, 'No message was added to this request.') %>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-5">
+                  <div class="seller-request-response-box p-3 h-100">
+                    <div class="small fw-bold seller-request-green-text mb-2">
+                      Supplier response
+                    </div>
+
+                    <p class="small text-muted mb-0">
+                      <%= shortText(request.supplierResponse, 'No response yet. The supplier has not replied.') %>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Action footer -->
+            <div class="card-footer bg-white border-0 px-3 px-sm-4 pb-3 pb-sm-4 pt-0">
+              <% if (status === 'approved') { %>
+                <div class="seller-request-import-box p-3">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-12 col-lg">
+                      <h4 class="h6 fw-bold text-primary mb-1">
+                        Approved — import this product into your store
+                      </h4>
+
+                      <p class="small text-muted mb-0">
+                        Enter your retail selling price. The product will be imported with stock 0 so you can review it first.
+                      </p>
+                    </div>
+
+                    <div class="col-12 col-lg-auto">
+                      <form method="POST" action="/wholesale/import/<%= request._id %>" class="row g-2 align-items-end">
+                        <div class="col-12 col-sm">
+                          <label class="form-label small fw-bold text-primary mb-1">
+                            Retail price
+                          </label>
+
+                          <input
+                            type="number"
+                            name="retailPrice"
+                            class="form-control form-control-sm"
+                            min="0.01"
+                            step="0.01"
+                            placeholder="Retail price"
+                            value="<%= Number((wholesalePrice * 1.35) || 1).toFixed(2) %>"
+                            required
+                          >
+                        </div>
+
+                        <div class="col-12 col-sm-auto">
+                          <button type="submit" class="btn btn-primary btn-sm fw-bold w-100">
+                            Import Product
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              <% } else if (status === 'pending') { %>
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 border rounded-4 p-3 bg-light">
+                  <div>
+                    <div class="fw-bold text-primary small">
+                      Waiting for supplier approval
+                    </div>
+
+                    <div class="text-muted small">
+                      You will be able to import this product after the supplier approves your request.
+                    </div>
+                  </div>
+
+                  <a href="<%= productId ? `/wholesale/products/${productId}` : '/wholesale' %>" class="btn btn-outline-primary btn-sm fw-bold">
+                    View Product
+                  </a>
+                </div>
+              <% } else if (status === 'rejected') { %>
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 border rounded-4 p-3 bg-light">
+                  <div>
+                    <div class="fw-bold text-danger small">
+                      Request rejected
+                    </div>
+
+                    <div class="text-muted small">
+                      This product cannot be imported from this request.
+                    </div>
+                  </div>
+
+                  <a href="/wholesale" class="btn btn-outline-primary btn-sm fw-bold">
+                    Find Another Product
+                  </a>
+                </div>
+              <% } else { %>
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 border rounded-4 p-3 bg-light">
+                  <div>
+                    <div class="fw-bold text-secondary small">
+                      Request not available
+                    </div>
+
+                    <div class="text-muted small">
+                      This request is currently marked as <%= statusLabel(status).toLowerCase() %>.
+                    </div>
+                  </div>
+
+                  <a href="/wholesale" class="btn btn-outline-primary btn-sm fw-bold">
+                    Browse Wholesale
+                  </a>
+                </div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      <% }) %>
     </div>
   <% } %>
 </div>

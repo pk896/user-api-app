@@ -1,4 +1,32 @@
 <!-- views/business-chart.ejs -->
+<%
+  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+
+  function money(amount) {
+    if (typeof formatMoney === 'function') {
+      return formatMoney(amount);
+    }
+
+    const n = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return CURRENCY + ' ' + n.toFixed(2);
+    }
+  }
+%>
 
 <script
   src="https://cdn.jsdelivr.net/npm/chart.js"
@@ -42,7 +70,7 @@
         <div class="col-12 col-sm-6 col-lg-3">
           <div class="border rounded-3 bg-body shadow-sm p-3 h-100">
             <div class="small text-body-secondary fw-semibold text-uppercase">Total Revenue</div>
-            <div class="h3 fw-bold text-primary mb-1" id="totalRevenue">R 0.00</div>
+            <div class="h3 fw-bold text-primary mb-1" id="totalRevenue"><%= money(0) %></div>
             <div class="small fw-semibold text-success" id="revenueChange">0%</div>
           </div>
         </div>
@@ -58,7 +86,7 @@
         <div class="col-12 col-sm-6 col-lg-3">
           <div class="border rounded-3 bg-body shadow-sm p-3 h-100">
             <div class="small text-body-secondary fw-semibold text-uppercase">Avg. Order Value</div>
-            <div class="h3 fw-bold text-primary mb-1" id="avgOrderValue">R 0.00</div>
+            <div class="h3 fw-bold text-primary mb-1" id="avgOrderValue"><%= money(0) %></div>
             <div class="small fw-semibold text-success" id="avgOrderChange">0%</div>
           </div>
         </div>
@@ -148,6 +176,29 @@
 // ==========================================
 // GLOBAL STATE & CONFIGURATION
 // ==========================================
+const BASE_CURRENCY = '<%= CURRENCY %>';
+
+function formatClientMoney(amount) {
+  const n = Number(amount || 0);
+
+  try {
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: BASE_CURRENCY,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+
+    if (BASE_CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
+    }
+
+    return formatted;
+  } catch (err) {
+    return BASE_CURRENCY + ' ' + n.toFixed(2);
+  }
+}
+
 let charts = {
   mainChart: null,
   revenueChart: null,
@@ -199,12 +250,12 @@ function updateMetrics(metrics) {
   if (!metrics) return;
 
   const totalRevenue = Number(metrics.totalRevenue || 0);
-  document.getElementById('totalRevenue').textContent = `R ${totalRevenue.toFixed(2)}`;
+  document.getElementById('totalRevenue').textContent = formatClientMoney(totalRevenue);
 
   document.getElementById('totalOrders').textContent = metrics.totalOrders || 0;
 
   const avgOrderValue = Number(metrics.avgOrderValue || 0);
-  document.getElementById('avgOrderValue').textContent = `R ${avgOrderValue.toFixed(2)}`;
+  document.getElementById('avgOrderValue').textContent = formatClientMoney(avgOrderValue);
 
   document.getElementById('activeProducts').textContent = metrics.activeProducts || 0;
 
@@ -228,7 +279,7 @@ function getChartOptions(prefix = '') {
         callbacks: {
           label: function(context) {
             if (context.parsed.y === null || typeof context.parsed.y === 'undefined') return '';
-            return prefix + Number(context.parsed.y).toFixed(2);
+            return prefix ? formatClientMoney(context.parsed.y) : Number(context.parsed.y).toFixed(2);
           }
         }
       }
@@ -238,7 +289,7 @@ function getChartOptions(prefix = '') {
         beginAtZero: true,
         ticks: {
           callback: function(value) {
-            return prefix + Number(value).toFixed(0);
+            return prefix ? formatClientMoney(value) : Number(value).toFixed(0);
           }
         }
       }
@@ -270,7 +321,7 @@ function createMainChart() {
         tension: 0.35
       }]
     },
-    options: getChartOptions('R ')
+    options: getChartOptions('money')
   });
 }
 
@@ -287,7 +338,7 @@ function createRevenueChart() {
   charts.revenueChart = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets: [{ label: 'Revenue', data: values }] },
-    options: getChartOptions('R ')
+    options: getChartOptions('money')
   });
 }
 
