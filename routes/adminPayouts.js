@@ -151,27 +151,30 @@ async function runCreatePayoutBatch({
   const min = Math.max(0, Number(minCents || 0));
   const noteClean = String(note || 'Seller payout').trim() || 'Seller payout';
 
-  const sellers = await Business.find({
-    role: 'seller',
+  const payoutBusinesses = await Business.find({
+    role: { $in: ['seller', 'supplier'] },
     'payouts.enabled': true,
     'payouts.paypalEmail': { $exists: true, $ne: '' },
   })
-    .select('_id name payouts.paypalEmail')
+    .select('_id name role payouts.paypalEmail')
     .lean();
 
   const payItems = [];
   let totalCents = 0;
 
-  // Sequential is okay for small seller counts; optimize later if needed.
-  for (const s of sellers) {
-    const available = await getSellerAvailableCents(s._id, cur);
+  // This now pays BOTH sellers and suppliers through the same PayPal payout system.
+  for (const business of payoutBusinesses) {
+    const available = await getSellerAvailableCents(business._id, cur);
+
     if (available >= min && available > 0) {
       payItems.push({
-        businessId: s._id,
-        receiver: normEmail(s?.payouts?.paypalEmail),
+        businessId: business._id,
+        receiver: normEmail(business?.payouts?.paypalEmail),
         amountCents: Number(available || 0),
         currency: cur,
+        role: business.role || 'business',
       });
+
       totalCents += Number(available || 0);
     }
   }
@@ -179,7 +182,7 @@ async function runCreatePayoutBatch({
   if (!payItems.length) {
     return {
       ok: true,
-      skippedReason: 'no-eligible-sellers',
+      skippedReason: 'no-eligible-businesses',
       payoutId: null,
       batchId: null,
       count: 0,
@@ -211,7 +214,10 @@ async function runCreatePayoutBatch({
         currency: it.currency,
         status: 'PENDING',
       })),
-      meta: { paypalBase: getPayPalBase() },
+      meta: {
+        paypalBase: getPayPalBase(),
+        includesRoles: [...new Set(payItems.map((it) => it.role || 'business'))],
+      },
     });
   } catch (e) {
     if (isDupKey(e)) {
@@ -229,8 +235,8 @@ async function runCreatePayoutBatch({
   try {
     paypalRes = await createPayoutBatch({
       senderBatchId,
-      emailSubject: 'You have received a payout',
-      emailMessage: 'You have received a payout from Unicoporate.com.',
+      emailSubject: 'You have received a Unicoporate payout',
+      emailMessage: 'You have received a payout from Unicoporate.com for seller or supplier earnings.',
       items: payItems.map((it) => ({
         receiver: normEmail(it.receiver),
         amount: toMoneyString(it.amountCents),
@@ -352,8 +358,8 @@ router.get(
       const baseCurrency = getBaseCurrency();
       const currencyPreview = baseCurrency;
 
-      const sellers = await Business.find({ role: 'seller' })
-        .select('_id name payouts.enabled payouts.paypalEmail')
+      const sellers = await Business.find({ role: { $in: ['seller', 'supplier'] } })
+        .select('_id name role payouts.enabled payouts.paypalEmail')
         .lean();
 
       const preview = [];
@@ -475,7 +481,7 @@ router.post(
         return res.redirect('/admin/payouts');
       }
 
-      if (out.ok && out.skippedReason === 'no-eligible-sellers') {
+      if (out.ok && out.skippedReason === 'no-eligible-businesses') {
         await logAdminAction(req, {
           action: 'payout.batch.create_skipped',
           entityType: 'payout',
@@ -490,7 +496,7 @@ router.post(
           },
         });
 
-        req.flash('info', 'No sellers are eligible for payout yet.');
+        req.flash('info', 'No sellers or suppliers are eligible for payout yet.');
         return res.redirect('/admin/payouts');
       }
 
@@ -529,7 +535,7 @@ router.post(
             },
           });
 
-          req.flash('success', `Payout batch created + synced (${out.count} sellers).`);
+          req.flash('success', `Payout batch created + synced (${out.count} businesses).`);
         } catch (e) {
           syncError = String(e?.message || e || '').slice(0, 500);
 
