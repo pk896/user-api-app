@@ -15,10 +15,7 @@ const SellerBalanceLedger = require('../models/SellerBalanceLedger');
 
 const { getSellerAvailableCents } = require('../utils/payouts/getSellerAvailableCents');
 const { runSyncPayoutById } = require('../utils/payouts/syncPayout');
-const {
-  createPayoutBatch,
-  getPayPalBase,
-} = require('../utils/payouts/createPaypalPayoutBatch');
+const { createPayoutBatch, getPayPalBase } = require('../utils/payouts/createPaypalPayoutBatch');
 
 const router = express.Router();
 
@@ -27,14 +24,15 @@ const router = express.Router();
  * --------------------------- */
 
 function isDupKey(err) {
-  return !!(
-    err &&
-    (err.code === 11000 || String(err.message || '').includes('E11000'))
-  );
+  return !!(err && (err.code === 11000 || String(err.message || '').includes('E11000')));
 }
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '')
+      .trim()
+      .toUpperCase() || 'USD'
+  );
 }
 
 function toMoneyString(cents) {
@@ -42,6 +40,58 @@ function toMoneyString(cents) {
   const n = Number(cents || 0);
   const safe = Number.isFinite(n) ? n : 0;
   return (Math.round(safe) / 100).toFixed(2);
+}
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfDaysAgo(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - Number(days || 0));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfMonthsAgo(months) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - Number(months || 0));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+async function sumSentPayoutItemsSince(startDate, currency) {
+  const match = {
+    currency,
+    items: {
+      $elemMatch: {
+        status: 'SENT',
+        paidAt: { $gte: startDate },
+      },
+    },
+  };
+
+  const rows = await Payout.aggregate([
+    { $match: match },
+    { $unwind: '$items' },
+    {
+      $match: {
+        'items.status': 'SENT',
+        'items.paidAt': { $gte: startDate },
+        'items.currency': currency,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalCents: { $sum: '$items.amountCents' },
+      },
+    },
+  ]);
+
+  return Math.max(0, Number(rows?.[0]?.totalCents || 0));
 }
 
 function resNonce(req) {
@@ -75,7 +125,9 @@ function safeObjectId(v) {
 }
 
 function normEmail(v) {
-  return String(v || '').trim().toLowerCase();
+  return String(v || '')
+    .trim()
+    .toLowerCase();
 }
 
 function payoutSnapshot(payout) {
@@ -236,7 +288,8 @@ async function runCreatePayoutBatch({
     paypalRes = await createPayoutBatch({
       senderBatchId,
       emailSubject: 'You have received a Unicoporate payout',
-      emailMessage: 'You have received a payout from Unicoporate.com for seller or supplier earnings.',
+      emailMessage:
+        'You have received a payout from Unicoporate.com for seller or supplier earnings.',
       items: payItems.map((it) => ({
         receiver: normEmail(it.receiver),
         amount: toMoneyString(it.amountCents),
@@ -254,7 +307,7 @@ async function runCreatePayoutBatch({
           meta: { ...(payoutDoc.meta || {}), createError: String(e?.message || e) },
         },
         $unset: { runKey: 1 },
-      }
+      },
     );
     throw e;
   }
@@ -266,7 +319,7 @@ async function runCreatePayoutBatch({
     {
       $set: { batchId, status: 'PROCESSING' },
       $unset: { runKey: 1 },
-    }
+    },
   );
 
   // Race-safe idempotent payout debits (no findOne+create)
@@ -338,25 +391,24 @@ router.get(
   requireAdminPermission('payouts.read'),
   async (req, res) => {
     try {
-      const payouts = await Payout.find({})
-        .sort({ createdAt: -1 })
-        .limit(30)
-        .lean();
+      const payouts = await Payout.find({}).sort({ createdAt: -1 }).limit(30).lean();
 
-      const totalBatches = payouts.length;
-
-      let totalPaidOutCents = 0;
-      for (const p of payouts) {
-        const items = Array.isArray(p.items) ? p.items : [];
-        for (const it of items) {
-          if (String(it.status || '').toUpperCase() === 'SENT') {
-            totalPaidOutCents += Math.max(0, Number(it.amountCents || 0));
-          }
-        }
-      }
+      const totalBatches = await Payout.countDocuments({});
 
       const baseCurrency = getBaseCurrency();
       const currencyPreview = baseCurrency;
+
+      const paidOutTodayCents = await sumSentPayoutItemsSince(startOfToday(), currencyPreview);
+
+      const paidOutLast30DaysCents = await sumSentPayoutItemsSince(
+        startOfDaysAgo(30),
+        currencyPreview,
+      );
+
+      const paidOutLast12MonthsCents = await sumSentPayoutItemsSince(
+        startOfMonthsAgo(12),
+        currencyPreview,
+      );
 
       const sellers = await Business.find({ role: { $in: ['seller', 'supplier'] } })
         .select('_id name role payouts.enabled payouts.paypalEmail')
@@ -375,7 +427,7 @@ router.get(
         if (enabled && hasPaypal) {
           availableCents = await getSellerAvailableCents(s._id, currencyPreview);
 
-          console.log('[admin/payouts preview seller]', {
+          console.log('[admin/payouts preview business]', {
             sellerName: s.name,
             businessId: String(s._id),
             enabled,
@@ -408,11 +460,17 @@ router.get(
 
       const kpis = {
         totalBatches,
-        totalPaidOut: totalPaidOutCents ? toMoneyString(totalPaidOutCents) : '—',
+
+        paidOutToday: toMoneyString(paidOutTodayCents),
+        paidOutLast30Days: toMoneyString(paidOutLast30DaysCents),
+        paidOutLast12Months: toMoneyString(paidOutLast12MonthsCents),
+
         lastStatus: payouts[0]?.status || '—',
         previewCurrency: currencyPreview,
         eligibleSellers: previewEligibleCount,
-        eligibleTotal: previewEligibleTotalCents ? toMoneyString(previewEligibleTotalCents) : '0.00',
+        eligibleTotal: previewEligibleTotalCents
+          ? toMoneyString(previewEligibleTotalCents)
+          : '0.00',
       };
 
       return res.render('admin-payouts', {
@@ -431,7 +489,7 @@ router.get(
       req.flash('error', `Failed to load payouts: ${err.message}`);
       return res.redirect('/admin/dashboard');
     }
-  }
+  },
 );
 
 /**
@@ -446,7 +504,9 @@ router.post(
   async (req, res) => {
     const minCents = Math.max(0, Number(req.body.minCents || 0));
     const note = String(req.body.note || 'Seller payout').trim();
-    const autoSyncRaw = String(req.body.autoSync || '').trim().toLowerCase();
+    const autoSyncRaw = String(req.body.autoSync || '')
+      .trim()
+      .toLowerCase();
     const autoSync =
       autoSyncRaw === '1' ||
       autoSyncRaw === 'true' ||
@@ -563,7 +623,10 @@ router.post(
             },
           });
 
-          req.flash('warning', `Payout created (${out.count} sellers) but sync failed: ${e.message}`);
+          req.flash(
+            'warning',
+            `Payout created (${out.count} businesses) but sync failed: ${e.message}`,
+          );
         }
 
         return res.redirect('/admin/payouts');
@@ -592,7 +655,7 @@ router.post(
         },
       });
 
-      req.flash('success', `Payout batch created (${out.count} sellers).`);
+      req.flash('success', `Payout batch created (${out.count} businesses).`);
       return res.redirect('/admin/payouts');
     } catch (err) {
       console.error(err);
@@ -614,7 +677,7 @@ router.post(
       req.flash('error', `Payout create failed: ${err.message}`);
       return res.redirect('/admin/payouts');
     }
-  }
+  },
 );
 
 router.post(
@@ -686,7 +749,7 @@ router.post(
       req.flash('error', `Payout sync failed: ${err.message}`);
       return res.redirect('/admin/payouts');
     }
-  }
+  },
 );
 
 /**
@@ -764,15 +827,19 @@ router.post(
       req.flash('error', `Sync recent failed: ${err.message}`);
       return res.redirect('/admin/payouts');
     }
-  }
+  },
 );
 
 /* -----------------------------
  * AUTO payouts routes (Cron) (unchanged)
  * --------------------------- */
 
-router.post('/payouts/auto-run', requireCronSecret, async (_req, _res) => { /* unchanged */ });
-router.post('/payouts/auto-sync-recent', requireCronSecret, async (_req, _res) => { /* unchanged */ });
+router.post('/payouts/auto-run', requireCronSecret, async (_req, _res) => {
+  /* unchanged */
+});
+router.post('/payouts/auto-sync-recent', requireCronSecret, async (_req, _res) => {
+  /* unchanged */
+});
 
 router.get(
   '/payouts/_ping',
@@ -781,7 +848,7 @@ router.get(
   requireAdminPermission('payouts.read'),
   (req, res) => {
     res.send('payouts route OK');
-  }
+  },
 );
 
 module.exports = router;
