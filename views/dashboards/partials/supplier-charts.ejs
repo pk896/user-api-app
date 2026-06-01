@@ -1,0 +1,570 @@
+<!--views/dashboards/partials/supplier-charts.ejs-->
+
+/* global Chart, coreui */
+// main.js
+/**
+* --------------------------------------------------------------------------
+* CoreUI Boostrap Admin Template main.js
+* Licensed under MIT (https://github.com/coreui/coreui-free-bootstrap-admin-template/blob/main/LICENSE)
+* --------------------------------------------------------------------------
+*/
+
+/**
+* Dashboard Charts
+*
+* This module initializes and manages all charts on the main Dashboard page (index.html).
+* It includes:
+* - Card charts (small charts in statistic cards)
+* - Main chart (large chart showing traffic/metrics over time)
+* - Custom tooltip configuration using CoreUI's ChartJS utilities
+* - Theme-aware chart updates (responds to dark/light mode changes)
+*
+* All charts use Chart.js with CoreUI's custom styling and color variables.
+*/
+
+<script nonce="<%= nonce %>">
+  // Configure Chart.js defaults for custom tooltips
+  Chart.defaults.pointHitDetectionRadius = 1;
+  Chart.defaults.plugins.tooltip.enabled = false;
+  Chart.defaults.plugins.tooltip.mode = 'index';
+  Chart.defaults.plugins.tooltip.position = 'nearest';
+  Chart.defaults.plugins.tooltip.external = coreui.ChartJS.customTooltips;
+  Chart.defaults.defaultFontColor = coreui.Utils.getStyle('--cui-body-color');
+  document.documentElement.addEventListener('ColorSchemeChange', () => {
+    cardChart1.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-primary');
+    cardChart2.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-info');
+    mainChart.options.scales.x.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.x.ticks.color = coreui.Utils.getStyle('--cui-body-color');
+    mainChart.options.scales.y.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.y.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.y.ticks.color = coreui.Utils.getStyle('--cui-body-color');
+    cardChart1.update();
+    cardChart2.update();
+    mainChart.update();
+  });
+
+  /**
+   * Generates a random integer between min and max (inclusive)
+   * @param {number} min - Minimum value
+   * @param {number} max - Maximum value
+   * @returns {number} Random integer between min and max
+   */
+  const random = (min, max) => Math.floor(Math.random() * (max - min + 1) + min);
+  const cardChart1 = new Chart(document.getElementById('card-chart1'), {
+    type: 'line',
+    data: {
+      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+      datasets: [{
+        label: 'My First dataset',
+        backgroundColor: 'transparent',
+        borderColor: 'rgba(255,255,255,.55)',
+        pointBackgroundColor: coreui.Utils.getStyle('--cui-primary'),
+        data: [65, 59, 84, 84, 51, 55, 40]
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          border: {
+            display: false
+          },
+          grid: {
+            display: false,
+            drawBorder: false
+          },
+          ticks: {
+            display: false
+          }
+        },
+        y: {
+          min: 30,
+          max: 89,
+          display: false,
+          grid: {
+            display: false
+          },
+          ticks: {
+            display: false
+          }
+        }
+      },
+      elements: {
+        line: {
+          borderWidth: 1,
+          tension: 0.4
+        },
+        point: {
+          radius: 4,
+          hitRadius: 10,
+          hoverRadius: 4
+        }
+      }
+    }
+  });
+
+  async function loadSupplierCard1Stats() {
+    try {
+      const response = await fetch('/business/api/supplier/kpis', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = await response.json();
+
+      if (!payload.ok) {
+        throw new Error(payload.message || 'Failed to load supplier stats');
+      }
+
+      const totalProducts = Number(payload?.totals?.totalProducts || 0);
+      const totalStock = Number(payload?.totals?.totalStock || 0);
+
+      const chartLabels = Array.isArray(payload?.chart?.card1?.labels) ?
+        payload.chart.card1.labels :
+        [];
+
+      const chartData = Array.isArray(payload?.chart?.card1?.data) ?
+        payload.chart.card1.data.map((value) => Number(value || 0)) :
+        [];
+
+      const weeklyStockMovement = chartData.reduce((sum, value) => sum + Number(value || 0), 0);
+
+      const totalProductsEl = document.getElementById('supplier-total-products');
+      const totalStockEl = document.getElementById('supplier-total-stock');
+      const movementTextEl = document.getElementById('supplier-stock-movement-text');
+
+      if (totalProductsEl) {
+        totalProductsEl.textContent = String(totalProducts);
+      }
+
+      if (totalStockEl) {
+        totalStockEl.textContent = String(totalStock);
+      }
+
+      if (movementTextEl) {
+        if (weeklyStockMovement > 0) {
+          movementTextEl.textContent = ` (${weeklyStockMovement} stock movement this week)`;
+        } else {
+          movementTextEl.textContent = '';
+        }
+      }
+
+      cardChart1.data.labels = chartLabels.length ?
+        chartLabels :
+        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      cardChart1.data.datasets[0].label = 'Total Stock Movement';
+      cardChart1.data.datasets[0].data = chartData.length ?
+        chartData :
+        [0, 0, 0, 0, 0, 0, 0];
+
+      const maxChartValue = Math.max(...cardChart1.data.datasets[0].data, 1);
+
+      cardChart1.options.scales.y.min = 0;
+      cardChart1.options.scales.y.max = Math.ceil(maxChartValue * 1.2);
+
+      cardChart1.update();
+    } catch (error) {
+      console.error('❌ Failed to load supplier card 1 stats:', error);
+    }
+  }
+
+  const cardChart2 = new Chart(document.getElementById('card-chart2'), {
+    type: 'line',
+    data: {
+      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+      datasets: [{
+        label: 'My First dataset',
+        backgroundColor: 'transparent',
+        borderColor: 'rgba(255,255,255,.55)',
+        pointBackgroundColor: coreui.Utils.getStyle('--cui-info'),
+        data: [1, 18, 9, 17, 34, 22, 11]
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          border: {
+            display: false
+          },
+          grid: {
+            display: false,
+            drawBorder: false
+          },
+          ticks: {
+            display: false
+          }
+        },
+        y: {
+          min: -9,
+          max: 39,
+          display: false,
+          grid: {
+            display: false
+          },
+          ticks: {
+            display: false
+          }
+        }
+      },
+      elements: {
+        line: {
+          borderWidth: 1
+        },
+        point: {
+          radius: 4,
+          hitRadius: 10,
+          hoverRadius: 4
+        }
+      }
+    }
+  });
+
+  // eslint-disable-next-line no-unused-vars
+  const cardChart3 = new Chart(document.getElementById('card-chart3'), {
+    type: 'line',
+    data: {
+      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+      datasets: [{
+        label: 'My First dataset',
+        backgroundColor: 'rgba(255,255,255,.2)',
+        borderColor: 'rgba(255,255,255,.55)',
+        data: [78, 81, 80, 45, 34, 12, 40],
+        fill: true
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          display: false
+        },
+        y: {
+          display: false
+        }
+      },
+      elements: {
+        line: {
+          borderWidth: 2,
+          tension: 0.4
+        },
+        point: {
+          radius: 0,
+          hitRadius: 10,
+          hoverRadius: 4
+        }
+      }
+    }
+  });
+
+  // eslint-disable-next-line no-unused-vars
+  const cardChart4 = new Chart(document.getElementById('card-chart4'), {
+    type: 'bar',
+    data: {
+      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April'],
+      datasets: [{
+        label: 'My First dataset',
+        backgroundColor: 'rgba(255,255,255,.2)',
+        borderColor: 'rgba(255,255,255,.55)',
+        data: [78, 81, 80, 45, 34, 12, 40, 85, 65, 23, 12, 98, 34, 84, 67, 82],
+        barPercentage: 0.6
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false,
+            drawTicks: false
+          },
+          ticks: {
+            display: false
+          }
+        },
+        y: {
+          border: {
+            display: false
+          },
+          grid: {
+            display: false,
+            drawBorder: false,
+            drawTicks: false
+          },
+          ticks: {
+            display: false
+          }
+        }
+      }
+    }
+  });
+
+  let supplierMainChartRange = 'month';
+
+  function formatSupplierCompactNumber(value) {
+    const amount = Number(value || 0);
+
+    return new Intl.NumberFormat('en', {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(amount);
+  }
+
+  function updateSupplierMainChartRangeButtons(activeRange) {
+    const dayInput = document.getElementById('supplier-chart-range-day');
+    const monthInput = document.getElementById('supplier-chart-range-month');
+    const yearInput = document.getElementById('supplier-chart-range-year');
+
+    const dayLabel = document.querySelector('label[for="supplier-chart-range-day"]');
+    const monthLabel = document.querySelector('label[for="supplier-chart-range-month"]');
+    const yearLabel = document.querySelector('label[for="supplier-chart-range-year"]');
+
+    if (dayInput) {
+      dayInput.checked = activeRange === 'day';
+    }
+
+    if (monthInput) {
+      monthInput.checked = activeRange === 'month';
+    }
+
+    if (yearInput) {
+      yearInput.checked = activeRange === 'year';
+    }
+
+    if (dayLabel) {
+      dayLabel.classList.toggle('active', activeRange === 'day');
+    }
+
+    if (monthLabel) {
+      monthLabel.classList.toggle('active', activeRange === 'month');
+    }
+
+    if (yearLabel) {
+      yearLabel.classList.toggle('active', activeRange === 'year');
+    }
+  }
+
+  const mainChart = new Chart(document.getElementById('main-chart'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+          label: 'Products Requested',
+          backgroundColor: `rgba(${coreui.Utils.getStyle('--cui-info-rgb')}, .1)`,
+          borderColor: coreui.Utils.getStyle('--cui-info'),
+          pointHoverBackgroundColor: '#fff',
+          borderWidth: 2,
+          data: [0],
+          fill: true,
+        },
+        {
+          label: 'Imported Seller Stock',
+          borderColor: coreui.Utils.getStyle('--cui-success'),
+          pointHoverBackgroundColor: '#fff',
+          borderWidth: 2,
+          data: [0],
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        annotation: {
+          annotations: {
+            line1: {
+              type: 'line',
+              yMin: 95,
+              yMax: 95,
+              borderColor: coreui.Utils.getStyle('--cui-danger'),
+              borderWidth: 1,
+              borderDash: [8, 5],
+            },
+          },
+        },
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const datasetLabel = context.dataset?.label || '';
+              const rawValue = Number(context.raw || 0);
+
+              return `${datasetLabel}: ${new Intl.NumberFormat('en-ZA').format(rawValue)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            color: coreui.Utils.getStyle('--cui-border-color-translucent'),
+            drawOnChartArea: false,
+          },
+          ticks: {
+            color: coreui.Utils.getStyle('--cui-body-color'),
+          },
+        },
+        y: {
+          border: {
+            color: coreui.Utils.getStyle('--cui-border-color-translucent'),
+          },
+          grid: {
+            color: coreui.Utils.getStyle('--cui-border-color-translucent'),
+          },
+          ticks: {
+            beginAtZero: true,
+            color: coreui.Utils.getStyle('--cui-body-color'),
+            max: 250,
+            maxTicksLimit: 5,
+            stepSize: Math.ceil(250 / 5),
+            callback(value) {
+              return formatSupplierCompactNumber(value);
+            },
+          },
+        },
+      },
+      elements: {
+        line: {
+          tension: 0.4,
+        },
+        point: {
+          radius: 0,
+          hitRadius: 10,
+          hoverRadius: 4,
+          hoverBorderWidth: 3,
+        },
+      },
+    },
+  });
+
+  async function loadSupplierMainChart(range = supplierMainChartRange) {
+    try {
+      supplierMainChartRange = range;
+
+      const response = await fetch(
+        `/business/api/supplier/trend-overview?range=${encodeURIComponent(range)}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = await response.json();
+
+      if (!payload.ok) {
+        throw new Error(payload.message || 'Failed to load supplier trend overview');
+      }
+
+      const labels = Array.isArray(payload?.chart?.labels) ?
+        payload.chart.labels : [];
+
+      const requestedData = Array.isArray(payload?.chart?.requested) ?
+        payload.chart.requested.map((value) => Number(value || 0)) : [];
+
+      const importedStockData = Array.isArray(payload?.chart?.importedStock) ?
+        payload.chart.importedStock.map((value) => Number(value || 0)) : [];
+
+      const rangeEl = document.getElementById('supplier-main-chart-range');
+      if (rangeEl) {
+        rangeEl.textContent = payload?.rangeLabel || 'Day / Month / Year';
+      }
+
+      mainChart.data.labels = labels.length ? labels : ['No data'];
+      mainChart.data.datasets[0].data = requestedData.length ? requestedData : [0];
+      mainChart.data.datasets[1].data = importedStockData.length ? importedStockData : [0];
+
+      const allValues = requestedData.concat(importedStockData);
+      const maxChartValue = Math.max(...(allValues.length ? allValues : [0]), 1);
+      const safeMax = Math.ceil(maxChartValue * 1.15);
+
+      mainChart.options.scales.y.max = safeMax;
+      mainChart.options.scales.y.ticks.stepSize = Math.max(1, Math.ceil(safeMax / 5));
+
+      if (mainChart.options.plugins?.annotation?.annotations?.line1) {
+        mainChart.options.plugins.annotation.annotations.line1.yMin = Math.min(95, safeMax);
+        mainChart.options.plugins.annotation.annotations.line1.yMax = Math.min(95, safeMax);
+      }
+
+      mainChart.update();
+      updateSupplierMainChartRangeButtons(range);
+    } catch (error) {
+      console.error('❌ Failed to load supplier main chart:', error);
+    }
+  }
+
+  loadSupplierMainChart('month');
+
+  const refreshSupplierMainChartBtn = document.getElementById('refresh-supplier-main-chart');
+
+  if (refreshSupplierMainChartBtn) {
+    refreshSupplierMainChartBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      loadSupplierMainChart(supplierMainChartRange);
+    });
+  }
+
+  const supplierChartRangeDay = document.getElementById('supplier-chart-range-day');
+  const supplierChartRangeMonth = document.getElementById('supplier-chart-range-month');
+  const supplierChartRangeYear = document.getElementById('supplier-chart-range-year');
+
+  if (supplierChartRangeDay) {
+    supplierChartRangeDay.addEventListener('change', () => {
+      if (supplierChartRangeDay.checked) {
+        loadSupplierMainChart('day');
+      }
+    });
+  }
+
+  if (supplierChartRangeMonth) {
+    supplierChartRangeMonth.addEventListener('change', () => {
+      if (supplierChartRangeMonth.checked) {
+        loadSupplierMainChart('month');
+      }
+    });
+  }
+
+  if (supplierChartRangeYear) {
+    supplierChartRangeYear.addEventListener('change', () => {
+      if (supplierChartRangeYear.checked) {
+        loadSupplierMainChart('year');
+      }
+    });
+  }
+
+  //# sourceMappingURL=main.js.map
+</script>

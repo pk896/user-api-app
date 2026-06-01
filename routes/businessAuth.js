@@ -232,6 +232,110 @@ function startOfDaysAgo(days) {
   return d;
 }
 
+function startOfMonth(date = new Date()) {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function monthKey(date) {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function monthLabelFromKey(key) {
+  const [year, month] = String(key || '').split('-');
+  const d = new Date(Number(year), Number(month) - 1, 1);
+
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function lastMonthKeys(count = 7) {
+  const now = startOfMonth(new Date());
+  const keys = [];
+
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setMonth(now.getMonth() - i);
+    keys.push(monthKey(d));
+  }
+
+  return keys;
+}
+
+async function buildSupplierMainChartData(supplierId) {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+  const keys = lastMonthKeys(7);
+
+  const firstKey = keys[0];
+  const [firstYear, firstMonth] = firstKey.split('-');
+  const fromDate = new Date(Number(firstYear), Number(firstMonth) - 1, 1);
+
+  // ✅ Line 1: quantity sellers requested from this supplier
+  const requestedAgg = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+        createdAt: { $gte: fromDate },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$createdAt' },
+          month: { $month: '$createdAt' },
+        },
+        requestedQty: { $sum: '$requestedQuantity' },
+      },
+    },
+  ]);
+
+  // ✅ Line 2: stock imported by sellers from this supplier
+  // Uses Product because imported wholesale products become normal seller Products.
+  const importedAgg = await Product.aggregate([
+    {
+      $match: {
+        sourceType: 'wholesale_import',
+        sourceSupplier: supplierObjectId,
+        importedAt: { $gte: fromDate },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$importedAt' },
+          month: { $month: '$importedAt' },
+        },
+        importedStock: { $sum: '$stock' },
+      },
+    },
+  ]);
+
+  const requestedMap = new Map();
+  requestedAgg.forEach((row) => {
+    const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}`;
+    requestedMap.set(key, Number(row.requestedQty || 0));
+  });
+
+  const importedMap = new Map();
+  importedAgg.forEach((row) => {
+    const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}`;
+    importedMap.set(key, Number(row.importedStock || 0));
+  });
+
+  return {
+    labels: keys.map(monthLabelFromKey),
+    requestedQty: keys.map((key) => requestedMap.get(key) || 0),
+    importedStock: keys.map((key) => importedMap.get(key) || 0),
+  };
+}
+
 function normalizeSupplierProductForCard(product, extra = {}) {
   return {
     _id: product?._id,
@@ -2078,8 +2182,10 @@ router.get(
 
       // ✅ Supplier dashboard data only.
       // ✅ Uses SupplierProduct + SupplyRequest.
-      // ❌ Does NOT use Product.
+      // ✅ Supplier KPI cards use SupplierProduct + SupplyRequest.
+      // ✅ Supplier main chart also reads imported seller Product stock linked by sourceSupplier.
       const supplierDashboardData = await computeSupplierWholesaleDashboardData(supplierDoc._id);
+      const supplierMainChart = await buildSupplierMainChartData(supplierDoc._id);
 
       const supplierAvatarUrl =
         String(supplierDoc.logoUrl || '').trim() || '/images/branding/logo-unincorporate.png';
@@ -2112,6 +2218,8 @@ router.get(
         supplierOutOfStockProducts: supplierDashboardData.supplierOutOfStockProducts || [],
 
         supplierFastestGrowingProducts: supplierDashboardData.supplierFastestGrowingProducts || [],
+
+        supplierMainChart,
 
         // Safe defaults for old dashboard sections that may still exist in the EJS
         trackingStats: {
@@ -2170,12 +2278,68 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
 
     // ✅ Supplier KPI API must also use SupplierProduct + SupplyRequest only.
     const supplierDashboardData = await computeSupplierWholesaleDashboardData(business._id);
+    const supplierObjectId = new mongoose.Types.ObjectId(String(business._id));
+
+    const stockStart = new Date();
+    stockStart.setDate(stockStart.getDate() - 6);
+    stockStart.setHours(0, 0, 0, 0);
+
+    const stockMovementRows = await SupplierProduct.aggregate([
+      {
+        $match: {
+          supplier: supplierObjectId,
+          status: { $ne: 'archived' },
+          updatedAt: { $gte: stockStart },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$updatedAt',
+            },
+          },
+          totalStock: { $sum: '$availableQuantity' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const stockMovementMap = new Map(
+      stockMovementRows.map((row) => [String(row._id), Number(row.totalStock || 0)])
+    );
+
+    const stockChartLabels = [];
+    const stockChartData = [];
+
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(stockStart);
+      d.setDate(stockStart.getDate() + i);
+
+      const key = d.toISOString().slice(0, 10);
+
+      stockChartLabels.push(
+        d.toLocaleDateString(undefined, {
+          weekday: 'short',
+        })
+      );
+
+      stockChartData.push(stockMovementMap.get(key) || 0);
+    }
 
     return res.json({
       ok: true,
 
       totals: supplierDashboardData.totals,
       inventoryValue: supplierDashboardData.inventoryValue,
+
+      chart: {
+        card1: {
+          labels: stockChartLabels,
+          data: stockChartData,
+        },
+      },
 
       supplierTopSellingProducts: supplierDashboardData.supplierTopSellingProducts || [],
 
@@ -2190,6 +2354,222 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
     return res.status(500).json({
       ok: false,
       message: 'Failed to load supplier KPIs',
+    });
+  }
+});
+
+/* ----------------------------------------------------------
+ * Supplier mainChart JSON
+ * ✅ Real supplier data only
+ * ✅ Used by views/dashboards/partials/supplier-charts.ejs
+ * -------------------------------------------------------- */
+function normalizeSupplierTrendRange(value) {
+  const range = String(value || '').trim().toLowerCase();
+
+  if (range === 'day') return 'day';
+  if (range === 'year') return 'year';
+
+  return 'month';
+}
+
+function startOfSupplierChartDay(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function supplierDateKey(date, range) {
+  const d = new Date(date);
+
+  if (range === 'year') {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function supplierDateLabel(key, range) {
+  if (range === 'year') {
+    const [year, month] = String(key || '').split('-');
+    const d = new Date(Number(year), Number(month) - 1, 1);
+
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  const d = new Date(`${key}T00:00:00`);
+
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function buildSupplierTrendBuckets(range) {
+  const safeRange = normalizeSupplierTrendRange(range);
+  const now = new Date();
+  const buckets = [];
+
+  if (safeRange === 'year') {
+    const start = new Date(now);
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    start.setMonth(start.getMonth() - 11);
+
+    for (let i = 0; i < 12; i += 1) {
+      const d = new Date(start);
+      d.setMonth(start.getMonth() + i);
+      buckets.push(supplierDateKey(d, 'year'));
+    }
+
+    return {
+      range: 'year',
+      rangeLabel: 'Last 12 months',
+      fromDate: start,
+      buckets,
+    };
+  }
+
+  if (safeRange === 'day') {
+    const start = startOfSupplierChartDay(now);
+    start.setDate(start.getDate() - 6);
+
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      buckets.push(supplierDateKey(d, 'day'));
+    }
+
+    return {
+      range: 'day',
+      rangeLabel: 'Last 7 days',
+      fromDate: start,
+      buckets,
+    };
+  }
+
+  const start = startOfSupplierChartDay(now);
+  start.setDate(start.getDate() - 29);
+
+  for (let i = 0; i < 30; i += 1) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    buckets.push(supplierDateKey(d, 'month'));
+  }
+
+  return {
+    range: 'month',
+    rangeLabel: 'Last 30 days',
+    fromDate: start,
+    buckets,
+  };
+}
+
+async function buildSupplierTrendOverview(supplierId, rangeInput = 'month') {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+  const trend = buildSupplierTrendBuckets(rangeInput);
+  const groupFormat = trend.range === 'year' ? '%Y-%m' : '%Y-%m-%d';
+
+  // Line 1: requested supply quantity from sellers
+  const requestRows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+        createdAt: { $gte: trend.fromDate },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: groupFormat,
+            date: '$createdAt',
+          },
+        },
+        requestedQty: { $sum: '$requestedQuantity' },
+      },
+    },
+  ]);
+
+  // Line 2: seller-side imported stock linked to this supplier
+  const importedRows = await Product.aggregate([
+    {
+      $addFields: {
+        supplierChartDate: {
+          $ifNull: ['$importedAt', '$createdAt'],
+        },
+      },
+    },
+    {
+      $match: {
+        sourceType: 'wholesale_import',
+        sourceSupplier: supplierObjectId,
+        supplierChartDate: { $gte: trend.fromDate },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: groupFormat,
+            date: '$supplierChartDate',
+          },
+        },
+        importedStock: { $sum: '$stock' },
+      },
+    },
+  ]);
+
+  const requestMap = new Map(
+    requestRows.map((row) => [String(row._id), Number(row.requestedQty || 0)])
+  );
+
+  const importedMap = new Map(
+    importedRows.map((row) => [String(row._id), Number(row.importedStock || 0)])
+  );
+
+  return {
+    range: trend.range,
+    rangeLabel: trend.rangeLabel,
+    chart: {
+      labels: trend.buckets.map((key) => supplierDateLabel(key, trend.range)),
+      requested: trend.buckets.map((key) => requestMap.get(key) || 0),
+      importedStock: trend.buckets.map((key) => importedMap.get(key) || 0),
+    },
+  };
+}
+
+router.get('/api/supplier/trend-overview', requireBusiness, requireVerifiedBusiness, async (req, res) => {
+  try {
+    const business = getBiz(req);
+
+    if (!business || !business._id || business.role !== 'supplier') {
+      return res.status(403).json({
+        ok: false,
+        message: 'Suppliers only',
+      });
+    }
+
+    const range = normalizeSupplierTrendRange(req.query.range);
+    const overview = await buildSupplierTrendOverview(business._id, range);
+
+    return res.json({
+      ok: true,
+      ...overview,
+    });
+  } catch (err) {
+    console.error('❌ Supplier trend overview API error:', err);
+
+    return res.status(500).json({
+      ok: false,
+      message: 'Failed to load supplier trend overview',
     });
   }
 });
