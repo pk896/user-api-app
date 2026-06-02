@@ -884,7 +884,10 @@ async function buildSupplierRefundCardData(supplierId) {
   const importedProductKeys = [
     ...new Set(
       importedSellerProducts
-        .flatMap((product) => [String(product._id || '').trim(), String(product.customId || '').trim()])
+        .flatMap((product) => [
+          String(product._id || '').trim(),
+          String(product.customId || '').trim(),
+        ])
         .filter(Boolean),
     ),
   ];
@@ -923,6 +926,7 @@ async function buildSupplierRefundCardData(supplierId) {
     return {
       totalRefundedOrders: 0,
       totalRefundedProducts: 0,
+      totalRefundedStock: 0,
       chart: {
         labels,
         data: emptyData,
@@ -942,6 +946,8 @@ async function buildSupplierRefundCardData(supplierId) {
       { $or: orderItemMatch },
       {
         $or: [
+          { 'items.refundStatus': { $in: ['PARTIAL', 'REFUNDED'] } },
+          { 'items.refundedQuantity': { $gt: 0 } },
           { status: { $in: ['REFUNDED', 'PARTIALLY_REFUNDED', 'Refunded', 'Partially Refunded'] } },
           { paymentStatus: { $in: ['refunded', 'partially_refunded', 'REFUNDED', 'PARTIALLY_REFUNDED'] } },
           { refunds: { $exists: true, $ne: [] } },
@@ -958,6 +964,7 @@ async function buildSupplierRefundCardData(supplierId) {
 
   let totalRefundedOrders = 0;
   let totalRefundedProducts = 0;
+  let totalRefundedStock = 0;
 
   const refundedMovementMap = new Map();
 
@@ -965,26 +972,76 @@ async function buildSupplierRefundCardData(supplierId) {
     if (!isSupplierRefundedOrder(order)) return;
 
     const items = Array.isArray(order.items) ? order.items : [];
+
     let orderHasSupplierRefundItem = false;
     let supplierRefundQtyForOrder = 0;
+    let supplierExactItemRefundFound = false;
+    let latestItemRefundDate = null;
 
     items.forEach((item) => {
       const itemKey = getSupplierSoldCardOrderItemKey(item);
       if (!itemKey || !productByKey.has(itemKey)) return;
 
-      const qty = getSupplierSoldCardOrderItemQty(item);
-      if (qty <= 0) return;
+      const originalQty = getSupplierSoldCardOrderItemQty(item);
+      if (originalQty <= 0) return;
 
+      const itemRefundStatus = String(item?.refundStatus || 'NONE').trim().toUpperCase();
+      const itemRefundedQty = Number(item?.refundedQuantity || 0);
+
+      // ✅ Best case: new item-level fields exist.
+      if (
+        itemRefundStatus === 'REFUNDED' ||
+        itemRefundStatus === 'PARTIAL' ||
+        itemRefundedQty > 0 ||
+        item?.refundedAt
+      ) {
+        const safeRefundedQty = Math.min(
+          originalQty,
+          Math.max(0, Number.isFinite(itemRefundedQty) ? itemRefundedQty : 0),
+        );
+
+        const qtyToCount =
+          safeRefundedQty > 0
+            ? safeRefundedQty
+            : itemRefundStatus === 'REFUNDED'
+              ? originalQty
+              : 0;
+
+        if (qtyToCount > 0) {
+          supplierExactItemRefundFound = true;
+          orderHasSupplierRefundItem = true;
+          supplierRefundQtyForOrder += qtyToCount;
+
+          if (item?.refundedAt) {
+            const d = new Date(item.refundedAt);
+            if (!Number.isNaN(d.getTime())) {
+              if (!latestItemRefundDate || d > latestItemRefundDate) {
+                latestItemRefundDate = d;
+              }
+            }
+          }
+        }
+
+        return;
+      }
+
+      // ✅ Fallback for old orders:
+      // If order is refunded but old items have no item refund fields,
+      // count the supplier imported product quantity inside that refunded order.
       orderHasSupplierRefundItem = true;
-      supplierRefundQtyForOrder += qty;
+      supplierRefundQtyForOrder += originalQty;
     });
 
-    if (!orderHasSupplierRefundItem) return;
+    if (!orderHasSupplierRefundItem || supplierRefundQtyForOrder <= 0) return;
 
     totalRefundedOrders += 1;
     totalRefundedProducts += supplierRefundQtyForOrder;
+    totalRefundedStock += supplierRefundQtyForOrder;
 
-    const refundDate = getSupplierRefundOrderDate(order);
+    const refundDate = supplierExactItemRefundFound && latestItemRefundDate
+      ? latestItemRefundDate
+      : getSupplierRefundOrderDate(order);
+
     const refundDayKey =
       refundDate && refundDate >= refundStart ? refundDate.toISOString().slice(0, 10) : '';
 
@@ -1009,6 +1066,7 @@ async function buildSupplierRefundCardData(supplierId) {
   return {
     totalRefundedOrders,
     totalRefundedProducts,
+    totalRefundedStock,
     chart: {
       labels,
       data,
@@ -2837,6 +2895,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
       refunds: {
         totalRefundedOrders: supplierRefundCardData.totalRefundedOrders,
         totalRefundedProducts: supplierRefundCardData.totalRefundedProducts,
+        totalRefundedStock: supplierRefundCardData.totalRefundedStock,
       },
 
       supplierTopSellingProducts: supplierDashboardData.supplierTopSellingProducts || [],

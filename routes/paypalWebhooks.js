@@ -149,6 +149,131 @@ async function applyStockDelta(items, deltaSign /* +1 restore */) {
   return { ok: true, changed: Number(res?.modifiedCount || 0) };
 }
 
+function getWebhookItemQty(item) {
+  const qty = Number(item?.quantity || item?.qty || 0);
+  return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
+function getWebhookMoneyValue(value) {
+  if (value === null || value === undefined || value === '') return 0;
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === 'object') {
+    return getWebhookMoneyValue(value.value ?? value.amount ?? value.price ?? 0);
+  }
+
+  const n = Number(String(value).trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getWebhookItemUnitPrice(item) {
+  return getWebhookMoneyValue(
+    item?.priceGross?.value ?? item?.price?.value ?? item?.price ?? item?.unitPrice ?? 0,
+  );
+}
+
+function getWebhookOrderCapturedTotal(orderDoc) {
+  return getWebhookMoneyValue(orderDoc?.amount?.value ?? orderDoc?.amount ?? 0);
+}
+
+function markOrderItemsRefundedFromPaypal(orderDoc, refundAmountRaw) {
+  if (!orderDoc || !Array.isArray(orderDoc.items) || !orderDoc.items.length) {
+    return {
+      ok: false,
+      reason: 'NO_ORDER_ITEMS',
+      markedItems: 0,
+      refundedQuantity: 0,
+    };
+  }
+
+  const refundAmount = getWebhookMoneyValue(refundAmountRaw);
+  const capturedTotal = getWebhookOrderCapturedTotal(orderDoc);
+  const now = new Date();
+
+  let markedItems = 0;
+  let refundedQuantity = 0;
+
+  const isFullRefund =
+    refundAmount > 0 &&
+    capturedTotal > 0 &&
+    refundAmount >= capturedTotal - 0.00001;
+
+  // ✅ Full refund: mark every order item fully refunded.
+  if (isFullRefund) {
+    orderDoc.items.forEach((item) => {
+      const qty = getWebhookItemQty(item);
+      if (qty <= 0) return;
+
+      item.refundStatus = 'REFUNDED';
+      item.refundedQuantity = qty;
+      item.refundedAt = now;
+      item.refundReason = 'PayPal full refund webhook';
+
+      markedItems += 1;
+      refundedQuantity += qty;
+    });
+
+    return {
+      ok: true,
+      mode: 'FULL',
+      markedItems,
+      refundedQuantity,
+    };
+  }
+
+  // ✅ Partial refund from PayPal dashboard:
+  // PayPal gives amount, not exact product. We allocate the amount across items by line value.
+  let remainingRefundAmount = refundAmount;
+
+  orderDoc.items.forEach((item) => {
+    if (remainingRefundAmount <= 0) return;
+
+    const qty = getWebhookItemQty(item);
+    if (qty <= 0) return;
+
+    const alreadyRefundedQty = Number(item?.refundedQuantity || 0);
+    const refundableQty = Math.max(0, qty - alreadyRefundedQty);
+    if (refundableQty <= 0) return;
+
+    const unitPrice = getWebhookItemUnitPrice(item);
+    if (unitPrice <= 0) return;
+
+    const refundableLineValue = unitPrice * refundableQty;
+    const amountForThisItem = Math.min(remainingRefundAmount, refundableLineValue);
+
+    let qtyToRefund = Math.ceil(amountForThisItem / unitPrice);
+    qtyToRefund = Math.max(0, Math.min(refundableQty, qtyToRefund));
+
+    if (qtyToRefund <= 0) return;
+
+    const nextRefundedQty = Math.min(qty, alreadyRefundedQty + qtyToRefund);
+
+    item.refundedQuantity = nextRefundedQty;
+    item.refundedAt = now;
+    item.refundReason = 'PayPal partial refund webhook';
+
+    if (nextRefundedQty >= qty) {
+      item.refundStatus = 'REFUNDED';
+    } else {
+      item.refundStatus = 'PARTIAL';
+    }
+
+    markedItems += 1;
+    refundedQuantity += qtyToRefund;
+    remainingRefundAmount -= amountForThisItem;
+  });
+
+  return {
+    ok: true,
+    mode: 'PARTIAL_AMOUNT_ALLOCATED',
+    markedItems,
+    refundedQuantity,
+  };
+}
+
 function buildStockItemsFromOrder(orderDoc) {
   // Prefer inventoryAdjustedItems (most accurate), fallback to order.items
   const inv = Array.isArray(orderDoc?.inventoryAdjustedItems) ? orderDoc.inventoryAdjustedItems : [];
@@ -352,6 +477,16 @@ router.post(
       order.paymentStatus = 'refund_submitted';
     }
 
+    // ✅ Mark item-level refund fields for supplier dashboard.
+    // Only do it for a NEW webhook/refund, not duplicate webhook retries.
+    let itemRefundMarking = null;
+
+    if (!already) {
+      itemRefundMarking = markOrderItemsRefundedFromPaypal(order, refundAmount);
+      order.raw = order.raw || {};
+      order.raw._itemRefundMarking = itemRefundMarking;
+    }
+
     await order.save();
 
     // ✅ Restore stock on FULL refund (idempotent)
@@ -396,6 +531,7 @@ router.post(
       paymentStatus: order.paymentStatus,
       refundedTotal: order.refundedTotal,
       newlyInserted: !already,
+      itemRefundMarking,
       inventoryRestore,
     });
   }

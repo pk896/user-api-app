@@ -70,6 +70,33 @@ const OrderItemSchema = new Schema(
       size: { type: String, trim: true },
       color: { type: String, trim: true },
     },
+
+    // ✅ Item-level refund tracking
+    // This lets supplier dashboard know exactly which product stock was refunded.
+    refundStatus: {
+      type: String,
+      enum: ['NONE', 'PARTIAL', 'REFUNDED'],
+      default: 'NONE',
+      index: true,
+    },
+
+    refundedQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    refundedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    refundReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   { _id: false }
 );
@@ -340,6 +367,7 @@ OrderSchema.index({ businessBuyer: 1, createdAt: -1 });
 OrderSchema.index({ 'paypal.captureId': 1, createdAt: -1 });
 OrderSchema.index({ 'captures.captureId': 1, createdAt: -1 });
 OrderSchema.index({ 'refunds.refundId': 1, createdAt: -1 });
+OrderSchema.index({ 'items.refundStatus': 1, 'items.refundedAt': -1 });
 
 // Shippo
 OrderSchema.index({ fulfillmentStatus: 1, createdAt: -1 });
