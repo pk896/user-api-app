@@ -137,6 +137,13 @@
       const totalSalesRevenue = Number(payload?.sales?.totalSalesRevenue || 0);
       const salesCurrency = payload?.sales?.currency || 'USD';
 
+      const eligiblePayoutAmount = Number(payload?.payouts?.eligiblePayoutAmount || 0);
+      const latestPaidPayoutAmount = Number(payload?.payouts?.latestPaidAmount || 0);
+      const payoutCurrency = payload?.payouts?.currency || 'USD';
+
+      const totalRefundedOrders = Number(payload?.refunds?.totalRefundedOrders || 0);
+      const totalRefundedProducts = Number(payload?.refunds?.totalRefundedProducts || 0);
+
       const chartLabels = Array.isArray(payload?.chart?.card1?.labels) ?
         payload.chart.card1.labels :
         [];
@@ -154,6 +161,12 @@
       const soldStockEl = document.getElementById('supplier-sold-stock');
       const salesRevenueEl = document.getElementById('supplier-sales-revenue');
 
+      const eligiblePayoutEl = document.getElementById('supplier-eligible-payout');
+      const latestPaidPayoutEl = document.getElementById('supplier-latest-paid-payout');
+
+      const refundedOrdersEl = document.getElementById('supplier-refunded-orders');
+      const refundedProductsEl = document.getElementById('supplier-refunded-products');
+
       if (totalProductsEl) {
         totalProductsEl.textContent = String(totalProducts);
       }
@@ -168,6 +181,22 @@
 
       if (salesRevenueEl) {
         salesRevenueEl.textContent = `(${formatSupplierCardMoney(totalSalesRevenue, salesCurrency)} revenue)`;
+      }
+
+      if (eligiblePayoutEl) {
+        eligiblePayoutEl.textContent = formatSupplierCardMoney(eligiblePayoutAmount, payoutCurrency);
+      }
+
+      if (latestPaidPayoutEl) {
+        latestPaidPayoutEl.textContent = formatSupplierCardMoney(latestPaidPayoutAmount, payoutCurrency);
+      }
+
+      if (refundedOrdersEl) {
+        refundedOrdersEl.textContent = String(totalRefundedOrders);
+      }
+
+      if (refundedProductsEl) {
+        refundedProductsEl.textContent = String(totalRefundedProducts);
       }
 
       if (movementTextEl) {
@@ -214,6 +243,52 @@
       cardChart2.options.scales.y.min = 0;
       cardChart2.options.scales.y.max = Math.ceil(maxSoldChartValue * 1.2);
 
+      const payoutChartLabels = Array.isArray(payload?.chart?.card3?.labels)
+        ? payload.chart.card3.labels
+        : [];
+
+      const payoutChartData = Array.isArray(payload?.chart?.card3?.data)
+        ? payload.chart.card3.data.map((value) => Number(value || 0))
+        : [];
+
+      cardChart3.data.labels = payoutChartLabels.length
+        ? payoutChartLabels
+        : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      cardChart3.data.datasets[0].label = 'Paid Payout Movement';
+      cardChart3.data.datasets[0].data = payoutChartData.length
+        ? payoutChartData
+        : [0, 0, 0, 0, 0, 0, 0];
+
+      const maxPayoutChartValue = Math.max(...cardChart3.data.datasets[0].data, 1);
+
+      cardChart3.options.scales.y.min = 0;
+      cardChart3.options.scales.y.max = Math.ceil(maxPayoutChartValue * 1.2);
+
+      const refundChartLabels = Array.isArray(payload?.chart?.card4?.labels)
+        ? payload.chart.card4.labels
+        : [];
+
+      const refundChartData = Array.isArray(payload?.chart?.card4?.data)
+        ? payload.chart.card4.data.map((value) => Number(value || 0))
+        : [];
+
+      cardChart4.data.labels = refundChartLabels.length
+        ? refundChartLabels
+        : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      cardChart4.data.datasets[0].label = 'Refunded Products Movement';
+      cardChart4.data.datasets[0].data = refundChartData.length
+        ? refundChartData
+        : [0, 0, 0, 0, 0, 0, 0];
+
+      const maxRefundChartValue = Math.max(...cardChart4.data.datasets[0].data, 1);
+
+      cardChart4.options.scales.y.min = 0;
+      cardChart4.options.scales.y.max = Math.ceil(maxRefundChartValue * 1.2);
+
+      cardChart4.update();
+      cardChart3.update();
       cardChart2.update();
       cardChart1.update();
     } catch (error) {
@@ -283,7 +358,7 @@
     data: {
       labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       datasets: [{
-        label: 'Approved requested quantity',
+        label: 'Paid Payout Movement',
         backgroundColor: 'rgba(255,255,255,.2)',
         borderColor: 'rgba(255,255,255,.55)',
         data: [0, 0, 0, 0, 0, 0, 0],
@@ -325,7 +400,7 @@
     data: {
       labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       datasets: [{
-        label: 'Supplier activity',
+        label: 'Refunded Products Movement',
         backgroundColor: 'rgba(255,255,255,.2)',
         borderColor: 'rgba(255,255,255,.55)',
         data: [0, 0, 0, 0, 0, 0, 0],

@@ -23,6 +23,8 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 
 const router = express.Router();
+const Payout = require('../models/Payout');
+const { getSellerAvailableCents } = require('../utils/payouts/getSellerAvailableCents');
 
 const BASE_CURRENCY =
   String(process.env.BASE_CURRENCY || '')
@@ -695,6 +697,318 @@ async function buildSupplierSoldCardData(supplierId) {
   return {
     totalSoldStock,
     totalSalesRevenue: Number(totalSalesRevenue.toFixed(2)),
+    chart: {
+      labels,
+      data,
+    },
+  };
+}
+
+function centsToAmount(cents) {
+  const n = Number(cents || 0);
+  return Number.isFinite(n) ? Number((n / 100).toFixed(2)) : 0;
+}
+
+function supplierPayoutDayKey(date) {
+  const d = new Date(date);
+  return d.toISOString().slice(0, 10);
+}
+
+async function buildSupplierPayoutCardData(supplierId) {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+  const currency = BASE_CURRENCY;
+
+  const eligibleCents = await getSellerAvailableCents(supplierObjectId, currency);
+
+  const paidStart = new Date();
+  paidStart.setDate(paidStart.getDate() - 6);
+  paidStart.setHours(0, 0, 0, 0);
+
+  const labels = [];
+  const emptyData = [];
+
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(paidStart);
+    d.setDate(paidStart.getDate() + i);
+
+    labels.push(
+      d.toLocaleDateString(undefined, {
+        weekday: 'short',
+      }),
+    );
+
+    emptyData.push(0);
+  }
+
+  const latestRows = await Payout.aggregate([
+    {
+      $match: {
+        currency,
+        items: {
+          $elemMatch: {
+            businessId: supplierObjectId,
+            status: 'SENT',
+          },
+        },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        'items.businessId': supplierObjectId,
+        'items.status': 'SENT',
+        'items.currency': currency,
+      },
+    },
+    { $sort: { 'items.paidAt': -1, updatedAt: -1, createdAt: -1 } },
+    { $limit: 1 },
+    {
+      $project: {
+        _id: 0,
+        amountCents: '$items.amountCents',
+        paidAt: '$items.paidAt',
+        receiver: '$items.receiver',
+        status: '$items.status',
+      },
+    },
+  ]);
+
+  const latestPaid = latestRows[0] || null;
+
+  const movementRows = await Payout.aggregate([
+    {
+      $match: {
+        currency,
+        items: {
+          $elemMatch: {
+            businessId: supplierObjectId,
+            status: 'SENT',
+            paidAt: { $gte: paidStart },
+          },
+        },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        'items.businessId': supplierObjectId,
+        'items.status': 'SENT',
+        'items.currency': currency,
+        'items.paidAt': { $gte: paidStart },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: '$items.paidAt',
+          },
+        },
+        totalCents: { $sum: '$items.amountCents' },
+      },
+    },
+  ]);
+
+  const movementMap = new Map(
+    movementRows.map((row) => [String(row._id), centsToAmount(row.totalCents)])
+  );
+
+  const data = [];
+
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(paidStart);
+    d.setDate(paidStart.getDate() + i);
+
+    const key = supplierPayoutDayKey(d);
+    data.push(movementMap.get(key) || 0);
+  }
+
+  return {
+    eligiblePayoutAmount: centsToAmount(eligibleCents),
+    latestPaidAmount: centsToAmount(latestPaid?.amountCents || 0),
+    latestPaidAt: latestPaid?.paidAt || null,
+    currency,
+    chart: {
+      labels,
+      data: data.length ? data : emptyData,
+    },
+  };
+}
+
+function isSupplierRefundedOrder(order) {
+  const status = String(order?.status || '').trim().toUpperCase();
+  const paymentStatus = String(order?.paymentStatus || '').trim().toLowerCase();
+
+  const refundedTotal = Number(order?.refundedTotal || 0);
+  const refunds = Array.isArray(order?.refunds) ? order.refunds : [];
+
+  return (
+    status === 'REFUNDED' ||
+    status === 'PARTIALLY_REFUNDED' ||
+    paymentStatus === 'refunded' ||
+    paymentStatus === 'partially_refunded' ||
+    refunds.length > 0 ||
+    refundedTotal > 0 ||
+    Boolean(order?.refundedAt)
+  );
+}
+
+function getSupplierRefundOrderDate(order) {
+  if (order?.refundedAt) return new Date(order.refundedAt);
+
+  const refunds = Array.isArray(order?.refunds) ? order.refunds : [];
+  const refundDates = refunds
+    .map((refund) => (refund?.createdAt ? new Date(refund.createdAt) : null))
+    .filter((date) => date && !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime());
+
+  if (refundDates.length) return refundDates[0];
+
+  if (order?.updatedAt) return new Date(order.updatedAt);
+  if (order?.createdAt) return new Date(order.createdAt);
+
+  return new Date();
+}
+
+async function buildSupplierRefundCardData(supplierId) {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+
+  const importedSellerProducts = await Product.find({
+    sourceType: 'wholesale_import',
+    sourceSupplier: supplierObjectId,
+  })
+    .select('_id customId name sourceSupplier sourceSupplierProduct sourceSupplyRequest')
+    .lean();
+
+  const importedProductKeys = [
+    ...new Set(
+      importedSellerProducts
+        .flatMap((product) => [String(product._id || '').trim(), String(product.customId || '').trim()])
+        .filter(Boolean),
+    ),
+  ];
+
+  const productByKey = new Map();
+
+  importedSellerProducts.forEach((product) => {
+    const idKey = String(product._id || '').trim();
+    const customKey = String(product.customId || '').trim();
+
+    if (idKey) productByKey.set(idKey, product);
+    if (customKey) productByKey.set(customKey, product);
+  });
+
+  const refundStart = new Date();
+  refundStart.setDate(refundStart.getDate() - 6);
+  refundStart.setHours(0, 0, 0, 0);
+
+  const labels = [];
+  const emptyData = [];
+
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(refundStart);
+    d.setDate(refundStart.getDate() + i);
+
+    labels.push(
+      d.toLocaleDateString(undefined, {
+        weekday: 'short',
+      }),
+    );
+
+    emptyData.push(0);
+  }
+
+  if (!importedProductKeys.length) {
+    return {
+      totalRefundedOrders: 0,
+      totalRefundedProducts: 0,
+      chart: {
+        labels,
+        data: emptyData,
+      },
+    };
+  }
+
+  const orderItemMatch = [
+    { 'items.productId': { $in: importedProductKeys } },
+    { 'items.customId': { $in: importedProductKeys } },
+    { 'items.pid': { $in: importedProductKeys } },
+    { 'items.sku': { $in: importedProductKeys } },
+  ];
+
+  const refundedOrderMatch = {
+    $and: [
+      { $or: orderItemMatch },
+      {
+        $or: [
+          { status: { $in: ['REFUNDED', 'PARTIALLY_REFUNDED', 'Refunded', 'Partially Refunded'] } },
+          { paymentStatus: { $in: ['refunded', 'partially_refunded', 'REFUNDED', 'PARTIALLY_REFUNDED'] } },
+          { refunds: { $exists: true, $ne: [] } },
+          { refundedAt: { $exists: true, $ne: null } },
+          { refundedTotal: { $nin: ['0', '0.00', '', null] } },
+        ],
+      },
+    ],
+  };
+
+  const refundedOrders = await Order.find(refundedOrderMatch)
+    .select('items status paymentStatus refunds refundedTotal refundedAt createdAt updatedAt')
+    .lean();
+
+  let totalRefundedOrders = 0;
+  let totalRefundedProducts = 0;
+
+  const refundedMovementMap = new Map();
+
+  refundedOrders.forEach((order) => {
+    if (!isSupplierRefundedOrder(order)) return;
+
+    const items = Array.isArray(order.items) ? order.items : [];
+    let orderHasSupplierRefundItem = false;
+    let supplierRefundQtyForOrder = 0;
+
+    items.forEach((item) => {
+      const itemKey = getSupplierSoldCardOrderItemKey(item);
+      if (!itemKey || !productByKey.has(itemKey)) return;
+
+      const qty = getSupplierSoldCardOrderItemQty(item);
+      if (qty <= 0) return;
+
+      orderHasSupplierRefundItem = true;
+      supplierRefundQtyForOrder += qty;
+    });
+
+    if (!orderHasSupplierRefundItem) return;
+
+    totalRefundedOrders += 1;
+    totalRefundedProducts += supplierRefundQtyForOrder;
+
+    const refundDate = getSupplierRefundOrderDate(order);
+    const refundDayKey =
+      refundDate && refundDate >= refundStart ? refundDate.toISOString().slice(0, 10) : '';
+
+    if (refundDayKey) {
+      refundedMovementMap.set(
+        refundDayKey,
+        (refundedMovementMap.get(refundDayKey) || 0) + supplierRefundQtyForOrder,
+      );
+    }
+  });
+
+  const data = [];
+
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(refundStart);
+    d.setDate(refundStart.getDate() + i);
+
+    const key = d.toISOString().slice(0, 10);
+    data.push(refundedMovementMap.get(key) || 0);
+  }
+
+  return {
+    totalRefundedOrders,
+    totalRefundedProducts,
     chart: {
       labels,
       data,
@@ -2430,6 +2744,8 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
     // ✅ Supplier KPI API must also use SupplierProduct + SupplyRequest only.
     const supplierDashboardData = await computeSupplierWholesaleDashboardData(business._id);
     const supplierSoldCardData = await buildSupplierSoldCardData(business._id);
+    const supplierPayoutCardData = await buildSupplierPayoutCardData(business._id);
+    const supplierRefundCardData = await buildSupplierRefundCardData(business._id);
     const supplierObjectId = new mongoose.Types.ObjectId(String(business._id));
 
     const stockStart = new Date();
@@ -2495,12 +2811,32 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
           labels: supplierSoldCardData.chart.labels,
           data: supplierSoldCardData.chart.data,
         },
+        card3: {
+          labels: supplierPayoutCardData.chart.labels,
+          data: supplierPayoutCardData.chart.data,
+        },
+        card4: {
+          labels: supplierRefundCardData.chart.labels,
+          data: supplierRefundCardData.chart.data,
+        },
       },
 
       sales: {
         totalSoldStock: supplierSoldCardData.totalSoldStock,
         totalSalesRevenue: supplierSoldCardData.totalSalesRevenue,
         currency: BASE_CURRENCY,
+      },
+
+      payouts: {
+        eligiblePayoutAmount: supplierPayoutCardData.eligiblePayoutAmount,
+        latestPaidAmount: supplierPayoutCardData.latestPaidAmount,
+        latestPaidAt: supplierPayoutCardData.latestPaidAt,
+        currency: supplierPayoutCardData.currency,
+      },
+
+      refunds: {
+        totalRefundedOrders: supplierRefundCardData.totalRefundedOrders,
+        totalRefundedProducts: supplierRefundCardData.totalRefundedProducts,
       },
 
       supplierTopSellingProducts: supplierDashboardData.supplierTopSellingProducts || [],
