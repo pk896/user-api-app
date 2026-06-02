@@ -33,11 +33,17 @@
   document.documentElement.addEventListener('ColorSchemeChange', () => {
     cardChart1.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-primary');
     cardChart2.data.datasets[0].pointBackgroundColor = coreui.Utils.getStyle('--cui-info');
+
     mainChart.options.scales.x.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
     mainChart.options.scales.x.ticks.color = coreui.Utils.getStyle('--cui-body-color');
-    mainChart.options.scales.y.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-    mainChart.options.scales.y.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
-    mainChart.options.scales.y.ticks.color = coreui.Utils.getStyle('--cui-body-color');
+
+    mainChart.options.scales.yProducts.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+    mainChart.options.scales.yProducts.grid.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+
+    mainChart.options.scales.yStock.border.color = coreui.Utils.getStyle('--cui-border-color-translucent');
+
+    mainChart.options.plugins.legend.labels.color = coreui.Utils.getStyle('--cui-body-color');
+
     cardChart1.update();
     cardChart2.update();
     mainChart.update();
@@ -49,17 +55,16 @@
    * @param {number} max - Maximum value
    * @returns {number} Random integer between min and max
    */
-  const random = (min, max) => Math.floor(Math.random() * (max - min + 1) + min);
   const cardChart1 = new Chart(document.getElementById('card-chart1'), {
     type: 'line',
     data: {
-      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+      labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       datasets: [{
-        label: 'My First dataset',
+        label: 'Supplier stock movement',
         backgroundColor: 'transparent',
         borderColor: 'rgba(255,255,255,.55)',
         pointBackgroundColor: coreui.Utils.getStyle('--cui-primary'),
-        data: [65, 59, 84, 84, 51, 55, 40]
+        data: [0, 0, 0, 0, 0, 0, 0]
       }]
     },
     options: {
@@ -83,8 +88,6 @@
           }
         },
         y: {
-          min: 30,
-          max: 89,
           display: false,
           grid: {
             display: false
@@ -130,6 +133,9 @@
 
       const totalProducts = Number(payload?.totals?.totalProducts || 0);
       const totalStock = Number(payload?.totals?.totalStock || 0);
+      const totalSoldStock = Number(payload?.sales?.totalSoldStock || 0);
+      const totalSalesRevenue = Number(payload?.sales?.totalSalesRevenue || 0);
+      const salesCurrency = payload?.sales?.currency || 'USD';
 
       const chartLabels = Array.isArray(payload?.chart?.card1?.labels) ?
         payload.chart.card1.labels :
@@ -145,12 +151,23 @@
       const totalStockEl = document.getElementById('supplier-total-stock');
       const movementTextEl = document.getElementById('supplier-stock-movement-text');
 
+      const soldStockEl = document.getElementById('supplier-sold-stock');
+      const salesRevenueEl = document.getElementById('supplier-sales-revenue');
+
       if (totalProductsEl) {
         totalProductsEl.textContent = String(totalProducts);
       }
 
       if (totalStockEl) {
         totalStockEl.textContent = String(totalStock);
+      }
+
+      if (soldStockEl) {
+        soldStockEl.textContent = String(totalSoldStock);
+      }
+
+      if (salesRevenueEl) {
+        salesRevenueEl.textContent = `(${formatSupplierCardMoney(totalSalesRevenue, salesCurrency)} revenue)`;
       }
 
       if (movementTextEl) {
@@ -175,6 +192,29 @@
       cardChart1.options.scales.y.min = 0;
       cardChart1.options.scales.y.max = Math.ceil(maxChartValue * 1.2);
 
+      const soldChartLabels = Array.isArray(payload?.chart?.card2?.labels)
+        ? payload.chart.card2.labels
+        : [];
+
+      const soldChartData = Array.isArray(payload?.chart?.card2?.data)
+        ? payload.chart.card2.data.map((value) => Number(value || 0))
+        : [];
+
+      cardChart2.data.labels = soldChartLabels.length
+        ? soldChartLabels
+        : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      cardChart2.data.datasets[0].label = 'Sold Stock Movement';
+      cardChart2.data.datasets[0].data = soldChartData.length
+        ? soldChartData
+        : [0, 0, 0, 0, 0, 0, 0];
+
+      const maxSoldChartValue = Math.max(...cardChart2.data.datasets[0].data, 1);
+
+      cardChart2.options.scales.y.min = 0;
+      cardChart2.options.scales.y.max = Math.ceil(maxSoldChartValue * 1.2);
+
+      cardChart2.update();
       cardChart1.update();
     } catch (error) {
       console.error('❌ Failed to load supplier card 1 stats:', error);
@@ -184,13 +224,13 @@
   const cardChart2 = new Chart(document.getElementById('card-chart2'), {
     type: 'line',
     data: {
-      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+      labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       datasets: [{
-        label: 'My First dataset',
+        label: 'Sold Stock Movement',
         backgroundColor: 'transparent',
         borderColor: 'rgba(255,255,255,.55)',
         pointBackgroundColor: coreui.Utils.getStyle('--cui-info'),
-        data: [1, 18, 9, 17, 34, 22, 11]
+        data: [0, 0, 0, 0, 0, 0, 0]
       }]
     },
     options: {
@@ -214,8 +254,6 @@
           }
         },
         y: {
-          min: -9,
-          max: 39,
           display: false,
           grid: {
             display: false
@@ -227,7 +265,8 @@
       },
       elements: {
         line: {
-          borderWidth: 1
+          borderWidth: 1,
+          tension: 0.4
         },
         point: {
           radius: 4,
@@ -242,12 +281,12 @@
   const cardChart3 = new Chart(document.getElementById('card-chart3'), {
     type: 'line',
     data: {
-      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+      labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       datasets: [{
-        label: 'My First dataset',
+        label: 'Approved requested quantity',
         backgroundColor: 'rgba(255,255,255,.2)',
         borderColor: 'rgba(255,255,255,.55)',
-        data: [78, 81, 80, 45, 34, 12, 40],
+        data: [0, 0, 0, 0, 0, 0, 0],
         fill: true
       }]
     },
@@ -284,12 +323,12 @@
   const cardChart4 = new Chart(document.getElementById('card-chart4'), {
     type: 'bar',
     data: {
-      labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April'],
+      labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       datasets: [{
-        label: 'My First dataset',
+        label: 'Supplier activity',
         backgroundColor: 'rgba(255,255,255,.2)',
         borderColor: 'rgba(255,255,255,.55)',
-        data: [78, 81, 80, 45, 34, 12, 40, 85, 65, 23, 12, 98, 34, 84, 67, 82],
+        data: [0, 0, 0, 0, 0, 0, 0],
         barPercentage: 0.6
       }]
     },
@@ -328,6 +367,28 @@
   });
 
   let supplierMainChartRange = 'month';
+
+  function formatSupplierCardMoney(value, currency = 'USD') {
+    const amount = Number(value || 0);
+    const safeCurrency = String(currency || 'USD').trim().toUpperCase() || 'USD';
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: safeCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+
+      if (safeCurrency === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch {
+      return `${safeCurrency} ${amount.toFixed(2)}`;
+    }
+  }
 
   function formatSupplierCompactNumber(value) {
     const amount = Number(value || 0);
@@ -376,41 +437,51 @@
     type: 'line',
     data: {
       labels: [],
-      datasets: [{
-          label: 'Products Requested',
-          backgroundColor: `rgba(${coreui.Utils.getStyle('--cui-info-rgb')}, .1)`,
-          borderColor: coreui.Utils.getStyle('--cui-info'),
-          pointHoverBackgroundColor: '#fff',
-          borderWidth: 2,
-          data: [0],
+      datasets: [
+        {
+          label: 'Supplier Products Imported by Sellers',
+          yAxisID: 'yProducts',
+          backgroundColor: 'rgba(124, 58, 237, 0.12)',
+          borderColor: '#7C3AED',
+          pointBackgroundColor: '#7C3AED',
+          pointBorderColor: '#ffffff',
+          pointHoverBackgroundColor: '#ffffff',
+          pointHoverBorderColor: '#7C3AED',
+          borderWidth: 3,
+          tension: 0.35,
           fill: true,
+          data: [0]
         },
         {
-          label: 'Imported Seller Stock',
-          borderColor: coreui.Utils.getStyle('--cui-success'),
-          pointHoverBackgroundColor: '#fff',
+          label: 'Total Stock Imported by Sellers',
+          yAxisID: 'yStock',
+          backgroundColor: 'transparent',
+          borderColor: '#22C55E',
+          pointBackgroundColor: '#22C55E',
+          pointBorderColor: '#ffffff',
+          pointHoverBackgroundColor: '#ffffff',
+          pointHoverBorderColor: '#22C55E',
           borderWidth: 2,
-          data: [0],
-        },
-      ],
+          tension: 0.35,
+          fill: false,
+          data: [0]
+        }
+      ]
     },
     options: {
       maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: 'index'
+      },
       plugins: {
-        annotation: {
-          annotations: {
-            line1: {
-              type: 'line',
-              yMin: 95,
-              yMax: 95,
-              borderColor: coreui.Utils.getStyle('--cui-danger'),
-              borderWidth: 1,
-              borderDash: [8, 5],
-            },
-          },
-        },
         legend: {
-          display: false,
+          display: true,
+          labels: {
+            color: coreui.Utils.getStyle('--cui-body-color'),
+            usePointStyle: true,
+            boxWidth: 10
+          }
         },
         tooltip: {
           callbacks: {
@@ -419,51 +490,71 @@
               const rawValue = Number(context.raw || 0);
 
               return `${datasetLabel}: ${new Intl.NumberFormat('en-ZA').format(rawValue)}`;
-            },
-          },
-        },
+            }
+          }
+        }
       },
       scales: {
         x: {
           grid: {
             color: coreui.Utils.getStyle('--cui-border-color-translucent'),
-            drawOnChartArea: false,
+            drawOnChartArea: false
           },
           ticks: {
-            color: coreui.Utils.getStyle('--cui-body-color'),
-          },
+            color: coreui.Utils.getStyle('--cui-body-color')
+          }
         },
-        y: {
+        yProducts: {
+          type: 'linear',
+          position: 'left',
+          beginAtZero: true,
+          min: 0,
           border: {
-            color: coreui.Utils.getStyle('--cui-border-color-translucent'),
+            color: coreui.Utils.getStyle('--cui-border-color-translucent')
           },
           grid: {
-            color: coreui.Utils.getStyle('--cui-border-color-translucent'),
+            color: coreui.Utils.getStyle('--cui-border-color-translucent')
           },
           ticks: {
-            beginAtZero: true,
-            color: coreui.Utils.getStyle('--cui-body-color'),
-            max: 250,
-            maxTicksLimit: 5,
-            stepSize: Math.ceil(250 / 5),
+            color: '#7C3AED',
+            maxTicksLimit: 6,
             callback(value) {
               return formatSupplierCompactNumber(value);
-            },
-          },
+            }
+          }
         },
+        yStock: {
+          type: 'linear',
+          position: 'right',
+          beginAtZero: true,
+          min: 0,
+          border: {
+            color: coreui.Utils.getStyle('--cui-border-color-translucent')
+          },
+          grid: {
+            drawOnChartArea: false
+          },
+          ticks: {
+            color: '#22C55E',
+            maxTicksLimit: 6,
+            callback(value) {
+              return formatSupplierCompactNumber(value);
+            }
+          }
+        }
       },
       elements: {
         line: {
-          tension: 0.4,
+          tension: 0.35
         },
         point: {
-          radius: 0,
+          radius: 3,
           hitRadius: 10,
-          hoverRadius: 4,
-          hoverBorderWidth: 3,
-        },
-      },
-    },
+          hoverRadius: 5,
+          hoverBorderWidth: 2
+        }
+      }
+    }
   });
 
   async function loadSupplierMainChart(range = supplierMainChartRange) {
@@ -471,12 +562,13 @@
       supplierMainChartRange = range;
 
       const response = await fetch(
-        `/business/api/supplier/trend-overview?range=${encodeURIComponent(range)}`, {
+        `/business/api/supplier/trend-overview?range=${encodeURIComponent(range)}`,
+        {
           method: 'GET',
           credentials: 'same-origin',
           headers: {
-            Accept: 'application/json',
-          },
+            Accept: 'application/json'
+          }
         }
       );
 
@@ -490,14 +582,17 @@
         throw new Error(payload.message || 'Failed to load supplier trend overview');
       }
 
-      const labels = Array.isArray(payload?.chart?.labels) ?
-        payload.chart.labels : [];
+      const labels = Array.isArray(payload?.chart?.labels)
+        ? payload.chart.labels
+        : [];
 
-      const requestedData = Array.isArray(payload?.chart?.requested) ?
-        payload.chart.requested.map((value) => Number(value || 0)) : [];
+      const importedProductsData = Array.isArray(payload?.chart?.importedProducts)
+        ? payload.chart.importedProducts.map((value) => Number(value || 0))
+        : [];
 
-      const importedStockData = Array.isArray(payload?.chart?.importedStock) ?
-        payload.chart.importedStock.map((value) => Number(value || 0)) : [];
+      const importedStockData = Array.isArray(payload?.chart?.importedStock)
+        ? payload.chart.importedStock.map((value) => Number(value || 0))
+        : [];
 
       const rangeEl = document.getElementById('supplier-main-chart-range');
       if (rangeEl) {
@@ -505,20 +600,17 @@
       }
 
       mainChart.data.labels = labels.length ? labels : ['No data'];
-      mainChart.data.datasets[0].data = requestedData.length ? requestedData : [0];
+      mainChart.data.datasets[0].data = importedProductsData.length ? importedProductsData : [0];
       mainChart.data.datasets[1].data = importedStockData.length ? importedStockData : [0];
 
-      const allValues = requestedData.concat(importedStockData);
-      const maxChartValue = Math.max(...(allValues.length ? allValues : [0]), 1);
-      const safeMax = Math.ceil(maxChartValue * 1.15);
+      const maxProductsValue = Math.max(...(importedProductsData.length ? importedProductsData : [0]), 0);
+      const maxStockValue = Math.max(...(importedStockData.length ? importedStockData : [0]), 0);
 
-      mainChart.options.scales.y.max = safeMax;
-      mainChart.options.scales.y.ticks.stepSize = Math.max(1, Math.ceil(safeMax / 5));
+      mainChart.options.scales.yProducts.min = 0;
+      mainChart.options.scales.yProducts.max = Math.ceil(Math.max(maxProductsValue, 1) * 1.15);
 
-      if (mainChart.options.plugins?.annotation?.annotations?.line1) {
-        mainChart.options.plugins.annotation.annotations.line1.yMin = Math.min(95, safeMax);
-        mainChart.options.plugins.annotation.annotations.line1.yMax = Math.min(95, safeMax);
-      }
+      mainChart.options.scales.yStock.min = 0;
+      mainChart.options.scales.yStock.max = Math.ceil(Math.max(maxStockValue, 1) * 1.15);
 
       mainChart.update();
       updateSupplierMainChartRangeButtons(range);
@@ -527,6 +619,7 @@
     }
   }
 
+  loadSupplierCard1Stats();
   loadSupplierMainChart('month');
 
   const refreshSupplierMainChartBtn = document.getElementById('refresh-supplier-main-chart');

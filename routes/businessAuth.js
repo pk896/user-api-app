@@ -277,11 +277,11 @@ async function buildSupplierMainChartData(supplierId) {
   const [firstYear, firstMonth] = firstKey.split('-');
   const fromDate = new Date(Number(firstYear), Number(firstMonth) - 1, 1);
 
-  // ✅ Line 1: quantity sellers requested from this supplier
-  const requestedAgg = await SupplyRequest.aggregate([
+  const importedRows = await SupplyRequest.aggregate([
     {
       $match: {
         supplier: supplierObjectId,
+        status: 'approved',
         createdAt: { $gte: fromDate },
       },
     },
@@ -291,48 +291,33 @@ async function buildSupplierMainChartData(supplierId) {
           year: { $year: '$createdAt' },
           month: { $month: '$createdAt' },
         },
-        requestedQty: { $sum: '$requestedQuantity' },
+
+        // Line 1: how many supplier product imports/approved requests happened
+        importedProducts: { $sum: 1 },
+
+        // Line 2: total supplier stock quantity imported/requested by sellers
+        importedStock: { $sum: '$requestedQuantity' },
       },
     },
   ]);
 
-  // ✅ Line 2: stock imported by sellers from this supplier
-  // Uses Product because imported wholesale products become normal seller Products.
-  const importedAgg = await Product.aggregate([
-    {
-      $match: {
-        sourceType: 'wholesale_import',
-        sourceSupplier: supplierObjectId,
-        importedAt: { $gte: fromDate },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          year: { $year: '$importedAt' },
-          month: { $month: '$importedAt' },
-        },
-        importedStock: { $sum: '$stock' },
-      },
-    },
-  ]);
+  const importedProductsMap = new Map();
+  const importedStockMap = new Map();
 
-  const requestedMap = new Map();
-  requestedAgg.forEach((row) => {
+  importedRows.forEach((row) => {
     const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}`;
-    requestedMap.set(key, Number(row.requestedQty || 0));
-  });
 
-  const importedMap = new Map();
-  importedAgg.forEach((row) => {
-    const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}`;
-    importedMap.set(key, Number(row.importedStock || 0));
+    importedProductsMap.set(key, Number(row.importedProducts || 0));
+    importedStockMap.set(key, Number(row.importedStock || 0));
   });
 
   return {
     labels: keys.map(monthLabelFromKey),
-    requestedQty: keys.map((key) => requestedMap.get(key) || 0),
-    importedStock: keys.map((key) => importedMap.get(key) || 0),
+    importedProducts: keys.map((key) => importedProductsMap.get(key) || 0),
+    importedStock: keys.map((key) => importedStockMap.get(key) || 0),
+
+    // keep old names safe for the existing footer if it still reads them
+    requestedQty: keys.map((key) => importedProductsMap.get(key) || 0),
   };
 }
 
@@ -548,6 +533,172 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
     supplierLowStockProducts,
     supplierOutOfStockProducts,
     supplierFastestGrowingProducts,
+  };
+}
+
+function getSupplierSoldCardOrderItemKey(item) {
+  return String(item?.productId || item?.customId || item?.pid || item?.sku || '').trim();
+}
+
+function getSupplierSoldCardOrderItemQty(item) {
+  const qty = Number(item?.quantity || item?.qty || 0);
+  return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
+function getSupplierSoldCardMoneyValue(value) {
+  if (value === null || value === undefined || value === '') return 0;
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === 'object') {
+    return getSupplierSoldCardMoneyValue(value.value ?? value.amount ?? value.price ?? 0);
+  }
+
+  const n = Number(String(value).trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getSupplierSoldCardUnitPrice(item) {
+  return getSupplierSoldCardMoneyValue(
+    item?.priceGross?.value ?? item?.price?.value ?? item?.price ?? item?.unitPrice ?? 0,
+  );
+}
+
+async function buildSupplierSoldCardData(supplierId) {
+  const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
+
+  const importedSellerProducts = await Product.find({
+    sourceType: 'wholesale_import',
+    sourceSupplier: supplierObjectId,
+  })
+    .select('_id customId name price sourceSupplier sourceSupplierProduct sourceSupplyRequest')
+    .lean();
+
+  const importedProductKeys = [
+    ...new Set(
+      importedSellerProducts
+        .flatMap((product) => [String(product._id || '').trim(), String(product.customId || '').trim()])
+        .filter(Boolean),
+    ),
+  ];
+
+  const productByKey = new Map();
+
+  importedSellerProducts.forEach((product) => {
+    const idKey = String(product._id || '').trim();
+    const customKey = String(product.customId || '').trim();
+
+    if (idKey) productByKey.set(idKey, product);
+    if (customKey) productByKey.set(customKey, product);
+  });
+
+  const emptyLabels = [];
+  const emptyData = [];
+
+  const soldStart = new Date();
+  soldStart.setDate(soldStart.getDate() - 6);
+  soldStart.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(soldStart);
+    d.setDate(soldStart.getDate() + i);
+
+    emptyLabels.push(
+      d.toLocaleDateString(undefined, {
+        weekday: 'short',
+      }),
+    );
+
+    emptyData.push(0);
+  }
+
+  if (!importedProductKeys.length) {
+    return {
+      totalSoldStock: 0,
+      totalSalesRevenue: 0,
+      chart: {
+        labels: emptyLabels,
+        data: emptyData,
+      },
+    };
+  }
+
+  const orderItemMatch = [
+    { 'items.productId': { $in: importedProductKeys } },
+    { 'items.customId': { $in: importedProductKeys } },
+    { 'items.pid': { $in: importedProductKeys } },
+    { 'items.sku': { $in: importedProductKeys } },
+  ];
+
+  const paidOrderMatch = buildNonRefundedPaidMatch(Order, {
+    $or: orderItemMatch,
+  });
+
+  const paidOrders = await Order.find(paidOrderMatch)
+    .select('items createdAt status paymentStatus refundStatus isRefunded refundedAt')
+    .lean();
+
+  let totalSoldStock = 0;
+  let totalSalesRevenue = 0;
+
+  const soldMovementMap = new Map();
+
+  paidOrders.forEach((order) => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    const orderDate = order.createdAt ? new Date(order.createdAt) : null;
+    const orderDayKey =
+      orderDate && orderDate >= soldStart ? orderDate.toISOString().slice(0, 10) : '';
+
+    items.forEach((item) => {
+      if (item?.isRefunded === true) return;
+      if (String(item?.refundStatus || '').toUpperCase().includes('REFUND')) return;
+
+      const itemKey = getSupplierSoldCardOrderItemKey(item);
+      if (!itemKey || !productByKey.has(itemKey)) return;
+
+      const qty = getSupplierSoldCardOrderItemQty(item);
+      if (qty <= 0) return;
+
+      const importedProduct = productByKey.get(itemKey) || {};
+      const unitPrice =
+        getSupplierSoldCardUnitPrice(item) || Number(importedProduct.price || 0) || 0;
+
+      totalSoldStock += qty;
+      totalSalesRevenue += unitPrice * qty;
+
+      if (orderDayKey) {
+        soldMovementMap.set(orderDayKey, (soldMovementMap.get(orderDayKey) || 0) + qty);
+      }
+    });
+  });
+
+  const labels = [];
+  const data = [];
+
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(soldStart);
+    d.setDate(soldStart.getDate() + i);
+
+    const key = d.toISOString().slice(0, 10);
+
+    labels.push(
+      d.toLocaleDateString(undefined, {
+        weekday: 'short',
+      }),
+    );
+
+    data.push(soldMovementMap.get(key) || 0);
+  }
+
+  return {
+    totalSoldStock,
+    totalSalesRevenue: Number(totalSalesRevenue.toFixed(2)),
+    chart: {
+      labels,
+      data,
+    },
   };
 }
 
@@ -2278,6 +2429,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
 
     // ✅ Supplier KPI API must also use SupplierProduct + SupplyRequest only.
     const supplierDashboardData = await computeSupplierWholesaleDashboardData(business._id);
+    const supplierSoldCardData = await buildSupplierSoldCardData(business._id);
     const supplierObjectId = new mongoose.Types.ObjectId(String(business._id));
 
     const stockStart = new Date();
@@ -2339,6 +2491,16 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
           labels: stockChartLabels,
           data: stockChartData,
         },
+        card2: {
+          labels: supplierSoldCardData.chart.labels,
+          data: supplierSoldCardData.chart.data,
+        },
+      },
+
+      sales: {
+        totalSoldStock: supplierSoldCardData.totalSoldStock,
+        totalSalesRevenue: supplierSoldCardData.totalSalesRevenue,
+        currency: BASE_CURRENCY,
       },
 
       supplierTopSellingProducts: supplierDashboardData.supplierTopSellingProducts || [],
@@ -2472,45 +2634,24 @@ function buildSupplierTrendBuckets(range) {
   };
 }
 
-async function buildSupplierTrendOverview(supplierId, rangeInput = 'month') {
+async function buildSupplierTrendOverview(supplierId, range = 'month') {
   const supplierObjectId = new mongoose.Types.ObjectId(String(supplierId));
-  const trend = buildSupplierTrendBuckets(rangeInput);
+  const trend = buildSupplierTrendBuckets(range);
+
   const groupFormat = trend.range === 'year' ? '%Y-%m' : '%Y-%m-%d';
 
-  // Line 1: requested supply quantity from sellers
-  const requestRows = await SupplyRequest.aggregate([
-    {
-      $match: {
-        supplier: supplierObjectId,
-        createdAt: { $gte: trend.fromDate },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          $dateToString: {
-            format: groupFormat,
-            date: '$createdAt',
-          },
-        },
-        requestedQty: { $sum: '$requestedQuantity' },
-      },
-    },
-  ]);
-
-  // Line 2: seller-side imported stock linked to this supplier
-  const importedRows = await Product.aggregate([
+  const importedRows = await SupplyRequest.aggregate([
     {
       $addFields: {
         supplierChartDate: {
-          $ifNull: ['$importedAt', '$createdAt'],
+          $ifNull: ['$approvedAt', '$createdAt'],
         },
       },
     },
     {
       $match: {
-        sourceType: 'wholesale_import',
-        sourceSupplier: supplierObjectId,
+        supplier: supplierObjectId,
+        status: 'approved',
         supplierChartDate: { $gte: trend.fromDate },
       },
     },
@@ -2522,16 +2663,21 @@ async function buildSupplierTrendOverview(supplierId, rangeInput = 'month') {
             date: '$supplierChartDate',
           },
         },
-        importedStock: { $sum: '$stock' },
+
+        // Purple line: how many supplier product imports were approved
+        importedProducts: { $sum: 1 },
+
+        // Green line: total stock quantity imported/requested by sellers
+        importedStock: { $sum: '$requestedQuantity' },
       },
     },
   ]);
 
-  const requestMap = new Map(
-    requestRows.map((row) => [String(row._id), Number(row.requestedQty || 0)])
+  const importedProductsMap = new Map(
+    importedRows.map((row) => [String(row._id), Number(row.importedProducts || 0)])
   );
 
-  const importedMap = new Map(
+  const importedStockMap = new Map(
     importedRows.map((row) => [String(row._id), Number(row.importedStock || 0)])
   );
 
@@ -2540,8 +2686,15 @@ async function buildSupplierTrendOverview(supplierId, rangeInput = 'month') {
     rangeLabel: trend.rangeLabel,
     chart: {
       labels: trend.buckets.map((key) => supplierDateLabel(key, trend.range)),
-      requested: trend.buckets.map((key) => requestMap.get(key) || 0),
-      importedStock: trend.buckets.map((key) => importedMap.get(key) || 0),
+
+      // This is what supplier-charts.ejs reads for the purple line
+      importedProducts: trend.buckets.map((key) => importedProductsMap.get(key) || 0),
+
+      // This is what supplier-charts.ejs reads for the green line
+      importedStock: trend.buckets.map((key) => importedStockMap.get(key) || 0),
+
+      // Safe old key, in case another old section still reads it
+      requested: trend.buckets.map((key) => importedProductsMap.get(key) || 0),
     },
   };
 }
