@@ -225,7 +225,7 @@ function pickField(body, dottedPath, fallback = '') {
 }
 
 const LOW_STOCK_THRESHOLD = 10;
-const SUPPLIER_LOW_STOCK_THRESHOLD = 10;
+const SUPPLIER_LOW_STOCK_THRESHOLD = 15;
 
 function startOfDaysAgo(days) {
   const d = new Date();
@@ -279,6 +279,17 @@ async function buildSupplierMainChartData(supplierId) {
   const [firstYear, firstMonth] = firstKey.split('-');
   const fromDate = new Date(Number(firstYear), Number(firstMonth) - 1, 1);
 
+  const now = new Date();
+
+  const last30Start = new Date(now);
+  last30Start.setDate(last30Start.getDate() - 29);
+  last30Start.setHours(0, 0, 0, 0);
+
+  const current7Start = startOfDaysAgo(7);
+  const previous14Start = startOfDaysAgo(14);
+
+  // ✅ Main chart data: keep the existing 7-month chart flow.
+  // This avoids disturbing the chart that is already working.
   const importedRows = await SupplyRequest.aggregate([
     {
       $match: {
@@ -294,10 +305,10 @@ async function buildSupplierMainChartData(supplierId) {
           month: { $month: '$createdAt' },
         },
 
-        // Line 1: how many supplier product imports/approved requests happened
+        // Purple line: approved imported products/requests
         importedProducts: { $sum: 1 },
 
-        // Line 2: total supplier stock quantity imported/requested by sellers
+        // Green line: approved imported seller stock/requested qty
         importedStock: { $sum: '$requestedQuantity' },
       },
     },
@@ -313,13 +324,127 @@ async function buildSupplierMainChartData(supplierId) {
     importedStockMap.set(key, Number(row.importedStock || 0));
   });
 
+  // ✅ Summary 1:
+  // Total requested quantity in the last 30 days.
+  // We exclude cancelled requests because they are no longer active business demand.
+  const requestedLast30Rows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+        status: { $ne: 'cancelled' },
+        createdAt: { $gte: last30Start },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalRequestedQty: { $sum: '$requestedQuantity' },
+      },
+    },
+  ]);
+
+  const requestedQtyLast30 = Number(requestedLast30Rows[0]?.totalRequestedQty || 0);
+
+  // ✅ Summary 2 + 3:
+  // Imported seller products and their current seller stock in the last 30 days.
+  // This uses Product records imported from wholesale.
+  const importedLast30Rows = await Product.aggregate([
+    {
+      $match: {
+        sourceType: 'wholesale_import',
+        sourceSupplier: supplierObjectId,
+        $expr: {
+          $gte: [{ $ifNull: ['$importedAt', '$createdAt'] }, last30Start],
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        importedProductsLast30: { $sum: 1 },
+        importedSellerStockLast30: { $sum: { $ifNull: ['$stock', 0] } },
+      },
+    },
+  ]);
+
+  const importedProductsLast30 = Number(importedLast30Rows[0]?.importedProductsLast30 || 0);
+  const importedSellerStockLast30 = Number(importedLast30Rows[0]?.importedSellerStockLast30 || 0);
+
+  // ✅ Summary 4:
+  // Business growth = current 7 days imported seller stock vs previous 7 days imported seller stock.
+  // If previous week was 0 and current week has stock, we show 100% growth.
+  const growthRows = await Product.aggregate([
+    {
+      $match: {
+        sourceType: 'wholesale_import',
+        sourceSupplier: supplierObjectId,
+        $expr: {
+          $gte: [{ $ifNull: ['$importedAt', '$createdAt'] }, previous14Start],
+        },
+      },
+    },
+    {
+      $project: {
+        stock: { $ifNull: ['$stock', 0] },
+        importedDate: { $ifNull: ['$importedAt', '$createdAt'] },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        current7Stock: {
+          $sum: {
+            $cond: [{ $gte: ['$importedDate', current7Start] }, '$stock', 0],
+          },
+        },
+        previous7Stock: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $gte: ['$importedDate', previous14Start] },
+                  { $lt: ['$importedDate', current7Start] },
+                ],
+              },
+              '$stock',
+              0,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  const current7Stock = Number(growthRows[0]?.current7Stock || 0);
+  const previous7Stock = Number(growthRows[0]?.previous7Stock || 0);
+
+  let businessGrowthPercent = 0;
+
+  if (previous7Stock > 0) {
+    businessGrowthPercent = ((current7Stock - previous7Stock) / previous7Stock) * 100;
+  } else if (previous7Stock === 0 && current7Stock > 0) {
+    businessGrowthPercent = 100;
+  }
+
+  businessGrowthPercent = Number(businessGrowthPercent.toFixed(1));
+
   return {
     labels: keys.map(monthLabelFromKey),
     importedProducts: keys.map((key) => importedProductsMap.get(key) || 0),
     importedStock: keys.map((key) => importedStockMap.get(key) || 0),
 
-    // keep old names safe for the existing footer if it still reads them
+    // Keep old name safe because the chart/footer may still read it.
     requestedQty: keys.map((key) => importedProductsMap.get(key) || 0),
+
+    // ✅ New real 30-day footer summary.
+    summary: {
+      requestedQtyLast30,
+      importedSellerStockLast30,
+      importedProductsLast30,
+      businessGrowthPercent,
+      current7Stock,
+      previous7Stock,
+    },
   };
 }
 
@@ -335,10 +460,27 @@ function normalizeSupplierProductForCard(product, extra = {}) {
     unit: product?.unit || 'units',
     status: product?.status || 'active',
 
-    // Request/sales-style numbers from SupplyRequest
+    // ✅ Generic qty field used by existing EJS cards
     qty: Number(extra.qty || 0),
-    previousQty: Number(extra.previousQty || 0),
-    growth: Number(extra.growth || 0),
+
+    // ✅ Real selling fields for the Top Selling card
+    soldQty: Number(extra.soldQty || extra.qty || 0),
+    soldRevenue: Number(extra.soldRevenue || 0),
+    soldOrders: Number(extra.soldOrders || 0),
+    sellerProductCount: Number(extra.sellerProductCount || 0),
+
+    // ✅ Growth fields for Fastest Growing card
+    currentWeeklySold: Number(extra.currentWeeklySold || 0),
+    previousWeeklySold: Number(extra.previousWeeklySold || 0),
+    weeklyGrowthPercent: Number(extra.weeklyGrowthPercent || 0),
+
+    currentMonthlySold: Number(extra.currentMonthlySold || 0),
+    previousMonthlySold: Number(extra.previousMonthlySold || 0),
+    monthlyGrowthPercent: Number(extra.monthlyGrowthPercent || 0),
+
+    // Keep old names safe for older EJS code
+    previousQty: Number(extra.previousQty || extra.previousWeeklySold || 0),
+    growth: Number(extra.growth || extra.currentWeeklySold || 0),
   };
 }
 
@@ -365,14 +507,31 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
     return (Number(p.availableQuantity) || 0) > 0;
   }).length;
 
-  const lowStock = activeProducts.filter((p) => {
-    const qty = Number(p.availableQuantity) || 0;
-    return qty > 0 && qty <= SUPPLIER_LOW_STOCK_THRESHOLD;
-  }).length;
+  const lowStockProductsRaw = activeProducts
+    .filter((p) => {
+      const qty = Number(p.availableQuantity) || 0;
+      return qty > 0 && qty <= SUPPLIER_LOW_STOCK_THRESHOLD;
+    })
+    .sort((a, b) => {
+      const qtyA = Number(a.availableQuantity || 0);
+      const qtyB = Number(b.availableQuantity || 0);
 
-  const outOfStock = activeProducts.filter((p) => {
-    return (Number(p.availableQuantity) || 0) <= 0;
-  }).length;
+      if (qtyA !== qtyB) return qtyA - qtyB;
+
+      return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    });
+
+  const lowStock = lowStockProductsRaw.length;
+
+  const outOfStockProductsRaw = activeProducts
+    .filter((p) => {
+      return (Number(p.availableQuantity) || 0) <= 0;
+    })
+    .sort((a, b) => {
+      return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    });
+
+  const outOfStock = outOfStockProductsRaw.length;
 
   const inventoryValue = activeProducts.reduce((sum, p) => {
     const price = Number(p.wholesalePrice) || 0;
@@ -380,44 +539,149 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
     return sum + price * qty;
   }, 0);
 
-  // ✅ Low stock products from SupplierProduct.availableQuantity
-  const supplierLowStockProducts = activeProducts
-    .filter((p) => {
-      const qty = Number(p.availableQuantity) || 0;
-      return qty > 0 && qty <= SUPPLIER_LOW_STOCK_THRESHOLD;
-    })
-    .sort((a, b) => Number(a.availableQuantity || 0) - Number(b.availableQuantity || 0))
-    .slice(0, 4)
-    .map((p) => normalizeSupplierProductForCard(p));
+  // ✅ Low stock products from SupplierProduct.availableQuantity.
+  // ✅ Shows the lowest 10 products, ordered by smallest available stock first.
+  const supplierLowStockProducts = lowStockProductsRaw.slice(0, 10).map((p) =>
+    normalizeSupplierProductForCard(p, {
+      qty: Number(p.availableQuantity || 0),
+    }),
+  );
 
-  // ✅ Out of stock products from SupplierProduct.availableQuantity
-  const supplierOutOfStockProducts = activeProducts
-    .filter((p) => (Number(p.availableQuantity) || 0) <= 0)
-    .sort((a, b) => {
-      return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
-    })
-    .slice(0, 4)
-    .map((p) => normalizeSupplierProductForCard(p));
+  // ✅ Out of stock products from SupplierProduct.availableQuantity.
+  // ✅ Shows the latest 10 products with 0 stock.
+  const supplierOutOfStockProducts = outOfStockProductsRaw.slice(0, 10).map((p) =>
+    normalizeSupplierProductForCard(p, {
+      qty: 0,
+    }),
+  );
 
-  // ✅ Top selling = approved supply requests grouped by supplierProduct
-  const approvedRequestRows = await SupplyRequest.aggregate([
-    {
-      $match: {
-        supplier: supplierObjectId,
-        status: 'approved',
-      },
-    },
-    {
-      $group: {
-        _id: '$supplierProduct',
-        qty: { $sum: '$requestedQuantity' },
-      },
-    },
-    { $sort: { qty: -1 } },
-    { $limit: 4 },
-  ]);
+  // ✅ Top selling = REAL SOLD STOCK from seller products imported from this supplier.
+  // Do NOT use SupplyRequest.requestedQuantity here.
+  // Flow:
+  // 1. Find seller Product docs imported from this supplier.
+  // 2. Match paid orders containing those imported seller products.
+  // 3. Sum sold item quantities back to the original SupplierProduct.
+  const importedSellerProducts = await Product.find({
+    sourceType: 'wholesale_import',
+    sourceSupplier: supplierObjectId,
+    sourceSupplierProduct: { $ne: null },
+  })
+    .select(
+      '_id customId name imageUrl category price stock soldCount soldOrders business sourceSupplierProduct',
+    )
+    .lean();
 
-  const topProductIds = approvedRequestRows.map((row) => row._id).filter(Boolean);
+  const importedProductKeys = [
+    ...new Set(
+      importedSellerProducts
+        .flatMap((product) => [
+          String(product._id || '').trim(),
+          String(product.customId || '').trim(),
+        ])
+        .filter(Boolean),
+    ),
+  ];
+
+  const importedProductByKey = new Map();
+
+  importedSellerProducts.forEach((product) => {
+    const idKey = String(product._id || '').trim();
+    const customKey = String(product.customId || '').trim();
+
+    if (idKey) importedProductByKey.set(idKey, product);
+    if (customKey) importedProductByKey.set(customKey, product);
+  });
+
+  const topSellingBySupplierProductId = new Map();
+
+  if (importedProductKeys.length) {
+    const orderItemMatch = [
+      { 'items.productId': { $in: importedProductKeys } },
+      { 'items.customId': { $in: importedProductKeys } },
+      { 'items.pid': { $in: importedProductKeys } },
+      { 'items.sku': { $in: importedProductKeys } },
+    ];
+
+    const paidOrderMatch = buildNonRefundedPaidMatch(Order, {
+      $or: orderItemMatch,
+    });
+
+    const paidOrders = await Order.find(paidOrderMatch)
+      .select('items createdAt status paymentStatus refundStatus isRefunded refundedAt')
+      .lean();
+
+    paidOrders.forEach((order) => {
+      if (isSupplierRefundedOrder(order)) return;
+
+      const items = Array.isArray(order.items) ? order.items : [];
+
+      items.forEach((item) => {
+        if (item?.isRefunded === true) return;
+        if (
+          String(item?.refundStatus || '')
+            .toUpperCase()
+            .includes('REFUND')
+        )
+          return;
+
+        const itemKey = String(
+          item?.productId || item?.customId || item?.pid || item?.sku || '',
+        ).trim();
+
+        if (!itemKey || !importedProductByKey.has(itemKey)) return;
+
+        const importedProduct = importedProductByKey.get(itemKey);
+        const supplierProductId = String(importedProduct?.sourceSupplierProduct || '').trim();
+
+        if (!supplierProductId) return;
+
+        const qty = Number(item?.quantity || item?.qty || 0);
+        if (!Number.isFinite(qty) || qty <= 0) return;
+
+        const unitPrice = getSupplierSoldCardUnitPrice(item) || Number(importedProduct.price || 0);
+        const lineRevenue = unitPrice * qty;
+
+        if (!topSellingBySupplierProductId.has(supplierProductId)) {
+          topSellingBySupplierProductId.set(supplierProductId, {
+            supplierProductId,
+            soldQty: 0,
+            soldRevenue: 0,
+            soldOrders: 0,
+            sellerProductIds: new Set(),
+            orderIds: new Set(),
+          });
+        }
+
+        const row = topSellingBySupplierProductId.get(supplierProductId);
+
+        row.soldQty += qty;
+        row.soldRevenue += lineRevenue;
+
+        const importedProductId = String(importedProduct._id || '').trim();
+        if (importedProductId) row.sellerProductIds.add(importedProductId);
+
+        const orderId = String(order._id || order.orderId || '').trim();
+        if (orderId) row.orderIds.add(orderId);
+      });
+    });
+  }
+
+  const topSellingStats = Array.from(topSellingBySupplierProductId.values())
+    .map((row) => ({
+      supplierProductId: row.supplierProductId,
+      soldQty: Number(row.soldQty || 0),
+      soldRevenue: Number(Number(row.soldRevenue || 0).toFixed(2)),
+      soldOrders: row.orderIds.size,
+      sellerProductCount: row.sellerProductIds.size,
+    }))
+    .filter((row) => row.soldQty > 0)
+    .sort((a, b) => b.soldQty - a.soldQty || b.soldRevenue - a.soldRevenue)
+    .slice(0, 10);
+
+  const topProductIds = topSellingStats
+    .map((row) => row.supplierProductId)
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const topProductDocs = topProductIds.length
     ? await SupplierProduct.find({
@@ -430,93 +694,455 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
 
   const topProductsById = new Map(topProductDocs.map((product) => [String(product._id), product]));
 
-  const supplierTopSellingProducts = approvedRequestRows
+  const supplierTopSellingProducts = topSellingStats
     .map((row) => {
-      const product = topProductsById.get(String(row._id));
+      const product = topProductsById.get(String(row.supplierProductId));
       if (!product) return null;
 
       return normalizeSupplierProductForCard(product, {
-        qty: row.qty,
+        qty: row.soldQty,
+        soldQty: row.soldQty,
+        soldRevenue: row.soldRevenue,
+        soldOrders: row.soldOrders,
+        sellerProductCount: row.sellerProductCount,
       });
     })
     .filter(Boolean);
 
-  // ✅ Fastest growing = approved requests this 7 days vs previous 7 days
-  const last7Start = startOfDaysAgo(7);
-  const previous14Start = startOfDaysAgo(14);
+  // ✅ Fastest growing = REAL SOLD STOCK from imported seller products.
+  // Do NOT use SupplyRequest.requestedQuantity here.
+  // Weekly Growth = current 7 days sold stock vs previous 7 days sold stock.
+  // Monthly Growth = current 30 days sold stock vs previous 30 days sold stock.
+  const current7Start = startOfDaysAgo(7);
+  const previous7Start = startOfDaysAgo(14);
 
-  const currentGrowthRows = await SupplyRequest.aggregate([
-    {
-      $match: {
-        supplier: supplierObjectId,
-        status: 'approved',
-        createdAt: { $gte: last7Start },
-      },
-    },
-    {
-      $group: {
-        _id: '$supplierProduct',
-        qty: { $sum: '$requestedQuantity' },
-      },
-    },
-  ]);
+  const current30Start = startOfDaysAgo(30);
+  const previous30Start = startOfDaysAgo(60);
 
-  const previousGrowthRows = await SupplyRequest.aggregate([
-    {
-      $match: {
-        supplier: supplierObjectId,
-        status: 'approved',
-        createdAt: {
-          $gte: previous14Start,
-          $lt: last7Start,
-        },
-      },
-    },
-    {
-      $group: {
-        _id: '$supplierProduct',
-        qty: { $sum: '$requestedQuantity' },
-      },
-    },
-  ]);
+  const calculateSoldGrowthPercent = (currentQty, previousQty) => {
+    const current = Number(currentQty || 0);
+    const previous = Number(previousQty || 0);
 
-  const previousByProductId = new Map(
-    previousGrowthRows.map((row) => [String(row._id), Number(row.qty || 0)]),
+    if (previous > 0) {
+      return Number((((current - previous) / previous) * 100).toFixed(1));
+    }
+
+    if (previous === 0 && current > 0) {
+      return 100;
+    }
+
+    return 0;
+  };
+
+  const supplierProductsById = new Map(
+    activeProducts.map((product) => [String(product._id), product]),
   );
 
-  const growthProductIds = currentGrowthRows.map((row) => row._id).filter(Boolean);
+  const fastestGrowingBySupplierProductId = new Map();
 
-  const growthProductDocs = growthProductIds.length
-    ? await SupplierProduct.find({
-        _id: { $in: growthProductIds },
-        supplier: supplierObjectId,
-      })
-        .select('_id customId name imageUrl category wholesalePrice availableQuantity unit status')
-        .lean()
-    : [];
+  if (importedProductKeys.length) {
+    const orderItemMatch = [
+      { 'items.productId': { $in: importedProductKeys } },
+      { 'items.customId': { $in: importedProductKeys } },
+      { 'items.pid': { $in: importedProductKeys } },
+      { 'items.sku': { $in: importedProductKeys } },
+    ];
 
-  const growthProductsById = new Map(
-    growthProductDocs.map((product) => [String(product._id), product]),
-  );
+    const paidOrderMatch = buildNonRefundedPaidMatch(Order, {
+      createdAt: { $gte: previous30Start },
+      $or: orderItemMatch,
+    });
 
-  const supplierFastestGrowingProducts = currentGrowthRows
+    const paidOrdersForGrowth = await Order.find(paidOrderMatch)
+      .select('items createdAt status paymentStatus refundStatus isRefunded refundedAt')
+      .lean();
+
+    paidOrdersForGrowth.forEach((order) => {
+      if (isSupplierRefundedOrder(order)) return;
+
+      const orderDate = order?.createdAt ? new Date(order.createdAt) : null;
+      if (!orderDate || Number.isNaN(orderDate.getTime())) return;
+
+      const items = Array.isArray(order.items) ? order.items : [];
+
+      items.forEach((item) => {
+        if (item?.isRefunded === true) return;
+        if (
+          String(item?.refundStatus || '')
+            .toUpperCase()
+            .includes('REFUND')
+        )
+          return;
+
+        const itemKey = String(
+          item?.productId || item?.customId || item?.pid || item?.sku || '',
+        ).trim();
+
+        if (!itemKey || !importedProductByKey.has(itemKey)) return;
+
+        const importedProduct = importedProductByKey.get(itemKey);
+        const supplierProductId = String(importedProduct?.sourceSupplierProduct || '').trim();
+
+        if (!supplierProductId) return;
+
+        const qty = Number(item?.quantity || item?.qty || 0);
+        if (!Number.isFinite(qty) || qty <= 0) return;
+
+        if (!fastestGrowingBySupplierProductId.has(supplierProductId)) {
+          fastestGrowingBySupplierProductId.set(supplierProductId, {
+            supplierProductId,
+            currentWeeklySold: 0,
+            previousWeeklySold: 0,
+            currentMonthlySold: 0,
+            previousMonthlySold: 0,
+          });
+        }
+
+        const row = fastestGrowingBySupplierProductId.get(supplierProductId);
+
+        // ✅ Current 7 days
+        if (orderDate >= current7Start) {
+          row.currentWeeklySold += qty;
+        }
+
+        // ✅ Previous 7 days
+        if (orderDate >= previous7Start && orderDate < current7Start) {
+          row.previousWeeklySold += qty;
+        }
+
+        // ✅ Current 30 days
+        if (orderDate >= current30Start) {
+          row.currentMonthlySold += qty;
+        }
+
+        // ✅ Previous 30 days
+        if (orderDate >= previous30Start && orderDate < current30Start) {
+          row.previousMonthlySold += qty;
+        }
+      });
+    });
+  }
+
+  const supplierFastestGrowingProducts = Array.from(fastestGrowingBySupplierProductId.values())
     .map((row) => {
-      const productId = String(row._id);
-      const product = growthProductsById.get(productId);
+      const product = supplierProductsById.get(String(row.supplierProductId));
       if (!product) return null;
 
-      const qty = Number(row.qty || 0);
-      const previousQty = previousByProductId.get(productId) || 0;
+      const weeklyGrowthPercent = calculateSoldGrowthPercent(
+        row.currentWeeklySold,
+        row.previousWeeklySold,
+      );
+
+      const monthlyGrowthPercent = calculateSoldGrowthPercent(
+        row.currentMonthlySold,
+        row.previousMonthlySold,
+      );
 
       return normalizeSupplierProductForCard(product, {
-        qty,
-        previousQty,
-        growth: qty - previousQty,
+        qty: row.currentWeeklySold,
+        currentWeeklySold: row.currentWeeklySold,
+        previousWeeklySold: row.previousWeeklySold,
+        weeklyGrowthPercent,
+
+        currentMonthlySold: row.currentMonthlySold,
+        previousMonthlySold: row.previousMonthlySold,
+        monthlyGrowthPercent,
+
+        previousQty: row.previousWeeklySold,
+        growth: row.currentWeeklySold - row.previousWeeklySold,
       });
     })
     .filter(Boolean)
-    .sort((a, b) => b.growth - a.growth || b.qty - a.qty)
-    .slice(0, 4);
+    .filter((product) => {
+      return (
+        Number(product.currentWeeklySold || 0) > 0 || Number(product.currentMonthlySold || 0) > 0
+      );
+    })
+    .sort((a, b) => {
+      const weeklyA = Number(a.weeklyGrowthPercent || 0);
+      const weeklyB = Number(b.weeklyGrowthPercent || 0);
+
+      if (weeklyA !== weeklyB) return weeklyB - weeklyA;
+
+      const currentWeeklyA = Number(a.currentWeeklySold || 0);
+      const currentWeeklyB = Number(b.currentWeeklySold || 0);
+
+      if (currentWeeklyA !== currentWeeklyB) return currentWeeklyB - currentWeeklyA;
+
+      const monthlyA = Number(a.monthlyGrowthPercent || 0);
+      const monthlyB = Number(b.monthlyGrowthPercent || 0);
+
+      return monthlyB - monthlyA;
+    })
+    .slice(0, 10);
+
+  // ✅ Supplier Performance Overview
+  // This replaces the fake "Traffic & Sales" CoreUI demo section.
+  // It shows real supplier request status, product health, and top requesting sellers.
+  const requestStatusRows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+      },
+    },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        requestedQty: { $sum: '$requestedQuantity' },
+      },
+    },
+  ]);
+
+  const requestStatusSummary = {
+    pending: {
+      label: 'Pending',
+      count: 0,
+      requestedQty: 0,
+      badgeClass: 'bg-warning',
+      textClass: 'text-warning',
+      progressClass: 'bg-warning',
+    },
+    approved: {
+      label: 'Approved',
+      count: 0,
+      requestedQty: 0,
+      badgeClass: 'bg-success',
+      textClass: 'text-success',
+      progressClass: 'bg-success',
+    },
+    rejected: {
+      label: 'Rejected',
+      count: 0,
+      requestedQty: 0,
+      badgeClass: 'bg-danger',
+      textClass: 'text-danger',
+      progressClass: 'bg-danger',
+    },
+    cancelled: {
+      label: 'Cancelled',
+      count: 0,
+      requestedQty: 0,
+      badgeClass: 'bg-secondary',
+      textClass: 'text-body-secondary',
+      progressClass: 'bg-secondary',
+    },
+  };
+
+  requestStatusRows.forEach((row) => {
+    const key = String(row._id || '').trim().toLowerCase();
+
+    if (!requestStatusSummary[key]) return;
+
+    requestStatusSummary[key].count = Number(row.count || 0);
+    requestStatusSummary[key].requestedQty = Number(row.requestedQty || 0);
+  });
+
+  const requestStatusTotal = Object.values(requestStatusSummary).reduce((sum, row) => {
+    return sum + Number(row.count || 0);
+  }, 0);
+
+  const topRequestingSellerRows = await SupplyRequest.aggregate([
+    {
+      $match: {
+        supplier: supplierObjectId,
+      },
+    },
+    {
+      $group: {
+        _id: '$seller',
+        totalRequests: { $sum: 1 },
+        totalRequestedQty: { $sum: '$requestedQuantity' },
+        approvedRequests: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'approved'] }, 1, 0],
+          },
+        },
+        approvedQty: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'approved'] }, '$requestedQuantity', 0],
+          },
+        },
+        pendingRequests: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'pending'] }, 1, 0],
+          },
+        },
+        pendingQty: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'pending'] }, '$requestedQuantity', 0],
+          },
+        },
+        rejectedRequests: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0],
+          },
+        },
+        lastRequestAt: { $max: '$createdAt' },
+      },
+    },
+    {
+      $sort: {
+        approvedQty: -1,
+        totalRequestedQty: -1,
+        totalRequests: -1,
+        lastRequestAt: -1,
+      },
+    },
+    { $limit: 5 },
+  ]);
+
+  const topSellerIds = topRequestingSellerRows.map((row) => row._id).filter(Boolean);
+
+  const topSellerDocs = topSellerIds.length
+    ? await Business.find({ _id: { $in: topSellerIds } })
+        .select('_id name email role logoUrl')
+        .lean()
+    : [];
+
+  const topSellerById = new Map(
+    topSellerDocs.map((seller) => [String(seller._id), seller]),
+  );
+
+  const topRequestingSellers = topRequestingSellerRows.map((row, index) => {
+    const seller = topSellerById.get(String(row._id)) || {};
+
+    return {
+      rank: index + 1,
+      sellerId: String(row._id || ''),
+      sellerName: seller.name || 'Seller account',
+      sellerEmail: seller.email || '',
+      sellerRole: seller.role || 'seller',
+      totalRequests: Number(row.totalRequests || 0),
+      totalRequestedQty: Number(row.totalRequestedQty || 0),
+      approvedRequests: Number(row.approvedRequests || 0),
+      approvedQty: Number(row.approvedQty || 0),
+      pendingRequests: Number(row.pendingRequests || 0),
+      pendingQty: Number(row.pendingQty || 0),
+      rejectedRequests: Number(row.rejectedRequests || 0),
+      lastRequestAt: row.lastRequestAt || null,
+    };
+  });
+
+  const productHealthSummary = {
+    totalProducts: products.length,
+    activeProducts: activeProducts.length,
+    draftProducts: products.filter((product) => product.status === 'draft').length,
+    pausedProducts: products.filter((product) => product.status === 'paused').length,
+    archivedProducts: products.filter((product) => product.status === 'archived').length,
+    inStock,
+    lowStock,
+    outOfStock,
+    totalStock,
+    inventoryValue,
+  };
+
+  const supplierPerformanceOverview = {
+    requestStatusSummary,
+    requestStatusTotal,
+    productHealthSummary,
+    topRequestingSellers,
+  };
+
+  // ✅ Seller Location Interest
+  // This shows where sellers are located when they import this supplier's products.
+  // Data source:
+  // - Product.sourceType = wholesale_import
+  // - Product.sourceSupplier = this supplier
+  // - Product.business = seller business
+  // - Business.country / Business.state / Business.city
+  const sellerLocationIds = [
+    ...new Set(
+      importedSellerProducts
+        .map((product) => String(product.business || '').trim())
+        .filter((id) => mongoose.isValidObjectId(id)),
+    ),
+  ].map((id) => new mongoose.Types.ObjectId(id));
+
+  const sellerLocationDocs = sellerLocationIds.length
+    ? await Business.find({ _id: { $in: sellerLocationIds } })
+        .select('_id name email country countryCode state city')
+        .lean()
+    : [];
+
+  const sellerLocationById = new Map(
+    sellerLocationDocs.map((seller) => [String(seller._id), seller]),
+  );
+
+  function cleanLocationValue(value, fallback = 'Not specified') {
+    const cleaned = String(value || '').trim();
+    return cleaned || fallback;
+  }
+
+  function buildLocationRanking(locationKey) {
+    const rowsByLocation = new Map();
+
+    importedSellerProducts.forEach((product) => {
+      const sellerId = String(product.business || '').trim();
+      const seller = sellerLocationById.get(sellerId);
+
+      if (!seller) return;
+
+      const locationName = cleanLocationValue(seller[locationKey]);
+
+      if (!rowsByLocation.has(locationName)) {
+        rowsByLocation.set(locationName, {
+          name: locationName,
+          importedProducts: 0,
+          importedStock: 0,
+          sellerIds: new Set(),
+          lastImportedAt: null,
+        });
+      }
+
+      const row = rowsByLocation.get(locationName);
+
+      const currentStock = Number(product.stock || 0);
+      const soldStock = Number(product.soldCount || 0);
+      const estimatedImportedStock = currentStock + soldStock;
+
+      row.importedProducts += 1;
+      row.importedStock += Number.isFinite(estimatedImportedStock) ? estimatedImportedStock : currentStock;
+      row.sellerIds.add(sellerId);
+
+      const importedDate = product.importedAt || product.createdAt || product.updatedAt || null;
+      if (importedDate) {
+        const date = new Date(importedDate);
+        if (!Number.isNaN(date.getTime())) {
+          if (!row.lastImportedAt || date > new Date(row.lastImportedAt)) {
+            row.lastImportedAt = date;
+          }
+        }
+      }
+    });
+
+    return Array.from(rowsByLocation.values())
+      .map((row) => ({
+        name: row.name,
+        importedProducts: Number(row.importedProducts || 0),
+        importedStock: Number(row.importedStock || 0),
+        sellerCount: row.sellerIds.size,
+        lastImportedAt: row.lastImportedAt,
+      }))
+      .sort((a, b) => {
+        if (Number(b.importedStock || 0) !== Number(a.importedStock || 0)) {
+          return Number(b.importedStock || 0) - Number(a.importedStock || 0);
+        }
+
+        if (Number(b.importedProducts || 0) !== Number(a.importedProducts || 0)) {
+          return Number(b.importedProducts || 0) - Number(a.importedProducts || 0);
+        }
+
+        return Number(b.sellerCount || 0) - Number(a.sellerCount || 0);
+      })
+      .slice(0, 10);
+  }
+
+  const supplierLocationInterest = {
+    countries: buildLocationRanking('country'),
+    provinces: buildLocationRanking('state'),
+    cities: buildLocationRanking('city'),
+  };  
 
   return {
     products: activeProducts,
@@ -535,6 +1161,12 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
     supplierLowStockProducts,
     supplierOutOfStockProducts,
     supplierFastestGrowingProducts,
+
+    // ✅ Real replacement for the fake Traffic & Sales section
+    supplierPerformanceOverview,
+
+    // ✅ Last section above footer: where sellers are importing from
+    supplierLocationInterest,
   };
 }
 
@@ -581,7 +1213,10 @@ async function buildSupplierSoldCardData(supplierId) {
   const importedProductKeys = [
     ...new Set(
       importedSellerProducts
-        .flatMap((product) => [String(product._id || '').trim(), String(product.customId || '').trim()])
+        .flatMap((product) => [
+          String(product._id || '').trim(),
+          String(product.customId || '').trim(),
+        ])
         .filter(Boolean),
     ),
   ];
@@ -655,7 +1290,12 @@ async function buildSupplierSoldCardData(supplierId) {
 
     items.forEach((item) => {
       if (item?.isRefunded === true) return;
-      if (String(item?.refundStatus || '').toUpperCase().includes('REFUND')) return;
+      if (
+        String(item?.refundStatus || '')
+          .toUpperCase()
+          .includes('REFUND')
+      )
+        return;
 
       const itemKey = getSupplierSoldCardOrderItemKey(item);
       if (!itemKey || !productByKey.has(itemKey)) return;
@@ -811,7 +1451,7 @@ async function buildSupplierPayoutCardData(supplierId) {
   ]);
 
   const movementMap = new Map(
-    movementRows.map((row) => [String(row._id), centsToAmount(row.totalCents)])
+    movementRows.map((row) => [String(row._id), centsToAmount(row.totalCents)]),
   );
 
   const data = [];
@@ -837,8 +1477,12 @@ async function buildSupplierPayoutCardData(supplierId) {
 }
 
 function isSupplierRefundedOrder(order) {
-  const status = String(order?.status || '').trim().toUpperCase();
-  const paymentStatus = String(order?.paymentStatus || '').trim().toLowerCase();
+  const status = String(order?.status || '')
+    .trim()
+    .toUpperCase();
+  const paymentStatus = String(order?.paymentStatus || '')
+    .trim()
+    .toLowerCase();
 
   const refundedTotal = Number(order?.refundedTotal || 0);
   const refunds = Array.isArray(order?.refunds) ? order.refunds : [];
@@ -949,7 +1593,11 @@ async function buildSupplierRefundCardData(supplierId) {
           { 'items.refundStatus': { $in: ['PARTIAL', 'REFUNDED'] } },
           { 'items.refundedQuantity': { $gt: 0 } },
           { status: { $in: ['REFUNDED', 'PARTIALLY_REFUNDED', 'Refunded', 'Partially Refunded'] } },
-          { paymentStatus: { $in: ['refunded', 'partially_refunded', 'REFUNDED', 'PARTIALLY_REFUNDED'] } },
+          {
+            paymentStatus: {
+              $in: ['refunded', 'partially_refunded', 'REFUNDED', 'PARTIALLY_REFUNDED'],
+            },
+          },
           { refunds: { $exists: true, $ne: [] } },
           { refundedAt: { $exists: true, $ne: null } },
           { refundedTotal: { $nin: ['0', '0.00', '', null] } },
@@ -985,7 +1633,9 @@ async function buildSupplierRefundCardData(supplierId) {
       const originalQty = getSupplierSoldCardOrderItemQty(item);
       if (originalQty <= 0) return;
 
-      const itemRefundStatus = String(item?.refundStatus || 'NONE').trim().toUpperCase();
+      const itemRefundStatus = String(item?.refundStatus || 'NONE')
+        .trim()
+        .toUpperCase();
       const itemRefundedQty = Number(item?.refundedQuantity || 0);
 
       // ✅ Best case: new item-level fields exist.
@@ -1001,11 +1651,7 @@ async function buildSupplierRefundCardData(supplierId) {
         );
 
         const qtyToCount =
-          safeRefundedQty > 0
-            ? safeRefundedQty
-            : itemRefundStatus === 'REFUNDED'
-              ? originalQty
-              : 0;
+          safeRefundedQty > 0 ? safeRefundedQty : itemRefundStatus === 'REFUNDED' ? originalQty : 0;
 
         if (qtyToCount > 0) {
           supplierExactItemRefundFound = true;
@@ -1038,9 +1684,10 @@ async function buildSupplierRefundCardData(supplierId) {
     totalRefundedProducts += supplierRefundQtyForOrder;
     totalRefundedStock += supplierRefundQtyForOrder;
 
-    const refundDate = supplierExactItemRefundFound && latestItemRefundDate
-      ? latestItemRefundDate
-      : getSupplierRefundOrderDate(order);
+    const refundDate =
+      supplierExactItemRefundFound && latestItemRefundDate
+        ? latestItemRefundDate
+        : getSupplierRefundOrderDate(order);
 
     const refundDayKey =
       refundDate && refundDate >= refundStart ? refundDate.toISOString().slice(0, 10) : '';
@@ -2742,6 +3389,16 @@ router.get(
 
         supplierFastestGrowingProducts: supplierDashboardData.supplierFastestGrowingProducts || [],
 
+        // ✅ Real supplier performance section under the 4 product cards
+        supplierPerformanceOverview: supplierDashboardData.supplierPerformanceOverview || {},
+
+        // ✅ Seller location interest section above footer
+        supplierLocationInterest: supplierDashboardData.supplierLocationInterest || {
+          countries: [],
+          provinces: [],
+          cities: [],
+        },
+
         supplierMainChart,
 
         // Safe defaults for old dashboard sections that may still exist in the EJS
@@ -2833,7 +3490,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
     ]);
 
     const stockMovementMap = new Map(
-      stockMovementRows.map((row) => [String(row._id), Number(row.totalStock || 0)])
+      stockMovementRows.map((row) => [String(row._id), Number(row.totalStock || 0)]),
     );
 
     const stockChartLabels = [];
@@ -2848,7 +3505,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
       stockChartLabels.push(
         d.toLocaleDateString(undefined, {
           weekday: 'short',
-        })
+        }),
       );
 
       stockChartData.push(stockMovementMap.get(key) || 0);
@@ -2921,7 +3578,9 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
  * ✅ Used by views/dashboards/partials/supplier-charts.ejs
  * -------------------------------------------------------- */
 function normalizeSupplierTrendRange(value) {
-  const range = String(value || '').trim().toLowerCase();
+  const range = String(value || '')
+    .trim()
+    .toLowerCase();
 
   if (range === 'day') return 'day';
   if (range === 'year') return 'year';
@@ -3069,11 +3728,11 @@ async function buildSupplierTrendOverview(supplierId, range = 'month') {
   ]);
 
   const importedProductsMap = new Map(
-    importedRows.map((row) => [String(row._id), Number(row.importedProducts || 0)])
+    importedRows.map((row) => [String(row._id), Number(row.importedProducts || 0)]),
   );
 
   const importedStockMap = new Map(
-    importedRows.map((row) => [String(row._id), Number(row.importedStock || 0)])
+    importedRows.map((row) => [String(row._id), Number(row.importedStock || 0)]),
   );
 
   return {
@@ -3094,33 +3753,38 @@ async function buildSupplierTrendOverview(supplierId, range = 'month') {
   };
 }
 
-router.get('/api/supplier/trend-overview', requireBusiness, requireVerifiedBusiness, async (req, res) => {
-  try {
-    const business = getBiz(req);
+router.get(
+  '/api/supplier/trend-overview',
+  requireBusiness,
+  requireVerifiedBusiness,
+  async (req, res) => {
+    try {
+      const business = getBiz(req);
 
-    if (!business || !business._id || business.role !== 'supplier') {
-      return res.status(403).json({
+      if (!business || !business._id || business.role !== 'supplier') {
+        return res.status(403).json({
+          ok: false,
+          message: 'Suppliers only',
+        });
+      }
+
+      const range = normalizeSupplierTrendRange(req.query.range);
+      const overview = await buildSupplierTrendOverview(business._id, range);
+
+      return res.json({
+        ok: true,
+        ...overview,
+      });
+    } catch (err) {
+      console.error('❌ Supplier trend overview API error:', err);
+
+      return res.status(500).json({
         ok: false,
-        message: 'Suppliers only',
+        message: 'Failed to load supplier trend overview',
       });
     }
-
-    const range = normalizeSupplierTrendRange(req.query.range);
-    const overview = await buildSupplierTrendOverview(business._id, range);
-
-    return res.json({
-      ok: true,
-      ...overview,
-    });
-  } catch (err) {
-    console.error('❌ Supplier trend overview API error:', err);
-
-    return res.status(500).json({
-      ok: false,
-      message: 'Failed to load supplier trend overview',
-    });
-  }
-});
+  },
+);
 
 /* ----------------------------------------------------------
  * Seller KPIs JSON for auto-refresh

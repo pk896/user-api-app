@@ -357,6 +357,42 @@
             const supplierFastestGrowingList =
               Array.isArray(supplierFastestGrowingProducts) ? supplierFastestGrowingProducts : [];
 
+            const supplierPerformance =
+              typeof supplierPerformanceOverview !== 'undefined' && supplierPerformanceOverview
+                ? supplierPerformanceOverview
+                : {};
+
+            const requestStatusSummary =
+              supplierPerformance.requestStatusSummary && typeof supplierPerformance.requestStatusSummary === 'object'
+                ? supplierPerformance.requestStatusSummary
+                : {};
+
+            const productHealthSummary =
+              supplierPerformance.productHealthSummary && typeof supplierPerformance.productHealthSummary === 'object'
+                ? supplierPerformance.productHealthSummary
+                : {};
+
+            const topRequestingSellers =
+              Array.isArray(supplierPerformance.topRequestingSellers)
+                ? supplierPerformance.topRequestingSellers
+                : [];
+
+            const requestStatusTotal = Number(supplierPerformance.requestStatusTotal || 0);
+
+            const supplierLocations =
+              typeof supplierLocationInterest !== 'undefined' && supplierLocationInterest
+                ? supplierLocationInterest
+                : {};
+
+            const topSellerCountries =
+              Array.isArray(supplierLocations.countries) ? supplierLocations.countries : [];
+
+            const topSellerProvinces =
+              Array.isArray(supplierLocations.provinces) ? supplierLocations.provinces : [];
+
+            const topSellerCities =
+              Array.isArray(supplierLocations.cities) ? supplierLocations.cities : [];
+
             const firstTopSelling = supplierTopSellingList[0] || null;
             const firstLowStock = supplierLowStockList[0] || null;
             const firstOutOfStock = supplierOutOfStockList[0] || null;
@@ -535,17 +571,30 @@
             const supplierChartSafe =
               typeof supplierMainChart !== 'undefined' && supplierMainChart ? supplierMainChart : {};
 
-            const chartRequestedTotal = Array.isArray(supplierChartSafe.requestedQty)
-              ? supplierChartSafe.requestedQty.reduce((sum, value) => sum + Number(value || 0), 0)
-              : 0;
+            const supplierChartSummary =
+              supplierChartSafe.summary && typeof supplierChartSafe.summary === 'object'
+                ? supplierChartSafe.summary
+                : {};
 
-            const chartImportedTotal = Array.isArray(supplierChartSafe.importedStock)
-              ? supplierChartSafe.importedStock.reduce((sum, value) => sum + Number(value || 0), 0)
-              : 0;
+            const requestedQtyLast30 = Number(supplierChartSummary.requestedQtyLast30 || 0);
+            const importedSellerStockLast30 = Number(supplierChartSummary.importedSellerStockLast30 || 0);
+            const importedProductsLast30 = Number(supplierChartSummary.importedProductsLast30 || 0);
+            const businessGrowthPercent = Number(supplierChartSummary.businessGrowthPercent || 0);
 
-            const chartMaxValue = Math.max(chartRequestedTotal, chartImportedTotal, 1);
-            const requestedPercent = Math.min(100, Math.round((chartRequestedTotal / chartMaxValue) * 100));
-            const importedPercent = Math.min(100, Math.round((chartImportedTotal / chartMaxValue) * 100));
+            const summaryMaxValue = Math.max(
+              requestedQtyLast30,
+              importedSellerStockLast30,
+              importedProductsLast30,
+              Math.abs(businessGrowthPercent),
+              1
+            );
+
+            const requestedPercent = Math.min(100, Math.round((requestedQtyLast30 / summaryMaxValue) * 100));
+            const importedStockPercent = Math.min(100, Math.round((importedSellerStockLast30 / summaryMaxValue) * 100));
+            const importedProductsPercent = Math.min(100, Math.round((importedProductsLast30 / summaryMaxValue) * 100));
+            const growthPercentBar = Math.min(100, Math.round((Math.abs(businessGrowthPercent) / summaryMaxValue) * 100));
+
+            const growthSign = businessGrowthPercent > 0 ? '+' : '';
           %>
 
           <div class="card-footer">
@@ -553,50 +602,44 @@
               <div class="col">
                 <div class="text-body-secondary">Requested Supply Qty</div>
                 <div class="fw-semibold text-truncate">
-                  <%= safeQty(chartRequestedTotal) %> units
+                  <%= safeQty(requestedQtyLast30) %> units
                 </div>
+                <div class="small text-body-secondary">Last 30 days</div>
                 <div class="progress progress-thin mt-2">
-                  <div
-                    class="progress-bar bg-info"
-                    role="progressbar"
-                    style="width: <%= requestedPercent %>%"
-                    aria-valuenow="<%= requestedPercent %>"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                  ></div>
+                  <div class="progress-bar bg-primary" role="progressbar" style="width: <%= requestedPercent %>%" aria-valuenow="<%= requestedPercent %>" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
               </div>
 
               <div class="col">
                 <div class="text-body-secondary">Imported Seller Stock</div>
                 <div class="fw-semibold text-truncate">
-                  <%= safeQty(chartImportedTotal) %> units
+                  <%= safeQty(importedSellerStockLast30) %> units
                 </div>
+                <div class="small text-body-secondary">Last 30 days</div>
                 <div class="progress progress-thin mt-2">
-                  <div
-                    class="progress-bar bg-success"
-                    role="progressbar"
-                    style="width: <%= importedPercent %>%"
-                    aria-valuenow="<%= importedPercent %>"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                  ></div>
+                  <div class="progress-bar bg-success" role="progressbar" style="width: <%= importedStockPercent %>%" aria-valuenow="<%= importedStockPercent %>" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
               </div>
 
               <div class="col">
-                <div class="text-body-secondary">Chart Period</div>
-                <div class="fw-semibold text-truncate">Last 7 months</div>
+                <div class="text-body-secondary">Imported Products</div>
+                <div class="fw-semibold text-truncate">
+                  <%= safeQty(importedProductsLast30) %> products
+                </div>
+                <div class="small text-body-secondary">Last 30 days</div>
                 <div class="progress progress-thin mt-2">
-                  <div class="progress-bar bg-primary" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                  <div class="progress-bar bg-primary" role="progressbar" style="width: <%= importedProductsPercent %>%" aria-valuenow="<%= importedProductsPercent %>" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
               </div>
 
               <div class="col">
-                <div class="text-body-secondary">Data Source</div>
-                <div class="fw-semibold text-truncate">Supplier DB data</div>
+                <div class="text-body-secondary">Business Growth</div>
+                <div class="fw-semibold text-truncate">
+                  <%= growthSign %><%= businessGrowthPercent.toFixed(1) %>%
+                </div>
+                <div class="small text-body-secondary">Current 7 days vs previous 7 days</div>
                 <div class="progress progress-thin mt-2">
-                  <div class="progress-bar bg-warning" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                  <div class="progress-bar <%= businessGrowthPercent >= 0 ? 'bg-success' : 'bg-danger' %>" role="progressbar" style="width: <%= growthPercentBar %>%" aria-valuenow="<%= growthPercentBar %>" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
               </div>
             </div>
@@ -613,8 +656,17 @@
                     <div class="text-body-secondary small text-uppercase fw-semibold">
                       Top Selling
                     </div>
+
                     <div class="fs-4 fw-semibold text-primary">
-                      <%= safeQty(firstTopSelling ? firstTopSelling.qty : 0) %>
+                      <%= safeQty(
+                        supplierTopSellingList.reduce((sum, product) => {
+                          return sum + Number(product.soldQty || product.qty || 0);
+                        }, 0)
+                      ) %>
+                    </div>
+
+                    <div class="small text-body-secondary">
+                      Sold stock from imported seller products
                     </div>
                   </div>
 
@@ -623,32 +675,53 @@
                   </div>
                 </div>
 
-                <% if (firstTopSelling) { %>
-                <div class="d-flex align-items-center gap-3">
-                  <img src="<%= firstTopSelling.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= firstTopSelling.name %>" class="rounded border" style="width:56px;height:56px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+                <% if (supplierTopSellingList.length) { %>
+                <div class="list-group list-group-flush">
+                  <% supplierTopSellingList.slice(0, 10).forEach((product, index) => { %>
+                  <div class="list-group-item px-0">
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="fw-semibold text-primary small">
+                        #<%= index + 1 %>
+                      </div>
 
-                  <div class="min-w-0">
-                    <div class="fw-semibold text-body text-truncate">
-                      <%= firstTopSelling.name %>
-                    </div>
-                    <div class="small text-body-secondary text-truncate">
-                      <%= firstTopSelling.category || 'Uncategorized' %>
-                    </div>
-                    <div class="small text-body-secondary">
-                      Approved requested qty: <strong><%= safeQty(firstTopSelling.qty) %></strong>
+                      <img src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= product.name %>" class="rounded border flex-shrink-0" style="width:46px;height:46px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+
+                      <div class="min-w-0 flex-grow-1">
+                        <div class="fw-semibold text-body text-truncate">
+                          <%= product.name %>
+                        </div>
+
+                        <div class="small text-body-secondary text-truncate">
+                          <%= product.category || 'Uncategorized' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Sold:
+                          <strong><%= safeQty(product.soldQty || product.qty || 0) %></strong>
+                          <%= product.unit || 'units' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Orders:
+                          <strong><%= safeQty(product.soldOrders || 0) %></strong>
+                          · Seller products:
+                          <strong><%= safeQty(product.sellerProductCount || 0) %></strong>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <% }) %>
                 </div>
                 <% } else { %>
                 <div class="text-body-secondary small">
-                  No approved supply requests yet.
+                  No sold imported wholesale products yet.
                 </div>
                 <% } %>
               </div>
 
               <div class="card-footer bg-transparent">
-                <a href="/wholesale/supplier/requests" class="btn btn-sm btn-outline-primary w-100">
-                  View Supply Requests
+                <a href="/wholesale/supplier/products" class="btn btn-sm btn-outline-primary w-100">
+                  View Wholesale Products
                 </a>
               </div>
             </div>
@@ -663,8 +736,13 @@
                     <div class="text-body-secondary small text-uppercase fw-semibold">
                       Low Stock
                     </div>
+
                     <div class="fs-4 fw-semibold text-warning">
                       <%= safeQty(supplierLowStockList.length) %>
+                    </div>
+
+                    <div class="small text-body-secondary">
+                      Products with 1 - 15 units left
                     </div>
                   </div>
 
@@ -673,22 +751,41 @@
                   </div>
                 </div>
 
-                <% if (firstLowStock) { %>
-                <div class="d-flex align-items-center gap-3">
-                  <img src="<%= firstLowStock.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= firstLowStock.name %>" class="rounded border" style="width:56px;height:56px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+                <% if (supplierLowStockList.length) { %>
+                <div class="list-group list-group-flush">
+                  <% supplierLowStockList.slice(0, 10).forEach((product, index) => { %>
+                  <div class="list-group-item px-0">
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="fw-semibold text-warning small">
+                        #<%= index + 1 %>
+                      </div>
 
-                  <div class="min-w-0">
-                    <div class="fw-semibold text-body text-truncate">
-                      <%= firstLowStock.name %>
-                    </div>
-                    <div class="small text-body-secondary text-truncate">
-                      <%= firstLowStock.category || 'Uncategorized' %>
-                    </div>
-                    <div class="small text-body-secondary">
-                      Available: <strong><%= safeQty(firstLowStock.availableQuantity) %></strong>
-                      <%= firstLowStock.unit || 'units' %>
+                      <img src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= product.name %>" class="rounded border flex-shrink-0" style="width:46px;height:46px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+
+                      <div class="min-w-0 flex-grow-1">
+                        <div class="fw-semibold text-body text-truncate">
+                          <%= product.name %>
+                        </div>
+
+                        <div class="small text-body-secondary text-truncate">
+                          <%= product.category || 'Uncategorized' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Available:
+                          <strong class="text-warning">
+                            <%= safeQty(product.availableQuantity || product.qty || 0) %>
+                          </strong>
+                          <%= product.unit || 'units' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Restock soon before this product becomes out of stock.
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <% }) %>
                 </div>
                 <% } else { %>
                 <div class="text-body-secondary small">
@@ -714,8 +811,13 @@
                     <div class="text-body-secondary small text-uppercase fw-semibold">
                       Out of Stock
                     </div>
+
                     <div class="fs-4 fw-semibold text-danger">
-                      <%= safeQty(supplierOutOfStockList.length) %>
+                      <%= safeQty(totals && typeof totals.outOfStock !== 'undefined' ? totals.outOfStock : supplierOutOfStockList.length) %>
+                    </div>
+
+                    <div class="small text-body-secondary">
+                      Products with 0 units available
                     </div>
                   </div>
 
@@ -724,21 +826,41 @@
                   </div>
                 </div>
 
-                <% if (firstOutOfStock) { %>
-                <div class="d-flex align-items-center gap-3">
-                  <img src="<%= firstOutOfStock.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= firstOutOfStock.name %>" class="rounded border" style="width:56px;height:56px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+                <% if (supplierOutOfStockList.length) { %>
+                <div class="list-group list-group-flush">
+                  <% supplierOutOfStockList.slice(0, 10).forEach((product, index) => { %>
+                  <div class="list-group-item px-0">
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="fw-semibold text-danger small">
+                        #<%= index + 1 %>
+                      </div>
 
-                  <div class="min-w-0">
-                    <div class="fw-semibold text-body text-truncate">
-                      <%= firstOutOfStock.name %>
-                    </div>
-                    <div class="small text-body-secondary text-truncate">
-                      <%= firstOutOfStock.category || 'Uncategorized' %>
-                    </div>
-                    <div class="small text-body-secondary">
-                      Available: <strong>0</strong> <%= firstOutOfStock.unit || 'units' %>
+                      <img src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= product.name %>" class="rounded border flex-shrink-0" style="width:46px;height:46px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+
+                      <div class="min-w-0 flex-grow-1">
+                        <div class="fw-semibold text-body text-truncate">
+                          <%= product.name %>
+                        </div>
+
+                        <div class="small text-body-secondary text-truncate">
+                          <%= product.category || 'Uncategorized' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Available:
+                          <strong class="text-danger">
+                            <%= safeQty(product.availableQuantity || product.qty || 0) %>
+                          </strong>
+                          <%= product.unit || 'units' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Restock this product before sellers request more supply.
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <% }) %>
                 </div>
                 <% } else { %>
                 <div class="text-body-secondary small">
@@ -759,569 +881,530 @@
           <div class="col-sm-6 col-xl-3">
             <div class="card h-100 border-success">
               <div class="card-body">
+                <%
+                  const topFastGrowing = supplierFastestGrowingList[0] || null;
+                  const weeklyGrowth = Number(topFastGrowing ? topFastGrowing.weeklyGrowthPercent || 0 : 0);
+                  const monthlyGrowth = Number(topFastGrowing ? topFastGrowing.monthlyGrowthPercent || 0 : 0);
+                  const weeklyGrowthSign = weeklyGrowth > 0 ? '+' : '';
+                  const monthlyGrowthSign = monthlyGrowth > 0 ? '+' : '';
+                %>
+
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                   <div>
                     <div class="text-body-secondary small text-uppercase fw-semibold">
                       Fastest Growing
                     </div>
+
                     <div class="fs-4 fw-semibold text-success">
-                      +<%= safeQty(firstFastGrowing ? firstFastGrowing.growth : 0) %>
+                      <%= weeklyGrowthSign %><%= weeklyGrowth.toFixed(1) %>%
+                    </div>
+
+                    <div class="small text-body-secondary">
+                      Weekly growth from sold stock
                     </div>
                   </div>
 
-                  <div class="text-white rounded-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#22C55E;">
+                  <div class="bg-success text-white rounded-3 d-flex align-items-center justify-content-center p-3">
                     <i class="icon icon-lg cil-arrow-top"></i>
                   </div>
                 </div>
 
-                <% if (firstFastGrowing) { %>
-                <div class="d-flex align-items-center gap-3">
-                  <img src="<%= firstFastGrowing.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= firstFastGrowing.name %>" class="rounded border" style="width:56px;height:56px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+                <% if (supplierFastestGrowingList.length) { %>
+                <div class="list-group list-group-flush">
+                  <% supplierFastestGrowingList.slice(0, 10).forEach((product, index) => {
+                      const productWeeklyGrowth = Number(product.weeklyGrowthPercent || 0);
+                      const productMonthlyGrowth = Number(product.monthlyGrowthPercent || 0);
+                      const productWeeklySign = productWeeklyGrowth > 0 ? '+' : '';
+                      const productMonthlySign = productMonthlyGrowth > 0 ? '+' : '';
+                    %>
+                  <div class="list-group-item px-0">
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="fw-semibold text-success small">
+                        #<%= index + 1 %>
+                      </div>
 
-                  <div class="min-w-0">
-                    <div class="fw-semibold text-body text-truncate">
-                      <%= firstFastGrowing.name %>
-                    </div>
-                    <div class="small text-body-secondary text-truncate">
-                      <%= firstFastGrowing.category || 'Uncategorized' %>
-                    </div>
-                    <div class="small text-body-secondary">
-                      This week: <strong><%= safeQty(firstFastGrowing.qty) %></strong>
-                      |
-                      Previous: <strong><%= safeQty(firstFastGrowing.previousQty) %></strong>
+                      <img src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= product.name %>" class="rounded border flex-shrink-0" style="width:46px;height:46px;object-fit:contain;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+
+                      <div class="min-w-0 flex-grow-1">
+                        <div class="fw-semibold text-body text-truncate">
+                          <%= product.name %>
+                        </div>
+
+                        <div class="small text-body-secondary text-truncate">
+                          <%= product.category || 'Uncategorized' %>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Weekly:
+                          <strong class="<%= productWeeklyGrowth >= 0 ? 'text-success' : 'text-danger' %>">
+                            <%= productWeeklySign %><%= productWeeklyGrowth.toFixed(1) %>%
+                          </strong>
+                          <span>
+                            (<%= safeQty(product.currentWeeklySold || 0) %> vs
+                            <%= safeQty(product.previousWeeklySold || 0) %>)
+                          </span>
+                        </div>
+
+                        <div class="small text-body-secondary">
+                          Monthly:
+                          <strong class="<%= productMonthlyGrowth >= 0 ? 'text-success' : 'text-danger' %>">
+                            <%= productMonthlySign %><%= productMonthlyGrowth.toFixed(1) %>%
+                          </strong>
+                          <span>
+                            (<%= safeQty(product.currentMonthlySold || 0) %> vs
+                            <%= safeQty(product.previousMonthlySold || 0) %>)
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <% }) %>
                 </div>
                 <% } else { %>
                 <div class="text-body-secondary small">
-                  No growth data yet.
+                  No sold-stock growth data yet.
                 </div>
                 <% } %>
               </div>
 
               <div class="card-footer bg-transparent">
-                <a href="/wholesale/supplier/requests" class="btn btn-sm btn-outline-success w-100">
-                  View Demand Growth
+                <a href="/wholesale/supplier/products" class="btn btn-sm btn-outline-success w-100">
+                  View Wholesale Products
                 </a>
               </div>
             </div>
           </div>
         </div>
         <!-- /.row-->
-        <div class="row">
-          <div class="col-md-12">
-            <div class="card mb-4">
-              <div class="card-header">Traffic &amp; Sales</div>
-              <div class="card-body">
-                <div class="row">
-                  <div class="col-sm-6">
-                    <div class="row">
-                      <div class="col-6">
-                        <div class="border-start border-start-4 border-start-info px-3 mb-3">
-                          <div class="small text-body-secondary text-truncate">New Clients</div>
-                          <div class="fs-5 fw-semibold">9.123</div>
-                        </div>
-                      </div>
-                      <!-- /.col-->
-                      <div class="col-6">
-                        <div class="border-start border-start-4 border-start-danger px-3 mb-3">
-                          <div class="small text-body-secondary text-truncate">Recuring Clients</div>
-                          <div class="fs-5 fw-semibold">22.643</div>
-                        </div>
-                      </div>
-                      <!-- /.col-->
-                    </div>
-                    <!-- /.row-->
-                    <hr class="mt-0">
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Monday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 34%" aria-valuenow="34" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 78%" aria-valuenow="78" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Tuesday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 56%" aria-valuenow="56" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 94%" aria-valuenow="94" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Wednesday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 12%" aria-valuenow="12" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 67%" aria-valuenow="67" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Thursday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 43%" aria-valuenow="43" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 91%" aria-valuenow="91" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Friday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 22%" aria-valuenow="22" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 73%" aria-valuenow="73" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Saturday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 53%" aria-valuenow="53" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 82%" aria-valuenow="82" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-4">
-                      <div class="progress-group-prepend"><span class="text-body-secondary small">Sunday</span></div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-info" role="progressbar" style="width: 9%" aria-valuenow="9" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: 69%" aria-valuenow="69" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
+        <div class="row g-4 mb-4">
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-primary text-white">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
+                  <div>
+                    <div class="fw-semibold">Supplier Performance Overview</div>
+                    <div class="small text-white text-opacity-75">
+                      Real wholesale request status, product health, and top requesting sellers.
                     </div>
                   </div>
-                  <!-- /.col-->
-                  <div class="col-sm-6">
-                    <div class="row">
-                      <div class="col-6">
-                        <div class="border-start border-start-4 border-start-warning px-3 mb-3">
-                          <div class="small text-body-secondary text-truncate">Pageviews</div>
-                          <div class="fs-5 fw-semibold">78.623</div>
-                        </div>
-                      </div>
-                      <!-- /.col-->
-                      <div class="col-6">
-                        <div class="border-start border-start-4 border-start-success px-3 mb-3">
-                          <div class="small text-body-secondary text-truncate">Organic</div>
-                          <div class="fs-5 fw-semibold">49.123</div>
-                        </div>
-                      </div>
-                      <!-- /.col-->
-                    </div>
-                    <!-- /.row-->
-                    <hr class="mt-0">
-                    <div class="progress-group">
-                      <div class="progress-group-header">
-                        <svg class="icon icon-lg me-2">
-                          <use xlink:href="https://cdn.jsdelivr.net/npm/@coreui/icons/sprites/free.svg#cil-user"></use>
-                        </svg>
-                        <div>Male</div>
-                        <div class="ms-auto fw-semibold">43%</div>
-                      </div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-warning" role="progressbar" style="width: 43%" aria-valuenow="43" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group mb-5">
-                      <div class="progress-group-header">
-                        <svg class="icon icon-lg me-2">
-                          <use xlink:href="https://cdn.jsdelivr.net/npm/@coreui/icons/sprites/free.svg#cil-user-female"></use>
-                        </svg>
-                        <div>Female</div>
-                        <div class="ms-auto fw-semibold">37%</div>
-                      </div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-warning" role="progressbar" style="width: 43%" aria-valuenow="43" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group">
-                      <div class="progress-group-header">
-                        <svg class="icon icon-lg me-2">
-                          <use xlink:href="https://cdn.jsdelivr.net/npm/@coreui/icons/sprites/brand.svg#cib-google"></use>
-                        </svg>
-                        <div>Organic Search</div>
-                        <div class="ms-auto fw-semibold me-2">191.235</div>
-                        <div class="text-body-secondary small">(56%)</div>
-                      </div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-success" role="progressbar" style="width: 56%" aria-valuenow="56" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group">
-                      <div class="progress-group-header">
-                        <svg class="icon icon-lg me-2">
-                          <use xlink:href="https://cdn.jsdelivr.net/npm/@coreui/icons/sprites/brand.svg#cib-facebook-f"></use>
-                        </svg>
-                        <div>Facebook</div>
-                        <div class="ms-auto fw-semibold me-2">51.223</div>
-                        <div class="text-body-secondary small">(15%)</div>
-                      </div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-success" role="progressbar" style="width: 15%" aria-valuenow="15" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group">
-                      <div class="progress-group-header">
-                        <svg class="icon icon-lg me-2">
-                          <use xlink:href="https://cdn.jsdelivr.net/npm/@coreui/icons/sprites/brand.svg#cib-twitter"></use>
-                        </svg>
-                        <div>Twitter</div>
-                        <div class="ms-auto fw-semibold me-2">37.564</div>
-                        <div class="text-body-secondary small">(11%)</div>
-                      </div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-success" role="progressbar" style="width: 11%" aria-valuenow="11" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="progress-group">
-                      <div class="progress-group-header">
-                        <svg class="icon icon-lg me-2">
-                          <use xlink:href="https://cdn.jsdelivr.net/npm/@coreui/icons/sprites/brand.svg#cib-linkedin"></use>
-                        </svg>
-                        <div>LinkedIn</div>
-                        <div class="ms-auto fw-semibold me-2">27.319</div>
-                        <div class="text-body-secondary small">(8%)</div>
-                      </div>
-                      <div class="progress-group-bars">
-                        <div class="progress progress-thin">
-                          <div class="progress-bar bg-success" role="progressbar" style="width: 8%" aria-valuenow="8" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                      </div>
-                    </div>
+
+                  <div class="d-flex flex-wrap gap-2">
+                    <a href="/wholesale/supplier/requests" class="btn btn-sm btn-light">
+                      View Requests
+                    </a>
+                    <a href="/wholesale/supplier/products" class="btn btn-sm btn-outline-light">
+                      Manage Products
+                    </a>
                   </div>
-                  <!-- /.col-->
                 </div>
-                <!-- /.row--><br>
-                <div class="table-responsive">
-                  <table class="table border mb-0">
-                    <thead class="fw-semibold text-nowrap">
-                      <tr class="align-middle">
-                        <th class="bg-body-secondary text-center">
-                          <i class="icon cil-people"></i>
-                        </th>
-                        <th class="bg-body-secondary">User</th>
-                        <th class="bg-body-secondary text-center">Country</th>
-                        <th class="bg-body-secondary">Usage</th>
-                        <th class="bg-body-secondary text-center">Payment Method</th>
-                        <th class="bg-body-secondary">Activity</th>
-                        <th class="bg-body-secondary"></th>
-                      </tr>
-                    </thead>
+              </div>
 
-                    <tbody>
-                      <tr class="align-middle">
-                        <td class="text-center">
-                          <div class="avatar avatar-md">
-                            <img class="avatar-img" src="assets/img/avatars/1.jpg" alt="user@email.com">
-                            <span class="avatar-status bg-success"></span>
+              <div class="card-body">
+                <div class="row g-4">
+                  <div class="col-lg-6">
+                    <div class="h6 fw-semibold text-primary mb-3">
+                      Supply Request Status
+                    </div>
+
+                    <%
+                      const requestStatuses = ['pending', 'approved', 'rejected', 'cancelled'];
+                    %>
+
+                    <% requestStatuses.forEach((statusKey) => {
+                      const statusRow = requestStatusSummary[statusKey] || {};
+                      const statusCount = Number(statusRow.count || 0);
+                      const statusQty = Number(statusRow.requestedQty || 0);
+                      const statusPercent = requestStatusTotal > 0
+                        ? Math.round((statusCount / requestStatusTotal) * 100)
+                        : 0;
+                    %>
+                    <div class="mb-3">
+                      <div class="d-flex justify-content-between align-items-center gap-3 mb-1">
+                        <div>
+                          <span class="badge <%= statusRow.badgeClass || 'bg-secondary' %>">
+                            <%= statusRow.label || statusKey %>
+                          </span>
+                          <span class="small text-body-secondary ms-2">
+                            <%= safeQty(statusQty) %> requested units
+                          </span>
+                        </div>
+
+                        <div class="fw-semibold">
+                          <%= safeQty(statusCount) %>
+                        </div>
+                      </div>
+
+                      <div class="progress progress-thin">
+                        <div class="progress-bar <%= statusRow.progressClass || 'bg-secondary' %>" role="progressbar" style="width: <%= statusPercent %>%" aria-valuenow="<%= statusPercent %>" aria-valuemin="0" aria-valuemax="100"></div>
+                      </div>
+                    </div>
+                    <% }) %>
+
+                    <% if (!requestStatusTotal) { %>
+                    <div class="alert alert-light border mb-0">
+                      No seller supply requests yet.
+                    </div>
+                    <% } %>
+                  </div>
+
+                  <div class="col-lg-6">
+                    <div class="h6 fw-semibold text-primary mb-3">
+                      Wholesale Product Health
+                    </div>
+
+                    <div class="row g-3">
+                      <div class="col-6">
+                        <div class="border rounded-3 p-3 h-100">
+                          <div class="small text-body-secondary">Active Products</div>
+                          <div class="fs-4 fw-semibold text-primary">
+                            <%= safeQty(productHealthSummary.activeProducts || 0) %>
                           </div>
-                        </td>
-                        <td>
-                          <div class="text-nowrap">Yiorgos Avraamu</div>
-                          <div class="small text-body-secondary text-nowrap">
-                            <span>New</span> | Registered: Jan 1, 2023
+                        </div>
+                      </div>
+
+                      <div class="col-6">
+                        <div class="border rounded-3 p-3 h-100">
+                          <div class="small text-body-secondary">Total Stock</div>
+                          <div class="fs-4 fw-semibold text-success">
+                            <%= safeQty(productHealthSummary.totalStock || 0) %>
                           </div>
-                        </td>
-                        <td class="text-center">
-                          <img src="https://flagcdn.com/28x21/us.png" alt="United States" width="28" height="21">
-                        </td>
-                        <td>
-                          <div class="d-flex justify-content-between align-items-baseline">
-                            <div class="fw-semibold">50%</div>
-                            <div class="text-nowrap small text-body-secondary ms-3">Jun 11, 2023 - Jul 10, 2023</div>
+                        </div>
+                      </div>
+
+                      <div class="col-6">
+                        <div class="border rounded-3 p-3 h-100">
+                          <div class="small text-body-secondary">Low Stock</div>
+                          <div class="fs-4 fw-semibold text-warning">
+                            <%= safeQty(productHealthSummary.lowStock || 0) %>
                           </div>
-                          <div class="progress progress-thin">
-                            <div class="progress-bar bg-success" role="progressbar" style="width: 50%" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"></div>
+                          <div class="small text-body-secondary">
+                            1 - 15 units left
                           </div>
-                        </td>
-                        <td class="text-center">
-                          <i class="icon icon-xl cib-cc-mastercard"></i>
-                        </td>
-                        <td>
-                          <div class="small text-body-secondary">Last login</div>
-                          <div class="fw-semibold text-nowrap">10 sec ago</div>
-                        </td>
-                        <td>
-                          <div class="dropdown">
-                            <button class="btn btn-transparent p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <i class="icon cil-options"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                              <a class="dropdown-item" href="#">Info</a>
-                              <a class="dropdown-item" href="#">Edit</a>
-                              <a class="dropdown-item text-danger" href="#">Delete</a>
+                        </div>
+                      </div>
+
+                      <div class="col-6">
+                        <div class="border rounded-3 p-3 h-100">
+                          <div class="small text-body-secondary">Out of Stock</div>
+                          <div class="fs-4 fw-semibold text-danger">
+                            <%= safeQty(productHealthSummary.outOfStock || 0) %>
+                          </div>
+                          <div class="small text-body-secondary">
+                            0 units available
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="border rounded-3 p-3">
+                          <div class="d-flex flex-wrap justify-content-between gap-2">
+                            <div>
+                              <div class="small text-body-secondary">Draft Products</div>
+                              <div class="fw-semibold">
+                                <%= safeQty(productHealthSummary.draftProducts || 0) %>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div class="small text-body-secondary">Paused Products</div>
+                              <div class="fw-semibold">
+                                <%= safeQty(productHealthSummary.pausedProducts || 0) %>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div class="small text-body-secondary">Archived Products</div>
+                              <div class="fw-semibold">
+                                <%= safeQty(productHealthSummary.archivedProducts || 0) %>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div class="small text-body-secondary">Inventory Value</div>
+                              <div class="fw-semibold text-primary">
+                                <%= safeMoney(productHealthSummary.inventoryValue || 0) %>
+                              </div>
                             </div>
                           </div>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                      <tr class="align-middle">
-                        <td class="text-center">
-                          <div class="avatar avatar-md">
-                            <img class="avatar-img" src="assets/img/avatars/2.jpg" alt="user@email.com">
-                            <span class="avatar-status bg-danger"></span>
-                          </div>
-                        </td>
-                        <td>
-                          <div class="text-nowrap">Avram Tarasios</div>
-                          <div class="small text-body-secondary text-nowrap">
-                            <span>Recurring</span> | Registered: Jan 1, 2023
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <img src="https://flagcdn.com/28x21/br.png" alt="Brazil" width="28" height="21">
-                        </td>
-                        <td>
-                          <div class="d-flex justify-content-between align-items-baseline">
-                            <div class="fw-semibold">10%</div>
-                            <div class="text-nowrap small text-body-secondary ms-3">Jun 11, 2023 - Jul 10, 2023</div>
-                          </div>
-                          <div class="progress progress-thin">
-                            <div class="progress-bar bg-info" role="progressbar" style="width: 10%" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <i class="icon icon-xl cib-cc-visa"></i>
-                        </td>
-                        <td>
-                          <div class="small text-body-secondary">Last login</div>
-                          <div class="fw-semibold text-nowrap">5 minutes ago</div>
-                        </td>
-                        <td>
-                          <div class="dropdown">
-                            <button class="btn btn-transparent p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <i class="icon cil-options"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                              <a class="dropdown-item" href="#">Info</a>
-                              <a class="dropdown-item" href="#">Edit</a>
-                              <a class="dropdown-item text-danger" href="#">Delete</a>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
+                  <div class="col-12">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                      <div>
+                        <div class="h6 fw-semibold text-primary mb-1">
+                          Top Requesting Sellers
+                        </div>
+                        <div class="small text-body-secondary">
+                          Sellers ranked by approved quantity, total requested quantity, and request activity.
+                        </div>
+                      </div>
 
-                      <tr class="align-middle">
-                        <td class="text-center">
-                          <div class="avatar avatar-md">
-                            <img class="avatar-img" src="assets/img/avatars/3.jpg" alt="user@email.com">
-                            <span class="avatar-status bg-warning"></span>
-                          </div>
-                        </td>
-                        <td>
-                          <div class="text-nowrap">Quintin Ed</div>
-                          <div class="small text-body-secondary text-nowrap">
-                            <span>New</span> | Registered: Jan 1, 2023
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <img src="https://flagcdn.com/28x21/in.png" alt="India" width="28" height="21">
-                        </td>
-                        <td>
-                          <div class="d-flex justify-content-between align-items-baseline">
-                            <div class="fw-semibold">74%</div>
-                            <div class="text-nowrap small text-body-secondary ms-3">Jun 11, 2023 - Jul 10, 2023</div>
-                          </div>
-                          <div class="progress progress-thin">
-                            <div class="progress-bar bg-warning" role="progressbar" style="width: 74%" aria-valuenow="74" aria-valuemin="0" aria-valuemax="100"></div>
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <i class="icon icon-xl cib-cc-stripe"></i>
-                        </td>
-                        <td>
-                          <div class="small text-body-secondary">Last login</div>
-                          <div class="fw-semibold text-nowrap">1 hour ago</div>
-                        </td>
-                        <td>
-                          <div class="dropdown">
-                            <button class="btn btn-transparent p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <i class="icon cil-options"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                              <a class="dropdown-item" href="#">Info</a>
-                              <a class="dropdown-item" href="#">Edit</a>
-                              <a class="dropdown-item text-danger" href="#">Delete</a>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
+                      <a href="/wholesale/supplier/requests" class="btn btn-sm btn-outline-primary align-self-md-start">
+                        View All Supply Requests
+                      </a>
+                    </div>
 
-                      <tr class="align-middle">
-                        <td class="text-center">
-                          <div class="avatar avatar-md">
-                            <img class="avatar-img" src="assets/img/avatars/4.jpg" alt="user@email.com">
-                            <span class="avatar-status bg-secondary"></span>
-                          </div>
-                        </td>
-                        <td>
-                          <div class="text-nowrap">Enéas Kwadwo</div>
-                          <div class="small text-body-secondary text-nowrap">
-                            <span>New</span> | Registered: Jan 1, 2023
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <img src="https://flagcdn.com/28x21/fr.png" alt="France" width="28" height="21">
-                        </td>
-                        <td>
-                          <div class="d-flex justify-content-between align-items-baseline">
-                            <div class="fw-semibold">98%</div>
-                            <div class="text-nowrap small text-body-secondary ms-3">Jun 11, 2023 - Jul 10, 2023</div>
-                          </div>
-                          <div class="progress progress-thin">
-                            <div class="progress-bar bg-danger" role="progressbar" style="width: 98%" aria-valuenow="98" aria-valuemin="0" aria-valuemax="100"></div>
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <i class="icon icon-xl cib-cc-paypal"></i>
-                        </td>
-                        <td>
-                          <div class="small text-body-secondary">Last login</div>
-                          <div class="fw-semibold text-nowrap">Last month</div>
-                        </td>
-                        <td>
-                          <div class="dropdown">
-                            <button class="btn btn-transparent p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <i class="icon cil-options"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                              <a class="dropdown-item" href="#">Info</a>
-                              <a class="dropdown-item" href="#">Edit</a>
-                              <a class="dropdown-item text-danger" href="#">Delete</a>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
+                    <div class="table-responsive">
+                      <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Seller</th>
+                            <th class="text-end">Requests</th>
+                            <th class="text-end">Approved Qty</th>
+                            <th class="text-end">Pending Qty</th>
+                            <th class="text-end">Last Request</th>
+                          </tr>
+                        </thead>
 
-                      <tr class="align-middle">
-                        <td class="text-center">
-                          <div class="avatar avatar-md">
-                            <img class="avatar-img" src="assets/img/avatars/5.jpg" alt="user@email.com">
-                            <span class="avatar-status bg-success"></span>
-                          </div>
-                        </td>
-                        <td>
-                          <div class="text-nowrap">Agapetus Tadeáš</div>
-                          <div class="small text-body-secondary text-nowrap">
-                            <span>New</span> | Registered: Jan 1, 2023
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <img src="https://flagcdn.com/28x21/es.png" alt="Spain" width="28" height="21">
-                        </td>
-                        <td>
-                          <div class="d-flex justify-content-between align-items-baseline">
-                            <div class="fw-semibold">22%</div>
-                            <div class="text-nowrap small text-body-secondary ms-3">Jun 11, 2023 - Jul 10, 2023</div>
-                          </div>
-                          <div class="progress progress-thin">
-                            <div class="progress-bar bg-info" role="progressbar" style="width: 22%" aria-valuenow="22" aria-valuemin="0" aria-valuemax="100"></div>
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <i class="icon icon-xl cib-cc-apple-pay"></i>
-                        </td>
-                        <td>
-                          <div class="small text-body-secondary">Last login</div>
-                          <div class="fw-semibold text-nowrap">Last week</div>
-                        </td>
-                        <td>
-                          <div class="dropdown dropup">
-                            <button class="btn btn-transparent p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <i class="icon cil-options"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                              <a class="dropdown-item" href="#">Info</a>
-                              <a class="dropdown-item" href="#">Edit</a>
-                              <a class="dropdown-item text-danger" href="#">Delete</a>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
+                        <tbody>
+                          <% if (topRequestingSellers.length) { %>
+                          <% topRequestingSellers.forEach((seller) => { %>
+                          <tr>
+                            <td>
+                              <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-primary">
+                                  #<%= safeQty(seller.rank || 0) %>
+                                </span>
 
-                      <tr class="align-middle">
-                        <td class="text-center">
-                          <div class="avatar avatar-md">
-                            <img class="avatar-img" src="assets/img/avatars/6.jpg" alt="user@email.com">
-                            <span class="avatar-status bg-danger"></span>
-                          </div>
-                        </td>
-                        <td>
-                          <div class="text-nowrap">Friderik Dávid</div>
-                          <div class="small text-body-secondary text-nowrap">
-                            <span>New</span> | Registered: Jan 1, 2023
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <img src="https://flagcdn.com/28x21/pl.png" alt="Poland" width="28" height="21">
-                        </td>
-                        <td>
-                          <div class="d-flex justify-content-between align-items-baseline">
-                            <div class="fw-semibold">43%</div>
-                            <div class="text-nowrap small text-body-secondary ms-3">Jun 11, 2023 - Jul 10, 2023</div>
-                          </div>
-                          <div class="progress progress-thin">
-                            <div class="progress-bar bg-success" role="progressbar" style="width: 43%" aria-valuenow="43" aria-valuemin="0" aria-valuemax="100"></div>
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <i class="icon icon-xl cib-cc-amex"></i>
-                        </td>
-                        <td>
-                          <div class="small text-body-secondary">Last login</div>
-                          <div class="fw-semibold text-nowrap">Yesterday</div>
-                        </td>
-                        <td>
-                          <div class="dropdown dropup">
-                            <button class="btn btn-transparent p-0" type="button" data-coreui-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <i class="icon cil-options"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                              <a class="dropdown-item" href="#">Info</a>
-                              <a class="dropdown-item" href="#">Edit</a>
-                              <a class="dropdown-item text-danger" href="#">Delete</a>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                                <div class="min-w-0">
+                                  <div class="fw-semibold text-truncate">
+                                    <%= seller.sellerName || 'Seller account' %>
+                                  </div>
+
+                                  <div class="small text-body-secondary text-truncate">
+                                    <%= seller.sellerEmail || 'No email' %>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td class="text-end">
+                              <div class="fw-semibold">
+                                <%= safeQty(seller.totalRequests || 0) %>
+                              </div>
+                              <div class="small text-body-secondary">
+                                <%= safeQty(seller.approvedRequests || 0) %> approved
+                              </div>
+                            </td>
+
+                            <td class="text-end">
+                              <span class="fw-semibold text-success">
+                                <%= safeQty(seller.approvedQty || 0) %>
+                              </span>
+                            </td>
+
+                            <td class="text-end">
+                              <span class="fw-semibold text-warning">
+                                <%= safeQty(seller.pendingQty || 0) %>
+                              </span>
+                            </td>
+
+                            <td class="text-end">
+                              <%
+                                    const sellerLastRequestDate = seller.lastRequestAt ? new Date(seller.lastRequestAt) : null;
+                                    const sellerLastRequestText =
+                                      sellerLastRequestDate && !Number.isNaN(sellerLastRequestDate.getTime())
+                                        ? sellerLastRequestDate.toLocaleDateString()
+                                        : '—';
+                                  %>
+                              <span class="small text-body-secondary">
+                                <%= sellerLastRequestText %>
+                              </span>
+                            </td>
+                          </tr>
+                          <% }) %>
+                          <% } else { %>
+                          <tr>
+                            <td colspan="5">
+                              <div class="alert alert-light border mb-0">
+                                No seller request activity yet.
+                              </div>
+                            </td>
+                          </tr>
+                          <% } %>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card-footer bg-transparent">
+                <div class="d-flex flex-column flex-md-row justify-content-between gap-2 small text-body-secondary">
+                  <div>
+                    Request data comes from seller supply requests.
+                  </div>
+                  <div>
+                    Product health comes from your wholesale product inventory.
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <!-- /.col-->
+        </div>
+        <!-- /.row-->
+        <div class="row g-4 mb-4">
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-primary text-white">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
+                  <div>
+                    <div class="fw-semibold">Seller Location Interest</div>
+                    <div class="small text-white text-opacity-75">
+                      Top places where sellers imported your wholesale products.
+                    </div>
+                  </div>
+
+                  <a href="/wholesale/supplier/imported-sales" class="btn btn-sm btn-light align-self-lg-start">
+                    View Imported Sales
+                  </a>
+                </div>
+              </div>
+
+              <div class="card-body">
+                <div class="row g-4">
+                  <%
+                    const renderLocationRows = (rows, emptyText) => {
+                      const safeRows = Array.isArray(rows) ? rows : [];
+                      return safeRows;
+                    };
+                  %>
+
+                  <div class="col-lg-4">
+                    <div class="h6 fw-semibold text-primary mb-3">
+                      Top 10 Countries
+                    </div>
+
+                    <% const countryRows = renderLocationRows(topSellerCountries, 'No countries yet.'); %>
+
+                    <% if (countryRows.length) { %>
+                    <div class="list-group list-group-flush">
+                      <% countryRows.forEach((row, index) => { %>
+                      <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                          <div class="min-w-0">
+                            <div class="fw-semibold text-truncate">
+                              <span class="badge bg-primary me-2">#<%= index + 1 %></span>
+                              <%= row.name || 'Not specified' %>
+                            </div>
+
+                            <div class="small text-body-secondary">
+                              <%= safeQty(row.sellerCount || 0) %> sellers ·
+                              <%= safeQty(row.importedProducts || 0) %> imported products
+                            </div>
+                          </div>
+
+                          <div class="text-end">
+                            <div class="fw-semibold text-success">
+                              <%= safeQty(row.importedStock || 0) %>
+                            </div>
+                            <div class="small text-body-secondary">stock</div>
+                          </div>
+                        </div>
+                      </div>
+                      <% }) %>
+                    </div>
+                    <% } else { %>
+                    <div class="alert alert-light border mb-0">
+                      No country import data yet.
+                    </div>
+                    <% } %>
+                  </div>
+
+                  <div class="col-lg-4">
+                    <div class="h6 fw-semibold text-primary mb-3">
+                      Top 10 Provinces / States
+                    </div>
+
+                    <% const provinceRows = renderLocationRows(topSellerProvinces, 'No provinces yet.'); %>
+
+                    <% if (provinceRows.length) { %>
+                    <div class="list-group list-group-flush">
+                      <% provinceRows.forEach((row, index) => { %>
+                      <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                          <div class="min-w-0">
+                            <div class="fw-semibold text-truncate">
+                              <span class="badge bg-primary me-2">#<%= index + 1 %></span>
+                              <%= row.name || 'Not specified' %>
+                            </div>
+
+                            <div class="small text-body-secondary">
+                              <%= safeQty(row.sellerCount || 0) %> sellers ·
+                              <%= safeQty(row.importedProducts || 0) %> imported products
+                            </div>
+                          </div>
+
+                          <div class="text-end">
+                            <div class="fw-semibold text-success">
+                              <%= safeQty(row.importedStock || 0) %>
+                            </div>
+                            <div class="small text-body-secondary">stock</div>
+                          </div>
+                        </div>
+                      </div>
+                      <% }) %>
+                    </div>
+                    <% } else { %>
+                    <div class="alert alert-light border mb-0">
+                      No province/state import data yet.
+                    </div>
+                    <% } %>
+                  </div>
+
+                  <div class="col-lg-4">
+                    <div class="h6 fw-semibold text-primary mb-3">
+                      Top 10 Cities
+                    </div>
+
+                    <% const cityRows = renderLocationRows(topSellerCities, 'No cities yet.'); %>
+
+                    <% if (cityRows.length) { %>
+                    <div class="list-group list-group-flush">
+                      <% cityRows.forEach((row, index) => { %>
+                      <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                          <div class="min-w-0">
+                            <div class="fw-semibold text-truncate">
+                              <span class="badge bg-primary me-2">#<%= index + 1 %></span>
+                              <%= row.name || 'Not specified' %>
+                            </div>
+
+                            <div class="small text-body-secondary">
+                              <%= safeQty(row.sellerCount || 0) %> sellers ·
+                              <%= safeQty(row.importedProducts || 0) %> imported products
+                            </div>
+                          </div>
+
+                          <div class="text-end">
+                            <div class="fw-semibold text-success">
+                              <%= safeQty(row.importedStock || 0) %>
+                            </div>
+                            <div class="small text-body-secondary">stock</div>
+                          </div>
+                        </div>
+                      </div>
+                      <% }) %>
+                    </div>
+                    <% } else { %>
+                    <div class="alert alert-light border mb-0">
+                      No city import data yet.
+                    </div>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card-footer bg-transparent">
+                <div class="small text-body-secondary">
+                  Location interest is calculated from seller businesses that imported this supplier's wholesale products.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <!-- /.row-->
       </div>
