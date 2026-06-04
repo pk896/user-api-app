@@ -16,11 +16,10 @@ function getBiz(req) {
 
 function buildUtcDayKey(offsetDays = 0) {
   const base = new Date();
-  const d = new Date(Date.UTC(
-    base.getUTCFullYear(),
-    base.getUTCMonth(),
-    base.getUTCDate()
-  ));
+
+  const d = new Date(
+    Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate())
+  );
 
   d.setUTCDate(d.getUTCDate() + offsetDays);
 
@@ -39,6 +38,21 @@ function buildDayKeyRange(startOffset, endOffset) {
   }
 
   return keys;
+}
+
+function calculateGrowthPercent(currentQty, previousQty) {
+  const current = Number(currentQty || 0);
+  const previous = Number(previousQty || 0);
+
+  if (previous > 0) {
+    return Number((((current - previous) / previous) * 100).toFixed(1));
+  }
+
+  if (previous === 0 && current > 0) {
+    return 100;
+  }
+
+  return 0;
 }
 
 // GET /api/seller/fastest-growing-products
@@ -62,85 +76,190 @@ router.get('/fastest-growing-products', requireBusiness, async (req, res) => {
 
     const businessId = new mongoose.Types.ObjectId(business._id);
 
+    // ✅ Weekly comparison
+    // current week: last 7 days including today
+    // previous week: 7 days before that
     const current7DayKeys = buildDayKeyRange(-6, 0);
     const previous7DayKeys = buildDayKeyRange(-13, -7);
 
-    const currentStats = await SellerProductDailyStat.aggregate([
+    // ✅ Monthly comparison
+    // current month window: last 30 days including today
+    // previous month window: 30 days before that
+    const current30DayKeys = buildDayKeyRange(-29, 0);
+    const previous30DayKeys = buildDayKeyRange(-59, -30);
+
+    const allNeededDayKeys = [
+      ...new Set([
+        ...current7DayKeys,
+        ...previous7DayKeys,
+        ...current30DayKeys,
+        ...previous30DayKeys,
+      ]),
+    ];
+
+    const stats = await SellerProductDailyStat.aggregate([
       {
         $match: {
           business: businessId,
-          dayKey: { $in: current7DayKeys },
-        }
+          dayKey: { $in: allNeededDayKeys },
+        },
       },
       {
         $group: {
           _id: '$productCustomId',
-          currentSoldCount: { $sum: '$soldCount' },
-          currentRevenue: { $sum: '$revenue' },
-          currentSoldOrders: { $sum: '$soldOrders' },
+
+          currentWeeklySold: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', current7DayKeys] }, '$soldCount', 0],
+            },
+          },
+          previousWeeklySold: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', previous7DayKeys] }, '$soldCount', 0],
+            },
+          },
+
+          currentMonthlySold: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', current30DayKeys] }, '$soldCount', 0],
+            },
+          },
+          previousMonthlySold: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', previous30DayKeys] }, '$soldCount', 0],
+            },
+          },
+
+          currentWeeklyRevenue: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', current7DayKeys] }, '$revenue', 0],
+            },
+          },
+          previousWeeklyRevenue: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', previous7DayKeys] }, '$revenue', 0],
+            },
+          },
+
+          currentMonthlyRevenue: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', current30DayKeys] }, '$revenue', 0],
+            },
+          },
+          previousMonthlyRevenue: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', previous30DayKeys] }, '$revenue', 0],
+            },
+          },
+
+          currentWeeklyOrders: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', current7DayKeys] }, '$soldOrders', 0],
+            },
+          },
+          currentMonthlyOrders: {
+            $sum: {
+              $cond: [{ $in: ['$dayKey', current30DayKeys] }, '$soldOrders', 0],
+            },
+          },
+
           productName: { $last: '$productName' },
-        }
-      }
-    ]);
-
-    const previousStats = await SellerProductDailyStat.aggregate([
-      {
-        $match: {
-          business: businessId,
-          dayKey: { $in: previous7DayKeys },
-        }
+        },
       },
-      {
-        $group: {
-          _id: '$productCustomId',
-          previousSoldCount: { $sum: '$soldCount' },
-          previousRevenue: { $sum: '$revenue' },
-          previousSoldOrders: { $sum: '$soldOrders' },
-        }
-      }
     ]);
 
-    const previousByCustomId = new Map(
-      previousStats.map((item) => [String(item._id), item])
-    );
+    const merged = stats
+      .map((row) => {
+        const customId = String(row._id || '').trim();
 
-    const merged = currentStats
-      .map((currentItem) => {
-        const customId = String(currentItem._id || '');
-        const previousItem = previousByCustomId.get(customId);
+        const currentWeeklySold = Number(row.currentWeeklySold || 0);
+        const previousWeeklySold = Number(row.previousWeeklySold || 0);
 
-        const currentSoldCount = Number(currentItem?.currentSoldCount || 0);
-        const previousSoldCount = Number(previousItem?.previousSoldCount || 0);
-        const currentRevenue = Number(currentItem?.currentRevenue || 0);
-        const previousRevenue = Number(previousItem?.previousRevenue || 0);
+        const currentMonthlySold = Number(row.currentMonthlySold || 0);
+        const previousMonthlySold = Number(row.previousMonthlySold || 0);
 
-        const growthCount = currentSoldCount - previousSoldCount;
-        const growthRevenue = Number((currentRevenue - previousRevenue).toFixed(2));
+        const weeklyGrowthCount = currentWeeklySold - previousWeeklySold;
+        const monthlyGrowthCount = currentMonthlySold - previousMonthlySold;
 
-        let growthPercent = null;
+        const weeklyGrowthPercent = calculateGrowthPercent(
+          currentWeeklySold,
+          previousWeeklySold
+        );
 
-        if (previousSoldCount > 0) {
-        growthPercent = Number((((currentSoldCount - previousSoldCount) / previousSoldCount) * 100).toFixed(2));
-        }
+        const monthlyGrowthPercent = calculateGrowthPercent(
+          currentMonthlySold,
+          previousMonthlySold
+        );
+
+        const currentWeeklyRevenue = Number(row.currentWeeklyRevenue || 0);
+        const previousWeeklyRevenue = Number(row.previousWeeklyRevenue || 0);
+
+        const currentMonthlyRevenue = Number(row.currentMonthlyRevenue || 0);
+        const previousMonthlyRevenue = Number(row.previousMonthlyRevenue || 0);
 
         return {
           customId,
-          name: currentItem?.productName || 'Unnamed product',
-          currentSoldCount,
-          previousSoldCount,
-          currentRevenue: Number(currentRevenue.toFixed(2)),
-          previousRevenue: Number(previousRevenue.toFixed(2)),
-          growthCount,
-          growthRevenue,
-          growthPercent,
-          currentSoldOrders: Number(currentItem?.currentSoldOrders || 0),
-          previousSoldOrders: Number(previousItem?.previousSoldOrders || 0),
+          name: row.productName || 'Unnamed product',
+
+          currentWeeklySold,
+          previousWeeklySold,
+          weeklyGrowthCount,
+          weeklyGrowthPercent,
+
+          currentMonthlySold,
+          previousMonthlySold,
+          monthlyGrowthCount,
+          monthlyGrowthPercent,
+
+          currentWeeklyRevenue: Number(currentWeeklyRevenue.toFixed(2)),
+          previousWeeklyRevenue: Number(previousWeeklyRevenue.toFixed(2)),
+          weeklyRevenueGrowth: Number(
+            (currentWeeklyRevenue - previousWeeklyRevenue).toFixed(2)
+          ),
+
+          currentMonthlyRevenue: Number(currentMonthlyRevenue.toFixed(2)),
+          previousMonthlyRevenue: Number(previousMonthlyRevenue.toFixed(2)),
+          monthlyRevenueGrowth: Number(
+            (currentMonthlyRevenue - previousMonthlyRevenue).toFixed(2)
+          ),
+
+          currentWeeklyOrders: Number(row.currentWeeklyOrders || 0),
+          currentMonthlyOrders: Number(row.currentMonthlyOrders || 0),
+
+          // ✅ Backward-safe old names
+          currentSoldCount: currentWeeklySold,
+          previousSoldCount: previousWeeklySold,
+          growthCount: weeklyGrowthCount,
+          growthPercent: weeklyGrowthPercent,
+          growthRevenue: Number((currentWeeklyRevenue - previousWeeklyRevenue).toFixed(2)),
         };
       })
-      .filter((item) => item.currentSoldCount > 0 && item.growthCount > 0)
+      .filter((item) => {
+        if (!item.customId) return false;
+
+        // ✅ Only show products that have real current activity and positive growth.
+        return (
+          (item.currentWeeklySold > 0 && item.weeklyGrowthCount > 0) ||
+          (item.currentMonthlySold > 0 && item.monthlyGrowthCount > 0)
+        );
+      })
       .sort((a, b) => {
-        if (b.growthCount !== a.growthCount) return b.growthCount - a.growthCount;
-        if (b.growthRevenue !== a.growthRevenue) return b.growthRevenue - a.growthRevenue;
+        if (b.weeklyGrowthPercent !== a.weeklyGrowthPercent) {
+          return b.weeklyGrowthPercent - a.weeklyGrowthPercent;
+        }
+
+        if (b.monthlyGrowthPercent !== a.monthlyGrowthPercent) {
+          return b.monthlyGrowthPercent - a.monthlyGrowthPercent;
+        }
+
+        if (b.weeklyGrowthCount !== a.weeklyGrowthCount) {
+          return b.weeklyGrowthCount - a.weeklyGrowthCount;
+        }
+
+        if (b.monthlyGrowthCount !== a.monthlyGrowthCount) {
+          return b.monthlyGrowthCount - a.monthlyGrowthCount;
+        }
+
         return a.name.localeCompare(b.name);
       })
       .slice(0, 10);
@@ -168,10 +287,30 @@ router.get('/fastest-growing-products', requireBusiness, async (req, res) => {
         category: product?.category || 'General',
         price: Number(product?.price || 0),
 
+        currentWeeklySold: item.currentWeeklySold,
+        previousWeeklySold: item.previousWeeklySold,
+        weeklyGrowthCount: item.weeklyGrowthCount,
+        weeklyGrowthPercent: item.weeklyGrowthPercent,
+
+        currentMonthlySold: item.currentMonthlySold,
+        previousMonthlySold: item.previousMonthlySold,
+        monthlyGrowthCount: item.monthlyGrowthCount,
+        monthlyGrowthPercent: item.monthlyGrowthPercent,
+
+        currentWeeklyRevenue: item.currentWeeklyRevenue,
+        previousWeeklyRevenue: item.previousWeeklyRevenue,
+        weeklyRevenueGrowth: item.weeklyRevenueGrowth,
+
+        currentMonthlyRevenue: item.currentMonthlyRevenue,
+        previousMonthlyRevenue: item.previousMonthlyRevenue,
+        monthlyRevenueGrowth: item.monthlyRevenueGrowth,
+
+        currentWeeklyOrders: item.currentWeeklyOrders,
+        currentMonthlyOrders: item.currentMonthlyOrders,
+
+        // ✅ Backward-safe old names
         currentSoldCount: item.currentSoldCount,
         previousSoldCount: item.previousSoldCount,
-        currentRevenue: item.currentRevenue,
-        previousRevenue: item.previousRevenue,
         growthCount: item.growthCount,
         growthRevenue: item.growthRevenue,
         growthPercent: item.growthPercent,
@@ -181,17 +320,17 @@ router.get('/fastest-growing-products', requireBusiness, async (req, res) => {
     return res.json({
       ok: true,
       currency:
-        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
-        'USD',
+        String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD',
       stats: {
         total: normalizedProducts.length,
-        currentRangeLabel: 'Last 7 days',
-        previousRangeLabel: 'Previous 7 days',
+        weeklyRangeLabel: 'Last 7 days vs previous 7 days',
+        monthlyRangeLabel: 'Last 30 days vs previous 30 days',
       },
       products: normalizedProducts,
     });
   } catch (error) {
     console.error('❌ seller fastest growing products api error:', error);
+
     return res.status(500).json({
       ok: false,
       message: 'Failed to load fastest growing products',
