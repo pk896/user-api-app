@@ -593,6 +593,7 @@ const adminStatsApi = require('./routes/adminStatsApi');
 const adminInventoryStatsApi = require('./routes/adminInventoryStatsApi');
 const adminAppUsersStatsApi = require('./routes/adminAppUsersStatsApi');
 const adminOrdersStatsApi = require('./routes/adminOrdersStatsApi');
+const adminGrossSalesMetricApi = require('./routes/adminGrossSalesMetricApi');
 const adminChartsApiRouter = require("./routes/adminChartsApi");
 const sellerStatsApi = require('./routes/sellerStatsApi');
 const sellerEarningsApi = require('./routes/sellerEarningsApi');
@@ -667,11 +668,13 @@ app.use('/api/seller', sellerTopBestSellersApi);
 app.use('/api/seller', sellerFastestGrowingProductsApi);
 app.use('/api/seller', sellerRecentOrdersCardApi);
 app.use('/api/seller', sellerTrendSummaryApi);
+
 app.use('/api/admin', adminStatsApi);
 app.use('/api/admin', adminInventoryStatsApi);
 app.use('/api/admin', adminAppUsersStatsApi);
 app.use('/api/admin', adminOrdersStatsApi);
 app.use('/api/admin', adminOrdersViewApi);
+app.use('/api/admin', adminGrossSalesMetricApi);
 app.use('/admin/api/dashboard', adminDashboardRouter);
 app.use("/api/admin/charts", adminChartsApiRouter);
 // Public API for checkout
