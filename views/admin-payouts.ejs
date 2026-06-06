@@ -19,6 +19,18 @@
     return (n / 100).toFixed(2);
   }
 
+  function payoutFailureReason(p) {
+    const meta = p && typeof p.meta === 'object' && p.meta ? p.meta : {};
+
+    const createError = meta.createError ? String(meta.createError) : '';
+    const batchStatus = meta.batchStatus ? String(meta.batchStatus) : '';
+
+    if (createError) return createError;
+    if (batchStatus) return 'PayPal batch status: ' + batchStatus;
+
+    return '';
+  }
+
   function badgeClass(status) {
     const v = String(status || '').trim().toUpperCase();
     if (v === 'COMPLETED' || v === 'SUCCESS') return 'bg-success-subtle text-success border border-success-subtle';
@@ -67,11 +79,7 @@
 %>
 
 <!-- Spinner Start -->
-<div
-  id="spinner"
-  class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center"
-  style="z-index: 9999;"
->
+<div id="spinner" class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center" style="z-index: 9999;">
   <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
     <span class="visually-hidden">Loading...</span>
   </div>
@@ -223,43 +231,43 @@
             </thead>
             <tbody>
               <% if (!preview.length) { %>
-                <tr>
-                  <td colspan="5" class="text-center text-muted py-4">No sellers or suppliers found.</td>
-                </tr>
+              <tr>
+                <td colspan="5" class="text-center text-muted py-4">No sellers or suppliers found.</td>
+              </tr>
               <% } else { %>
-                <% preview.forEach(function(s){ %>
-                  <tr>
-                    <td>
-                      <div class="fw-bold text-break"><%= esc(s.name || '—') %></div>
-                      <div class="small text-muted text-break">businessId: <%= esc(s.businessId) %></div>
-                    </td>
+              <% preview.forEach(function(s){ %>
+              <tr>
+                <td>
+                  <div class="fw-bold text-break"><%= esc(s.name || '—') %></div>
+                  <div class="small text-muted text-break">businessId: <%= esc(s.businessId) %></div>
+                </td>
 
-                    <td><%- yesNoPill(!!s.enabled, 'ENABLED', 'DISABLED') %></td>
+                <td><%- yesNoPill(!!s.enabled, 'ENABLED', 'DISABLED') %></td>
 
-                    <td>
-                      <% if (s.hasPaypal) { %>
-                        <span class="badge rounded-pill brand-soft-purple text-dark border text-wrap"><%= esc(s.paypalEmailMasked || maskEmailLocal(s.paypalEmail || '')) %></span>
-                      <% } else { %>
-                        <span class="badge rounded-pill text-bg-danger">NOT SET</span>
-                      <% } %>
-                    </td>
+                <td>
+                  <% if (s.hasPaypal) { %>
+                  <span class="badge rounded-pill brand-soft-purple text-dark border text-wrap"><%= esc(s.paypalEmailMasked || maskEmailLocal(s.paypalEmail || '')) %></span>
+                  <% } else { %>
+                  <span class="badge rounded-pill text-bg-danger">NOT SET</span>
+                  <% } %>
+                </td>
 
-                    <td>
-                      <div class="fw-bold brand-purple-text">
-                        <%= money(s.availableCents) %> <span class="small text-muted"><%= esc(previewCurrency) %></span>
-                      </div>
-                      <div class="small text-muted">cents: <%= Number(s.availableCents||0) %></div>
-                    </td>
+                <td>
+                  <div class="fw-bold brand-purple-text">
+                    <%= money(s.availableCents) %> <span class="small text-muted"><%= esc(previewCurrency) %></span>
+                  </div>
+                  <div class="small text-muted">cents: <%= Number(s.availableCents||0) %></div>
+                </td>
 
-                    <td>
-                      <% if (s.eligible) { %>
-                        <span class="badge rounded-pill text-bg-success">YES</span>
-                      <% } else { %>
-                        <span class="badge rounded-pill text-bg-secondary">NO</span>
-                      <% } %>
-                    </td>
-                  </tr>
-                <% }) %>
+                <td>
+                  <% if (s.eligible) { %>
+                  <span class="badge rounded-pill text-bg-success">YES</span>
+                  <% } else { %>
+                  <span class="badge rounded-pill text-bg-secondary">NO</span>
+                  <% } %>
+                </td>
+              </tr>
+              <% }) %>
               <% } %>
             </tbody>
           </table>
@@ -269,59 +277,59 @@
       <!-- mobile / tablet cards -->
       <div class="card-body d-lg-none p-2 p-md-3">
         <% if (!preview.length) { %>
-          <div class="text-center text-muted py-3">No sellers or suppliers found.</div>
+        <div class="text-center text-muted py-3">No sellers or suppliers found.</div>
         <% } else { %>
-          <div class="row g-2 g-md-3">
-            <% preview.forEach(function(s){ %>
-              <div class="col-12">
-                <div class="card border-0 shadow-sm h-100 brand-soft-purple">
-                  <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
-                      <div class="min-w-0 flex-grow-1">
-                        <div class="fw-bold brand-purple-text text-break"><%= esc(s.name || '—') %></div>
-                        <div class="small text-muted text-break">businessId: <%= esc(s.businessId) %></div>
-                      </div>
-                      <div class="flex-shrink-0">
-                        <% if (s.eligible) { %>
-                          <span class="badge rounded-pill text-bg-success">YES</span>
-                        <% } else { %>
-                          <span class="badge rounded-pill text-bg-secondary">NO</span>
-                        <% } %>
-                      </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-start gap-2 py-2 border-top flex-wrap">
-                      <span class="small text-muted fw-semibold">Payouts</span>
-                      <span><%- yesNoPill(!!s.enabled, 'ENABLED', 'DISABLED') %></span>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-start gap-2 py-2 border-top flex-wrap">
-                      <span class="small text-muted fw-semibold">PayPal</span>
-                      <div class="text-end">
-                        <% if (s.hasPaypal) { %>
-                          <span class="badge rounded-pill brand-kpi-soft-purple text-dark border text-wrap"><%= esc(s.paypalEmailMasked || maskEmailLocal(s.paypalEmail || '')) %></span>
-                        <% } else { %>
-                          <span class="badge rounded-pill text-bg-danger">NOT SET</span>
-                        <% } %>
-                      </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-start gap-2 py-2 border-top flex-wrap">
-                      <span class="small text-muted fw-semibold">Available</span>
-                      <span class="fw-bold brand-purple-text text-break">
-                        <%= money(s.availableCents) %> <span class="small text-muted"><%= esc(previewCurrency) %></span>
-                      </span>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-start gap-2 pt-2 border-top flex-wrap">
-                      <span class="small text-muted fw-semibold">Cents</span>
-                      <span class="small text-muted text-break"><%= Number(s.availableCents||0) %></span>
-                    </div>
+        <div class="row g-2 g-md-3">
+          <% preview.forEach(function(s){ %>
+          <div class="col-12">
+            <div class="card border-0 shadow-sm h-100 brand-soft-purple">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+                  <div class="min-w-0 flex-grow-1">
+                    <div class="fw-bold brand-purple-text text-break"><%= esc(s.name || '—') %></div>
+                    <div class="small text-muted text-break">businessId: <%= esc(s.businessId) %></div>
+                  </div>
+                  <div class="flex-shrink-0">
+                    <% if (s.eligible) { %>
+                    <span class="badge rounded-pill text-bg-success">YES</span>
+                    <% } else { %>
+                    <span class="badge rounded-pill text-bg-secondary">NO</span>
+                    <% } %>
                   </div>
                 </div>
+
+                <div class="d-flex justify-content-between align-items-start gap-2 py-2 border-top flex-wrap">
+                  <span class="small text-muted fw-semibold">Payouts</span>
+                  <span><%- yesNoPill(!!s.enabled, 'ENABLED', 'DISABLED') %></span>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start gap-2 py-2 border-top flex-wrap">
+                  <span class="small text-muted fw-semibold">PayPal</span>
+                  <div class="text-end">
+                    <% if (s.hasPaypal) { %>
+                    <span class="badge rounded-pill brand-kpi-soft-purple text-dark border text-wrap"><%= esc(s.paypalEmailMasked || maskEmailLocal(s.paypalEmail || '')) %></span>
+                    <% } else { %>
+                    <span class="badge rounded-pill text-bg-danger">NOT SET</span>
+                    <% } %>
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start gap-2 py-2 border-top flex-wrap">
+                  <span class="small text-muted fw-semibold">Available</span>
+                  <span class="fw-bold brand-purple-text text-break">
+                    <%= money(s.availableCents) %> <span class="small text-muted"><%= esc(previewCurrency) %></span>
+                  </span>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start gap-2 pt-2 border-top flex-wrap">
+                  <span class="small text-muted fw-semibold">Cents</span>
+                  <span class="small text-muted text-break"><%= Number(s.availableCents||0) %></span>
+                </div>
               </div>
-            <% }) %>
+            </div>
           </div>
+          <% }) %>
+        </div>
         <% } %>
       </div>
 
@@ -357,28 +365,13 @@
 
                 <div class="col-12 col-md-6">
                   <label for="minCents" class="form-label fw-semibold brand-purple-text">Minimum payout (cents)</label>
-                  <input
-                    id="minCents"
-                    name="minCents"
-                    class="form-control brand-input"
-                    placeholder="0 (example: 5000 = 50.00)"
-                    inputmode="numeric"
-                    value="0"
-                    autocomplete="off"
-                  />
+                  <input id="minCents" name="minCents" class="form-control brand-input" placeholder="0 (example: 5000 = 50.00)" inputmode="numeric" value="0" autocomplete="off" />
                   <div class="form-text">Only sellers and suppliers with available ≥ minCents will be paid.</div>
                 </div>
 
                 <div class="col-12">
                   <label for="note" class="form-label fw-semibold brand-purple-text">Note</label>
-                  <input
-                    id="note"
-                    name="note"
-                    class="form-control brand-input"
-                    placeholder="Seller payout (for internal records)"
-                    value="Seller payout"
-                    autocomplete="off"
-                  />
+                  <input id="note" name="note" class="form-control brand-input" placeholder="Seller payout (for internal records)" value="Seller payout" autocomplete="off" />
                 </div>
 
                 <div class="col-12">
@@ -437,140 +430,148 @@
 
       <div class="card-body p-2 p-md-3">
         <% if (!payoutList.length) { %>
-          <div class="text-center py-4">
-            <div class="fs-2">📭</div>
-            <div class="fw-bold mt-2 brand-purple-text">No payout batches yet</div>
-            <div class="text-muted small">Use “Auto Pay Now” above.</div>
-          </div>
+        <div class="text-center py-4">
+          <div class="fs-2">📭</div>
+          <div class="fw-bold mt-2 brand-purple-text">No payout batches yet</div>
+          <div class="text-muted small">Use “Auto Pay Now” above.</div>
+        </div>
         <% } else { %>
 
-          <div class="row g-2 g-md-3">
-            <% payoutList.forEach(function(p, idx){
+        <div class="row g-2 g-md-3">
+          <% payoutList.forEach(function(p, idx){
               const items = Array.isArray(p.items) ? p.items : [];
               const sent = items.filter(i => String(i.status||'').toUpperCase()==='SENT').length;
               const failed = items.filter(i => String(i.status||'').toUpperCase()==='FAILED').length;
               const pending = items.filter(i => String(i.status||'').toUpperCase()==='PENDING').length;
               const collapseId = 'payoutItems-' + idx;
             %>
-              <div class="col-12">
-                <div class="card border-0 shadow-sm h-100 brand-kpi-soft-purple">
-                  <div class="card-body p-3">
+          <div class="col-12">
+            <div class="card border-0 shadow-sm h-100 brand-kpi-soft-purple">
+              <div class="card-body p-3">
+                <div class="row g-3">
+                  <div class="col-12 col-xl-8">
                     <div class="row g-3">
-                      <div class="col-12 col-xl-8">
-                        <div class="row g-3">
-                          <div class="col-12 col-md-6 col-lg-4">
-                            <div class="small text-muted fw-semibold">Created</div>
-                            <div class="fw-bold text-break brand-purple-text"><%= p.createdAt ? new Date(p.createdAt).toLocaleString() : '—' %></div>
-                            <div class="small text-muted">Admin payouts</div>
-                          </div>
-
-                          <div class="col-6 col-md-3 col-lg-2">
-                            <div class="small text-muted fw-semibold">Mode</div>
-                            <div><span class="badge rounded-pill bg-white text-dark border"><%= esc(p.mode || 'SANDBOX') %></span></div>
-                          </div>
-
-                          <div class="col-6 col-md-3 col-lg-3">
-                            <div class="small text-muted fw-semibold">Status</div>
-                            <div><span class="badge rounded-pill <%= badgeClass(p.status) %>"><%= esc(p.status || '—') %></span></div>
-                          </div>
-
-                          <div class="col-6 col-md-3 col-lg-1">
-                            <div class="small text-muted fw-semibold">Currency</div>
-                            <div class="fw-bold brand-purple-text"><%= esc(p.currency || previewCurrency) %></div>
-                          </div>
-
-                          <div class="col-6 col-md-3 col-lg-2">
-                            <div class="small text-muted fw-semibold">Total</div>
-                            <div class="fw-bold brand-purple-text"><%= money(p.totalCents) %></div>
-                            <div class="small text-muted">cents: <%= Number(p.totalCents||0) %></div>
-                          </div>
-
-                          <div class="col-12 col-lg-6">
-                            <div class="small text-muted fw-semibold">Batch IDs</div>
-                            <div class="small text-break">
-                              <div><strong>batchId:</strong> <%= esc(p.batchId || '—') %></div>
-                              <div><strong>senderBatchId:</strong> <%= esc(p.senderBatchId || '—') %></div>
-                            </div>
-                          </div>
-
-                          <div class="col-12 col-lg-6">
-                            <div class="small text-muted fw-semibold mb-1">Items</div>
-                            <div class="d-flex flex-wrap gap-2">
-                              <span class="badge rounded-pill text-bg-success">SENT: <strong class="ms-1"><%= sent %></strong></span>
-                              <span class="badge rounded-pill text-white brand-purple-bg">PENDING: <strong class="ms-1"><%= pending %></strong></span>
-                              <span class="badge rounded-pill text-bg-danger">FAILED: <strong class="ms-1"><%= failed %></strong></span>
-                            </div>
-                          </div>
-                        </div>
+                      <div class="col-12 col-md-6 col-lg-4">
+                        <div class="small text-muted fw-semibold">Created</div>
+                        <div class="fw-bold text-break brand-purple-text"><%= p.createdAt ? new Date(p.createdAt).toLocaleString() : '—' %></div>
+                        <div class="small text-muted">Admin payouts</div>
                       </div>
 
-                      <div class="col-12 col-xl-4">
-                        <div class="d-flex flex-column flex-sm-row flex-xl-column gap-2">
-                          <form method="POST" action="/admin/payouts/<%= esc(p._id) %>/sync" class="m-0">
-                            <button class="btn brand-soft-purple brand-purple-text border w-100" type="submit">Sync</button>
-                          </form>
+                      <div class="col-6 col-md-3 col-lg-2">
+                        <div class="small text-muted fw-semibold">Mode</div>
+                        <div><span class="badge rounded-pill bg-white text-dark border"><%= esc(p.mode || 'SANDBOX') %></span></div>
+                      </div>
 
-                          <button
-                            class="btn brand-kpi-soft-green brand-purple-text border w-100"
-                            type="button"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#<%= collapseId %>"
-                            aria-expanded="false"
-                            aria-controls="<%= collapseId %>"
-                          >
-                            View Items (<%= items.length %>)
-                          </button>
+                      <div class="col-6 col-md-3 col-lg-3">
+                        <div class="small text-muted fw-semibold">Status</div>
+                        <div><span class="badge rounded-pill <%= badgeClass(p.status) %>"><%= esc(p.status || '—') %></span></div>
+                      </div>
+
+                      <div class="col-6 col-md-3 col-lg-1">
+                        <div class="small text-muted fw-semibold">Currency</div>
+                        <div class="fw-bold brand-purple-text"><%= esc(p.currency || previewCurrency) %></div>
+                      </div>
+
+                      <div class="col-6 col-md-3 col-lg-2">
+                        <div class="small text-muted fw-semibold">Total</div>
+                        <div class="fw-bold brand-purple-text"><%= money(p.totalCents) %></div>
+                        <div class="small text-muted">cents: <%= Number(p.totalCents||0) %></div>
+                      </div>
+
+                      <div class="col-12 col-lg-6">
+                        <div class="small text-muted fw-semibold">Batch IDs</div>
+                        <div class="small text-break">
+                          <div><strong>batchId:</strong> <%= esc(p.batchId || '—') %></div>
+                          <div><strong>senderBatchId:</strong> <%= esc(p.senderBatchId || '—') %></div>
+                        </div>
+
+                        <% const failReason = payoutFailureReason(p); %>
+                        <% if (String(p.status || '').toUpperCase() === 'FAILED' && failReason) { %>
+                        <div class="alert alert-danger mt-3 mb-0 small text-break">
+                          <div class="fw-bold mb-1">Failure reason</div>
+                          <%= esc(failReason) %>
+                        </div>
+                        <% } %>
+                      </div>
+
+                      <div class="col-12 col-lg-6">
+                        <div class="small text-muted fw-semibold mb-1">Items</div>
+                        <div class="d-flex flex-wrap gap-2">
+                          <span class="badge rounded-pill text-bg-success">SENT: <strong class="ms-1"><%= sent %></strong></span>
+                          <span class="badge rounded-pill text-white brand-purple-bg">PENDING: <strong class="ms-1"><%= pending %></strong></span>
+                          <span class="badge rounded-pill text-bg-danger">FAILED: <strong class="ms-1"><%= failed %></strong></span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div class="collapse" id="<%= collapseId %>">
-                    <div class="card-footer border-0 brand-soft-purple p-3">
-                      <% if (!items.length) { %>
-                        <div class="text-muted small">No items for this payout batch.</div>
+                  <div class="col-12 col-xl-4">
+                    <div class="d-flex flex-column flex-sm-row flex-xl-column gap-2">
+                      <% if (p.batchId) { %>
+                      <form method="POST" action="/admin/payouts/<%= esc(p._id) %>/sync" class="m-0">
+                        <button class="btn brand-soft-purple brand-purple-text border w-100" type="submit">Sync</button>
+                      </form>
                       <% } else { %>
-                        <div class="row g-2 g-md-3">
-                          <% items.forEach(function(it){
-                            const st = String(it.status||'PENDING').toUpperCase();
-                            const receiverRaw = String(it.receiver || '').trim();
-                            const receiverMasked = receiverRaw ? maskEmailLocal(receiverRaw) : '—';
-                          %>
-                            <div class="col-12 col-md-6 col-xl-4">
-                              <div class="card border-0 shadow-sm h-100 bg-white">
-                                <div class="card-body p-3">
-                                  <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
-                                    <span class="badge rounded-pill brand-soft-purple text-dark border"><%= esc(it.currency || p.currency || previewCurrency) %></span>
-                                    <span class="badge rounded-pill <%= st==='SENT' ? 'text-bg-success' : (st==='FAILED' ? 'text-bg-danger' : 'text-white brand-purple-bg') %>">
-                                      <%= esc(st) %>
-                                    </span>
-                                  </div>
-
-                                  <div class="fw-bold fs-5 brand-purple-text"><%= money(it.amountCents) %></div>
-                                  <div class="mt-1 fw-semibold text-break"><%= esc(receiverMasked) %></div>
-                                  <div class="small text-muted mt-1 text-break">businessId: <%= esc(it.businessId) %></div>
-
-                                  <% if (it.error) { %>
-                                    <div class="alert alert-danger py-2 px-3 small mt-3 mb-2">
-                                      Error: <%= esc(it.error) %>
-                                    </div>
-                                  <% } %>
-
-                                  <div class="small text-muted mt-2 text-break">
-                                    paypalItemId: <%= esc(it.paypalItemId || '—') %>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          <% }) %>
-                        </div>
+                      <div class="alert alert-warning small mb-0 text-break">
+                        <div class="fw-bold">Not syncable</div>
+                        PayPal batch was never created, so this old failed payout has no PayPal batchId.
+                      </div>
                       <% } %>
+
+                      <button class="btn brand-kpi-soft-green brand-purple-text border w-100" type="button" data-bs-toggle="collapse" data-bs-target="#<%= collapseId %>" aria-expanded="false" aria-controls="<%= collapseId %>">
+                        View Items (<%= items.length %>)
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
-            <% }) %>
+
+              <div class="collapse" id="<%= collapseId %>">
+                <div class="card-footer border-0 brand-soft-purple p-3">
+                  <% if (!items.length) { %>
+                  <div class="text-muted small">No items for this payout batch.</div>
+                  <% } else { %>
+                  <div class="row g-2 g-md-3">
+                    <% items.forEach(function(it){
+                            const st = String(it.status||'PENDING').toUpperCase();
+                            const receiverRaw = String(it.receiver || '').trim();
+                            const receiverMasked = receiverRaw ? maskEmailLocal(receiverRaw) : '—';
+                          %>
+                    <div class="col-12 col-md-6 col-xl-4">
+                      <div class="card border-0 shadow-sm h-100 bg-white">
+                        <div class="card-body p-3">
+                          <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+                            <span class="badge rounded-pill brand-soft-purple text-dark border"><%= esc(it.currency || p.currency || previewCurrency) %></span>
+                            <span class="badge rounded-pill <%= st==='SENT' ? 'text-bg-success' : (st==='FAILED' ? 'text-bg-danger' : 'text-white brand-purple-bg') %>">
+                              <%= esc(st) %>
+                            </span>
+                          </div>
+
+                          <div class="fw-bold fs-5 brand-purple-text"><%= money(it.amountCents) %></div>
+                          <div class="mt-1 fw-semibold text-break"><%= esc(receiverMasked) %></div>
+                          <div class="small text-muted mt-1 text-break">businessId: <%= esc(it.businessId) %></div>
+
+                          <% if (it.error) { %>
+                          <div class="alert alert-danger py-2 px-3 small mt-3 mb-2">
+                            Error: <%= esc(it.error) %>
+                          </div>
+                          <% } %>
+
+                          <div class="small text-muted mt-2 text-break">
+                            paypalItemId: <%= esc(it.paypalItemId || '—') %>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <% }) %>
+                  </div>
+                  <% } %>
+                </div>
+              </div>
+            </div>
           </div>
+          <% }) %>
+        </div>
 
         <% } %>
       </div>
@@ -608,15 +609,15 @@
 %>
 
 <script nonce="<%= NONCE %>">
-  document.addEventListener('DOMContentLoaded', function () {
+  document.addEventListener('DOMContentLoaded', function() {
     const pageSpinner = document.getElementById('spinner');
 
     if (pageSpinner) {
-      window.addEventListener('load', function () {
-        setTimeout(function () {
+      window.addEventListener('load', function() {
+        setTimeout(function() {
           pageSpinner.classList.remove('show');
 
-          setTimeout(function () {
+          setTimeout(function() {
             pageSpinner.classList.add('d-none');
           }, 300);
         }, 700);

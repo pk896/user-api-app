@@ -3,141 +3,219 @@
 
 const { fetch } = require('undici');
 
-const {
-  PAYPAL_CLIENT_ID,
-  PAYPAL_CLIENT_SECRET,
-  PAYPAL_MODE = 'sandbox',
-} = process.env;
+function getPayPalMode() {
+  return String(process.env.PAYPAL_MODE || 'sandbox').trim().toLowerCase() === 'live'
+    ? 'live'
+    : 'sandbox';
+}
 
-const PP_API =
-  String(PAYPAL_MODE).toLowerCase() === 'live'
+function getPayPalBase() {
+  return getPayPalMode() === 'live'
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
+}
 
 function getBaseCurrency() {
-  return (
-    String(process.env.BASE_CURRENCY || '').trim().toUpperCase() ||
-    'USD'
-  );
+  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 }
 
-function mustEnv(name, v) {
-  const s = String(v || '').trim();
-  if (!s) throw new Error(`Missing env: ${name}`);
-  return s;
+function mustEnv(name) {
+  const value = String(process.env[name] || '').trim();
+  if (!value) {
+    throw new Error(`Missing env: ${name}`);
+  }
+  return value;
 }
 
-function isValidEmail(v) {
-  const s = String(v || '').trim();
-  if (!s) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+function isValidEmail(value) {
+  const email = String(value || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function clampStr(s, max) {
-  const v = String(s || '');
-  return v.length > max ? v.slice(0, max) : v;
+function clampStr(value, max) {
+  const text = String(value || '').trim();
+  return text.length > max ? text.slice(0, max) : text;
 }
 
-/**
- * PayPal expects amount.value as a string with 2 decimals.
- * We must never silently send 0.00 unless caller asked.
- */
 function toMoneyString(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) throw new Error(`Invalid amount: ${value}`);
-  const rounded = Math.round(n * 100) / 100;
-  if (rounded <= 0) throw new Error(`Amount must be > 0 (got ${value})`);
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    throw new Error(`Invalid payout amount: ${value}`);
+  }
+
+  const rounded = Math.round(numeric * 100) / 100;
+  if (rounded <= 0) {
+    throw new Error(`Payout amount must be greater than 0. Got: ${value}`);
+  }
+
   return rounded.toFixed(2);
 }
 
-/* -----------------------------
- * OAuth token caching
- * --------------------------- */
-let cachedToken = null;
-let cachedTokenExpMs = 0;
+function buildPayPalErrorMessage(prefix, status, json, rawText) {
+  const name = json?.name ? String(json.name) : '';
+  const message = json?.message ? String(json.message) : '';
+  const debugId = json?.debug_id ? String(json.debug_id) : '';
 
-// Refresh a bit early (60s) to avoid edge expiry mid-request
-const EXP_SKEW_MS = 60 * 1000;
+  const details = Array.isArray(json?.details)
+    ? json.details
+        .map((detail) => {
+          const issue = detail?.issue ? String(detail.issue) : '';
+          const description = detail?.description ? String(detail.description) : '';
+          const field = detail?.field ? String(detail.field) : '';
+          return [issue, description, field ? `field: ${field}` : ''].filter(Boolean).join(' - ');
+        })
+        .filter(Boolean)
+        .join(' | ')
+    : '';
+
+  return [
+    `${prefix} (${status})`,
+    name,
+    message,
+    details,
+    debugId ? `debug_id: ${debugId}` : '',
+    rawText && !message ? String(rawText).slice(0, 500) : '',
+  ]
+    .filter(Boolean)
+    .join(' | ');
+}
+
+async function fetchWithTimeout(url, options = {}, label = 'PayPal request') {
+  const controller = new AbortController();
+  const timeoutMs = Math.max(5000, Number(process.env.PAYPAL_HTTP_TIMEOUT_MS || 30000));
+
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const causeMessage =
+      error?.cause?.message ||
+      error?.cause?.code ||
+      error?.code ||
+      error?.message ||
+      'Unknown network error';
+
+    const err = new Error(
+      `${label} failed before PayPal responded. API=${getPayPalBase()}. mode=${getPayPalMode()}. reason=${causeMessage}`
+    );
+
+    err.status = 'NETWORK_ERROR';
+    err.paypal = {
+      apiBase: getPayPalBase(),
+      mode: getPayPalMode(),
+      reason: String(causeMessage || ''),
+      originalMessage: String(error?.message || ''),
+      causeCode: String(error?.cause?.code || error?.code || ''),
+    };
+
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* -----------------------------
+ * OAuth token cache
+ * --------------------------- */
+
+let cachedToken = null;
+let cachedTokenExpiresAtMs = 0;
+const EXPIRY_SKEW_MS = 60 * 1000;
 
 async function fetchAccessToken() {
-  const cid = mustEnv('PAYPAL_CLIENT_ID', PAYPAL_CLIENT_ID);
-  const sec = mustEnv('PAYPAL_CLIENT_SECRET', PAYPAL_CLIENT_SECRET);
+  const clientId = mustEnv('PAYPAL_CLIENT_ID');
+  const clientSecret = mustEnv('PAYPAL_CLIENT_SECRET');
 
-  const auth = Buffer.from(`${cid}:${sec}`).toString('base64');
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-  const res = await fetch(`${PP_API}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${auth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
+  const res = await fetchWithTimeout(
+    `${getPayPalBase()}/v1/oauth2/token`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
     },
-    body: 'grant_type=client_credentials',
-  });
+    'PayPal OAuth token request'
+  );
 
   const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`PayPal token error: ${res.status} ${text}`);
+
+  let json = {};
+  try {
+    json = JSON.parse(text || '{}');
+  } catch {
+    json = {};
   }
 
-  const json = JSON.parse(text || '{}');
+  if (!res.ok) {
+    const err = new Error(buildPayPalErrorMessage('PayPal token error', res.status, json, text));
+    err.status = res.status;
+    err.paypal = json;
+    throw err;
+  }
+
   const token = String(json.access_token || '').trim();
-  const expiresIn = Number(json.expires_in || 0); // seconds
-  const safeExpiresIn = expiresIn > 0 ? expiresIn : 8 * 60; // fallback: 8 minutes
+  const expiresInSeconds = Number(json.expires_in || 0);
 
-  if (!token) throw new Error('PayPal token missing in response');
+  if (!token) {
+    throw new Error('PayPal token response did not include access_token.');
+  }
 
-  // Cache with expiry
-  const now = Date.now();
   cachedToken = token;
-  cachedTokenExpMs = now + (safeExpiresIn * 1000);
+  cachedTokenExpiresAtMs = Date.now() + (expiresInSeconds > 0 ? expiresInSeconds : 480) * 1000;
 
   return token;
 }
 
 async function getAccessToken() {
-  const now = Date.now();
-  if (cachedToken && cachedTokenExpMs && now < (cachedTokenExpMs - EXP_SKEW_MS)) {
+  if (
+    cachedToken &&
+    cachedTokenExpiresAtMs &&
+    Date.now() < cachedTokenExpiresAtMs - EXPIRY_SKEW_MS
+  ) {
     return cachedToken;
   }
+
   return fetchAccessToken();
 }
 
 /* -----------------------------
- * Payout calls
+ * Public functions
  * --------------------------- */
 
-/**
- * Create a payout batch:
- * items: [{ receiver, amount, currency, note, senderItemId }]
- */
-async function createPayoutBatch({
-  senderBatchId,
-  emailSubject,
-  emailMessage,
-  items,
-}) {
-  if (!Array.isArray(items) || !items.length) throw new Error('No payout items');
+async function createPayoutBatch({ senderBatchId, emailSubject, emailMessage, items }) {
+  if (!Array.isArray(items) || !items.length) {
+    throw new Error('No payout items were provided.');
+  }
 
-  const normalizedItems = items.map((it, idx) => {
-    const receiver = String(it?.receiver || '').trim().toLowerCase();
-    const currency =
-      String(it?.currency || '').trim().toUpperCase() ||
-      getBaseCurrency(); 
-    const note = clampStr(it?.note || '', 255);
-    const senderItemId = clampStr(it?.senderItemId || '', 127);
+  const normalizedItems = items.map((item, index) => {
+    const receiver = String(item?.receiver || '').trim().toLowerCase();
+    const currency = String(item?.currency || '').trim().toUpperCase() || getBaseCurrency();
+    const senderItemId = clampStr(item?.senderItemId || '', 127);
+    const note = clampStr(item?.note || '', 255);
 
     if (!isValidEmail(receiver)) {
-      throw new Error(`Invalid receiver email at item[${idx}]: "${receiver}"`);
+      throw new Error(`Invalid PayPal receiver email at item[${index}]: "${receiver}"`);
     }
+
     if (!senderItemId) {
-      throw new Error(`Missing senderItemId at item[${idx}]`);
+      throw new Error(`Missing senderItemId at payout item[${index}].`);
     }
 
     return {
       recipient_type: 'EMAIL',
       receiver,
       amount: {
-        value: toMoneyString(it?.amount),
+        value: toMoneyString(item?.amount),
         currency,
       },
       note,
@@ -149,70 +227,105 @@ async function createPayoutBatch({
 
   const body = {
     sender_batch_header: {
-      sender_batch_id: clampStr(String(senderBatchId || `payout-${Date.now()}`), 127),
-      email_subject: String(emailSubject || 'You have received a payout'),
-      email_message: String(emailMessage || ''),
+      sender_batch_id: clampStr(senderBatchId || `payout-${Date.now()}`, 127),
+      email_subject: clampStr(emailSubject || 'You have received a payout', 255),
+      email_message: clampStr(emailMessage || '', 1000),
     },
     items: normalizedItems,
   };
 
-  const res = await fetch(`${PP_API}/v1/payments/payouts`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const res = await fetchWithTimeout(
+    `${getPayPalBase()}/v1/payments/payouts`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(body),
+    },
+    'PayPal create payout batch request'
+  );
 
   const text = await res.text();
-  const json = (() => {
-    try {
-      return JSON.parse(text || '{}');
-    } catch {
-      return {};
-    }
-  })();
+
+  let json = {};
+  try {
+    json = JSON.parse(text || '{}');
+  } catch {
+    json = {};
+  }
 
   if (!res.ok) {
-    const msg = json?.message || json?.name || `PayPal payouts create failed (${res.status})`;
-    throw new Error(msg);
+    const err = new Error(
+      buildPayPalErrorMessage('PayPal payout batch create error', res.status, json, text)
+    );
+    err.status = res.status;
+    err.paypal = json;
+    throw err;
   }
 
   return json;
 }
 
 async function getPayoutBatch(payoutBatchId) {
-  const id = String(payoutBatchId || '').trim();
-  if (!id) throw new Error('Missing payoutBatchId');
+  const batchId = String(payoutBatchId || '').trim();
+
+  if (!batchId) {
+    throw new Error('Missing payoutBatchId.');
+  }
 
   const token = await getAccessToken();
 
-  const res = await fetch(
-    `${PP_API}/v1/payments/payouts/${encodeURIComponent(id)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const res = await fetchWithTimeout(
+    `${getPayPalBase()}/v1/payments/payouts/${encodeURIComponent(batchId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    'PayPal get payout batch request'
   );
 
   const text = await res.text();
-  const json = (() => {
-    try {
-      return JSON.parse(text || '{}');
-    } catch {
-      return {};
-    }
-  })();
+
+  let json = {};
+  try {
+    json = JSON.parse(text || '{}');
+  } catch {
+    json = {};
+  }
 
   if (!res.ok) {
-    const msg = json?.message || json?.name || `PayPal payouts fetch failed (${res.status})`;
-    throw new Error(msg);
+    const err = new Error(
+      buildPayPalErrorMessage('PayPal get payout batch error', res.status, json, text)
+    );
+    err.status = res.status;
+    err.paypal = json;
+    throw err;
   }
 
   return json;
 }
 
-function getPayPalBase() {
-  return PP_API;
+async function paypalHealthCheck() {
+  const token = await getAccessToken();
+
+  return {
+    ok: true,
+    mode: getPayPalMode(),
+    apiBase: getPayPalBase(),
+    hasToken: !!token,
+    tokenPreview: token ? `${token.slice(0, 8)}...` : '',
+    baseCurrency: getBaseCurrency(),
+  };
 }
 
 module.exports = {
   createPayoutBatch,
   getPayoutBatch,
   getPayPalBase,
+  paypalHealthCheck,
 };

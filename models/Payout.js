@@ -114,9 +114,20 @@ payoutSchema.index({ runKey: 1 }, { unique: true, sparse: true });
 // ✅ Useful indexes for admin pages + lookups
 payoutSchema.index({ createdAt: -1 });
 
-// ✅ Ensure a PayPal batchId is never reused inside the same mode (SANDBOX/LIVE)
-// (batchId can be null/empty before PayPal returns it, so sparse is needed)
-payoutSchema.index({ mode: 1, batchId: 1 }, { unique: true, sparse: true });
+// ✅ Ensure a real PayPal batchId is never reused inside the same mode.
+// IMPORTANT:
+// batchId must be UNSET before PayPal returns payout_batch_id.
+// This partial unique index only applies when batchId is a string.
+// Do NOT add $ne here because MongoDB rejects $ne in partial indexes.
+payoutSchema.index(
+  { mode: 1, batchId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      batchId: { $type: 'string' },
+    },
+  }
+);
 
 // ✅ Status filtering
 payoutSchema.index({ status: 1, createdAt: -1 });

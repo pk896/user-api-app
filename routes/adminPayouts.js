@@ -15,7 +15,11 @@ const SellerBalanceLedger = require('../models/SellerBalanceLedger');
 
 const { getSellerAvailableCents } = require('../utils/payouts/getSellerAvailableCents');
 const { runSyncPayoutById } = require('../utils/payouts/syncPayout');
-const { createPayoutBatch, getPayPalBase } = require('../utils/payouts/createPaypalPayoutBatch');
+const {
+  createPayoutBatch,
+  getPayPalBase,
+  paypalHealthCheck,
+} = require('../utils/payouts/createPaypalPayoutBatch');
 
 const router = express.Router();
 
@@ -248,6 +252,32 @@ async function runCreatePayoutBatch({
   // One active creation per currency
   const runKey = `RUNLOCK:${cur}`;
 
+  // ✅ Clear old/stale payout locks before starting a new payout.
+  // This fixes cases where a previous failed payout left runKey: "RUNLOCK:USD".
+  const staleLockCutoff = new Date(Date.now() - 5 * 60 * 1000);
+
+  const staleLockResult = await Payout.updateMany(
+    {
+      runKey,
+      status: { $in: ['CREATED', 'FAILED'] },
+      createdAt: { $lte: staleLockCutoff },
+    },
+    {
+      $unset: { runKey: 1 },
+      $set: {
+        'meta.staleRunKeyClearedAt': new Date(),
+        'meta.staleRunKeyClearedReason': 'Cleared before creating a new payout batch',
+      },
+    },
+  );
+
+  if (Number(staleLockResult?.modifiedCount || 0) > 0) {
+    console.warn('[admin payouts create] cleared stale payout run locks', {
+      runKey,
+      clearedCount: staleLockResult.modifiedCount,
+    });
+  }
+
   let payoutDoc;
   try {
     payoutDoc = await Payout.create({
@@ -258,6 +288,9 @@ async function runCreatePayoutBatch({
       currency: cur,
       totalCents,
       status: 'CREATED',
+      // ✅ Do not set batchId here.
+      // batchId must only be added after PayPal returns payout_batch_id.
+      // This prevents duplicate-key errors for null batchId.
       note: noteClean,
       items: payItems.map((it) => ({
         businessId: it.businessId,
@@ -273,14 +306,34 @@ async function runCreatePayoutBatch({
     });
   } catch (e) {
     if (isDupKey(e)) {
+      console.error('[admin payouts create] payout run lock duplicate key', {
+        currency: cur,
+        runKey,
+        message: String(e?.message || e),
+      });
+
       return {
         ok: false,
         error: 'payout-run-already-in-progress',
-        message: `Another payout run is already starting for ${cur}. Please wait and refresh.`,
+        message: `Another payout run is already starting for ${cur}. Please wait 5 minutes, refresh, then try again.`,
       };
     }
     throw e;
   }
+
+  console.log('[admin payouts create] local payout created before PayPal call', {
+    payoutId: String(payoutDoc._id),
+    senderBatchId,
+    currency: cur,
+    itemCount: payItems.length,
+    totalCents,
+    receivers: payItems.map((it) => ({
+      businessId: String(it.businessId),
+      receiverSet: Boolean(it.receiver),
+      amountCents: it.amountCents,
+      currency: it.currency,
+    })),
+  });
 
   // Create PayPal batch (if this fails, mark payout FAILED + release lock)
   let paypalRes = null;
@@ -299,16 +352,30 @@ async function runCreatePayoutBatch({
       })),
     });
   } catch (e) {
+    console.error('[admin payouts create] PayPal create failed', {
+      payoutId: String(payoutDoc._id),
+      message: String(e?.message || e),
+      status: e?.status || null,
+      paypal: e?.paypal || null,
+    });
+
     await Payout.updateOne(
       { _id: payoutDoc._id },
       {
         $set: {
           status: 'FAILED',
-          meta: { ...(payoutDoc.meta || {}), createError: String(e?.message || e) },
+          meta: {
+            ...(payoutDoc.meta || {}),
+            createError: String(e?.message || e).slice(0, 1000),
+            createErrorAt: new Date(),
+            createErrorStatus: e?.status || null,
+            createErrorPaypal: e?.paypal || null,
+          },
         },
         $unset: { runKey: 1 },
       },
     );
+
     throw e;
   }
 
@@ -658,7 +725,11 @@ router.post(
       req.flash('success', `Payout batch created (${out.count} businesses).`);
       return res.redirect('/admin/payouts');
     } catch (err) {
-      console.error(err);
+      console.error('[admin payouts route] payout create failed', {
+        message: String(err?.message || err),
+        status: err?.status || null,
+        paypal: err?.paypal || null,
+      });
 
       await logAdminAction(req, {
         action: 'payout.batch.create',
@@ -840,6 +911,37 @@ router.post('/payouts/auto-run', requireCronSecret, async (_req, _res) => {
 router.post('/payouts/auto-sync-recent', requireCronSecret, async (_req, _res) => {
   /* unchanged */
 });
+
+router.get(
+  '/payouts/_paypal-health',
+  requireAdmin,
+  requireAdminRole(['super_admin', 'payout_admin']),
+  requireAdminPermission('payouts.read'),
+  async (req, res) => {
+    try {
+      const out = await paypalHealthCheck();
+
+      return res.json({
+        ok: true,
+        message: 'PayPal connection is working.',
+        ...out,
+      });
+    } catch (err) {
+      console.error('[admin payouts paypal health] failed', {
+        message: String(err?.message || err),
+        status: err?.status || null,
+        paypal: err?.paypal || null,
+      });
+
+      return res.status(500).json({
+        ok: false,
+        message: String(err?.message || err),
+        status: err?.status || null,
+        paypal: err?.paypal || null,
+      });
+    }
+  },
+);
 
 router.get(
   '/payouts/_ping',
