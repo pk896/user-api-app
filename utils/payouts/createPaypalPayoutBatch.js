@@ -1,6 +1,7 @@
 // utils/payouts/createPaypalPayoutBatch.js
 'use strict';
 
+const crypto = require('crypto');
 const { fetch } = require('undici');
 
 function getPayPalMode() {
@@ -19,11 +20,32 @@ function getBaseCurrency() {
   return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
 }
 
+function isTruthyEnv(value) {
+  const v = String(value || '').trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(v);
+}
+
+function assertPayoutModeAllowed() {
+  const mode = getPayPalMode();
+
+  if (mode !== 'live') {
+    return;
+  }
+
+  if (!isTruthyEnv(process.env.PAYOUTS_LIVE_ENABLED)) {
+    throw new Error(
+      'LIVE PayPal payouts are blocked. Set PAYOUTS_LIVE_ENABLED=true only after final production testing.'
+    );
+  }
+}
+
 function mustEnv(name) {
   const value = String(process.env[name] || '').trim();
+
   if (!value) {
     throw new Error(`Missing env: ${name}`);
   }
+
   return value;
 }
 
@@ -39,16 +61,58 @@ function clampStr(value, max) {
 
 function toMoneyString(value) {
   const numeric = Number(value);
+
   if (!Number.isFinite(numeric)) {
     throw new Error(`Invalid payout amount: ${value}`);
   }
 
   const rounded = Math.round(numeric * 100) / 100;
+
   if (rounded <= 0) {
     throw new Error(`Payout amount must be greater than 0. Got: ${value}`);
   }
 
   return rounded.toFixed(2);
+}
+
+function makePayPalRequestId(seed) {
+  const raw = String(seed || '').trim();
+
+  if (raw) {
+    return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+  }
+
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return crypto.randomBytes(16).toString('hex');
+}
+
+function safePayPalErrorJson(json) {
+  if (!json || typeof json !== 'object') {
+    return null;
+  }
+
+  return {
+    name: json.name || '',
+    message: json.message || '',
+    debug_id: json.debug_id || '',
+    details: Array.isArray(json.details)
+      ? json.details.map((detail) => ({
+          issue: detail?.issue || '',
+          description: detail?.description || '',
+          field: detail?.field || '',
+        }))
+      : [],
+    links: Array.isArray(json.links)
+      ? json.links.map((link) => ({
+          href: link?.href || '',
+          rel: link?.rel || '',
+          method: link?.method || '',
+        }))
+      : [],
+  };
 }
 
 function buildPayPalErrorMessage(prefix, status, json, rawText) {
@@ -159,7 +223,7 @@ async function fetchAccessToken() {
   if (!res.ok) {
     const err = new Error(buildPayPalErrorMessage('PayPal token error', res.status, json, text));
     err.status = res.status;
-    err.paypal = json;
+    err.paypal = safePayPalErrorJson(json);
     throw err;
   }
 
@@ -192,10 +256,24 @@ async function getAccessToken() {
  * Public functions
  * --------------------------- */
 
-async function createPayoutBatch({ senderBatchId, emailSubject, emailMessage, items }) {
+async function createPayoutBatch({
+  senderBatchId,
+  paypalRequestId = '',
+  emailSubject,
+  emailMessage,
+  items,
+}) {
+  assertPayoutModeAllowed();
+
   if (!Array.isArray(items) || !items.length) {
     throw new Error('No payout items were provided.');
   }
+
+  const safeSenderBatchId = clampStr(senderBatchId || `payout-${Date.now()}`, 127);
+  const safePaypalRequestId = clampStr(
+    paypalRequestId || makePayPalRequestId(`payout:${safeSenderBatchId}`),
+    38
+  );
 
   const normalizedItems = items.map((item, index) => {
     const receiver = String(item?.receiver || '').trim().toLowerCase();
@@ -204,7 +282,7 @@ async function createPayoutBatch({ senderBatchId, emailSubject, emailMessage, it
     const note = clampStr(item?.note || '', 255);
 
     if (!isValidEmail(receiver)) {
-      throw new Error(`Invalid PayPal receiver email at item[${index}]: "${receiver}"`);
+      throw new Error(`Invalid PayPal receiver email at item[${index}].`);
     }
 
     if (!senderItemId) {
@@ -227,7 +305,7 @@ async function createPayoutBatch({ senderBatchId, emailSubject, emailMessage, it
 
   const body = {
     sender_batch_header: {
-      sender_batch_id: clampStr(senderBatchId || `payout-${Date.now()}`, 127),
+      sender_batch_id: safeSenderBatchId,
       email_subject: clampStr(emailSubject || 'You have received a payout', 255),
       email_message: clampStr(emailMessage || '', 1000),
     },
@@ -242,6 +320,7 @@ async function createPayoutBatch({ senderBatchId, emailSubject, emailMessage, it
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         Prefer: 'return=representation',
+        'PayPal-Request-Id': safePaypalRequestId,
       },
       body: JSON.stringify(body),
     },
@@ -261,12 +340,20 @@ async function createPayoutBatch({ senderBatchId, emailSubject, emailMessage, it
     const err = new Error(
       buildPayPalErrorMessage('PayPal payout batch create error', res.status, json, text)
     );
+
     err.status = res.status;
-    err.paypal = json;
+    err.paypal = safePayPalErrorJson(json);
+    err.paypalRequestId = safePaypalRequestId;
+    err.senderBatchId = safeSenderBatchId;
+
     throw err;
   }
 
-  return json;
+  return {
+    ...json,
+    paypalRequestId: safePaypalRequestId,
+    senderBatchId: safeSenderBatchId,
+  };
 }
 
 async function getPayoutBatch(payoutBatchId) {
@@ -303,7 +390,7 @@ async function getPayoutBatch(payoutBatchId) {
       buildPayPalErrorMessage('PayPal get payout batch error', res.status, json, text)
     );
     err.status = res.status;
-    err.paypal = json;
+    err.paypal = safePayPalErrorJson(json);
     throw err;
   }
 
@@ -320,6 +407,7 @@ async function paypalHealthCheck() {
     hasToken: !!token,
     tokenPreview: token ? `${token.slice(0, 8)}...` : '',
     baseCurrency: getBaseCurrency(),
+    livePayoutsEnabled: isTruthyEnv(process.env.PAYOUTS_LIVE_ENABLED),
   };
 }
 

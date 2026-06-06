@@ -339,19 +339,19 @@
       </div>
     </div>
 
-    <!-- create + sync -->
+    <!-- review + sync -->
     <div class="card border-0 shadow-sm mb-3 overflow-hidden">
       <div class="card-header border-0 text-white brand-purple-bg py-3">
-        <h2 class="h5 fw-bold mb-1">Auto pay sellers & suppliers now</h2>
+        <h2 class="h5 fw-bold mb-1">Prepare payout review</h2>
         <p class="mb-0 small text-white text-opacity-75">
-          Pays all eligible sellers and suppliers, then creates a PayPal batch + local payout record.
+          Production-safe flow: first prepare a review, then confirm the reviewed payout before PayPal is called.
         </p>
       </div>
 
       <div class="card-body p-3">
         <div class="row g-3">
           <div class="col-12 col-xl-8">
-            <form method="POST" action="/admin/payouts/create" autocomplete="off">
+            <form method="POST" action="/admin/payouts/review" autocomplete="off">
               <div class="row g-3">
                 <div class="col-12 col-md-6">
                   <label for="currency" class="form-label fw-semibold brand-purple-text">Currency</label>
@@ -366,7 +366,7 @@
                 <div class="col-12 col-md-6">
                   <label for="minCents" class="form-label fw-semibold brand-purple-text">Minimum payout (cents)</label>
                   <input id="minCents" name="minCents" class="form-control brand-input" placeholder="0 (example: 5000 = 50.00)" inputmode="numeric" value="0" autocomplete="off" />
-                  <div class="form-text">Only sellers and suppliers with available ≥ minCents will be paid.</div>
+                  <div class="form-text">Only sellers and suppliers with available ≥ minCents will be included in the review.</div>
                 </div>
 
                 <div class="col-12">
@@ -375,19 +375,17 @@
                 </div>
 
                 <div class="col-12">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="autoSync" value="1" checked id="autoSync">
-                    <label class="form-check-label brand-purple-text" for="autoSync">
-                      Auto-sync immediately after create
-                    </label>
+                  <div class="alert alert-warning small mb-0">
+                    <div class="fw-bold brand-purple-text mb-1">Production safety</div>
+                    This button does <strong>not</strong> send money. It only prepares a reviewed payout batch.
+                    You will confirm the payout from the history section after checking the businesses and amounts.
                   </div>
-                  <div class="form-text">Updates item statuses quickly. You can still sync later below.</div>
                 </div>
 
                 <div class="col-12 d-flex flex-column flex-sm-row gap-2 align-items-start">
-                  <button class="btn text-white brand-purple-bg border-0 px-4 w-100 w-sm-auto" type="submit">Auto Pay Now</button>
+                  <button class="btn text-white brand-purple-bg border-0 px-4 w-100 w-sm-auto" type="submit">Prepare Payout Review</button>
                   <div class="small text-muted">
-                    Creates PayPal payout batch and debits each eligible business with <code>PAYOUT_DEBIT</code>.
+                    Creates a local <code>REVIEWED</code> payout only. PayPal is not called yet.
                   </div>
                 </div>
               </div>
@@ -400,7 +398,7 @@
                 <input type="hidden" name="limit" value="10" />
                 <button class="btn text-white brand-green-bg border-0 w-100 w-sm-auto" type="submit">Sync Recent Batches</button>
                 <div class="form-text mt-2">
-                  Syncs the most recent batches. You can also sync per batch below.
+                  Backup only. Webhooks now auto-sync payout batches, but this can still refresh recent batches manually.
                 </div>
               </div>
             </form>
@@ -433,7 +431,7 @@
         <div class="text-center py-4">
           <div class="fs-2">📭</div>
           <div class="fw-bold mt-2 brand-purple-text">No payout batches yet</div>
-          <div class="text-muted small">Use “Auto Pay Now” above.</div>
+          <div class="text-muted small">Use “Prepare Payout Review” above.</div>
         </div>
         <% } else { %>
 
@@ -464,7 +462,12 @@
 
                       <div class="col-6 col-md-3 col-lg-3">
                         <div class="small text-muted fw-semibold">Status</div>
-                        <div><span class="badge rounded-pill <%= badgeClass(p.status) %>"><%= esc(p.status || '—') %></span></div>
+                        <div class="d-flex flex-wrap gap-1">
+                          <span class="badge rounded-pill <%= badgeClass(p.status) %>"><%= esc(p.status || '—') %></span>
+                          <% if (p.approvalStatus) { %>
+                            <span class="badge rounded-pill bg-white text-dark border"><%= esc(p.approvalStatus) %></span>
+                          <% } %>
+                        </div>
                       </div>
 
                       <div class="col-6 col-md-3 col-lg-1">
@@ -507,15 +510,40 @@
 
                   <div class="col-12 col-xl-4">
                     <div class="d-flex flex-column flex-sm-row flex-xl-column gap-2">
-                      <% if (p.batchId) { %>
-                      <form method="POST" action="/admin/payouts/<%= esc(p._id) %>/sync" class="m-0">
-                        <button class="btn brand-soft-purple brand-purple-text border w-100" type="submit">Sync</button>
-                      </form>
+                      <% const approvalStatus = String(p.approvalStatus || '').toUpperCase(); %>
+
+                      <% if (!p.batchId && (approvalStatus === 'REVIEWED' || approvalStatus === 'CONFIRMED')) { %>
+                        <form method="POST" action="/admin/payouts/<%= esc(p._id) %>/confirm" class="m-0">
+                          <div class="card border-0 shadow-sm bg-white">
+                            <div class="card-body p-3">
+                              <div class="fw-bold brand-purple-text mb-2">Ready to confirm</div>
+
+                              <div class="small text-muted mb-3">
+                                This is the final step. Clicking this button calls PayPal and creates the real payout batch.
+                              </div>
+
+                              <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" name="autoSync" value="1" checked id="autoSync-<%= esc(p._id) %>">
+                                <label class="form-check-label small brand-purple-text" for="autoSync-<%= esc(p._id) %>">
+                                  Auto-sync after PayPal create
+                                </label>
+                              </div>
+
+                              <button class="btn text-white brand-purple-bg border-0 w-100" type="submit">
+                                Confirm & Pay
+                              </button>
+                            </div>
+                          </div>
+                        </form>
+                      <% } else if (p.batchId) { %>
+                        <form method="POST" action="/admin/payouts/<%= esc(p._id) %>/sync" class="m-0">
+                          <button class="btn brand-soft-purple brand-purple-text border w-100" type="submit">Sync</button>
+                        </form>
                       <% } else { %>
-                      <div class="alert alert-warning small mb-0 text-break">
-                        <div class="fw-bold">Not syncable</div>
-                        PayPal batch was never created, so this old failed payout has no PayPal batchId.
-                      </div>
+                        <div class="alert alert-warning small mb-0 text-break">
+                          <div class="fw-bold">Not syncable</div>
+                          PayPal batch was never created, so this old failed payout has no PayPal batchId.
+                        </div>
                       <% } %>
 
                       <button class="btn brand-kpi-soft-green brand-purple-text border w-100" type="button" data-bs-toggle="collapse" data-bs-target="#<%= collapseId %>" aria-expanded="false" aria-controls="<%= collapseId %>">

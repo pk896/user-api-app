@@ -29,6 +29,20 @@ try {
 
 const { verifyWebhookSignature } = require('../utils/paypal/verifyWebhookSignature');
 
+let Payout = null;
+try {
+  Payout = require('../models/Payout');
+} catch {
+  Payout = null;
+}
+
+let runSyncPayoutById = null;
+try {
+  ({ runSyncPayoutById } = require('../utils/payouts/syncPayout'));
+} catch {
+  runSyncPayoutById = null;
+}
+
 /* -------------------------------------------------- */
 /* Helpers */
 /* -------------------------------------------------- */
@@ -115,6 +129,129 @@ function isRefundEventType(eventTypeUpper) {
     eventTypeUpper === 'PAYMENT.REFUND.DENIED' ||     // still useful to record
     eventTypeUpper === 'PAYMENT.REFUND.PENDING'
   );
+}
+
+function isPayoutBatchEventType(eventTypeUpper) {
+  return (
+    eventTypeUpper === 'PAYMENT.PAYOUTSBATCH.PROCESSING' ||
+    eventTypeUpper === 'PAYMENT.PAYOUTSBATCH.SUCCESS' ||
+    eventTypeUpper === 'PAYMENT.PAYOUTSBATCH.DENIED'
+  );
+}
+
+function extractPayoutBatchId(body) {
+  const direct =
+    body?.resource?.batch_header?.payout_batch_id ||
+    body?.resource?.batch_header?.batch_id ||
+    body?.resource?.payout_batch_id ||
+    body?.resource?.batch_id ||
+    '';
+
+  if (direct) return safeStr(direct, 128);
+
+  const links = Array.isArray(body?.resource?.links) ? body.resource.links : [];
+
+  for (const link of links) {
+    const href = String(link?.href || '');
+    const match = /\/v1\/payments\/payouts\/([^/?#]+)/i.exec(href);
+
+    if (match && match[1]) {
+      return safeStr(match[1], 128);
+    }
+  }
+
+  return '';
+}
+
+async function handlePayoutBatchWebhook(body, eventType, eventId) {
+  if (!Payout) {
+    console.warn('[PAYPAL] Payout model not available for payout webhook');
+    return {
+      ok: true,
+      handled: 'payout-batch',
+      ignored: true,
+      reason: 'Payout-model-missing',
+      eventType,
+      eventId,
+    };
+  }
+
+  if (typeof runSyncPayoutById !== 'function') {
+    console.warn('[PAYPAL] runSyncPayoutById not available for payout webhook');
+    return {
+      ok: true,
+      handled: 'payout-batch',
+      ignored: true,
+      reason: 'sync-function-missing',
+      eventType,
+      eventId,
+    };
+  }
+
+  const batchId = extractPayoutBatchId(body);
+
+  if (!batchId) {
+    console.warn('[PAYPAL] payout webhook missing payout_batch_id', {
+      eventType,
+      eventId,
+    });
+
+    return {
+      ok: true,
+      handled: 'payout-batch',
+      ignored: true,
+      reason: 'missing-payout-batch-id',
+      eventType,
+      eventId,
+    };
+  }
+
+  const payout = await Payout.findOne({ batchId }).select('_id batchId status lastWebhookEventId').lean();
+
+  if (!payout) {
+    console.warn('[PAYPAL] payout webhook batchId not found locally', {
+      batchId,
+      eventType,
+      eventId,
+    });
+
+    return {
+      ok: true,
+      handled: 'payout-batch',
+      ignored: true,
+      reason: 'local-payout-not-found',
+      batchId,
+      eventType,
+      eventId,
+    };
+  }
+
+  const syncResult = await runSyncPayoutById(payout._id, {
+    source: 'webhook',
+    webhookEventId: eventId,
+  });
+
+  console.log('[PAYPAL] payout webhook auto-sync result:', {
+    batchId,
+    payoutId: String(payout._id),
+    eventType,
+    eventId,
+    ok: syncResult?.ok,
+    status: syncResult?.status,
+    skipped: syncResult?.skipped,
+    reason: syncResult?.reason,
+    creditedBackCount: syncResult?.creditedBackCount,
+  });
+
+  return {
+    ok: true,
+    handled: 'payout-batch',
+    batchId,
+    payoutId: String(payout._id),
+    eventType,
+    eventId,
+    syncResult,
+  };
 }
 
 function pickProductKeyFromItem(it) {
@@ -378,7 +515,33 @@ router.post(
       });
     }
 
-    // ---- Refund events only ----
+    // ---- Payout batch events: auto-sync local payout status/items ----
+    if (isPayoutBatchEventType(eventType)) {
+      try {
+        const payoutOut = await handlePayoutBatchWebhook(body, eventType, eventId);
+        return res.json(payoutOut);
+      } catch (err) {
+        // Important:
+        // Return 200 so PayPal does not keep retrying forever for a temporary local sync issue.
+        // Manual Sync Recent Batches remains the backup.
+        console.error('[PAYPAL] payout webhook auto-sync failed:', {
+          eventType,
+          eventId,
+          message: String(err?.message || err),
+        });
+
+        return res.json({
+          ok: true,
+          handled: 'payout-batch',
+          syncFailed: true,
+          eventType,
+          eventId,
+          message: 'Webhook verified, but local payout auto-sync failed. Use manual Sync Recent Batches as backup.',
+        });
+      }
+    }
+
+    // ---- Refund events only after payout handling ----
     if (!isRefundEventType(eventType)) {
       return res.json({ ok: true, ignored: true, eventType, eventId });
     }
