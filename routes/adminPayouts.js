@@ -846,6 +846,7 @@ router.get(
       return res.render('admin-payouts', {
         title: 'Seller Payouts',
         nonce: resNonce(req),
+        fullWidthPage: true,
         payouts,
         kpis,
         previewSellers: preview,
