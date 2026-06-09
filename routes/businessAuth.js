@@ -3013,6 +3013,9 @@ router.get('/profile/edit-bank', requireBusiness, async (req, res) => {
       business,
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
+
+      // ✅ Make edit bank page use full-width layout container
+      fullWidthPage: true,
     });
   } catch (err) {
     console.error('❌ GET /profile/edit-bank error:', err);
@@ -4278,6 +4281,9 @@ router.get('/profile', requireBusiness, async (req, res) => {
       nonce: res.locals.nonce,
       baseCurrency: BASE_CURRENCY,
       formatMoney: formatBusinessMoney,
+
+      // ✅ Make business profile use full-width layout container
+      fullWidthPage: true,
     });
   } catch (err) {
     console.error('❌ Business profile error:', err);
@@ -4330,6 +4336,9 @@ router.get('/profile/edit-details', requireBusiness, async (req, res) => {
       error: req.flash('error'),
       info: req.flash('info'),
       warning: req.flash('warning'),
+
+      // ✅ Make edit details page use full-width layout container
+      fullWidthPage: true,
     });
   } catch (err) {
     console.error('❌ GET /business/profile/edit-details error:', err);
