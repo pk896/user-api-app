@@ -1507,6 +1507,10 @@ router.get(
         active: 'my-supply-requests',
         business: seller,
         requests,
+
+        // ✅ Makes layout.ejs use: container-fluid px-0
+        fullWidthPage: true,
+
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
         baseCurrency: BASE_CURRENCY,
@@ -1544,6 +1548,10 @@ router.get(
         active: 'supplier-requests',
         business: supplier,
         requests,
+
+        // ✅ Makes layout.ejs use: container-fluid px-0
+        fullWidthPage: true,
+
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
         baseCurrency: BASE_CURRENCY,
