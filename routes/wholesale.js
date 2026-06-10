@@ -1329,11 +1329,16 @@ router.get('/suppliers/:supplierId', async (req, res) => {
       supplier,
       products,
       business: getBusiness(req),
+
+      // ✅ Makes layout.ejs use: container-fluid px-0
+      fullWidthPage: true,
+
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
       baseCurrency: BASE_CURRENCY,
       formatMoney: formatWholesaleMoney,
     });
+
   } catch (err) {
     console.error('❌ Supplier profile error:', err);
     req.flash('error', 'Failed to load supplier profile.');

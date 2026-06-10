@@ -386,6 +386,10 @@ router.get(
         business: seller,
         items,
         subtotal,
+
+        // ✅ Makes layout.ejs use: container-fluid px-0
+        fullWidthPage: true,
+
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
         baseCurrency: BASE_CURRENCY,
