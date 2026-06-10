@@ -1225,6 +1225,10 @@ router.get('/', async (req, res) => {
       q,
       category,
       business: getBusiness(req),
+
+      // ✅ Makes layout.ejs use: container-fluid px-0
+      fullWidthPage: true,
+
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
       baseCurrency: BASE_CURRENCY,
@@ -1270,6 +1274,10 @@ router.get('/suppliers', async (req, res) => {
       suppliers,
       q,
       business: getBusiness(req),
+
+      // ✅ Makes layout.ejs use: container-fluid px-0
+      fullWidthPage: true,
+
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
       baseCurrency: BASE_CURRENCY,
@@ -1365,6 +1373,10 @@ router.get('/products/:id', async (req, res) => {
       business: getBusiness(req),
       errors: [],
       form: {},
+
+      // ✅ Makes layout.ejs use: container-fluid px-0
+      fullWidthPage: true,
+
       themeCss: res.locals.themeCss,
       nonce: res.locals.nonce,
       baseCurrency: BASE_CURRENCY,
@@ -1431,6 +1443,10 @@ router.post(
           business: seller,
           errors: errors.array(),
           form: req.body,
+
+          // ✅ Keeps this page full-width even after form validation errors
+          fullWidthPage: true,
+
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
           baseCurrency: BASE_CURRENCY,
@@ -1452,6 +1468,10 @@ router.post(
             },
           ],
           form: req.body,
+
+          // ✅ Keeps this page full-width even after form validation errors
+          fullWidthPage: true,
+
           themeCss: res.locals.themeCss,
           nonce: res.locals.nonce,
           baseCurrency: BASE_CURRENCY,
