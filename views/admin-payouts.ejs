@@ -106,9 +106,27 @@
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
-            <span class="badge rounded-pill bg-white text-dark px-3 py-2">Purple <strong>#7C3AED</strong></span>
-            <span class="badge rounded-pill bg-white text-dark px-3 py-2">Green <strong>#22C55E</strong></span>
+          <div class="w-100 w-lg-auto" style="max-width: 620px;">
+            <div class="row g-2">
+              <div class="col-12 col-md-7">
+                <label for="payoutSearchInput" class="form-label small fw-semibold text-white text-opacity-75 mb-1">
+                  Search batch / business
+                </label>
+                <input id="payoutSearchInput" type="search" class="form-control" placeholder="Search batchId, senderBatchId, businessId..." autocomplete="off" />
+              </div>
+
+              <div class="col-12 col-md-5">
+                <label for="payoutStatusFilter" class="form-label small fw-semibold text-white text-opacity-75 mb-1">
+                  Filter item status
+                </label>
+                <select id="payoutStatusFilter" class="form-select">
+                  <option value="">All statuses</option>
+                  <option value="SENT">SENT</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="FAILED">FAILED</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -408,7 +426,7 @@
     </div>
 
     <!-- history -->
-    <div class="card border border-2 shadow-sm overflow-hidden brand-section-card rounded-0">
+    <div id="payoutHistory" class="card border border-2 shadow-sm overflow-hidden brand-section-card rounded-0">
       <div class="card-header border-0 brand-soft-purple py-3">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-3">
           <div>
@@ -418,10 +436,15 @@
             </p>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
-            <span class="badge rounded-pill text-bg-success">COMPLETED</span>
-            <span class="badge rounded-pill text-white brand-purple-bg">PROCESSING</span>
-            <span class="badge rounded-pill text-bg-danger">FAILED</span>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="badge rounded-pill text-white brand-purple-bg px-3 py-2">
+              Found: <strong id="payoutFoundCount"><%= esc(String(payoutList.length)) %></strong>
+              <span id="payoutFoundLabel">batches</span>
+            </span>
+
+            <a href="#payoutHistory" class="badge rounded-pill text-bg-light border text-decoration-none px-3 py-2">
+              Payout history
+            </a>
           </div>
         </div>
       </div>
@@ -435,6 +458,10 @@
         </div>
         <% } else { %>
 
+        <div id="payoutNoResults" class="alert alert-warning d-none mb-3">
+          No payout batches match your current search or status filter.
+        </div>
+
         <div class="row g-2 g-md-3">
           <% payoutList.forEach(function(p, idx){
               const items = Array.isArray(p.items) ? p.items : [];
@@ -444,7 +471,7 @@
               const collapseId = 'payoutItems-' + idx;
             %>
           <div class="col-12">
-            <div class="card border border-2 shadow-sm h-100 payout-batch-card payout-batch-<%= idx % 4 %>">
+            <div class="card border border-2 shadow-sm h-100 payout-batch-card payout-batch-<%= idx % 4 %>" data-payout-batch-card="1" data-payout-statuses="<%= esc(items.map(i => String(i.status || 'PENDING').toUpperCase()).join(' ')) %>" data-payout-batchid="<%= esc(String(p.batchId || '')) %>" data-payout-senderbatchid="<%= esc(String(p.senderBatchId || '')) %>" data-payout-businessids="<%= esc(items.map(i => String(i.businessId || '')).join(' ')) %>">
               <div class="card-body p-3">
                 <div class="row g-3">
                   <div class="col-12 col-xl-8">
@@ -560,7 +587,7 @@
                   <div class="text-muted small">No items for this payout batch.</div>
                   <% } else { %>
                   <div class="row g-2 g-md-3">
-                    <% items.forEach(function(it){
+                    <% items.forEach(function(it){  
                             const st = String(it.status||'PENDING').toUpperCase();
                             const receiverRaw = String(it.receiver || '').trim();
                             const receiverMasked = receiverRaw ? maskEmailLocal(receiverRaw) : '—';
@@ -604,8 +631,116 @@
         <% } %>
       </div>
     </div>
-
   </div>
+
+  <script nonce="<%= NONCE %>">
+    document.addEventListener('DOMContentLoaded', function() {
+      const searchInput = document.getElementById('payoutSearchInput');
+      const statusFilter = document.getElementById('payoutStatusFilter');
+      const noResults = document.getElementById('payoutNoResults');
+      const foundCount = document.getElementById('payoutFoundCount');
+      const foundLabel = document.getElementById('payoutFoundLabel');
+      const historySection = document.getElementById('payoutHistory');
+
+      const cards = Array.from(document.querySelectorAll('[data-payout-batch-card="1"]'));
+
+      let scrollTimer = null;
+
+      function normalize(value) {
+        return String(value || '').toLowerCase().trim();
+      }
+
+      function updateFoundCount(count) {
+        if (foundCount) {
+          foundCount.textContent = String(count);
+        }
+
+        if (foundLabel) {
+          foundLabel.textContent = count === 1 ? 'batch' : 'batches';
+        }
+      }
+
+      function moveToPayoutHistory() {
+        if (!historySection) return;
+
+        if (window.location.hash !== '#payoutHistory') {
+          history.replaceState(null, '', '#payoutHistory');
+        }
+
+        historySection.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }
+
+      function scheduleMoveToPayoutHistory() {
+        clearTimeout(scrollTimer);
+
+        scrollTimer = setTimeout(function() {
+          const q = normalize(searchInput ? searchInput.value : '');
+          const status = String(statusFilter ? statusFilter.value : '').trim().toUpperCase();
+
+          if (q || status) {
+            moveToPayoutHistory();
+          }
+        }, 5000);
+      }
+
+      function applyPayoutFilters(options) {
+        const shouldScroll = options && options.scroll === true;
+
+        const q = normalize(searchInput ? searchInput.value : '');
+        const status = String(statusFilter ? statusFilter.value : '').trim().toUpperCase();
+
+        let visibleCount = 0;
+
+        cards.forEach(function(card) {
+          const statuses = String(card.dataset.payoutStatuses || '').toUpperCase();
+
+          const searchable = normalize([
+            card.dataset.payoutBatchid || '',
+            card.dataset.payoutSenderbatchid || '',
+            card.dataset.payoutBusinessids || '',
+            card.textContent || '',
+          ].join(' '));
+
+          const matchesStatus = !status || statuses.includes(status);
+          const matchesSearch = !q || searchable.includes(q);
+
+          const show = matchesStatus && matchesSearch;
+
+          const wrapper = card.closest('.col-12') || card;
+          wrapper.classList.toggle('d-none', !show);
+
+          if (show) visibleCount += 1;
+        });
+
+        updateFoundCount(visibleCount);
+
+        if (noResults) {
+          noResults.classList.toggle('d-none', visibleCount > 0);
+        }
+
+        if (shouldScroll && (q || status)) {
+          scheduleMoveToPayoutHistory();
+        }
+      }
+
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          applyPayoutFilters({ scroll: true });
+        });
+      }
+
+      if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+          applyPayoutFilters({ scroll: true });
+        });
+      }
+
+      applyPayoutFilters({ scroll: window.location.hash === '#payoutHistory' });
+    });
+  </script>
 </section>
 
 <%
