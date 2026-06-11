@@ -16,6 +16,7 @@ const Order = require('../models/Order');
 
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
+const requireOfficialNumberVerified = require('../middleware/requireOfficialNumberVerified');
 
 const router = express.Router();
 
@@ -707,6 +708,7 @@ router.post(
   '/supplier/products',
   requireBusiness,
   requireVerifiedBusiness,
+  requireOfficialNumberVerified,
   requireRole('supplier'),
   handleSupplierUpload(
     supplierProductUpload.fields([
@@ -952,6 +954,7 @@ router.post(
   '/supplier/products/:id/edit',
   requireBusiness,
   requireVerifiedBusiness,
+  requireOfficialNumberVerified,
   requireRole('supplier'),
   handleSupplierUpload(supplierProductUpload.any()),
   [
@@ -1251,7 +1254,7 @@ router.get('/suppliers', async (req, res) => {
 
     const filter = {
       role: 'supplier',
-      isVerified: true,
+      'verification.status': 'verified',
     };
 
     if (q) {
@@ -1263,7 +1266,9 @@ router.get('/suppliers', async (req, res) => {
     }
 
     const suppliers = await Business.find(filter)
-      .select('name logoUrl country city verification createdAt')
+      .select(
+        'name logoUrl country city officialNumber officialNumberType isVerified verification createdAt',
+      )
       .sort({ createdAt: -1 })
       .limit(80)
       .lean();
@@ -1308,7 +1313,9 @@ router.get('/suppliers/:supplierId', async (req, res) => {
       role: 'supplier',
       isVerified: true,
     })
-      .select('name logoUrl country city phone verification createdAt')
+      .select(
+        'name logoUrl country city phone officialNumber officialNumberType isVerified verification createdAt',
+      )
       .lean();
 
     if (!supplier) {

@@ -26,6 +26,15 @@
       return CURRENCY + ' ' + n.toFixed(2);
     }
   }
+
+  const supplierVerification = supplier && supplier.verification ? supplier.verification : {};
+  const supplierOfficialStatus = String(supplierVerification.status || 'pending').trim().toLowerCase();
+  const supplierOfficialNumber = String(supplier && supplier.officialNumber ? supplier.officialNumber : '').trim();
+  const supplierOfficialNumberType = String(supplier && supplier.officialNumberType ? supplier.officialNumberType : 'OTHER').trim();
+
+  const supplierOfficialVerified = supplierOfficialStatus === 'verified';
+  const supplierOfficialRejected = supplierOfficialStatus === 'rejected';
+  const supplierOfficialPending = supplierOfficialStatus === 'pending';
 %>
 
 <style nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
@@ -476,9 +485,17 @@
               <%= supplier.name %>
             </h1>
 
-            <p class="supplier-hero-location small mb-0">
+            <p class="supplier-hero-location small mb-1">
               <%= supplier.city || '' %>
               <%= supplier.country ? ', ' + supplier.country : '' %>
+            </p>
+
+            <p class="supplier-hero-location small mb-0">
+              <span class="fw-bold">Official No.:</span>
+              <%= supplierOfficialNumber || 'Not provided' %>
+              <span class="opacity-75">
+                (<%= supplierOfficialNumberType || 'OTHER' %>)
+              </span>
             </p>
           </div>
         </div>
@@ -490,11 +507,40 @@
             <%= products && products.length ? products.length : 0 %>
           </span>
 
+          <% if (supplierOfficialVerified) { %>
+            <span
+              class="badge rounded-pill text-bg-success px-3 py-2 fw-bold"
+              title="Official number verified: <%= supplierOfficialNumber || 'Not shown' %>"
+            >
+              Official No.: Verified
+            </span>
+          <% } else if (supplierOfficialRejected) { %>
+            <span
+              class="badge rounded-pill text-bg-danger px-3 py-2 fw-bold"
+              title="Official number rejected: <%= supplierOfficialNumber || 'Not shown' %>"
+            >
+              Official No.: Rejected
+            </span>
+          <% } else if (supplierOfficialPending) { %>
+            <span
+              class="badge rounded-pill text-bg-warning text-dark px-3 py-2 fw-bold"
+              title="Official number pending review: <%= supplierOfficialNumber || 'Not shown' %>"
+            >
+              Official No.: Pending
+            </span>
+          <% } else { %>
+            <span
+              class="badge rounded-pill text-bg-secondary px-3 py-2 fw-bold"
+              title="Official number status: <%= supplierOfficialStatus || 'unverified' %>"
+            >
+              Official No.: Unverified
+            </span>
+          <% } %>
+
           <a href="/wholesale" class="btn btn-light btn-sm supplier-market-btn">
             Marketplace
           </a>
         </div>
-
       </div>
     </div>
   </section>

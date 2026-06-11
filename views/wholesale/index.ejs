@@ -37,6 +37,10 @@
     min-height: 100vh;
   }
 
+  #wholesale-products {
+    scroll-margin-top: 1rem;
+  }
+
   .wholesale-hero {
     border: 1px solid rgba(13, 110, 253, 0.12);
     background:
@@ -434,7 +438,7 @@
   </section>
 
   <!-- Search / Filter -->
-  <form method="GET" action="/wholesale" class="card wholesale-search-card shadow-sm mb-3 mb-lg-4">
+  <form method="GET" action="/wholesale#wholesale-products" class="card wholesale-search-card shadow-sm mb-3 mb-lg-4">
     <div class="card-body p-2 p-sm-3">
       <div class="row g-2 align-items-center">
         <div class="col-12 col-lg-6">
@@ -442,6 +446,7 @@
             Search products
           </label>
           <input
+            id="wholesaleSearchInput"
             type="search"
             name="q"
             class="form-control form-control-sm"
@@ -454,7 +459,7 @@
           <label class="form-label small fw-bold text-muted mb-1">
             Category
           </label>
-          <select name="category" class="form-select form-select-sm">
+          <select id="wholesaleCategorySelect" name="category" class="form-select form-select-sm">
             <option value="">All categories</option>
             <% (categories || []).forEach((item) => { %>
               <option value="<%= item %>" <%= category === item ? 'selected' : '' %>>
@@ -475,6 +480,8 @@
       </div>
     </div>
   </form>
+
+  <div id="wholesale-products"></div>
 
   <% if (!products || products.length === 0) { %>
     <div class="card wholesale-empty-card shadow-sm">
@@ -660,3 +667,41 @@
     </div>
   <% } %>
 </div>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  (function () {
+    const searchInput = document.getElementById('wholesaleSearchInput');
+    const categorySelect = document.getElementById('wholesaleCategorySelect');
+
+    if (!searchInput) return;
+
+    let clearedRefreshDone = false;
+
+    function refreshWholesaleWhenSearchIsEmpty() {
+      const keyword = String(searchInput.value || '').trim();
+      const category = categorySelect ? String(categorySelect.value || '').trim() : '';
+
+      if (keyword) {
+        clearedRefreshDone = false;
+        return;
+      }
+
+      if (clearedRefreshDone) return;
+      clearedRefreshDone = true;
+
+      const params = new URLSearchParams();
+
+      if (category) {
+        params.set('category', category);
+      }
+
+      const queryString = params.toString();
+
+      window.location.href = queryString
+        ? '/wholesale?' + queryString + '#wholesale-products'
+        : '/wholesale#wholesale-products';
+    }
+
+    searchInput.addEventListener('input', refreshWholesaleWhenSearchIsEmpty);
+  })();
+</script>
