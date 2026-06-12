@@ -99,6 +99,66 @@ const supplyRequestSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // ==========================
+    // 🏭 Wholesale import tracking
+    // ==========================
+    // When a seller imports an approved request into Product,
+    // we store the imported seller product here so this request
+    // cannot be imported twice by mistake.
+    importedProduct: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+      default: null,
+      index: true,
+    },
+
+    importedQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, 'Imported quantity cannot be negative'],
+    },
+
+    importedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    // Short lock used while the import is running.
+    // This protects supplier stock if the seller double-clicks Import Product.
+    importLockedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    // ==========================
+    // 🗑️ Imported product delete / return tracking
+    // ==========================
+    // If the seller deletes an imported product, the unsold stock is returned
+    // to SupplierProduct.availableQuantity and recorded here for supplier tracking.
+    importDeletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    returnedQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, 'Returned quantity cannot be negative'],
+    },
+
+    deletedImportedProductSnapshot: {
+      customId: { type: String, trim: true, default: '' },
+      name: { type: String, trim: true, default: '' },
+      imageUrl: { type: String, trim: true, default: '' },
+      stockReturned: { type: Number, default: 0 },
+      sellerStockAtDelete: { type: Number, default: 0 },
+      soldCountAtDelete: { type: Number, default: 0 },
+      deletedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
@@ -110,6 +170,20 @@ supplyRequestSchema.index(
 
 supplyRequestSchema.index({ supplier: 1, status: 1, createdAt: -1 });
 supplyRequestSchema.index({ seller: 1, status: 1, createdAt: -1 });
+
+// Helps prevent repeated importing of the same approved request.
+supplyRequestSchema.index({
+  seller: 1,
+  status: 1,
+  importedAt: 1,
+  importLockedAt: 1,
+});
+
+supplyRequestSchema.index({
+  supplier: 1,
+  importDeletedAt: 1,
+  importedAt: 1,
+});
 
 module.exports =
   mongoose.models.SupplyRequest ||

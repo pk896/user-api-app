@@ -5,6 +5,8 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Product = require('../models/Product');
+const SupplierProduct = require('../models/SupplierProduct');
+const SupplyRequest = require('../models/SupplyRequest');
 
 const requireBusiness = require('../middleware/requireBusiness');
 const requireVerifiedBusiness = require('../middleware/requireVerifiedBusiness');
@@ -1514,12 +1516,18 @@ router.post(
  * Important:
  * - Normal seller products own their S3 images, so deleting product deletes images.
  * - Wholesale-imported products reuse supplier images, so seller delete must NOT delete S3 images.
+ * - If seller deletes an imported product, only unsold stock is returned to supplier stock.
  * =========================================================== */
 router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
   try {
     const business = req.business || req.session.business;
 
-    const product = await Product.findOneAndDelete({
+    if (!business || !business._id) {
+      req.flash('error', 'Session expired. Please log in again.');
+      return res.redirect('/business/login');
+    }
+
+    const product = await Product.findOne({
       customId: req.params.id,
       business: business._id,
     });
@@ -1534,6 +1542,62 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
       !!product.sourceSupplyRequest ||
       !!product.sourceSupplierProduct;
 
+    const sellerStockLeft = Math.max(0, Math.floor(Number(product.stock || 0)));
+    const soldCountAtDelete = Math.max(0, Math.floor(Number(product.soldCount || 0)));
+
+    // ✅ If this is an imported supplier product, return ONLY the seller's remaining unsold stock.
+    // Example:
+    // Imported 20, sold 5, stock left 15, seller deletes product
+    // Supplier gets back 15, not 20.
+    if (isWholesaleImportedProduct && product.sourceSupplierProduct && sellerStockLeft > 0) {
+      await SupplierProduct.updateOne(
+        {
+          _id: product.sourceSupplierProduct,
+        },
+        {
+          $inc: {
+            availableQuantity: sellerStockLeft,
+          },
+        },
+      );
+    }
+
+    // ✅ Mark the linked request(s) as deleted by seller so supplier tracking can show it.
+    if (isWholesaleImportedProduct) {
+      const supplyRequestFilter = {
+        seller: business._id,
+        importedAt: { $ne: null },
+        $or: [
+          { importedProduct: product._id },
+          { _id: product.sourceSupplyRequest || null },
+        ],
+      };
+
+      await SupplyRequest.updateMany(
+        supplyRequestFilter,
+        {
+          $set: {
+            importDeletedAt: new Date(),
+            returnedQuantity: sellerStockLeft,
+            deletedImportedProductSnapshot: {
+              customId: String(product.customId || '').trim(),
+              name: String(product.name || '').trim(),
+              imageUrl: String(product.imageUrl || '').trim(),
+              stockReturned: sellerStockLeft,
+              sellerStockAtDelete: sellerStockLeft,
+              soldCountAtDelete,
+              deletedAt: new Date(),
+            },
+          },
+        },
+      );
+    }
+
+    await Product.deleteOne({
+      _id: product._id,
+      business: business._id,
+    });
+
     if (!isWholesaleImportedProduct) {
       await deleteProductImagesFromS3(product);
     }
@@ -1541,8 +1605,8 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
     req.flash(
       'success',
       isWholesaleImportedProduct
-        ? '🗑️ Imported product removed from your products. Supplier images were kept safe.'
-        : '🗑️ Product deleted successfully!'
+        ? `🗑️ Imported product removed. ${sellerStockLeft} unsold item(s) were returned to the supplier stock. Supplier images were kept safe.`
+        : '🗑️ Product deleted successfully!',
     );
 
     return res.redirect('/products/all');

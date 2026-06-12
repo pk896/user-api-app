@@ -288,14 +288,71 @@ async function buildSupplierImportedTrackingData(supplierId) {
     .sort({ updatedAt: -1, importedAt: -1, createdAt: -1 })
     .lean();
 
+  // ✅ Deleted imported products are no longer in Product collection,
+  // so we recover their tracking row from SupplyRequest.
+  const deletedImportedRequests = await SupplyRequest.find({
+    supplier: supplierObjectId,
+    importedAt: { $ne: null },
+    importDeletedAt: { $ne: null },
+  })
+    .select(
+      'seller supplier supplierProduct requestedQuantity importedQuantity importedAt importDeletedAt returnedQuantity deletedImportedProductSnapshot',
+    )
+    .populate('seller', 'name email logoUrl')
+    .populate('supplierProduct', 'name imageUrl wholesalePrice availableQuantity unit')
+    .sort({ importDeletedAt: -1, importedAt: -1, createdAt: -1 })
+    .lean();
+
+  const deletedPseudoProducts = deletedImportedRequests
+    .map((request) => {
+      const snapshot = request.deletedImportedProductSnapshot || {};
+      const supplierProduct = request.supplierProduct || {};
+
+      const customId = String(snapshot.customId || '').trim();
+      if (!customId) return null;
+
+      return {
+        _id: `deleted-${request._id}`,
+        customId,
+        name: snapshot.name || supplierProduct.name || 'Deleted imported product',
+        imageUrl: snapshot.imageUrl || supplierProduct.imageUrl || '',
+        stock: 0,
+        soldCount: Number(snapshot.soldCountAtDelete || 0),
+        soldOrders: 0,
+        business: request.seller || null,
+        sourceSupplierProduct: supplierProduct || request.supplierProduct || null,
+        sourceSupplyRequest: request._id,
+        wholesaleCostPrice: Number(supplierProduct.wholesalePrice || 0),
+        importedAt: request.importedAt,
+        updatedAt: request.importDeletedAt,
+        deletedFromSeller: true,
+        importDeletedAt: request.importDeletedAt,
+        returnedQuantity: Number(request.returnedQuantity || 0),
+        importedQuantity: Number(request.importedQuantity || request.requestedQuantity || 0),
+      };
+    })
+    .filter(Boolean);
+
+  const activeCustomIds = new Set(
+    importedProducts.map((product) => String(product.customId || '').trim()).filter(Boolean),
+  );
+
+  // Avoid duplicate rows if something still exists as active.
+  const deletedOnlyProducts = deletedPseudoProducts.filter((product) => {
+    const customId = String(product.customId || '').trim();
+    return customId && !activeCustomIds.has(customId);
+  });
+
+  const allTrackedProducts = importedProducts.concat(deletedOnlyProducts);
+
   const importedCustomIds = [
     ...new Set(
-      importedProducts.map((product) => String(product.customId || '').trim()).filter(Boolean),
+      allTrackedProducts.map((product) => String(product.customId || '').trim()).filter(Boolean),
     ),
   ];
 
   const productByCustomId = new Map(
-    importedProducts.map((product) => [String(product.customId || '').trim(), product]),
+    allTrackedProducts.map((product) => [String(product.customId || '').trim(), product]),
   );
 
   const paidStatuses = orderPaidStatusValues();
@@ -320,8 +377,9 @@ async function buildSupplierImportedTrackingData(supplierId) {
 
   const productStatsMap = new Map();
 
-  importedProducts.forEach((product) => {
+  allTrackedProducts.forEach((product) => {
     const customId = String(product.customId || '').trim();
+    if (!customId) return;
 
     productStatsMap.set(customId, {
       product,
@@ -334,6 +392,10 @@ async function buildSupplierImportedTrackingData(supplierId) {
       paidOrderRevenue: 0,
       supplierValueEstimate: 0,
       latestPaidOrderAt: null,
+      deletedFromSeller: Boolean(product.deletedFromSeller),
+      importDeletedAt: product.importDeletedAt || null,
+      returnedQuantity: Number(product.returnedQuantity || 0),
+      importedQuantity: Number(product.importedQuantity || 0),
     });
   });
 
@@ -392,12 +454,17 @@ async function buildSupplierImportedTrackingData(supplierId) {
   });
 
   const productStats = Array.from(productStatsMap.values()).map((row) => {
-    const soldCount = Number(row.soldCount || 0);
     const currentSellerStock = Number(row.currentSellerStock || 0);
+    const soldCount = Number(row.soldCount || row.paidOrderQty || 0);
+    const importedQuantity =
+      Number(row.importedQuantity || 0) > 0
+        ? Number(row.importedQuantity || 0)
+        : soldCount + currentSellerStock;
 
     return {
       ...row,
-      estimatedImportedQuantity: soldCount + currentSellerStock,
+      soldCount,
+      estimatedImportedQuantity: importedQuantity || soldCount + currentSellerStock,
       paidOrderRevenue: Number(row.paidOrderRevenue.toFixed(2)),
       supplierValueEstimate: Number(row.supplierValueEstimate.toFixed(2)),
     };
@@ -406,6 +473,8 @@ async function buildSupplierImportedTrackingData(supplierId) {
   const totals = productStats.reduce(
     (acc, row) => {
       acc.importedProducts += 1;
+
+      // Deleted seller products have 0 seller stock left because the unsold stock was returned.
       acc.currentSellerStock += Number(row.currentSellerStock || 0);
       acc.soldCount += Number(row.soldCount || 0);
       acc.paidOrderQty += Number(row.paidOrderQty || 0);

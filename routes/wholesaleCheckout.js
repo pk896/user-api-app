@@ -513,6 +513,19 @@ router.post(
 /* =========================================================
  * POST /wholesale/import/:requestId
  * Seller imports approved supplier product into seller Product collection
+ *
+ * Stock communication:
+ * 1) If seller has never imported this supplier product:
+ *    - create seller Product
+ *    - Product.stock = approved quantity
+ *
+ * 2) If seller already imported this supplier product before:
+ *    - do NOT create duplicate product
+ *    - add approved quantity to existing Product.stock
+ *
+ * 3) Always deduct the same quantity from SupplierProduct.availableQuantity.
+ * 4) Mark SupplyRequest as imported so the same request cannot run twice.
+ * 5) Roll back supplier stock if something fails.
  * ======================================================= */
 router.post(
   '/import/:requestId',
@@ -522,6 +535,9 @@ router.post(
   async (req, res) => {
     let reservedSupplierProductId = null;
     let reservedQuantity = 0;
+    let createdProductId = null;
+    let restockedProductId = null;
+    let claimedSupplyRequestId = null;
 
     try {
       const seller = getBusiness(req);
@@ -532,61 +548,114 @@ router.post(
         return res.redirect('/wholesale/my-requests');
       }
 
-      const supplyRequest = await SupplyRequest.findOne({
-        _id: requestId,
-        seller: seller._id,
-        status: 'approved',
-      })
+      const staleLockDate = new Date(Date.now() - 10 * 60 * 1000);
+
+      const supplyRequest = await SupplyRequest.findOneAndUpdate(
+        {
+          _id: requestId,
+          seller: seller._id,
+          status: 'approved',
+          $and: [
+            {
+              $or: [
+                { importedAt: null },
+                { importedAt: { $exists: false } },
+              ],
+            },
+            {
+              $or: [
+                { importLockedAt: null },
+                { importLockedAt: { $exists: false } },
+                { importLockedAt: { $lt: staleLockDate } },
+              ],
+            },
+          ],
+        },
+        {
+          $set: {
+            importLockedAt: new Date(),
+          },
+        },
+        { new: true },
+      )
         .populate('supplier')
         .populate('supplierProduct')
         .lean();
 
       if (!supplyRequest) {
-        req.flash('error', 'Only approved supply requests can be imported.');
+        const existingImported = await SupplyRequest.findOne({
+          _id: requestId,
+          seller: seller._id,
+        })
+          .populate('importedProduct', 'name customId')
+          .lean();
+
+        if (existingImported?.importedAt) {
+          const importedName =
+            existingImported.importedProduct?.name || 'your seller product';
+
+          req.flash('info', `This supply request is already imported as "${importedName}".`);
+          return res.redirect('/products/all');
+        }
+
+        req.flash(
+          'error',
+          'This request cannot be imported right now. It may already be importing, not approved, or unavailable.',
+        );
         return res.redirect('/wholesale/my-requests');
       }
+
+      claimedSupplyRequestId = supplyRequest._id;
 
       const supplierProduct = supplyRequest.supplierProduct;
 
       if (!supplierProduct || !supplierProduct._id) {
-        req.flash('error', 'Supplier product was not found.');
-        return res.redirect('/wholesale/my-requests');
+        throw new Error('Supplier product was not found.');
       }
-
-      const duplicate = await Product.findOne({
-        business: seller._id,
-        sourceSupplyRequest: supplyRequest._id,
-      })
-        .select('_id customId name')
-        .lean();
-
-      if (duplicate) {
-        req.flash('info', `This supply request is already imported as "${duplicate.name}".`);
-        return res.redirect('/products/all');
-      }
-
-      if (!supplierShippingIsComplete(supplierProduct)) {
-        req.flash(
-          'error',
-          'Cannot import this product yet. The supplier product is missing shipping weight or dimensions.',
-        );
-        return res.redirect('/wholesale/my-requests');
-      }
-
-      const wholesalePrice = Number(supplierProduct.wholesalePrice || 0);
 
       const approvedQuantity = toPositiveInt(supplyRequest.requestedQuantity, 0);
 
       if (approvedQuantity <= 0) {
-        req.flash(
-          'error',
-          'Cannot import this product because the approved request quantity is invalid.',
-        );
-        return res.redirect('/wholesale/my-requests');
+        throw new Error('Cannot import this product because the approved request quantity is invalid.');
       }
 
+      const wholesalePrice = Number(supplierProduct.wholesalePrice || 0);
       const supplierId = supplyRequest.supplier?._id || supplyRequest.supplier;
 
+      // ✅ Stop the same request from being imported twice.
+      const sameRequestDuplicate = await Product.findOne({
+        business: seller._id,
+        sourceSupplyRequest: supplyRequest._id,
+      })
+        .select('_id customId name stock')
+        .lean();
+
+      if (sameRequestDuplicate) {
+        await SupplyRequest.updateOne(
+          { _id: supplyRequest._id },
+          {
+            $set: {
+              importedProduct: sameRequestDuplicate._id,
+              importedQuantity: Number(sameRequestDuplicate.stock || approvedQuantity || 0),
+              importedAt: new Date(),
+            },
+            $unset: {
+              importLockedAt: '',
+            },
+          },
+        );
+
+        req.flash('info', `This supply request is already imported as "${sameRequestDuplicate.name}".`);
+        return res.redirect('/products/all');
+      }
+
+      if (!supplierShippingIsComplete(supplierProduct)) {
+        throw new Error(
+          'Cannot import this product yet. The supplier product is missing shipping weight or dimensions.',
+        );
+      }
+
+      // ✅ Deduct supplier stock first, safely.
       const reservedSupplierProduct = await SupplierProduct.findOneAndUpdate(
         {
           _id: supplierProduct._id,
@@ -602,16 +671,76 @@ router.post(
       ).lean();
 
       if (!reservedSupplierProduct) {
-        req.flash(
-          'error',
+        throw new Error(
           `Cannot import this product because the supplier no longer has ${approvedQuantity} item(s) available.`,
         );
-        return res.redirect('/wholesale/my-requests');
       }
 
       reservedSupplierProductId = supplierProduct._id;
       reservedQuantity = approvedQuantity;
 
+      // ✅ IMPORTANT:
+      // If seller already imported this supplier product before,
+      // restock that existing seller product instead of creating a duplicate.
+      const existingSellerProduct = await Product.findOne({
+        business: seller._id,
+        sourceType: 'wholesale_import',
+        sourceSupplierProduct: supplierProduct._id,
+      })
+        .select('_id customId name stock sourceSupplierProduct')
+        .lean();
+
+      if (existingSellerProduct) {
+        const restockedProduct = await Product.findOneAndUpdate(
+          {
+            _id: existingSellerProduct._id,
+            business: seller._id,
+            sourceSupplierProduct: supplierProduct._id,
+          },
+          {
+            $inc: {
+              stock: approvedQuantity,
+            },
+            $set: {
+              sourceSupplier: supplierId,
+              wholesaleCostPrice: wholesalePrice,
+              importedAt: new Date(),
+            },
+          },
+          {
+            new: true,
+          },
+        ).lean();
+
+        if (!restockedProduct) {
+          throw new Error('Could not restock the existing imported product.');
+        }
+
+        restockedProductId = restockedProduct._id;
+
+        await SupplyRequest.updateOne(
+          { _id: supplyRequest._id },
+          {
+            $set: {
+              importedProduct: restockedProduct._id,
+              importedQuantity: approvedQuantity,
+              importedAt: new Date(),
+            },
+            $unset: {
+              importLockedAt: '',
+            },
+          },
+        );
+
+        req.flash(
+          'success',
+          `Existing product restocked successfully. ${approvedQuantity} item(s) were added to "${restockedProduct.name}". Supplier stock was reduced by ${approvedQuantity}.`,
+        );
+
+        return res.redirect('/products/all');
+      }
+
+      // ✅ If no existing imported product exists, create a new seller product.
       const suggestedRetailPrice =
         wholesalePrice > 0 ? Number((wholesalePrice * 1.35).toFixed(2)) : 1;
 
@@ -646,7 +775,6 @@ router.post(
         description: supplierProduct.description || '',
         imageUrl: supplierProduct.imageUrl,
 
-        // ✅ Import stock from approved supply request quantity
         stock: approvedQuantity,
 
         role,
@@ -684,7 +812,7 @@ router.post(
         business: seller._id,
 
         sourceType: 'wholesale_import',
-        sourceSupplier: supplyRequest.supplier?._id || supplyRequest.supplier,
+        sourceSupplier: supplierId,
         sourceSupplierProduct: supplierProduct._id,
         sourceSupplyRequest: supplyRequest._id,
         wholesaleCostPrice: wholesalePrice,
@@ -696,15 +824,49 @@ router.post(
       });
 
       await importedProduct.save();
+      createdProductId = importedProduct._id;
+
+      await SupplyRequest.updateOne(
+        { _id: supplyRequest._id },
+        {
+          $set: {
+            importedProduct: importedProduct._id,
+            importedQuantity: approvedQuantity,
+            importedAt: new Date(),
+          },
+          $unset: {
+            importLockedAt: '',
+          },
+        },
+      );
 
       req.flash(
         'success',
-        `Product imported successfully with ${approvedQuantity} item(s) in stock. Please review the retail price before selling.`,
+        `Product imported successfully with ${approvedQuantity} item(s) in stock. Supplier stock was reduced by ${approvedQuantity}. Please review the retail price before selling.`,
       );
 
       return res.redirect('/products/all');
     } catch (err) {
       console.error('❌ Wholesale import error:', err);
+
+      if (createdProductId) {
+        try {
+          await Product.deleteOne({ _id: createdProductId });
+        } catch (deleteErr) {
+          console.error('❌ Failed to rollback imported seller product:', deleteErr);
+        }
+      }
+
+      if (restockedProductId && reservedQuantity > 0) {
+        try {
+          await Product.updateOne(
+            { _id: restockedProductId },
+            { $inc: { stock: -reservedQuantity } },
+          );
+        } catch (stockRollbackErr) {
+          console.error('❌ Failed to rollback seller product restock:', stockRollbackErr);
+        }
+      }
 
       if (reservedSupplierProductId && reservedQuantity > 0) {
         try {
@@ -717,8 +879,22 @@ router.post(
         }
       }
 
-      req.flash('error', err.message || 'Could not import this wholesale product.');
+      if (claimedSupplyRequestId) {
+        try {
+          await SupplyRequest.updateOne(
+            { _id: claimedSupplyRequestId },
+            {
+              $unset: {
+                importLockedAt: '',
+              },
+            },
+          );
+        } catch (unlockErr) {
+          console.error('❌ Failed to unlock supply request import:', unlockErr);
+        }
+      }
 
+      req.flash('error', err.message || 'Could not import this wholesale product.');
       return res.redirect('/wholesale/my-requests');
     }
   },
