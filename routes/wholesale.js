@@ -1199,7 +1199,10 @@ router.get('/', async (req, res) => {
     const q = cleanString(req.query.q);
     const category = cleanString(req.query.category);
 
-    const filter = { status: 'active' };
+    const filter = {
+      status: 'active',
+      availableQuantity: { $gt: 0 },
+    };
 
     if (category) {
       filter.category = category;
@@ -1217,6 +1220,7 @@ router.get('/', async (req, res) => {
 
     const categories = await SupplierProduct.distinct('category', {
       status: 'active',
+      availableQuantity: { $gt: 0 },
       category: { $ne: '' },
     });
 
@@ -1570,7 +1574,10 @@ router.get(
       const supplier = getBusiness(req);
 
       const requests = await SupplyRequest.find({ supplier: supplier._id })
-        .populate('seller', 'name logoUrl country city email phone')
+        .populate(
+          'seller',
+          'name logoUrl officialNumber officialNumberType verification country city email phone'
+        )
         .populate('supplierProduct', 'name imageUrl wholesalePrice minimumOrderQuantity unit')
         .sort({ createdAt: -1 })
         .lean();
