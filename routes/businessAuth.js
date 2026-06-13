@@ -12,6 +12,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const Business = require('../models/Business');
 const Product = require('../models/Product'); // seller products - keep for seller/buyer flows
 const SupplierProduct = require('../models/SupplierProduct');
+const SupplierProductStockHistory = require('../models/SupplierProductStockHistory');
 const SupplyRequest = require('../models/SupplyRequest');
 const _DeliveryOption = require('../models/DeliveryOption');
 const requireBusiness = require('../middleware/requireBusiness');
@@ -226,6 +227,11 @@ function pickField(body, dottedPath, fallback = '') {
 
 const LOW_STOCK_THRESHOLD = 10;
 const SUPPLIER_LOW_STOCK_THRESHOLD = 15;
+
+function safeSupplierDashboardNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
 
 function startOfDaysAgo(days) {
   const d = new Date();
@@ -3464,54 +3470,64 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
     const supplierSoldCardData = await buildSupplierSoldCardData(business._id);
     const supplierPayoutCardData = await buildSupplierPayoutCardData(business._id);
     const supplierRefundCardData = await buildSupplierRefundCardData(business._id);
-    const supplierObjectId = new mongoose.Types.ObjectId(String(business._id));
+    const supplierObjectId = new mongoose.Types.ObjectId(
+      String(business._id),
+    );
 
+    // Last seven calendar days, including today.
     const stockStart = new Date();
     stockStart.setDate(stockStart.getDate() - 6);
     stockStart.setHours(0, 0, 0, 0);
 
-    const stockMovementRows = await SupplierProduct.aggregate([
-      {
-        $match: {
-          supplier: supplierObjectId,
-          status: { $ne: 'archived' },
-          updatedAt: { $gte: stockStart },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: '%Y-%m-%d',
-              date: '$updatedAt',
-            },
-          },
-          totalStock: { $sum: '$availableQuantity' },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
+    const stockEnd = new Date();
+    stockEnd.setHours(23, 59, 59, 999);
 
-    const stockMovementMap = new Map(
-      stockMovementRows.map((row) => [String(row._id), Number(row.totalStock || 0)]),
-    );
+    // Real supplier stock changes written by SupplierProduct middleware.
+    const stockHistoryRows = await SupplierProductStockHistory.find({
+      supplier: supplierObjectId,
+      createdAt: {
+        $gte: stockStart,
+        $lte: stockEnd,
+      },
+    })
+      .select('delta createdAt')
+      .sort({ createdAt: 1 })
+      .lean();
 
     const stockChartLabels = [];
     const stockChartData = [];
 
     for (let i = 0; i < 7; i += 1) {
-      const d = new Date(stockStart);
-      d.setDate(stockStart.getDate() + i);
+      const dayStart = new Date(stockStart);
+      dayStart.setDate(stockStart.getDate() + i);
+      dayStart.setHours(0, 0, 0, 0);
 
-      const key = d.toISOString().slice(0, 10);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayStartTime = dayStart.getTime();
+      const dayEndTime = dayEnd.getTime();
+
+      const dailyStockMovement = stockHistoryRows
+        .filter((row) => {
+          const historyTime = new Date(row.createdAt).getTime();
+
+          return (
+            historyTime >= dayStartTime &&
+            historyTime <= dayEndTime
+          );
+        })
+        .reduce((sum, row) => {
+          return sum + safeSupplierDashboardNumber(row.delta);
+        }, 0);
 
       stockChartLabels.push(
-        d.toLocaleDateString(undefined, {
+        dayStart.toLocaleDateString(undefined, {
           weekday: 'short',
         }),
       );
 
-      stockChartData.push(stockMovementMap.get(key) || 0);
+      stockChartData.push(dailyStockMovement);
     }
 
     return res.json({

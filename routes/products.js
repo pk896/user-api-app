@@ -1214,7 +1214,7 @@ router.get('/view/:id', async (req, res) => {
 /* ===========================================================
  * ✏️ GET: Edit Product (only own)
  * =========================================================== */
-router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, async (req, res) => {
+router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, requireOfficialNumberVerified, async (req, res) => {
   try {
     const business = req.business || req.session.business;
     const product = await Product.findOne({

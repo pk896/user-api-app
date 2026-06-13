@@ -202,9 +202,14 @@
 
       if (movementTextEl) {
         if (weeklyStockMovement > 0) {
-          movementTextEl.textContent = ` (${weeklyStockMovement} stock movement this week)`;
+          movementTextEl.textContent =
+            ` (+${weeklyStockMovement} added in the last 7 days)`;
+        } else if (weeklyStockMovement < 0) {
+          movementTextEl.textContent =
+            ` (${Math.abs(weeklyStockMovement)} removed in the last 7 days)`;
         } else {
-          movementTextEl.textContent = '';
+          movementTextEl.textContent =
+            ' (no stock movement in the last 7 days)';
         }
       }
 
@@ -212,15 +217,42 @@
         chartLabels :
         ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-      cardChart1.data.datasets[0].label = 'Total Stock Movement';
+      cardChart1.data.datasets[0].label =
+        'Daily Supplier Stock Movement';
       cardChart1.data.datasets[0].data = chartData.length ?
         chartData :
         [0, 0, 0, 0, 0, 0, 0];
 
-      const maxChartValue = Math.max(...cardChart1.data.datasets[0].data, 1);
+      const stockMovementValues =
+        cardChart1.data.datasets[0].data.map((value) =>
+          Number(value || 0),
+        );
 
-      cardChart1.options.scales.y.min = 0;
-      cardChart1.options.scales.y.max = Math.ceil(maxChartValue * 1.2);
+      const minimumStockMovement = Math.min(
+        ...stockMovementValues,
+        0,
+      );
+
+      const maximumStockMovement = Math.max(
+        ...stockMovementValues,
+        0,
+      );
+
+      const stockMovementRange = Math.max(
+        maximumStockMovement - minimumStockMovement,
+        1,
+      );
+
+      const stockMovementPadding = Math.max(
+        Math.ceil(stockMovementRange * 0.2),
+        1,
+      );
+
+      cardChart1.options.scales.y.min =
+        minimumStockMovement - stockMovementPadding;
+
+      cardChart1.options.scales.y.max =
+        maximumStockMovement + stockMovementPadding;
 
       const soldChartLabels = Array.isArray(payload?.chart?.card2?.labels)
         ? payload.chart.card2.labels

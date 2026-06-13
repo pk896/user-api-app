@@ -974,6 +974,7 @@ router.get(
   '/supplier/products/:id/edit',
   requireBusiness,
   requireVerifiedBusiness,
+  requireOfficialNumberVerified,
   requireRole('supplier'),
   async (req, res) => {
     try {
@@ -1023,7 +1024,6 @@ router.post(
   '/supplier/products/:id/edit',
   requireBusiness,
   requireVerifiedBusiness,
-  requireOfficialNumberVerified,
   requireRole('supplier'),
   handleSupplierUpload(supplierProductUpload.any()),
   [
@@ -1797,6 +1797,10 @@ router.get(
         totals: trackingData.totals,
         productStats: trackingData.productStats,
         orderRows: trackingData.orderRows,
+
+        // ✅ Makes layout.ejs use: container-fluid px-0
+        fullWidthPage: true,
+
         themeCss: res.locals.themeCss,
         nonce: res.locals.nonce,
         baseCurrency: BASE_CURRENCY,
