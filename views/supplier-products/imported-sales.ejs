@@ -168,7 +168,6 @@
 
   .supplier-imported-page img,
   .supplier-imported-page svg,
-  .supplier-imported-page table,
   .supplier-imported-page iframe,
   .supplier-imported-page canvas {
     max-width: 100%;
@@ -187,6 +186,65 @@
   .supplier-imported-page .text-muted {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  /* ==========================================================
+  * SELLER-SIDE STOCK TABLE
+  * Keep product and seller details aligned on narrow screens.
+  * Bootstrap .table-responsive provides horizontal scrolling.
+  * ======================================================== */
+
+  .supplier-imported-stock-table {
+    width: 100%;
+    min-width: 1080px;
+    table-layout: auto;
+  }
+
+  .supplier-imported-stock-table th,
+  .supplier-imported-stock-table td {
+    vertical-align: middle;
+  }
+
+  .supplier-imported-stock-table th {
+    white-space: nowrap;
+  }
+
+  .supplier-imported-product-cell {
+    width: 260px;
+    min-width: 260px;
+  }
+
+  .supplier-imported-seller-cell {
+    width: 230px;
+    min-width: 230px;
+  }
+
+  .supplier-imported-product-info,
+  .supplier-imported-seller-info {
+    min-width: 0;
+  }
+
+  .supplier-imported-product-name,
+  .supplier-imported-seller-name {
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  .supplier-imported-seller-email,
+  .supplier-imported-product-id {
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .supplier-imported-stock-table .supplier-imported-number-cell,
+  .supplier-imported-stock-table .supplier-imported-badge-cell,
+  .supplier-imported-stock-table .supplier-imported-value-cell,
+  .supplier-imported-stock-table .supplier-imported-date-cell {
+    white-space: nowrap;
   }
 
   @media (max-width: 767.98px) {
@@ -340,11 +398,11 @@
 
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table align-middle mb-0">
+        <table class="table align-middle mb-0 supplier-imported-stock-table">
           <thead class="table-light">
             <tr>
-              <th>Product</th>
-              <th>Seller</th>
+              <th class="supplier-imported-product-cell">Product</th>
+              <th class="supplier-imported-seller-cell">Seller</th>
               <th>Imported Qty</th>
               <th>Stock Left</th>
               <th>Sold</th>
@@ -360,57 +418,68 @@
             <% const seller = row.seller || {}; %>
 
             <tr>
-              <td>
-                <div class="d-flex align-items-center gap-2">
-                  <img src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>" alt="<%= product.name || 'Imported product' %>" class="supplier-imported-img p-2" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';">
+              <td class="supplier-imported-product-cell">
+                <div class="d-flex align-items-center gap-3">
+                  <img
+                    src="<%= product.imageUrl || '/images/branding/logo-unincorporate.png' %>"
+                    alt="<%= product.name || 'Imported product' %>"
+                    class="supplier-imported-img p-2 flex-shrink-0"
+                    loading="lazy"
+                    decoding="async"
+                    onerror="this.onerror=null;this.src='/images/branding/logo-unincorporate.png';"
+                  >
 
-                  <div class="min-w-0">
-                    <div class="fw-bold text-primary">
+                  <div class="supplier-imported-product-info">
+                    <div class="fw-bold text-primary supplier-imported-product-name">
                       <%= product.name || 'Imported Product' %>
                     </div>
-                    <div class="small text-muted">
+
+                    <div class="small text-muted mt-1 supplier-imported-product-id">
                       <%= product.customId || '' %>
                     </div>
                   </div>
                 </div>
               </td>
 
-              <td>
-                <div class="fw-bold">
-                  <%= seller.name || 'Seller' %>
-                </div>
-                <div class="small text-muted">
-                  <%= seller.email || '' %>
+              <td class="supplier-imported-seller-cell">
+                <div class="supplier-imported-seller-info">
+                  <div class="fw-bold supplier-imported-seller-name">
+                    <%= seller.name || 'Seller' %>
+                  </div>
+
+                  <div class="small text-muted mt-1 supplier-imported-seller-email">
+                    <%= seller.email || '' %>
+                  </div>
                 </div>
               </td>
 
-              <td class="fw-bold">
+              <td class="fw-bold supplier-imported-number-cell">
                 <%= row.estimatedImportedQuantity || 0 %>
               </td>
 
-              <td>
+              <td class="supplier-imported-badge-cell">
                 <% if (Number(row.currentSellerStock || 0) > 0) { %>
-                <span class="badge rounded-pill bg-primary px-3 py-2">
-                  <%= row.currentSellerStock || 0 %> left
-                </span>
+                  <span class="badge rounded-pill bg-primary px-3 py-2">
+                    <%= row.currentSellerStock || 0 %> left
+                  </span>
                 <% } else { %>
-                <span class="badge rounded-pill text-bg-danger px-3 py-2">
-                  Out of stock
-                </span>
+                  <span class="badge rounded-pill text-bg-danger px-3 py-2">
+                    Out of stock
+                  </span>
                 <% } %>
               </td>
 
-              <td>
+              <td class="supplier-imported-badge-cell">
                 <span class="badge rounded-pill text-white supplier-imported-green-bg px-3 py-2">
                   <%= row.soldCount || 0 %> sold
                 </span>
               </td>
 
-              <td class="fw-bold text-primary">
+              <td class="fw-bold text-primary supplier-imported-value-cell">
                 <%= money(row.supplierValueEstimate || 0) %>
               </td>
 
-              <td>
+              <td class="supplier-imported-badge-cell">
                 <% if (row.deletedFromSeller) { %>
                   <span class="badge rounded-pill text-bg-danger px-3 py-2">
                     Deleted by seller
@@ -428,7 +497,7 @@
                 <% } %>
               </td>
 
-              <td class="small text-muted">
+              <td class="small text-muted supplier-imported-date-cell">
                 <%= niceDate(row.latestPaidOrderAt) %>
               </td>
             </tr>
