@@ -1916,13 +1916,12 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
 });
 
 // ======================================================
-// ✅ CREATE ORDER (PayPal) — SHIPPO ONLY (NO DeliveryOption, NO collect)
+// ✅ CREATE ORDER (PayPal) — SHIPPO OR COURIER GUY
 // ======================================================
 router.post('/create-order', requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     const cart = req.session?.cart || { items: [] };
 
-    // ✅ Shippo-only: shipping address is ALWAYS required
     let shippingInput = null;
     try {
       shippingInput = requireShippingAddressFromBody(req);
@@ -1942,10 +1941,10 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       });
     }
 
-    // ✅ Build itemsBrief (keep your existing logic)
     const itemsBrief = cart.items.map((it, i) => {
       const qty = toQty(it.qty ?? it.quantity, 1);
       const unitPriceN = normalizeMoneyNumber(it.price ?? it.unitPrice);
+
       if (unitPriceN === null || unitPriceN < 0) {
         throw new Error(`Invalid price for item #${i + 1}. Fix cart item price before checkout.`);
       }
@@ -1976,108 +1975,301 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         productId,
         name: (it.name || it.title || `Item ${i + 1}`).toString().slice(0, 127),
         quantity: qty,
-        unitPrice: grossUnit,        // gross
-        unitPriceGross: grossUnit,   // gross
-        unitPriceNet: netUnit,       // net
+        unitPrice: grossUnit,
+        unitPriceGross: grossUnit,
+        unitPriceNet: netUnit,
         imageUrl: it.imageUrl || it.image || '',
         variants: it.variants || {},
       };
     });
 
-    // ✅ Shippo selection must come from checkout
-    let shippoRateId = safeStr(req.body?.shippoRateId, 128);
-    let shippoShipmentId = safeStr(req.body?.shippoShipmentId, 128);
+    const providerInput = String(
+      req.body?.shippingProvider ||
+        req.body?.delivery ||
+        ''
+    )
+      .trim()
+      .toLowerCase();
 
-    // ✅ Fallback: if frontend forgot to send, use remember-rate session (if present)
-    if ((!shippoRateId || !shippoShipmentId) && req.session?.shippoSelectedRate) {
-      shippoRateId = shippoRateId || safeStr(req.session.shippoSelectedRate.rateId, 128);
-      shippoShipmentId = shippoShipmentId || safeStr(req.session.shippoSelectedRate.shipmentId, 128);
-    }
+    const providerKey =
+      providerInput === 'courier_guy' || providerInput === 'courier-guy'
+        ? 'courier_guy'
+        : providerInput === 'shippo'
+        ? 'shippo'
+        : '';
 
-    // ✅ Extra fallback: use current quote shipmentId as last resort (prevents missing shipmentId bugs)
-    if (!shippoShipmentId && req.session?.shippoQuote?.shipmentId) {
-      shippoShipmentId = safeStr(req.session.shippoQuote.shipmentId, 128);
-    }
-
-    if (!shippoRateId || !shippoShipmentId) {
+    if (!providerKey) {
       return res.status(422).json({
         ok: false,
-        code: 'SHIPPO_RATE_REQUIRED',
-        message: 'Please select a shipping rate (Shippo) before paying.',
+        code: 'SHIPPING_PROVIDER_REQUIRED',
+        message: 'Please select a valid shipping provider before paying.',
       });
     }
 
-    // ✅ Validate against the session quote (prevents fake rateId/price)
-    const q = req.session?.shippoQuote || null;
+    const currentCartSig = cartSig(cart);
+    const currentTo = shippoToFromShippingInput(shippingInput);
 
-    const fresh = q?.createdAt && Date.now() - q.createdAt < 30 * 60 * 1000; // 30 min
-    const sameShipment = q?.shipmentId && String(q.shipmentId) === String(shippoShipmentId);
+    let deliveryDollars = 0;
+    let deliveryName = '';
+    let deliveryDays = null;
+    let quoteFingerprint = null;
+    let pendingShippo = null;
+    let pendingCourierGuy = null;
+    let requestRateId = '';
+    let requestQuoteId = '';
 
-    if (!q || !fresh || !sameShipment) {
-      return res.status(409).json({
-        ok: false,
-        code: 'SHIPPO_QUOTE_EXPIRED',
-        message: 'Shipping quote expired. Please re-select your shipping rate.',
-      });
+    if (providerKey === 'shippo') {
+      let shippoRateId = safeStr(
+        req.body?.shippoRateId || req.body?.shippingRateId,
+        128
+      );
+
+      let shippoShipmentId = safeStr(req.body?.shippoShipmentId, 128);
+
+      if ((!shippoRateId || !shippoShipmentId) && req.session?.shippoSelectedRate) {
+        shippoRateId = shippoRateId || safeStr(req.session.shippoSelectedRate.rateId, 128);
+        shippoShipmentId =
+          shippoShipmentId || safeStr(req.session.shippoSelectedRate.shipmentId, 128);
+      }
+
+      if (!shippoShipmentId && req.session?.shippoQuote?.shipmentId) {
+        shippoShipmentId = safeStr(req.session.shippoQuote.shipmentId, 128);
+      }
+
+      if (!shippoRateId || !shippoShipmentId) {
+        return res.status(422).json({
+          ok: false,
+          code: 'SHIPPO_RATE_REQUIRED',
+          message: 'Please select a Shippo shipping rate before paying.',
+        });
+      }
+
+      const q = req.session?.shippoQuote || null;
+      const fresh = q?.createdAt && Date.now() - q.createdAt < 30 * 60 * 1000;
+      const sameShipment =
+        q?.shipmentId && String(q.shipmentId) === String(shippoShipmentId);
+
+      if (!q || !fresh || !sameShipment || q.cartSig !== currentCartSig) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_QUOTE_EXPIRED',
+          message: 'Shippo quote expired. Please re-select your shipping rate.',
+        });
+      }
+
+      if (!sameShippoTo(q.to, currentTo)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_ADDRESS_CHANGED',
+          message: 'Shipping address changed after quoting. Please re-select your shipping rate.',
+        });
+      }
+
+      const rate = Array.isArray(q.rates)
+        ? q.rates.find((r) => String(r.rateId) === String(shippoRateId))
+        : null;
+
+      if (!rate) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_RATE_NOT_FOUND',
+          message: 'Selected Shippo rate was not found. Please re-select it.',
+        });
+      }
+
+      const rateCurrency = String(rate.currency || '').toUpperCase();
+      if (!rateCurrency || rateCurrency !== upperCcy) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_RATE_CURRENCY_MISMATCH',
+          message: `Selected Shippo rate currency (${rateCurrency || 'UNKNOWN'}) does not match checkout currency (${upperCcy}).`,
+        });
+      }
+
+      const picked = {
+        shipmentId: String(q.shipmentId),
+        rateId: String(rate.rateId),
+        provider: rate.provider || null,
+        service: rate.service || null,
+        days: rate.days ?? null,
+        amount: Number(rate.amount || 0),
+        currency: rateCurrency,
+      };
+
+      deliveryDollars = Number(picked.amount.toFixed(2));
+      deliveryName = `Shippo: ${(picked.provider || 'Carrier')} ${(picked.service || 'Service')}`.trim();
+      deliveryDays = picked.days ?? 0;
+      requestRateId = picked.rateId;
+      requestQuoteId = picked.shipmentId;
+
+      quoteFingerprint = {
+        provider: 'SHIPPO',
+        cartSig: q.cartSig,
+        quotedAt: q.createdAt,
+        to: q.to,
+      };
+
+      pendingShippo = {
+        shipmentId: picked.shipmentId,
+        payerShipmentId: picked.shipmentId,
+        payerRateId: picked.rateId,
+        rateId: picked.rateId,
+        provider: picked.provider,
+        service: picked.service,
+        days: picked.days,
+        amount: picked.amount,
+        currency: picked.currency,
+        isInternational: !!q?.isInternational,
+        fromCountry: q?.fromCountry ? String(q.fromCountry).toUpperCase() : null,
+        toCountry: q?.toCountry ? String(q.toCountry).toUpperCase() : null,
+        customsDeclarationId: q?.customsDeclarationId
+          ? String(q.customsDeclarationId)
+          : null,
+      };
     }
 
-    // ✅ Prevent address mismatch (quoted "to" must match current shipping input)
-    const toFromInput = shippoToFromShippingInput(shippingInput);
-    if (!sameShippoTo(q.to, toFromInput)) {
-      return res.status(409).json({
-        ok: false,
-        code: 'SHIPPO_ADDRESS_CHANGED',
-        message: 'Shipping address changed after quoting. Please re-select your shipping rate.',
-      });
+    if (providerKey === 'courier_guy') {
+      let courierGuyQuoteId = safeStr(req.body?.courierGuyQuoteId, 160);
+      let courierGuyRateId = safeStr(
+        req.body?.courierGuyRateId || req.body?.shippingRateId,
+        160
+      );
+
+      const remembered = req.session?.courierGuySelectedRate || null;
+
+      if (!courierGuyQuoteId && remembered?.quoteId) {
+        courierGuyQuoteId = safeStr(remembered.quoteId, 160);
+      }
+
+      if (!courierGuyRateId && remembered?.rateId) {
+        courierGuyRateId = safeStr(remembered.rateId, 160);
+      }
+
+      if (!courierGuyQuoteId || !courierGuyRateId) {
+        return res.status(422).json({
+          ok: false,
+          code: 'COURIER_GUY_RATE_REQUIRED',
+          message: 'Please select a Courier Guy rate before paying.',
+        });
+      }
+
+      const q = req.session?.courierGuyQuote || null;
+      const fresh =
+        q?.createdAt &&
+        Date.now() - q.createdAt < 30 * 60 * 1000 &&
+        (!q.expiresAt || Date.now() <= q.expiresAt);
+
+      if (
+        !q ||
+        !fresh ||
+        String(q.quoteId || '') !== courierGuyQuoteId ||
+        q.cartSig !== currentCartSig
+      ) {
+        return res.status(409).json({
+          ok: false,
+          code: 'COURIER_GUY_QUOTE_EXPIRED',
+          message: 'Courier Guy quote expired. Please reload and re-select your rate.',
+        });
+      }
+
+      const quotedShippingInput = q.shippingInput || null;
+      const quotedTo = quotedShippingInput
+        ? shippoToFromShippingInput(quotedShippingInput)
+        : null;
+
+      if (!quotedTo || !sameShippoTo(quotedTo, currentTo)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'COURIER_GUY_ADDRESS_CHANGED',
+          message: 'Shipping address changed after quoting. Please reload Courier Guy rates.',
+        });
+      }
+
+      const rate = Array.isArray(q.rates)
+        ? q.rates.find((r) => String(r.rateId) === courierGuyRateId)
+        : null;
+
+      if (!rate) {
+        return res.status(409).json({
+          ok: false,
+          code: 'COURIER_GUY_RATE_NOT_FOUND',
+          message: 'Selected Courier Guy rate was not found. Please re-select it.',
+        });
+      }
+
+      const rateCurrency = String(rate.currency || '').toUpperCase();
+      if (!rateCurrency || rateCurrency !== upperCcy) {
+        return res.status(409).json({
+          ok: false,
+          code: 'COURIER_GUY_RATE_CURRENCY_MISMATCH',
+          message: `Selected Courier Guy rate currency (${rateCurrency || 'UNKNOWN'}) does not match checkout currency (${upperCcy}).`,
+        });
+      }
+
+      const rateAmount = Number(rate.amount);
+      if (!Number.isFinite(rateAmount) || rateAmount < 0) {
+        return res.status(409).json({
+          ok: false,
+          code: 'COURIER_GUY_RATE_INVALID',
+          message: 'Selected Courier Guy rate amount is invalid. Please reload rates.',
+        });
+      }
+
+      deliveryDollars = Number(rateAmount.toFixed(2));
+      deliveryName = `The Courier Guy: ${rate.service || rate.serviceCode || 'Courier service'}`;
+      deliveryDays = null;
+      requestRateId = String(rate.rateId);
+      requestQuoteId = String(q.quoteId);
+
+      quoteFingerprint = {
+        provider: 'COURIER_GUY',
+        cartSig: q.cartSig,
+        quotedAt: q.createdAt,
+        quoteId: q.quoteId,
+        warehouseId: q.warehouseId || null,
+        to: quotedShippingInput,
+      };
+
+      pendingCourierGuy = {
+        serviceLevelId: String(rate.serviceLevelId || rate.rateId),
+        serviceCode: rate.serviceCode || '',
+        service: rate.service || rate.serviceCode || 'Courier service',
+        quoteCreatedAt: q.createdAt ? new Date(q.createdAt).toISOString() : null,
+        quoteExpiresAt: q.expiresAt ? new Date(q.expiresAt).toISOString() : null,
+        warehouseId: q.warehouseId || null,
+        warehouseCode: q.warehouseCode || '',
+        chosenRate: {
+          serviceLevelId: String(rate.serviceLevelId || rate.rateId),
+          serviceCode: rate.serviceCode || '',
+          service: rate.service || rate.serviceCode || 'Courier service',
+          amount: Number(rate.amount).toFixed(2),
+          amountExcludingVat:
+            rate.amountExcludingVat == null
+              ? null
+              : Number(rate.amountExcludingVat).toFixed(2),
+          currency: rateCurrency,
+          vat: rate.vat == null ? null : Number(rate.vat).toFixed(2),
+          vatPercentage:
+            rate.vatPercentage == null ? null : Number(rate.vatPercentage),
+          collectionDate: rate.collectionDate || null,
+          collectionCutOffTime: rate.collectionCutOffTime || null,
+          deliveryDateFrom: rate.deliveryDateFrom || null,
+          deliveryDateTo: rate.deliveryDateTo || null,
+          actualWeight: rate.actualWeight ?? null,
+          chargedWeight: rate.chargedWeight ?? null,
+          volumetricWeight: rate.volumetricWeight ?? null,
+          extras: Array.isArray(rate.extras) ? rate.extras : [],
+          surcharges: Array.isArray(rate.surcharges) ? rate.surcharges : [],
+        },
+        collectionAddressSnapshot: q.requestPayload?.collection_address || null,
+        deliveryAddressSnapshot: q.requestPayload?.delivery_address || null,
+        parcelSnapshot: Array.isArray(q.requestPayload?.parcels)
+          ? q.requestPayload.parcels
+          : [],
+        autoCreateEnabled: true,
+        autoCreateStatus: 'PENDING',
+      };
     }
-
-    const rate = Array.isArray(q.rates)
-      ? q.rates.find((r) => String(r.rateId) === String(shippoRateId))
-      : null;
-
-    if (!rate) {
-      const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
-      return res.status(409).json({
-        ok: false,
-        code: 'SHIPPO_RATE_NOT_FOUND',
-        message: 'Selected shipping rate not found. Please re-select.',
-        ...(isProd
-          ? {}
-          : {
-              debug: {
-                received: { shippoRateId, shippoShipmentId },
-                session: {
-                  shipmentId: q?.shipmentId || null,
-                  rateIds: Array.isArray(q?.rates) ? q.rates.map((x) => String(x.rateId)) : [],
-                },
-              },
-            }),
-      });
-    }
-
-    // ✅ Currency safety: shipping rate MUST match checkout currency
-    const rateCurrency = String(rate.currency || '').toUpperCase();
-    if (!rateCurrency || rateCurrency !== upperCcy) {
-      return res.status(409).json({
-        ok: false,
-        code: 'SHIPPO_RATE_CURRENCY_MISMATCH',
-        message: `Selected shipping rate currency (${rateCurrency || 'UNKNOWN'}) does not match checkout currency (${upperCcy}). Please refresh shipping rates.`,
-      });
-    }
-
-    // ✅ This is the ONLY "delivery option" now (Shippo)
-    const shippoPicked = {
-      shipmentId: String(q.shipmentId),
-      rateId: String(rate.rateId),
-      provider: rate.provider || null,
-      service: rate.service || null,
-      days: rate.days ?? null,
-      amount: Number(rate.amount || 0),
-      currency: rate.currency || upperCcy,
-    };
-
-    // ✅ Use the rate amount as delivery/shipping
-    const deliveryDollars = Number((Number(rate.amount || 0)).toFixed(2));
 
     const {
       items: ppItems,
@@ -2091,15 +2283,12 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
           name: paypalNameWithVariants(x.name, x.variants),
           description: variantText(x.variants),
           sku: x.productId,
-          price: x.unitPrice, // gross input (computeTotalsFromSession converts to NET)
+          price: x.unitPrice,
           quantity: x.quantity,
         })),
       },
       deliveryDollars
     );
-
-    // ✅ Shippo-only: PayPal must receive the shipping address
-    const shippingPref = 'SET_PROVIDED_ADDRESS';
 
     const orderBody = {
       intent: 'CAPTURE',
@@ -2116,7 +2305,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
             },
           },
           items: ppItems,
-          description: `Shipping: ${shippoPicked.provider || 'Carrier'} ${shippoPicked.service || 'Service'}`.trim(),
+          description: `Shipping: ${deliveryName}`.slice(0, 127),
           shipping: {
             name: { full_name: shippingInput.fullName },
             address: shippingInput.address,
@@ -2126,7 +2315,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       application_context: {
         brand_name: BRAND_NAME_N,
         user_action: 'PAY_NOW',
-        shipping_preference: shippingPref,
+        shipping_preference: 'SET_PROVIDED_ADDRESS',
       },
     };
 
@@ -2134,9 +2323,10 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       .createHash('sha256')
       .update(
         JSON.stringify({
-          cartSig: cartSig(cart),
-          shippoShipmentId,
-          shippoRateId,
+          cartSig: currentCartSig,
+          shippingProvider: providerKey,
+          requestQuoteId,
+          requestRateId,
           addr: shippingInput.address,
           user: getUserId(req) || getBusinessId(req) || req.sessionID || 'guest',
         })
@@ -2173,19 +2363,22 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         ok: false,
         code: 'PAYPAL_CREATE_FAILED',
         message: `PayPal create order failed (${ppRes.status}).`,
-        details: String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : data,
+        details:
+          String(process.env.NODE_ENV || '').toLowerCase() === 'production'
+            ? undefined
+            : data,
       });
     }
 
-    // ✅ Persist what we need for capture-order + optional label buying
     req.session.pendingOrder = {
       id: data.id,
-      cartSig: cartSig(cart),
+      cartSig: currentCartSig,
       itemsBrief,
+      shippingProvider: providerKey === 'courier_guy' ? 'COURIER_GUY' : 'SHIPPO',
 
-      deliveryOptionId: null, // ✅ shippo-only
-      deliveryName: `Shippo: ${(shippoPicked.provider || 'Carrier')} ${(shippoPicked.service || 'Service')}`.trim(),
-      deliveryDays: shippoPicked.days ?? 0,
+      deliveryOptionId: null,
+      deliveryName,
+      deliveryDays,
       deliveryPrice: del,
 
       subTotal,
@@ -2193,30 +2386,9 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       grandTotal: grand,
       currency: upperCcy,
 
-      quoteFingerprint: {
-        cartSig: q.cartSig,
-        quotedAt: q.createdAt,
-        to: q.to,
-      },
-
-      shippo: {
-        shipmentId: shippoPicked.shipmentId,
-        payerShipmentId: shippoPicked.shipmentId,
-        // ✅ keep both (backward compatible)
-        payerRateId: shippoPicked.rateId,
-        rateId: shippoPicked.rateId,
-        provider: shippoPicked.provider || null,
-        service: shippoPicked.service || null,
-        days: shippoPicked.days ?? null,
-        amount: shippoPicked.amount ?? null,
-        currency: shippoPicked.currency || upperCcy,
-
-        // ✅ bring customs/intl info from the session quote
-        isInternational: !!q?.isInternational,
-        fromCountry: q?.fromCountry ? String(q.fromCountry).toUpperCase() : null,
-        toCountry: q?.toCountry ? String(q.toCountry).toUpperCase() : null,
-        customsDeclarationId: q?.customsDeclarationId ? String(q.customsDeclarationId) : null,
-      },
+      quoteFingerprint,
+      ...(pendingShippo ? { shippo: pendingShippo } : {}),
+      ...(pendingCourierGuy ? { courierGuy: pendingCourierGuy } : {}),
 
       shippingInput: {
         fullName: shippingInput.fullName,
@@ -2441,6 +2613,21 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
           shipping: shippingAddress,
 
+          shippingProvider:
+            pending?.shippingProvider === 'COURIER_GUY'
+              ? 'COURIER_GUY'
+              : 'SHIPPO',
+
+          ...(pending?.courierGuy
+            ? {
+                courierGuy: {
+                  ...pending.courierGuy,
+                  autoCreateEnabled: pending.courierGuy.autoCreateEnabled !== false,
+                  autoCreateStatus: pending.courierGuy.autoCreateStatus || 'PENDING',
+                },
+              }
+            : {}),
+
           amount: { value: toMoney2(finalAmount.value || '0'), currency: finalAmount.currency_code || upperCcy },
 
           breakdown: pending
@@ -2511,7 +2698,10 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         // DO NOT overwrite an existing purchased label/transaction
         // ======================================================
         try {
-          const pShippo = pending?.shippo || null;
+          const pShippo =
+            pending?.shippingProvider === 'SHIPPO'
+              ? pending?.shippo || null
+              : null;
 
           if (doc && pShippo?.rateId && pShippo?.shipmentId) {
             doc.shippo = doc.shippo || {};
@@ -2644,8 +2834,10 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
     req.session.cart = { items: [] };
     req.session.pendingOrder = null;
-    req.session.shippoSelectedRate = null; // ✅ clear after successful payment
-    req.session.shippoQuote = null;        // optional: clear quote too
+    req.session.shippoSelectedRate = null;
+    req.session.shippoQuote = null;
+    req.session.courierGuySelectedRate = null;
+    req.session.courierGuyQuote = null;
     await saveSession(req);
 
     return res.json({

@@ -154,7 +154,7 @@ ${trackingTextLines.length ? trackingTextLines.join('\n') : ''}
 TRACK YOUR ORDER
 ${publicTrackingUrl}
 
-Thank you for shopping with Unicoporate.com.
+Thank you for shopping with Kasyora.com.
 `.trim();
 
   const html = `
@@ -169,7 +169,7 @@ Thank you for shopping with Unicoporate.com.
     <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:640px;max-width:100%;margin:0 auto;background:#FFFFFF;border:1px solid rgba(124,58,237,0.16);border-radius:18px;overflow:hidden;">
       <tr>
         <td style="padding:26px 28px;background:#7C3AED;color:#FFFFFF;">
-          <div style="font-size:20px;font-weight:900;">Unicoporate.com</div>
+          <div style="font-size:20px;font-weight:900;">Kasyora.com</div>
           <div style="font-size:13px;margin-top:5px;color:rgba(255,255,255,0.88);">${esc(statusLabel)}</div>
         </td>
       </tr>
@@ -265,7 +265,7 @@ Thank you for shopping with Unicoporate.com.
 
       <tr>
         <td style="padding:18px 28px;background:#0F172A;text-align:center;color:#94A3B8;font-size:11px;line-height:1.6;">
-          © ${new Date().getFullYear()} Unicoporate.com. All rights reserved.
+          © ${new Date().getFullYear()} Kasyora.com. All rights reserved.
           <br>Sent to ${esc(customerEmail || 'you')}.
         </td>
       </tr>
@@ -327,7 +327,7 @@ async function sendOrderProcessingEmail(order, baseUrl) {
   const built = buildStatusEmail({
     order,
     baseUrl,
-    statusTitle: 'Your Unicoporate order is being processed',
+    statusTitle: 'Your Kasyora order is being processed',
     headline: 'Your order is being processed',
     intro: 'Your shipping label has been created and your order is now being prepared for shipment.',
     statusLabel: 'Processing',
@@ -340,7 +340,7 @@ async function sendOrderShippedEmail(order, baseUrl) {
   const built = buildStatusEmail({
     order,
     baseUrl,
-    statusTitle: 'Your Unicoporate order has shipped',
+    statusTitle: 'Your Kasyora order has shipped',
     headline: 'Your order has shipped',
     intro: 'Your order is on its way. You can use the tracking details below to follow the delivery progress.',
     statusLabel: 'Shipped',
@@ -353,9 +353,9 @@ async function sendOrderDeliveredEmail(order, baseUrl) {
   const built = buildStatusEmail({
     order,
     baseUrl,
-    statusTitle: 'Your Unicoporate order has been delivered',
+    statusTitle: 'Your Kasyora order has been delivered',
     headline: 'Your order has been delivered',
-    intro: 'Your order has been marked as delivered. Thank you for shopping with Unicoporate.com.',
+    intro: 'Your order has been marked as delivered. Thank you for shopping with Kasyora.com.',
     statusLabel: 'Delivered',
   });
 

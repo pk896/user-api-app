@@ -183,6 +183,222 @@ const ShippingTrackingSchema = new Schema(
   { _id: false }
 );
 
+// ======================================================
+// The Courier Guy / Shiplogic standalone schemas
+// ======================================================
+const CourierGuyChosenRateSchema = new Schema(
+  {
+    serviceLevelId: { type: String, trim: true },
+    serviceCode: { type: String, trim: true },
+    service: { type: String, trim: true },
+
+    amount: String,
+    amountExcludingVat: String,
+    currency: {
+      type: String,
+      default: getBaseCurrency,
+      uppercase: true,
+      trim: true,
+    },
+
+    vat: String,
+    vatPercentage: Number,
+
+    collectionDate: Date,
+
+    // Shiplogic may return a time-only value such as "15:00:00".
+    // Keep it as text instead of forcing it into a JavaScript Date.
+    collectionCutOffTime: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    deliveryDateFrom: Date,
+    deliveryDateTo: Date,
+
+    actualWeight: Number,
+    chargedWeight: Number,
+    volumetricWeight: Number,
+
+    extras: {
+      type: Array,
+      default: [],
+    },
+
+    surcharges: {
+      type: Array,
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
+const CourierGuySchema = new Schema(
+  {
+    // Rate selected by the payer during checkout
+    serviceLevelId: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
+    serviceCode: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
+    chosenRate: CourierGuyChosenRateSchema,
+
+    quoteCreatedAt: Date,
+    quoteExpiresAt: Date,
+
+    // Collection warehouse used for the quote and shipment
+    warehouseId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Warehouse',
+      default: null,
+      index: true,
+    },
+
+    warehouseCode: {
+      type: String,
+      trim: true,
+    },
+
+    // Shipment returned by Shiplogic
+    shipmentId: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
+    trackingReference: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
+    shortTrackingReference: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
+    waybillNumber: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
+    waybillUrl: {
+      type: String,
+      trim: true,
+    },
+
+    labelUrl: {
+      type: String,
+      trim: true,
+    },
+
+    stickerUrl: {
+      type: String,
+      trim: true,
+    },
+
+    trackingUrl: {
+      type: String,
+      trim: true,
+    },
+
+    shipmentStatus: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+
+    // Standalone automatic shipment worker state
+    autoCreateEnabled: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+
+    autoCreateStatus: {
+      type: String,
+      enum: [
+        'PENDING',
+        'PROCESSING',
+        'SUCCESS',
+        'FAILED',
+        'SKIPPED',
+      ],
+      default: 'PENDING',
+      index: true,
+    },
+
+    autoCreateAttemptedAt: Date,
+    autoCreateLastSuccessAt: Date,
+
+    autoCreateLastError: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    trackingStatus: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    lastTrackingSyncAt: Date,
+    webhookLastReceivedAt: Date,
+
+    paypalTrackingPushedAt: Date,
+
+    paypalTrackingLastError: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    paypalTrackingLastResponse: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    // These snapshots help us recreate or inspect a shipment safely.
+    collectionAddressSnapshot: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    deliveryAddressSnapshot: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    parcelSnapshot: {
+      type: Array,
+      default: [],
+    },
+
+    createResponse: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    trackingResponse: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const RefundSchema = new Schema(
   {
     refundId: { type: String, index: true }, // ✅ helps idempotency + lookups
@@ -222,6 +438,27 @@ const OrderSchema = new Schema(
 
     // PayPal shipping address snapshot
     shipping: ShippingAddressSchema,
+
+    // ==================================================
+    // Shipping provider selected by the customer
+    //
+    // Existing orders may not have this field. Those
+    // orders remain compatible and can be treated as
+    // Shippo when their shippo payer IDs exist.
+    // ==================================================
+    shippingProvider: {
+      type: String,
+      enum: ['SHIPPO', 'COURIER_GUY'],
+      default: 'SHIPPO',
+      index: true,
+    },
+
+    // The Courier Guy data stays completely separate
+    // from the existing Shippo object.
+    courierGuy: {
+      type: CourierGuySchema,
+      default: undefined,
+    },
 
     // ✅ Fulfillment lifecycle (separate from PayPal payment status)
     fulfillmentStatus: {

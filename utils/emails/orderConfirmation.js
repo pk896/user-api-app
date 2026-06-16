@@ -119,7 +119,7 @@ function buildOrderConfirmationEmail(order, baseUrl) {
 
   const items = Array.isArray(o.items) ? o.items : [];
 
-  const subject = `Your Unicoporate order confirmation - ${orderId}`;
+  const subject = `Your Kasyora order confirmation - ${orderId}`;
 
   const deliveryEtaText = getDeliveryEtaText(o);
 
@@ -155,7 +155,7 @@ ${trackingUrl}
 Important:
 Please keep this Order ID. You will need it to track your order.
 
-Thank you for shopping with Unicoporate.com.
+Thank you for shopping with Kasyora.com.
 `.trim();
 
   const itemRowsHtml = items.length
@@ -197,7 +197,7 @@ Thank you for shopping with Unicoporate.com.
         <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:640px;max-width:100%;margin:0 auto;background:#FFFFFF;border:1px solid rgba(124,58,237,0.16);border-radius:18px;overflow:hidden;">
           <tr>
             <td style="padding:26px 28px;background:#7C3AED;color:#FFFFFF;">
-              <div style="font-size:20px;font-weight:900;">Unicoporate.com</div>
+              <div style="font-size:20px;font-weight:900;">Kasyora.com</div>
               <div style="font-size:13px;margin-top:5px;color:rgba(255,255,255,0.88);">Order confirmation</div>
             </td>
           </tr>
@@ -264,7 +264,7 @@ Thank you for shopping with Unicoporate.com.
 
           <tr>
             <td style="padding:18px 28px;background:#0F172A;text-align:center;color:#94A3B8;font-size:11px;line-height:1.6;">
-              © ${new Date().getFullYear()} Unicoporate.com. All rights reserved.
+              © ${new Date().getFullYear()} Kasyora.com. All rights reserved.
               <br>Sent to ${esc(customerEmail || 'you')}.
             </td>
           </tr>

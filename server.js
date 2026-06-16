@@ -611,6 +611,9 @@ const adminDashboardRouter = require('./routes/admin/dashboard');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
+const adminCourierGuyTestRoutes = require('./routes/adminCourierGuyTest');
+const adminCourierGuyRoutes = require('./routes/adminCourierGuy');
+const courierGuyCheckoutApiRoutes = require('./routes/courierGuyCheckoutApi');
 const productsRouter = require('./routes/products');
 const wholesaleRoutes = require('./routes/wholesale');
 const wholesaleCheckoutRoutes = require('./routes/wholesaleCheckout');
@@ -723,13 +726,27 @@ app.use('/admin', adminBizVerifyRoutes);
 
 // Admin pages/forms
 app.use('/admin', deliveryOptionsAdmin);
+
+// Shippo remains standalone.
 app.use(adminShippoRoutes);
+
+// Courier Guy connection/rate test routes remain standalone.
+app.use(adminCourierGuyTestRoutes);
+
+// Courier Guy production shipment admin remains standalone.
+app.use(adminCourierGuyRoutes);
+
 app.use('/admin', adminPayoutsRoutes);
 
 // Commerce / catalog
 app.use('/products', productsRouter);
 app.use('/wholesale', wholesaleRoutes);
 app.use('/wholesale', wholesaleCheckoutRoutes);
+
+// Standalone Courier Guy checkout API.
+// Mounted before paymentRouter so it remains isolated.
+app.use('/payment', courierGuyCheckoutApiRoutes);
+
 app.use('/payment', paymentRouter);
 
 // Public pages
@@ -1048,13 +1065,44 @@ async function startServer() {
     });
   }
 
-  // ✅ Shippo auto-buy loop (runs ONLY if SHIPPO_AUTO_BUY_ENABLED=true)
+    // =====================================================
+  // Shippo automatic label buying
+  // Completely standalone from The Courier Guy.
+  // =====================================================
   try {
-    const { startAutoBuyLoop } = require('./utils/shippo/autoBuyLabels');
+    const {
+      startAutoBuyLoop,
+    } = require('./utils/shippo/autoBuyLabels');
+
     startAutoBuyLoop();
+
     console.log('✅ Shippo auto-buy loop initialized');
-  } catch (e) {
-    console.warn('⚠️ Shippo auto-buy loop not started:', e?.message);
+  } catch (error) {
+    console.warn(
+      '⚠️ Shippo auto-buy loop not started:',
+      error?.message || error,
+    );
+  }
+
+  // =====================================================
+  // Courier Guy automatic shipment creation
+  // Completely standalone from Shippo.
+  // =====================================================
+  try {
+    const {
+      startCourierGuyAutoCreateWorker,
+    } = require('./utils/courierGuy/autoCreateCourierGuyShipments');
+
+    startCourierGuyAutoCreateWorker();
+
+    console.log(
+      '✅ Courier Guy automatic shipment worker initialized',
+    );
+  } catch (error) {
+    console.warn(
+      '⚠️ Courier Guy automatic shipment worker not started:',
+      error?.message || error,
+    );
   }
 
   // Start the server

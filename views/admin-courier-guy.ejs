@@ -1,0 +1,222 @@
+<!--views/admin-courier-guy.ejs-->
+<%
+  const list = Array.isArray(orders) ? orders : [];
+  const currency = String(baseCurrency || 'USD').toUpperCase();
+
+  const money = (value, ccy = currency) => {
+    const amount = Number(value || 0);
+    try {
+      const formatted = new Intl.NumberFormat('en-ZA', {
+        style: 'currency',
+        currency: ccy,
+      }).format(amount);
+      return ccy === 'ZAR' ? formatted.replace(/^ZAR\s?/, 'R') : formatted;
+    } catch {
+      return `${ccy} ${amount.toFixed(2)}`;
+    }
+  };
+
+  const niceDate = (value) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+      });
+    } catch {
+      return String(value);
+    }
+  };
+%>
+
+<div class="container-fluid px-0 py-3 py-lg-4">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-primary text-white p-3 p-lg-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+          <h1 class="h3 fw-bold mb-1">Courier Guy Shipments</h1>
+          <p class="mb-0 text-white-50">
+            Create and track Shiplogic shipments using the payer-selected Courier Guy service.
+          </p>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="/admin" class="btn btn-light text-primary fw-semibold">Back to Admin</a>
+          <a href="/admin/shippo" class="btn btn-outline-light fw-semibold">Shippo Labels</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-body p-3 p-lg-4">
+      <div class="row g-3">
+        <div class="col-12 col-lg-8">
+          <label for="courierGuySearch" class="form-label fw-semibold text-primary">
+            Search orders
+          </label>
+          <input
+            id="courierGuySearch"
+            type="search"
+            class="form-control"
+            placeholder="Order ID, service, shipment ID, tracking or status"
+          >
+        </div>
+        <div class="col-12 col-lg-4 d-flex align-items-end">
+          <div class="alert alert-success mb-0 w-100">
+            <strong><%= list.length %></strong> Courier Guy order(s)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <% if (!list.length) { %>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <div class="display-5 mb-3">📦</div>
+        <h2 class="h4 text-primary">No Courier Guy orders yet</h2>
+        <p class="text-body-secondary mb-0">
+          Paid orders appear here after the payer selects a Courier Guy rate at checkout.
+        </p>
+      </div>
+    </div>
+  <% } %>
+
+  <div id="courierGuyOrders" class="d-grid gap-3">
+    <% list.forEach((order) => {
+      const cg = order.courierGuy || {};
+      const rate = cg.chosenRate || {};
+      const tracking = order.shippingTracking || {};
+      const searchText = [
+        order.orderId,
+        order.status,
+        order.paymentStatus,
+        order.fulfillmentStatus,
+        cg.serviceCode,
+        rate.service,
+        cg.shipmentId,
+        cg.trackingReference,
+        cg.waybillNumber,
+        cg.autoCreateStatus,
+      ].join(' ').toLowerCase();
+    %>
+      <article class="card border-0 shadow-sm courier-guy-order" data-search="<%= searchText %>">
+        <div class="card-header bg-primary text-white">
+          <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+            <div>
+              <div class="small text-white-50">Order</div>
+              <div class="h5 mb-0 fw-bold"><%= order.orderId || order._id %></div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <span class="badge bg-light text-primary">
+                Payment: <%= order.paymentStatus || order.status || 'UNKNOWN' %>
+              </span>
+              <span class="badge bg-success">
+                Courier: <%= cg.autoCreateStatus || 'PENDING' %>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body p-3 p-lg-4">
+          <div class="row g-3">
+            <div class="col-12 col-lg-4">
+              <h2 class="h6 text-primary fw-bold">Payer-selected service</h2>
+              <dl class="row small mb-0">
+                <dt class="col-5">Service</dt>
+                <dd class="col-7"><%= rate.service || cg.serviceCode || '—' %></dd>
+                <dt class="col-5">Rate ID</dt>
+                <dd class="col-7 text-break"><%= cg.serviceLevelId || '—' %></dd>
+                <dt class="col-5">Price</dt>
+                <dd class="col-7"><%= money(rate.amount, rate.currency || currency) %></dd>
+                <dt class="col-5">Warehouse</dt>
+                <dd class="col-7"><%= cg.warehouseCode || cg.warehouseId || '—' %></dd>
+              </dl>
+            </div>
+
+            <div class="col-12 col-lg-4">
+              <h2 class="h6 text-primary fw-bold">Shipment</h2>
+              <dl class="row small mb-0">
+                <dt class="col-5">Shipment ID</dt>
+                <dd class="col-7 text-break"><%= cg.shipmentId || 'Not created' %></dd>
+                <dt class="col-5">Waybill</dt>
+                <dd class="col-7 text-break"><%= cg.waybillNumber || '—' %></dd>
+                <dt class="col-5">Tracking</dt>
+                <dd class="col-7 text-break"><%= tracking.trackingNumber || cg.trackingReference || '—' %></dd>
+                <dt class="col-5">Status</dt>
+                <dd class="col-7"><%= cg.shipmentStatus || tracking.liveStatus || 'PENDING' %></dd>
+              </dl>
+            </div>
+
+            <div class="col-12 col-lg-4">
+              <h2 class="h6 text-primary fw-bold">Automation</h2>
+              <dl class="row small mb-0">
+                <dt class="col-5">Enabled</dt>
+                <dd class="col-7"><%= cg.autoCreateEnabled === false ? 'No' : 'Yes' %></dd>
+                <dt class="col-5">Attempted</dt>
+                <dd class="col-7"><%= niceDate(cg.autoCreateAttemptedAt) %></dd>
+                <dt class="col-5">Succeeded</dt>
+                <dd class="col-7"><%= niceDate(cg.autoCreateLastSuccessAt) %></dd>
+              </dl>
+            </div>
+          </div>
+
+          <% if (cg.autoCreateLastError) { %>
+            <div class="alert alert-danger mt-3 mb-0 text-break">
+              <strong>Last error:</strong> <%= cg.autoCreateLastError %>
+            </div>
+          <% } %>
+
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <% if (!cg.shipmentId) { %>
+              <form method="POST" action="/admin/courier-guy/<%= order._id %>/create-shipment" class="m-0">
+                <button type="submit" class="btn btn-primary">
+                  Create Courier Guy Shipment
+                </button>
+              </form>
+            <% } else { %>
+              <form method="POST" action="/admin/courier-guy/<%= order._id %>/refresh-tracking" class="m-0">
+                <button type="submit" class="btn btn-primary">
+                  Refresh Tracking
+                </button>
+              </form>
+            <% } %>
+
+            <% if (cg.waybillUrl) { %>
+              <a href="<%= cg.waybillUrl %>" target="_blank" rel="noopener" class="btn btn-outline-primary">
+                Open Waybill
+              </a>
+            <% } %>
+
+            <% if (cg.labelUrl || cg.stickerUrl) { %>
+              <a href="<%= cg.labelUrl || cg.stickerUrl %>" target="_blank" rel="noopener" class="btn btn-outline-success">
+                Open Label
+              </a>
+            <% } %>
+
+            <% if (cg.trackingUrl || tracking.trackingUrl) { %>
+              <a href="<%= cg.trackingUrl || tracking.trackingUrl %>" target="_blank" rel="noopener" class="btn btn-outline-primary">
+                Track Shipment
+              </a>
+            <% } %>
+          </div>
+        </div>
+      </article>
+    <% }) %>
+  </div>
+</div>
+
+<script nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  (() => {
+    const search = document.getElementById('courierGuySearch');
+    const cards = Array.from(document.querySelectorAll('.courier-guy-order'));
+
+    if (!search) return;
+
+    search.addEventListener('input', () => {
+      const value = search.value.trim().toLowerCase();
+
+      cards.forEach((card) => {
+        const haystack = String(card.dataset.search || '');
+        card.classList.toggle('d-none', value && !haystack.includes(value));
+      });
+    });
+  })();
+</script>
