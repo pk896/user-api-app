@@ -2,6 +2,7 @@
 'use strict';
 
 const Warehouse = require('../../models/Warehouse');
+const { convertMoneyAmount } = require('../fx/getFxRate');
 
 const {
   buildCourierGuyAddressFromWarehouse,
@@ -49,9 +50,43 @@ function orderShippingInput(order) {
   };
 }
 
-function declaredValue(order) {
-  const value = Number(order?.breakdown?.itemTotal?.value ?? order?.amount?.value ?? 0);
-  return Number.isFinite(value) && value > 0 ? Number(value.toFixed(2)) : null;
+async function declaredValueZar(order) {
+  const rawValue = Number(order?.breakdown?.itemTotal?.value ?? order?.amount?.value ?? 0);
+
+  if (!Number.isFinite(rawValue) || rawValue <= 0) {
+    return null;
+  }
+
+  const sourceCurrency = String(
+    order?.breakdown?.itemTotal?.currency ||
+      order?.amount?.currency ||
+      process.env.BASE_CURRENCY ||
+      'USD',
+  )
+    .trim()
+    .toUpperCase();
+
+  const roundedValue = Number(rawValue.toFixed(2));
+
+  if (sourceCurrency === 'ZAR') {
+    return roundedValue;
+  }
+
+  const conversion = await convertMoneyAmount(roundedValue, sourceCurrency, 'ZAR');
+
+  const convertedValue = Number(conversion?.value);
+
+  if (!Number.isFinite(convertedValue) || convertedValue <= 0) {
+    const error = new Error(
+      `Could not convert Courier Guy declared value from ${sourceCurrency} to ZAR.`,
+    );
+
+    error.code = 'COURIER_GUY_DECLARED_VALUE_CONVERSION_FAILED';
+
+    throw error;
+  }
+
+  return Number(convertedValue.toFixed(2));
 }
 
 async function buildCourierGuyShipmentPayload(order) {
@@ -130,8 +165,19 @@ async function buildCourierGuyShipmentPayload(order) {
     payload.service_level_id = serviceLevelId;
   }
 
-  const value = declaredValue(order);
-  if (value !== null) payload.declared_value = value;
+  const value = await declaredValueZar(order);
+
+  if (value !== null && value > 30000) {
+    const error = new Error('Courier Guy declared value cannot exceed R30,000 for this shipment.');
+
+    error.code = 'COURIER_GUY_DECLARED_VALUE_LIMIT_EXCEEDED';
+
+    throw error;
+  }
+
+  if (value !== null) {
+    payload.declared_value = value;
+  }
 
   const instructions = clean(order?.shippingInstructions || '', 500);
   if (instructions) payload.special_instructions = instructions;

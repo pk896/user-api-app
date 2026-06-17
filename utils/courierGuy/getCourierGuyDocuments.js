@@ -1,228 +1,172 @@
 // utils/courierGuy/getCourierGuyDocuments.js
 'use strict';
 
-const { fetch } = require('undici');
+const { courierGuyRequest } = require('./courierGuyClient');
 
-const {
-  requireCourierGuyConfig,
-} = require('./courierGuyConfig');
-
-function clean(value, max = 3000) {
+function clean(value, max = 1000000) {
   return String(value ?? '')
     .trim()
     .slice(0, max);
 }
 
-function findSignedUrl(data) {
-  if (typeof data === 'string') {
-    const value = clean(data);
-
-    return /^https?:\/\//i.test(value)
-      ? value
-      : '';
+function extractShipments(data) {
+  if (Array.isArray(data)) {
+    return data;
   }
 
-  const candidates = [
-    data?.url,
-    data?.signed_url,
-    data?.signedUrl,
-    data?.download_url,
-    data?.downloadUrl,
-    data?.data?.url,
-    data?.data?.signed_url,
-    data?.data?.signedUrl,
-  ];
+  if (Array.isArray(data?.shipments)) {
+    return data.shipments;
+  }
 
-  for (const candidate of candidates) {
-    const value = clean(candidate);
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
 
-    if (/^https?:\/\//i.test(value)) {
-      return value;
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  if (data?.shipment && typeof data.shipment === 'object') {
+    return [data.shipment];
+  }
+
+  if (data && typeof data === 'object') {
+    return [data];
+  }
+
+  return [];
+}
+
+function normalizeStickerParcels(data) {
+  const shipments = extractShipments(data);
+  const parcels = [];
+
+  for (const shipment of shipments) {
+    const parcelWaybills = Array.isArray(shipment?.parcel_waybills) ? shipment.parcel_waybills : [];
+
+    for (const parcel of parcelWaybills) {
+      const content = clean(parcel?.sticker_waybill_content || parcel?.stickerWaybillContent || '');
+
+      if (!content) {
+        continue;
+      }
+
+      parcels.push({
+        parcelReference: clean(parcel?.parcel_reference || parcel?.parcelReference || '', 200),
+
+        content,
+      });
     }
   }
 
-  return '';
+  return parcels;
 }
 
-async function requestDocument(
-  documentType,
-  shipmentId
-) {
-  const config = requireCourierGuyConfig();
+function combineStickerZpl(stickerParcels) {
+  const parcels = Array.isArray(stickerParcels) ? stickerParcels : [];
 
-  const type = String(documentType || '')
-    .trim()
-    .toLowerCase();
+  return parcels
+    .map((parcel) => clean(parcel?.content))
+    .filter(Boolean)
+    .join('\n\n');
+}
 
-  if (!['waybill', 'sticker'].includes(type)) {
-    const error = new Error(
-      'Unsupported Courier Guy document type.'
-    );
-
-    error.code =
-      'COURIER_GUY_DOCUMENT_TYPE_INVALID';
-
-    throw error;
-  }
-
+async function getCourierGuyDocuments(shipmentId) {
   const id = String(shipmentId || '').trim();
 
   if (!id) {
-    const error = new Error(
-      'Courier Guy shipmentId is required.'
-    );
+    const error = new Error('Courier Guy shipmentId is required.');
 
-    error.code =
-      'COURIER_GUY_SHIPMENT_ID_MISSING';
+    error.code = 'COURIER_GUY_SHIPMENT_ID_MISSING';
 
     throw error;
   }
 
-  const url = new URL(
-    `${config.baseUrl}/generate/${type}/${encodeURIComponent(id)}`
-  );
-
-  // This key is used server-side only.
-  // The generated signed PDF URL is what gets saved.
-  url.searchParams.set(
-    'api_key',
-    config.apiKey
-  );
-
-  const controller = new AbortController();
-
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, config.timeoutMs);
+  const query = new URLSearchParams({
+    format: 'zpl',
+    id,
+  });
 
   try {
-    const response = await fetch(url, {
+    const response = await courierGuyRequest(`/shipments/label/stickers?${query.toString()}`, {
       method: 'GET',
-
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        Accept: 'application/json',
-      },
-
-      signal: controller.signal,
+      timeoutMs: 45000,
     });
 
-    const responseText = await response
-      .text()
-      .catch(() => '');
+    const stickerParcels = normalizeStickerParcels(response.data);
 
-    let data = {};
+    const stickerZpl = combineStickerZpl(stickerParcels);
 
-    try {
-      data = responseText
-        ? JSON.parse(responseText)
-        : {};
-    } catch {
-      data = responseText;
-    }
+    if (!stickerZpl) {
+      return {
+        format: 'zpl',
 
-    if (!response.ok) {
-      const message =
-        typeof data === 'string'
-          ? data
-          : data?.message ||
-            data?.detail ||
-            data?.error ||
-            `Shiplogic ${type} request returned HTTP ${response.status}.`;
+        stickerParcels: [],
+        stickerZpl: '',
 
-      const error = new Error(
-        String(message || '').slice(0, 1000)
-      );
+        // The supplied documentation confirms ZPL stickers,
+        // but does not provide a separate PDF waybill endpoint.
+        waybillUrl: '',
+        stickerUrl: '',
 
-      error.code =
-        'COURIER_GUY_DOCUMENT_FAILED';
+        waybillResponse: null,
+        stickerResponse: response.data,
 
-      error.status = response.status;
-      error.documentType = type;
-      error.shiplogic = data;
-
-      throw error;
-    }
-
-    const signedUrl = findSignedUrl(data);
-
-    if (!signedUrl) {
-      const error = new Error(
-        `Shiplogic did not return a signed ${type} URL.`
-      );
-
-      error.code =
-        'COURIER_GUY_DOCUMENT_URL_MISSING';
-
-      error.documentType = type;
-      error.shiplogic = data;
-
-      throw error;
+        errors: [
+          {
+            type: 'sticker',
+            message: 'The Courier Guy returned no sticker_waybill_content for this shipment.',
+          },
+        ],
+      };
     }
 
     return {
-      url: signedUrl,
-      raw: data,
+      format: 'zpl',
+
+      stickerParcels,
+      stickerZpl,
+
+      waybillUrl: '',
+      stickerUrl: '',
+
+      waybillResponse: null,
+      stickerResponse: response.data,
+
+      errors: [],
     };
-  } finally {
-    clearTimeout(timeout);
+  } catch (error) {
+    console.warn('[Courier Guy sticker retrieval failed]', {
+      shipmentId: id,
+      code: error?.code || '',
+      status: error?.status || null,
+      message: error?.message || String(error),
+    });
+
+    return {
+      format: 'zpl',
+
+      stickerParcels: [],
+      stickerZpl: '',
+
+      waybillUrl: '',
+      stickerUrl: '',
+
+      waybillResponse: null,
+      stickerResponse: error?.shiplogic || null,
+
+      errors: [
+        {
+          type: 'sticker',
+          message: String(error?.message || 'Courier Guy sticker retrieval failed.').slice(0, 1000),
+        },
+      ],
+    };
   }
-}
-
-async function getCourierGuyDocuments(
-  shipmentId
-) {
-  const results = await Promise.allSettled([
-    requestDocument('waybill', shipmentId),
-    requestDocument('sticker', shipmentId),
-  ]);
-
-  const waybillResult = results[0];
-  const stickerResult = results[1];
-
-  return {
-    waybillUrl:
-      waybillResult.status === 'fulfilled'
-        ? waybillResult.value.url
-        : '',
-
-    stickerUrl:
-      stickerResult.status === 'fulfilled'
-        ? stickerResult.value.url
-        : '',
-
-    waybillResponse:
-      waybillResult.status === 'fulfilled'
-        ? waybillResult.value.raw
-        : null,
-
-    stickerResponse:
-      stickerResult.status === 'fulfilled'
-        ? stickerResult.value.raw
-        : null,
-
-    errors: [
-      waybillResult.status === 'rejected'
-        ? {
-            type: 'waybill',
-            message:
-              waybillResult.reason?.message ||
-              String(waybillResult.reason),
-          }
-        : null,
-
-      stickerResult.status === 'rejected'
-        ? {
-            type: 'sticker',
-            message:
-              stickerResult.reason?.message ||
-              String(stickerResult.reason),
-          }
-        : null,
-    ].filter(Boolean),
-  };
 }
 
 module.exports = {
   getCourierGuyDocuments,
+  normalizeStickerParcels,
+  combineStickerZpl,
 };

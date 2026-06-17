@@ -5,7 +5,11 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 function getBaseCurrency() {
-  return String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  return (
+    String(process.env.BASE_CURRENCY || '')
+      .trim()
+      .toUpperCase() || 'USD'
+  );
 }
 
 // ✅ Single canonical paid-like list (always compare UPPERCASE)
@@ -17,7 +21,7 @@ const MoneySchema = new Schema(
     value: { type: String, required: true }, // keep as string to avoid FP drift
     currency: { type: String, default: getBaseCurrency },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const BreakdownMoneySchema = new Schema(
@@ -25,7 +29,7 @@ const BreakdownMoneySchema = new Schema(
     value: { type: String, required: true },
     currency: { type: String, default: getBaseCurrency },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const SellerReceivableSchema = new Schema(
@@ -34,7 +38,7 @@ const SellerReceivableSchema = new Schema(
     paypalFee: { type: MoneySchema },
     net: { type: MoneySchema },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CaptureSchema = new Schema(
@@ -47,7 +51,7 @@ const CaptureSchema = new Schema(
     updateTime: Date,
     links: [{ rel: String, href: String, method: String }],
   },
-  { _id: false }
+  { _id: false },
 );
 
 const OrderItemSchema = new Schema(
@@ -98,7 +102,7 @@ const OrderItemSchema = new Schema(
       default: '',
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const PayerNameSchema = new Schema({ given: String, surname: String }, { _id: false });
@@ -110,7 +114,7 @@ const PayerSchema = new Schema(
     name: PayerNameSchema,
     countryCode: String,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const ShippingAddressSchema = new Schema(
@@ -128,7 +132,7 @@ const ShippingAddressSchema = new Schema(
     postal_code: String,
     country_code: String,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const BreakdownSchema = new Schema(
@@ -137,7 +141,7 @@ const BreakdownSchema = new Schema(
     taxTotal: BreakdownMoneySchema,
     shipping: BreakdownMoneySchema,
   },
-  { _id: false }
+  { _id: false },
 );
 
 // ✅ delivery snapshot for thank-you/receipt
@@ -148,7 +152,7 @@ const DeliverySnapshotSchema = new Schema(
     deliveryDays: Number,
     amount: String, // "15.00"
   },
-  { _id: false }
+  { _id: false },
 );
 
 // --- Tracking ---
@@ -180,7 +184,7 @@ const ShippingTrackingSchema = new Schema(
     shippedAt: Date,
     deliveredAt: Date,
   },
-  { _id: false }
+  { _id: false },
 );
 
 // ======================================================
@@ -231,7 +235,7 @@ const CourierGuyChosenRateSchema = new Schema(
       default: [],
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CourierGuySchema = new Schema(
@@ -328,19 +332,25 @@ const CourierGuySchema = new Schema(
 
     autoCreateStatus: {
       type: String,
-      enum: [
-        'PENDING',
-        'PROCESSING',
-        'SUCCESS',
-        'FAILED',
-        'SKIPPED',
-      ],
+      enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'SKIPPED'],
       default: 'PENDING',
       index: true,
     },
 
     autoCreateAttemptedAt: Date,
     autoCreateLastSuccessAt: Date,
+
+    autoCreateAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    autoCreateNextAttemptAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
 
     autoCreateLastError: {
       type: String,
@@ -395,8 +405,42 @@ const CourierGuySchema = new Schema(
       type: Schema.Types.Mixed,
       default: null,
     },
+
+    // ======================================================
+    // Official Courier Guy parcel sticker document
+    //
+    // The Courier Guy returns ZPL text, not a public URL.
+    // One shipment can contain more than one parcel sticker.
+    // ======================================================
+    stickerFormat: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: '',
+    },
+
+    stickerParcels: {
+      type: Array,
+      default: [],
+    },
+
+    stickerZpl: {
+      type: String,
+      default: '',
+    },
+
+    stickerGeneratedAt: {
+      type: Date,
+      default: null,
+    },
+
+    documentLastError: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const RefundSchema = new Schema(
@@ -408,7 +452,7 @@ const RefundSchema = new Schema(
     createdAt: { type: Date, default: Date.now },
     source: String, // ✅ lets webhook store "webhook:EVENT"
   },
-  { _id: false }
+  { _id: false },
 );
 
 // ---------- Main Order schema ----------
@@ -485,12 +529,12 @@ const OrderSchema = new Schema(
 
       // ✅ Persist chosen rate so admin page can show provider/service/price after refresh
       chosenRate: {
-        provider: String,       // e.g. "USPS"
-        service: String,        // e.g. "Priority Mail International"
-        amount: String,         // e.g. "72.56"
-        currency: String,       // e.g. "USD"
-        estimatedDays: Number,  // e.g. 8
-        durationTerms: String,  // e.g. "~8 days"
+        provider: String, // e.g. "USPS"
+        service: String, // e.g. "Priority Mail International"
+        amount: String, // e.g. "72.56"
+        currency: String, // e.g. "USD"
+        estimatedDays: Number, // e.g. 8
+        durationTerms: String, // e.g. "~8 days"
       },
 
       // ✅ customs declaration id (reused for international)
@@ -499,7 +543,7 @@ const OrderSchema = new Schema(
       // ✅ International metadata (used for label buying / audit)
       isInternational: { type: Boolean, default: false },
       fromCountry: { type: String, trim: true, uppercase: true }, // e.g. ZA
-      toCountry: { type: String, trim: true, uppercase: true },   // e.g. US
+      toCountry: { type: String, trim: true, uppercase: true }, // e.g. US
 
       // ✅ When Shippo selection was persisted (optional but useful)
       createdAt: Date,
@@ -545,7 +589,6 @@ const OrderSchema = new Schema(
     // Courier + tracking info
     shippingTracking: ShippingTrackingSchema,
 
-
     amount: MoneySchema, // captured total
     breakdown: BreakdownSchema,
 
@@ -589,9 +632,9 @@ const OrderSchema = new Schema(
     sellerDailyStatsAdjustedAt: { type: Date, default: null },
 
     // ✅ idempotency guard for restoring stock on full refund
-    inventoryRestored: { type: Boolean, default: false }, 
+    inventoryRestored: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // ---------- Indexes ----------
@@ -611,12 +654,33 @@ OrderSchema.index({ fulfillmentStatus: 1, createdAt: -1 });
 OrderSchema.index({ 'shippo.transactionId': 1, createdAt: -1 });
 OrderSchema.index({ 'shippo.shipmentId': 1, createdAt: -1 });
 
+// Courier Guy worker and tracking indexes
+OrderSchema.index({
+  shippingProvider: 1,
+  'courierGuy.autoCreateStatus': 1,
+  'courierGuy.autoCreateNextAttemptAt': 1,
+  createdAt: 1,
+});
+
+OrderSchema.index({
+  shippingProvider: 1,
+  'courierGuy.shipmentId': 1,
+});
+
+OrderSchema.index({
+  'courierGuy.trackingReference': 1,
+});
+
 // ---------- Statics / helpers ----------
 OrderSchema.statics.PAID_STATES = PAID_STATES;
 
 OrderSchema.methods.isPaidLike = function isPaidLike() {
-  const s = String(this.status || '').trim().toUpperCase();
-  const ps = String(this.paymentStatus || '').trim().toUpperCase();
+  const s = String(this.status || '')
+    .trim()
+    .toUpperCase();
+  const ps = String(this.paymentStatus || '')
+    .trim()
+    .toUpperCase();
 
   // paid-like if either field indicates paid/completed
   if (PAID_STATES.includes(s)) return true;

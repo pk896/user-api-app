@@ -36,12 +36,33 @@ function buildCourierGuyAddressFromWarehouse(warehouse) {
 
   const missing = [];
 
-  if (!result.company) missing.push('warehouse.name');
-  if (!result.street_address) missing.push('warehouse.address.street1');
-  if (!result.city) missing.push('warehouse.address.city');
-  if (!result.zone) missing.push('warehouse.address.state/province');
-  if (!result.country) missing.push('warehouse.address.country');
-  if (!result.code) missing.push('warehouse.address.zip');
+  if (!result.company) {
+    missing.push('warehouse.name');
+  }
+
+  if (!result.street_address) {
+    missing.push('warehouse.address.street1');
+  }
+
+  if (!result.local_area) {
+    missing.push('warehouse.address.street2/suburb');
+  }
+
+  if (!result.city) {
+    missing.push('warehouse.address.city');
+  }
+
+  if (!result.zone) {
+    missing.push('warehouse.address.state/province');
+  }
+
+  if (!result.country) {
+    missing.push('warehouse.address.country');
+  }
+
+  if (!result.code) {
+    missing.push('warehouse.address.zip');
+  }
 
   if (missing.length) {
     const error = new Error(
@@ -76,12 +97,12 @@ function buildCourierGuyContactFromWarehouse(warehouse) {
     email: clean(warehouse.email || process.env.COURIER_GUY_COLLECTION_EMAIL || '', 255),
   };
 
-  if (!contact.mobile_number && !contact.email) {
-    const error = new Error(
-      'Courier Guy collection contact requires a warehouse phone or email address.',
-    );
+  if (!contact.mobile_number) {
+    const error = new Error('Courier Guy collection contact requires a warehouse phone number.');
 
     error.code = 'COURIER_GUY_COLLECTION_CONTACT_INCOMPLETE';
+    error.missing = ['warehouse.phone or COURIER_GUY_COLLECTION_PHONE'];
+
     throw error;
   }
 

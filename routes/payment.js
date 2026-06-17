@@ -10,8 +10,12 @@ const mongoose = require('mongoose');
 const { creditSellersFromOrder } = require('../utils/payouts/creditSellersFromOrder');
 const { sendOrderConfirmationEmail } = require('../utils/emails/orderConfirmation');
 const { convertMoneyAmount, FX_PROVIDER } = require('../utils/fx/getFxRate');
-const { resolveShippoFromAddressForCart } = require('../utils/payment/resolveShippoFromAddressForCart');
-const { shippoCreateCustomsDeclaration } = require('../utils/payment/shippoCreateCustomsDeclaration');
+const {
+  resolveShippoFromAddressForCart,
+} = require('../utils/payment/resolveShippoFromAddressForCart');
+const {
+  shippoCreateCustomsDeclaration,
+} = require('../utils/payment/shippoCreateCustomsDeclaration');
 const {
   kgFrom,
   loadProductsForCart,
@@ -28,7 +32,7 @@ try {
 } catch {
   if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
     throw new Error(
-      'Missing middleware/requireAdmin in production. Fix path or deploy build. Refusing to start.'
+      'Missing middleware/requireAdmin in production. Fix path or deploy build. Refusing to start.',
     );
   }
   // DEV fallback only
@@ -119,7 +123,9 @@ try {
 
 let buildShippoAddressFromWarehouse = null;
 try {
-  ({ buildShippoAddressFromWarehouse } = require('../utils/shippo/buildShippoAddressFromWarehouse'));
+  ({
+    buildShippoAddressFromWarehouse,
+  } = require('../utils/shippo/buildShippoAddressFromWarehouse'));
 } catch {
   buildShippoAddressFromWarehouse = null;
 }
@@ -136,17 +142,19 @@ const {
 
 // ✅ Normalize + validate (so Render env changes are safe)
 const PAYPAL_MODE_N = (() => {
-  const m = String(PAYPAL_MODE || 'sandbox').trim().toLowerCase();
+  const m = String(PAYPAL_MODE || 'sandbox')
+    .trim()
+    .toLowerCase();
   return m === 'live' ? 'live' : 'sandbox'; // fallback to sandbox on typos
 })();
 
 const PP_API =
-  PAYPAL_MODE_N === 'live'
-    ? 'https://api-m.paypal.com'
-    : 'https://api-m.sandbox.paypal.com';
+  PAYPAL_MODE_N === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 
 const upperCcy = (() => {
-  const c = String(BASE_CURRENCY || 'USD').trim().toUpperCase();
+  const c = String(BASE_CURRENCY || 'USD')
+    .trim()
+    .toUpperCase();
   return /^[A-Z]{3}$/.test(c) ? c : 'USD'; // fallback to USD if invalid
 })();
 
@@ -171,7 +179,10 @@ const PLATFORM_FEE_BPS = (() => {
 // ✅ Origin protection for cookie-session JSON endpoints (anti-CSRF)
 // ======================================================
 function normalizeOrigin(s) {
-  return String(s || '').trim().replace(/\/$/, '').toLowerCase();
+  return String(s || '')
+    .trim()
+    .replace(/\/$/, '')
+    .toLowerCase();
 }
 
 // ✅ Single source of truth: WEB_ORIGINS env
@@ -290,7 +301,9 @@ function themeCssFrom(req) {
   return req.session?.theme === 'dark' ? '/css/dark.css' : '/css/light.css';
 }
 function safeStr(v, max = 2000) {
-  return String(v || '').trim().slice(0, max);
+  return String(v || '')
+    .trim()
+    .slice(0, max);
 }
 
 function publicBaseUrlFromReq(req) {
@@ -358,7 +371,9 @@ function asIdVariants(id) {
 }
 
 function normalizeCountryCode(code) {
-  const c = String(code || '').trim().toUpperCase();
+  const c = String(code || '')
+    .trim()
+    .toUpperCase();
   return /^[A-Z]{2}$/.test(c) ? c : null;
 }
 
@@ -368,7 +383,10 @@ function cleanAddrField(v, max = 100) {
 }
 
 function _normCmp(v) {
-  return String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 }
 function shippoToFromShippingInput(shippingInput) {
   // shippingInput is from requireShippingAddressFromBody()
@@ -419,12 +437,7 @@ function _cartFromOrderDoc(orderDoc) {
       name: it?.name || 'Item',
       qty: toQty(it?.quantity ?? it?.qty, 1),
       // use gross if available; else fall back
-      price:
-        it?.priceGross?.value ??
-        it?.price?.value ??
-        it?.price ??
-        it?.unitPrice ??
-        0,
+      price: it?.priceGross?.value ?? it?.price?.value ?? it?.price ?? it?.unitPrice ?? 0,
     })),
   };
 }
@@ -447,21 +460,13 @@ function requireShippingAddressFromBody(req) {
   //  fullName/name, address_line_1/line1, address_line_2/line2, admin_area_2/city, admin_area_1/state, postal_code/zip, country_code/countryCode
 
   const fullName = cleanAddrField(s.fullName || s.name || s.full_name, 120);
-  const line1 = cleanAddrField(
-    s.address_line_1 || s.line1 || s.address1 || s.street1,
-    300
-  );
-  const line2 = cleanAddrField(
-    s.address_line_2 || s.line2 || s.address2 || s.street2,
-    300
-  );
+  const line1 = cleanAddrField(s.address_line_1 || s.line1 || s.address1 || s.street1, 300);
+  const line2 = cleanAddrField(s.address_line_2 || s.line2 || s.address2 || s.street2, 300);
   const city = cleanAddrField(s.admin_area_2 || s.city, 120);
   const state = cleanAddrField(s.admin_area_1 || s.state || s.province, 120);
   const postalCode = cleanAddrField(s.postal_code || s.postalCode || s.zip, 60);
 
-  const countryCode = normalizeCountryCode(
-    s.country_code || s.countryCode || s.country
-  );
+  const countryCode = normalizeCountryCode(s.country_code || s.countryCode || s.country);
 
   const phone = cleanAddrField(s.phone || '', 40); // required for couriers (Shippo)
   const email = cleanAddrField(s.email || '', 140); // optional
@@ -527,7 +532,9 @@ function variantText(variants) {
 }
 
 function paypalNameWithVariants(baseName, variants) {
-  const base = String(baseName || 'Item').trim().slice(0, 127);
+  const base = String(baseName || 'Item')
+    .trim()
+    .slice(0, 127);
   const vt = variantText(variants);
   if (!vt) return base;
   const combined = `${base} (${vt})`;
@@ -598,10 +605,7 @@ function isBenignShippoMessage(m) {
   if (src === 'ups' && code === '110971') return true;
 
   // ✅ Known Shippo carrier capability warning (not fatal)
-  if (
-    src === 'shippo' &&
-    text.includes("doesn't support one or more shipment options")
-  ) {
+  if (src === 'shippo' && text.includes("doesn't support one or more shipment options")) {
     return true;
   }
 
@@ -681,7 +685,7 @@ async function shippoCreateShipment({ to, cart }) {
   // ✅ Create customs once for international shipments
   let customsDeclarationId = null;
   if (intl) {
-   customsDeclarationId = await shippoCreateCustomsDeclaration(
+    customsDeclarationId = await shippoCreateCustomsDeclaration(
       { cart, toCountry: to.country },
       {
         loadProductsForCart,
@@ -699,7 +703,7 @@ async function shippoCreateShipment({ to, cart }) {
         shippoHeaders,
         SHIPPO_TIMEOUT_MS,
         Product, // ✅ REQUIRED for loadProductsForCart inside customs flow
-      }
+      },
     );
   }
 
@@ -741,7 +745,7 @@ async function shippoCreateShipment({ to, cart }) {
       headers: shippoHeaders(),
       body: JSON.stringify(payload),
     },
-    SHIPPO_TIMEOUT_MS
+    SHIPPO_TIMEOUT_MS,
   );
 
   const json = await res.json().catch(() => ({}));
@@ -750,12 +754,9 @@ async function shippoCreateShipment({ to, cart }) {
 
   console.log(
     '[Shippo shipment] carrier_accounts=',
-    Array.isArray(json?.carrier_accounts) ? json.carrier_accounts.length : null
+    Array.isArray(json?.carrier_accounts) ? json.carrier_accounts.length : null,
   );
-  console.log(
-    '[Shippo shipment] rates=',
-    Array.isArray(json?.rates) ? json.rates.length : null
-  );
+  console.log('[Shippo shipment] rates=', Array.isArray(json?.rates) ? json.rates.length : null);
 
   // ✅ Log only important messages loudly; benign ones as warnings (non-fatal)
   if (_msgSplit.benign.length) {
@@ -769,9 +770,9 @@ async function shippoCreateShipment({ to, cart }) {
   const objStatus = String(json?.object_status || '').toUpperCase();
   if (objStatus && objStatus !== 'SUCCESS') {
     const msg =
-      (Array.isArray(json?.messages) && json.messages.length)
+      Array.isArray(json?.messages) && json.messages.length
         ? JSON.stringify(json.messages)
-        : (json?.detail || json?.message || 'Shippo shipment object_status=ERROR');
+        : json?.detail || json?.message || 'Shippo shipment object_status=ERROR';
     const err = new Error(`Shippo shipment error: ${msg}`);
     err.code = 'SHIPPO_SHIPMENT_OBJECT_ERROR';
     throw err;
@@ -897,7 +898,7 @@ function computeTotalsFromSession(cart, delivery = 0) {
     const name = (it.name || `Item ${i + 1}`).toString().slice(0, 127);
 
     const description = safeStr(it.description || '', 127);
-const sku = safeStr(it.sku || '', 127);
+    const sku = safeStr(it.sku || '', 127);
 
     return {
       name,
@@ -921,10 +922,10 @@ const sku = safeStr(it.sku || '', 127);
 
   return {
     items: ppItems,
-    subTotal: netItemsTotal,     // ✅ NET (PayPal item_total)
-    vatTotal: vat,               // ✅ VAT (PayPal tax_total)
+    subTotal: netItemsTotal, // ✅ NET (PayPal item_total)
+    vatTotal: vat, // ✅ VAT (PayPal tax_total)
     delivery: del,
-    grandTotal: grand,           // ✅ PayPal amount.value
+    grandTotal: grand, // ✅ PayPal amount.value
   };
 }
 
@@ -945,7 +946,10 @@ async function getAccessToken() {
 
   const res = await fetchWithTimeout(`${PP_API}/v1/oauth2/token`, {
     method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
     body: 'grant_type=client_credentials',
   });
 
@@ -1025,13 +1029,16 @@ async function listRefundsForCapture(captureId) {
 
   const res = await fetchWithTimeout(
     `${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refunds`,
-    { method: 'GET', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    },
   );
 
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(
-      `PayPal list refunds failed (${res.status}): ${json?.message || JSON.stringify(json)}`
+      `PayPal list refunds failed (${res.status}): ${json?.message || JSON.stringify(json)}`,
     );
   }
 
@@ -1097,7 +1104,9 @@ async function reconcileRefundsForOrderDoc(orderDoc, captureId, { source = 'sync
     }
 
     const amtVal = r?.amount?.value ?? null;
-    const ccy = String(r?.amount?.currency_code || orderDoc?.amount?.currency || upperCcy).toUpperCase();
+    const ccy = String(
+      r?.amount?.currency_code || orderDoc?.amount?.currency || upperCcy,
+    ).toUpperCase();
 
     orderDoc.refunds.push({
       refundId,
@@ -1230,7 +1239,7 @@ function buildSellerDailyStatItemsFromOrder(orderDoc) {
 
   for (const item of items) {
     const productCustomId = String(
-      item?.productId || item?.customId || item?.pid || item?.sku || ''
+      item?.productId || item?.customId || item?.pid || item?.sku || '',
     ).trim();
 
     const quantity = Number(item?.quantity || 0);
@@ -1240,17 +1249,12 @@ function buildSellerDailyStatItemsFromOrder(orderDoc) {
 
     const unitPrice =
       Number(
-        item?.priceGross?.value ??
-        item?.price?.value ??
-        item?.price ??
-        item?.unitPrice ??
-        0
+        item?.priceGross?.value ?? item?.price?.value ?? item?.price ?? item?.unitPrice ?? 0,
       ) || 0;
 
-    const productObjectId =
-      mongoose.Types.ObjectId.isValid(item?.product?._id)
-        ? new mongoose.Types.ObjectId(item.product._id)
-        : null;
+    const productObjectId = mongoose.Types.ObjectId.isValid(item?.product?._id)
+      ? new mongoose.Types.ObjectId(item.product._id)
+      : null;
 
     if (!grouped.has(productCustomId)) {
       grouped.set(productCustomId, {
@@ -1289,8 +1293,8 @@ async function applySellerDailyStatsOnPaidOrder(orderDoc) {
     new Set(
       (Array.isArray(orderDoc?.items) ? orderDoc.items : [])
         .map((item) => String(item?.productId || item?.customId || '').trim())
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+    ),
   );
 
   if (productCustomIds.length === 0) {
@@ -1471,13 +1475,13 @@ function shapeOrderForClient(doc) {
   const items = Array.isArray(doc?.items)
     ? doc.items.map((it) => {
         const raw =
-        it?.priceGross?.value ??   // ✅ prefer gross for display
-        it?.price?.value ??
-        it?.price ??
-        it?.unitPrice ??
-        it?.unit_amount?.value ??
-        it?.unit_amount ??
-        0;
+          it?.priceGross?.value ?? // ✅ prefer gross for display
+          it?.price?.value ??
+          it?.price ??
+          it?.unitPrice ??
+          it?.unit_amount?.value ??
+          it?.unit_amount ??
+          0;
 
         const priceN = normalizeMoneyNumber(raw);
         return {
@@ -1543,8 +1547,14 @@ function buildSessionSnapshot(orderId, pending) {
     amount: { value: Number(normalizeMoneyNumber(pending?.grandTotal) ?? 0) },
     items,
     breakdown: {
-      itemTotal: pending?.subTotal != null ? { value: Number(normalizeMoneyNumber(pending.subTotal) ?? 0) } : null,
-      taxTotal: pending?.vatTotal != null ? { value: Number(normalizeMoneyNumber(pending.vatTotal) ?? 0) } : null,
+      itemTotal:
+        pending?.subTotal != null
+          ? { value: Number(normalizeMoneyNumber(pending.subTotal) ?? 0) }
+          : null,
+      taxTotal:
+        pending?.vatTotal != null
+          ? { value: Number(normalizeMoneyNumber(pending.vatTotal) ?? 0) }
+          : null,
       shipping:
         pending?.deliveryPrice != null
           ? { value: Number(normalizeMoneyNumber(pending.deliveryPrice) ?? 0) }
@@ -1570,8 +1580,9 @@ function buildSessionSnapshot(orderId, pending) {
 // ======================================================
 function isSellerBusiness(req) {
   const b = req.session?.business || {};
-  const role =
-    String(b.role || b.type || b.accountType || b.kind || '').trim().toLowerCase();
+  const role = String(b.role || b.type || b.accountType || b.kind || '')
+    .trim()
+    .toLowerCase();
   // treat seller + supplier as "can fulfill / see their items"
   return role === 'seller' || role === 'supplier';
 }
@@ -1671,7 +1682,7 @@ router.post('/shippo/remember-rate', requireAllowedOriginJson, express.json(), a
     const b = req.body || {};
 
     const shipmentId = String(b.shippoShipmentId || '').trim();
-    const rateId     = String(b.shippoRateId || '').trim();
+    const rateId = String(b.shippoRateId || '').trim();
 
     if (!shipmentId || !rateId) {
       return res.status(400).json({
@@ -1684,7 +1695,7 @@ router.post('/shippo/remember-rate', requireAllowedOriginJson, express.json(), a
     // ✅ Validate against the CURRENT session quote (prevents stale/fake rate selection)
     const q = req.session?.shippoQuote || null;
 
-    const fresh = q?.createdAt && (Date.now() - q.createdAt) < 30 * 60 * 1000; // 30 min
+    const fresh = q?.createdAt && Date.now() - q.createdAt < 30 * 60 * 1000; // 30 min
     const sameShipment = q?.shipmentId && String(q.shipmentId) === String(shipmentId);
 
     if (!q || !fresh || !sameShipment) {
@@ -1696,8 +1707,7 @@ router.post('/shippo/remember-rate', requireAllowedOriginJson, express.json(), a
     }
 
     const exists =
-      Array.isArray(q.rates) &&
-      q.rates.some((r) => String(r.rateId) === String(rateId));
+      Array.isArray(q.rates) && q.rates.some((r) => String(r.rateId) === String(rateId));
 
     if (!exists) {
       return res.status(409).json({
@@ -1714,13 +1724,13 @@ router.post('/shippo/remember-rate', requireAllowedOriginJson, express.json(), a
       shipmentId,
       rateId,
       provider: picked?.provider ? String(picked.provider).trim() : String(b.provider || '').trim(),
-      service:  picked?.service  ? String(picked.service).trim()  : String(b.service || '').trim(),
-      amount:   picked?.amount != null ? Number(picked.amount) : Number(b.amount || 0),
+      service: picked?.service ? String(picked.service).trim() : String(b.service || '').trim(),
+      amount: picked?.amount != null ? Number(picked.amount) : Number(b.amount || 0),
       currency: picked?.currency
         ? String(picked.currency).toUpperCase()
         : String(b.currency || upperCcy).toUpperCase(),
-        
-      days:     picked?.days != null ? Number(picked.days) : Number(b.days || 0),
+
+      days: picked?.days != null ? Number(picked.days) : Number(b.days || 0),
       selectedAt: new Date().toISOString(),
     };
 
@@ -1764,7 +1774,7 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
     const q = req.session?.shippoQuote || null;
 
     // ✅ 5 minute cache when cart+address match
-    const isFresh = q?.createdAt && (Date.now() - q.createdAt) < 5 * 60 * 1000;
+    const isFresh = q?.createdAt && Date.now() - q.createdAt < 5 * 60 * 1000;
     if (
       q &&
       isFresh &&
@@ -1793,7 +1803,6 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       return res.status(422).json({ ok: false, code: 'CART_EMPTY', message: 'Cart is empty.' });
     }
 
-    
     const shipment = await shippoCreateShipment({ to, cart });
 
     const shipmentId = shipment?.object_id ? String(shipment.object_id) : null;
@@ -1822,15 +1831,13 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
     const fromCountry =
       normalizeCountryCode(shipment?._fromCountry) ||
       normalizeCountryCode(
-        typeof shipment?.address_from === 'object' ? shipment?.address_from?.country : null
+        typeof shipment?.address_from === 'object' ? shipment?.address_from?.country : null,
       ) ||
       normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) ||
       'ZA';
 
     const toCountry =
-      normalizeCountryCode(shipment?._toCountry) ||
-      normalizeCountryCode(to?.country) ||
-      '';
+      normalizeCountryCode(shipment?._toCountry) || normalizeCountryCode(to?.country) || '';
 
     if (!shipmentId || !rates.length) {
       return res.status(502).json({
@@ -1874,9 +1881,7 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
     console.error('POST /payment/shippo/quote error:', err?.message || err);
 
     const msg = String(err?.message || '');
-    const isAbort =
-      err?.name === 'AbortError' ||
-      msg.toLowerCase().includes('aborted');
+    const isAbort = err?.name === 'AbortError' || msg.toLowerCase().includes('aborted');
 
     const code = err?.code || (isAbort ? 'SHIPPO_TIMEOUT' : 'SHIPPO_QUOTE_FAILED');
 
@@ -1910,7 +1915,7 @@ router.post('/shippo/quote', requireAllowedOriginJson, express.json(), async (re
       code: isAbort ? 'SHIPPO_TIMEOUT' : code,
       message: isAbort
         ? 'Shipping quotes are taking too long right now. Please try again.'
-        : (msg || 'Failed to load shipping rates.'),
+        : msg || 'Failed to load shipping rates.',
     });
   }
 });
@@ -1953,17 +1958,17 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         it.customId != null
           ? it.customId
           : it.productId != null
-          ? it.productId
-          : it.pid != null
-          ? it.pid
-          : it.sku != null
-          ? it.sku
-          : ''
+            ? it.productId
+            : it.pid != null
+              ? it.pid
+              : it.sku != null
+                ? it.sku
+                : '',
       ).trim();
 
       if (!productId) {
         throw new Error(
-          `Missing productId/customId for cart item #${i + 1}. Your cart must store Product.customId.`
+          `Missing productId/customId for cart item #${i + 1}. Your cart must store Product.customId.`,
         );
       }
 
@@ -1983,11 +1988,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       };
     });
 
-    const providerInput = String(
-      req.body?.shippingProvider ||
-        req.body?.delivery ||
-        ''
-    )
+    const providerInput = String(req.body?.shippingProvider || req.body?.delivery || '')
       .trim()
       .toLowerCase();
 
@@ -1995,8 +1996,8 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       providerInput === 'courier_guy' || providerInput === 'courier-guy'
         ? 'courier_guy'
         : providerInput === 'shippo'
-        ? 'shippo'
-        : '';
+          ? 'shippo'
+          : '';
 
     if (!providerKey) {
       return res.status(422).json({
@@ -2019,10 +2020,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     let requestQuoteId = '';
 
     if (providerKey === 'shippo') {
-      let shippoRateId = safeStr(
-        req.body?.shippoRateId || req.body?.shippingRateId,
-        128
-      );
+      let shippoRateId = safeStr(req.body?.shippoRateId || req.body?.shippingRateId, 128);
 
       let shippoShipmentId = safeStr(req.body?.shippoShipmentId, 128);
 
@@ -2046,8 +2044,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
 
       const q = req.session?.shippoQuote || null;
       const fresh = q?.createdAt && Date.now() - q.createdAt < 30 * 60 * 1000;
-      const sameShipment =
-        q?.shipmentId && String(q.shipmentId) === String(shippoShipmentId);
+      const sameShipment = q?.shipmentId && String(q.shipmentId) === String(shippoShipmentId);
 
       if (!q || !fresh || !sameShipment || q.cartSig !== currentCartSig) {
         return res.status(409).json({
@@ -2097,7 +2094,8 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       };
 
       deliveryDollars = Number(picked.amount.toFixed(2));
-      deliveryName = `Shippo: ${(picked.provider || 'Carrier')} ${(picked.service || 'Service')}`.trim();
+      deliveryName =
+        `Shippo: ${picked.provider || 'Carrier'} ${picked.service || 'Service'}`.trim();
       deliveryDays = picked.days ?? 0;
       requestRateId = picked.rateId;
       requestQuoteId = picked.shipmentId;
@@ -2122,18 +2120,13 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         isInternational: !!q?.isInternational,
         fromCountry: q?.fromCountry ? String(q.fromCountry).toUpperCase() : null,
         toCountry: q?.toCountry ? String(q.toCountry).toUpperCase() : null,
-        customsDeclarationId: q?.customsDeclarationId
-          ? String(q.customsDeclarationId)
-          : null,
+        customsDeclarationId: q?.customsDeclarationId ? String(q.customsDeclarationId) : null,
       };
     }
 
     if (providerKey === 'courier_guy') {
       let courierGuyQuoteId = safeStr(req.body?.courierGuyQuoteId, 160);
-      let courierGuyRateId = safeStr(
-        req.body?.courierGuyRateId || req.body?.shippingRateId,
-        160
-      );
+      let courierGuyRateId = safeStr(req.body?.courierGuyRateId || req.body?.shippingRateId, 160);
 
       const remembered = req.session?.courierGuySelectedRate || null;
 
@@ -2173,9 +2166,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       }
 
       const quotedShippingInput = q.shippingInput || null;
-      const quotedTo = quotedShippingInput
-        ? shippoToFromShippingInput(quotedShippingInput)
-        : null;
+      const quotedTo = quotedShippingInput ? shippoToFromShippingInput(quotedShippingInput) : null;
 
       if (!quotedTo || !sameShippoTo(quotedTo, currentTo)) {
         return res.status(409).json({
@@ -2244,13 +2235,10 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
           service: rate.service || rate.serviceCode || 'Courier service',
           amount: Number(rate.amount).toFixed(2),
           amountExcludingVat:
-            rate.amountExcludingVat == null
-              ? null
-              : Number(rate.amountExcludingVat).toFixed(2),
+            rate.amountExcludingVat == null ? null : Number(rate.amountExcludingVat).toFixed(2),
           currency: rateCurrency,
           vat: rate.vat == null ? null : Number(rate.vat).toFixed(2),
-          vatPercentage:
-            rate.vatPercentage == null ? null : Number(rate.vatPercentage),
+          vatPercentage: rate.vatPercentage == null ? null : Number(rate.vatPercentage),
           collectionDate: rate.collectionDate || null,
           collectionCutOffTime: rate.collectionCutOffTime || null,
           deliveryDateFrom: rate.deliveryDateFrom || null,
@@ -2263,9 +2251,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         },
         collectionAddressSnapshot: q.requestPayload?.collection_address || null,
         deliveryAddressSnapshot: q.requestPayload?.delivery_address || null,
-        parcelSnapshot: Array.isArray(q.requestPayload?.parcels)
-          ? q.requestPayload.parcels
-          : [],
+        parcelSnapshot: Array.isArray(q.requestPayload?.parcels) ? q.requestPayload.parcels : [],
         autoCreateEnabled: true,
         autoCreateStatus: 'PENDING',
       };
@@ -2287,7 +2273,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
           quantity: x.quantity,
         })),
       },
-      deliveryDollars
+      deliveryDollars,
     );
 
     const orderBody = {
@@ -2329,7 +2315,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
           requestRateId,
           addr: shippingInput.address,
           user: getUserId(req) || getBusinessId(req) || req.sessionID || 'guest',
-        })
+        }),
       )
       .digest('hex')
       .slice(0, 64);
@@ -2347,7 +2333,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         },
         body: JSON.stringify(orderBody),
       },
-      15000
+      15000,
     );
 
     const data = await ppRes.json().catch(() => ({}));
@@ -2364,9 +2350,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         code: 'PAYPAL_CREATE_FAILED',
         message: `PayPal create order failed (${ppRes.status}).`,
         details:
-          String(process.env.NODE_ENV || '').toLowerCase() === 'production'
-            ? undefined
-            : data,
+          String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : data,
       });
     }
 
@@ -2420,7 +2404,9 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
   try {
     const orderID = safeStr(req.body?.orderID || req.query?.orderId, 128);
     if (!orderID) {
-      return res.status(400).json({ ok: false, code: 'MISSING_ORDER_ID', message: 'Missing orderId/orderID' });
+      return res
+        .status(400)
+        .json({ ok: false, code: 'MISSING_ORDER_ID', message: 'Missing orderId/orderID' });
     }
 
     const pending = req.session.pendingOrder || null;
@@ -2445,10 +2431,13 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
     const token = await getAccessToken();
 
-    const capRes = await fetchWithTimeout(`${PP_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
+    const capRes = await fetchWithTimeout(
+      `${PP_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      },
+    );
 
     const capture = await capRes.json().catch(() => ({}));
 
@@ -2458,7 +2447,8 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         ok: false,
         code: 'PAYPAL_CAPTURE_FAILED',
         message: 'PayPal capture failed',
-        details: String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : capture,
+        details:
+          String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : capture,
       });
     }
 
@@ -2480,15 +2470,31 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
     // 1) Prefer PayPal shipping (source of truth if present)
     let shippingAddress = {
-      name: puShipping.name?.full_name || puShipping.name?.name || payerFullName || 'No name provided',
+      name:
+        puShipping.name?.full_name ||
+        puShipping.name?.name ||
+        pendingShip?.fullName ||
+        payerFullName ||
+        'No name provided',
+
       phone: shipPhone,
       email: shipEmail,
-      address_line_1: puAddr.address_line_1 || puAddr.line1 || '',
-      address_line_2: puAddr.address_line_2 || puAddr.line2 || '',
-      admin_area_2: puAddr.admin_area_2 || puAddr.city || '',
-      admin_area_1: puAddr.admin_area_1 || puAddr.state || '',
-      postal_code: puAddr.postal_code || '',
-      country_code: puAddr.country_code || '',
+
+      address_line_1:
+        puAddr.address_line_1 || puAddr.line1 || pendingShip?.address?.address_line_1 || '',
+
+      // Preserve the suburb/local area validated during checkout.
+      // PayPal frequently omits address_line_2.
+      address_line_2:
+        pendingShip?.address?.address_line_2 || puAddr.address_line_2 || puAddr.line2 || '',
+
+      admin_area_2: puAddr.admin_area_2 || puAddr.city || pendingShip?.address?.admin_area_2 || '',
+
+      admin_area_1: puAddr.admin_area_1 || puAddr.state || pendingShip?.address?.admin_area_1 || '',
+
+      postal_code: puAddr.postal_code || pendingShip?.address?.postal_code || '',
+
+      country_code: puAddr.country_code || pendingShip?.address?.country_code || '',
     };
 
     // 2) If PayPal didn't provide address, fall back to the session shippingInput you validated in create-order
@@ -2513,8 +2519,7 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
       };
     }
 
-    const finalAmount =
-      cap0?.amount ||
+    const finalAmount = cap0?.amount ||
       pu?.amount || {
         value: String(pending?.grandTotal || '0'),
         currency_code: upperCcy,
@@ -2570,21 +2575,33 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
                 captureId,
                 status: cap0.status || undefined,
                 amount: cap0.amount
-                  ? { value: String(cap0.amount.value || '0'), currency: cap0.amount.currency_code || upperCcy }
+                  ? {
+                      value: String(cap0.amount.value || '0'),
+                      currency: cap0.amount.currency_code || upperCcy,
+                    }
                   : undefined,
                 sellerReceivable: srb
                   ? {
                       gross:
                         grossVal != null
-                          ? { value: String(grossVal), currency: cap0.amount?.currency_code || upperCcy }
+                          ? {
+                              value: String(grossVal),
+                              currency: cap0.amount?.currency_code || upperCcy,
+                            }
                           : undefined,
                       paypalFee:
                         paypalFeeVal != null
-                          ? { value: String(paypalFeeVal), currency: cap0.amount?.currency_code || upperCcy }
+                          ? {
+                              value: String(paypalFeeVal),
+                              currency: cap0.amount?.currency_code || upperCcy,
+                            }
                           : undefined,
                       net:
                         netVal != null
-                          ? { value: String(netVal), currency: cap0.amount?.currency_code || upperCcy }
+                          ? {
+                              value: String(netVal),
+                              currency: cap0.amount?.currency_code || upperCcy,
+                            }
                           : undefined,
                     }
                   : undefined,
@@ -2598,7 +2615,9 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         const update = {
           orderId: orderID,
           status: String(capture?.status || 'COMPLETED'),
-          paymentStatus: paidLike ? 'paid' : (safeStr(capture?.status, 32).toLowerCase() || 'unknown'),
+          paymentStatus: paidLike
+            ? 'paid'
+            : safeStr(capture?.status, 32).toLowerCase() || 'unknown',
 
           platformFeeBps: PLATFORM_FEE_BPS, // ✅ ADDED THIS
 
@@ -2613,10 +2632,7 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
           shipping: shippingAddress,
 
-          shippingProvider:
-            pending?.shippingProvider === 'COURIER_GUY'
-              ? 'COURIER_GUY'
-              : 'SHIPPO',
+          shippingProvider: pending?.shippingProvider === 'COURIER_GUY' ? 'COURIER_GUY' : 'SHIPPO',
 
           ...(pending?.courierGuy
             ? {
@@ -2628,13 +2644,25 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
               }
             : {}),
 
-          amount: { value: toMoney2(finalAmount.value || '0'), currency: finalAmount.currency_code || upperCcy },
+          amount: {
+            value: toMoney2(finalAmount.value || '0'),
+            currency: finalAmount.currency_code || upperCcy,
+          },
 
           breakdown: pending
             ? {
-                itemTotal: pending.subTotal != null ? { value: toMoney2(pending.subTotal), currency: upperCcy } : undefined,
-                taxTotal: pending.vatTotal != null ? { value: toMoney2(pending.vatTotal), currency: upperCcy } : undefined,
-                shipping: pending.deliveryPrice != null ? { value: toMoney2(pending.deliveryPrice), currency: upperCcy } : undefined,
+                itemTotal:
+                  pending.subTotal != null
+                    ? { value: toMoney2(pending.subTotal), currency: upperCcy }
+                    : undefined,
+                taxTotal:
+                  pending.vatTotal != null
+                    ? { value: toMoney2(pending.vatTotal), currency: upperCcy }
+                    : undefined,
+                shipping:
+                  pending.deliveryPrice != null
+                    ? { value: toMoney2(pending.deliveryPrice), currency: upperCcy }
+                    : undefined,
               }
             : undefined,
 
@@ -2657,7 +2685,7 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         doc = await Order.findOneAndUpdate(
           { orderId: orderID },
           { $set: update, $setOnInsert: { createdAt: new Date() } },
-          { new: true, upsert: true, setDefaultsOnInsert: true }
+          { new: true, upsert: true, setDefaultsOnInsert: true },
         );
 
         // ✅ Payment succeeded, but fulfillment may still be pending
@@ -2698,10 +2726,7 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         // DO NOT overwrite an existing purchased label/transaction
         // ======================================================
         try {
-          const pShippo =
-            pending?.shippingProvider === 'SHIPPO'
-              ? pending?.shippo || null
-              : null;
+          const pShippo = pending?.shippingProvider === 'SHIPPO' ? pending?.shippo || null : null;
 
           if (doc && pShippo?.rateId && pShippo?.shipmentId) {
             doc.shippo = doc.shippo || {};
@@ -2715,9 +2740,7 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
             }
 
             const alreadyPurchased =
-              !!doc.shippo.transactionId ||
-              !!doc.shippo.labelUrl ||
-              !!doc.shippo.trackingNumber;
+              !!doc.shippo.transactionId || !!doc.shippo.labelUrl || !!doc.shippo.trackingNumber;
 
             // ✅ always persist customs/intl metadata if present (even if label already exists)
             if (pShippo.customsDeclarationId && !doc.shippo.customsDeclarationId) {
@@ -2792,7 +2815,9 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
           if (doc && typeof creditSellersFromOrder === 'function') {
             const paidStatus = String(capture?.status || doc.status || '').toUpperCase();
             if (paidStatus === 'COMPLETED' || paidStatus === 'PAID') {
-              const feeBps = Number.isFinite(doc?.platformFeeBps) ? doc.platformFeeBps : PLATFORM_FEE_BPS;
+              const feeBps = Number.isFinite(doc?.platformFeeBps)
+                ? doc.platformFeeBps
+                : PLATFORM_FEE_BPS;
               // await creditSellersFromOrder(doc, { platformFeeBps: feeBps, onlyIfPaidLike: false });
 
               const creditResult = await creditSellersFromOrder(doc, {
@@ -2828,7 +2853,9 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
     req.session.lastOrderSnapshot = {
       ...buildSessionSnapshot(orderID, pending),
       shipping: shippingAddress,
-      amount: { value: Number(normalizeMoneyNumber(finalAmount?.value) ?? pending?.grandTotal ?? 0) },
+      amount: {
+        value: Number(normalizeMoneyNumber(finalAmount?.value) ?? pending?.grandTotal ?? 0),
+      },
       currency: String(finalAmount?.currency_code || pending?.currency || upperCcy).toUpperCase(),
     };
 
@@ -2850,7 +2877,9 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
     });
   } catch (err) {
     console.error('capture-order error:', err?.stack || err);
-    return res.status(500).json({ ok: false, code: 'SERVER_ERROR', message: 'Server error capturing order' });
+    return res
+      .status(500)
+      .json({ ok: false, code: 'SERVER_ERROR', message: 'Server error capturing order' });
   }
 });
 
@@ -2871,7 +2900,8 @@ router.get('/order/:id', async (req, res) => {
     if (Order) {
       const doc = await findOrderByAnyId(id);
       if (doc) {
-        if (!docOwnedByRequester(req, doc)) return res.status(403).json({ success: false, message: 'Forbidden.' });
+        if (!docOwnedByRequester(req, doc))
+          return res.status(403).json({ success: false, message: 'Forbidden.' });
         return res.json({ success: true, order: shapeOrderForClient(doc) });
       }
     }
@@ -2889,7 +2919,8 @@ router.get('/thank-you', (req, res) => {
   const id = safeStr(req.query.orderId, 128);
   const snapId = req.session?.lastOrderSnapshot?.id;
 
-  if (!id && snapId) return res.redirect(`/payment/thank-you?orderId=${encodeURIComponent(snapId)}`);
+  if (!id && snapId)
+    return res.redirect(`/payment/thank-you?orderId=${encodeURIComponent(snapId)}`);
 
   return res.render('thank-you', {
     title: 'Thank you',
@@ -3021,9 +3052,7 @@ router.get('/my-orders', requireAnyAuthJson, async (req, res) => {
         .select('customId')
         .lean();
 
-      const sellerIds = sellerProducts
-        .map((p) => String(p?.customId || '').trim())
-        .filter(Boolean);
+      const sellerIds = sellerProducts.map((p) => String(p?.customId || '').trim()).filter(Boolean);
 
       if (!sellerIds.length) {
         return res.json({ ok: true, orders: [] });
@@ -3038,7 +3067,7 @@ router.get('/my-orders', requireAnyAuthJson, async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(200)
         .select(
-          'orderId paypalOrderId status paymentStatus fulfillmentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal'
+          'orderId paypalOrderId status paymentStatus fulfillmentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal',
         )
         .lean();
 
@@ -3104,7 +3133,7 @@ router.get('/my-orders', requireAnyAuthJson, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(200)
       .select(
-        'orderId paypalOrderId status paymentStatus fulfillmentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal'
+        'orderId paypalOrderId status paymentStatus fulfillmentStatus createdAt amount total totalAmount currency items shipping shippingTracking refunds refundedTotal',
       )
       .lean();
 
@@ -3117,8 +3146,10 @@ router.get('/my-orders', requireAnyAuthJson, async (req, res) => {
 
       let amountRaw =
         (o.amount && (o.amount.value ?? o.amount)) ??
-        (o.total?.value ?? o.total) ??
-        (o.totalAmount?.value ?? o.totalAmount) ??
+        o.total?.value ??
+        o.total ??
+        o.totalAmount?.value ??
+        o.totalAmount ??
         0;
 
       if (amountRaw && typeof amountRaw === 'object') {
@@ -3170,7 +3201,8 @@ function refundSoFarWouldExceed(captured, refundedSoFar, want) {
 router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), async (req, res) => {
   try {
     const captureId = safeStr(req.body?.captureId, 128);
-    if (!captureId) return res.status(400).json({ success: false, message: 'captureId is required.' });
+    if (!captureId)
+      return res.status(400).json({ success: false, message: 'captureId is required.' });
 
     const amountNum = normalizeMoneyNumber(req.body?.amount);
     if (amountNum !== null && (!Number.isFinite(amountNum) || amountNum <= 0)) {
@@ -3190,7 +3222,9 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
       if (bodyOrderId && orderDoc) {
         const dbOrderId = String(orderDoc.orderId || orderDoc._id);
         if (dbOrderId !== bodyOrderId) {
-          return res.status(400).json({ success: false, message: 'captureId does not match the provided orderId.' });
+          return res
+            .status(400)
+            .json({ success: false, message: 'captureId does not match the provided orderId.' });
         }
       }
     }
@@ -3206,7 +3240,9 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
         const want = amountNum === null ? captured.value - refundedSoFar : amountNum;
 
         if (want <= 0) {
-          return res.status(400).json({ success: false, message: 'Nothing left to refund for this capture.' });
+          return res
+            .status(400)
+            .json({ success: false, message: 'Nothing left to refund for this capture.' });
         }
 
         if (refundSoFarWouldExceed(captured.value, refundedSoFar, want)) {
@@ -3219,18 +3255,22 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
     }
 
     const payload = {};
-    if (amountNum !== null) payload.amount = { value: amountNum.toFixed(2), currency_code: currency };
+    if (amountNum !== null)
+      payload.amount = { value: amountNum.toFixed(2), currency_code: currency };
 
     const note = safeStr(req.body?.note, 255);
     if (note) payload.note_to_payer = note;
 
     const token = await getAccessToken();
 
-    const ppRes = await fetchWithTimeout(`${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const ppRes = await fetchWithTimeout(
+      `${PP_API}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    );
 
     const refundJson = await ppRes.json().catch(() => ({}));
     if (!ppRes.ok) {
@@ -3238,7 +3278,10 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
       return res.status(502).json({
         success: false,
         message: refundJson?.message || `PayPal refund failed (${ppRes.status}).`,
-        details: String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : refundJson,
+        details:
+          String(process.env.NODE_ENV || '').toLowerCase() === 'production'
+            ? undefined
+            : refundJson,
       });
     }
 
@@ -3255,12 +3298,15 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
 
         const refundedAmountStr = safeMoneyString(
           paypalRefundValue ?? (amountNum !== null ? amountNum.toFixed(2) : null),
-          32
+          32,
         );
-        const refundedCurrencyStr = String(paypalRefundCurrency || currency || upperCcy).toUpperCase();
+        const refundedCurrencyStr = String(
+          paypalRefundCurrency || currency || upperCcy,
+        ).toUpperCase();
 
         orderDoc.refunds = Array.isArray(orderDoc.refunds) ? orderDoc.refunds : [];
-        if (refundId) duplicated = orderDoc.refunds.some((r) => String(r?.refundId || '') === refundId);
+        if (refundId)
+          duplicated = orderDoc.refunds.some((r) => String(r?.refundId || '') === refundId);
 
         if (!duplicated) {
           orderDoc.refunds.push({
@@ -3298,7 +3344,8 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
         try {
           if (String(orderDoc.status || '').toUpperCase() === 'REFUNDED') {
             inventoryRestore = await restoreInventoryOnRefundedOrder(orderDoc, 'admin-refund');
-            if (!inventoryRestore.ok) console.warn('⚠️ Inventory restore failed:', inventoryRestore);
+            if (!inventoryRestore.ok)
+              console.warn('⚠️ Inventory restore failed:', inventoryRestore);
           }
         } catch (e) {
           console.warn('⚠️ Inventory restore exception:', e?.message || String(e));
@@ -3329,10 +3376,16 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
           console.warn('⚠️ reconcileRefundsForOrderDoc failed:', e3?.message || String(e3));
         }
       } else {
-        console.warn('⚠️ Refund succeeded in PayPal but no matching orderDoc found for captureId:', captureId);
+        console.warn(
+          '⚠️ Refund succeeded in PayPal but no matching orderDoc found for captureId:',
+          captureId,
+        );
       }
     } catch (e) {
-      console.warn('⚠️ Refund saved to PayPal but failed to persist to DB:', e?.message || String(e));
+      console.warn(
+        '⚠️ Refund saved to PayPal but failed to persist to DB:',
+        e?.message || String(e),
+      );
     }
 
     return res.json({ success: true, refund: refundJson, duplicated, ledger, inventoryRestore });
@@ -3345,85 +3398,114 @@ router.post('/refund', requireAdmin, requireAllowedOriginJson, express.json(), a
 // ======================================================
 // 🔒 Manual sync routes (ADMIN ONLY)
 // ======================================================
-router.post('/sync-refunds', requireAdmin, requireAllowedOriginJson, express.json(), async (req, res) => {
-  try {
-    const captureId = safeStr(req.body?.captureId, 128);
-    if (!captureId) return res.status(400).json({ ok: false, message: 'captureId is required.' });
-    if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
-
-    const orderDoc = await findOrderByCaptureId(captureId);
-    if (!orderDoc) {
-      return res.status(404).json({
-        ok: false,
-        message: 'No local order found for this captureId. Refund exists in PayPal, but your DB has no matching order.',
-      });
-    }
-
-    const out = await reconcileRefundsForOrderDoc(orderDoc, captureId, { source: 'sync-refunds' });
-
-    // If full refund detected, restore inventory
+router.post(
+  '/sync-refunds',
+  requireAdmin,
+  requireAllowedOriginJson,
+  express.json(),
+  async (req, res) => {
     try {
-      if (out?.ok && String(out.status || '').toUpperCase() === 'REFUNDED') {
-        await restoreInventoryOnRefundedOrder(orderDoc, 'sync-refunds');
+      const captureId = safeStr(req.body?.captureId, 128);
+      if (!captureId) return res.status(400).json({ ok: false, message: 'captureId is required.' });
+      if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
+
+      const orderDoc = await findOrderByCaptureId(captureId);
+      if (!orderDoc) {
+        return res.status(404).json({
+          ok: false,
+          message:
+            'No local order found for this captureId. Refund exists in PayPal, but your DB has no matching order.',
+        });
       }
-    } catch (e) {
-      console.warn('⚠️ restoreInventoryOnRefundedOrder (sync-refunds) failed:', e?.message || String(e));
-    }
 
-    return res.json(out);
-  } catch (err) {
-    console.error('sync-refunds error:', err?.stack || err);
-    return res.status(500).json({ ok: false, message: err?.message || 'Server error syncing refunds.' });
-  }
-});
+      const out = await reconcileRefundsForOrderDoc(orderDoc, captureId, {
+        source: 'sync-refunds',
+      });
 
-router.post('/reconcile-recent-refunds', requireAdmin, requireAllowedOriginJson, express.json(), async (req, res) => {
-  try {
-    if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
-
-    const days = Math.max(1, Math.min(120, Number(req.body?.days || 30)));
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-
-    const candidates = await Order.find({
-      createdAt: { $gte: since },
-      status: { $in: ['COMPLETED', 'PAID', 'REFUND_SUBMITTED', 'PARTIALLY_REFUNDED', 'REFUNDED'] },
-      $or: [
-        { 'paypal.captureId': { $exists: true, $ne: null } },
-        { 'captures.0.captureId': { $exists: true } },
-      ],
-    }).sort({ createdAt: -1 });
-
-    const results = [];
-    let changed = 0;
-
-    for (const orderDoc of candidates) {
-      const cid =
-        orderDoc?.paypal?.captureId ||
-        (Array.isArray(orderDoc.captures) && orderDoc.captures[0]?.captureId) ||
-        null;
-
-      if (!cid) continue;
-
-      const out = await reconcileRefundsForOrderDoc(orderDoc, cid, { source: 'reconcile-recent' });
-      results.push(out);
-      if (out?.ok && out.newlyAdded > 0) changed++;
-
-      // If now fully refunded, restore inventory
+      // If full refund detected, restore inventory
       try {
         if (out?.ok && String(out.status || '').toUpperCase() === 'REFUNDED') {
-          await restoreInventoryOnRefundedOrder(orderDoc, 'reconcile-recent-refunds');
+          await restoreInventoryOnRefundedOrder(orderDoc, 'sync-refunds');
         }
       } catch (e) {
-        console.warn('⚠️ restoreInventoryOnRefundedOrder (reconcile-recent) failed:', e?.message || String(e));
+        console.warn(
+          '⚠️ restoreInventoryOnRefundedOrder (sync-refunds) failed:',
+          e?.message || String(e),
+        );
       }
-    }
 
-    return res.json({ ok: true, days, scanned: candidates.length, changed, results });
-  } catch (err) {
-    console.error('reconcile-recent-refunds error:', err?.stack || err);
-    return res.status(500).json({ ok: false, message: err?.message || 'Server error reconciling refunds.' });
-  }
-});
+      return res.json(out);
+    } catch (err) {
+      console.error('sync-refunds error:', err?.stack || err);
+      return res
+        .status(500)
+        .json({ ok: false, message: err?.message || 'Server error syncing refunds.' });
+    }
+  },
+);
+
+router.post(
+  '/reconcile-recent-refunds',
+  requireAdmin,
+  requireAllowedOriginJson,
+  express.json(),
+  async (req, res) => {
+    try {
+      if (!Order) return res.status(500).json({ ok: false, message: 'Order model not available.' });
+
+      const days = Math.max(1, Math.min(120, Number(req.body?.days || 30)));
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const candidates = await Order.find({
+        createdAt: { $gte: since },
+        status: {
+          $in: ['COMPLETED', 'PAID', 'REFUND_SUBMITTED', 'PARTIALLY_REFUNDED', 'REFUNDED'],
+        },
+        $or: [
+          { 'paypal.captureId': { $exists: true, $ne: null } },
+          { 'captures.0.captureId': { $exists: true } },
+        ],
+      }).sort({ createdAt: -1 });
+
+      const results = [];
+      let changed = 0;
+
+      for (const orderDoc of candidates) {
+        const cid =
+          orderDoc?.paypal?.captureId ||
+          (Array.isArray(orderDoc.captures) && orderDoc.captures[0]?.captureId) ||
+          null;
+
+        if (!cid) continue;
+
+        const out = await reconcileRefundsForOrderDoc(orderDoc, cid, {
+          source: 'reconcile-recent',
+        });
+        results.push(out);
+        if (out?.ok && out.newlyAdded > 0) changed++;
+
+        // If now fully refunded, restore inventory
+        try {
+          if (out?.ok && String(out.status || '').toUpperCase() === 'REFUNDED') {
+            await restoreInventoryOnRefundedOrder(orderDoc, 'reconcile-recent-refunds');
+          }
+        } catch (e) {
+          console.warn(
+            '⚠️ restoreInventoryOnRefundedOrder (reconcile-recent) failed:',
+            e?.message || String(e),
+          );
+        }
+      }
+
+      return res.json({ ok: true, days, scanned: candidates.length, changed, results });
+    } catch (err) {
+      console.error('reconcile-recent-refunds error:', err?.stack || err);
+      return res
+        .status(500)
+        .json({ ok: false, message: err?.message || 'Server error reconciling refunds.' });
+    }
+  },
+);
 
 router.get('/fx-test', requireAdmin, async (req, res) => {
   try {
@@ -3463,11 +3545,7 @@ router.get('/admin/backfill-seller-daily-stats-30d', async (req, res) => {
     }
 
     const now = new Date();
-    const start = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate()
-    ));
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     start.setUTCDate(start.getUTCDate() - 29);
 
     const orders = await Order.find({
@@ -3482,9 +3560,9 @@ router.get('/admin/backfill-seller-daily-stats-30d', async (req, res) => {
         orders.flatMap((order) =>
           (Array.isArray(order.items) ? order.items : [])
             .map((item) => String(item?.productId || item?.customId || '').trim())
-            .filter(Boolean)
-        )
-      )
+            .filter(Boolean),
+        ),
+      ),
     );
 
     const products = await Product.find({
@@ -3500,8 +3578,8 @@ router.get('/admin/backfill-seller-daily-stats-30d', async (req, res) => {
           business: product.business,
           productId: product._id,
           productName: product.name || '',
-        }
-      ])
+        },
+      ]),
     );
 
     const aggregateMap = new Map();
@@ -3528,11 +3606,7 @@ router.get('/admin/backfill-seller-daily-stats-30d', async (req, res) => {
 
         const unitPrice =
           Number(
-            item?.priceGross?.value ??
-            item?.price?.value ??
-            item?.price ??
-            item?.unitPrice ??
-            0
+            item?.priceGross?.value ?? item?.price?.value ?? item?.price ?? item?.unitPrice ?? 0,
           ) || 0;
 
         if (!groupedPerOrder.has(productCustomId)) {

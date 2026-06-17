@@ -65,13 +65,37 @@ function getLatestCaptureId(order) {
   return String(latestCapture?.captureId || '').trim();
 }
 
+function isCourierGuyShippedLike(order) {
+  const values = [
+    order?.courierGuy?.shipmentStatus,
+    order?.courierGuy?.trackingStatus,
+    order?.shippingTracking?.liveStatus,
+    order?.shippingTracking?.status,
+  ]
+    .map((value) =>
+      String(value || '')
+        .trim()
+        .toUpperCase(),
+    )
+    .filter(Boolean);
+
+  return values.some((status) =>
+    ['COLLECTED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(status),
+  );
+}
+
 async function pushPaypalTracking(order) {
   const captureId = getLatestCaptureId(order);
 
   const trackingNumber = String(order?.shippingTracking?.trackingNumber || '').trim();
 
-  if (!captureId || !trackingNumber || order?.courierGuy?.paypalTrackingPushedAt) {
-    return;
+  if (
+    !captureId ||
+    !trackingNumber ||
+    order?.courierGuy?.paypalTrackingPushedAt ||
+    !isCourierGuyShippedLike(order)
+  ) {
+    return false;
   }
 
   try {
@@ -79,7 +103,10 @@ async function pushPaypalTracking(order) {
       transactionId: captureId,
       trackingNumber,
       carrier: 'The Courier Guy',
-      status: 'SHIPPED',
+      status:
+        String(order?.courierGuy?.shipmentStatus || '').toUpperCase() === 'DELIVERED'
+          ? 'DELIVERED'
+          : 'SHIPPED',
     });
 
     order.courierGuy.paypalTrackingPushedAt = new Date();
@@ -87,10 +114,19 @@ async function pushPaypalTracking(order) {
     order.courierGuy.paypalTrackingLastResponse = response;
 
     await order.save();
+
+    return true;
   } catch (error) {
     order.courierGuy.paypalTrackingLastError = String(error?.message || error).slice(0, 500);
 
-    await order.save();
+    await order.save().catch(() => {});
+
+    console.warn('[admin-courier-guy] PayPal tracking push failed:', {
+      orderId: order.orderId,
+      message: error?.message || String(error),
+    });
+
+    return false;
   }
 }
 
@@ -122,69 +158,187 @@ router.post(
   ...guards,
   requireAdminPermission('shipping.labels.manage'),
   async (req, res) => {
-    const order = await findOrder(req.params.id);
+    const existingOrder = await findOrder(req.params.id);
+
+    if (!existingOrder) {
+      req.flash('error', 'Order not found.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    if (String(existingOrder.shippingProvider || '').toUpperCase() !== 'COURIER_GUY') {
+      req.flash('error', 'This order did not select The Courier Guy.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    if (!existingOrder.isPaidLike()) {
+      req.flash('error', 'A Courier Guy shipment cannot be created before the order is paid.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    if (String(existingOrder?.courierGuy?.shipmentId || '').trim()) {
+      req.flash('warning', 'This order already has a Courier Guy shipment.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    const before = existingOrder.toObject();
+
+    const order = await Order.findOneAndUpdate(
+      {
+        _id: existingOrder._id,
+        shippingProvider: 'COURIER_GUY',
+
+        $and: [
+          {
+            $or: [
+              {
+                status: {
+                  $in: [
+                    'COMPLETED',
+                    'PAID',
+                    'SHIPPED',
+                    'DELIVERED',
+                    'CAPTURED',
+                    'completed',
+                    'paid',
+                    'shipped',
+                    'delivered',
+                    'captured',
+                  ],
+                },
+              },
+              {
+                paymentStatus: {
+                  $in: ['COMPLETED', 'PAID', 'CAPTURED', 'completed', 'paid', 'captured'],
+                },
+              },
+            ],
+          },
+
+          {
+            $or: [
+              {
+                'courierGuy.shipmentId': {
+                  $exists: false,
+                },
+              },
+              {
+                'courierGuy.shipmentId': '',
+              },
+              {
+                'courierGuy.shipmentId': null,
+              },
+            ],
+          },
+
+          {
+            $or: [
+              {
+                'courierGuy.autoCreateStatus': {
+                  $exists: false,
+                },
+              },
+              {
+                'courierGuy.autoCreateStatus': {
+                  $in: ['PENDING', 'FAILED', null],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        $set: {
+          'courierGuy.autoCreateStatus': 'PROCESSING',
+
+          'courierGuy.autoCreateAttemptedAt': new Date(),
+
+          'courierGuy.autoCreateLastError': '',
+        },
+
+        $inc: {
+          'courierGuy.autoCreateAttempts': 1,
+        },
+      },
+      {
+        new: true,
+      },
+    );
 
     if (!order) {
-      req.flash('error', 'Order not found.');
+      req.flash(
+        'warning',
+        'This shipment is already being created, has already been created, or the order is not eligible.',
+      );
+
       return res.redirect('/admin/courier-guy');
     }
-
-    if (String(order.shippingProvider || '').toUpperCase() !== 'COURIER_GUY') {
-      req.flash('error', 'This order did not select The Courier Guy.');
-      return res.redirect('/admin/courier-guy');
-    }
-
-    const before = order.toObject();
 
     try {
-      order.courierGuy = order.courierGuy || {};
-      order.courierGuy.autoCreateStatus = 'PROCESSING';
-      order.courierGuy.autoCreateAttemptedAt = new Date();
-      order.courierGuy.autoCreateLastError = '';
-      await order.save();
-
       const result = await createCourierGuyShipment(order);
+
       await saveCourierGuyShipmentToOrder(order, result);
-      await pushPaypalTracking(order);
+
+      order.courierGuy.autoCreateNextAttemptAt = null;
+
+      await order.save();
 
       try {
         await sendOrderProcessingEmail(order);
       } catch (emailError) {
-        console.warn('[admin-courier-guy] processing email failed:', emailError.message);
+        console.warn(
+          '[admin-courier-guy] processing email failed:',
+          emailError?.message || String(emailError),
+        );
       }
 
       await logAdminAction(req, {
         action: 'shipping.courier_guy.create_shipment',
+
         entityType: 'order',
         entityId: String(order._id),
         status: 'success',
         before,
         after: order.toObject(),
+
         meta: {
           orderId: order.orderId,
           shipmentId: order.courierGuy?.shipmentId,
+
           serviceLevelId: order.courierGuy?.serviceLevelId,
+
+          serviceCode: order.courierGuy?.serviceCode,
         },
       });
 
       req.flash('success', `Courier Guy shipment created for order ${order.orderId}.`);
     } catch (error) {
       order.courierGuy = order.courierGuy || {};
+
       order.courierGuy.autoCreateStatus = 'FAILED';
+
+      order.courierGuy.autoCreateNextAttemptAt = null;
+
       order.courierGuy.autoCreateLastError = String(error?.message || error).slice(0, 500);
+
       await order.save().catch(() => {});
 
       await logAdminAction(req, {
         action: 'shipping.courier_guy.create_shipment',
+
         entityType: 'order',
         entityId: String(order._id),
         status: 'failure',
         before,
+
         meta: {
           orderId: order.orderId,
           code: error?.code || '',
+
           error: String(error?.message || error).slice(0, 500),
-          shiplogic: error?.shiplogic || null,
         },
       });
 
@@ -231,6 +385,8 @@ router.post(
         documents,
       });
 
+      await pushPaypalTracking(order);
+
       await logAdminAction(req, {
         action: 'shipping.courier_guy.refresh_tracking',
         entityType: 'order',
@@ -243,7 +399,26 @@ router.post(
         },
       });
 
-      req.flash('success', `Tracking refreshed for order ${order.orderId}.`);
+      const documentErrors = Array.isArray(documents?.errors) ? documents.errors : [];
+
+      if (documentErrors.length) {
+        const documentMessage = documentErrors
+          .map((item) => {
+            return `${item.type}: ${item.message}`;
+          })
+          .join(' | ')
+          .slice(0, 700);
+
+        req.flash(
+          'warning',
+          `Tracking refreshed, but Courier Guy documents are not available: ${documentMessage}`,
+        );
+      } else {
+        req.flash(
+          'success',
+          `Tracking and Courier Guy documents refreshed for order ${order.orderId}.`,
+        );
+      }
     } catch (error) {
       await logAdminAction(req, {
         action: 'shipping.courier_guy.refresh_tracking',
@@ -261,6 +436,123 @@ router.post(
     }
 
     return res.redirect('/admin/courier-guy');
+  },
+);
+
+router.get(
+  '/admin/courier-guy/:id/sticker.zpl',
+  ...guards,
+  requireAdminPermission('shipping.labels.manage'),
+  async (req, res) => {
+    const order = await findOrder(req.params.id);
+
+    if (!order) {
+      req.flash('error', 'Order not found.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    if (String(order.shippingProvider || '').toUpperCase() !== 'COURIER_GUY') {
+      req.flash('error', 'This order did not select The Courier Guy.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    const shipmentId = String(order?.courierGuy?.shipmentId || '').trim();
+
+    if (!shipmentId) {
+      req.flash('error', 'This order does not have a Courier Guy shipment yet.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    try {
+      let stickerZpl = String(order?.courierGuy?.stickerZpl || '');
+
+      if (!stickerZpl.trim()) {
+        const documents = await getCourierGuyDocuments(shipmentId);
+
+        stickerZpl = String(documents?.stickerZpl || '');
+
+        if (!stickerZpl.trim()) {
+          const errors = Array.isArray(documents?.errors) ? documents.errors : [];
+
+          const message = errors
+            .map((item) => {
+              return String(item?.message || '').trim();
+            })
+            .filter(Boolean)
+            .join(' | ');
+
+          throw new Error(message || 'Courier Guy did not return printable sticker ZPL.');
+        }
+
+        order.courierGuy = order.courierGuy || {};
+
+        order.courierGuy.stickerFormat = 'zpl';
+
+        order.courierGuy.stickerParcels = Array.isArray(documents.stickerParcels)
+          ? documents.stickerParcels
+          : [];
+
+        order.courierGuy.stickerZpl = stickerZpl;
+
+        order.courierGuy.stickerGeneratedAt = new Date();
+
+        order.courierGuy.documentLastError = '';
+
+        await order.save();
+      }
+
+      const safeOrderId = String(order.orderId || order._id || 'courier-guy')
+        .replace(/[^a-zA-Z0-9_-]/g, '-')
+        .slice(0, 100);
+
+      await logAdminAction(req, {
+        action: 'shipping.courier_guy.download_sticker',
+        entityType: 'order',
+        entityId: String(order._id),
+        status: 'success',
+
+        meta: {
+          orderId: order.orderId,
+          shipmentId,
+          format: 'zpl',
+        },
+      });
+
+      res.setHeader('Content-Type', 'application/zpl; charset=utf-8');
+
+      res.setHeader('Content-Disposition', `attachment; filename="courier-guy-${safeOrderId}.zpl"`);
+
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+
+      return res.status(200).send(stickerZpl);
+    } catch (error) {
+      order.courierGuy = order.courierGuy || {};
+
+      order.courierGuy.documentLastError = String(error?.message || error).slice(0, 1000);
+
+      await order.save().catch(() => {});
+
+      await logAdminAction(req, {
+        action: 'shipping.courier_guy.download_sticker',
+        entityType: 'order',
+        entityId: String(order._id),
+        status: 'failure',
+
+        meta: {
+          orderId: order.orderId,
+          shipmentId,
+          code: error?.code || '',
+          error: String(error?.message || error).slice(0, 500),
+        },
+      });
+
+      req.flash('error', error?.message || 'Could not download the Courier Guy sticker.');
+
+      return res.redirect('/admin/courier-guy');
+    }
   },
 );
 

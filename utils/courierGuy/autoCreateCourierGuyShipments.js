@@ -7,8 +7,6 @@ const { createCourierGuyShipment } = require('./createCourierGuyShipment');
 
 const { saveCourierGuyShipmentToOrder } = require('./saveCourierGuyShipmentToOrder');
 
-const { addTrackingToPaypalOrder } = require('../paypal/addTrackingToPaypalOrder');
-
 const { sendOrderProcessingEmail } = require('../emails/orderStatusEmail');
 
 let running = false;
@@ -18,104 +16,77 @@ function boolEnv(name, fallback = false) {
   const raw = String(process.env[name] ?? '')
     .trim()
     .toLowerCase();
+
   if (!raw) return fallback;
+
   return ['1', 'true', 'yes', 'on'].includes(raw);
 }
 
 function numEnv(name, fallback) {
   const value = Number(process.env[name]);
+
   return Number.isFinite(value) ? value : fallback;
 }
 
 function paidQuery() {
   return {
     $or: [
-      { status: { $in: ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'] } },
       {
-        paymentStatus: { $in: ['PAID', 'COMPLETED', 'CAPTURED', 'paid', 'completed', 'captured'] },
+        status: {
+          $in: ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'],
+        },
+      },
+      {
+        paymentStatus: {
+          $in: ['PAID', 'COMPLETED', 'CAPTURED', 'paid', 'completed', 'captured'],
+        },
       },
     ],
   };
 }
 
-function getLatestCaptureId(order) {
-  const directCaptureId = String(
-    order?.paypal?.captureId || ''
-  ).trim();
+function nextRetryDate() {
+  const retryMinutes = Math.max(5, Math.floor(numEnv('COURIER_GUY_AUTO_CREATE_RETRY_MINUTES', 30)));
 
-  if (directCaptureId) {
-    return directCaptureId;
-  }
-
-  const captures = Array.isArray(order?.captures)
-    ? order.captures
-    : [];
-
-  const completedCapture = [...captures]
-    .reverse()
-    .find((capture) => {
-      const status = String(capture?.status || '')
-        .trim()
-        .toUpperCase();
-
-      return (
-        capture?.captureId &&
-        ['COMPLETED', 'CAPTURED', 'PAID'].includes(status)
-      );
-    });
-
-  if (completedCapture?.captureId) {
-    return String(completedCapture.captureId).trim();
-  }
-
-  const latestCapture = [...captures]
-    .reverse()
-    .find((capture) => capture?.captureId);
-
-  return String(
-    latestCapture?.captureId || ''
-  ).trim();
+  return new Date(Date.now() + retryMinutes * 60 * 1000);
 }
 
-async function pushPaypalTracking(order) {
-  const captureId = getLatestCaptureId(order);
+async function markFailed(order, error) {
+  order.courierGuy = order.courierGuy || {};
 
-  const trackingNumber = String(order?.shippingTracking?.trackingNumber || '').trim();
+  order.courierGuy.autoCreateStatus = 'FAILED';
 
-  if (!captureId || !trackingNumber || order?.courierGuy?.paypalTrackingPushedAt) {
-    return;
-  }
+  order.courierGuy.autoCreateAttemptedAt = new Date();
 
-  try {
-    const response = await addTrackingToPaypalOrder({
-      transactionId: captureId,
-      trackingNumber,
-      carrier: 'The Courier Guy',
-      status: 'SHIPPED',
+  order.courierGuy.autoCreateNextAttemptAt = nextRetryDate();
+
+  order.courierGuy.autoCreateLastError = String(error?.message || error).slice(0, 500);
+
+  await order.save().catch((saveError) => {
+    console.error('[courier-guy-auto] failed to save failure state:', {
+      orderId: order.orderId,
+      message: saveError?.message || String(saveError),
     });
-
-    order.courierGuy.paypalTrackingPushedAt = new Date();
-    order.courierGuy.paypalTrackingLastError = '';
-    order.courierGuy.paypalTrackingLastResponse = response;
-
-    await order.save();
-  } catch (error) {
-    order.courierGuy.paypalTrackingLastError = String(error?.message || error).slice(0, 500);
-
-    await order.save();
-  }
+  });
 }
 
 async function processOrder(order) {
   try {
     const result = await createCourierGuyShipment(order);
+
     await saveCourierGuyShipmentToOrder(order, result);
-    await pushPaypalTracking(order);
+
+    order.courierGuy.autoCreateNextAttemptAt = null;
+
+    await order.save();
 
     try {
       await sendOrderProcessingEmail(order);
     } catch (emailError) {
-      console.warn('[courier-guy-auto] processing email failed:', emailError.message);
+      console.warn(
+        '[courier-guy-auto] processing email failed:',
+        emailError?.message || String(emailError),
+      );
     }
 
     console.log('[courier-guy-auto] shipment created:', {
@@ -123,34 +94,149 @@ async function processOrder(order) {
       shipmentId: order.courierGuy?.shipmentId,
     });
   } catch (error) {
-    order.courierGuy = order.courierGuy || {};
-    order.courierGuy.autoCreateStatus = 'FAILED';
-    order.courierGuy.autoCreateAttemptedAt = new Date();
-    order.courierGuy.autoCreateLastError = String(error?.message || error).slice(0, 500);
-    await order.save().catch(() => {});
+    await markFailed(order, error);
 
     console.error('[courier-guy-auto] shipment creation failed:', {
       orderId: order.orderId,
-      code: error?.code,
-      message: error?.message,
+      code: error?.code || '',
+      message: error?.message || String(error),
     });
   }
 }
 
 async function runCourierGuyAutoCreateOnce() {
-  if (running) return;
+  if (running) {
+    console.log('[courier-guy-auto] skipped overlapping run.');
+
+    return;
+  }
+
   running = true;
 
   try {
+    const now = new Date();
+
+    const staleProcessingMinutes = Math.max(
+      10,
+      Math.floor(numEnv('COURIER_GUY_AUTO_CREATE_STALE_MINUTES', 30)),
+    );
+
+    const staleBefore = new Date(now.getTime() - staleProcessingMinutes * 60 * 1000);
+
+    await Order.updateMany(
+      {
+        shippingProvider: 'COURIER_GUY',
+
+        'courierGuy.shipmentId': {
+          $in: ['', null],
+        },
+
+        'courierGuy.autoCreateStatus': 'PROCESSING',
+
+        'courierGuy.autoCreateAttemptedAt': {
+          $lte: staleBefore,
+        },
+      },
+      {
+        $set: {
+          'courierGuy.autoCreateStatus': 'FAILED',
+
+          'courierGuy.autoCreateNextAttemptAt': now,
+
+          'courierGuy.autoCreateLastError':
+            'Recovered a stale Courier Guy shipment creation lock after a server interruption.',
+        },
+      },
+    );
+
     const maxPerRun = Math.max(1, Math.floor(numEnv('COURIER_GUY_AUTO_CREATE_MAX_PER_RUN', 10)));
+
+    const maxAttempts = Math.max(1, Math.floor(numEnv('COURIER_GUY_AUTO_CREATE_MAX_ATTEMPTS', 5)));
 
     const candidates = await Order.find({
       shippingProvider: 'COURIER_GUY',
-      'courierGuy.serviceLevelId': { $exists: true, $nin: ['', null] },
-      'courierGuy.shipmentId': { $in: ['', null] },
-      'courierGuy.autoCreateEnabled': { $ne: false },
-      'courierGuy.autoCreateStatus': { $in: ['PENDING', 'FAILED', null] },
-      ...paidQuery(),
+
+      $and: [
+        paidQuery(),
+
+        {
+          $or: [
+            {
+              'courierGuy.serviceLevelId': {
+                $exists: true,
+                $nin: ['', null],
+              },
+            },
+            {
+              'courierGuy.serviceCode': {
+                $exists: true,
+                $nin: ['', null],
+              },
+            },
+          ],
+        },
+
+        {
+          $or: [
+            {
+              'courierGuy.shipmentId': {
+                $exists: false,
+              },
+            },
+            {
+              'courierGuy.shipmentId': '',
+            },
+            {
+              'courierGuy.shipmentId': null,
+            },
+          ],
+        },
+
+        {
+          'courierGuy.autoCreateEnabled': {
+            $ne: false,
+          },
+        },
+
+        {
+          'courierGuy.autoCreateStatus': {
+            $in: ['PENDING', 'FAILED', null],
+          },
+        },
+
+        {
+          $or: [
+            {
+              'courierGuy.autoCreateAttempts': {
+                $exists: false,
+              },
+            },
+            {
+              'courierGuy.autoCreateAttempts': {
+                $lt: maxAttempts,
+              },
+            },
+          ],
+        },
+
+        {
+          $or: [
+            {
+              'courierGuy.autoCreateNextAttemptAt': {
+                $exists: false,
+              },
+            },
+            {
+              'courierGuy.autoCreateNextAttemptAt': null,
+            },
+            {
+              'courierGuy.autoCreateNextAttemptAt': {
+                $lte: now,
+              },
+            },
+          ],
+        },
+      ],
     })
       .sort({ createdAt: 1 })
       .limit(maxPerRun);
@@ -159,22 +245,113 @@ async function runCourierGuyAutoCreateOnce() {
       const claimed = await Order.findOneAndUpdate(
         {
           _id: candidate._id,
+
           shippingProvider: 'COURIER_GUY',
-          'courierGuy.shipmentId': { $in: ['', null] },
-          'courierGuy.autoCreateStatus': { $in: ['PENDING', 'FAILED', null] },
+
+          $and: [
+            {
+              $or: [
+                {
+                  'courierGuy.serviceLevelId': {
+                    $exists: true,
+                    $nin: ['', null],
+                  },
+                },
+                {
+                  'courierGuy.serviceCode': {
+                    $exists: true,
+                    $nin: ['', null],
+                  },
+                },
+              ],
+            },
+
+            {
+              $or: [
+                {
+                  'courierGuy.shipmentId': {
+                    $exists: false,
+                  },
+                },
+                {
+                  'courierGuy.shipmentId': '',
+                },
+                {
+                  'courierGuy.shipmentId': null,
+                },
+              ],
+            },
+
+            {
+              'courierGuy.autoCreateEnabled': {
+                $ne: false,
+              },
+            },
+
+            {
+              'courierGuy.autoCreateStatus': {
+                $in: ['PENDING', 'FAILED', null],
+              },
+            },
+
+            {
+              $or: [
+                {
+                  'courierGuy.autoCreateAttempts': {
+                    $exists: false,
+                  },
+                },
+                {
+                  'courierGuy.autoCreateAttempts': {
+                    $lt: maxAttempts,
+                  },
+                },
+              ],
+            },
+
+            {
+              $or: [
+                {
+                  'courierGuy.autoCreateNextAttemptAt': {
+                    $exists: false,
+                  },
+                },
+                {
+                  'courierGuy.autoCreateNextAttemptAt': null,
+                },
+                {
+                  'courierGuy.autoCreateNextAttemptAt': {
+                    $lte: now,
+                  },
+                },
+              ],
+            },
+          ],
         },
         {
           $set: {
             'courierGuy.autoCreateStatus': 'PROCESSING',
-            'courierGuy.autoCreateAttemptedAt': new Date(),
+
+            'courierGuy.autoCreateAttemptedAt': now,
+
             'courierGuy.autoCreateLastError': '',
           },
+
+          $inc: {
+            'courierGuy.autoCreateAttempts': 1,
+          },
         },
-        { new: true },
+        {
+          new: true,
+        },
       );
 
-      if (claimed) await processOrder(claimed);
+      if (claimed) {
+        await processOrder(claimed);
+      }
     }
+  } catch (error) {
+    console.error('[courier-guy-auto] worker run failed:', error?.stack || error?.message || error);
   } finally {
     running = false;
   }
@@ -185,6 +362,13 @@ function startCourierGuyAutoCreateWorker() {
 
   if (!enabled) {
     console.log('[courier-guy-auto] disabled.');
+
+    return;
+  }
+
+  if (timer) {
+    console.warn('[courier-guy-auto] worker already started.');
+
     return;
   }
 
@@ -192,11 +376,13 @@ function startCourierGuyAutoCreateWorker() {
 
   console.log(`[courier-guy-auto] enabled. interval=${intervalMinutes}m`);
 
-  setTimeout(() => {
+  const initialTimer = setTimeout(() => {
     runCourierGuyAutoCreateOnce().catch((error) => {
       console.error('[courier-guy-auto] initial run failed:', error);
     });
   }, 15000);
+
+  initialTimer.unref?.();
 
   timer = setInterval(
     () => {

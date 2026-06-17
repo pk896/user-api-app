@@ -84,6 +84,9 @@ async function createCourierGuyShipment(order) {
   // A document failure must not mark the successfully-created
   // shipment as failed.
   let documents = {
+    format: 'zpl',
+    stickerParcels: [],
+    stickerZpl: '',
     waybillUrl: '',
     stickerUrl: '',
     waybillResponse: null,
@@ -101,10 +104,11 @@ async function createCourierGuyShipment(order) {
     });
   }
 
+  // The official Courier Guy sticker endpoint returns ZPL text,
+  // not a browser URL. The ZPL is saved separately on the order.
   shipment.waybillUrl = documents.waybillUrl || shipment.waybillUrl || '';
 
   shipment.stickerUrl = documents.stickerUrl || shipment.stickerUrl || '';
-
   return {
     reused: false,
     shipment,

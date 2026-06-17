@@ -10,9 +10,7 @@ function clean(value, max = 255) {
 function normalizeCountry(value) {
   const country = clean(value, 2).toUpperCase();
 
-  return /^[A-Z]{2}$/.test(country)
-    ? country
-    : '';
+  return /^[A-Z]{2}$/.test(country) ? country : '';
 }
 
 function buildCourierGuyDeliveryAddress(shippingInput) {
@@ -36,6 +34,10 @@ function buildCourierGuyDeliveryAddress(shippingInput) {
     missing.push('shipping.address.address_line_1');
   }
 
+  if (!result.local_area) {
+    missing.push('shipping.address.address_line_2/suburb');
+  }
+
   if (!result.city) {
     missing.push('shipping.address.admin_area_2');
   }
@@ -54,7 +56,7 @@ function buildCourierGuyDeliveryAddress(shippingInput) {
 
   if (missing.length) {
     const error = new Error(
-      `Delivery address is missing Courier Guy fields: ${missing.join(', ')}`
+      `Delivery address is missing Courier Guy fields: ${missing.join(', ')}`,
     );
 
     error.code = 'COURIER_GUY_DELIVERY_ADDRESS_INCOMPLETE';
@@ -81,13 +83,13 @@ function buildCourierGuyDeliveryContact(shippingInput) {
     missing.push('shipping.fullName');
   }
 
-  if (!contact.mobile_number && !contact.email) {
-    missing.push('shipping.phone or shipping.email');
+  if (!contact.mobile_number) {
+    missing.push('shipping.phone');
   }
 
   if (missing.length) {
     const error = new Error(
-      `Delivery contact is missing Courier Guy fields: ${missing.join(', ')}`
+      `Delivery contact is missing Courier Guy fields: ${missing.join(', ')}`,
     );
 
     error.code = 'COURIER_GUY_DELIVERY_CONTACT_INCOMPLETE';

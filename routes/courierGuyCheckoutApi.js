@@ -75,7 +75,13 @@ function shippingInputFromRequest(req) {
   );
 
   const line2 = normalizeText(
-    source.address_line_2 || source.line2 || source.street2 || source.address2,
+    source.suburb ||
+      source.local_area ||
+      source.localArea ||
+      source.address_line_2 ||
+      source.line2 ||
+      source.street2 ||
+      source.address2,
     300,
   );
 
@@ -92,6 +98,7 @@ function shippingInputFromRequest(req) {
   if (!fullName) missing.push('full name');
   if (!phone) missing.push('phone');
   if (!line1) missing.push('street address');
+  if (!line2) missing.push('suburb / local area');
   if (!city) missing.push('city');
   if (!state) missing.push('province/state');
   if (!postalCode) missing.push('postal code');

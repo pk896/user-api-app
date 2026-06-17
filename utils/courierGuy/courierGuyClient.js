@@ -3,9 +3,7 @@
 
 const { fetch } = require('undici');
 
-const {
-  requireCourierGuyConfig,
-} = require('./courierGuyConfig');
+const { requireCourierGuyConfig } = require('./courierGuyConfig');
 
 function safeJson(value) {
   try {
@@ -32,10 +30,7 @@ function safeErrorMessage(data, status) {
     return safeJson(data.errors).slice(0, 1500);
   }
 
-  if (
-    data?.errors &&
-    typeof data.errors === 'object'
-  ) {
+  if (data?.errors && typeof data.errors === 'object') {
     return safeJson(data.errors).slice(0, 1500);
   }
 
@@ -43,24 +38,15 @@ function safeErrorMessage(data, status) {
     return safeJson(data.validation_errors).slice(0, 1500);
   }
 
-  if (
-    data?.validation_errors &&
-    typeof data.validation_errors === 'object'
-  ) {
+  if (data?.validation_errors && typeof data.validation_errors === 'object') {
     return safeJson(data.validation_errors).slice(0, 1500);
   }
 
-  if (
-    data?.message &&
-    typeof data.message === 'object'
-  ) {
+  if (data?.message && typeof data.message === 'object') {
     return safeJson(data.message).slice(0, 1500);
   }
 
-  if (
-    data?.detail &&
-    typeof data.detail === 'object'
-  ) {
+  if (data?.detail && typeof data.detail === 'object') {
     return safeJson(data.detail).slice(0, 1500);
   }
 
@@ -68,26 +54,14 @@ function safeErrorMessage(data, status) {
     return data.raw.trim().slice(0, 1500);
   }
 
-  if (
-    data &&
-    typeof data === 'object' &&
-    Object.keys(data).length
-  ) {
+  if (data && typeof data === 'object' && Object.keys(data).length) {
     return safeJson(data).slice(0, 1500);
   }
 
   return `Shiplogic returned HTTP ${status}.`;
 }
 
-async function courierGuyRequest(
-  path,
-  {
-    method = 'GET',
-    body,
-    timeoutMs,
-    headers = {},
-  } = {}
-) {
+async function courierGuyRequest(path, { method = 'GET', body, timeoutMs, headers = {} } = {}) {
   const config = requireCourierGuyConfig();
 
   const requestTimeout = Number.isFinite(Number(timeoutMs))
@@ -105,37 +79,27 @@ async function courierGuyRequest(
   }, requestTimeout);
 
   try {
-    const response = await fetch(
-      `${config.baseUrl}${normalizedPath}`,
-      {
-        method: String(method || 'GET').toUpperCase(),
+    const response = await fetch(`${config.baseUrl}${normalizedPath}`, {
+      method: String(method || 'GET').toUpperCase(),
 
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          ...headers,
-        },
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...headers,
+      },
 
-        body:
-          body === undefined || body === null
-            ? undefined
-            : JSON.stringify(body),
+      body: body === undefined || body === null ? undefined : JSON.stringify(body),
 
-        signal: controller.signal,
-      }
-    );
+      signal: controller.signal,
+    });
 
-    const responseText = await response
-      .text()
-      .catch(() => '');
+    const responseText = await response.text().catch(() => '');
 
     let data = {};
 
     try {
-      data = responseText
-        ? JSON.parse(responseText)
-        : {};
+      data = responseText ? JSON.parse(responseText) : {};
     } catch {
       data = {
         raw: responseText.slice(0, 3000),
@@ -143,25 +107,16 @@ async function courierGuyRequest(
     }
 
     if (!response.ok) {
-      const requestMethod = String(
-        method || 'GET'
-      ).toUpperCase();
+      const requestMethod = String(method || 'GET').toUpperCase();
 
-      const errorMessage = safeErrorMessage(
-        data,
-        response.status
-      );
+      const errorMessage = safeErrorMessage(data, response.status);
 
-      console.error(
-        '[Courier Guy API rejected request]',
-        {
-          method: requestMethod,
-          path: normalizedPath,
-          status: response.status,
-          message: errorMessage,
-          response: data,
-        }
-      );
+      console.error('[Courier Guy API rejected request]', {
+        method: requestMethod,
+        path: normalizedPath,
+        status: response.status,
+        message: errorMessage,
+      });
 
       const error = new Error(errorMessage);
 
@@ -188,9 +143,7 @@ async function courierGuyRequest(
         .toLowerCase()
         .includes('aborted')
     ) {
-      const timeoutError = new Error(
-        'The Courier Guy request timed out.'
-      );
+      const timeoutError = new Error('The Courier Guy request timed out.');
 
       timeoutError.code = 'COURIER_GUY_TIMEOUT';
       timeoutError.status = 504;
