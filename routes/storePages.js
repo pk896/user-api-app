@@ -18,8 +18,13 @@ const sharp = require('sharp');
 const http = require('http');
 const https = require('https');
 
-const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
-const APP_URL = String(process.env.APP_URL || 'http://localhost:3000').trim().replace(/\/+$/, '');
+const BASE_CURRENCY =
+  String(process.env.BASE_CURRENCY || '')
+    .trim()
+    .toUpperCase() || 'USD';
+const APP_URL = String(process.env.APP_URL || 'http://localhost:3000')
+  .trim()
+  .replace(/\/+$/, '');
 const VAT_RATE = Number(process.env.VAT_RATE || 0.15);
 
 function mapStoreProduct(p) {
@@ -168,13 +173,11 @@ function mapShopMainBanner(banner, product) {
     productName: mappedProduct.name,
     active: !!banner.active,
   };
-}    
+}
 
 async function getFeaturedProducts(limit, excludeCustomId = null) {
   const safeLimit = Number(limit || 0) > 0 ? Number(limit) : 4;
-  const excludeFilter = excludeCustomId
-    ? { customId: { $ne: excludeCustomId } }
-    : {};
+  const excludeFilter = excludeCustomId ? { customId: { $ne: excludeCustomId } } : {};
 
   const pickedIds = new Set();
   const results = [];
@@ -212,10 +215,7 @@ async function getFeaturedProducts(limit, excludeCustomId = null) {
 
   await addBatch({
     isPopular: true,
-    $or: [
-      { isOnSale: true },
-      { isNewItem: true },
-    ],
+    $or: [{ isOnSale: true }, { isNewItem: true }],
   });
 
   await addBatch({
@@ -250,7 +250,7 @@ function storeMoney(amount) {
       style: 'currency',
       currency: BASE_CURRENCY,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      maximumFractionDigits: 2,
     }).format(n);
 
     if (BASE_CURRENCY === 'ZAR') {
@@ -289,7 +289,10 @@ function fitText(value, maxLength) {
 }
 
 function svgTextLines(value, maxLength, maxLines) {
-  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  const words = String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   const lines = [];
   let currentLine = '';
 
@@ -328,11 +331,13 @@ function svgTextLines(value, maxLength, maxLines) {
 }
 
 function renderSvgTextLines(lines, x, firstY, fontSize, lineGap, color, weight) {
-  return lines.map((line, index) => {
-    const y = firstY + (index * lineGap);
+  return lines
+    .map((line, index) => {
+      const y = firstY + index * lineGap;
 
-    return `<text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${color}">${xmlSafe(line)}</text>`;
-  }).join('');
+      return `<text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${color}">${xmlSafe(line)}</text>`;
+    })
+    .join('');
 }
 
 function downloadImageBuffer(url) {
@@ -398,10 +403,7 @@ router.get('/store', async (req, res) => {
       ];
     }
 
-    const allProductsRaw = await Product.find(baseQuery)
-      .sort({ createdAt: -1 })
-      .limit(8)
-      .lean();
+    const allProductsRaw = await Product.find(baseQuery).sort({ createdAt: -1 }).limit(8).lean();
 
     const newArrivalsRaw = await Product.find(baseQuery)
       .sort({ createdAt: -1, _id: -1 })
@@ -520,7 +522,7 @@ router.get('/store', async (req, res) => {
 
     res.render('store/index', {
       layout: 'layouts/store',
-      title: 'Unicoporate Store',
+      title: 'Kasyora Store',
       allProducts,
       newArrivals,
       featuredProducts,
@@ -541,7 +543,7 @@ router.get('/store', async (req, res) => {
     console.error('❌ store index error:', err);
     res.render('store/index', {
       layout: 'layouts/store',
-      title: 'Unicoporate Store',
+      title: 'Kasyora Store',
       allProducts: [],
       newArrivals: [],
       featuredProducts: [],
@@ -801,7 +803,7 @@ router.get('/store/product/:id/share-image', async (req, res) => {
       ? await sharp(productImageBuffer)
           .resize(520, 520, {
             fit: 'contain',
-            background: '#ffffff'
+            background: '#ffffff',
           })
           .png()
           .toBuffer()
@@ -810,8 +812,8 @@ router.get('/store/product/:id/share-image', async (req, res) => {
             width: 520,
             height: 520,
             channels: 4,
-            background: '#ffffff'
-          }
+            background: '#ffffff',
+          },
         })
           .png()
           .toBuffer();
@@ -823,7 +825,7 @@ router.get('/store/product/:id/share-image', async (req, res) => {
         <rect x="40" y="40" width="1120" height="550" rx="36" fill="none" stroke="#7C3AED" stroke-width="8"/>
         <rect x="80" y="80" width="520" height="470" rx="28" fill="#ffffff"/>
         <rect x="650" y="105" width="420" height="42" rx="21" fill="#22C55E"/>
-        <text x="680" y="134" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">UNICOPORATE STORE</text>
+        <text x="680" y="134" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Kasyora STORE</text>
         ${renderSvgTextLines(productNameLines, 650, 215, 50, 58, '#7C3AED', 800)}
         <text x="650" y="340" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#212529">Category: ${xmlSafe(productCategory)}</text>
         <text x="650" y="410" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="#22C55E">${xmlSafe(productPrice)} incl. VAT</text>
@@ -836,18 +838,18 @@ router.get('/store/product/:id/share-image', async (req, res) => {
         {
           input: productImage,
           left: 80,
-          top: 80
-        }
+          top: 80,
+        },
       ])
       .jpeg({
         quality: 92,
-        progressive: true
+        progressive: true,
       })
       .toBuffer();
 
     res.set({
       'Content-Type': 'image/jpeg',
-      'Cache-Control': 'public, max-age=86400'
+      'Cache-Control': 'public, max-age=86400',
     });
 
     return res.send(finalImage);
@@ -907,10 +909,7 @@ router.get('/store/product/:id', async (req, res) => {
     const relatedProductsRaw = await Product.find({
       stock: { $gt: 0 },
       customId: { $ne: rawProduct.customId },
-      $or: [
-        { category: rawProduct.category || null },
-        { type: rawProduct.type || null },
-      ],
+      $or: [{ category: rawProduct.category || null }, { type: rawProduct.type || null }],
     })
       .sort({ createdAt: -1 })
       .limit(5)
@@ -932,10 +931,7 @@ router.get('/store/product/:id', async (req, res) => {
       }).lean();
 
       if (rawSidebarProduct) {
-        shopSidebarBanner = mapShopSidebarBanner(
-          shopSidebarBannerRaw,
-          rawSidebarProduct
-        );
+        shopSidebarBanner = mapShopSidebarBanner(shopSidebarBannerRaw, rawSidebarProduct);
       }
     }
 
@@ -953,7 +949,7 @@ router.get('/store/product/:id', async (req, res) => {
       product: {
         ...product,
         shareUrl: `/store/product/${product.customId}?share=${shareVersion}`,
-        shareImageUrl: `/store/product/${product.customId}/share-image?v=${shareVersion}`
+        shareImageUrl: `/store/product/${product.customId}/share-image?v=${shareVersion}`,
       },
       myRating,
       featuredSidebarProducts,
@@ -976,14 +972,12 @@ router.get('/store/cart', async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    const cartItems = Array.isArray(req.session?.cart?.items)
-      ? req.session.cart.items
-      : [];
+    const cartItems = Array.isArray(req.session?.cart?.items) ? req.session.cart.items : [];
 
     const cartSubtotal = cartItems.reduce((sum, item) => {
       const price = Number(item.price || 0);
       const quantity = Number(item.quantity || 0);
-      return sum + (price * quantity);
+      return sum + price * quantity;
     }, 0);
 
     const cartCount = cartItems.reduce((sum, item) => {
@@ -1103,9 +1097,7 @@ router.get('/store/bestseller', async (req, res) => {
     const topSellingProducts = topSellingProductsRaw.map(mapStoreProduct);
     const productListProducts = productListProductsRaw.map(mapStoreProduct);
 
-    const cardsRaw = await BestsellerCard.find({ active: true })
-      .sort({ sortOrder: 1 })
-      .lean();
+    const cardsRaw = await BestsellerCard.find({ active: true }).sort({ sortOrder: 1 }).lean();
 
     let bestsellerLeft = null;
     let bestsellerRight = null;

@@ -24,7 +24,9 @@ function textToHtml(s = '') {
  * - If html isn't provided, a simple HTML fallback is generated from text.
  */
 async function sendBuyerEmail({ to, subject, text, html, replyTo }) {
-  if (!to) {return;} // quietly skip if no recipient
+  if (!to) {
+    return;
+  } // quietly skip if no recipient
   await sendMail({
     to,
     subject,
@@ -32,7 +34,7 @@ async function sendBuyerEmail({ to, subject, text, html, replyTo }) {
     html: html || textToHtml(text || ''),
     // Optionally let buyers reply to supplier or support:
     // Prefer explicit replyTo if provided, otherwise fall back to SMTP_FROM
-    replyTo: replyTo || process.env.SMTP_FROM || 'Unicoporate <phakisingxongxela@gmail.com>',
+    replyTo: replyTo || process.env.SMTP_FROM || 'Kasyora <phakisingxongxela@gmail.com>',
   });
 }
 
@@ -66,7 +68,9 @@ async function runMatchingTypeOnly(req, res) {
 
     // Load demand from either model (historical support)
     let demand = await Demand.findById(demandId).lean();
-    if (!demand) {demand = await DemandedProduct.findById(demandId).lean();}
+    if (!demand) {
+      demand = await DemandedProduct.findById(demandId).lean();
+    }
     if (!demand) {
       console.warn('[/matches/run] demand not found by id', demandId);
       req.flash('error', 'Demand not found.');
@@ -118,7 +122,9 @@ async function runMatchingTypeOnly(req, res) {
 
     for (const p of products) {
       const supplierId = p.business || p.businessId; // tolerate both field names
-      if (!supplierId) {continue;}
+      if (!supplierId) {
+        continue;
+      }
 
       const snapshot = {
         demandTitle: demand.title || demand.productName || demand.type || dTypeRaw,
@@ -149,8 +155,11 @@ async function runMatchingTypeOnly(req, res) {
       );
 
       // count inserts reliably across Mongoose versions
-      if (resUpsert.upsertedId || resUpsert.upsertedCount > 0) {created++;}
-      else {updated++;}
+      if (resUpsert.upsertedId || resUpsert.upsertedCount > 0) {
+        created++;
+      } else {
+        updated++;
+      }
     }
 
     req.flash('success', `Matched by type "${dTypeRaw}" — ${created} new, ${updated} updated.`);
@@ -345,7 +354,7 @@ Message: ${match.supplierMessage || '—'}`,
             supplier.email ||
             supplier.contactEmail ||
             process.env.SMTP_FROM ||
-            'support@unicoporate.co.za',
+            'support@Kasyora.co.za',
         });
       } catch (e) {
         // Don’t block the flow on email failure; notification already created
@@ -402,8 +411,9 @@ router.get('/buyer/summary', requireBusiness, requireRole('buyer'), async (req, 
     const perDemandMap = new Map();
     for (const row of perDemandAgg) {
       const did = String(row._id.demandId);
-      if (!perDemandMap.has(did))
-        {perDemandMap.set(did, { demandId: did, pending: 0, accepted: 0, rejected: 0, total: 0 });}
+      if (!perDemandMap.has(did)) {
+        perDemandMap.set(did, { demandId: did, pending: 0, accepted: 0, rejected: 0, total: 0 });
+      }
       const bucket = perDemandMap.get(did);
       bucket[row._id.status] = row.count;
       bucket.total += row.count;

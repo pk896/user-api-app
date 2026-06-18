@@ -936,7 +936,9 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
   };
 
   requestStatusRows.forEach((row) => {
-    const key = String(row._id || '').trim().toLowerCase();
+    const key = String(row._id || '')
+      .trim()
+      .toLowerCase();
 
     if (!requestStatusSummary[key]) return;
 
@@ -1006,9 +1008,7 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
         .lean()
     : [];
 
-  const topSellerById = new Map(
-    topSellerDocs.map((seller) => [String(seller._id), seller]),
-  );
+  const topSellerById = new Map(topSellerDocs.map((seller) => [String(seller._id), seller]));
 
   const topRequestingSellers = topRequestingSellerRows.map((row, index) => {
     const seller = topSellerById.get(String(row._id)) || {};
@@ -1108,7 +1108,9 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
       const estimatedImportedStock = currentStock + soldStock;
 
       row.importedProducts += 1;
-      row.importedStock += Number.isFinite(estimatedImportedStock) ? estimatedImportedStock : currentStock;
+      row.importedStock += Number.isFinite(estimatedImportedStock)
+        ? estimatedImportedStock
+        : currentStock;
       row.sellerIds.add(sellerId);
 
       const importedDate = product.importedAt || product.createdAt || product.updatedAt || null;
@@ -1148,7 +1150,7 @@ async function computeSupplierWholesaleDashboardData(supplierId) {
     countries: buildLocationRanking('country'),
     provinces: buildLocationRanking('state'),
     cities: buildLocationRanking('city'),
-  };  
+  };
 
   return {
     products: activeProducts,
@@ -1826,7 +1828,7 @@ async function sendBusinessVerificationEmail(business, token, req) {
   const verifyUrl = `${baseUrl}/business/verify-email/${encodeURIComponent(token)}`;
 
   const to = business.email;
-  const subject = '✅ Verify your business email - Unicoporate';
+  const subject = '✅ Verify your business email - Kasyora';
 
   const text = [
     `Hi ${escapeHtml(business.name || 'there')},`,
@@ -3369,7 +3371,7 @@ router.get(
       const supplierAvatarUrl =
         String(supplierDoc.logoUrl || '').trim() || '/images/branding/logo-unincorporate.png';
 
-      const supportInbox = process.env.SUPPORT_INBOX || 'support@unicoporate.test';
+      const supportInbox = process.env.SUPPORT_INBOX || 'support@Kasyora.test';
 
       const mailerOk = !!(
         process.env.SENDGRID_API_KEY ||
@@ -3470,9 +3472,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
     const supplierSoldCardData = await buildSupplierSoldCardData(business._id);
     const supplierPayoutCardData = await buildSupplierPayoutCardData(business._id);
     const supplierRefundCardData = await buildSupplierRefundCardData(business._id);
-    const supplierObjectId = new mongoose.Types.ObjectId(
-      String(business._id),
-    );
+    const supplierObjectId = new mongoose.Types.ObjectId(String(business._id));
 
     // Last seven calendar days, including today.
     const stockStart = new Date();
@@ -3512,10 +3512,7 @@ router.get('/api/supplier/kpis', requireBusiness, requireVerifiedBusiness, async
         .filter((row) => {
           const historyTime = new Date(row.createdAt).getTime();
 
-          return (
-            historyTime >= dayStartTime &&
-            historyTime <= dayEndTime
-          );
+          return historyTime >= dayStartTime && historyTime <= dayEndTime;
         })
         .reduce((sum, row) => {
           return sum + safeSupplierDashboardNumber(row.delta);

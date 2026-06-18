@@ -25,7 +25,7 @@ function buildCourierGuyAddressFromWarehouse(warehouse) {
 
   const result = {
     type: 'business',
-    company: clean(warehouse.name || 'Unicoporate', 255),
+    company: clean(warehouse.name || 'Kasyora', 255),
     street_address: clean(address.street1, 255),
     local_area: clean(address.street2, 255),
     city: clean(address.city, 120),

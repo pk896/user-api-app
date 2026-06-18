@@ -21,7 +21,9 @@ function sanitizeBaseUrl(baseUrl) {
 }
 
 function normalizeStatus(s) {
-  const v = String(s || 'pending').trim().toLowerCase();
+  const v = String(s || 'pending')
+    .trim()
+    .toLowerCase();
   if (v === 'approved') return 'verified';
   if (['verified', 'pending', 'rejected', 'unverified'].includes(v)) return v;
   return 'pending';
@@ -132,18 +134,16 @@ function buildBusinessWelcomeVerifiedEmail(business, baseUrl) {
   const profileUrl = safeBaseUrl ? `${safeBaseUrl}/business/profile` : '';
 
   // pick primary CTA based on status
-  const primaryUrl =
-    status === 'verified' || status === 'pending' ? dashboardUrl : profileUrl;
+  const primaryUrl = status === 'verified' || status === 'pending' ? dashboardUrl : profileUrl;
 
-  const secondaryUrl =
-    status === 'verified' || status === 'pending' ? profileUrl : dashboardUrl;
+  const secondaryUrl = status === 'verified' || status === 'pending' ? profileUrl : dashboardUrl;
 
-  const subject = `🎉 Welcome to Unicoporate.com — Business Account Created`;
+  const subject = `🎉 Welcome to Kasyora.com — Business Account Created`;
 
   const businessId = b.internalBusinessId || b._id || '—';
 
   const text = `
-Welcome to Unicoporate.com!
+Welcome to Kasyora.com!
 
 Your business account has been created and your email is verified.
 
@@ -197,7 +197,7 @@ If you didn’t create this account, contact support immediately.
     `
     : `
       <div style="margin-top:16px;color:${brand.slate};font-size:13px;line-height:1.6;">
-        Log in to Unicoporate.com to open your dashboard and profile.
+        Log in to Kasyora.com to open your dashboard and profile.
       </div>
     `;
 
@@ -244,7 +244,7 @@ If you didn’t create this account, contact support immediately.
             <div class="stack" style="min-width:0;">
               <div style="display:inline-block;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.22);border-radius:12px;padding:10px 14px;">
                 <div style="color:#fff;font-weight:900;letter-spacing:-0.3px;font-size:16px;">
-                  Unicoporate.com
+                  Kasyora.com
                 </div>
                 <div style="color:rgba(255,255,255,0.92);font-size:12px;margin-top:2px;">
                   Business account created
@@ -340,7 +340,7 @@ If you didn’t create this account, contact support immediately.
       <tr>
         <td class="px" style="padding:18px 28px;background:${brand.black};text-align:center;">
           <div style="color:#94A3B8;font-size:11px;line-height:1.6;">
-            © ${new Date().getFullYear()} Unicoporate.com. All rights reserved.
+            © ${new Date().getFullYear()} Kasyora.com. All rights reserved.
             <br/>Sent to ${esc(b.email || 'you')}.
           </div>
         </td>

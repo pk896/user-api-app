@@ -10,7 +10,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const { sendMail, _FROM } = require('../utils/mailer');
 const ResetToken = require('../models/ResetToken');
-const requireAdmin = require('../middleware/requireAdmin')
+const requireAdmin = require('../middleware/requireAdmin');
 
 // Optional wishlist model (if you have it)
 let Wishlist = null;
@@ -96,7 +96,7 @@ function loginUserIntoSession(req, userDoc, remember, cb) {
       _id: userDoc._id.toString(),
       name: userDoc.name,
       email: userDoc.email,
-      username: userDoc.username || null,          // ✅ add username to session
+      username: userDoc.username || null, // ✅ add username to session
       createdAt: userDoc.createdAt,
       provider: userDoc.provider || 'local',
       isEmailVerified: !!userDoc.isEmailVerified,
@@ -129,14 +129,14 @@ function maskEmail(email = '') {
 function resolveCurrency(order, capture) {
   return String(
     (capture?.amount && (capture.amount.currency_code || capture.amount.currency)) ||
-    (order?.amount && (order.amount.currency_code || order.amount.currency)) ||
-    order?.currency ||
-    order?.total?.currency ||
-    order?.breakdown?.itemTotal?.currency ||
-    order?.breakdown?.taxTotal?.currency ||
-    order?.breakdown?.shipping?.currency ||
-    process.env.BASE_CURRENCY ||
-    'USD'
+      (order?.amount && (order.amount.currency_code || order.amount.currency)) ||
+      order?.currency ||
+      order?.total?.currency ||
+      order?.breakdown?.itemTotal?.currency ||
+      order?.breakdown?.taxTotal?.currency ||
+      order?.breakdown?.shipping?.currency ||
+      process.env.BASE_CURRENCY ||
+      'USD',
   ).toUpperCase();
 }
 
@@ -162,14 +162,7 @@ router.post('/signup', async (req, res) => {
   try {
     const { name, email, username, password, confirm, age, confirm16 } = req.body || {};
 
-    if (
-      !name ||
-      !email ||
-      !username ||
-      !password ||
-      !confirm ||
-      typeof age === 'undefined'
-    ) {
+    if (!name || !email || !username || !password || !confirm || typeof age === 'undefined') {
       req.flash('error', 'All fields are required.');
       return res.redirect('/users/signup');
     }
@@ -215,10 +208,7 @@ router.post('/signup', async (req, res) => {
 
     const nAge = Number(age);
     if (!Number.isInteger(nAge) || nAge < 16 || nAge > 120) {
-      req.flash(
-        'error',
-        'You must be at least 16 years old (valid whole number between 16-120).',
-      );
+      req.flash('error', 'You must be at least 16 years old (valid whole number between 16-120).');
       return res.redirect('/users/signup');
     }
     if (!confirm16) {
@@ -240,10 +230,7 @@ router.post('/signup', async (req, res) => {
             'This email is already registered with Google sign-in. Please log in with Google.',
           );
         } else {
-          req.flash(
-            'error',
-            'Email already registered. You can log in or use Google.',
-          );
+          req.flash('error', 'Email already registered. You can log in or use Google.');
         }
         return res.redirect('/users/signup');
       }
@@ -281,11 +268,11 @@ router.post('/signup', async (req, res) => {
 
     // ✉️ Send verification email (using your mailer)
     try {
-      const subject = 'Verify your Unicoporate account';
+      const subject = 'Verify your Kasyora account';
       const text = [
         `Hi ${cleanName || 'there'},`,
         '',
-        'Thank you for creating a Unicoporate account.',
+        'Thank you for creating a Kasyora account.',
         'Please confirm that this is your real email address by opening the link below:',
         '',
         verifyUrl,
@@ -297,7 +284,7 @@ router.post('/signup', async (req, res) => {
 
       const html = `
         <p>Hi ${cleanName || 'there'},</p>
-        <p>Thank you for creating a <strong>Unicoporate</strong> account.</p>
+        <p>Thank you for creating a <strong>Kasyora</strong> account.</p>
         <p>Please confirm that this is your real email address by clicking the button below:</p>
         <p style="margin:16px 0;">
           <a href="${verifyUrl}"
@@ -588,7 +575,7 @@ router.post('/verify-email/resend', ensureUser, async (req, res) => {
       emailVerificationToken,
     )}`;
 
-    const subject = 'Verify your Unicoporate account';
+    const subject = 'Verify your Kasyora account';
     const text = [
       `Hi ${user.name || 'there'},`,
       '',
@@ -664,11 +651,11 @@ router.get('/dashboard', ensureVerifiedUser, async (req, res) => {
 
     // Get orders with shippingTracking data
     const orders = await Order.find({ userId: uid }).sort({ createdAt: -1 }).limit(10).lean();
-    
+
     // Extract shipments from orders that have tracking info
     const shipments = orders
-      .filter(order => order.shippingTracking && order.shippingTracking.trackingNumber)
-      .map(order => ({
+      .filter((order) => order.shippingTracking && order.shippingTracking.trackingNumber)
+      .map((order) => ({
         orderId: order._id,
         status: order.shippingTracking.status || 'PENDING',
         carrier: order.shippingTracking.carrierLabel || order.shippingTracking.carrier,
@@ -678,7 +665,7 @@ router.get('/dashboard', ensureVerifiedUser, async (req, res) => {
         shippedAt: order.shippingTracking.shippedAt,
         deliveredAt: order.shippingTracking.deliveredAt,
         // For convenience, include the order status too
-        orderStatus: order.status
+        orderStatus: order.status,
       }))
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
       .slice(0, 5); // Limit to 5 most recent
@@ -695,31 +682,28 @@ router.get('/dashboard', ensureVerifiedUser, async (req, res) => {
 
     // Calculate metrics from the orders array
     const totalOrders = orders.length;
-    const paidOrders = orders.filter(order => 
-      PAID_STATES.includes(order.status)
-    ).length;
+    const paidOrders = orders.filter((order) => PAID_STATES.includes(order.status)).length;
 
     // Calculate total spent
     const totalSpent = orders.reduce((sum, order) => {
       try {
         let amountValue = 0;
-        
+
         if (order.breakdown?.grandTotal) {
           amountValue = Number(order.breakdown.grandTotal);
-        }
-        else if (order.amount?.value) {
+        } else if (order.amount?.value) {
           amountValue = Number(order.amount.value);
-        }
-        else if (order.breakdown) {
-          const itemTotal = Number(order.breakdown.itemTotal?.value || order.breakdown.subTotal || 0);
+        } else if (order.breakdown) {
+          const itemTotal = Number(
+            order.breakdown.itemTotal?.value || order.breakdown.subTotal || 0,
+          );
           const taxTotal = Number(order.breakdown.taxTotal?.value || order.breakdown.vatTotal || 0);
           const shipping = Number(order.breakdown.shipping?.value || order.breakdown.delivery || 0);
           amountValue = itemTotal + taxTotal + shipping;
-        }
-        else if (order.purchase_units?.[0]?.amount?.value) {
+        } else if (order.purchase_units?.[0]?.amount?.value) {
           amountValue = Number(order.purchase_units[0].amount.value);
         }
-        
+
         return sum + amountValue;
       } catch (error) {
         console.error(`Error calculating amount for order ${order._id}:`, error);
@@ -738,16 +722,15 @@ router.get('/dashboard', ensureVerifiedUser, async (req, res) => {
       orders: orders,
       shipments: shipments,
       wishlistItems: wishlistItems,
-      kpis: { 
-        totalOrders, 
-        paidOrders, 
-        totalSpent 
+      kpis: {
+        totalOrders,
+        paidOrders,
+        totalSpent,
       },
       // Flash messages if any
       success: req.flash('success'),
-      error: req.flash('error')
+      error: req.flash('error'),
     });
-
   } catch (error) {
     console.error('Dashboard error:', error);
     req.flash('error', 'Unable to load dashboard. Please try again.');
@@ -877,10 +860,7 @@ router.get('/payments', ensureVerifiedUser, async (req, res) => {
     } else if (o?.payment && Array.isArray(o.payment.captures)) {
       o.payment.captures.forEach(addCapture);
     } else if (o?.paypalCaptureId) {
-      const rawValue =
-        (o.amount && (o.amount.total || o.amount.value)) ||
-        o.total ||
-        0;
+      const rawValue = (o.amount && (o.amount.total || o.amount.value)) || o.total || 0;
       const currency = resolveCurrency(o);
       const valueNum = Number(rawValue) || 0;
 
@@ -932,7 +912,7 @@ router.get('/username/forgot', (req, res) => {
     scripts: pageScripts(nonce),
     user: req.session.user || null,
     business: req.session.business || null,
-    messages: req.flash(),          // so your EJS can use messages.error/messages.success
+    messages: req.flash(), // so your EJS can use messages.error/messages.success
     email,
     nonce,
   });
@@ -941,7 +921,9 @@ router.get('/username/forgot', (req, res) => {
 // POST /users/username/forgot
 router.post('/username/forgot', async (req, res) => {
   try {
-    const rawEmail = String(req.body?.email || '').toLowerCase().trim();
+    const rawEmail = String(req.body?.email || '')
+      .toLowerCase()
+      .trim();
 
     // basic validation (do NOT reveal if email exists)
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
@@ -957,7 +939,7 @@ router.post('/username/forgot', async (req, res) => {
     // If user exists AND has a username, email it.
     // If user exists but no username (rare), email guidance.
     if (user) {
-      const appName = 'Unicoporate';
+      const appName = 'Kasyora';
 
       let subject = `Your ${appName} username`;
       let text = '';
@@ -1022,10 +1004,10 @@ router.post('/username/forgot', async (req, res) => {
         });
       } catch (mailErr) {
         console.error('[POST /users/username/forgot] email failed FULL:', mailErr);
-  console.error('[POST /users/username/forgot] email failed MSG:', mailErr?.message);
-  console.error('[POST /users/username/forgot] email failed RESPONSE:', mailErr?.response);
-  console.error('[POST /users/username/forgot] email failed BODY:', mailErr?.response?.body);
-  // still respond same (don’t reveal anything)
+        console.error('[POST /users/username/forgot] email failed MSG:', mailErr?.message);
+        console.error('[POST /users/username/forgot] email failed RESPONSE:', mailErr?.response);
+        console.error('[POST /users/username/forgot] email failed BODY:', mailErr?.response?.body);
+        // still respond same (don’t reveal anything)
         // console.error('[POST /users/username/forgot] email failed:', mailErr);
         // still respond same (don’t reveal anything)
       }
@@ -1092,13 +1074,13 @@ router.post('/password/forgot', async (req, res) => {
 
       await ResetToken.create({
         userId: user._id,
-        token,        // store the SAME token we send in the email
+        token, // store the SAME token we send in the email
         expiresAt,
       });
 
       const resetUrl = `${appUrl}/users/password/reset/${encodeURIComponent(token)}`;
 
-      const subject = 'Reset your Unicoporate.com password';
+      const subject = 'Reset your Kasyora.com password';
       const text = [
         `Hi ${user.name || 'there'},`,
         '',
@@ -1113,7 +1095,7 @@ router.post('/password/forgot', async (req, res) => {
 
       const html = `
         <p>Hi ${user.name || 'there'},</p>
-        <p>We received a request to reset the password for your <strong>Unicoporate.com</strong> account.</p>
+        <p>We received a request to reset the password for your <strong>Kasyora.com</strong> account.</p>
         <p>If you made this request, click the button below to set a new password:</p>
         <p style="margin:16px 0;">
           <a href="${resetUrl}"
@@ -1284,10 +1266,7 @@ router.post('/change-password', ensureUser, async (req, res) => {
 
     // If user is Google-only with no password, block this
     if (user.provider === 'google' && !user.passwordHash) {
-      req.flash(
-        'error',
-        'This account uses Google sign in. You cannot change a password here.',
-      );
+      req.flash('error', 'This account uses Google sign in. You cannot change a password here.');
       return res.redirect('/users/change-password');
     }
 
@@ -1414,8 +1393,12 @@ router.post('/profile/edit', ensureUser, async (req, res) => {
 
     if (updated) {
       req.session.user.name = updated.name;
-      if (updated.email) { req.session.user.email = updated.email; }
-      if (updated.username) { req.session.user.username = updated.username; }
+      if (updated.email) {
+        req.session.user.email = updated.email;
+      }
+      if (updated.username) {
+        req.session.user.username = updated.username;
+      }
     }
 
     req.flash('success', 'Profile updated.');
@@ -1466,7 +1449,7 @@ router.post('/profile/delete', ensureUser, async (req, res) => {
 router.get('/about', (req, res) => {
   const { nonce = '' } = res.locals;
   res.render('about', {
-    title: 'About Unicoporate',
+    title: 'About Kasyora',
     active: 'about',
     styles: pageStyles(nonce),
     scripts: pageScripts(nonce),
@@ -1580,14 +1563,14 @@ router.post('/debug/accounts/delete-email', requireAdmin, requireDevMode, async 
 });
 
 // http://localhost:3000/users/debug/email/test?to=YOUR_EMAIL@gmail.com
-router.get('/debug/email/test',requireAdmin, requireDevMode, async (req, res) => {
+router.get('/debug/email/test', requireAdmin, requireDevMode, async (req, res) => {
   try {
     const to = String(req.query.to || '').trim();
     if (!to) return res.status(400).send('Use ?to=you@example.com');
 
     await sendMail({
       to,
-      subject: 'Test email from Unicoporate',
+      subject: 'Test email from Kasyora',
       text: 'If you got this, sendMail works.',
       html: '<p>If you got this, <b>sendMail</b> works.</p>',
     });

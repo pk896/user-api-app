@@ -53,9 +53,7 @@ function assertMailerEnv() {
     const from = (process.env.SMTP_FROM || '').trim();
 
     if (!host || !user || !pass || !from) {
-      throw new Error(
-        'MAIL_PROVIDER=smtp but SMTP_HOST/SMTP_USER/SMTP_PASS/SMTP_FROM is missing',
-      );
+      throw new Error('MAIL_PROVIDER=smtp but SMTP_HOST/SMTP_USER/SMTP_PASS/SMTP_FROM is missing');
     }
     return;
   }
@@ -74,7 +72,7 @@ function buildOfficialNumberRejectedEmail(business, baseUrl, reason) {
   const officialNumberType = b.officialNumberType || 'OTHER';
   const safeReason = String(reason || '').trim() || 'No reason provided';
 
-  const subject = '❌ Official Number Rejected - Unicoporate.com';
+  const subject = '❌ Official Number Rejected - Kasyora.com';
 
   // ✅ TEXT = no HTML tags
   const text = `
@@ -95,7 +93,7 @@ ${profileUrlText}
 Security reminder:
 If you didn’t request this, contact support immediately.
 
-Unicoporate.com
+Kasyora.com
 `.trim();
 
   const html = `
@@ -123,7 +121,7 @@ Unicoporate.com
         <td class="px" style="padding:22px 26px;background:linear-gradient(135deg, #DC2626 0%, #0F172A 100%);">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div style="min-width:0;">
-              <div style="color:#fff;font-weight:900;font-size:16px;letter-spacing:-0.2px;">Unicoporate.com</div>
+              <div style="color:#fff;font-weight:900;font-size:16px;letter-spacing:-0.2px;">Kasyora.com</div>
               <div style="color:rgba(255,255,255,0.92);font-size:12px;margin-top:4px;">Official Number verification update</div>
             </div>
             <div style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.20);
@@ -195,7 +193,7 @@ Unicoporate.com
       <tr>
         <td class="px" style="padding:16px 26px;background:#0F172A;text-align:center;">
           <div style="color:#94A3B8;font-size:11px;line-height:1.6;">
-            © ${new Date().getFullYear()} Unicoporate.com. All rights reserved.
+            © ${new Date().getFullYear()} Kasyora.com. All rights reserved.
             <br/>Sent to ${esc(b.email || 'you')}.
           </div>
         </td>

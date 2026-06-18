@@ -136,7 +136,7 @@ const {
   PAYPAL_MODE = 'sandbox',
   BASE_CURRENCY,
   VAT_RATE = '0.15',
-  BRAND_NAME = 'Unicoporate',
+  BRAND_NAME = 'Kasyora',
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
 } = process.env;
 
@@ -165,8 +165,8 @@ const vatRate = (() => {
 })();
 
 const BRAND_NAME_N = (() => {
-  const s = String(BRAND_NAME || 'Unicoporate').trim();
-  return s.slice(0, 127) || 'Unicoporate'; // PayPal brand_name length safety
+  const s = String(BRAND_NAME || 'Kasyora').trim();
+  return s.slice(0, 127) || 'Kasyora'; // PayPal brand_name length safety
 })();
 
 const PLATFORM_FEE_BPS = (() => {
@@ -187,7 +187,7 @@ function normalizeOrigin(s) {
 
 // ✅ Single source of truth: WEB_ORIGINS env
 // Example:
-// WEB_ORIGINS="https://unicoporate.com,https://www.unicoporate.com"
+// WEB_ORIGINS="https://Kasyora.com,https://www.Kasyora.com"
 const ALLOWED_ORIGINS = String(process.env.WEB_ORIGINS || '')
   .split(',')
   .map(normalizeOrigin)

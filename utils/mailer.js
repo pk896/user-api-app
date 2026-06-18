@@ -10,7 +10,7 @@
  * REQUIRED ENV (SendGrid):
  *   MAIL_PROVIDER=sendgrid
  *   SENDGRID_API_KEY=...
- *   SMTP_FROM="Unicoporate <verified-sender@yourdomain.com>"
+ *   SMTP_FROM="Kasyora <verified-sender@yourdomain.com>"
  *
  * REQUIRED ENV (SMTP):
  *   MAIL_PROVIDER=smtp
@@ -18,7 +18,7 @@
  *   SMTP_PORT=587 (or 465)
  *   SMTP_USER=...
  *   SMTP_PASS=...
- *   SMTP_FROM="Unicoporate <your-email@yourdomain.com>"
+ *   SMTP_FROM="Kasyora <your-email@yourdomain.com>"
  *
  * OPTIONAL:
  *   MAIL_LOG_LEVEL=info   (info|debug|silent)
@@ -41,7 +41,10 @@ function getFrom() {
 }
 
 function getLogLevel() {
-  return env('MAIL_LOG_LEVEL', process.env.NODE_ENV === 'production' ? 'info' : 'debug').toLowerCase();
+  return env(
+    'MAIL_LOG_LEVEL',
+    process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  ).toLowerCase();
 }
 
 function logInfo(...args) {
@@ -64,7 +67,9 @@ function assertEnvOrThrow() {
   const from = getFrom();
 
   if (!from) {
-    throw new Error('SMTP_FROM is missing. Set SMTP_FROM to a real/verified sender (e.g. "Unicoporate <noreply@yourdomain.com>").');
+    throw new Error(
+      'SMTP_FROM is missing. Set SMTP_FROM to a real/verified sender (e.g. "Kasyora <noreply@yourdomain.com>").',
+    );
   }
 
   if (provider === 'sendgrid') {
@@ -237,7 +242,7 @@ function mailerReady() {
    ✅ Export BOTH FROM and _FROM so old code doesn't break
 ====================================================== */
 
-const FROM = getFrom() || 'Unicoporate <phakisingxongxela@gmail.com>';
+const FROM = getFrom() || 'Kasyora <phakisingxongxela@gmail.com>';
 const _FROM = FROM;
 
 // Auto init (safe)

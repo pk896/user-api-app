@@ -6,10 +6,18 @@ const { sendMail } = require('../utils/mailer');
 const router = express.Router();
 
 function dashboardPathFor(b) {
-  if (!b) { return ''; }
-  if (b.role === 'seller') { return '/business/dashboards/seller-dashboard'; }
-  if (b.role === 'supplier') { return '/business/dashboards/supplier-dashboard'; }
-  if (b.role === 'buyer') { return '/business/dashboards/buyer-dashboard'; }
+  if (!b) {
+    return '';
+  }
+  if (b.role === 'seller') {
+    return '/business/dashboards/seller-dashboard';
+  }
+  if (b.role === 'supplier') {
+    return '/business/dashboards/supplier-dashboard';
+  }
+  if (b.role === 'buyer') {
+    return '/business/dashboards/buyer-dashboard';
+  }
   return '/business/login';
 }
 
@@ -47,13 +55,16 @@ router.post('/', (req, res) => {
   const nextQs = next ? `&next=${encodeURIComponent(next)}` : '';
 
   if (hp) {
-  // Pretend success for bots
+    // Pretend success for bots
     return res.redirect(303, `/store/contact?sent=1${nextQs}#storeContactSection`);
   }
 
   if (!name || !email || !phone || !businessRole || !subject || !message) {
     req.flash('error', '⚠️ Please fill in all fields.');
-    return res.redirect(303, `/store/contact${next ? `?next=${encodeURIComponent(next)}` : ''}#storeContactSection`);
+    return res.redirect(
+      303,
+      `/store/contact${next ? `?next=${encodeURIComponent(next)}` : ''}#storeContactSection`,
+    );
   }
 
   const supportTo = process.env.SUPPORT_INBOX || process.env.SMTP_FROM;
@@ -67,7 +78,7 @@ router.post('/', (req, res) => {
     `Business Role: ${businessRole}`,
     '',
     'Message:',
-    message
+    message,
   ].join('\n');
 
   const html =
@@ -86,27 +97,27 @@ router.post('/', (req, res) => {
       html,
       replyTo: `${name} <${email}>`,
       headers: {
-        'List-Unsubscribe': `<mailto:${supportTo}?subject=unsubscribe>`
+        'List-Unsubscribe': `<mailto:${supportTo}?subject=unsubscribe>`,
       },
     }),
     ...(process.env.MAIL_ACK === '1' && email
       ? [
           sendMail({
             to: email,
-            subject: 'We received your message (Unicoporate Support)',
+            subject: 'We received your message (Kasyora Support)',
             text:
               `Hi ${name},\n\n` +
-              `Thanks for contacting Unicoporate Support. Your message has been received.\n` +
+              `Thanks for contacting Kasyora Support. Your message has been received.\n` +
               `We’ll get back to you shortly.\n\n` +
               `Subject: ${subject}\n` +
               `Business Role: ${businessRole}\n\n` +
-              `— Unicoporate Support`,
+              `— Kasyora Support`,
             html:
               `<p>Hi ${escHtml(name)},</p>` +
-              `<p>Thanks for contacting <strong>Unicoporate Support</strong>. Your message has been received. We’ll get back to you shortly.</p>` +
+              `<p>Thanks for contacting <strong>Kasyora Support</strong>. Your message has been received. We’ll get back to you shortly.</p>` +
               `<p><strong>Subject:</strong> ${escHtml(subject)}<br>` +
               `<strong>Business Role:</strong> ${escHtml(businessRole)}</p>` +
-              `<p>— Unicoporate Support</p>`,
+              `<p>— Kasyora Support</p>`,
             replyTo: process.env.SUPPORT_INBOX || undefined,
           }),
         ]
