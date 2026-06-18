@@ -9,6 +9,12 @@ function clean(value, max = 1000000) {
     .slice(0, max);
 }
 
+function sleep(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 function extractShipments(data) {
   if (Array.isArray(data)) {
     return data;
@@ -30,6 +36,10 @@ function extractShipments(data) {
     return [data.shipment];
   }
 
+  if (data?.data?.shipment && typeof data.data.shipment === 'object') {
+    return [data.data.shipment];
+  }
+
   if (data && typeof data === 'object') {
     return [data];
   }
@@ -37,23 +47,52 @@ function extractShipments(data) {
   return [];
 }
 
+function extractParcelWaybills(shipment) {
+  const source = shipment || {};
+
+  const candidates = [
+    source.parcel_waybills,
+    source.parcelWaybills,
+    source.parcels,
+    source.shipment?.parcel_waybills,
+    source.shipment?.parcelWaybills,
+    source.data?.parcel_waybills,
+    source.data?.parcelWaybills,
+  ];
+
+  return candidates.find(Array.isArray) || [];
+}
+
 function normalizeStickerParcels(data) {
   const shipments = extractShipments(data);
   const parcels = [];
 
   for (const shipment of shipments) {
-    const parcelWaybills = Array.isArray(shipment?.parcel_waybills) ? shipment.parcel_waybills : [];
+    const parcelWaybills = extractParcelWaybills(shipment);
 
     for (const parcel of parcelWaybills) {
-      const content = clean(parcel?.sticker_waybill_content || parcel?.stickerWaybillContent || '');
+      const parcelReference = clean(
+        parcel?.parcel_reference ||
+          parcel?.parcelReference ||
+          parcel?.waybill_number ||
+          parcel?.waybillNumber ||
+          '',
+        200,
+      );
 
-      if (!content) {
+      const content = clean(
+        parcel?.sticker_waybill_content ||
+          parcel?.stickerWaybillContent ||
+          parcel?.zpl ||
+          '',
+      );
+
+      if (!parcelReference && !content) {
         continue;
       }
 
       parcels.push({
-        parcelReference: clean(parcel?.parcel_reference || parcel?.parcelReference || '', 200),
-
+        parcelReference,
         content,
       });
     }
@@ -71,98 +110,223 @@ function combineStickerZpl(stickerParcels) {
     .join('\n\n');
 }
 
-async function getCourierGuyDocuments(shipmentId) {
-  const id = String(shipmentId || '').trim();
+function uniqueStickerParcels(parcels) {
+  const source = Array.isArray(parcels) ? parcels : [];
+  const unique = [];
+  const seen = new Set();
 
-  if (!id) {
-    const error = new Error('Courier Guy shipmentId is required.');
+  for (const parcel of source) {
+    const parcelReference = clean(parcel?.parcelReference, 200);
+    const content = clean(parcel?.content);
+
+    const key = parcelReference || content.slice(0, 250);
+
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    unique.push({
+      parcelReference,
+      content,
+    });
+  }
+
+  return unique;
+}
+
+async function requestStickerPage({
+  shipmentId,
+  trackingReference,
+  limit,
+  offset,
+}) {
+  const query = new URLSearchParams({
+    format: 'zpl',
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  if (shipmentId) {
+    query.set('id', shipmentId);
+  } else {
+    query.set('tracking_reference', trackingReference);
+  }
+
+  return courierGuyRequest(
+    `/shipments/label/stickers?${query.toString()}`,
+    {
+      method: 'GET',
+      timeoutMs: 45000,
+    },
+  );
+}
+
+async function retrieveAllStickerParcels({
+  shipmentId,
+  trackingReference,
+}) {
+  const limit = 20;
+  const maximumPages = 10;
+
+  const allParcels = [];
+  const rawResponses = [];
+
+  for (let page = 0; page < maximumPages; page += 1) {
+    const offset = page * limit;
+
+    const response = await requestStickerPage({
+      shipmentId,
+      trackingReference,
+      limit,
+      offset,
+    });
+
+    rawResponses.push(response.data);
+
+    const pageParcels = normalizeStickerParcels(response.data);
+
+    if (!pageParcels.length) {
+      break;
+    }
+
+    allParcels.push(...pageParcels);
+
+    /*
+     * A page containing fewer than the requested limit normally means
+     * that there are no more parcel stickers to retrieve.
+     */
+    if (pageParcels.length < limit) {
+      break;
+    }
+  }
+
+  return {
+    stickerParcels: uniqueStickerParcels(allParcels),
+    rawResponses,
+  };
+}
+
+async function getCourierGuyDocuments(
+  shipmentId,
+  {
+    trackingReference = '',
+    retryDelaysMs = [0, 1500, 3000, 5000],
+  } = {},
+) {
+  const id = clean(shipmentId, 200);
+  const tracking = clean(trackingReference, 200);
+
+  if (!id && !tracking) {
+    const error = new Error(
+      'Courier Guy shipmentId or trackingReference is required.',
+    );
 
     error.code = 'COURIER_GUY_SHIPMENT_ID_MISSING';
 
     throw error;
   }
 
-  const query = new URLSearchParams({
-    format: 'zpl',
-    id,
-  });
+  const delays = Array.isArray(retryDelaysMs) && retryDelaysMs.length
+    ? retryDelaysMs
+    : [0];
 
-  try {
-    const response = await courierGuyRequest(`/shipments/label/stickers?${query.toString()}`, {
-      method: 'GET',
-      timeoutMs: 45000,
-    });
+  let lastError = null;
+  let lastRawResponse = null;
 
-    const stickerParcels = normalizeStickerParcels(response.data);
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    const delay = Number(delays[attempt]);
 
-    const stickerZpl = combineStickerZpl(stickerParcels);
-
-    if (!stickerZpl) {
-      return {
-        format: 'zpl',
-
-        stickerParcels: [],
-        stickerZpl: '',
-
-        // The supplied documentation confirms ZPL stickers,
-        // but does not provide a separate PDF waybill endpoint.
-        waybillUrl: '',
-        stickerUrl: '',
-
-        waybillResponse: null,
-        stickerResponse: response.data,
-
-        errors: [
-          {
-            type: 'sticker',
-            message: 'The Courier Guy returned no sticker_waybill_content for this shipment.',
-          },
-        ],
-      };
+    if (Number.isFinite(delay) && delay > 0) {
+      await sleep(delay);
     }
 
-    return {
-      format: 'zpl',
+    try {
+      const result = await retrieveAllStickerParcels({
+        shipmentId: id,
+        trackingReference: tracking,
+      });
 
-      stickerParcels,
-      stickerZpl,
+      lastRawResponse = result.rawResponses;
 
-      waybillUrl: '',
-      stickerUrl: '',
+      const stickerParcels = result.stickerParcels;
 
-      waybillResponse: null,
-      stickerResponse: response.data,
+      const stickerZpl = combineStickerZpl(stickerParcels);
 
-      errors: [],
-    };
-  } catch (error) {
-    console.warn('[Courier Guy sticker retrieval failed]', {
-      shipmentId: id,
-      code: error?.code || '',
-      status: error?.status || null,
-      message: error?.message || String(error),
-    });
+      const primaryWaybillNumber = clean(
+        stickerParcels.find((parcel) => parcel?.parcelReference)
+          ?.parcelReference || '',
+        200,
+      );
 
-    return {
-      format: 'zpl',
+      if (stickerZpl) {
+        return {
+          format: 'zpl',
 
-      stickerParcels: [],
-      stickerZpl: '',
+          stickerParcels,
+          stickerZpl,
 
-      waybillUrl: '',
-      stickerUrl: '',
+          primaryWaybillNumber,
 
-      waybillResponse: null,
-      stickerResponse: error?.shiplogic || null,
+          waybillUrl: '',
+          stickerUrl: '',
 
-      errors: [
-        {
-          type: 'sticker',
-          message: String(error?.message || 'Courier Guy sticker retrieval failed.').slice(0, 1000),
-        },
-      ],
-    };
+          waybillResponse: null,
+          stickerResponse: lastRawResponse,
+
+          errors: [],
+        };
+      }
+
+      lastError = new Error(
+        'The Courier Guy returned no sticker_waybill_content yet.',
+      );
+
+      lastError.code = 'COURIER_GUY_STICKER_NOT_READY';
+    } catch (error) {
+      lastError = error;
+
+      lastRawResponse = error?.shiplogic || lastRawResponse;
+
+      console.warn('[Courier Guy sticker retrieval attempt failed]', {
+        shipmentId: id,
+        trackingReference: tracking,
+        attempt: attempt + 1,
+        totalAttempts: delays.length,
+        code: error?.code || '',
+        status: error?.status || null,
+        message: error?.message || String(error),
+      });
+    }
   }
+
+  const message = String(
+    lastError?.message ||
+      'The Courier Guy sticker is not available yet.',
+  ).slice(0, 1000);
+
+  return {
+    format: 'zpl',
+
+    stickerParcels: [],
+    stickerZpl: '',
+
+    primaryWaybillNumber: '',
+
+    waybillUrl: '',
+    stickerUrl: '',
+
+    waybillResponse: null,
+    stickerResponse: lastRawResponse,
+
+    errors: [
+      {
+        type: 'sticker',
+        message,
+      },
+    ],
+  };
 }
 
 module.exports = {

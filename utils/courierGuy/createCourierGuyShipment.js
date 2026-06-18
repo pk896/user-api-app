@@ -87,6 +87,7 @@ async function createCourierGuyShipment(order) {
     format: 'zpl',
     stickerParcels: [],
     stickerZpl: '',
+    primaryWaybillNumber: '',
     waybillUrl: '',
     stickerUrl: '',
     waybillResponse: null,
@@ -95,7 +96,9 @@ async function createCourierGuyShipment(order) {
   };
 
   try {
-    documents = await getCourierGuyDocuments(shipment.shipmentId);
+    documents = await getCourierGuyDocuments(shipment.shipmentId, {
+      trackingReference: shipment.trackingReference,
+    });
   } catch (documentError) {
     console.warn('[Courier Guy documents unavailable after creation]', {
       shipmentId: shipment.shipmentId,
@@ -106,9 +109,12 @@ async function createCourierGuyShipment(order) {
 
   // The official Courier Guy sticker endpoint returns ZPL text,
   // not a browser URL. The ZPL is saved separately on the order.
+  shipment.waybillNumber = shipment.waybillNumber || documents.primaryWaybillNumber || '';
+
   shipment.waybillUrl = documents.waybillUrl || shipment.waybillUrl || '';
 
   shipment.stickerUrl = documents.stickerUrl || shipment.stickerUrl || '';
+
   return {
     reused: false,
     shipment,

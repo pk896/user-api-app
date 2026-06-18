@@ -46,6 +46,16 @@
     </div>
 
     <div class="card-body p-3 p-lg-4">
+      <div class="alert alert-info mb-3">
+        <div class="fw-bold text-primary">About Courier Guy sticker files</div>
+        <div class="small">
+          Courier Guy supplies parcel stickers as ZPL printer instructions.
+          A .zpl file is intended for a Zebra-compatible thermal label printer
+          and will not open as a normal image, video, or PDF. To inspect the raw
+          printer commands, open the downloaded file with Notepad.
+        </div>
+      </div>
+
       <div class="row g-3">
         <div class="col-12 col-lg-8">
           <label for="courierGuySearch" class="form-label fw-semibold text-primary">
@@ -79,6 +89,20 @@
       const cg = order.courierGuy || {};
       const rate = cg.chosenRate || {};
       const tracking = order.shippingTracking || {};
+
+      const stickerParcels = Array.isArray(cg.stickerParcels)
+        ? cg.stickerParcels
+        : [];
+
+      const parcelWaybills = stickerParcels
+        .map((parcel) => String(parcel?.parcelReference || '').trim())
+        .filter(Boolean);
+
+      const primaryWaybill =
+        cg.waybillNumber ||
+        parcelWaybills[0] ||
+        '';
+
       const searchText = [
         order.orderId,
         order.status,
@@ -89,6 +113,7 @@
         cg.shipmentId,
         cg.trackingReference,
         cg.waybillNumber,
+        parcelWaybills.join(' '),
         cg.autoCreateStatus,
       ].join(' ').toLowerCase();
     %>
@@ -114,30 +139,70 @@
         <div class="row g-3">
           <div class="col-12 col-lg-4">
             <h2 class="h6 text-primary fw-bold">Payer-selected service</h2>
+
             <dl class="row small mb-0">
               <dt class="col-5">Service</dt>
-              <dd class="col-7"><%= rate.service || cg.serviceCode || '—' %></dd>
+              <dd class="col-7 text-break">
+                <%= rate.service || cg.serviceCode || '—' %>
+              </dd>
+
               <dt class="col-5">Rate ID</dt>
-              <dd class="col-7 text-break"><%= cg.serviceLevelId || '—' %></dd>
+              <dd class="col-7 text-break">
+                <%= cg.serviceLevelId || '—' %>
+              </dd>
+
               <dt class="col-5">Price</dt>
-              <dd class="col-7"><%= money(rate.amount, rate.currency || currency) %></dd>
+              <dd class="col-7">
+                <%= money(rate.amount, rate.currency || currency) %>
+              </dd>
+
               <dt class="col-5">Warehouse</dt>
-              <dd class="col-7"><%= cg.warehouseCode || cg.warehouseId || '—' %></dd>
+              <dd class="col-7 text-break">
+                <%= cg.warehouseCode || cg.warehouseId || '—' %>
+              </dd>
             </dl>
           </div>
 
           <div class="col-12 col-lg-4">
             <h2 class="h6 text-primary fw-bold">Shipment</h2>
+
             <dl class="row small mb-0">
               <dt class="col-5">Shipment ID</dt>
-              <dd class="col-7 text-break"><%= cg.shipmentId || 'Not created' %></dd>
+              <dd class="col-7 text-break">
+                <%= cg.shipmentId || 'Not created' %>
+              </dd>
+
               <dt class="col-5">Waybill</dt>
-              <dd class="col-7 text-break"><%= cg.waybillNumber || '—' %></dd>
+              <dd class="col-7 text-break">
+                <%= primaryWaybill || 'Not available yet' %>
+              </dd>
+
               <dt class="col-5">Tracking</dt>
-              <dd class="col-7 text-break"><%= tracking.trackingNumber || cg.trackingReference || '—' %></dd>
+              <dd class="col-7 text-break">
+                <%= tracking.trackingNumber || cg.trackingReference || '—' %>
+              </dd>
+
               <dt class="col-5">Status</dt>
-              <dd class="col-7"><%= cg.shipmentStatus || tracking.liveStatus || 'PENDING' %></dd>
+              <dd class="col-7 text-break">
+                <%= cg.shipmentStatus || tracking.liveStatus || 'PENDING' %>
+              </dd>
             </dl>
+
+            <% if (parcelWaybills.length > 1) { %>
+            <div class="mt-3">
+              <div class="small fw-bold text-primary mb-1">
+                Parcel waybills
+              </div>
+
+              <div class="d-flex flex-wrap gap-1">
+                <% parcelWaybills.forEach((parcelWaybill) => { %>
+                <span class="badge bg-light text-primary border text-break">
+                  <%= parcelWaybill %>
+                </span>
+                <% }) %>
+              </div>
+            </div>
+            <% } %>
           </div>
 
           <div class="col-12 col-lg-4">
@@ -188,8 +253,8 @@
           <% } %>
 
           <% if (cg.shipmentId) { %>
-          <a href="/admin/courier-guy/<%= order._id %>/sticker.zpl" class="btn btn-outline-success">
-            Download Sticker ZPL
+          <a href="/admin/courier-guy/<%= order._id %>/sticker.zpl" class="btn btn-success" download>
+            Download Printer Sticker (.zpl)
           </a>
           <% } %>
 

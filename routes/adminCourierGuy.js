@@ -369,10 +369,14 @@ router.post(
     }
 
     try {
+      const trackingReference = String(order?.courierGuy?.trackingReference || '').trim();
+
       const [shipment, documents] = await Promise.all([
         getCourierGuyShipment(shipmentId),
 
-        getCourierGuyDocuments(shipmentId),
+        getCourierGuyDocuments(shipmentId, {
+          trackingReference,
+        }),
       ]);
 
       shipment.waybillUrl = documents.waybillUrl || order.courierGuy?.waybillUrl || '';
@@ -470,7 +474,9 @@ router.get(
       let stickerZpl = String(order?.courierGuy?.stickerZpl || '');
 
       if (!stickerZpl.trim()) {
-        const documents = await getCourierGuyDocuments(shipmentId);
+        const documents = await getCourierGuyDocuments(shipmentId, {
+          trackingReference: String(order?.courierGuy?.trackingReference || '').trim(),
+        });
 
         stickerZpl = String(documents?.stickerZpl || '');
 
@@ -494,6 +500,21 @@ router.get(
         order.courierGuy.stickerParcels = Array.isArray(documents.stickerParcels)
           ? documents.stickerParcels
           : [];
+
+        const documentWaybillNumber = String(
+          documents.primaryWaybillNumber ||
+            order.courierGuy.stickerParcels.find((parcel) => {
+              return String(parcel?.parcelReference || '').trim();
+            })?.parcelReference ||
+            '',
+        ).trim();
+
+        if (
+          documentWaybillNumber &&
+          !String(order.courierGuy.waybillNumber || '').trim()
+        ) {
+          order.courierGuy.waybillNumber = documentWaybillNumber;
+        }
 
         order.courierGuy.stickerZpl = stickerZpl;
 

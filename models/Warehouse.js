@@ -6,7 +6,12 @@ const mongoose = require('mongoose');
 const WarehouseAddressSchema = new mongoose.Schema(
   {
     street1: { type: String, required: true, trim: true },
-    street2: { type: String, default: '', trim: true },
+    street2: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
     city: { type: String, required: true, trim: true },
     state: { type: String, required: true, trim: true },
     zip: { type: String, required: true, trim: true },
@@ -19,7 +24,7 @@ const WarehouseAddressSchema = new mongoose.Schema(
       maxlength: 2,
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const WarehouseSchema = new mongoose.Schema(
@@ -109,7 +114,13 @@ const WarehouseSchema = new mongoose.Schema(
       default: [],
       set: function (values) {
         return Array.isArray(values)
-          ? values.map((v) => String(v || '').trim().toUpperCase()).filter(Boolean)
+          ? values
+              .map((v) =>
+                String(v || '')
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean)
           : [];
       },
     },
@@ -131,7 +142,7 @@ const WarehouseSchema = new mongoose.Schema(
       maxlength: 1000,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 WarehouseSchema.index({ country: 1, provinceCode: 1, isActive: 1, priority: 1 });
@@ -165,8 +176,7 @@ WarehouseSchema.pre('validate', function (next) {
   next();
 });
 
-const Warehouse =
-  mongoose.models.Warehouse || mongoose.model('Warehouse', WarehouseSchema);
+const Warehouse = mongoose.models.Warehouse || mongoose.model('Warehouse', WarehouseSchema);
 
 module.exports = Warehouse;
 module.exports.Warehouse = Warehouse;

@@ -14,17 +14,20 @@ async function getCourierGuyShipment(shipmentId) {
 
   if (!id) {
     const error = new Error(
-      'Courier Guy shipmentId is required.'
+      'Courier Guy shipmentId is required.',
     );
 
-    error.code =
-      'COURIER_GUY_SHIPMENT_ID_MISSING';
+    error.code = 'COURIER_GUY_SHIPMENT_ID_MISSING';
 
     throw error;
   }
 
+  /*
+   * Parcel information is required because Courier Guy parcel
+   * waybill references can be nested inside parcel_waybills.
+   */
   const query = new URLSearchParams({
-    include_parcels: 'false',
+    include_parcels: 'true',
     id,
   });
 
@@ -33,11 +36,11 @@ async function getCourierGuyShipment(shipmentId) {
     {
       method: 'GET',
       timeoutMs: 30000,
-    }
+    },
   );
 
   return normalizeCourierGuyShipment(
-    response.data
+    response.data,
   );
 }
 
