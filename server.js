@@ -611,7 +611,6 @@ const adminDashboardRouter = require('./routes/admin/dashboard');
 const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
-const adminCourierGuyTestRoutes = require('./routes/adminCourierGuyTest');
 const adminCourierGuyRoutes = require('./routes/adminCourierGuy');
 const courierGuyCheckoutApiRoutes = require('./routes/courierGuyCheckoutApi');
 const productsRouter = require('./routes/products');
@@ -729,9 +728,6 @@ app.use('/admin', deliveryOptionsAdmin);
 
 // Shippo remains standalone.
 app.use(adminShippoRoutes);
-
-// Courier Guy connection/rate test routes remain standalone.
-app.use(adminCourierGuyTestRoutes);
 
 // Courier Guy production shipment admin remains standalone.
 app.use(adminCourierGuyRoutes);

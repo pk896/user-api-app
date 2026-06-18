@@ -17,6 +17,8 @@ const { getCourierGuyShipment } = require('../utils/courierGuy/getCourierGuyShip
 
 const { getCourierGuyDocuments } = require('../utils/courierGuy/getCourierGuyDocuments');
 
+const { renderCourierGuyZplToPdf } = require('../utils/courierGuy/renderCourierGuyZplToPdf');
+
 const {
   saveCourierGuyShipmentToOrder,
 } = require('../utils/courierGuy/saveCourierGuyShipmentToOrder');
@@ -509,10 +511,7 @@ router.get(
             '',
         ).trim();
 
-        if (
-          documentWaybillNumber &&
-          !String(order.courierGuy.waybillNumber || '').trim()
-        ) {
+        if (documentWaybillNumber && !String(order.courierGuy.waybillNumber || '').trim()) {
           order.courierGuy.waybillNumber = documentWaybillNumber;
         }
 
@@ -571,6 +570,152 @@ router.get(
       });
 
       req.flash('error', error?.message || 'Could not download the Courier Guy sticker.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+  },
+);
+
+router.get(
+  '/admin/courier-guy/:id/sticker.pdf',
+  ...guards,
+  requireAdminPermission('shipping.labels.manage'),
+  async (req, res) => {
+    const order = await findOrder(req.params.id);
+
+    if (!order) {
+      req.flash('error', 'Order not found.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    if (
+      String(order.shippingProvider || '')
+        .trim()
+        .toUpperCase() !== 'COURIER_GUY'
+    ) {
+      req.flash('error', 'This order did not select The Courier Guy.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    const shipmentId = String(order?.courierGuy?.shipmentId || '').trim();
+
+    if (!shipmentId) {
+      req.flash('error', 'This order does not have a Courier Guy shipment yet.');
+
+      return res.redirect('/admin/courier-guy');
+    }
+
+    try {
+      let stickerZpl = String(order?.courierGuy?.stickerZpl || '');
+
+      /*
+       * Older orders may have a shipment but no locally saved ZPL.
+       * Retrieve and save the original Courier Guy document first.
+       */
+      if (!stickerZpl.trim()) {
+        const documents = await getCourierGuyDocuments(shipmentId, {
+          trackingReference: String(order?.courierGuy?.trackingReference || '').trim(),
+        });
+
+        stickerZpl = String(documents?.stickerZpl || '');
+
+        if (!stickerZpl.trim()) {
+          const errors = Array.isArray(documents?.errors) ? documents.errors : [];
+
+          const message = errors
+            .map((item) => {
+              return String(item?.message || '').trim();
+            })
+            .filter(Boolean)
+            .join(' | ');
+
+          throw new Error(message || 'Courier Guy did not return printable sticker ZPL.');
+        }
+
+        order.courierGuy = order.courierGuy || {};
+
+        order.courierGuy.stickerFormat = 'zpl';
+
+        order.courierGuy.stickerParcels = Array.isArray(documents.stickerParcels)
+          ? documents.stickerParcels
+          : [];
+
+        const documentWaybillNumber = String(
+          documents.primaryWaybillNumber ||
+            order.courierGuy.stickerParcels.find((parcel) => {
+              return String(parcel?.parcelReference || '').trim();
+            })?.parcelReference ||
+            '',
+        ).trim();
+
+        if (documentWaybillNumber && !String(order.courierGuy.waybillNumber || '').trim()) {
+          order.courierGuy.waybillNumber = documentWaybillNumber;
+        }
+
+        order.courierGuy.stickerZpl = stickerZpl;
+
+        order.courierGuy.stickerGeneratedAt = new Date();
+
+        order.courierGuy.documentLastError = '';
+
+        await order.save();
+      }
+
+      const pdfBuffer = await renderCourierGuyZplToPdf(stickerZpl);
+
+      const safeOrderId = String(order.orderId || order._id || 'courier-guy')
+        .replace(/[^a-zA-Z0-9_-]/g, '-')
+        .slice(0, 100);
+
+      await logAdminAction(req, {
+        action: 'shipping.courier_guy.download_sticker_pdf',
+
+        entityType: 'order',
+        entityId: String(order._id),
+        status: 'success',
+
+        meta: {
+          orderId: order.orderId,
+          shipmentId,
+          format: 'pdf',
+          sourceFormat: 'zpl',
+        },
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+
+      res.setHeader('Content-Disposition', `attachment; filename="courier-guy-${safeOrderId}.pdf"`);
+
+      res.setHeader('Content-Length', String(pdfBuffer.length));
+
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+
+      return res.status(200).send(pdfBuffer);
+    } catch (error) {
+      order.courierGuy = order.courierGuy || {};
+
+      order.courierGuy.documentLastError = String(error?.message || error).slice(0, 1000);
+
+      await order.save().catch(() => {});
+
+      await logAdminAction(req, {
+        action: 'shipping.courier_guy.download_sticker_pdf',
+
+        entityType: 'order',
+        entityId: String(order._id),
+        status: 'failure',
+
+        meta: {
+          orderId: order.orderId,
+          shipmentId,
+          code: error?.code || '',
+          error: String(error?.message || error).slice(0, 500),
+        },
+      });
+
+      req.flash('error', error?.message || 'Could not generate the Courier Guy PDF sticker.');
 
       return res.redirect('/admin/courier-guy');
     }
