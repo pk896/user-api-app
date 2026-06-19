@@ -43,7 +43,25 @@ function inferCarrierLabelFromUrl(url) {
 }
 
 function _normCarrier(v) {
-  return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return String(v || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function isStrictShippoOrder(order) {
+  if (!order) {
+    return false;
+  }
+
+  const shippingProvider = String(order.shippingProvider || '')
+    .trim()
+    .toUpperCase();
+
+  const payerRateId = String(order?.shippo?.payerRateId || '').trim();
+
+  const payerShipmentId = String(order?.shippo?.payerShipmentId || '').trim();
+
+  return shippingProvider === 'SHIPPO' && Boolean(payerRateId) && Boolean(payerShipmentId);
 }
 
 function shippingSnapshot(order) {
@@ -164,13 +182,17 @@ async function shippoPollShipmentRates(shipmentId, { tries = 10, delayMs = 1500 
   if (!sid) throw new Error('Missing shipmentId for Shippo poll.');
 
   for (let i = 0; i < tries; i++) {
-    const shipment = await shippoGetJson(`/shipments/${encodeURIComponent(sid)}/`, { timeoutMs: 25000 });
+    const shipment = await shippoGetJson(`/shipments/${encodeURIComponent(sid)}/`, {
+      timeoutMs: 25000,
+    });
     const rates = Array.isArray(shipment?.rates) ? shipment.rates : [];
 
     // Shippo sometimes uses object_status to indicate readiness/errors
     const st = String(shipment?.object_status || '').toUpperCase();
     if (st === 'ERROR') {
-      const err = new Error(`Shippo shipment object_status=ERROR: ${JSON.stringify(shipment?.messages || [])}`);
+      const err = new Error(
+        `Shippo shipment object_status=ERROR: ${JSON.stringify(shipment?.messages || [])}`,
+      );
       err.code = 'SHIPPO_SHIPMENT_OBJECT_ERROR';
       err.shippo = shipment;
       throw err;
@@ -212,7 +234,15 @@ function mapToEnum(desired, enumValues) {
   }
 
   // 2) fallbacks in best-effort order
-  const fallbackOrder = ['PROCESSING', 'PRE_TRANSIT', 'PENDING', 'SHIPPED', 'IN_TRANSIT', 'CREATED', 'UNKNOWN'];
+  const fallbackOrder = [
+    'PROCESSING',
+    'PRE_TRANSIT',
+    'PENDING',
+    'SHIPPED',
+    'IN_TRANSIT',
+    'CREATED',
+    'UNKNOWN',
+  ];
   for (const fb of fallbackOrder) {
     for (const ev of enumValues) {
       if (_normCarrier(ev) === _normCarrier(fb)) return ev;
@@ -232,117 +262,143 @@ router.get(
   requireAdminRole(['super_admin', 'shipping_admin']),
   requireAdminPermission('shipping.read'),
   async (req, res) => {
-  try {
-    const orders = await Order.find({})
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .select('_id orderId createdAt amount paymentStatus fulfillmentStatus status shippingTracking shippo shipping paypal');
+    try {
+      const orders = await Order.find({
+        shippingProvider: 'SHIPPO',
 
-    const paidLike = orders.filter((o) => (typeof o.isPaidLike === 'function' ? o.isPaidLike() : false));
+        'shippo.payerRateId': {
+          $exists: true,
+          $nin: ['', null],
+        },
 
-    // Backfill missing tracking + carrier label for old orders
-    for (const o of paidLike) {
-      const hasLabel = !!String(o?.shippo?.labelUrl || '').trim();
-      const txId = String(o?.shippo?.transactionId || '').trim();
+        'shippo.payerShipmentId': {
+          $exists: true,
+          $nin: ['', null],
+        },
+      })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .select(
+          '_id orderId createdAt amount paymentStatus fulfillmentStatus status shippingProvider shippingTracking shippo shipping paypal',
+        );
 
-      const trackingNumber = String(o?.shippingTracking?.trackingNumber || '').trim();
-      const trackingUrl = String(o?.shippingTracking?.trackingUrl || '').trim();
-      const missingTracking = !trackingNumber && !trackingUrl;
+      const paidLike = orders.filter((order) => {
+        const paid = typeof order.isPaidLike === 'function' ? order.isPaidLike() : false;
 
-      // 1) Recover missing tracking from Shippo transaction
-      if (hasLabel && txId && missingTracking) {
-        try {
-          const tx = await shippoGetTransaction(txId);
+        return paid && isStrictShippoOrder(order);
+      });
 
-          const repairedTrackingNumber = String(tx?.tracking_number || '').trim();
-          const repairedTrackingUrl = String(tx?.tracking_url_provider || '').trim();
-          const repairedLabelUrl = String(tx?.label_url || o?.shippo?.labelUrl || '').trim();
+      // Backfill missing tracking + carrier label for old orders
+      for (const o of paidLike) {
+        const hasLabel = !!String(o?.shippo?.labelUrl || '').trim();
+        const txId = String(o?.shippo?.transactionId || '').trim();
 
-          const carrierToken = String(o?.shippo?.carrier || '').trim();
+        const trackingNumber = String(o?.shippingTracking?.trackingNumber || '').trim();
+        const trackingUrl = String(o?.shippingTracking?.trackingUrl || '').trim();
+        const missingTracking = !trackingNumber && !trackingUrl;
 
-          const rawProvider =
-            String(o?.shippo?.chosenRate?.provider || '').trim() ||
-            String(tx?.rate?.provider || '').trim() ||
-            '';
+        // 1) Recover missing tracking from Shippo transaction
+        if (hasLabel && txId && missingTracking) {
+          try {
+            const tx = await shippoGetTransaction(txId);
 
-          const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+            const repairedTrackingNumber = String(tx?.tracking_number || '').trim();
+            const repairedTrackingUrl = String(tx?.tracking_url_provider || '').trim();
+            const repairedLabelUrl = String(tx?.label_url || o?.shippo?.labelUrl || '').trim();
 
-          const repairedCarrierLabel =
+            const carrierToken = String(o?.shippo?.carrier || '').trim();
+
+            const rawProvider =
+              String(o?.shippo?.chosenRate?.provider || '').trim() ||
+              String(tx?.rate?.provider || '').trim() ||
+              '';
+
+            const badProvider =
+              !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+            const repairedCarrierLabel =
+              (badProvider ? '' : rawProvider) ||
+              inferCarrierLabelFromUrl(repairedTrackingUrl) ||
+              (carrierToken ? String(carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '') ||
+              '';
+
+            if (repairedTrackingNumber || repairedTrackingUrl) {
+              await Order.updateOne(
+                { _id: o._id },
+                {
+                  $set: {
+                    'shippingTracking.trackingNumber': repairedTrackingNumber,
+                    'shippingTracking.trackingUrl': repairedTrackingUrl,
+                    'shippingTracking.labelUrl': repairedLabelUrl,
+                    'shippingTracking.carrierToken': carrierToken || null,
+                    'shippingTracking.carrierLabel': repairedCarrierLabel || '',
+                  },
+                },
+              );
+
+              o.shippingTracking = o.shippingTracking || {};
+              o.shippingTracking.trackingNumber = repairedTrackingNumber;
+              o.shippingTracking.trackingUrl = repairedTrackingUrl;
+              o.shippingTracking.labelUrl = repairedLabelUrl;
+              o.shippingTracking.carrierToken = carrierToken || null;
+              o.shippingTracking.carrierLabel = repairedCarrierLabel || '';
+            }
+          } catch (err) {
+            console.warn(`⚠️ Could not backfill Shippo tracking for ${o.orderId}:`, err.message);
+          }
+        }
+
+        // 2) Backfill missing carrierLabel if tracking exists
+        const nowHasTracking = !!(
+          String(o?.shippingTracking?.trackingNumber || '').trim() ||
+          String(o?.shippingTracking?.trackingUrl || '').trim()
+        );
+        const missingLabel = !String(o?.shippingTracking?.carrierLabel || '').trim();
+
+        if (hasLabel && nowHasTracking && missingLabel) {
+          const rawProvider = String(o?.shippo?.chosenRate?.provider || '').trim();
+          const badProvider =
+            !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+          const inferred =
+            inferCarrierLabelFromUrl(o?.shippingTracking?.trackingUrl) ||
             (badProvider ? '' : rawProvider) ||
-            inferCarrierLabelFromUrl(repairedTrackingUrl) ||
-            (carrierToken ? String(carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '') ||
-            '';
+            (o?.shippo?.carrier
+              ? String(o.shippo.carrier).replace(/_/g, ' ').toUpperCase().trim()
+              : '') ||
+            (o?.shippingTracking?.carrierToken
+              ? String(o.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim()
+              : '');
 
-          if (repairedTrackingNumber || repairedTrackingUrl) {
+          if (inferred) {
             await Order.updateOne(
               { _id: o._id },
-              {
-                $set: {
-                  'shippingTracking.trackingNumber': repairedTrackingNumber,
-                  'shippingTracking.trackingUrl': repairedTrackingUrl,
-                  'shippingTracking.labelUrl': repairedLabelUrl,
-                  'shippingTracking.carrierToken': carrierToken || null,
-                  'shippingTracking.carrierLabel': repairedCarrierLabel || '',
-                },
-              }
+              { $set: { 'shippingTracking.carrierLabel': inferred } },
             );
-
             o.shippingTracking = o.shippingTracking || {};
-            o.shippingTracking.trackingNumber = repairedTrackingNumber;
-            o.shippingTracking.trackingUrl = repairedTrackingUrl;
-            o.shippingTracking.labelUrl = repairedLabelUrl;
-            o.shippingTracking.carrierToken = carrierToken || null;
-            o.shippingTracking.carrierLabel = repairedCarrierLabel || '';
+            o.shippingTracking.carrierLabel = inferred;
           }
-        } catch (err) {
-          console.warn(`⚠️ Could not backfill Shippo tracking for ${o.orderId}:`, err.message);
         }
       }
 
-      // 2) Backfill missing carrierLabel if tracking exists
-      const nowHasTracking = !!(
-        String(o?.shippingTracking?.trackingNumber || '').trim() ||
-        String(o?.shippingTracking?.trackingUrl || '').trim()
-      );
-      const missingLabel = !String(o?.shippingTracking?.carrierLabel || '').trim();
+      const paidLikeLean = paidLike.map((o) => o.toObject({ virtuals: true }));
 
-      if (hasLabel && nowHasTracking && missingLabel) {
-        const rawProvider = String(o?.shippo?.chosenRate?.provider || '').trim();
-        const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
-
-        const inferred =
-          inferCarrierLabelFromUrl(o?.shippingTracking?.trackingUrl) ||
-          (badProvider ? '' : rawProvider) ||
-          (o?.shippo?.carrier ? String(o.shippo.carrier).replace(/_/g, ' ').toUpperCase().trim() : '') ||
-          (o?.shippingTracking?.carrierToken
-            ? String(o.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim()
-            : '');
-
-        if (inferred) {
-          await Order.updateOne({ _id: o._id }, { $set: { 'shippingTracking.carrierLabel': inferred } });
-          o.shippingTracking = o.shippingTracking || {};
-          o.shippingTracking.carrierLabel = inferred;
-        }
-      }
+      return res.render('admin-shippo', {
+        layout: 'layout',
+        title: 'Shippo Labels',
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+        orders: paidLikeLean,
+        success: req.flash('success') || [],
+        error: req.flash('error') || [],
+      });
+    } catch (e) {
+      console.error('Admin Shippo page error:', e);
+      req.flash('error', e.message || 'Could not load Shippo page');
+      return res.redirect('/admin');
     }
-
-    const paidLikeLean = paidLike.map((o) => o.toObject({ virtuals: true }));
-
-    return res.render('admin-shippo', {
-      layout: 'layout',
-      title: 'Shippo Labels',
-      themeCss: res.locals.themeCss,
-      nonce: res.locals.nonce,
-      orders: paidLikeLean,
-      success: req.flash('success') || [],
-      error: req.flash('error') || [],
-    });
-  } catch (e) {
-    console.error('Admin Shippo page error:', e);
-    req.flash('error', e.message || 'Could not load Shippo page');
-    return res.redirect('/admin');
-  }
-});
+  },
+);
 
 // ======================================================
 // ✅ Get rates for an order (ADMIN)
@@ -354,73 +410,94 @@ router.get(
   requireAdminRole(['super_admin', 'shipping_admin']),
   requireAdminPermission('shipping.read'),
   async (req, res) => {
-  try {
-    const orderId = String(req.params.orderId || '').trim();
-    const order = await Order.findOne({ orderId });
-    if (!order) return res.status(404).json({ ok: false, message: 'Order not found' });
+    try {
+      const orderId = String(req.params.orderId || '').trim();
 
-    if (typeof order.isPaidLike === 'function' && !order.isPaidLike()) {
-      return res.status(400).json({ ok: false, message: 'Order is not paid-like yet' });
-    }
+      const order = await Order.findOne({ orderId });
 
-    // ✅ STRICT: use payerShipmentId only (NO building parcels/customs)
-    const payerShipmentId = String(order?.shippo?.payerShipmentId || '').trim() || null;
-    const payerRateId = String(order?.shippo?.payerRateId || '').trim() || null;
+      if (!order) {
+        return res.status(404).json({
+          ok: false,
+          message: 'Order not found.',
+        });
+      }
 
-    if (!payerShipmentId) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Missing payerShipmentId on order. Cannot fetch rates without rebuilding shipments (blocked by policy).',
-        debug: { orderId: order.orderId },
+      if (!isStrictShippoOrder(order)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_PROVIDER_MISMATCH',
+          message:
+            'This order does not belong to Shippo or does not contain the payer-selected Shippo rate.',
+        });
+      }
+
+      if (typeof order.isPaidLike === 'function' && !order.isPaidLike()) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Order is not paid-like yet.',
+        });
+      }
+
+      // ✅ STRICT: use payerShipmentId only (NO building parcels/customs)
+      const payerShipmentId = String(order?.shippo?.payerShipmentId || '').trim() || null;
+      const payerRateId = String(order?.shippo?.payerRateId || '').trim() || null;
+
+      if (!payerShipmentId) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            'Missing payerShipmentId on order. Cannot fetch rates without rebuilding shipments (blocked by policy).',
+          debug: { orderId: order.orderId },
+        });
+      }
+
+      const { shipment, rates } = await shippoPollShipmentRates(payerShipmentId, {
+        tries: 10,
+        delayMs: 1500,
       });
+
+      const cleanRates = (Array.isArray(rates) ? rates : [])
+        .map((r) => ({
+          id: r.object_id,
+          object_id: r.object_id,
+          provider: r.provider,
+          service: r.servicelevel?.name || r.servicelevel?.token || '',
+          amount: r.amount,
+          currency: r.currency,
+          estimatedDays: r.estimated_days ?? null,
+          durationTerms: r.duration_terms ?? '',
+        }))
+        .filter((r) => r.object_id && r.amount != null)
+        .sort((a, b) => Number(a.amount) - Number(b.amount));
+
+      const payerRecorded = !!payerRateId;
+
+      const payerInThisList = payerRateId
+        ? cleanRates.some((r) => String(r?.object_id || '').trim() === payerRateId)
+        : false;
+
+      return res.json({
+        ok: true,
+
+        // ✅ show payer shipment
+        shipmentId: shipment?.object_id || payerShipmentId,
+
+        // ✅ payer choice from order (trusted)
+        payerRateId,
+        payerRecorded,
+        payerInThisList,
+
+        // ✅ no hints needed now (we rely on payerRateId)
+        payerHint: null,
+
+        rates: cleanRates,
+      });
+    } catch (e) {
+      console.error('Shippo rates error:', e);
+      return res.status(500).json({ ok: false, message: e.message || 'Shippo rates error' });
     }
-
-    const { shipment, rates } = await shippoPollShipmentRates(payerShipmentId, {
-      tries: 10,
-      delayMs: 1500,
-    });
-
-    const cleanRates = (Array.isArray(rates) ? rates : [])
-      .map((r) => ({
-        id: r.object_id,
-        object_id: r.object_id,
-        provider: r.provider,
-        service: r.servicelevel?.name || r.servicelevel?.token || '',
-        amount: r.amount,
-        currency: r.currency,
-        estimatedDays: r.estimated_days ?? null,
-        durationTerms: r.duration_terms ?? '',
-      }))
-      .filter((r) => r.object_id && r.amount != null)
-      .sort((a, b) => Number(a.amount) - Number(b.amount));
-
-    const payerRecorded = !!payerRateId;
-
-    const payerInThisList = payerRateId
-      ? cleanRates.some((r) => String(r?.object_id || '').trim() === payerRateId)
-      : false;
-
-    return res.json({
-      ok: true,
-
-      // ✅ show payer shipment
-      shipmentId: shipment?.object_id || payerShipmentId,
-
-      // ✅ payer choice from order (trusted)
-      payerRateId,
-      payerRecorded,
-      payerInThisList,
-
-      // ✅ no hints needed now (we rely on payerRateId)
-      payerHint: null,
-
-      rates: cleanRates,
-    });
-  } catch (e) {
-    console.error('Shippo rates error:', e);
-    return res.status(500).json({ ok: false, message: e.message || 'Shippo rates error' });
-  }
-});
+  },
+);
 
 // ======================================================
 // ✅ Create label for a specific paid order (ADMIN)
@@ -432,376 +509,415 @@ router.post(
   requireAdminRole(['super_admin', 'shipping_admin']),
   requireAdminPermission('shipping.labels.manage'),
   async (req, res) => {
-  try {
-    const orderId = String(req.params.orderId || '').trim();
-    const order = await Order.findOne({ orderId });
+    try {
+      const orderId = String(req.params.orderId || '').trim();
 
-    if (!order) return res.status(404).json({ ok: false, message: 'Order not found' });
+      const order = await Order.findOne({ orderId });
 
-    if (typeof order.isPaidLike === 'function' && !order.isPaidLike()) {
-      return res.status(400).json({ ok: false, message: 'Order is not paid-like yet' });
-    }
-
-    // ✅ idempotent: don't buy twice
-    if (order.shippo?.transactionId && order.shippo?.labelUrl) {
-      const hasTracking =
-        !!String(order?.shippingTracking?.trackingNumber || '').trim() ||
-        !!String(order?.shippingTracking?.trackingUrl || '').trim();
-
-      if (!hasTracking) {
-        const before = shippingSnapshot(order);
-
-        try {
-          const tx = await shippoGetTransaction(order.shippo.transactionId);
-
-          order.shippingTracking = order.shippingTracking || {};
-
-          order.shippingTracking.trackingNumber = String(tx?.tracking_number || '').trim();
-          order.shippingTracking.trackingUrl = String(tx?.tracking_url_provider || '').trim();
-          order.shippingTracking.labelUrl = String(tx?.label_url || order?.shippo?.labelUrl || '').trim();
-          order.shippingTracking.carrierToken = String(order?.shippo?.carrier || '').trim() || null;
-
-          const rawProvider =
-            String(order?.shippo?.chosenRate?.provider || '').trim() ||
-            String(tx?.rate?.provider || '').trim() ||
-            '';
-
-          const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
-
-          order.shippingTracking.carrierLabel =
-            (badProvider ? '' : rawProvider) ||
-            inferCarrierLabelFromUrl(order.shippingTracking.trackingUrl) ||
-            (order.shippingTracking.carrierToken
-              ? String(order.shippingTracking.carrierToken).replace(/_/g, ' ').toUpperCase().trim()
-              : '') ||
-            '';
-
-          await order.save();
-
-          await logAdminAction(req, {
-            action: 'shipping.label.recover_tracking',
-            entityType: 'order',
-            entityId: String(order._id),
-            status: 'success',
-            before,
-            after: shippingSnapshot(order),
-            meta: orderAuditMeta(order, {
-              transactionId: order.shippo?.transactionId || '',
-              labelUrl: order.shippo?.labelUrl || '',
-            }),
-          });
-        } catch (err) {
-          console.warn(`⚠️ Failed to recover tracking for existing label ${order.orderId}:`, err.message);
-
-          await logAdminAction(req, {
-            action: 'shipping.label.recover_tracking',
-            entityType: 'order',
-            entityId: String(order._id),
-            status: 'failure',
-            before,
-            meta: orderAuditMeta(order, {
-              error: String(err?.message || err || '').slice(0, 500),
-              transactionId: order.shippo?.transactionId || '',
-              labelUrl: order.shippo?.labelUrl || '',
-            }),
-          });
-        }
+      if (!order) {
+        return res.status(404).json({
+          ok: false,
+          message: 'Order not found.',
+        });
       }
 
-      return res.json({
-        ok: true,
-        labelUrl: order.shippo.labelUrl,
-        trackingNumber: order.shippingTracking?.trackingNumber || '',
-        trackingUrl: order.shippingTracking?.trackingUrl || '',
-        carrierEnum: order.shippingTracking?.carrier || null,
-        carrierToken: order.shippingTracking?.carrierToken || null,
-      });
-    }
+      if (!isStrictShippoOrder(order)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_PROVIDER_MISMATCH',
+          message:
+            'This order did not select Shippo or does not contain the payer-selected Shippo rate.',
+        });
+      }
 
-    // ======================================================
-    // ✅ STRICT MODE (NO FALLBACKS):
-    // MUST buy payerRateId from payerShipmentId only
-    // ======================================================
-    let shipment, chosenRate, transaction, carrierToken;
+      if (typeof order.isPaidLike === 'function' && !order.isPaidLike()) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Order is not paid-like yet.',
+        });
+      }
 
-    const beforeLabelPurchase = shippingSnapshot(order);
+      // ✅ idempotent: don't buy twice
+      if (order.shippo?.transactionId && order.shippo?.labelUrl) {
+        const hasTracking =
+          !!String(order?.shippingTracking?.trackingNumber || '').trim() ||
+          !!String(order?.shippingTracking?.trackingUrl || '').trim();
 
-    const bodyRateId = req.body?.rateId ? String(req.body.rateId).trim() : null;
+        if (!hasTracking) {
+          const before = shippingSnapshot(order);
 
-    const payerRateId = String(order?.shippo?.payerRateId || '').trim() || null;
-    const payerShipmentId = String(order?.shippo?.payerShipmentId || '').trim() || null;
+          try {
+            const tx = await shippoGetTransaction(order.shippo.transactionId);
 
-    if (!payerRateId) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Missing payerRateId on order. payment.js must save payerRateId.',
-        debug: { orderId: order.orderId },
-      });
-    }
+            order.shippingTracking = order.shippingTracking || {};
 
-    if (!payerShipmentId) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Missing payerShipmentId on order. payment.js must save payerShipmentId.',
-        debug: { orderId: order.orderId, payerRateId },
-      });
-    }
+            order.shippingTracking.trackingNumber = String(tx?.tracking_number || '').trim();
+            order.shippingTracking.trackingUrl = String(tx?.tracking_url_provider || '').trim();
+            order.shippingTracking.labelUrl = String(
+              tx?.label_url || order?.shippo?.labelUrl || '',
+            ).trim();
+            order.shippingTracking.carrierToken =
+              String(order?.shippo?.carrier || '').trim() || null;
 
-    if (bodyRateId && bodyRateId !== payerRateId) {
-      return res.status(409).json({
-        ok: false,
-        message: 'This order must be bought using the payer-selected rateId only.',
-        debug: { payerRateId, bodyRateId },
-      });
-    }
+            const rawProvider =
+              String(order?.shippo?.chosenRate?.provider || '').trim() ||
+              String(tx?.rate?.provider || '').trim() ||
+              '';
 
-    try {
-      ({ shipment, chosenRate, transaction, carrierToken } = await createLabelForOrder(order, {
-        rateId: payerRateId,
-        shipmentId: payerShipmentId,
-        strictRateId: true,
-      }));
-    } catch (e) {
-      const shippo = e?.shippo || e?.details || null;
+            const badProvider =
+              !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
 
-      console.error('❌ Shippo STRICT payer purchase failed:', {
-        message: e?.message,
-        code: e?.code,
-        payerRateId,
-        payerShipmentId,
-        shippo,
-      });
+            order.shippingTracking.carrierLabel =
+              (badProvider ? '' : rawProvider) ||
+              inferCarrierLabelFromUrl(order.shippingTracking.trackingUrl) ||
+              (order.shippingTracking.carrierToken
+                ? String(order.shippingTracking.carrierToken)
+                    .replace(/_/g, ' ')
+                    .toUpperCase()
+                    .trim()
+                : '') ||
+              '';
 
-      return res.status(502).json({
-        ok: false,
-        message: e?.message || 'Shippo failed (strict payer rate)',
-        shippo,
-        debug: { orderId: order.orderId, payerRateId, payerShipmentId },
-      });
-    }
+            await order.save();
 
-    if (String(chosenRate?.object_id || '').trim() !== payerRateId) {
-      return res.status(409).json({
-        ok: false,
-        message: 'Strict mismatch: Shippo did not buy payerRateId.',
-        debug: {
+            await logAdminAction(req, {
+              action: 'shipping.label.recover_tracking',
+              entityType: 'order',
+              entityId: String(order._id),
+              status: 'success',
+              before,
+              after: shippingSnapshot(order),
+              meta: orderAuditMeta(order, {
+                transactionId: order.shippo?.transactionId || '',
+                labelUrl: order.shippo?.labelUrl || '',
+              }),
+            });
+          } catch (err) {
+            console.warn(
+              `⚠️ Failed to recover tracking for existing label ${order.orderId}:`,
+              err.message,
+            );
+
+            await logAdminAction(req, {
+              action: 'shipping.label.recover_tracking',
+              entityType: 'order',
+              entityId: String(order._id),
+              status: 'failure',
+              before,
+              meta: orderAuditMeta(order, {
+                error: String(err?.message || err || '').slice(0, 500),
+                transactionId: order.shippo?.transactionId || '',
+                labelUrl: order.shippo?.labelUrl || '',
+              }),
+            });
+          }
+        }
+
+        return res.json({
+          ok: true,
+          labelUrl: order.shippo.labelUrl,
+          trackingNumber: order.shippingTracking?.trackingNumber || '',
+          trackingUrl: order.shippingTracking?.trackingUrl || '',
+          carrierEnum: order.shippingTracking?.carrier || null,
+          carrierToken: order.shippingTracking?.carrierToken || null,
+        });
+      }
+
+      // ======================================================
+      // ✅ STRICT MODE (NO FALLBACKS):
+      // MUST buy payerRateId from payerShipmentId only
+      // ======================================================
+      let shipment, chosenRate, transaction, carrierToken;
+
+      const beforeLabelPurchase = shippingSnapshot(order);
+
+      const bodyRateId = req.body?.rateId ? String(req.body.rateId).trim() : null;
+
+      const payerRateId = String(order?.shippo?.payerRateId || '').trim() || null;
+      const payerShipmentId = String(order?.shippo?.payerShipmentId || '').trim() || null;
+
+      if (!payerRateId) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Missing payerRateId on order. payment.js must save payerRateId.',
+          debug: { orderId: order.orderId },
+        });
+      }
+
+      if (!payerShipmentId) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Missing payerShipmentId on order. payment.js must save payerShipmentId.',
+          debug: { orderId: order.orderId, payerRateId },
+        });
+      }
+
+      if (bodyRateId && bodyRateId !== payerRateId) {
+        return res.status(409).json({
+          ok: false,
+          message: 'This order must be bought using the payer-selected rateId only.',
+          debug: { payerRateId, bodyRateId },
+        });
+      }
+
+      try {
+        ({ shipment, chosenRate, transaction, carrierToken } = await createLabelForOrder(order, {
+          rateId: payerRateId,
+          shipmentId: payerShipmentId,
+          strictRateId: true,
+        }));
+      } catch (e) {
+        const shippo = e?.shippo || e?.details || null;
+
+        console.error('❌ Shippo STRICT payer purchase failed:', {
+          message: e?.message,
+          code: e?.code,
           payerRateId,
-          chosenRateId: String(chosenRate?.object_id || '').trim() || null,
           payerShipmentId,
-          shipmentId: shipment?.object_id || null,
-        },
-      });
-    }
-
-    // ======================================================
-    // ✅ Shippo must return label_url
-    // ======================================================
-    if (!transaction || !transaction.label_url) {
-      const status = transaction?.status || transaction?.tracking_status || 'UNKNOWN';
-      const messages =
-        (Array.isArray(transaction?.messages) && transaction.messages.length ? transaction.messages : null) ||
-        transaction?.meta ||
-        null;
-
-      console.error('❌ Shippo transaction missing label_url:', {
-        status,
-        messages,
-        transactionId: transaction?.object_id,
-        rateId: chosenRate?.object_id,
-        provider: chosenRate?.provider,
-        servicelevel: chosenRate?.servicelevel?.token,
-      });
-
-      return res.status(502).json({
-        ok: false,
-        message: 'Shippo did not return a label_url.',
-        shippo: {
-          status,
-          messages,
-          transactionId: transaction?.object_id || '',
-          rateId: chosenRate?.object_id || '',
-          provider: chosenRate?.provider || '',
-          servicelevel: chosenRate?.servicelevel?.token || '',
-        },
-      });
-    }
-
-    // ======================================================
-    // ✅ Save Shippo info + Tracking info on the Order
-    // ======================================================
-    order.shippo = order.shippo || {};
-    order.shippingTracking = order.shippingTracking || {};
-
-    // ✅ DO NOT overwrite shipmentId (keep history stable)
-    if (!order.shippo.shipmentId) {
-      order.shippo.shipmentId = shipment?.object_id || null;
-    }
-
-    // ✅ DO NOT overwrite payer fields (they must stay as saved by payment.js)
-    // payerRateId and payerShipmentId are already on the order
-
-    order.shippo.transactionId = transaction?.object_id || null;
-    order.shippo.rateId = chosenRate?.object_id || null;
-    order.shippo.labelUrl = transaction?.label_url || null;
-    order.shippo.trackingStatus = transaction?.tracking_status || null;
-
-    order.shippo.carrier = carrierToken || null;
-
-    order.shippo.chosenRate = {
-      provider: String(chosenRate?.provider || '').trim() || null,
-      service: String(chosenRate?.servicelevel?.name || chosenRate?.servicelevel?.token || '').trim() || null,
-      amount: chosenRate?.amount != null ? String(chosenRate.amount) : null,
-      currency: String(chosenRate?.currency || '').trim() || null,
-      estimatedDays: chosenRate?.estimated_days != null ? Number(chosenRate.estimated_days) : null,
-      durationTerms: String(chosenRate?.duration_terms || '').trim() || null,
-    };
-
-    order.shippingTracking.trackingNumber = String(transaction?.tracking_number || '').trim();
-    order.shippingTracking.trackingUrl = String(transaction?.tracking_url_provider || '').trim();
-    order.shippingTracking.labelUrl = String(transaction?.label_url || '').trim();
-
-    // ✅ Do NOT write enum-unsafe carrier values
-    order.shippingTracking.carrierToken = carrierToken || null;
-
-    const rawProvider =
-      String(chosenRate?.provider || '').trim() ||
-      String(transaction?.provider || '').trim() ||
-      '';
-
-    const badProvider = !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
-
-    const finalCarrierLabel =
-      (badProvider ? '' : rawProvider) ||
-      inferCarrierLabelFromUrl(order.shippingTracking.trackingUrl) ||
-      (carrierToken ? String(carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '') ||
-      '';
-
-    order.shippingTracking.carrierLabel = finalCarrierLabel || '';
-
-    const statusEnums = getTrackingStatusEnumValues(order);
-    const safeTrackingStatus = mapToEnum('LABEL_CREATED', statusEnums);
-    if (safeTrackingStatus) order.shippingTracking.status = safeTrackingStatus;
-
-    const fulfillEnums = getFulfillmentEnumValues(order);
-    const safeFulfillment = mapToEnum('LABEL_CREATED', fulfillEnums);
-    if (safeFulfillment) order.fulfillmentStatus = safeFulfillment;
-
-    await order.save();
-
-    // ======================================================
-    // ✅ Send customer processing email after label purchase (non-fatal)
-    // ======================================================
-    try {
-      await sendOrderProcessingEmail(order, publicBaseUrlFromReq(req));
-    } catch (e) {
-      console.warn('⚠️ Order processing email failed (non-fatal):', e?.message || e);
-    }
-
-    // ======================================================
-    // ✅ Send tracking to PayPal immediately after label purchase (non-fatal)
-    // ======================================================
-    try {
-      // ✅ Your schema stores captureId here
-      const captureId =
-        String(order?.paypal?.captureId || '').trim() ||
-        String(order?.captures?.[0]?.captureId || '').trim() ||
-        '';
-
-      // ✅ tracking number from Shippo transaction
-      const trackingNumber = String(order?.shippingTracking?.trackingNumber || '').trim();
-
-      // ✅ carrier best-effort: your util will normalize again, so pass a decent value
-      const carrierInput =
-        String(order?.shippingTracking?.carrierToken || '').trim() ||
-        String(order?.shippingTracking?.carrier || '').trim() ||
-        String(order?.shippingTracking?.carrierLabel || '').trim() ||
-        String(rawProvider || '').trim() ||
-        inferCarrierLabelFromUrl(order?.shippingTracking?.trackingUrl) ||
-        'OTHER';
-
-      if (captureId && trackingNumber) {
-        const paypalResp = await addTrackingToPaypalOrder({
-          transactionId: captureId,
-          trackingNumber,
-          carrier: carrierInput,
-          status: 'SHIPPED',
+          shippo,
         });
 
+        return res.status(502).json({
+          ok: false,
+          message: e?.message || 'Shippo failed (strict payer rate)',
+          shippo,
+          debug: { orderId: order.orderId, payerRateId, payerShipmentId },
+        });
+      }
+
+      if (String(chosenRate?.object_id || '').trim() !== payerRateId) {
+        return res.status(409).json({
+          ok: false,
+          message: 'Strict mismatch: Shippo did not buy payerRateId.',
+          debug: {
+            payerRateId,
+            chosenRateId: String(chosenRate?.object_id || '').trim() || null,
+            payerShipmentId,
+            shipmentId: shipment?.object_id || null,
+          },
+        });
+      }
+
+      // ======================================================
+      // ✅ Shippo must return label_url
+      // ======================================================
+      if (!transaction || !transaction.label_url) {
+        const status = transaction?.status || transaction?.tracking_status || 'UNKNOWN';
+        const messages =
+          (Array.isArray(transaction?.messages) && transaction.messages.length
+            ? transaction.messages
+            : null) ||
+          transaction?.meta ||
+          null;
+
+        console.error('❌ Shippo transaction missing label_url:', {
+          status,
+          messages,
+          transactionId: transaction?.object_id,
+          rateId: chosenRate?.object_id,
+          provider: chosenRate?.provider,
+          servicelevel: chosenRate?.servicelevel?.token,
+        });
+
+        return res.status(502).json({
+          ok: false,
+          message: 'Shippo did not return a label_url.',
+          shippo: {
+            status,
+            messages,
+            transactionId: transaction?.object_id || '',
+            rateId: chosenRate?.object_id || '',
+            provider: chosenRate?.provider || '',
+            servicelevel: chosenRate?.servicelevel?.token || '',
+          },
+        });
+      }
+
+      // ======================================================
+      // ✅ Save Shippo info + Tracking info on the Order
+      // ======================================================
+      order.shippo = order.shippo || {};
+      order.shippingTracking = order.shippingTracking || {};
+
+      // ✅ DO NOT overwrite shipmentId (keep history stable)
+      if (!order.shippo.shipmentId) {
+        order.shippo.shipmentId = shipment?.object_id || null;
+      }
+
+      // ✅ DO NOT overwrite payer fields (they must stay as saved by payment.js)
+      // payerRateId and payerShipmentId are already on the order
+
+      order.shippo.transactionId = transaction?.object_id || null;
+      order.shippo.rateId = chosenRate?.object_id || null;
+      order.shippo.labelUrl = transaction?.label_url || null;
+      order.shippo.trackingStatus = transaction?.tracking_status || null;
+
+      order.shippo.carrier = carrierToken || null;
+
+      order.shippo.chosenRate = {
+        provider: String(chosenRate?.provider || '').trim() || null,
+        service:
+          String(chosenRate?.servicelevel?.name || chosenRate?.servicelevel?.token || '').trim() ||
+          null,
+        amount: chosenRate?.amount != null ? String(chosenRate.amount) : null,
+        currency: String(chosenRate?.currency || '').trim() || null,
+        estimatedDays:
+          chosenRate?.estimated_days != null ? Number(chosenRate.estimated_days) : null,
+        durationTerms: String(chosenRate?.duration_terms || '').trim() || null,
+      };
+
+      order.shippingTracking.trackingNumber = String(transaction?.tracking_number || '').trim();
+      order.shippingTracking.trackingUrl = String(transaction?.tracking_url_provider || '').trim();
+      order.shippingTracking.labelUrl = String(transaction?.label_url || '').trim();
+
+      // ✅ Do NOT write enum-unsafe carrier values
+      order.shippingTracking.carrierToken = carrierToken || null;
+
+      const rawProvider =
+        String(chosenRate?.provider || '').trim() ||
+        String(transaction?.provider || '').trim() ||
+        '';
+
+      const badProvider =
+        !rawProvider || ['UNKNOWN', 'OTHER', 'SHIPPO'].includes(_normCarrier(rawProvider));
+
+      const finalCarrierLabel =
+        (badProvider ? '' : rawProvider) ||
+        inferCarrierLabelFromUrl(order.shippingTracking.trackingUrl) ||
+        (carrierToken ? String(carrierToken).replace(/_/g, ' ').toUpperCase().trim() : '') ||
+        '';
+
+      order.shippingTracking.carrierLabel = finalCarrierLabel || '';
+
+      const statusEnums = getTrackingStatusEnumValues(order);
+      const safeTrackingStatus = mapToEnum('LABEL_CREATED', statusEnums);
+      if (safeTrackingStatus) order.shippingTracking.status = safeTrackingStatus;
+
+      const fulfillEnums = getFulfillmentEnumValues(order);
+      const safeFulfillment = mapToEnum('LABEL_CREATED', fulfillEnums);
+      if (safeFulfillment) order.fulfillmentStatus = safeFulfillment;
+
+      await order.save();
+
+      // ======================================================
+      // ✅ Send customer processing email after label purchase (non-fatal)
+      // ======================================================
+      try {
+        await sendOrderProcessingEmail(order, publicBaseUrlFromReq(req));
+      } catch (e) {
+        console.warn('⚠️ Order processing email failed (non-fatal):', e?.message || e);
+      }
+
+      // ======================================================
+      // ✅ Send tracking to PayPal immediately after label purchase (non-fatal)
+      // ======================================================
+      try {
+        // ✅ Your schema stores captureId here
+        const captureId =
+          String(order?.paypal?.captureId || '').trim() ||
+          String(order?.captures?.[0]?.captureId || '').trim() ||
+          '';
+
+        // ✅ tracking number from Shippo transaction
+        const trackingNumber = String(order?.shippingTracking?.trackingNumber || '').trim();
+
+        // ✅ carrier best-effort: your util will normalize again, so pass a decent value
+        const carrierInput =
+          String(order?.shippingTracking?.carrierToken || '').trim() ||
+          String(order?.shippingTracking?.carrier || '').trim() ||
+          String(order?.shippingTracking?.carrierLabel || '').trim() ||
+          String(rawProvider || '').trim() ||
+          inferCarrierLabelFromUrl(order?.shippingTracking?.trackingUrl) ||
+          'OTHER';
+
+        if (captureId && trackingNumber) {
+          const paypalResp = await addTrackingToPaypalOrder({
+            transactionId: captureId,
+            trackingNumber,
+            carrier: carrierInput,
+            status: 'SHIPPED',
+          });
+
+          await Order.updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                'shippo.paypalTrackingPushedAt': new Date(),
+                'shippo.paypalTrackingLastError': '',
+                'shippo.paypalTrackingLastResponse': paypalResp || null,
+              },
+            },
+          ).catch(() => {});
+        } else {
+          console.warn('⚠️ Skipping PayPal tracking update (missing fields):', {
+            captureId: !!captureId,
+            trackingNumber: !!trackingNumber,
+            carrierInput: !!carrierInput,
+          });
+        }
+      } catch (e) {
+        console.warn('⚠️ PayPal tracking update failed (non-fatal):', e.message);
+
+        // ✅ store last error (optional)
         await Order.updateOne(
           { _id: order._id },
           {
             $set: {
-              'shippo.paypalTrackingPushedAt': new Date(),
-              'shippo.paypalTrackingLastError': '',
-              'shippo.paypalTrackingLastResponse': paypalResp || null,
+              'shippo.paypalTrackingLastError': String(e?.message || 'PayPal tracking error'),
             },
-          }
+          },
         ).catch(() => {});
-      } else {
-        console.warn('⚠️ Skipping PayPal tracking update (missing fields):', {
-          captureId: !!captureId,
-          trackingNumber: !!trackingNumber,
-          carrierInput: !!carrierInput,
-        });
       }
-    } catch (e) {
-      console.warn('⚠️ PayPal tracking update failed (non-fatal):', e.message);
 
-      // ✅ store last error (optional)
-      await Order.updateOne(
-        { _id: order._id },
-        { $set: { 'shippo.paypalTrackingLastError': String(e?.message || 'PayPal tracking error') } }
-      ).catch(() => {});
-    }
+      await logAdminAction(req, {
+        action: 'shipping.label.create',
+        entityType: 'order',
+        entityId: String(order._id),
+        status: 'success',
+        before: beforeLabelPurchase,
+        after: shippingSnapshot(order),
+        meta: orderAuditMeta(order, {
+          payerRateId,
+          payerShipmentId,
+          shipmentId: shipment?.object_id || null,
+          transactionId: transaction?.object_id || null,
+          labelUrl: transaction?.label_url || '',
+          trackingNumber: transaction?.tracking_number || '',
+          trackingUrl: transaction?.tracking_url_provider || '',
+          carrierToken: order.shippingTracking?.carrierToken || null,
+          carrierLabel: order.shippingTracking?.carrierLabel || '',
+        }),
+      });
 
-    await logAdminAction(req, {
-      action: 'shipping.label.create',
-      entityType: 'order',
-      entityId: String(order._id),
-      status: 'success',
-      before: beforeLabelPurchase,
-      after: shippingSnapshot(order),
-      meta: orderAuditMeta(order, {
-        payerRateId,
-        payerShipmentId,
+      return res.json({
+        ok: true,
+        labelUrl: transaction.label_url,
+        trackingNumber: transaction.tracking_number,
+        trackingUrl: transaction.tracking_url_provider,
         shipmentId: shipment?.object_id || null,
-        transactionId: transaction?.object_id || null,
-        labelUrl: transaction?.label_url || '',
-        trackingNumber: transaction?.tracking_number || '',
-        trackingUrl: transaction?.tracking_url_provider || '',
+        transactionId: transaction.object_id,
+        carrierEnum: order.shippingTracking?.carrier || null,
         carrierToken: order.shippingTracking?.carrierToken || null,
-        carrierLabel: order.shippingTracking?.carrierLabel || '',
-      }),
-    });
+      });
+    } catch (e) {
+      console.error('Shippo label error:', e);
 
-    return res.json({
-      ok: true,
-      labelUrl: transaction.label_url,
-      trackingNumber: transaction.tracking_number,
-      trackingUrl: transaction.tracking_url_provider,
-      shipmentId: shipment?.object_id || null,
-      transactionId: transaction.object_id,
-      carrierEnum: order.shippingTracking?.carrier || null,
-      carrierToken: order.shippingTracking?.carrierToken || null,
-    });
-  } catch (e) {
-    console.error('Shippo label error:', e);
+      await logAdminAction(req, {
+        action: 'shipping.label.create',
+        entityType: 'order',
+        entityId: '',
+        status: 'failure',
+        meta: {
+          section: 'shippo_labels',
+          orderId: String(req.params.orderId || '').trim(),
+          error: String(e?.message || e || '').slice(0, 500),
+        },
+      });
 
-    await logAdminAction(req, {
-      action: 'shipping.label.create',
-      entityType: 'order',
-      entityId: '',
-      status: 'failure',
-      meta: {
-        section: 'shippo_labels',
-        orderId: String(req.params.orderId || '').trim(),
-        error: String(e?.message || e || '').slice(0, 500),
-      },
-    });
-
-    return res.status(500).json({ ok: false, message: e.message || 'Shippo error' });
-  }
-});
+      return res.status(500).json({ ok: false, message: e.message || 'Shippo error' });
+    }
+  },
+);
 
 // ======================================================
 // ✅ Update address for an order (ADMIN)
@@ -809,68 +925,85 @@ router.post(
 // ======================================================
 router.post(
   '/admin/orders/:orderId/shippo/update-address',
-  requireAdmin, requireAdminRole(['super_admin', 'shipping_admin']),
+  requireAdmin,
+  requireAdminRole(['super_admin', 'shipping_admin']),
   requireAdminPermission('shipping.update'),
   async (req, res) => {
-  try {
-    const orderId = String(req.params.orderId || '').trim();
-    const order = await Order.findOne({ orderId });
+    try {
+      const orderId = String(req.params.orderId || '').trim();
 
-    if (!order) return res.status(404).json({ ok: false, message: 'Order not found' });
+      const order = await Order.findOne({ orderId });
 
-    const before = shippingSnapshot(order);
+      if (!order) {
+        return res.status(404).json({
+          ok: false,
+          message: 'Order not found.',
+        });
+      }
 
-    const b = req.body || {};
-    order.shipping = order.shipping || {};
+      if (!isStrictShippoOrder(order)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'SHIPPO_PROVIDER_MISMATCH',
+          message:
+            'This order does not belong to Shippo, so its address cannot be changed from the Shippo page.',
+        });
+      }
 
-    order.shipping.address_line_1 = String(b.street1 || '').trim();
-    order.shipping.address_line_2 = String(b.street2 || '').trim();
-    order.shipping.admin_area_2 = String(b.city || '').trim();
-    order.shipping.admin_area_1 = String(b.state || '').trim();
-    order.shipping.postal_code = String(b.zip || '').trim();
-    order.shipping.country_code = String(b.country || '').trim().toUpperCase();
+      const before = shippingSnapshot(order);
 
-    await order.save();
+      const b = req.body || {};
+      order.shipping = order.shipping || {};
 
-    await logAdminAction(req, {
-      action: 'shipping.address.update',
-      entityType: 'order',
-      entityId: String(order._id),
-      status: 'success',
-      before,
-      after: shippingSnapshot(order),
-      meta: orderAuditMeta(order, {
-        updatedFields: [
-          'shipping.address_line_1',
-          'shipping.address_line_2',
-          'shipping.admin_area_2',
-          'shipping.admin_area_1',
-          'shipping.postal_code',
-          'shipping.country_code',
-        ],
-      }),
-    });
+      order.shipping.address_line_1 = String(b.street1 || '').trim();
+      order.shipping.address_line_2 = String(b.street2 || '').trim();
+      order.shipping.admin_area_2 = String(b.city || '').trim();
+      order.shipping.admin_area_1 = String(b.state || '').trim();
+      order.shipping.postal_code = String(b.zip || '').trim();
+      order.shipping.country_code = String(b.country || '')
+        .trim()
+        .toUpperCase();
 
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('Update address failed:', e);
+      await order.save();
 
-    await logAdminAction(req, {
-      action: 'shipping.address.update',
-      entityType: 'order',
-      entityId: '',
-      status: 'failure',
-      meta: {
-        section: 'shippo_labels',
-        orderId: String(req.params.orderId || '').trim(),
-        error: String(e?.message || e || '').slice(0, 500),
-      },
-    });
+      await logAdminAction(req, {
+        action: 'shipping.address.update',
+        entityType: 'order',
+        entityId: String(order._id),
+        status: 'success',
+        before,
+        after: shippingSnapshot(order),
+        meta: orderAuditMeta(order, {
+          updatedFields: [
+            'shipping.address_line_1',
+            'shipping.address_line_2',
+            'shipping.admin_area_2',
+            'shipping.admin_area_1',
+            'shipping.postal_code',
+            'shipping.country_code',
+          ],
+        }),
+      });
 
-    return res.status(500).json({ ok: false, message: e.message || 'Update address failed' });
-  }
-});
+      return res.json({ ok: true });
+    } catch (e) {
+      console.error('Update address failed:', e);
+
+      await logAdminAction(req, {
+        action: 'shipping.address.update',
+        entityType: 'order',
+        entityId: '',
+        status: 'failure',
+        meta: {
+          section: 'shippo_labels',
+          orderId: String(req.params.orderId || '').trim(),
+          error: String(e?.message || e || '').slice(0, 500),
+        },
+      });
+
+      return res.status(500).json({ ok: false, message: e.message || 'Update address failed' });
+    }
+  },
+);
 
 module.exports = router;
-
-
