@@ -9,6 +9,26 @@ function clean(value, max = 1000) {
     .slice(0, max);
 }
 
+function normalizeDpmm(value) {
+  const raw = clean(value, 20).toLowerCase().replace(/\s+/g, '');
+
+  const aliases = {
+    6: '6dpmm',
+    '6dpmm': '6dpmm',
+
+    8: '8dpmm',
+    '8dpmm': '8dpmm',
+
+    12: '12dpmm',
+    '12dpmm': '12dpmm',
+
+    24: '24dpmm',
+    '24dpmm': '24dpmm',
+  };
+
+  return aliases[raw] || '';
+}
+
 function numberEnv(name, fallback, minimum, maximum) {
   const value = Number(process.env[name]);
 
@@ -16,68 +36,45 @@ function numberEnv(name, fallback, minimum, maximum) {
     return fallback;
   }
 
-  return Math.max(
-    minimum,
-    Math.min(maximum, Math.floor(value)),
-  );
+  return Math.max(minimum, Math.min(maximum, Math.floor(value)));
 }
 
 function getLabelaryConfig() {
   const apiBase = clean(
-    process.env.LABELARY_API_BASE ||
-      'https://api.labelary.com/v1',
+    process.env.LABELARY_API_BASE || 'https://api.labelary.com/v1',
     500,
   ).replace(/\/+$/, '');
 
-  const dpmm = clean(
-    process.env.LABELARY_DPMM || '8dpmm',
-    20,
-  );
+  const configuredDpmm =
+    process.env.LABELARY_DPMM === undefined ||
+    process.env.LABELARY_DPMM === null ||
+    String(process.env.LABELARY_DPMM).trim() === ''
+      ? '8dpmm'
+      : process.env.LABELARY_DPMM;
 
-  const widthInches = clean(
-    process.env.LABELARY_LABEL_WIDTH_INCHES || '4',
-    20,
-  );
+  const dpmm = normalizeDpmm(configuredDpmm);
 
-  const heightInches = clean(
-    process.env.LABELARY_LABEL_HEIGHT_INCHES || '6',
-    20,
-  );
+  const widthInches = clean(process.env.LABELARY_LABEL_WIDTH_INCHES || '4', 20);
 
-  const timeoutMs = numberEnv(
-    'LABELARY_TIMEOUT_MS',
-    45000,
-    5000,
-    120000,
-  );
+  const heightInches = clean(process.env.LABELARY_LABEL_HEIGHT_INCHES || '6', 20);
 
-  const maxZplBytes = numberEnv(
-    'LABELARY_MAX_ZPL_BYTES',
-    1000000,
-    1000,
-    1000000,
-  );
+  const timeoutMs = numberEnv('LABELARY_TIMEOUT_MS', 45000, 5000, 120000);
 
-  const maxPdfBytes = numberEnv(
-    'LABELARY_MAX_PDF_BYTES',
-    20000000,
-    100000,
-    50000000,
-  );
+  const maxZplBytes = numberEnv('LABELARY_MAX_ZPL_BYTES', 1000000, 1000, 1000000);
+
+  const maxPdfBytes = numberEnv('LABELARY_MAX_PDF_BYTES', 20000000, 100000, 50000000);
 
   if (!/^https:\/\//i.test(apiBase)) {
-    const error = new Error(
-      'LABELARY_API_BASE must use HTTPS.',
-    );
+    const error = new Error('LABELARY_API_BASE must use HTTPS.');
 
     error.code = 'LABELARY_API_BASE_INVALID';
 
     throw error;
   }
 
-  if (!['6dpmm', '8dpmm', '12dpmm', '24dpmm'].includes(dpmm)) {
+  if (!dpmm) {
     const error = new Error(
-      'LABELARY_DPMM must be one of 6dpmm, 8dpmm, 12dpmm, or 24dpmm.',
+      'LABELARY_DPMM must be 6, 8, 12, or 24. Values such as 8 and 8dpmm are both supported.',
     );
 
     error.code = 'LABELARY_DPMM_INVALID';
@@ -96,9 +93,7 @@ function getLabelaryConfig() {
     height <= 0 ||
     height > 15
   ) {
-    const error = new Error(
-      'Labelary label width and height must be between 0 and 15 inches.',
-    );
+    const error = new Error('Labelary label width and height must be between 0 and 15 inches.');
 
     error.code = 'LABELARY_LABEL_SIZE_INVALID';
 
@@ -128,9 +123,7 @@ async function renderCourierGuyZplToPdf(zpl) {
   const source = String(zpl || '');
 
   if (!source.trim()) {
-    const error = new Error(
-      'Courier Guy ZPL is required before a PDF can be generated.',
-    );
+    const error = new Error('Courier Guy ZPL is required before a PDF can be generated.');
 
     error.code = 'COURIER_GUY_ZPL_REQUIRED';
 
@@ -181,19 +174,13 @@ async function renderCourierGuyZplToPdf(zpl) {
       signal: controller.signal,
     });
 
-    const responseBuffer = Buffer.from(
-      await response.arrayBuffer(),
-    );
+    const responseBuffer = Buffer.from(await response.arrayBuffer());
 
     if (!response.ok) {
-      const responseMessage = responseBuffer
-        .toString('utf8')
-        .trim()
-        .slice(0, 1500);
+      const responseMessage = responseBuffer.toString('utf8').trim().slice(0, 1500);
 
       const error = new Error(
-        responseMessage ||
-          `The ZPL-to-PDF service returned HTTP ${response.status}.`,
+        responseMessage || `The ZPL-to-PDF service returned HTTP ${response.status}.`,
       );
 
       error.code = 'COURIER_GUY_PDF_RENDER_FAILED';
@@ -213,9 +200,7 @@ async function renderCourierGuyZplToPdf(zpl) {
     }
 
     if (!isPdfBuffer(responseBuffer)) {
-      const error = new Error(
-        'The ZPL-to-PDF service did not return a valid PDF document.',
-      );
+      const error = new Error('The ZPL-to-PDF service did not return a valid PDF document.');
 
       error.code = 'COURIER_GUY_PDF_INVALID';
 
@@ -230,9 +215,7 @@ async function renderCourierGuyZplToPdf(zpl) {
         .toLowerCase()
         .includes('aborted')
     ) {
-      const timeoutError = new Error(
-        'Courier Guy PDF generation timed out.',
-      );
+      const timeoutError = new Error('Courier Guy PDF generation timed out.');
 
       timeoutError.code = 'COURIER_GUY_PDF_TIMEOUT';
       timeoutError.status = 504;

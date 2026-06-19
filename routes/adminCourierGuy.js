@@ -541,13 +541,29 @@ router.get(
         },
       });
 
-      res.setHeader('Content-Type', 'application/zpl; charset=utf-8');
+      const zplBuffer = Buffer.from(stickerZpl, 'utf8');
 
-      res.setHeader('Content-Disposition', `attachment; filename="courier-guy-${safeOrderId}.zpl"`);
+      res.status(200);
 
-      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      /*
+       * application/octet-stream is intentionally used here.
+       * Some Android browsers do not understand application/zpl and may
+       * try to display or archive the surrounding webpage instead.
+       */
+      res.setHeader('Content-Type', 'application/octet-stream');
 
-      return res.status(200).send(stickerZpl);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="courier-guy-${safeOrderId}.zpl"; filename*=UTF-8''courier-guy-${safeOrderId}.zpl`,
+      );
+
+      res.setHeader('Content-Length', String(zplBuffer.length));
+      res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+
+      return res.end(zplBuffer);
     } catch (error) {
       order.courierGuy = order.courierGuy || {};
 
@@ -684,15 +700,22 @@ router.get(
         },
       });
 
+      res.status(200);
+
       res.setHeader('Content-Type', 'application/pdf');
 
-      res.setHeader('Content-Disposition', `attachment; filename="courier-guy-${safeOrderId}.pdf"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="courier-guy-${safeOrderId}.pdf"; filename*=UTF-8''courier-guy-${safeOrderId}.pdf`,
+      );
 
       res.setHeader('Content-Length', String(pdfBuffer.length));
+      res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
 
-      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
-
-      return res.status(200).send(pdfBuffer);
+      return res.end(pdfBuffer);
     } catch (error) {
       order.courierGuy = order.courierGuy || {};
 
