@@ -6,6 +6,19 @@
   const t = o.shippingTracking || {};
   const events = Array.isArray(t.liveEvents) ? t.liveEvents : [];
 
+  const shippingProvider = String(
+    o.shippingProvider || 'SHIPPO'
+  )
+    .trim()
+    .toUpperCase();
+
+  const isCourierGuy =
+    shippingProvider === 'COURIER_GUY';
+
+  const adminBackUrl = isCourierGuy
+    ? '/admin/courier-guy'
+    : '/admin/shippo';
+
   function niceDate(d) {
     try {
       if (!d) return '';
@@ -29,10 +42,40 @@
     );
   };
 
+  const eventStatusRank = (value) => {
+    const status = String(value || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[-\s]+/g, '_');
+
+    const ranks = {
+      SUBMITTED: 10,
+      PROCESSING: 20,
+      COLLECTION_ASSIGNED: 30,
+      PICKED_UP: 40,
+      COLLECTED: 40,
+      IN_TRANSIT: 50,
+      OUT_FOR_DELIVERY: 60,
+      DELIVERED: 70,
+      DELAYED: 15,
+      CANCELLED: 5,
+    };
+
+    return ranks[status] || 0;
+  };
+
   const eventsSorted = [...events].sort((a, b) => {
     const da = new Date(pickEventDate(a) || 0).getTime();
     const db = new Date(pickEventDate(b) || 0).getTime();
-    return db - da;
+
+    if (db !== da) {
+      return db - da;
+    }
+
+    return (
+      eventStatusRank(b?.status || b?.rawStatus) -
+      eventStatusRank(a?.status || a?.rawStatus)
+    );
   });
 
   const lastUpdateRaw =
@@ -42,6 +85,18 @@
     t.lastUpdatedAt ||
     t.updatedAt ||
     o.updatedAt ||
+    null;
+
+  const courierGuyRate = o?.courierGuy?.chosenRate || {};
+
+  const courierGuyDeliveryFrom =
+    courierGuyRate.deliveryDateFrom ||
+    courierGuyRate.delivery_date_from ||
+    null;
+
+  const courierGuyDeliveryTo =
+    courierGuyRate.deliveryDateTo ||
+    courierGuyRate.delivery_date_to ||
     null;
 
   const etaRaw =
@@ -55,12 +110,14 @@
   const lastUpdateText = lastUpdateRaw ? niceDate(lastUpdateRaw) : '—';
 
   const currentStatus =
-    t.liveStatus ||
-    t.status ||
     liveTracking?.status ||
     eventsSorted[0]?.status ||
+    t.liveStatus ||
+    t.status ||
+    o?.courierGuy?.shipmentStatus ||
+    o?.courierGuy?.trackingStatus ||
     o.fulfillmentStatus ||
-    (t.trackingNumber ? 'SHIPPED' : '');
+    (t.trackingNumber ? 'SHIPPED' : 'PROCESSING');
 
   const rateDays =
     o?.shippo?.chosenRate?.estimatedDays ??
@@ -79,9 +136,40 @@
       ? new Date(new Date(labelDate).getTime() + (Number(rateDays) * 24 * 60 * 60 * 1000))
       : null;
 
+  const courierGuyEtaText = (() => {
+    if (!isCourierGuy) {
+      return '';
+    }
+
+    if (courierGuyDeliveryFrom && courierGuyDeliveryTo) {
+      const fromText = niceDate(courierGuyDeliveryFrom);
+      const toText = niceDate(courierGuyDeliveryTo);
+
+      if (fromText === toText) {
+        return fromText;
+      }
+
+      return `${fromText} – ${toText}`;
+    }
+
+    if (courierGuyDeliveryFrom) {
+      return niceDate(courierGuyDeliveryFrom);
+    }
+
+    if (courierGuyDeliveryTo) {
+      return niceDate(courierGuyDeliveryTo);
+    }
+
+    return '';
+  })();
+
   const etaFinalText = etaRaw
     ? niceDate(etaRaw)
-    : (approxEtaRaw ? (niceDate(approxEtaRaw) + ' (approx)') : '—');
+    : courierGuyEtaText
+      ? `${courierGuyEtaText} (estimated from selected service)`
+      : approxEtaRaw
+        ? `${niceDate(approxEtaRaw)} (approx)`
+        : 'Not provided yet';
 
   const prettyCarrier = (v) => {
     const s = String(v || '').trim();
@@ -102,19 +190,27 @@
   };
 
   const prettyStatus = (v) => {
-    const s = String(v || '').trim().toUpperCase();
+    const s = String(v || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[-\s]+/g, '_');
+
     const m = {
       PENDING: 'Pending',
       PROCESSING: 'Processing',
+      SUBMITTED: 'Shipment submitted',
+      COLLECTION_ASSIGNED: 'Collection assigned',
+      PICKED_UP: 'Collected',
       LABEL_CREATED: 'Label created',
       SHIPPED: 'Shipped',
       IN_TRANSIT: 'In transit',
       OUT_FOR_DELIVERY: 'Out for delivery',
       DELIVERED: 'Delivered',
+      DELAYED: 'Delayed',
       CANCELLED: 'Cancelled',
       RETURNED: 'Returned',
       FAILURE: 'Tracking error',
-      UNKNOWN: 'Unknown',
+      UNKNOWN: 'Processing',
     };
     return m[s] || (s ? s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '—');
   };
@@ -129,11 +225,15 @@
     if (s === 'OUT_FOR_DELIVERY') return 'trk-badge-ship';
     if (s === 'IN_TRANSIT') return 'trk-badge-ship';
     if (s === 'SHIPPED') return 'trk-badge-ship';
+    if (s === 'PICKED_UP') return 'trk-badge-ship';
+    if (s === 'COLLECTION_ASSIGNED') return 'trk-badge-ship';
+    if (s === 'SUBMITTED') return 'trk-badge-muted';
     if (s === 'LABEL_CREATED') return 'trk-badge-ship';
 
     if (s === 'CANCELLED') return 'trk-badge-bad';
     if (s === 'RETURNED') return 'trk-badge-bad';
     if (s === 'FAILURE') return 'trk-badge-bad';
+    if (s === 'DELAYED') return 'trk-badge-bad';
 
     if (s === 'PROCESSING') return 'trk-badge-muted';
     if (s === 'PENDING') return 'trk-badge-muted';
@@ -143,9 +243,50 @@
   };
 
   const eventDetails = (ev) => {
-    const d = String(ev?.details || '').trim();
-    const r = String(ev?.rawStatus || '').trim();
-    return d || r || prettyStatus(ev?.status);
+    const rawStatus = String(
+      ev?.rawStatus ||
+      ev?.status ||
+      ''
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+
+    const details = String(ev?.details || '').trim();
+
+    if (rawStatus.includes('collection assigned')) {
+      return 'A Courier Guy collection has been assigned for this shipment.';
+    }
+
+    if (rawStatus.includes('collection booked')) {
+      return 'The parcel collection has been booked.';
+    }
+
+    if (rawStatus.includes('submitted')) {
+      return 'The shipment details were submitted successfully to The Courier Guy.';
+    }
+
+    if (
+      rawStatus.includes('picked up') ||
+      rawStatus.includes('collected')
+    ) {
+      return 'The parcel has been collected by The Courier Guy.';
+    }
+
+    if (rawStatus.includes('in transit')) {
+      return 'The parcel is travelling through the Courier Guy delivery network.';
+    }
+
+    if (rawStatus.includes('out for delivery')) {
+      return 'The parcel is with the driver for delivery.';
+    }
+
+    if (rawStatus.includes('delivered')) {
+      return 'The parcel has been delivered.';
+    }
+
+    return details || prettyStatus(ev?.status);
   };
 
   const eventLocationLine = (loc) => {
@@ -188,26 +329,27 @@
     String(t.trackingUrl || '').trim() ||
     buildCarrierTrackingUrl(t.carrierToken || t.carrier, t.trackingNumber);
 
-  const labelUrlFinal =
-    String(
-      o?.shippo?.labelUrl ||
-      o?.shippo?.label_url ||
-      o?.shippo?.labelPdfUrl ||
-      o?.shippo?.label_pdf ||
-      t?.labelUrl ||
-      ''
-    ).trim();
+  const labelUrlFinal = isCourierGuy
+    ? (
+        o?._id
+          ? `/admin/courier-guy/${o._id}/sticker.pdf`
+          : ''
+      )
+    : String(
+        o?.shippo?.labelUrl ||
+        o?.shippo?.label_url ||
+        o?.shippo?.labelPdfUrl ||
+        o?.shippo?.label_pdf ||
+        t?.labelUrl ||
+        ''
+      ).trim();
 
   const successList = toArray(success);
   const errorList = toArray(error);
 %>
 
 <!-- Spinner Start -->
-<div
-  id="spinner"
-  class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center"
-  style="z-index: 9999;"
->
+<div id="spinner" class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center" style="z-index: 9999;">
   <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
     <span class="visually-hidden">Loading...</span>
   </div>
@@ -237,7 +379,7 @@
               </div>
 
               <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-lg-auto">
-                <a class="btn btn-light text-brand-purple fw-semibold" href="<%= isAdmin ? '/admin/shippo' : '/orders' %>">
+                <a class="btn btn-light text-primary fw-semibold" href="<%= isAdmin ? adminBackUrl : '/orders' %>">
                   ← Back
                 </a>
                 <button class="btn btn-brand-green" type="button" id="btnRefresh">
@@ -255,9 +397,9 @@
                   <%= statusTag(currentStatus) %>
                 </span>
                 <% if (t.status && currentStatus && String(t.status).toUpperCase() !== String(currentStatus).toUpperCase()) { %>
-                  <span class="badge rounded-pill <%= statusClass(t.status) %>">
-                    <%= 'Saved: ' + statusTag(t.status) %>
-                  </span>
+                <span class="badge rounded-pill <%= statusClass(t.status) %>">
+                  <%= 'Saved: ' + statusTag(t.status) %>
+                </span>
                 <% } %>
               </div>
             </div>
@@ -266,11 +408,11 @@
       </div>
 
       <% successList.forEach(msg => { %>
-        <div class="alert alert-success shadow-sm mb-3" role="alert">✅ <%= msg %></div>
+      <div class="alert alert-success shadow-sm mb-3" role="alert">✅ <%= msg %></div>
       <% }) %>
 
       <% errorList.forEach(msg => { %>
-        <div class="alert alert-danger shadow-sm mb-3" role="alert">❌ <%= msg %></div>
+      <div class="alert alert-danger shadow-sm mb-3" role="alert">❌ <%= msg %></div>
       <% }) %>
 
       <div class="row g-3 g-lg-4">
@@ -285,29 +427,35 @@
               <div class="tracking-field rounded-3 p-3 mb-3">
                 <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Carrier</div>
                 <div class="fw-semibold fs-5 text-dark">
-                  <%= (t.carrierLabel || prettyCarrier(t.carrier) || '—') %>
-                  <% if (t.carrierToken) { %>
-                    <span class="badge rounded-pill trk-badge-base ms-2"><%= prettyCarrier(t.carrierToken) %></span>
+                  <%= isCourierGuy
+                    ? 'The Courier Guy'
+                    : (t.carrierLabel || prettyCarrier(t.carrier) || '—')
+                  %>
+
+                  <% if (!isCourierGuy && t.carrierToken) { %>
+                  <span class="badge rounded-pill trk-badge-base ms-2">
+                    <%= prettyCarrier(t.carrierToken) %>
+                  </span>
                   <% } %>
                 </div>
               </div>
 
               <% if (trackingUrlFinal) { %>
-                <div class="tracking-field rounded-3 p-3 mb-3">
-                  <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Tracking link</div>
-                  <a class="btn btn-outline-brand-purple fw-semibold" href="<%= trackingUrlFinal %>" target="_blank" rel="noopener noreferrer">
-                    Open carrier tracking ↗
-                  </a>
-                </div>
+              <div class="tracking-field rounded-3 p-3 mb-3">
+                <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Tracking link</div>
+                <a class="btn btn-outline-brand-purple fw-semibold" href="<%= trackingUrlFinal %>" target="_blank" rel="noopener noreferrer">
+                  Open carrier tracking ↗
+                </a>
+              </div>
               <% } %>
 
               <% if (labelUrlFinal) { %>
-                <div class="tracking-field rounded-3 p-3 mb-3">
-                  <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Shipping label</div>
-                  <a class="btn btn-outline-brand-purple fw-semibold" href="<%= labelUrlFinal %>" target="_blank" rel="noopener noreferrer">
-                    Open shipping label ↗
-                  </a>
-                </div>
+              <div class="tracking-field rounded-3 p-3 mb-3">
+                <div class="small fw-semibold text-uppercase text-brand-purple mb-2">Shipping label</div>
+                <a class="btn btn-outline-brand-purple fw-semibold" href="<%= labelUrlFinal %>" target="_blank" rel="noopener noreferrer">
+                  Open shipping label ↗
+                </a>
+              </div>
               <% } %>
 
               <div class="tracking-field rounded-3 p-3 mb-3">
@@ -320,72 +468,61 @@
                 <div class="fw-semibold text-dark"><%= etaFinalText %></div>
               </div>
 
-              <% if (isAdmin) { %>
-                <div class="pt-2">
-                  <h2 class="h5 fw-bold text-brand-purple mb-3">Admin: set tracking</h2>
+              <% if (isAdmin && !isCourierGuy) { %>
+              <div class="pt-2">
+                <h2 class="h5 fw-bold text-brand-purple mb-3">Admin: set tracking</h2>
 
-                  <form method="POST" action="<%= BASE %>/<%= o._id %>" class="row g-3">
-                    <div class="col-12">
-                      <label class="form-label fw-semibold text-brand-purple">Carrier (Shippo token)</label>
-                      <select name="carrier" class="form-select tracking-input" required>
-                        <option value="">Choose…</option>
-                        <option value="usps" <%= t.carrierToken === 'usps' ? 'selected' : '' %>>USPS</option>
-                        <option value="ups" <%= t.carrierToken === 'ups' ? 'selected' : '' %>>UPS</option>
-                        <option value="fedex" <%= t.carrierToken === 'fedex' ? 'selected' : '' %>>FedEx</option>
-                        <option value="dhl_express" <%= t.carrierToken === 'dhl_express' ? 'selected' : '' %>>DHL Express</option>
-                      </select>
-                    </div>
+                <form method="POST" action="<%= BASE %>/<%= o._id %>" class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-brand-purple">Carrier (Shippo token)</label>
+                    <select name="carrier" class="form-select tracking-input" required>
+                      <option value="">Choose…</option>
+                      <option value="usps" <%= t.carrierToken === 'usps' ? 'selected' : '' %>>USPS</option>
+                      <option value="ups" <%= t.carrierToken === 'ups' ? 'selected' : '' %>>UPS</option>
+                      <option value="fedex" <%= t.carrierToken === 'fedex' ? 'selected' : '' %>>FedEx</option>
+                      <option value="dhl_express" <%= t.carrierToken === 'dhl_express' ? 'selected' : '' %>>DHL Express</option>
+                    </select>
+                  </div>
 
-                    <div class="col-12">
-                      <label class="form-label fw-semibold text-brand-purple">Tracking number</label>
-                      <input
-                        name="trackingNumber"
-                        class="form-control tracking-input"
-                        value="<%= t.trackingNumber || '' %>"
-                        placeholder="Enter tracking number"
-                        required
-                      />
-                    </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-brand-purple">Tracking number</label>
+                    <input name="trackingNumber" class="form-control tracking-input" value="<%= t.trackingNumber || '' %>" placeholder="Enter tracking number" required />
+                  </div>
 
-                    <div class="col-12">
-                      <label class="form-label fw-semibold text-brand-purple">Carrier display name (optional)</label>
-                      <input
-                        name="carrierLabel"
-                        class="form-control tracking-input"
-                        value="<%= t.carrierLabel || '' %>"
-                        placeholder="Name shown on page (e.g. DHL Express South Africa)"
-                      />
-                    </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-brand-purple">Carrier display name (optional)</label>
+                    <input name="carrierLabel" class="form-control tracking-input" value="<%= t.carrierLabel || '' %>" placeholder="Name shown on page (e.g. DHL Express South Africa)" />
+                  </div>
 
-                    <div class="col-12">
-                      <div class="small text-body-secondary">
-                        Tracking link is auto-shown from the saved URL, or generated from carrier + tracking number if URL is missing.
-                      </div>
+                  <div class="col-12">
+                    <div class="small text-body-secondary">
+                      Tracking link is auto-shown from the saved URL, or generated from carrier + tracking number if URL is missing.
                     </div>
+                  </div>
 
-                    <div class="col-12">
-                      <% if (labelUrlFinal) { %>
-                        <div class="small text-body-secondary">
-                          Shipping label is available above as a clickable link.
-                        </div>
-                      <% } else { %>
-                        <div class="small text-body-secondary">
-                          Shipping label will appear automatically after a label URL is saved from your shipping flow.
-                        </div>
-                      <% } %>
+                  <div class="col-12">
+                    <% if (labelUrlFinal) { %>
+                    <div class="small text-body-secondary">
+                      Shipping label is available above as a clickable link.
                     </div>
+                    <% } else { %>
+                    <div class="small text-body-secondary">
+                      Shipping label will appear automatically after a label URL is saved from your shipping flow.
+                    </div>
+                    <% } %>
+                  </div>
 
-                    <div class="col-12">
-                      <button class="btn btn-brand-purple fw-semibold" type="submit">Save tracking</button>
-                    </div>
+                  <div class="col-12">
+                    <button class="btn btn-brand-purple fw-semibold" type="submit">Save tracking</button>
+                  </div>
 
-                    <div class="col-12">
-                      <div class="small text-body-secondary">
-                        We save the real carrier in <span class="font-monospace">carrierToken</span>. This field only changes the display name shown on this page.
-                      </div>
+                  <div class="col-12">
+                    <div class="small text-body-secondary">
+                      We save the real carrier in <span class="font-monospace">carrierToken</span>. This field only changes the display name shown on this page.
                     </div>
-                  </form>
-                </div>
+                  </div>
+                </form>
+              </div>
               <% } %>
 
             </div>
@@ -402,33 +539,33 @@
               <div id="liveMsg" class="small text-body-secondary mb-3"></div>
 
               <% if (!events.length) { %>
-                <div class="tracking-empty rounded-3 p-3">
-                  No live events yet. Click “Refresh live tracking”.
-                </div>
+              <div class="tracking-empty rounded-3 p-3">
+                No live events yet. Click “Refresh live tracking”.
+              </div>
               <% } else { %>
-                <div class="d-grid gap-3" id="eventsBox">
-                  <% events.slice().reverse().forEach(ev => { %>
-                    <div class="tracking-field rounded-3 p-3">
-                      <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-2">
-                        <span class="badge rounded-pill <%= statusClass(ev.status) %>">
-                          <%= statusTag(ev.status) %>
-                        </span>
-                        <span class="small text-body-secondary">
-                          <%= niceDate(pickEventDate(ev) || ev.date) %>
-                        </span>
-                      </div>
+              <div class="d-grid gap-3" id="eventsBox">
+                <% eventsSorted.forEach(ev => { %>
+                <div class="tracking-field rounded-3 p-3">
+                  <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-2">
+                    <span class="badge rounded-pill <%= statusClass(ev.status) %>">
+                      <%= statusTag(ev.status) %>
+                    </span>
+                    <span class="small text-body-secondary">
+                      <%= niceDate(pickEventDate(ev) || ev.date) %>
+                    </span>
+                  </div>
 
-                      <div class="fw-semibold text-dark mb-2"><%= eventDetails(ev) %></div>
+                  <div class="fw-semibold text-dark mb-2"><%= eventDetails(ev) %></div>
 
-                      <% const locLine = eventLocationLine(ev.location); %>
-                      <% if (locLine) { %>
-                        <div class="small text-body-secondary">📍 <%= locLine %></div>
-                      <% } else if (ev.location) { %>
-                        <div class="small text-body-secondary"><%= JSON.stringify(ev.location) %></div>
-                      <% } %>
-                    </div>
-                  <% }) %>
+                  <% const locLine = eventLocationLine(ev.location); %>
+                  <% if (locLine) { %>
+                  <div class="small text-body-secondary">📍 <%= locLine %></div>
+                  <% } else if (ev.location) { %>
+                  <div class="small text-body-secondary"><%= JSON.stringify(ev.location) %></div>
+                  <% } %>
                 </div>
+                <% }) %>
+              </div>
               <% } %>
             </div>
           </div>
@@ -444,11 +581,25 @@
     background-color: #f8f5ff !important;
   }
 
-  .text-brand-purple { color: #7C3AED !important; }
-  .bg-brand-purple { background-color: #7C3AED !important; }
-  .bg-brand-purple-soft { background-color: rgba(124, 58, 237, 0.10) !important; }
-  .border-brand-purple { border-color: rgba(124, 58, 237, 0.35) !important; }
-  .border-brand-purple-soft { border-color: rgba(124, 58, 237, 0.18) !important; }
+  .text-brand-purple {
+    color: #7C3AED !important;
+  }
+
+  .bg-brand-purple {
+    background-color: #7C3AED !important;
+  }
+
+  .bg-brand-purple-soft {
+    background-color: rgba(124, 58, 237, 0.10) !important;
+  }
+
+  .border-brand-purple {
+    border-color: rgba(124, 58, 237, 0.35) !important;
+  }
+
+  .border-brand-purple-soft {
+    border-color: rgba(124, 58, 237, 0.18) !important;
+  }
 
   .tracking-head-kicker {
     color: rgba(255, 255, 255, 0.82) !important;
@@ -552,52 +703,54 @@
 </style>
 
 <script nonce="<%= PAGE_NONCE %>">
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('btnRefresh');
-  const msg = document.getElementById('liveMsg');
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('btnRefresh');
+    const msg = document.getElementById('liveMsg');
 
-  async function refresh() {
-    if (msg) msg.textContent = 'Refreshing…';
-    if (btn) btn.disabled = true;
+    async function refresh() {
+      if (msg) msg.textContent = 'Refreshing…';
+      if (btn) btn.disabled = true;
 
-    let r, data;
-    try {
-      r = await fetch('<%= BASE %>/<%= o._id %>/refresh', {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      });
-      data = await r.json().catch(() => ({}));
-    } catch (e) {
+      let r, data;
+      try {
+        r = await fetch('<%= BASE %>/<%= o._id %>/refresh', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        data = await r.json().catch(() => ({}));
+      } catch (e) {
+        if (btn) btn.disabled = false;
+        if (msg) msg.textContent = '❌ Network error. Please try again.';
+        return;
+      }
+
       if (btn) btn.disabled = false;
-      if (msg) msg.textContent = '❌ Network error. Please try again.';
-      return;
+
+      if (!r.ok || !data.ok) {
+        if (msg) msg.textContent = '❌ ' + (data.message || 'Failed to refresh');
+        return;
+      }
+
+      if (msg) msg.textContent = '✅ Updated. Reloading…';
+      window.location.reload();
     }
 
-    if (btn) btn.disabled = false;
+    if (btn) btn.addEventListener('click', refresh);
 
-    if (!r.ok || !data.ok) {
-      if (msg) msg.textContent = '❌ ' + (data.message || 'Failed to refresh');
-      return;
+    const pageSpinner = document.getElementById('spinner');
+
+    if (pageSpinner) {
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          pageSpinner.classList.remove('show');
+
+          setTimeout(function() {
+            pageSpinner.classList.add('d-none');
+          }, 300);
+        }, 700);
+      });
     }
-
-    if (msg) msg.textContent = '✅ Updated. Reloading…';
-    window.location.reload();
-  }
-
-  if (btn) btn.addEventListener('click', refresh);
-
-  const pageSpinner = document.getElementById('spinner');
-
-  if (pageSpinner) {
-    window.addEventListener('load', function () {
-      setTimeout(function () {
-        pageSpinner.classList.remove('show');
-
-        setTimeout(function () {
-          pageSpinner.classList.add('d-none');
-        }, 300);
-      }, 700);
-    });
-  }
-});
+  });
 </script>

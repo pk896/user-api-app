@@ -6,6 +6,9 @@ const router = express.Router();
 const axios = require('axios');
 
 const { getShippoTracking } = require('../utils/shippo/getShippoTracking');
+
+const { getCourierGuyShipment } = require('../utils/courierGuy/getCourierGuyShipment');
+
 const {
   sendOrderShippedEmail,
   sendOrderDeliveredEmail,
@@ -24,7 +27,9 @@ const mongoose = require('mongoose');
 // Enum-safe mapping (prevents ValidationError on enums)
 // ------------------------------------------------------
 function _norm(v) {
-  return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return String(v || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
 }
 
 function getTrackingStatusEnumValues(orderDoc) {
@@ -55,8 +60,8 @@ function mapToEnum(desired, enumValues) {
     want === _norm('OUT_FOR_DELIVERY')
       ? ['SHIPPED', 'IN_TRANSIT', 'PROCESSING', 'PENDING', 'UNKNOWN']
       : want === _norm('LABEL_CREATED')
-      ? ['PROCESSING', 'PENDING', 'UNKNOWN']
-      : ['PROCESSING', 'PENDING', 'UNKNOWN'];
+        ? ['PROCESSING', 'PENDING', 'UNKNOWN']
+        : ['PROCESSING', 'PENDING', 'UNKNOWN'];
 
   for (const fb of fallbackOrder) {
     for (const ev of enumValues) {
@@ -79,7 +84,9 @@ function liveStatusToFulfillment(liveStatus) {
 }
 
 function isShippedLikeStatus(value) {
-  const s = String(value || '').trim().toUpperCase();
+  const s = String(value || '')
+    .trim()
+    .toUpperCase();
   return s === 'SHIPPED' || s === 'IN_TRANSIT' || s === 'OUT_FOR_DELIVERY';
 }
 
@@ -91,7 +98,9 @@ async function sendTrackingStatusEmailIfNeeded(order) {
       order?.shippingTracking?.status ||
       order?.fulfillmentStatus ||
       '',
-  ).trim().toUpperCase();
+  )
+    .trim()
+    .toUpperCase();
 
   if (status === 'DELIVERED') {
     await sendOrderDeliveredEmail(order);
@@ -113,9 +122,7 @@ async function findOrderByParam(param, lean = false) {
 
   // Otherwise try lookup by your PayPal orderId field
   // (this matches your Order schema field "orderId")
-  return lean
-    ? Order.findOne({ orderId: p }).lean()
-    : Order.findOne({ orderId: p });
+  return lean ? Order.findOne({ orderId: p }).lean() : Order.findOne({ orderId: p });
 }
 
 /* ---------------------------------------
@@ -191,6 +198,163 @@ function hasBusiness(req) {
 function hasAdmin(req) {
   return Boolean(req.session?.admin);
 }
+
+function isCourierGuyOrder(order) {
+  return (
+    String(order?.shippingProvider || '')
+      .trim()
+      .toUpperCase() === 'COURIER_GUY'
+  );
+}
+
+function courierGuyShipmentToLiveTracking(shipment) {
+  const source = shipment || {};
+  const raw = source.raw || source;
+
+  const events =
+    (Array.isArray(source.events) && source.events) ||
+    (Array.isArray(raw.events) && raw.events) ||
+    (Array.isArray(raw.tracking_events) && raw.tracking_events) ||
+    (Array.isArray(raw.trackingEvents) && raw.trackingEvents) ||
+    (Array.isArray(raw.history) && raw.history) ||
+    [];
+
+  function eventDateValue(event) {
+    const value =
+      event?.datetime ||
+      event?.date ||
+      event?.status_date ||
+      event?.event_datetime ||
+      event?.timestamp ||
+      event?.created_at ||
+      event?.updated_at ||
+      null;
+
+    const milliseconds = value ? new Date(value).getTime() : 0;
+
+    return Number.isFinite(milliseconds) ? milliseconds : 0;
+  }
+
+  function eventStatusRank(value) {
+    const status = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+
+    if (status.includes('delivered')) return 100;
+    if (status.includes('out for delivery')) return 90;
+    if (status.includes('in transit')) return 80;
+
+    if (status.includes('picked up') || status.includes('collected')) {
+      return 70;
+    }
+
+    if (status.includes('collection assigned')) {
+      return 60;
+    }
+
+    if (status.includes('collection booked')) {
+      return 50;
+    }
+
+    if (status.includes('submitted')) {
+      return 40;
+    }
+
+    if (status.includes('processing')) {
+      return 30;
+    }
+
+    if (status.includes('delayed') || status.includes('exception')) {
+      return 20;
+    }
+
+    if (status.includes('cancelled')) {
+      return 10;
+    }
+
+    return 0;
+  }
+
+  const sortedEvents = events.slice().sort((a, b) => {
+    const dateDifference = eventDateValue(b) - eventDateValue(a);
+
+    if (dateDifference !== 0) {
+      return dateDifference;
+    }
+
+    const aStatus = a?.rawStatus || a?.status || a?.event || a?.type || '';
+
+    const bStatus = b?.rawStatus || b?.status || b?.event || b?.type || '';
+
+    return eventStatusRank(bStatus) - eventStatusRank(aStatus);
+  });
+
+  const latestMeaningfulEvent =
+    sortedEvents.find((event) => {
+      const value = event?.rawStatus || event?.status || event?.event || event?.type || '';
+
+      return eventStatusRank(value) > 0;
+    }) || null;
+
+  const eventStatus =
+    latestMeaningfulEvent?.rawStatus ||
+    latestMeaningfulEvent?.status ||
+    latestMeaningfulEvent?.event ||
+    latestMeaningfulEvent?.type ||
+    '';
+
+  const topLevelStatus =
+    source.status ||
+    source.shipmentStatus ||
+    source.trackingStatus ||
+    raw.status ||
+    raw.shipment_status ||
+    raw.tracking_status ||
+    raw.state ||
+    '';
+
+  /*
+   * Prefer the most advanced dated event.
+   *
+   * Shiplogic sandbox can return a generic or unknown top-level status
+   * while its event history already contains collection-assigned.
+   */
+  const finalRawStatus = eventStatus || topLevelStatus || 'PROCESSING';
+
+  const estimatedDelivery =
+    source.estimatedDelivery ||
+    raw.estimated_delivery ||
+    raw.estimatedDelivery ||
+    raw.delivery_date ||
+    raw.expected_delivery_date ||
+    null;
+
+  const lastUpdate =
+    latestMeaningfulEvent?.datetime ||
+    latestMeaningfulEvent?.date ||
+    latestMeaningfulEvent?.status_date ||
+    latestMeaningfulEvent?.event_datetime ||
+    latestMeaningfulEvent?.timestamp ||
+    latestMeaningfulEvent?.created_at ||
+    latestMeaningfulEvent?.updated_at ||
+    source.lastUpdate ||
+    raw.updated_at ||
+    raw.updatedAt ||
+    raw.last_tracking_update ||
+    raw.lastTrackingUpdate ||
+    new Date().toISOString();
+
+  return {
+    status: mapStatus(finalRawStatus),
+    events: sortedEvents,
+    estimatedDelivery,
+    lastUpdate,
+    raw,
+  };
+}
+
 function isShippoCarrierToken(carrier) {
   // Shippo carrier tokens are typically lowercase strings like:
   // "ups", "usps", "fedex", "dhl_express"
@@ -228,7 +392,11 @@ function normalizeCarrierForSchema(rawCarrier) {
   // If user selected a Shippo token in the dropdown
   if (tokenToEnum[lower]) {
     const token = lower === 'dhl' ? 'dhl_express' : lower; // normalize
-    return { carrierEnum: tokenToEnum[lower], carrierToken: token, carrierLabelAuto: tokenToEnum[lower] };
+    return {
+      carrierEnum: tokenToEnum[lower],
+      carrierToken: token,
+      carrierLabelAuto: tokenToEnum[lower],
+    };
   }
 
   // If they posted an enum already (USPS/UPS/FEDEX/DHL/OTHER)
@@ -240,7 +408,11 @@ function normalizeCarrierForSchema(rawCarrier) {
 
   // Legacy courier keys
   if (COURIER_APIS[upper]) {
-    return { carrierEnum: upper, carrierToken: '', carrierLabelAuto: COURIER_APIS[upper].name || upper };
+    return {
+      carrierEnum: upper,
+      carrierToken: '',
+      carrierLabelAuto: COURIER_APIS[upper].name || upper,
+    };
   }
 
   // Unknown -> store as OTHER (safe)
@@ -252,7 +424,9 @@ function normalizeCarrierForSchema(rawCarrier) {
 // convert enum -> Shippo token so live tracking works.
 // ------------------------------------------------------
 function carrierEnumToShippoToken(carrierEnum) {
-  const upper = String(carrierEnum || '').trim().toUpperCase();
+  const upper = String(carrierEnum || '')
+    .trim()
+    .toUpperCase();
   const map = {
     USPS: 'usps',
     UPS: 'ups',
@@ -267,18 +441,79 @@ function isShippoTestKey() {
 }
 
 function mapStatus(courierStatus) {
-  if (!courierStatus) return 'UNKNOWN';
+  if (!courierStatus) {
+    return 'PROCESSING';
+  }
 
-  const status = courierStatus.toString().toLowerCase();
+  const status = String(courierStatus)
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
 
-  if (status.includes('delivered') || status.includes('completed')) return 'DELIVERED';
-  if (status.includes('out for delivery') || status.includes('on vehicle')) return 'OUT_FOR_DELIVERY';
-  if (status.includes('in transit') || status.includes('in transportation')) return 'IN_TRANSIT';
-  if (status.includes('picked up') || status.includes('collected')) return 'PICKED_UP';
-  if (status.includes('exception') || status.includes('delay')) return 'DELAYED';
-  if (status.includes('pending') || status.includes('processing')) return 'PROCESSING';
+  if (status.includes('delivered') || status.includes('completed')) {
+    return 'DELIVERED';
+  }
 
-  return 'UNKNOWN';
+  if (status.includes('out for delivery') || status.includes('on vehicle')) {
+    return 'OUT_FOR_DELIVERY';
+  }
+
+  if (
+    status.includes('in transit') ||
+    status.includes('in transportation') ||
+    status.includes('linehaul')
+  ) {
+    return 'IN_TRANSIT';
+  }
+
+  if (
+    status.includes('picked up') ||
+    status.includes('collected') ||
+    status.includes('collection completed')
+  ) {
+    return 'PICKED_UP';
+  }
+
+  if (
+    status.includes('collection assigned') ||
+    status.includes('collection booked') ||
+    status.includes('collection scheduled')
+  ) {
+    return 'COLLECTION_ASSIGNED';
+  }
+
+  if (
+    status.includes('submitted') ||
+    status.includes('created') ||
+    status.includes('shipment created') ||
+    status.includes('accepted')
+  ) {
+    return 'SUBMITTED';
+  }
+
+  if (
+    status.includes('exception') ||
+    status.includes('delayed') ||
+    status.includes('delay') ||
+    status.includes('failed')
+  ) {
+    return 'DELAYED';
+  }
+
+  if (status.includes('cancelled') || status.includes('canceled')) {
+    return 'CANCELLED';
+  }
+
+  if (status.includes('pending') || status.includes('processing')) {
+    return 'PROCESSING';
+  }
+
+  /*
+   * A created Courier Guy shipment should not be displayed as Unknown
+   * merely because Shiplogic introduces a status we do not map yet.
+   */
+  return 'PROCESSING';
 }
 
 function parseLegacyTrackingData(courier, data) {
@@ -366,7 +601,7 @@ async function cacheLiveTracking(orderIdOrOrderIdField, liveTracking) {
 
   // ✅ enum-safe mapping (prevents ValidationError)
   const trackingEnums = getTrackingStatusEnumValues(Order);
-  const fulfillEnums  = getFulfillmentEnumValues(Order);
+  const fulfillEnums = getFulfillmentEnumValues(Order);
 
   const safeTrackingStatus =
     mapToEnum(liveTracking.status, trackingEnums) || mapToEnum('UNKNOWN', trackingEnums);
@@ -438,36 +673,58 @@ router.get('/:orderId', async (req, res, next) => {
     let liveTracking = null;
 
     const st = order.shippingTracking || {};
-    const trackingNumber = String(st.trackingNumber || '').trim();
 
-    const carrierToken = String(st.carrierToken || '').trim(); // "usps"
-    const carrierEnum  = String(st.carrier || '').trim();      // "USPS"
+    if (isCourierGuyOrder(order)) {
+      const shipmentId = String(order?.courierGuy?.shipmentId || '').trim();
 
-    // ✅ Use Shippo token first; if missing, convert enum -> token (old orders)
-    const carrierForTracking =
-      carrierToken ||
-      carrierEnumToShippoToken(carrierEnum) ||
-      carrierEnum; // last fallback (legacy couriers might still use it)
+      if (shipmentId) {
+        try {
+          const shipment = await getCourierGuyShipment(shipmentId);
 
-
-    if (trackingNumber && carrierForTracking) {
-      liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
-
-      if (liveTracking) {
-        // Cache your live tracking fields
-        await cacheLiveTracking(req.params.orderId, liveTracking);
-
-        // Also update the in-memory order object used by this render
-        order.shippingTracking = order.shippingTracking || {};
-        order.shippingTracking.liveStatus = liveTracking.status || '';
-        order.shippingTracking.liveEvents = Array.isArray(liveTracking.events) ? liveTracking.events : [];
-        order.shippingTracking.lastTrackingUpdate = liveTracking.lastUpdate || new Date();
-        order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery || null;
-
-        // If no saved status yet, let the page show the live one
-        if (!order.shippingTracking.status && liveTracking.status) {
-          order.shippingTracking.status = liveTracking.status;
+          liveTracking = courierGuyShipmentToLiveTracking(shipment);
+        } catch (error) {
+          console.warn('[order-tracking] Courier Guy live tracking unavailable:', {
+            orderId: order.orderId,
+            shipmentId,
+            message: error?.message || String(error),
+          });
         }
+      }
+    } else {
+      const trackingNumber = String(st.trackingNumber || '').trim();
+
+      const carrierToken = String(st.carrierToken || '').trim();
+
+      const carrierEnum = String(st.carrier || '').trim();
+
+      const carrierForTracking =
+        carrierToken || carrierEnumToShippoToken(carrierEnum) || carrierEnum;
+
+      if (trackingNumber && carrierForTracking) {
+        liveTracking = await fetchAnyLiveTracking({
+          carrier: carrierForTracking,
+          trackingNumber,
+        });
+      }
+    }
+
+    if (liveTracking) {
+      await cacheLiveTracking(req.params.orderId, liveTracking);
+
+      order.shippingTracking = order.shippingTracking || {};
+
+      order.shippingTracking.liveStatus = liveTracking.status || '';
+
+      order.shippingTracking.liveEvents = Array.isArray(liveTracking.events)
+        ? liveTracking.events
+        : [];
+
+      order.shippingTracking.lastTrackingUpdate = liveTracking.lastUpdate || new Date();
+
+      order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery || null;
+
+      if (!order.shippingTracking.status && liveTracking.status) {
+        order.shippingTracking.status = liveTracking.status;
       }
     }
 
@@ -522,17 +779,16 @@ router.post('/:orderId', async (req, res, next) => {
     order.shippingTracking = order.shippingTracking || {};
 
     // ✅ Keep enum in .carrier (what your schema expects)
-    order.shippingTracking.carrier = normalized.carrierEnum || order.shippingTracking.carrier || 'OTHER';
+    order.shippingTracking.carrier =
+      normalized.carrierEnum || order.shippingTracking.carrier || 'OTHER';
 
     // ✅ Keep Shippo token in .carrierToken (for Shippo tracking)
-    order.shippingTracking.carrierToken = normalized.carrierToken || order.shippingTracking.carrierToken || '';
+    order.shippingTracking.carrierToken =
+      normalized.carrierToken || order.shippingTracking.carrierToken || '';
 
     // ✅ Label (user wins, else auto label)
     order.shippingTracking.carrierLabel =
-      carrierLabel ||
-      normalized.carrierLabelAuto ||
-      order.shippingTracking.carrierLabel ||
-      '';
+      carrierLabel || normalized.carrierLabelAuto || order.shippingTracking.carrierLabel || '';
 
     if (trackingNumber) {
       order.shippingTracking.trackingNumber = trackingNumber;
@@ -549,19 +805,26 @@ router.post('/:orderId', async (req, res, next) => {
     }
 
     const trackingEnums = getTrackingStatusEnumValues(order);
-    const safeStatus = mapToEnum(status || order.shippingTracking.status || 'PROCESSING', trackingEnums);
+    const safeStatus = mapToEnum(
+      status || order.shippingTracking.status || 'PROCESSING',
+      trackingEnums,
+    );
     if (safeStatus) order.shippingTracking.status = safeStatus;
 
     // Auto-fetch live tracking (Shippo-first when carrier is a Shippo token)
     let liveTracking = null;
 
     const carrierForTracking = String(
-      order.shippingTracking.carrierToken || order.shippingTracking.carrier || ''
+      order.shippingTracking.carrierToken || order.shippingTracking.carrier || '',
     ).trim();
 
     if (trackingNumber && carrierForTracking && carrierForTracking.toLowerCase() !== 'other') {
       // ✅ If using Shippo TEST key, don’t try to track USPS/UPS/etc (Shippo only allows "shippo" test carrier)
-      if (isShippoTestKey() && isShippoCarrierToken(carrierForTracking) && carrierForTracking !== 'shippo') {
+      if (
+        isShippoTestKey() &&
+        isShippoCarrierToken(carrierForTracking) &&
+        carrierForTracking !== 'shippo'
+      ) {
         liveTracking = null;
       } else {
         liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
@@ -591,7 +854,10 @@ router.post('/:orderId', async (req, res, next) => {
       console.warn('⚠️ Manual tracking status email failed (non-fatal):', e?.message || e);
     }
 
-    req.flash('success', 'Tracking updated.' + (liveTracking ? ' Live tracking data fetched.' : ''));
+    req.flash(
+      'success',
+      'Tracking updated.' + (liveTracking ? ' Live tracking data fetched.' : ''),
+    );
 
     return res.redirect(`${req.baseUrl}/${order._id}`);
   } catch (err) {
@@ -623,43 +889,96 @@ router.get('/:orderId/refresh', async (req, res) => {
       }
     }
 
-    const st = order.shippingTracking || {};
-    const trackingNumber = String(st.trackingNumber || '').trim();
-    const carrierForTracking = String(
-      st.carrierToken ||
-      carrierEnumToShippoToken(st.carrier) ||
-      st.carrier ||
-      ''
-    ).trim();
+    let liveTracking = null;
 
-    if (!trackingNumber || !carrierForTracking) {
-      return res.json({ ok: false, message: 'No tracking details saved yet.' });
-    }
+    if (isCourierGuyOrder(order)) {
+      const shipmentId = String(order?.courierGuy?.shipmentId || '').trim();
 
-    if (isShippoTestKey() && isShippoCarrierToken(carrierForTracking) && carrierForTracking !== 'shippo') {
-      return res.json({ ok: false, message: 'Shippo test key cannot live-track USPS/UPS/FedEx/DHL. Use a live key or Shippo test tracking numbers.' });
-    }
-
-    const liveTracking = await fetchAnyLiveTracking({ carrier: carrierForTracking, trackingNumber });
-
-    if (liveTracking) {
-      order.shippingTracking.liveStatus = liveTracking.status;
-      order.shippingTracking.liveEvents = liveTracking.events;
-      order.shippingTracking.lastTrackingUpdate = new Date();
-      order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery;
-
-      await order.save();
-
-      try {
-        await sendTrackingStatusEmailIfNeeded(order);
-      } catch (e) {
-        console.warn('⚠️ Refresh tracking status email failed (non-fatal):', e?.message || e);
+      if (!shipmentId) {
+        return res.json({
+          ok: false,
+          message: 'This Courier Guy order does not have a shipment yet.',
+        });
       }
 
-      return res.json({ ok: true, liveTracking });
+      const shipment = await getCourierGuyShipment(shipmentId);
+
+      liveTracking = courierGuyShipmentToLiveTracking(shipment);
+    } else {
+      const st = order.shippingTracking || {};
+
+      const trackingNumber = String(st.trackingNumber || '').trim();
+
+      const carrierForTracking = String(
+        st.carrierToken || carrierEnumToShippoToken(st.carrier) || st.carrier || '',
+      ).trim();
+
+      if (!trackingNumber || !carrierForTracking) {
+        return res.json({
+          ok: false,
+          message: 'No tracking details saved yet.',
+        });
+      }
+
+      if (
+        isShippoTestKey() &&
+        isShippoCarrierToken(carrierForTracking) &&
+        carrierForTracking !== 'shippo'
+      ) {
+        return res.json({
+          ok: false,
+          message:
+            'Shippo test key cannot live-track USPS/UPS/FedEx/DHL. Use a live key or Shippo test tracking numbers.',
+        });
+      }
+
+      liveTracking = await fetchAnyLiveTracking({
+        carrier: carrierForTracking,
+        trackingNumber,
+      });
     }
 
-    return res.json({ ok: false, message: 'Could not refresh tracking data' });
+    if (!liveTracking) {
+      return res.json({
+        ok: false,
+        message: 'Could not refresh tracking data.',
+      });
+    }
+
+    order.shippingTracking = order.shippingTracking || {};
+
+    order.shippingTracking.liveStatus = liveTracking.status;
+
+    order.shippingTracking.liveEvents = Array.isArray(liveTracking.events)
+      ? liveTracking.events
+      : [];
+
+    order.shippingTracking.lastTrackingUpdate = new Date();
+
+    order.shippingTracking.estimatedDelivery = liveTracking.estimatedDelivery || null;
+
+    if (isCourierGuyOrder(order)) {
+      order.courierGuy = order.courierGuy || {};
+
+      order.courierGuy.shipmentStatus = liveTracking.status;
+
+      order.courierGuy.trackingStatus = liveTracking.status;
+
+      order.courierGuy.lastTrackingSyncAt = new Date();
+    }
+
+    await order.save();
+
+    try {
+      await sendTrackingStatusEmailIfNeeded(order);
+    } catch (error) {
+      console.warn('⚠️ Refresh tracking status email failed (non-fatal):', error?.message || error);
+    }
+
+    return res.json({
+      ok: true,
+      liveTracking,
+    });
   } catch (error) {
     console.error('Error refreshing tracking:', error?.response?.data || error.message);
     return res.status(500).json({ ok: false, message: 'Internal server error' });
