@@ -26,6 +26,8 @@ const ROLE_PERMISSIONS = {
     'shipping.update',
     'shipping.labels.manage',
     'delivery_options.manage',
+    'cj.read',
+    'cj.orders.manage',
   ],
 
   store_admin: [
@@ -33,6 +35,8 @@ const ROLE_PERMISSIONS = {
     'store.banners.manage',
     'store.promotions.manage',
     'store.content.manage',
+    'cj.read',
+    'cj.products.manage',
   ],
 
   payout_admin: [
@@ -50,6 +54,8 @@ const ROLE_PERMISSIONS = {
     'inventory.read',
     'inventory.update',
     'inventory.adjust',
+    'cj.read',
+    'cj.products.manage',
   ],
 
   support_admin: [

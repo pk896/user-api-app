@@ -28,7 +28,10 @@ const REQUIRED_VARS = [
   "BRAND_NAME",
   "VAT_RATE",
   "BASE_CURRENCY",
-  "PLATFORM_FEE_BPS"
+  "PLATFORM_FEE_BPS",
+  "CJ_API_ENABLED",
+  "CJ_API_KEY",
+  "CJ_API_BASE_URL"
 ];
 
 function validateEnv() {

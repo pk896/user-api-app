@@ -270,6 +270,8 @@ app.use((req, res, next) => {
       "'self'",
       "data:",
       "blob:",
+
+      // Existing Kasyora image providers
       "https://*.amazonaws.com",
       "https://*.cloudinary.com",
       "https://www.paypalobjects.com",
@@ -278,6 +280,14 @@ app.use((req, res, next) => {
       "https://flagcdn.com",
       "https://images.unsplash.com",
       "https://plus.unsplash.com",
+
+      // CJ Dropshipping product and variant images
+      "https://cjdropshipping.com",
+      "https://*.cjdropshipping.com",
+
+      // Some CJ catalogue records use Alibaba/Aliyun image storage
+      "https://*.alicdn.com",
+      "https://*.aliyuncs.com",
     ],
 
     connectSrc: [
@@ -432,6 +442,11 @@ app.use(
 
 app.use(flash());
 
+// Store department and separate cart summaries.
+// This does not mix or modify either cart.
+const storeDepartment = require('./middleware/storeDepartment');
+app.use(storeDepartment);
+
 // Date helpers middleware
 const { attachDateHelpers } = require('./middleware/dates');
 app.use(attachDateHelpers);
@@ -519,7 +534,17 @@ app.get(
     // Keep only safe session data across regenerate
     const keep = {
       business: req.session?.business || null,
+
+      // Existing internal seller/supplier cart.
       cart: req.session?.cart || null,
+
+      // Separate CJ department cart.
+      cjCart: req.session?.cjCart || null,
+
+      // Controls which catalogue and cart are visible.
+      storeDepartment:
+        req.session?.storeDepartment || 'internal',
+
       theme: req.session?.theme || null,
       returnTo: req.session?.returnTo || null,
     };
@@ -532,9 +557,26 @@ app.get(
       }
 
       // Restore kept values
-      if (keep.business) req.session.business = keep.business;
-      if (keep.cart) req.session.cart = keep.cart;
-      if (keep.theme) req.session.theme = keep.theme;
+      if (keep.business) {
+        req.session.business = keep.business;
+      }
+
+      if (keep.cart) {
+        req.session.cart = keep.cart;
+      }
+
+      if (keep.cjCart) {
+        req.session.cjCart = keep.cjCart;
+      }
+
+      req.session.storeDepartment =
+        keep.storeDepartment === 'cj'
+          ? 'cj'
+          : 'internal';
+
+      if (keep.theme) {
+        req.session.theme = keep.theme;
+      }
 
       // Set user session
       req.session.user = {
@@ -612,6 +654,8 @@ const deliveryOptionsApi = require('./routes/deliveryOptionsApi');
 const deliveryOptionsAdmin = require('./routes/deliveryOptions');
 const adminShippoRoutes = require('./routes/adminShippo');
 const adminCourierGuyRoutes = require('./routes/adminCourierGuy');
+const adminCjRoutes = require('./routes/adminCj');
+const adminCjProductsRoutes = require('./routes/adminCjProducts');
 const courierGuyCheckoutApiRoutes = require('./routes/courierGuyCheckoutApi');
 const productsRouter = require('./routes/products');
 const wholesaleRoutes = require('./routes/wholesale');
@@ -629,6 +673,7 @@ const adminShopHeaderImage = require('./routes/adminShopHeaderImage');
 const adminWarehousingDispenseRoutes = require('./routes/adminWarehousingDispense');
 const adminCeoAuditRoutes = require('./routes/adminCeoAudit');
 const cartRoutes = require('./routes/cart');
+const cjCartRoutes = require('./routes/cjCart');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
 const businessAuthRoutes = require('./routes/businessAuth');
@@ -667,7 +712,13 @@ if (ratingsRouter) {
 }
 
 // API first
+
+// Existing internal seller/supplier cart.
 app.use('/api/cart', cartRoutes);
+
+// Separate CJ cart. It never reads or writes req.session.cart.
+app.use('/api/cj-cart', cjCartRoutes);
+
 app.use('/api/seller', sellerStatsApi);
 app.use('/api/seller', sellerEarningsApi);
 app.use('/api/seller', sellerInventoryApi);
@@ -732,6 +783,15 @@ app.use(adminShippoRoutes);
 // Courier Guy production shipment admin remains standalone.
 app.use(adminCourierGuyRoutes);
 
+// CJ Dropshipping remains a separate Kasyora department.
+// It does not use the internal cart, checkout, payment, order,
+// Shippo, Courier Guy, seller, or supplier routes.
+app.use(adminCjRoutes);
+
+// Separate CJ catalogue, variant selection, import,
+// pricing, and imported-product administration.
+app.use(adminCjProductsRoutes);
+
 app.use('/admin', adminPayoutsRoutes);
 
 // Commerce / catalog
@@ -748,6 +808,13 @@ app.use('/payment', paymentRouter);
 // Public pages
 app.use('/contact', contactRoutes);
 app.use('/links', someLinksRoutes);
+
+// The public Kasyora storefront must own the root URL.
+// This must be registered before any router mounted at "/".
+app.get('/', (req, res) => {
+  return res.redirect(302, '/store');
+});
+
 app.use('/', publicOrderTrackingRoutes);
 app.use('/', storePagesRoutes);
 
@@ -901,13 +968,10 @@ app.get('/seller-ui', requireBusiness, (req, res) => {
   res.redirect('/seller-ui/');
 });
 
-// 5) Static files
+// Public static files.
+// The explicit "/" storefront redirect is registered earlier,
+// before routers mounted at the root path.
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Land on the store page by default
-app.get('/', (req, res) => {
-  res.redirect(302, '/store');
-});
 
 // Cart count API
 app.get('/cart/count', (req, res) => {
@@ -921,6 +985,73 @@ app.get('/cart/count', (req, res) => {
     console.error('❌ Failed to fetch cart count:', err);
     res.status(500).json({ count: 0 });
   }
+});
+
+// Separate CJ cart count API
+app.get('/cj/cart/count', (req, res) => {
+  try {
+    const items = Array.isArray(
+      req.session?.cjCart?.items,
+    )
+      ? req.session.cjCart.items
+      : [];
+
+    const count = items.reduce(
+      (sum, item) =>
+        sum +
+        Math.max(
+          0,
+          Math.floor(Number(item?.quantity || 0)),
+        ),
+      0,
+    );
+
+    return res.json({
+      success: true,
+      source: 'CJ',
+      count,
+    });
+  } catch (error) {
+    console.error(
+      '❌ Failed to fetch CJ cart count:',
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      source: 'CJ',
+      count: 0,
+    });
+  }
+});
+
+/*
+ * Explicitly switch the visible store department.
+ *
+ * This does not add, remove, copy, or combine cart items.
+ */
+app.post('/store/department/internal', (req, res) => {
+  req.session.storeDepartment = 'internal';
+
+  const returnTo =
+    safeReturnTo(req.body?.returnTo) ||
+    '/store';
+
+  req.session.save(() => {
+    return res.redirect(returnTo);
+  });
+});
+
+app.post('/store/department/cj', (req, res) => {
+  req.session.storeDepartment = 'cj';
+
+  const returnTo =
+    safeReturnTo(req.body?.returnTo) ||
+    '/cj';
+
+  req.session.save(() => {
+    return res.redirect(returnTo);
+  });
 });
 
 /* ---------------------------------------

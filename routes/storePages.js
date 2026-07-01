@@ -4,6 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const CjProduct = require('../models/CjProduct');
 const Rating = require('../models/Rating');
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
@@ -60,6 +61,278 @@ function mapStoreProduct(p) {
     ratingsCount: Number(p.ratingsCount || 0),
     url: `/store/product/${p.customId}`,
   };
+}
+
+function getStoreDepartment(req) {
+  return String(req.session?.storeDepartment || '')
+    .trim()
+    .toLowerCase() === 'cj'
+    ? 'cj'
+    : 'internal';
+}
+
+function getEnabledCjVariants(product) {
+  return Array.isArray(product?.variants)
+    ? product.variants.filter((variant) => variant?.isEnabled === true)
+    : [];
+}
+
+function getCjVariantPriceExVat(variant) {
+  const value = Number(variant?.sellingPriceExVat?.value);
+
+  return Number.isFinite(value) && value >= 0
+    ? Number(value.toFixed(2))
+    : null;
+}
+
+function mapCjStoreProduct(product) {
+  const enabledVariants = getEnabledCjVariants(product);
+
+  const validVariants = enabledVariants
+    .map((variant) => {
+      const priceExVat = getCjVariantPriceExVat(variant);
+
+      if (priceExVat === null) {
+        return null;
+      }
+
+      return {
+        cjVariantId: String(variant.cjVariantId || '').trim(),
+        variantSku: String(variant.variantSku || '').trim(),
+        variantName: String(
+          variant.variantName ||
+            variant.variantKey ||
+            variant.variantSku ||
+            'Variant',
+        ).trim(),
+        imageUrl: String(
+          variant.imageUrl ||
+            product.mainImageUrl ||
+            '',
+        ).trim(),
+        priceExVat,
+        weightGrams:
+          Number.isFinite(Number(variant.weightGrams))
+            ? Number(variant.weightGrams)
+            : null,
+        inventoryKnown: variant.inventoryKnown === true,
+        totalInventory: Math.max(
+          0,
+          Number(variant.totalInventory || 0),
+        ),
+      };
+    })
+    .filter(
+      (variant) =>
+        variant &&
+        variant.cjVariantId &&
+        variant.variantSku,
+    );
+
+  const prices = validVariants
+    .map((variant) => Number(variant.priceExVat))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+
+  const lowestPrice =
+    prices.length > 0
+      ? Math.min(...prices)
+      : 0;
+
+  const firstVariant =
+    validVariants.length > 0
+      ? validVariants[0]
+      : null;
+
+  const categoryName = String(
+    product?.category?.name ||
+      product?.category?.secondName ||
+      product?.category?.firstName ||
+      product?.productType ||
+      'CJ Product',
+  ).trim();
+
+  return {
+    source: 'CJ',
+    isCj: true,
+
+    id: String(product.cjProductId || '').trim(),
+
+    /*
+     * customId is supplied only to keep the current card templates
+     * renderable until we patch their button logic.
+     *
+     * The CJ cart server still validates cjProductId and cjVariantId.
+     */
+    customId: String(product.cjProductId || '').trim(),
+    cjProductId: String(product.cjProductId || '').trim(),
+
+    productSku: String(product.productSku || '').trim(),
+
+    name: String(product.name || 'CJ Product').trim(),
+
+    description: String(
+      product.descriptionHtml || '',
+    ).trim(),
+
+    image: String(
+      firstVariant?.imageUrl ||
+        product.mainImageUrl ||
+        '',
+    ).trim(),
+
+    imageUrl: String(
+      firstVariant?.imageUrl ||
+        product.mainImageUrl ||
+        '',
+    ).trim(),
+
+    category: categoryName,
+    role: 'cj',
+    type: String(product.productType || '').trim(),
+
+    color: '',
+    size: '',
+    sizes: [],
+    colors: [],
+    colorImages: [],
+
+    keywords: [
+      String(product.name || '').trim(),
+      String(product.productSku || '').trim(),
+      categoryName,
+      String(product.productType || '').trim(),
+      ...validVariants.map((variant) => variant.variantSku),
+      ...validVariants.map((variant) => variant.variantName),
+    ].filter(Boolean),
+
+    /*
+     * The existing homepage template expects the price excluding VAT.
+     * It adds VAT only for display.
+     */
+    price: Number(lowestPrice.toFixed(2)),
+    oldPrice: null,
+
+    isNew: false,
+    sale: false,
+    popular: Number(product.cjListedNumber || 0) > 0,
+
+    /*
+     * Unknown CJ inventory must not be represented as zero stock.
+     * This public stock field is only a display compatibility value.
+     * The CJ cart and later checkout perform server validation.
+     */
+    stock: validVariants.length,
+
+    rating: 0,
+    avgRating: 0,
+    ratingsCount: 0,
+
+    variants: validVariants,
+    enabledVariantCount: validVariants.length,
+
+    defaultCjVariantId:
+      firstVariant?.cjVariantId || '',
+
+    url: `/cj/product/${encodeURIComponent(
+      String(product.cjProductId || '').trim(),
+    )}`,
+  };
+}
+
+function buildCjHomepageQuery({
+  keyword,
+  category,
+}) {
+  const query = {
+    status: 'active',
+
+    variants: {
+      $elemMatch: {
+        isEnabled: true,
+        'sellingPriceExVat.value': {
+          $gte: 0,
+        },
+      },
+    },
+  };
+
+  if (category) {
+    query.$or = [
+      { 'category.name': category },
+      { 'category.firstName': category },
+      { 'category.secondName': category },
+      { productType: category },
+    ];
+  }
+
+  if (keyword) {
+    const escapedKeyword = keyword.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&',
+    );
+
+    const keywordRegex = new RegExp(
+      escapedKeyword,
+      'i',
+    );
+
+    const keywordConditions = [
+      { name: keywordRegex },
+      { originalName: keywordRegex },
+      { productSku: keywordRegex },
+      { productType: keywordRegex },
+      { 'category.name': keywordRegex },
+      { 'category.firstName': keywordRegex },
+      { 'category.secondName': keywordRegex },
+      { 'variants.variantSku': keywordRegex },
+      { 'variants.variantName': keywordRegex },
+    ];
+
+    if (Array.isArray(query.$or)) {
+      query.$and = [
+        {
+          $or: query.$or,
+        },
+        {
+          $or: keywordConditions,
+        },
+      ];
+
+      delete query.$or;
+    } else {
+      query.$or = keywordConditions;
+    }
+  }
+
+  return query;
+}
+
+async function loadCjHomepageProducts({
+  keyword,
+  category,
+}) {
+  const query = buildCjHomepageQuery({
+    keyword,
+    category,
+  });
+
+  const rows = await CjProduct.find(query)
+    .sort({
+      updatedAt: -1,
+      importedAt: -1,
+      _id: -1,
+    })
+    .limit(24)
+    .lean();
+
+  return rows
+    .map(mapCjStoreProduct)
+    .filter(
+      (product) =>
+        product.cjProductId &&
+        product.enabledVariantCount > 0 &&
+        product.price >= 0,
+    );
 }
 
 function mapPromoOffer(offer, product) {
@@ -376,12 +649,128 @@ function downloadImageBuffer(url) {
 }
 
 router.get('/store', async (req, res) => {
-  try {
-    const keyword = String(req.query.keyword || '').trim();
-    const category = String(req.query.category || '').trim();
+  const storeDepartment = getStoreDepartment(req);
 
+  try {
+    const keyword = String(
+      req.query.keyword || '',
+    ).trim();
+
+    const category = String(
+      req.query.category || '',
+    ).trim();
+
+    /*
+     * Shared marketing slides may remain visible in both departments.
+     *
+     * Product-linked internal banners are intentionally hidden when
+     * the CJ department is active so an internal Product is never
+     * displayed inside the CJ-only storefront.
+     */
+    const heroSlidesRaw = await HeroSlide.find({
+      active: true,
+    })
+      .sort({
+        sortOrder: 1,
+        createdAt: 1,
+      })
+      .lean();
+
+    const heroSlides = heroSlidesRaw.map((slide) => ({
+      title: slide.title || '',
+      subtitle: slide.subtitle || '',
+      description: slide.description || '',
+      image: slide.image || '',
+      buttonText: slide.buttonText || 'Shop Now',
+
+      /*
+       * In CJ mode, do not allow a stored internal-product URL
+       * to take the customer into the internal department.
+       */
+      buttonUrl:
+        storeDepartment === 'cj'
+          ? '/store?department=cj#homeProductsSection'
+          : slide.buttonUrl || '/store/shop',
+    }));
+
+    if (storeDepartment === 'cj') {
+      const cjProducts = await loadCjHomepageProducts({
+        keyword,
+        category,
+      });
+
+      /*
+       * CJ currently has no Kasyora sales history in this stage.
+       * The arrays are therefore derived from the same isolated
+       * active CJ catalogue using safe deterministic ordering.
+       */
+      const allProducts = cjProducts.slice(0, 8);
+
+      const newArrivals = [...cjProducts]
+        .slice(0, 8);
+
+      const featuredProducts = [...cjProducts]
+        .sort((a, b) => {
+          return (
+            Number(b.enabledVariantCount || 0) -
+            Number(a.enabledVariantCount || 0)
+          );
+        })
+        .slice(0, 8);
+
+      const bestSellerProducts = [...cjProducts]
+        .sort((a, b) => {
+          return (
+            Number(b.popular || 0) -
+            Number(a.popular || 0)
+          );
+        })
+        .slice(0, 8);
+
+      const productListProducts =
+        cjProducts.slice(0, 12);
+
+      return res.render('store/index', {
+        layout: 'layouts/store',
+        title: 'CJ Products | Kasyora',
+
+        storeDepartment: 'cj',
+        productSource: 'CJ',
+
+        allProducts,
+        newArrivals,
+        featuredProducts,
+        bestSellerProducts,
+        productListProducts,
+
+        heroSlides,
+
+        /*
+         * These records are linked to internal Product custom IDs.
+         * They must not appear while the CJ department is active.
+         */
+        sideBannerProduct: null,
+        promoOfferLeft: null,
+        promoOfferRight: null,
+        midBannerLeft: null,
+        midBannerRight: null,
+
+        selectedKeyword: keyword,
+        selectedCategory: category,
+
+        baseCurrency: BASE_CURRENCY,
+        vatRate: VAT_RATE,
+      });
+    }
+
+    /*
+     * Existing internal seller/supplier storefront flow.
+     * This block preserves the previous queries and mappings.
+     */
     const baseQuery = {
-      stock: { $gt: 0 },
+      stock: {
+        $gt: 0,
+      },
     };
 
     if (category) {
@@ -389,8 +778,15 @@ router.get('/store', async (req, res) => {
     }
 
     if (keyword) {
-      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const keywordRegex = new RegExp(escapedKeyword, 'i');
+      const escapedKeyword = keyword.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
+
+      const keywordRegex = new RegExp(
+        escapedKeyword,
+        'i',
+      );
 
       baseQuery.$or = [
         { name: keywordRegex },
@@ -403,85 +799,131 @@ router.get('/store', async (req, res) => {
       ];
     }
 
-    const allProductsRaw = await Product.find(baseQuery).sort({ createdAt: -1 }).limit(8).lean();
-
-    const newArrivalsRaw = await Product.find(baseQuery)
-      .sort({ createdAt: -1, _id: -1 })
+    const allProductsRaw = await Product.find(
+      baseQuery,
+    )
+      .sort({
+        createdAt: -1,
+      })
       .limit(8)
       .lean();
 
-    const featuredProductsRaw = await getFeaturedProducts(8);
-
-    const bestSellerProductsRaw = await Product.find(baseQuery)
-      .sort({ soldCount: -1, createdAt: -1 })
+    const newArrivalsRaw = await Product.find(
+      baseQuery,
+    )
+      .sort({
+        createdAt: -1,
+        _id: -1,
+      })
       .limit(8)
       .lean();
 
-    const productListProductsRaw = await Product.find(baseQuery)
-      .sort({ createdAt: -1 })
-      .limit(12)
-      .lean();
+    const featuredProductsRaw =
+      await getFeaturedProducts(8);
 
-    const allProducts = allProductsRaw.map(mapStoreProduct);
-    const newArrivals = newArrivalsRaw.map(mapStoreProduct);
-    const featuredProducts = featuredProductsRaw.map(mapStoreProduct);
-    const bestSellerProducts = bestSellerProductsRaw.map(mapStoreProduct);
-    const productListProducts = productListProductsRaw.map(mapStoreProduct);
+    const bestSellerProductsRaw =
+      await Product.find(baseQuery)
+        .sort({
+          soldCount: -1,
+          createdAt: -1,
+        })
+        .limit(8)
+        .lean();
 
-    const heroSlidesRaw = await HeroSlide.find({ active: true })
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .lean();
+    const productListProductsRaw =
+      await Product.find(baseQuery)
+        .sort({
+          createdAt: -1,
+        })
+        .limit(12)
+        .lean();
 
-    const heroSlides = heroSlidesRaw.map((slide) => ({
-      title: slide.title || '',
-      subtitle: slide.subtitle || '',
-      description: slide.description || '',
-      image: slide.image || '',
-      buttonText: slide.buttonText || 'Shop Now',
-      buttonUrl: slide.buttonUrl || '/store/shop',
-    }));
+    const allProducts =
+      allProductsRaw.map(mapStoreProduct);
 
-    const featuredBanner = await FeaturedBanner.findOne({ active: true })
-      .sort({ updatedAt: -1 })
-      .lean();
+    const newArrivals =
+      newArrivalsRaw.map(mapStoreProduct);
+
+    const featuredProducts =
+      featuredProductsRaw.map(mapStoreProduct);
+
+    const bestSellerProducts =
+      bestSellerProductsRaw.map(mapStoreProduct);
+
+    const productListProducts =
+      productListProductsRaw.map(mapStoreProduct);
+
+    const featuredBanner =
+      await FeaturedBanner.findOne({
+        active: true,
+      })
+        .sort({
+          updatedAt: -1,
+        })
+        .lean();
 
     let sideBannerProduct = null;
 
     if (featuredBanner?.productCustomId) {
-      const rawBannerProduct = await Product.findOne({
-        customId: featuredBanner.productCustomId,
-        stock: { $gt: 0 },
-      }).lean();
+      const rawBannerProduct =
+        await Product.findOne({
+          customId:
+            featuredBanner.productCustomId,
+          stock: {
+            $gt: 0,
+          },
+        }).lean();
 
       if (rawBannerProduct) {
-        const mapped = mapStoreProduct(rawBannerProduct);
+        const mapped =
+          mapStoreProduct(rawBannerProduct);
 
         sideBannerProduct = {
           ...mapped,
-          badgeText: featuredBanner.badgeText || 'Special Offer',
-          offerText: featuredBanner.offerText || 'Featured Product',
+          badgeText:
+            featuredBanner.badgeText ||
+            'Special Offer',
+          offerText:
+            featuredBanner.offerText ||
+            'Featured Product',
         };
       }
     }
 
-    const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .lean();
+    const homePromoOffersRaw =
+      await HomePromoOffer.find({
+        active: true,
+      })
+        .sort({
+          sortOrder: 1,
+          createdAt: 1,
+        })
+        .lean();
 
     let promoOfferLeft = null;
     let promoOfferRight = null;
 
     for (const offer of homePromoOffersRaw) {
-      if (!offer?.productCustomId) continue;
+      if (!offer?.productCustomId) {
+        continue;
+      }
 
-      const rawProduct = await Product.findOne({
-        customId: offer.productCustomId,
-        stock: { $gt: 0 },
-      }).lean();
+      const rawProduct =
+        await Product.findOne({
+          customId: offer.productCustomId,
+          stock: {
+            $gt: 0,
+          },
+        }).lean();
 
-      if (!rawProduct) continue;
+      if (!rawProduct) {
+        continue;
+      }
 
-      const mappedOffer = mapPromoOffer(offer, rawProduct);
+      const mappedOffer = mapPromoOffer(
+        offer,
+        rawProduct,
+      );
 
       if (offer.slot === 'left') {
         promoOfferLeft = mappedOffer;
@@ -492,24 +934,40 @@ router.get('/store', async (req, res) => {
       }
     }
 
-    const homeMidBannersRaw = await HomeMidBanner.find({ active: true })
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .lean();
+    const homeMidBannersRaw =
+      await HomeMidBanner.find({
+        active: true,
+      })
+        .sort({
+          sortOrder: 1,
+          createdAt: 1,
+        })
+        .lean();
 
     let midBannerLeft = null;
     let midBannerRight = null;
 
     for (const banner of homeMidBannersRaw) {
-      if (!banner?.productCustomId) continue;
+      if (!banner?.productCustomId) {
+        continue;
+      }
 
-      const rawProduct = await Product.findOne({
-        customId: banner.productCustomId,
-        stock: { $gt: 0 },
-      }).lean();
+      const rawProduct =
+        await Product.findOne({
+          customId: banner.productCustomId,
+          stock: {
+            $gt: 0,
+          },
+        }).lean();
 
-      if (!rawProduct) continue;
+      if (!rawProduct) {
+        continue;
+      }
 
-      const mappedBanner = mapMidBanner(banner, rawProduct);
+      const mappedBanner = mapMidBanner(
+        banner,
+        rawProduct,
+      );
 
       if (banner.slot === 'left') {
         midBannerLeft = mappedBanner;
@@ -520,45 +978,75 @@ router.get('/store', async (req, res) => {
       }
     }
 
-    res.render('store/index', {
+    return res.render('store/index', {
       layout: 'layouts/store',
       title: 'Kasyora Store',
+
+      storeDepartment: 'internal',
+      productSource: 'INTERNAL',
+
       allProducts,
       newArrivals,
       featuredProducts,
       bestSellerProducts,
       productListProducts,
+
       heroSlides,
       sideBannerProduct,
       promoOfferLeft,
       promoOfferRight,
       midBannerLeft,
       midBannerRight,
+
       selectedKeyword: keyword,
       selectedCategory: category,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
     });
   } catch (err) {
-    console.error('❌ store index error:', err);
-    res.render('store/index', {
+    console.error(
+      '❌ store index error:',
+      err,
+    );
+
+    return res.render('store/index', {
       layout: 'layouts/store',
-      title: 'Kasyora Store',
+
+      title:
+        storeDepartment === 'cj'
+          ? 'CJ Products | Kasyora'
+          : 'Kasyora Store',
+
+      storeDepartment,
+      productSource:
+        storeDepartment === 'cj'
+          ? 'CJ'
+          : 'INTERNAL',
+
       allProducts: [],
       newArrivals: [],
       featuredProducts: [],
       bestSellerProducts: [],
       productListProducts: [],
+
       heroSlides: [],
       sideBannerProduct: null,
       promoOfferLeft: null,
       promoOfferRight: null,
       midBannerLeft: null,
       midBannerRight: null,
-      selectedKeyword: '',
-      selectedCategory: '',
+
+      selectedKeyword: String(
+        req.query.keyword || '',
+      ).trim(),
+
+      selectedCategory: String(
+        req.query.category || '',
+      ).trim(),
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
     });
   }
 });
