@@ -1,0 +1,899 @@
+<!-- views/cj/cart.ejs -->
+<%
+  const CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : ''
+  ).trim().toUpperCase() || 'USD';
+
+  const ITEMS = Array.isArray(cartItems)
+    ? cartItems
+    : [];
+
+  const ITEM_COUNT = Number(
+    typeof itemCount !== 'undefined'
+      ? itemCount
+      : 0
+  );
+
+  const SUBTOTAL_EX_VAT = Number(
+    typeof subtotalExVat !== 'undefined'
+      ? subtotalExVat
+      : 0
+  );
+
+  const VAT_AMOUNT = Number(
+    typeof vatAmount !== 'undefined'
+      ? vatAmount
+      : 0
+  );
+
+  const TOTAL_INC_VAT = Number(
+    typeof totalIncVat !== 'undefined'
+      ? totalIncVat
+      : 0
+  );
+
+  function formatMoney(amount) {
+    const value = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return CURRENCY + ' ' + value.toFixed(2);
+    }
+  }
+%>
+
+<!-- Page Header Start -->
+<div class="container-fluid bg-light py-4 border-bottom">
+  <div class="container">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+      <div>
+        <span class="badge bg-success mb-2">
+          CJ Dropshipping Department
+        </span>
+
+        <h1 class="text-primary mb-1">
+          CJ Cart
+        </h1>
+
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item">
+              <a href="/store">Store</a>
+            </li>
+
+            <li class="breadcrumb-item active" aria-current="page">
+              CJ Cart
+            </li>
+          </ol>
+        </nav>
+      </div>
+
+      <a
+        href="/store#homeProductsSection"
+        class="btn btn-outline-primary rounded-pill px-4"
+      >
+        <i class="fas fa-arrow-left me-2"></i>
+        Continue Shopping
+      </a>
+    </div>
+  </div>
+</div>
+<!-- Page Header End -->
+
+<!-- Department Notice Start -->
+<div class="container-fluid px-0">
+  <div class="alert alert-success rounded-0 border-0 mb-0">
+    <div class="container">
+      <div class="d-flex align-items-start gap-3">
+        <i class="fas fa-shopping-cart fa-lg mt-1"></i>
+
+        <div>
+          <strong>
+            Separate CJ cart
+          </strong>
+
+          <div class="small mt-1">
+            This cart contains only CJ Dropshipping products.
+            Your internal Kasyora seller and supplier cart remains separate
+            and is not changed by this page.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Department Notice End -->
+
+<!-- CJ Cart Start -->
+<div class="container-fluid py-5">
+  <div class="container">
+    <div
+      id="cjCartMessage"
+      class="d-none"
+      role="alert"
+    ></div>
+
+    <% if (ITEMS.length === 0) { %>
+      <!-- Empty Cart -->
+      <div
+        id="cjEmptyCartState"
+        class="card border-0 shadow-sm"
+      >
+        <div class="card-body text-center py-5">
+          <div class="mb-4">
+            <i class="fas fa-shopping-cart fa-4x text-primary"></i>
+          </div>
+
+          <h2 class="text-primary">
+            Your CJ cart is empty
+          </h2>
+
+          <p class="text-muted mb-4">
+            Browse the CJ Dropshipping department and select a product variant
+            to add it to this separate cart.
+          </p>
+
+          <a
+            href="/store#homeProductsSection"
+            class="btn btn-primary btn-lg rounded-pill px-5"
+          >
+            <i class="fas fa-store me-2"></i>
+            Browse CJ Products
+          </a>
+        </div>
+      </div>
+    <% } else { %>
+      <div id="cjCartContent" class="row g-4">
+        <!-- Cart Items -->
+        <div class="col-12 col-lg-8">
+          <div class="card border-0 shadow-sm">
+            <div class="card-header bg-primary text-white py-3">
+              <div class="d-flex align-items-center justify-content-between">
+                <h4 class="mb-0 text-white">
+                  CJ Cart Items
+                </h4>
+
+                <span
+                  id="cjCartItemCountBadge"
+                  class="badge bg-success"
+                >
+                  <%= ITEM_COUNT %>
+                  item<%= ITEM_COUNT === 1 ? '' : 's' %>
+                </span>
+              </div>
+            </div>
+
+            <div class="card-body p-0">
+              <div id="cjCartItems">
+                <% ITEMS.forEach(function(item) { %>
+                  <div
+                    class="cj-cart-item border-bottom p-3 p-md-4"
+                    data-cj-variant-id="<%= item.cjVariantId %>"
+                  >
+                    <div class="row g-3 align-items-center">
+                      <!-- Product Image -->
+                      <div class="col-4 col-md-2">
+                        <a
+                          href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>"
+                          class="d-block border rounded p-2 bg-white"
+                        >
+                          <img
+                            src="<%= item.imageUrl %>"
+                            alt="<%= item.name %>"
+                            class="img-fluid w-100"
+                            style="height: 110px; object-fit: contain;"
+                          >
+                        </a>
+                      </div>
+
+                      <!-- Product Information -->
+                      <div class="col-8 col-md-4">
+                        <a
+                          href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>"
+                          class="text-decoration-none"
+                        >
+                          <h5 class="text-primary mb-2">
+                            <%= item.name %>
+                          </h5>
+                        </a>
+
+                        <div class="small text-muted mb-1">
+                          Variant:
+                          <strong class="text-dark">
+                            <%= item.variantName %>
+                          </strong>
+                        </div>
+
+                        <div class="small text-muted mb-1">
+                          Variant SKU:
+                          <span class="text-dark text-break">
+                            <%= item.variantSku || 'Not available' %>
+                          </span>
+                        </div>
+
+                        <% if (item.inventoryKnown) { %>
+                          <div class="small text-muted">
+                            Inventory snapshot:
+                            <span class="text-dark">
+                              <%= item.inventorySnapshot %>
+                            </span>
+                          </div>
+                        <% } else { %>
+                          <div class="small text-muted">
+                            Inventory will be checked again during checkout.
+                          </div>
+                        <% } %>
+                      </div>
+
+                      <!-- Unit Price -->
+                      <div class="col-6 col-md-2">
+                        <div class="small text-muted mb-1">
+                          Unit price
+                        </div>
+
+                        <div class="fw-bold text-primary">
+                          <%= formatMoney(item.price) %>
+                        </div>
+
+                        <div class="small text-muted">
+                          incl. VAT
+                        </div>
+                      </div>
+
+                      <!-- Quantity -->
+                      <div class="col-6 col-md-2">
+                        <label
+                          for="cjQuantity_<%= item.cjVariantId %>"
+                          class="small text-muted mb-1"
+                        >
+                          Quantity
+                        </label>
+
+                        <input
+                          id="cjQuantity_<%= item.cjVariantId %>"
+                          type="number"
+                          class="form-control js-cj-cart-quantity"
+                          value="<%= item.quantity %>"
+                          min="1"
+                          max="<%= item.inventoryKnown ? Math.max(1, Number(item.inventorySnapshot || 1)) : 100 %>"
+                          step="1"
+                          data-cj-variant-id="<%= item.cjVariantId %>"
+                          data-previous-quantity="<%= item.quantity %>"
+                        >
+                      </div>
+
+                      <!-- Line Total / Remove -->
+                      <div class="col-12 col-md-2 text-md-end">
+                        <div class="small text-muted mb-1">
+                          Line total
+                        </div>
+
+                        <div
+                          class="fw-bold text-primary fs-5 mb-2 js-cj-line-total"
+                          data-cj-variant-id="<%= item.cjVariantId %>"
+                        >
+                          <%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %>
+                        </div>
+
+                        <button
+                          type="button"
+                          class="btn btn-outline-danger btn-sm rounded-pill js-cj-remove-item"
+                          data-cj-variant-id="<%= item.cjVariantId %>"
+                        >
+                          <i class="fas fa-trash-alt me-1"></i>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                <% }) %>
+              </div>
+            </div>
+
+            <div class="card-footer bg-white py-3">
+              <div class="d-flex flex-column flex-sm-row gap-2 justify-content-between">
+                <a
+                  href="/store#homeProductsSection"
+                  class="btn btn-outline-primary rounded-pill"
+                >
+                  <i class="fas fa-arrow-left me-2"></i>
+                  Continue Shopping
+                </a>
+
+                <button
+                  id="cjClearCartButton"
+                  type="button"
+                  class="btn btn-outline-danger rounded-pill"
+                >
+                  <i class="fas fa-trash me-2"></i>
+                  Clear CJ Cart
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cart Summary -->
+        <div class="col-12 col-lg-4">
+          <div class="card border-0 shadow-sm">
+            <div class="card-header bg-primary text-white py-3">
+              <h4 class="text-white mb-0">
+                CJ Order Summary
+              </h4>
+            </div>
+
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between mb-3">
+                <span class="text-muted">
+                  Items
+                </span>
+
+                <strong id="cjSummaryItemCount">
+                  <%= ITEM_COUNT %>
+                </strong>
+              </div>
+
+              <div class="d-flex justify-content-between mb-3">
+                <span class="text-muted">
+                  Subtotal excluding VAT
+                </span>
+
+                <strong id="cjSummarySubtotalExVat">
+                  <%= formatMoney(SUBTOTAL_EX_VAT) %>
+                </strong>
+              </div>
+
+              <div class="d-flex justify-content-between mb-3">
+                <span class="text-muted">
+                  VAT
+                </span>
+
+                <strong id="cjSummaryVatAmount">
+                  <%= formatMoney(VAT_AMOUNT) %>
+                </strong>
+              </div>
+
+              <hr>
+
+              <div class="d-flex justify-content-between align-items-center mb-4">
+                <span class="fw-bold fs-5">
+                  Total including VAT
+                </span>
+
+                <strong
+                  id="cjSummaryTotalIncVat"
+                  class="text-primary fs-4"
+                >
+                  <%= formatMoney(TOTAL_INC_VAT) %>
+                </strong>
+              </div>
+
+              <div class="alert alert-light border small">
+                <i class="fas fa-info-circle text-primary me-2"></i>
+
+                Shipping, destination taxes, customs charges and CJ logistics
+                costs are not included in this cart total yet. They will be
+                calculated and validated in the separate CJ checkout.
+              </div>
+
+              <a
+                href="/cj/checkout"
+                id="cjProceedCheckoutButton"
+                class="btn btn-primary btn-lg rounded-pill w-100"
+              >
+                <i class="fas fa-lock me-2"></i>
+                Proceed To CJ Checkout
+              </a>
+
+              <div class="small text-muted text-center mt-3">
+                This checkout does not use Shippo, Courier Guy or the internal
+                Kasyora order flow.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</div>
+<!-- CJ Cart End -->
+
+<%- include('../store/partials/footer') %>
+
+<script nonce="<%= nonce %>">
+  (function () {
+    const currency = '<%= CURRENCY %>';
+
+    const messageElement = document.getElementById(
+      'cjCartMessage'
+    );
+
+    const cartContent = document.getElementById(
+      'cjCartContent'
+    );
+
+    const cartItemsContainer = document.getElementById(
+      'cjCartItems'
+    );
+
+    const itemCountBadge = document.getElementById(
+      'cjCartItemCountBadge'
+    );
+
+    const summaryItemCount = document.getElementById(
+      'cjSummaryItemCount'
+    );
+
+    const summarySubtotalExVat = document.getElementById(
+      'cjSummarySubtotalExVat'
+    );
+
+    const summaryVatAmount = document.getElementById(
+      'cjSummaryVatAmount'
+    );
+
+    const summaryTotalIncVat = document.getElementById(
+      'cjSummaryTotalIncVat'
+    );
+
+    const clearCartButton = document.getElementById(
+      'cjClearCartButton'
+    );
+
+    const checkoutButton = document.getElementById(
+      'cjProceedCheckoutButton'
+    );
+
+    function formatMoney(amount) {
+      const value = Number(amount || 0);
+
+      try {
+        const formatted = new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: currency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(value);
+
+        if (currency === 'ZAR') {
+          return formatted.replace(/^ZAR\s?/, 'R');
+        }
+
+        return formatted;
+      } catch (error) {
+        return currency + ' ' + value.toFixed(2);
+      }
+    }
+
+    function showMessage(message, type) {
+      if (!messageElement) {
+        return;
+      }
+
+      messageElement.className =
+        'alert alert-' +
+        (type === 'success'
+          ? 'success'
+          : 'danger');
+
+      messageElement.textContent = String(
+        message || ''
+      );
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+
+    function clearMessage() {
+      if (!messageElement) {
+        return;
+      }
+
+      messageElement.className = 'd-none';
+      messageElement.textContent = '';
+    }
+
+    function safeQuantity(value, maximum) {
+      const max = Math.max(
+        1,
+        Number(maximum || 100)
+      );
+
+      let quantity = Math.floor(
+        Number(value || 1)
+      );
+
+      if (!Number.isFinite(quantity)) {
+        quantity = 1;
+      }
+
+      return Math.max(
+        1,
+        Math.min(max, quantity)
+      );
+    }
+
+    function updateSummary(data) {
+      const itemCount = Number(
+        data?.itemCount || 0
+      );
+
+      const subtotal = Number(
+        data?.subtotalExVat || 0
+      );
+
+      const vat = Number(
+        data?.vatAmount || 0
+      );
+
+      const total = Number(
+        data?.totalIncVat || 0
+      );
+
+      if (itemCountBadge) {
+        itemCountBadge.textContent =
+          String(itemCount) +
+          ' item' +
+          (itemCount === 1 ? '' : 's');
+      }
+
+      if (summaryItemCount) {
+        summaryItemCount.textContent =
+          String(itemCount);
+      }
+
+      if (summarySubtotalExVat) {
+        summarySubtotalExVat.textContent =
+          formatMoney(subtotal);
+      }
+
+      if (summaryVatAmount) {
+        summaryVatAmount.textContent =
+          formatMoney(vat);
+      }
+
+      if (summaryTotalIncVat) {
+        summaryTotalIncVat.textContent =
+          formatMoney(total);
+      }
+
+      if (checkoutButton) {
+        checkoutButton.classList.toggle(
+          'disabled',
+          itemCount <= 0
+        );
+
+        checkoutButton.setAttribute(
+          'aria-disabled',
+          itemCount <= 0
+            ? 'true'
+            : 'false'
+        );
+      }
+
+      document
+        .querySelectorAll('.store-cart-total')
+        .forEach(function (element) {
+          element.textContent =
+            formatMoney(total);
+        });
+
+      document
+        .querySelectorAll('.store-cart-link')
+        .forEach(function (link) {
+          link.href = '/cj/cart';
+
+          link.classList.toggle(
+            'cart-flash-active',
+            itemCount > 0
+          );
+        });
+    }
+
+    function renderEmptyCart() {
+      if (!cartContent) {
+        window.location.reload();
+        return;
+      }
+
+      cartContent.outerHTML = `
+        <div
+          id="cjEmptyCartState"
+          class="card border-0 shadow-sm"
+        >
+          <div class="card-body text-center py-5">
+            <div class="mb-4">
+              <i class="fas fa-shopping-cart fa-4x text-primary"></i>
+            </div>
+
+            <h2 class="text-primary">
+              Your CJ cart is empty
+            </h2>
+
+            <p class="text-muted mb-4">
+              Browse the CJ Dropshipping department and select a product
+              variant to add it to this separate cart.
+            </p>
+
+            <a
+              href="/store#homeProductsSection"
+              class="btn btn-primary btn-lg rounded-pill px-5"
+            >
+              <i class="fas fa-store me-2"></i>
+              Browse CJ Products
+            </a>
+          </div>
+        </div>
+      `;
+    }
+
+    async function postCartAction(url, body) {
+      const response = await fetch(url, {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+
+        credentials: 'same-origin',
+
+        body: JSON.stringify(body || {})
+      });
+
+      const data = await response
+        .json()
+        .catch(function () {
+          return {};
+        });
+
+      if (
+        !response.ok ||
+        data.success === false
+      ) {
+        throw new Error(
+          data.message ||
+          'The CJ cart could not be updated.'
+        );
+      }
+
+      return data;
+    }
+
+    document.addEventListener(
+      'change',
+      async function (event) {
+        const input = event.target.closest(
+          '.js-cj-cart-quantity'
+        );
+
+        if (!input) {
+          return;
+        }
+
+        clearMessage();
+
+        const cjVariantId = String(
+          input.getAttribute(
+            'data-cj-variant-id'
+          ) || ''
+        ).trim();
+
+        const previousQuantity = safeQuantity(
+          input.getAttribute(
+            'data-previous-quantity'
+          ),
+          input.max
+        );
+
+        const quantity = safeQuantity(
+          input.value,
+          input.max
+        );
+
+        input.value = String(quantity);
+        input.disabled = true;
+
+        try {
+          const data = await postCartAction(
+            '/api/cj-cart/quantity',
+            {
+              cjVariantId,
+              quantity
+            }
+          );
+
+          input.setAttribute(
+            'data-previous-quantity',
+            String(quantity)
+          );
+
+          const updatedItem = Array.isArray(data.items)
+            ? data.items.find(function (item) {
+                return String(
+                  item?.cjVariantId || ''
+                ) === cjVariantId;
+              })
+            : null;
+
+          const lineTotalElement =
+            document.querySelector(
+              '.js-cj-line-total[data-cj-variant-id="' +
+              CSS.escape(cjVariantId) +
+              '"]'
+            );
+
+          if (
+            lineTotalElement &&
+            updatedItem
+          ) {
+            lineTotalElement.textContent =
+              formatMoney(
+                Number(updatedItem.price || 0) *
+                Number(updatedItem.quantity || 0)
+              );
+          }
+
+          updateSummary(data);
+
+          showMessage(
+            data.message ||
+            'CJ cart quantity updated.',
+            'success'
+          );
+        } catch (error) {
+          input.value =
+            String(previousQuantity);
+
+          showMessage(
+            error?.message ||
+            'The CJ cart quantity could not be updated.',
+            'error'
+          );
+        } finally {
+          input.disabled = false;
+        }
+      }
+    );
+
+    document.addEventListener(
+      'click',
+      async function (event) {
+        const removeButton = event.target.closest(
+          '.js-cj-remove-item'
+        );
+
+        if (!removeButton) {
+          return;
+        }
+
+        event.preventDefault();
+        clearMessage();
+
+        const cjVariantId = String(
+          removeButton.getAttribute(
+            'data-cj-variant-id'
+          ) || ''
+        ).trim();
+
+        if (!cjVariantId) {
+          showMessage(
+            'The CJ cart item could not be identified.',
+            'error'
+          );
+
+          return;
+        }
+
+        const originalHtml =
+          removeButton.innerHTML;
+
+        removeButton.disabled = true;
+        removeButton.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-1"></span>' +
+          'Removing...';
+
+        try {
+          const data = await postCartAction(
+            '/api/cj-cart/remove',
+            {
+              cjVariantId
+            }
+          );
+
+          const row = removeButton.closest(
+            '.cj-cart-item'
+          );
+
+          if (row) {
+            row.remove();
+          }
+
+          updateSummary(data);
+
+          if (
+            !Array.isArray(data.items) ||
+            data.items.length === 0
+          ) {
+            renderEmptyCart();
+          } else {
+            showMessage(
+              data.message ||
+              'CJ product removed from the cart.',
+              'success'
+            );
+          }
+        } catch (error) {
+          removeButton.disabled = false;
+          removeButton.innerHTML =
+            originalHtml;
+
+          showMessage(
+            error?.message ||
+            'The CJ product could not be removed.',
+            'error'
+          );
+        }
+      }
+    );
+
+    clearCartButton?.addEventListener(
+      'click',
+      async function () {
+        clearMessage();
+
+        const confirmed = window.confirm(
+          'Remove every product from the separate CJ cart?'
+        );
+
+        if (!confirmed) {
+          return;
+        }
+
+        const originalHtml =
+          clearCartButton.innerHTML;
+
+        clearCartButton.disabled = true;
+        clearCartButton.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-2"></span>' +
+          'Clearing...';
+
+        try {
+          const data = await postCartAction(
+            '/api/cj-cart/clear',
+            {}
+          );
+
+          updateSummary(data);
+          renderEmptyCart();
+        } catch (error) {
+          clearCartButton.disabled = false;
+          clearCartButton.innerHTML =
+            originalHtml;
+
+          showMessage(
+            error?.message ||
+            'The CJ cart could not be cleared.',
+            'error'
+          );
+        }
+      }
+    );
+  })();
+</script>

@@ -674,6 +674,9 @@ const adminWarehousingDispenseRoutes = require('./routes/adminWarehousingDispens
 const adminCeoAuditRoutes = require('./routes/adminCeoAudit');
 const cartRoutes = require('./routes/cart');
 const cjCartRoutes = require('./routes/cjCart');
+const cjStoreRoutes = require('./routes/cjStore');
+const cjCheckoutRoutes = require('./routes/cjCheckout');
+const cjPaymentRoutes = require('./routes/cjPayment');
 const paymentRouter = require('./routes/payment');
 const usersRouter = require('./routes/users');
 const businessAuthRoutes = require('./routes/businessAuth');
@@ -814,6 +817,18 @@ app.use('/links', someLinksRoutes);
 app.get('/', (req, res) => {
   return res.redirect(302, '/store');
 });
+
+// Public CJ storefront.
+// This is separate from the internal seller/supplier storefront.
+app.use('/', cjStoreRoutes);
+
+// Separate CJ checkout and logistics quotation.
+// It does not use the internal payment, Shippo or Courier Guy flows.
+app.use('/', cjCheckoutRoutes);
+
+// Separate CJ PayPal order creation and capture.
+// It writes only to CjOrder and never to the internal Order model.
+app.use('/', cjPaymentRoutes);
 
 app.use('/', publicOrderTrackingRoutes);
 app.use('/', storePagesRoutes);

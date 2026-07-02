@@ -1,0 +1,593 @@
+<!-- views/cj/order-success.ejs -->
+<%
+  const CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : order?.currency || ''
+  ).trim().toUpperCase() || 'USD';
+
+  const ITEMS = Array.isArray(order?.items)
+    ? order.items
+    : [];
+
+  const DELIVERY =
+    order?.deliveryAddress &&
+    typeof order.deliveryAddress === 'object'
+      ? order.deliveryAddress
+      : {};
+
+  const SHIPPING =
+    order?.selectedShipping &&
+    typeof order.selectedShipping === 'object'
+      ? order.selectedShipping
+      : {};
+
+  const TRACKING =
+    order?.tracking &&
+    typeof order.tracking === 'object'
+      ? order.tracking
+      : {};
+
+  function moneyValue(money) {
+    if (
+      money &&
+      typeof money === 'object'
+    ) {
+      return Number(
+        money.value || 0
+      );
+    }
+
+    return Number(money || 0);
+  }
+
+  function formatMoney(value) {
+    const amount = moneyValue(value);
+
+    try {
+      const formatted =
+        new Intl.NumberFormat(
+          undefined,
+          {
+            style: 'currency',
+            currency: CURRENCY,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }
+        ).format(amount);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(
+          /^ZAR\s?/,
+          'R'
+        );
+      }
+
+      return formatted;
+    } catch (error) {
+      return (
+        CURRENCY +
+        ' ' +
+        amount.toFixed(2)
+      );
+    }
+  }
+
+  function niceDate(value) {
+    if (!value) {
+      return '';
+    }
+
+    try {
+      return new Date(value)
+        .toLocaleString(
+          'en-ZA',
+          {
+            timeZone:
+              'Africa/Johannesburg',
+
+            year:
+              'numeric',
+
+            month:
+              'short',
+
+            day:
+              '2-digit',
+
+            hour:
+              '2-digit',
+
+            minute:
+              '2-digit'
+          }
+        );
+    } catch (error) {
+      return String(value || '');
+    }
+  }
+
+  function prettyStatus(value) {
+    const status = String(
+      value || ''
+    )
+      .trim()
+      .toUpperCase();
+
+    const labels = {
+      PAYMENT_PENDING:
+        'Payment pending',
+
+      PAID:
+        'Paid',
+
+      CJ_ORDER_PENDING:
+        'Waiting for CJ order creation',
+
+      CJ_ORDER_CREATED:
+        'CJ order created',
+
+      PROCESSING:
+        'Processing',
+
+      SHIPPED:
+        'Shipped',
+
+      IN_TRANSIT:
+        'In transit',
+
+      OUT_FOR_DELIVERY:
+        'Out for delivery',
+
+      DELIVERED:
+        'Delivered',
+
+      CANCELLED:
+        'Cancelled',
+
+      RETURNED:
+        'Returned',
+
+      FAILED:
+        'Failed',
+
+      COMPLETED:
+        'Completed',
+
+      CREATED:
+        'Created'
+    };
+
+    return (
+      labels[status] ||
+      status
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(
+          /^\w/,
+          function (letter) {
+            return letter.toUpperCase();
+          }
+        )
+    );
+  }
+%>
+
+<!-- Header Start -->
+<div class="container-fluid bg-light py-4 border-bottom">
+  <div class="container">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+      <div>
+        <span class="badge bg-success mb-2">
+          CJ Dropshipping Department
+        </span>
+
+        <h1 class="text-primary mb-1">
+          Order Confirmed
+        </h1>
+
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item">
+              <a href="/store">
+                Store
+              </a>
+            </li>
+
+            <li class="breadcrumb-item active" aria-current="page">
+              CJ Order Confirmed
+            </li>
+          </ol>
+        </nav>
+      </div>
+
+      <a
+        href="/store"
+        class="btn btn-outline-primary rounded-pill px-4"
+      >
+        <i class="fas fa-store me-2"></i>
+        Continue Shopping
+      </a>
+    </div>
+  </div>
+</div>
+<!-- Header End -->
+
+<!-- Success Notice Start -->
+<div class="container-fluid px-0">
+  <div class="alert alert-success rounded-0 border-0 mb-0">
+    <div class="container">
+      <div class="d-flex align-items-start gap-3">
+        <i class="fas fa-check-circle fa-2x mt-1"></i>
+
+        <div>
+          <strong class="fs-5">
+            Your PayPal payment was completed successfully.
+          </strong>
+
+          <div class="mt-1">
+            Your CJ order has been saved under order number
+            <strong>
+              <%= order.cjOrderNumber %>
+            </strong>.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Success Notice End -->
+
+<div class="container-fluid py-5">
+  <div class="container">
+    <div class="row g-4">
+      <!-- Main Order Information -->
+      <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white py-3">
+            <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+              <h2 class="h4 text-white mb-0">
+                CJ Order
+                <%= order.cjOrderNumber %>
+              </h2>
+
+              <span class="badge bg-success">
+                <%= prettyStatus(order.paymentStatus) %>
+              </span>
+            </div>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="row g-3 mb-4">
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Order number
+                </div>
+
+                <div class="fw-bold text-primary text-break">
+                  <%= order.cjOrderNumber %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Payment date
+                </div>
+
+                <div class="fw-semibold">
+                  <%= niceDate(order.paidAt || order.createdAt) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Payment status
+                </div>
+
+                <div class="fw-semibold">
+                  <%= prettyStatus(order.paymentStatus) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Fulfilment status
+                </div>
+
+                <div class="fw-semibold">
+                  <%= prettyStatus(order.fulfillmentStatus) %>
+                </div>
+              </div>
+            </div>
+
+            <h3 class="h5 text-primary mb-3">
+              Products
+            </h3>
+
+            <% ITEMS.forEach(function(item) { %>
+              <div class="row g-3 align-items-center border-top py-3">
+                <div class="col-4 col-md-2">
+                  <a
+                    href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>"
+                    class="d-block border rounded p-2"
+                  >
+                    <img
+                      src="<%= item.imageUrl %>"
+                      alt="<%= item.name %>"
+                      class="img-fluid w-100"
+                      style="height: 90px; object-fit: contain;"
+                    >
+                  </a>
+                </div>
+
+                <div class="col-8 col-md-5">
+                  <a
+                    href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>"
+                    class="text-decoration-none"
+                  >
+                    <div class="fw-bold text-primary">
+                      <%= item.name %>
+                    </div>
+                  </a>
+
+                  <div class="small text-muted mt-1">
+                    Variant:
+                    <%= item.variantName %>
+                  </div>
+
+                  <div class="small text-muted">
+                    SKU:
+                    <%= item.variantSku || 'Not available' %>
+                  </div>
+                </div>
+
+                <div class="col-6 col-md-2">
+                  <div class="small text-muted">
+                    Quantity
+                  </div>
+
+                  <div class="fw-semibold">
+                    <%= item.quantity %>
+                  </div>
+                </div>
+
+                <div class="col-6 col-md-3 text-md-end">
+                  <div class="small text-muted">
+                    Line total
+                  </div>
+
+                  <div class="fw-bold text-primary">
+                    <%= formatMoney(item.lineTotalIncVat) %>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </div>
+
+        <!-- Delivery Address -->
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white py-3">
+            <h2 class="h4 text-white mb-0">
+              Delivery Details
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="row g-4">
+              <div class="col-12 col-md-6">
+                <h3 class="h6 text-primary">
+                  Recipient
+                </h3>
+
+                <div class="fw-semibold">
+                  <%= DELIVERY.firstName %>
+                  <%= DELIVERY.lastName %>
+                </div>
+
+                <% if (DELIVERY.companyName) { %>
+                  <div>
+                    <%= DELIVERY.companyName %>
+                  </div>
+                <% } %>
+
+                <div class="mt-2">
+                  <i class="fas fa-envelope me-2 text-primary"></i>
+                  <%= DELIVERY.email %>
+                </div>
+
+                <div>
+                  <i class="fas fa-phone me-2 text-primary"></i>
+                  <%= DELIVERY.phone %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <h3 class="h6 text-primary">
+                  Delivery address
+                </h3>
+
+                <div>
+                  <%
+                    const firstAddressLine = [
+                      DELIVERY.houseNumber,
+                      DELIVERY.addressLine1
+                    ].filter(Boolean).join(' ');
+                  %>
+
+                  <%= firstAddressLine %>
+                </div>
+
+                <% if (DELIVERY.addressLine2) { %>
+                  <div>
+                    <%= DELIVERY.addressLine2 %>
+                  </div>
+                <% } %>
+
+                <% if (DELIVERY.suburb) { %>
+                  <div>
+                    <%= DELIVERY.suburb %>
+                  </div>
+                <% } %>
+
+                <div>
+                  <%= DELIVERY.city %>,
+                  <%= DELIVERY.province %>
+                </div>
+
+                <div>
+                  <%= DELIVERY.postalCode %>
+                </div>
+
+                <div>
+                  <%= DELIVERY.countryCode %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white py-3">
+            <h2 class="h4 text-white mb-0">
+              Payment Summary
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between mb-3">
+              <span class="text-muted">
+                Products excluding VAT
+              </span>
+
+              <strong>
+                <%= formatMoney(order.productSubtotalExVat) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <span class="text-muted">
+                Product VAT
+              </span>
+
+              <strong>
+                <%= formatMoney(order.productVatAmount) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <span class="text-muted">
+                Products including VAT
+              </span>
+
+              <strong>
+                <%= formatMoney(order.productTotalIncVat) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <span class="text-muted">
+                CJ shipping
+              </span>
+
+              <strong>
+                <%= formatMoney(order.shippingTotal) %>
+              </strong>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fw-bold fs-5">
+                Paid total
+              </span>
+
+              <strong class="text-primary fs-4">
+                <%= formatMoney(order.payableTotal) %>
+              </strong>
+            </div>
+
+            <% if (order.paypal?.captureId) { %>
+              <div class="small text-muted mt-4 text-break">
+                PayPal capture:
+                <%= order.paypal.captureId %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+
+        <!-- CJ Shipping -->
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white py-3">
+            <h2 class="h4 text-white mb-0">
+              CJ Shipping
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="mb-3">
+              <div class="small text-muted">
+                Selected method
+              </div>
+
+              <div class="fw-bold text-primary">
+                <%= SHIPPING.logisticsName || 'CJ Shipping' %>
+              </div>
+            </div>
+
+            <% if (SHIPPING.deliveryEstimate) { %>
+              <div class="mb-3">
+                <div class="small text-muted">
+                  Estimated delivery
+                </div>
+
+                <div class="fw-semibold">
+                  <%= SHIPPING.deliveryEstimate %>
+                </div>
+              </div>
+            <% } %>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Current status
+              </div>
+
+              <div class="fw-semibold">
+                <%= prettyStatus(order.fulfillmentStatus) %>
+              </div>
+            </div>
+
+            <% if (TRACKING.trackingNumber) { %>
+              <div class="mb-3">
+                <div class="small text-muted">
+                  Tracking number
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= TRACKING.trackingNumber %>
+                </div>
+              </div>
+            <% } else { %>
+              <div class="alert alert-light border small mb-0">
+                Tracking will appear after CJ creates and dispatches the supplier order.
+              </div>
+            <% } %>
+          </div>
+        </div>
+
+        <a
+          href="/store"
+          class="btn btn-primary btn-lg rounded-pill w-100"
+        >
+          <i class="fas fa-shopping-bag me-2"></i>
+          Continue Shopping
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../store/partials/footer') %>

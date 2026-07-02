@@ -1,0 +1,1129 @@
+<!-- views/cj/checkout.ejs -->
+<%
+  const CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : ''
+  ).trim().toUpperCase() || 'USD';
+
+  const ITEMS = Array.isArray(cartItems)
+    ? cartItems
+    : [];
+
+  const SAVED_ADDRESS =
+    savedAddress && typeof savedAddress === 'object'
+      ? savedAddress
+      : {};
+
+  const SAVED_QUOTE =
+    savedQuote && typeof savedQuote === 'object'
+      ? savedQuote
+      : null;
+
+  const SAVED_OPTIONS =
+    Array.isArray(SAVED_QUOTE?.options)
+        ? SAVED_QUOTE.options
+        : [];
+
+    const SAVED_SELECTED_SHIPPING =
+    savedSelectedShipping &&
+    typeof savedSelectedShipping === 'object'
+        ? savedSelectedShipping
+        : null;
+
+    const SAVED_SELECTED_SHIPPING_ID =
+    String(
+        SAVED_SELECTED_SHIPPING?.id || ''
+    ).trim();
+
+  function formatMoney(amount) {
+    const value = Number(amount || 0);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return CURRENCY + ' ' + value.toFixed(2);
+    }
+  }
+
+  function countryValue(country) {
+    if (typeof country === 'string') {
+      return country.trim().toUpperCase();
+    }
+
+    return String(
+      country?.code ||
+      country?.countryCode ||
+      country?.iso2 ||
+      country?.value ||
+      ''
+    ).trim().toUpperCase();
+  }
+
+  function countryLabel(country) {
+    if (typeof country === 'string') {
+      return country;
+    }
+
+    return String(
+      country?.name ||
+      country?.countryName ||
+      country?.label ||
+      country?.code ||
+      country?.countryCode ||
+      ''
+    ).trim();
+  }
+%>
+
+<!-- Header Start -->
+<div class="container-fluid bg-light py-4 border-bottom">
+  <div class="container">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+      <div>
+        <span class="badge bg-success mb-2">
+          CJ Dropshipping Department
+        </span>
+
+        <h1 class="text-primary mb-1">
+          CJ Checkout
+        </h1>
+
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item">
+              <a href="/store">Store</a>
+            </li>
+
+            <li class="breadcrumb-item">
+              <a href="/cj/cart">CJ Cart</a>
+            </li>
+
+            <li class="breadcrumb-item active" aria-current="page">
+              Checkout
+            </li>
+          </ol>
+        </nav>
+      </div>
+
+      <a href="/cj/cart" class="btn btn-outline-primary rounded-pill px-4">
+        <i class="fas fa-arrow-left me-2"></i>
+        Return To CJ Cart
+      </a>
+    </div>
+  </div>
+</div>
+<!-- Header End -->
+
+<!-- CJ Notice Start -->
+<div class="container-fluid px-0">
+  <div class="alert alert-success rounded-0 border-0 mb-0">
+    <div class="container">
+      <div class="d-flex align-items-start gap-3">
+        <i class="fas fa-globe fa-lg mt-1"></i>
+
+        <div>
+          <strong>
+            Separate CJ logistics checkout
+          </strong>
+
+          <div class="small mt-1">
+            Enter the delivery address below to request current CJ shipping
+            methods. This checkout does not use Shippo, Courier Guy or the
+            internal Kasyora order flow.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- CJ Notice End -->
+
+<div class="container-fluid py-5">
+  <div class="container">
+    <div id="cjCheckoutMessage" class="d-none" role="alert"></div>
+
+    <div class="row g-4">
+      <!-- Address Form -->
+      <div class="col-12 col-lg-7">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white py-3">
+            <h4 class="text-white mb-0">
+              Delivery Address
+            </h4>
+          </div>
+
+          <div class="card-body p-4">
+            <form id="cjCheckoutAddressForm" novalidate>
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label for="cjFirstName" class="form-label fw-semibold">
+                    First name
+                  </label>
+
+                  <input id="cjFirstName" name="firstName" type="text" class="form-control" value="<%= SAVED_ADDRESS.firstName || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjLastName" class="form-label fw-semibold">
+                    Last name
+                  </label>
+
+                  <input id="cjLastName" name="lastName" type="text" class="form-control" value="<%= SAVED_ADDRESS.lastName || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjEmail" class="form-label fw-semibold">
+                    Email address
+                  </label>
+
+                  <input id="cjEmail" name="email" type="email" class="form-control" value="<%= SAVED_ADDRESS.email || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjPhone" class="form-label fw-semibold">
+                    Phone number
+                  </label>
+
+                  <input id="cjPhone" name="phone" type="tel" class="form-control" value="<%= SAVED_ADDRESS.phone || '' %>" placeholder="+27..." required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjCountryCode" class="form-label fw-semibold">
+                    Destination country
+                  </label>
+
+                  <select id="cjCountryCode" name="countryCode" class="form-select" required>
+                    <option value="">
+                      Select country
+                    </option>
+
+                    <% (COUNTRIES || []).forEach(function(country) { %>
+                    <%
+                        const value = countryValue(country);
+                        const label = countryLabel(country);
+                      %>
+
+                    <% if (value && label) { %>
+                    <option value="<%= value %>" <%= String(SAVED_ADDRESS.countryCode || '').toUpperCase() === value ? 'selected' : '' %>>
+                      <%= label %>
+                    </option>
+                    <% } %>
+                    <% }) %>
+                  </select>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjProvince" class="form-label fw-semibold">
+                    Province or state
+                  </label>
+
+                  <input id="cjProvince" name="province" type="text" class="form-control" value="<%= SAVED_ADDRESS.province || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjCity" class="form-label fw-semibold">
+                    City
+                  </label>
+
+                  <input id="cjCity" name="city" type="text" class="form-control" value="<%= SAVED_ADDRESS.city || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjSuburb" class="form-label fw-semibold">
+                    Suburb
+                  </label>
+
+                  <input id="cjSuburb" name="suburb" type="text" class="form-control" value="<%= SAVED_ADDRESS.suburb || '' %>">
+                </div>
+
+                <div class="col-12 col-md-8">
+                  <label for="cjAddressLine1" class="form-label fw-semibold">
+                    Street address
+                  </label>
+
+                  <input id="cjAddressLine1" name="addressLine1" type="text" class="form-control" value="<%= SAVED_ADDRESS.addressLine1 || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-4">
+                  <label for="cjHouseNumber" class="form-label fw-semibold">
+                    House number
+                  </label>
+
+                  <input id="cjHouseNumber" name="houseNumber" type="text" class="form-control" value="<%= SAVED_ADDRESS.houseNumber || '' %>">
+                </div>
+
+                <div class="col-12">
+                  <label for="cjAddressLine2" class="form-label fw-semibold">
+                    Apartment, suite or additional address
+                  </label>
+
+                  <input id="cjAddressLine2" name="addressLine2" type="text" class="form-control" value="<%= SAVED_ADDRESS.addressLine2 || '' %>">
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjPostalCode" class="form-label fw-semibold">
+                    Postal code
+                  </label>
+
+                  <input id="cjPostalCode" name="postalCode" type="text" class="form-control" value="<%= SAVED_ADDRESS.postalCode || '' %>" required>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjCompanyName" class="form-label fw-semibold">
+                    Company name
+                  </label>
+
+                  <input id="cjCompanyName" name="companyName" type="text" class="form-control" value="<%= SAVED_ADDRESS.companyName || '' %>">
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjTaxId" class="form-label fw-semibold">
+                    Tax ID
+                  </label>
+
+                  <input id="cjTaxId" name="taxId" type="text" class="form-control" value="<%= SAVED_ADDRESS.taxId || '' %>">
+
+                  <div class="form-text">
+                    Optional. Enter only when required for the destination.
+                  </div>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label for="cjIossNumber" class="form-label fw-semibold">
+                    IOSS number
+                  </label>
+
+                  <input id="cjIossNumber" name="iossNumber" type="text" class="form-control" value="<%= SAVED_ADDRESS.iossNumber || '' %>">
+
+                  <div class="form-text">
+                    Optional and normally relevant only to qualifying EU orders.
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="alert alert-light border mb-0">
+                    <div class="small">
+                      <strong>Current CJ origin:</strong>
+                      <%= defaultOriginCountryCode || 'Not configured' %>
+                    </div>
+
+                    <div class="small text-muted mt-1">
+                      CJ will calculate shipping from the configured origin
+                      country to the destination entered above.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <button id="cjCalculateShippingButton" type="submit" class="btn btn-primary btn-lg rounded-pill w-100">
+                    <i class="fas fa-truck me-2"></i>
+                    Calculate CJ Shipping
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Order Summary -->
+      <div class="col-12 col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white py-3">
+            <h4 class="text-white mb-0">
+              CJ Cart Summary
+            </h4>
+          </div>
+
+          <div class="card-body p-4">
+            <% ITEMS.forEach(function(item) { %>
+            <div class="d-flex gap-3 mb-3 pb-3 border-bottom">
+              <a href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>" class="flex-shrink-0">
+                <img src="<%= item.imageUrl %>" alt="<%= item.name %>" class="border rounded" style="width: 72px; height: 72px; object-fit: contain;">
+              </a>
+
+              <div class="flex-grow-1">
+                <a href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>" class="text-decoration-none">
+                  <div class="fw-semibold text-primary">
+                    <%= item.name %>
+                  </div>
+                </a>
+
+                <div class="small text-muted">
+                  <%= item.variantName %>
+                </div>
+
+                <div class="small mt-1">
+                  <%= item.quantity %>
+                  ×
+                  <%= formatMoney(item.price) %>
+                </div>
+              </div>
+
+              <div class="fw-semibold text-primary text-end">
+                <%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %>
+              </div>
+            </div>
+            <% }) %>
+
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                Items
+              </span>
+
+              <strong id="cjCheckoutItemCount">
+                <%= Number(itemCount || 0) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                Products excluding VAT
+              </span>
+
+              <strong id="cjCheckoutSubtotalExVat">
+                <%= formatMoney(subtotalExVat) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                Product VAT
+              </span>
+
+              <strong id="cjCheckoutVatAmount">
+                <%= formatMoney(vatAmount) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <span class="fw-semibold">
+                Products including VAT
+              </span>
+
+              <strong id="cjCheckoutProductTotal" class="text-primary">
+                <%= formatMoney(totalIncVat) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <span class="text-muted">
+                Selected CJ shipping
+              </span>
+
+              <strong id="cjCheckoutShippingAmount">
+                <%= SAVED_SELECTED_SHIPPING
+                    ? formatMoney(SAVED_SELECTED_SHIPPING.shippingAmount)
+                    : formatMoney(0) %>
+              </strong>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fw-bold fs-5">
+                Estimated payable total
+              </span>
+
+              <strong id="cjCheckoutPayableTotal" class="text-primary fs-4">
+                <%= SAVED_SELECTED_SHIPPING
+                    ? formatMoney(SAVED_SELECTED_SHIPPING.payableTotal)
+                    : formatMoney(totalIncVat) %>
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shipping Options -->
+        <div id="cjShippingOptionsCard" class="card border-0 shadow-sm <%= SAVED_OPTIONS.length ? '' : 'd-none' %>">
+          <div class="card-header bg-primary text-white py-3">
+            <h4 class="text-white mb-0">
+              CJ Shipping Methods
+            </h4>
+          </div>
+
+          <div class="card-body p-4">
+            <div id="cjShippingOptions">
+              <% SAVED_OPTIONS.forEach(function(option, index) { %>
+              <label class="d-block border rounded p-3 mb-3 cj-shipping-option <%= SAVED_SELECTED_SHIPPING_ID === String(option.id || '').trim() ? 'border-primary bg-light' : '' %>" for="cjShippingOption_<%= index %>">
+
+                <div class="d-flex gap-3">
+                  <input id="cjShippingOption_<%= index %>" type="radio" name="cjShippingOption" class="form-check-input mt-1 js-cj-shipping-option" value="<%= option.id %>" data-shipping-amount="<%= option.shippingAmount %>" data-payable-total="<%= option.payableTotal %>" <%= SAVED_SELECTED_SHIPPING_ID === String(option.id || '').trim()
+                            ? 'checked'
+                            : '' %>>
+
+                  <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between gap-3">
+                      <strong class="text-primary">
+                        <%= option.logisticsName %>
+                      </strong>
+
+                      <strong>
+                        <%= formatMoney(option.shippingAmount) %>
+                      </strong>
+                    </div>
+
+                    <% if (option.deliveryEstimate) { %>
+                    <div class="small text-muted mt-1">
+                      Estimated delivery:
+                      <%= option.deliveryEstimate %>
+                    </div>
+                    <% } %>
+
+                    <% if (option.message) { %>
+                    <div class="small text-muted mt-1">
+                      <%= option.message %>
+                    </div>
+                    <% } %>
+                  </div>
+                </div>
+              </label>
+              <% }) %>
+            </div>
+
+            <button id="cjContinueToPaymentButton" type="button" class="btn btn-success btn-lg rounded-pill w-100" <%= SAVED_SELECTED_SHIPPING ? '' : 'disabled' %>>
+              <i class="fas fa-lock me-2"></i>
+              Continue To CJ Payment
+            </button>
+
+            <div class="small text-muted text-center mt-3">
+              Your payment will be completed securely through PayPal.
+              Kasyora stores the order in the separate CJ order department.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../store/partials/footer') %>
+
+<script nonce="<%= nonce %>">
+  (function() {
+    const currency = '<%= CURRENCY %>';
+
+    const addressForm = document.getElementById(
+      'cjCheckoutAddressForm'
+    );
+
+    const calculateButton = document.getElementById(
+      'cjCalculateShippingButton'
+    );
+
+    const messageElement = document.getElementById(
+      'cjCheckoutMessage'
+    );
+
+    const optionsCard = document.getElementById(
+      'cjShippingOptionsCard'
+    );
+
+    const optionsContainer = document.getElementById(
+      'cjShippingOptions'
+    );
+
+    const shippingAmountElement = document.getElementById(
+      'cjCheckoutShippingAmount'
+    );
+
+    const payableTotalElement = document.getElementById(
+      'cjCheckoutPayableTotal'
+    );
+
+    const productTotalElement = document.getElementById(
+      'cjCheckoutProductTotal'
+    );
+
+    const itemCountElement = document.getElementById(
+      'cjCheckoutItemCount'
+    );
+
+    const subtotalElement = document.getElementById(
+      'cjCheckoutSubtotalExVat'
+    );
+
+    const vatElement = document.getElementById(
+      'cjCheckoutVatAmount'
+    );
+
+    const continueButton = document.getElementById(
+      'cjContinueToPaymentButton'
+    );
+
+    function formatMoney(amount) {
+      const value = Number(amount || 0);
+
+      try {
+        const formatted = new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: currency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(value);
+
+        if (currency === 'ZAR') {
+          return formatted.replace(/^ZAR\s?/, 'R');
+        }
+
+        return formatted;
+      } catch (error) {
+        return currency + ' ' + value.toFixed(2);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function showMessage(message, type) {
+      if (!messageElement) {
+        return;
+      }
+
+      messageElement.className =
+        'alert alert-' +
+        (type === 'success' ?
+          'success' :
+          'danger');
+
+      messageElement.textContent =
+        String(message || '');
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+
+    function clearMessage() {
+      if (!messageElement) {
+        return;
+      }
+
+      messageElement.className = 'd-none';
+      messageElement.textContent = '';
+    }
+
+    function formPayload() {
+      const data = new FormData(addressForm);
+      const payload = {};
+
+      data.forEach(function(value, key) {
+        payload[key] = String(value || '').trim();
+      });
+
+      return payload;
+    }
+
+    async function selectShippingOption(input) {
+      const optionId = String(
+        input.value || ''
+      ).trim();
+
+      const shippingAmount = Number(
+        input.getAttribute(
+          'data-shipping-amount'
+        ) || 0
+      );
+
+      const payableTotal = Number(
+        input.getAttribute(
+          'data-payable-total'
+        ) || 0
+      );
+
+      if (!optionId) {
+        showMessage(
+          'The selected CJ shipping method could not be identified.',
+          'error'
+        );
+
+        return;
+      }
+
+      document
+        .querySelectorAll(
+          '.js-cj-shipping-option'
+        )
+        .forEach(function(radio) {
+          radio.disabled = true;
+        });
+
+      if (continueButton) {
+        continueButton.disabled = true;
+      }
+
+      clearMessage();
+
+      try {
+        const response = await fetch(
+          '/api/cj-checkout/select-shipping', {
+            method: 'POST',
+
+            headers: {
+              'Content-Type': 'application/json',
+
+              Accept: 'application/json'
+            },
+
+            credentials: 'same-origin',
+
+            body: JSON.stringify({
+              optionId
+            })
+          }
+        );
+
+        const data = await response
+          .json()
+          .catch(function() {
+            return {};
+          });
+
+        if (
+          !response.ok ||
+          data.success === false
+        ) {
+          throw new Error(
+            data.message ||
+            'The selected CJ shipping method could not be saved.'
+          );
+        }
+
+        const selected =
+          data.selectedShipping || {};
+
+        if (shippingAmountElement) {
+          shippingAmountElement.textContent =
+            formatMoney(
+              selected.shippingAmount ??
+              shippingAmount
+            );
+        }
+
+        if (payableTotalElement) {
+          payableTotalElement.textContent =
+            formatMoney(
+              selected.payableTotal ??
+              payableTotal
+            );
+        }
+
+        document
+          .querySelectorAll(
+            '.cj-shipping-option'
+          )
+          .forEach(function(label) {
+            label.classList.remove(
+              'border-primary',
+              'bg-light'
+            );
+          });
+
+        input
+          .closest(
+            '.cj-shipping-option'
+          )
+          ?.classList.add(
+            'border-primary',
+            'bg-light'
+          );
+
+        if (continueButton) {
+          continueButton.disabled =
+            false;
+        }
+
+        showMessage(
+          data.message ||
+          'CJ shipping method selected successfully.',
+          'success'
+        );
+      } catch (error) {
+        input.checked = false;
+
+        if (shippingAmountElement) {
+          shippingAmountElement.textContent =
+            formatMoney(0);
+        }
+
+        const productTotal = Number(
+          productTotalElement
+          ?.textContent
+          ?.replace(/[^0-9.-]/g, '') ||
+          0
+        );
+
+        if (payableTotalElement) {
+          payableTotalElement.textContent =
+            formatMoney(productTotal);
+        }
+
+        showMessage(
+          error?.message ||
+          'The selected CJ shipping method could not be saved.',
+          'error'
+        );
+      } finally {
+        document
+          .querySelectorAll(
+            '.js-cj-shipping-option'
+          )
+          .forEach(function(radio) {
+            radio.disabled = false;
+          });
+      }
+    }
+
+    function bindShippingOptions() {
+      document
+        .querySelectorAll(
+          '.js-cj-shipping-option'
+        )
+        .forEach(function(input) {
+          input.addEventListener(
+            'change',
+            async function() {
+              await selectShippingOption(
+                input
+              );
+            }
+          );
+        });
+    }
+
+    function renderShippingOptions(options) {
+      if (!optionsContainer || !optionsCard) {
+        return;
+      }
+
+      const rows = Array.isArray(options) ?
+        options : [];
+
+      optionsContainer.innerHTML =
+        rows.map(function(option, index) {
+          const id =
+            'cjShippingOptionDynamic_' +
+            index;
+
+          const estimate =
+            option.deliveryEstimate ?
+            `
+                <div class="small text-muted mt-1">
+                  Estimated delivery:
+                  ${escapeHtml(option.deliveryEstimate)}
+                </div>
+              ` :
+            '';
+
+          const message =
+            option.message ?
+            `
+                <div class="small text-muted mt-1">
+                  ${escapeHtml(option.message)}
+                </div>
+              ` :
+            '';
+
+          return `
+            <label
+              class="d-block border rounded p-3 mb-3 cj-shipping-option"
+              for="${id}"
+            >
+              <div class="d-flex gap-3">
+                <input
+                  id="${id}"
+                  type="radio"
+                  name="cjShippingOption"
+                  class="form-check-input mt-1 js-cj-shipping-option"
+                  value="${escapeHtml(option.id)}"
+                  data-shipping-amount="${Number(option.shippingAmount || 0)}"
+                  data-payable-total="${Number(option.payableTotal || 0)}"
+                >
+
+                <div class="flex-grow-1">
+                  <div class="d-flex justify-content-between gap-3">
+                    <strong class="text-primary">
+                      ${escapeHtml(option.logisticsName)}
+                    </strong>
+
+                    <strong>
+                      ${formatMoney(option.shippingAmount)}
+                    </strong>
+                  </div>
+
+                  ${estimate}
+                  ${message}
+                </div>
+              </div>
+            </label>
+          `;
+        }).join('');
+
+      optionsCard.classList.remove(
+        'd-none'
+      );
+
+      if (continueButton) {
+        continueButton.disabled = true;
+      }
+
+      if (shippingAmountElement) {
+        shippingAmountElement.textContent =
+          formatMoney(0);
+      }
+
+      const productTotal = Number(
+        productTotalElement
+        ?.textContent
+        ?.replace(/[^0-9.-]/g, '') ||
+        0
+      );
+
+      if (payableTotalElement) {
+        payableTotalElement.textContent =
+          formatMoney(productTotal);
+      }
+
+      bindShippingOptions();
+
+      optionsCard.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+
+    addressForm?.addEventListener(
+      'submit',
+      async function(event) {
+        event.preventDefault();
+        clearMessage();
+
+        if (!addressForm.checkValidity()) {
+          addressForm.classList.add(
+            'was-validated'
+          );
+
+          showMessage(
+            'Please complete every required delivery-address field.',
+            'error'
+          );
+
+          return;
+        }
+
+        const originalHtml =
+          calculateButton.innerHTML;
+
+        calculateButton.disabled = true;
+        calculateButton.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
+          'Calculating CJ Shipping...';
+
+        try {
+          const response = await fetch(
+            '/api/cj-checkout/quote', {
+              method: 'POST',
+
+              headers: {
+                'Content-Type': 'application/json',
+
+                Accept: 'application/json'
+              },
+
+              credentials: 'same-origin',
+
+              body: JSON.stringify(
+                formPayload()
+              )
+            }
+          );
+
+          const data = await response
+            .json()
+            .catch(function() {
+              return {};
+            });
+
+          if (
+            !response.ok ||
+            data.success === false
+          ) {
+            throw new Error(
+              data.message ||
+              'CJ shipping methods could not be calculated.'
+            );
+          }
+
+          const quote = data.quote || {};
+
+          if (itemCountElement) {
+            itemCountElement.textContent =
+              String(quote.itemCount || 0);
+          }
+
+          if (subtotalElement) {
+            subtotalElement.textContent =
+              formatMoney(
+                quote.productSubtotalExVat
+              );
+          }
+
+          if (vatElement) {
+            vatElement.textContent =
+              formatMoney(
+                quote.productVatAmount
+              );
+          }
+
+          if (productTotalElement) {
+            productTotalElement.textContent =
+              formatMoney(
+                quote.productTotalIncVat
+              );
+          }
+
+          if (payableTotalElement) {
+            payableTotalElement.textContent =
+              formatMoney(
+                quote.productTotalIncVat
+              );
+          }
+
+          renderShippingOptions(
+            quote.options
+          );
+
+          showMessage(
+            data.message ||
+            'CJ shipping methods calculated successfully.',
+            'success'
+          );
+        } catch (error) {
+          optionsCard?.classList.add(
+            'd-none'
+          );
+
+          showMessage(
+            error?.message ||
+            'CJ shipping methods could not be calculated.',
+            'error'
+          );
+        } finally {
+          calculateButton.disabled = false;
+          calculateButton.innerHTML =
+            originalHtml;
+        }
+      }
+    );
+
+    continueButton?.addEventListener(
+      'click',
+      async function() {
+        clearMessage();
+
+        const selectedInput =
+          document.querySelector(
+            '.js-cj-shipping-option:checked'
+          );
+
+        if (!selectedInput) {
+          showMessage(
+            'Please select and save a CJ shipping method first.',
+            'error'
+          );
+
+          return;
+        }
+
+        const originalHtml =
+          continueButton.innerHTML;
+
+        continueButton.disabled = true;
+
+        continueButton.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
+          'Opening PayPal...';
+
+        try {
+          const response = await fetch(
+            '/api/cj-payment/create', {
+              method: 'POST',
+
+              headers: {
+                'Content-Type': 'application/json',
+
+                Accept: 'application/json'
+              },
+
+              credentials: 'same-origin',
+
+              body: JSON.stringify({})
+            }
+          );
+
+          const data = await response
+            .json()
+            .catch(function() {
+              return {};
+            });
+
+          if (
+            !response.ok ||
+            data.success === false
+          ) {
+            throw new Error(
+              data.message ||
+              'The CJ PayPal payment could not be started.'
+            );
+          }
+
+          const approvalUrl = String(
+            data.approvalUrl || ''
+          ).trim();
+
+          if (!approvalUrl) {
+            throw new Error(
+              'PayPal did not return a payment approval page.'
+            );
+          }
+
+          window.location.assign(
+            approvalUrl
+          );
+        } catch (error) {
+          continueButton.disabled = false;
+
+          continueButton.innerHTML =
+            originalHtml;
+
+          showMessage(
+            error?.message ||
+            'The CJ PayPal payment could not be started.',
+            'error'
+          );
+        }
+      }
+    );
+
+    bindShippingOptions();
+  })();
+</script>
