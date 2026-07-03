@@ -76,7 +76,7 @@ router.post('/paypal', async (req, res) => {
 
   try {
     event = parseBody(req.body);
-  } catch (error) {
+  } catch {
     return res.status(400).json({ received: false, message: 'Invalid JSON body.' });
   }
 
