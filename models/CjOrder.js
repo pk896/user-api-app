@@ -909,6 +909,7 @@ const cjOrderSchema = new Schema(
       enum: [
         'CREATED',
         'APPROVED',
+        'PENDING',
         'COMPLETED',
         'DECLINED',
         'CANCELLED',

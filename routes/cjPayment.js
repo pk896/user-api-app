@@ -12,6 +12,7 @@ const { convertMoneyAmount, FX_PROVIDER } = require('../utils/fx/getFxRate');
 const {
   createRequestId,
   createPaypalOrder,
+  getPaypalOrder,
   capturePaypalOrder,
   getPaypalApprovalUrl,
   getPaypalCapture,
@@ -187,6 +188,44 @@ function getGuestSessionReference(req) {
     .createHash('sha256')
     .update(String(req.sessionID || ''))
     .digest('hex');
+}
+
+function buildCjOrderOwnershipFilters(req, cjOrderNumber) {
+  const filters = [];
+
+  const userId = getUserId(req);
+
+  const businessBuyerId = getBusinessBuyerId(req);
+
+  const guestSessionId = getGuestSessionReference(req);
+
+  if (userId) {
+    filters.push({
+      userId,
+    });
+  }
+
+  if (businessBuyerId) {
+    filters.push({
+      businessBuyerId,
+    });
+  }
+
+  if (guestSessionId) {
+    filters.push({
+      guestSessionId,
+    });
+  }
+
+  const lastOrderNumber = safeString(req.session?.cjLastOrder?.cjOrderNumber, 100);
+
+  if (lastOrderNumber && lastOrderNumber === cjOrderNumber) {
+    filters.push({
+      cjOrderNumber: lastOrderNumber,
+    });
+  }
+
+  return filters;
 }
 
 function generateCjOrderNumber() {
@@ -540,6 +579,80 @@ router.post('/api/cj-payment/create', async (req, res) => {
   let localOrder = null;
 
   try {
+    /*
+     * Do not create another PayPal order while the current
+     * CJ session already has an unfinished payment.
+     */
+    const existingPayment =
+      req.session?.cjPayment && req.session.cjPayment.source === 'CJ'
+        ? req.session.cjPayment
+        : null;
+
+    const existingLocalOrderId = safeString(existingPayment?.localOrderId, 100);
+
+    if (existingLocalOrderId && mongoose.Types.ObjectId.isValid(existingLocalOrderId)) {
+      const existingOrder = await CjOrder.findById(existingLocalOrderId)
+        .select(
+          [
+            'cjOrderNumber',
+            'status',
+            'paymentStatus',
+            'paypal.orderId',
+            'paypal.captureId',
+            'paypal.captureStatus',
+          ].join(' '),
+        )
+        .lean();
+
+      if (existingOrder && existingOrder.paymentStatus === 'COMPLETED') {
+        return res.status(409).json({
+          success: false,
+          code: 'CJ_PAYMENT_ALREADY_COMPLETED',
+          message: 'This CJ payment has already been completed.',
+          redirectTo: `/cj/order/success/${encodeURIComponent(existingOrder.cjOrderNumber)}`,
+        });
+      }
+
+      if (
+        existingOrder &&
+        ['CREATED', 'APPROVED', 'PENDING'].includes(
+          String(existingOrder.paymentStatus || '').toUpperCase(),
+        ) &&
+        existingOrder.paypal?.orderId
+      ) {
+        const isPendingCapture =
+          String(existingOrder.paypal?.captureStatus || '').toUpperCase() === 'PENDING' ||
+          String(existingOrder.paymentStatus || '').toUpperCase() === 'PENDING';
+
+        return res.status(409).json({
+          success: false,
+
+          code: 'CJ_PAYMENT_ALREADY_IN_PROGRESS',
+
+          message: isPendingCapture
+            ? 'PayPal is still processing your existing payment. Do not pay again.'
+            : 'A PayPal payment already exists for this CJ checkout. Do not create another payment.',
+
+          redirectTo: isPendingCapture
+            ? `/cj/order/success/${encodeURIComponent(existingOrder.cjOrderNumber)}`
+            : '',
+        });
+      }
+
+      /*
+       * A cancelled or failed previous order should not block
+       * a legitimate new payment attempt.
+       */
+      if (
+        !existingOrder ||
+        ['CANCELLED', 'DECLINED', 'FAILED'].includes(
+          String(existingOrder?.paymentStatus || '').toUpperCase(),
+        )
+      ) {
+        delete req.session.cjPayment;
+      }
+    }
+
     const checkoutData = checkoutFromSession(req);
 
     const paypalAmount = await convertPayableForPaypal(checkoutData.payableTotal);
@@ -800,6 +913,102 @@ router.post('/api/cj-payment/create', async (req, res) => {
   }
 });
 
+async function finalizeCompletedCjPayment({ req, order, paypalResponse, capture }) {
+  const payer = paypalResponse?.payer || {};
+
+  const captureStatus = safeString(capture?.status, 100).toUpperCase();
+
+  const captureAmount = getCaptureAmount(capture);
+
+  const expectedAmount = Number(order.paypal?.amount?.value);
+
+  const expectedCurrency = normalizeCurrency(order.paypal?.amount?.currency);
+
+  if (captureStatus !== 'COMPLETED') {
+    throw createPaymentError(
+      'CJ_PAYPAL_CAPTURE_NOT_COMPLETED',
+      `PayPal capture status is ${captureStatus || 'unknown'}.`,
+      409,
+    );
+  }
+
+  if (captureAmount.currency !== expectedCurrency) {
+    throw createPaymentError(
+      'CJ_PAYPAL_CAPTURE_CURRENCY_MISMATCH',
+      'The PayPal capture currency does not match the CJ order.',
+      409,
+    );
+  }
+
+  if (!amountsMatch(expectedAmount, captureAmount.value)) {
+    throw createPaymentError(
+      'CJ_PAYPAL_CAPTURE_AMOUNT_MISMATCH',
+      'The PayPal capture amount does not match the CJ order total.',
+      409,
+    );
+  }
+
+  order.status = 'PAID';
+
+  order.paymentStatus = 'COMPLETED';
+
+  order.fulfillmentStatus = 'CJ_ORDER_PENDING';
+
+  order.paidAt = capture?.create_time ? new Date(capture.create_time) : new Date();
+
+  order.payer = {
+    payerId: safeString(payer?.payer_id, 200),
+
+    email: safeString(payer?.email_address, 320).toLowerCase(),
+
+    givenName: safeString(payer?.name?.given_name, 200),
+
+    surname: safeString(payer?.name?.surname, 200),
+
+    countryCode: safeString(payer?.address?.country_code, 2).toUpperCase(),
+  };
+
+  order.paypal.orderStatus = safeString(paypalResponse?.status, 100).toUpperCase();
+
+  order.paypal.captureId = safeString(capture.id, 200);
+
+  order.paypal.captureStatus = 'COMPLETED';
+
+  order.paypal.capturedAt = capture?.create_time ? new Date(capture.create_time) : new Date();
+
+  order.paypal.rawCaptureResponse = paypalResponse;
+
+  order.supplierOrder.createStatus = 'PENDING';
+
+  order.lastPaymentErrorCode = '';
+
+  order.lastPaymentErrorMessage = '';
+
+  await order.save();
+
+  req.session.cjCart = {
+    source: 'CJ',
+    items: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  delete req.session.cjCheckout;
+  delete req.session.cjPayment;
+
+  req.session.cjLastOrder = {
+    source: 'CJ',
+
+    cjOrderNumber: order.cjOrderNumber,
+
+    localOrderId: String(order._id),
+  };
+
+  req.session.storeDepartment = 'cj';
+
+  return order;
+}
+
 /*
  * GET /cj/payment/return
  *
@@ -843,6 +1052,45 @@ router.get('/cj/payment/return', async (req, res) => {
       );
     }
 
+    /*
+     * The PayPal order has already been captured, but PayPal is
+     * still processing it. Never call the capture endpoint again.
+     */
+    if (
+      order.paypal?.captureId &&
+      String(order.paypal?.captureStatus || '').toUpperCase() === 'PENDING'
+    ) {
+      req.session.cjPayment = {
+        source: 'CJ',
+
+        localOrderId: String(order._id),
+
+        cjOrderNumber: order.cjOrderNumber,
+
+        paypalOrderId: order.paypal.orderId,
+
+        paypalCaptureId: order.paypal.captureId,
+
+        captureStatus: 'PENDING',
+
+        updatedAt: new Date().toISOString(),
+      };
+
+      req.session.cjLastOrder = {
+        source: 'CJ',
+
+        cjOrderNumber: order.cjOrderNumber,
+
+        localOrderId: String(order._id),
+      };
+
+      req.session.storeDepartment = 'cj';
+
+      return req.session.save(() =>
+        res.redirect(`/cj/order/success/${encodeURIComponent(order.cjOrderNumber)}`),
+      );
+    }
+
     const captureResponse = await capturePaypalOrder({
       paypalOrderId,
 
@@ -867,14 +1115,6 @@ router.get('/cj/payment/return', async (req, res) => {
 
     const expectedCurrency = normalizeCurrency(order.paypal?.amount?.currency);
 
-    if (captureStatus !== 'COMPLETED') {
-      throw createPaymentError(
-        'CJ_PAYPAL_CAPTURE_NOT_COMPLETED',
-        `PayPal capture status is ${captureStatus || 'unknown'}.`,
-        409,
-      );
-    }
-
     if (captureAmount.currency !== expectedCurrency) {
       throw createPaymentError(
         'CJ_PAYPAL_CAPTURE_CURRENCY_MISMATCH',
@@ -887,6 +1127,92 @@ router.get('/cj/payment/return', async (req, res) => {
       throw createPaymentError(
         'CJ_PAYPAL_CAPTURE_AMOUNT_MISMATCH',
         'The PayPal capture amount does not match the CJ order total.',
+        409,
+      );
+    }
+
+    if (captureStatus === 'PENDING') {
+      const pendingReason = safeString(
+        capture?.status_details?.reason ||
+          captureResponse?.purchase_units?.[0]?.payments?.captures?.[0]?.status_details?.reason ||
+          '',
+        200,
+      );
+
+      /*
+       * PayPal has already created the capture, but settlement
+       * is still pending.
+       *
+       * Do not capture again and do not start CJ fulfilment.
+       */
+      order.status = 'PAYMENT_PENDING';
+
+      order.paymentStatus = 'PENDING';
+
+      order.fulfillmentStatus = 'PENDING';
+
+      order.paypal.orderStatus = safeString(
+        captureResponse?.status || 'COMPLETED',
+        100,
+      ).toUpperCase();
+
+      order.paypal.captureId = safeString(capture.id, 200);
+
+      order.paypal.captureStatus = 'PENDING';
+
+      order.paypal.capturedAt = capture?.create_time ? new Date(capture.create_time) : new Date();
+
+      order.paypal.rawCaptureResponse = captureResponse;
+
+      order.supplierOrder.createStatus = 'NOT_CREATED';
+
+      order.lastPaymentErrorCode = 'PAYPAL_CAPTURE_PENDING';
+
+      order.lastPaymentErrorMessage = pendingReason
+        ? `PayPal capture is pending: ${pendingReason}`
+        : 'PayPal capture is still pending.';
+
+      await order.save();
+
+      req.session.cjPayment = {
+        source: 'CJ',
+
+        localOrderId: String(order._id),
+
+        cjOrderNumber: order.cjOrderNumber,
+
+        paypalOrderId: order.paypal.orderId,
+
+        paypalCaptureId: order.paypal.captureId,
+
+        captureStatus: 'PENDING',
+
+        updatedAt: new Date().toISOString(),
+      };
+
+      req.session.cjLastOrder = {
+        source: 'CJ',
+
+        cjOrderNumber: order.cjOrderNumber,
+
+        localOrderId: String(order._id),
+      };
+
+      req.session.storeDepartment = 'cj';
+
+      return req.session.save((saveError) => {
+        if (saveError) {
+          console.error('[CJ payment] Pending payment session save failed:', saveError);
+        }
+
+        return res.redirect(`/cj/order/success/${encodeURIComponent(order.cjOrderNumber)}`);
+      });
+    }
+
+    if (captureStatus !== 'COMPLETED') {
+      throw createPaymentError(
+        'CJ_PAYPAL_CAPTURE_NOT_COMPLETED',
+        `PayPal capture status is ${captureStatus || 'unknown'}.`,
         409,
       );
     }
@@ -1112,8 +1438,25 @@ router.get('/cj/order/success/:cjOrderNumber', async (req, res) => {
       return res.redirect('/store');
     }
 
-    if (order.paymentStatus !== 'COMPLETED') {
-      req.flash('warning', 'This CJ order has not yet been confirmed as paid.');
+    const normalizedPaymentStatus = String(order.paymentStatus || '').toUpperCase();
+
+    const normalizedCaptureStatus = String(order.paypal?.captureStatus || '').toUpperCase();
+
+    /*
+     * Backward compatibility for CJ orders saved by the
+     * previous version as APPROVED while the PayPal capture
+     * was actually PENDING.
+     */
+    if (normalizedPaymentStatus === 'APPROVED' && normalizedCaptureStatus === 'PENDING') {
+      order.paymentStatus = 'PENDING';
+      order.status = 'PAYMENT_PENDING';
+      order.fulfillmentStatus = 'PENDING';
+    }
+
+    const allowedPaymentStatuses = new Set(['PENDING', 'COMPLETED']);
+
+    if (!allowedPaymentStatuses.has(String(order.paymentStatus || '').toUpperCase())) {
+      req.flash('warning', 'This CJ order is not available as an active payment.');
 
       return res.redirect('/cj/checkout');
     }
@@ -1139,6 +1482,128 @@ router.get('/cj/order/success/:cjOrderNumber', async (req, res) => {
     req.flash('error', 'The CJ order confirmation page could not be loaded.');
 
     return res.redirect('/store');
+  }
+});
+
+/*
+ * GET /api/cj-payment/status/:cjOrderNumber
+ *
+ * Checks an existing PayPal order without creating or capturing
+ * another payment. This safely handles a capture that initially
+ * returned PENDING.
+ */
+router.get('/api/cj-payment/status/:cjOrderNumber', async (req, res) => {
+  try {
+    const cjOrderNumber = safeString(req.params?.cjOrderNumber, 100);
+
+    const ownershipFilters = buildCjOrderOwnershipFilters(req, cjOrderNumber);
+
+    if (!ownershipFilters.length) {
+      throw createPaymentError(
+        'CJ_PAYMENT_ORDER_NOT_FOUND',
+        'The CJ order could not be accessed from the current session.',
+        404,
+      );
+    }
+
+    const order = await CjOrder.findOne({
+      cjOrderNumber,
+
+      $or: ownershipFilters,
+    }).select('+paypal.rawCaptureResponse +metadata');
+
+    if (!order) {
+      throw createPaymentError(
+        'CJ_PAYMENT_ORDER_NOT_FOUND',
+        'The CJ order could not be found.',
+        404,
+      );
+    }
+
+    if (order.paymentStatus === 'COMPLETED') {
+      return res.json({
+        success: true,
+        completed: true,
+        pending: false,
+        cjOrderNumber: order.cjOrderNumber,
+        redirectTo: `/cj/order/success/${encodeURIComponent(order.cjOrderNumber)}`,
+      });
+    }
+
+    const paypalOrderId = safeString(order.paypal?.orderId, 200);
+
+    if (!paypalOrderId) {
+      throw createPaymentError(
+        'CJ_PAYMENT_PAYPAL_ORDER_NOT_FOUND',
+        'The PayPal order ID is unavailable.',
+        404,
+      );
+    }
+
+    const paypalOrder = await getPaypalOrder(paypalOrderId);
+
+    const capture = getPaypalCapture(paypalOrder);
+
+    if (!capture) {
+      return res.json({
+        success: true,
+        completed: false,
+        pending: true,
+        status: safeString(paypalOrder?.status || 'PENDING', 100).toUpperCase(),
+        message: 'PayPal is still processing the payment.',
+      });
+    }
+
+    const captureStatus = safeString(capture?.status, 100).toUpperCase();
+
+    if (captureStatus === 'COMPLETED') {
+      await finalizeCompletedCjPayment({
+        req,
+        order,
+        paypalResponse: paypalOrder,
+        capture,
+      });
+
+      return req.session.save(() =>
+        res.json({
+          success: true,
+          completed: true,
+          pending: false,
+          cjOrderNumber: order.cjOrderNumber,
+          redirectTo: `/cj/order/success/${encodeURIComponent(order.cjOrderNumber)}`,
+        }),
+      );
+    }
+
+    order.paypal.captureStatus = captureStatus || 'PENDING';
+
+    order.lastPaymentErrorCode =
+      captureStatus === 'PENDING'
+        ? 'PAYPAL_CAPTURE_PENDING'
+        : `PAYPAL_CAPTURE_${captureStatus || 'UNKNOWN'}`;
+
+    order.lastPaymentErrorMessage = safeString(
+      capture?.status_details?.reason || `PayPal capture status is ${captureStatus || 'unknown'}.`,
+      2000,
+    );
+
+    await order.save();
+
+    return res.json({
+      success: true,
+      completed: false,
+      pending: captureStatus === 'PENDING',
+      status: captureStatus || 'PENDING',
+      reason: safeString(capture?.status_details?.reason, 200),
+      message:
+        captureStatus === 'PENDING'
+          ? 'PayPal is still processing the payment.'
+          : `PayPal payment status is ${captureStatus || 'unknown'}.`,
+    });
+  } catch (error) {
+    console.error('[CJ payment] Status check failed:', error?.stack || error);
+
+    return sendPaymentError(res, error);
   }
 });
 

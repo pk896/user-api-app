@@ -162,10 +162,26 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// PayPal Webhooks MUST use RAW body (before express.json)
+// PayPal Webhooks MUST use RAW body before express.json().
+
+const cjPaypalWebhooks = require('./routes/cjPaypalWebhooks');
 const paypalWebhooks = require('./routes/paypalWebhooks');
-// Accept any content-type to avoid charset/proxy issues
-app.use('/webhooks', express.raw({ type: '*/*' }), paypalWebhooks);
+
+// Separate CJ PayPal webhook.
+// This route reads and updates only CjOrder.
+app.use(
+  '/webhooks/cj-paypal',
+  express.raw({ type: '*/*' }),
+  cjPaypalWebhooks,
+);
+
+// Existing internal Kasyora PayPal webhook.
+// Keep this route and its internal Order logic unchanged.
+app.use(
+  '/webhooks',
+  express.raw({ type: '*/*' }),
+  paypalWebhooks,
+);
 
 const COUNTRIES = require('./utils/countries');
 const { CATEGORIES } = require('./utils/category');

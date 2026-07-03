@@ -28,6 +28,10 @@
       ? order.tracking
       : {};
 
+  const PAYMENT_STATUS = String(order?.paymentStatus || '').trim().toUpperCase();
+  const PAYMENT_PENDING = PAYMENT_STATUS === 'PENDING';
+  const PAYMENT_COMPLETED = PAYMENT_STATUS === 'COMPLETED';
+
   function moneyValue(money) {
     if (
       money &&
@@ -183,7 +187,7 @@
         </span>
 
         <h1 class="text-primary mb-1">
-          Order Confirmed
+          <%= PAYMENT_PENDING ? 'Payment Pending' : 'Order Confirmed' %>
         </h1>
 
         <nav aria-label="breadcrumb">
@@ -201,10 +205,7 @@
         </nav>
       </div>
 
-      <a
-        href="/store"
-        class="btn btn-outline-primary rounded-pill px-4"
-      >
+      <a href="/store" class="btn btn-outline-primary rounded-pill px-4">
         <i class="fas fa-store me-2"></i>
         Continue Shopping
       </a>
@@ -213,8 +214,35 @@
 </div>
 <!-- Header End -->
 
-<!-- Success Notice Start -->
+<!-- Payment Notice Start -->
 <div class="container-fluid px-0">
+  <% if (PAYMENT_PENDING) { %>
+  <div class="alert alert-warning rounded-0 border-0 mb-0">
+    <div class="container">
+      <div class="d-flex align-items-start gap-3">
+        <span class="spinner-border spinner-border-sm mt-1" aria-hidden="true"></span>
+
+        <div>
+          <strong class="fs-5 text-primary">
+            PayPal is reviewing your payment.
+          </strong>
+
+          <div class="mt-1">
+            Your payment was received, but PayPal has not
+            confirmed it as completed yet. Do not pay again.
+          </div>
+
+          <div class="small mt-2">
+            CJ order:
+            <strong>
+              <%= order.cjOrderNumber %>
+            </strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } else if (PAYMENT_COMPLETED) { %>
   <div class="alert alert-success rounded-0 border-0 mb-0">
     <div class="container">
       <div class="d-flex align-items-start gap-3">
@@ -235,11 +263,26 @@
       </div>
     </div>
   </div>
+  <% } %>
 </div>
-<!-- Success Notice End -->
+<!-- Payment Notice End -->
 
 <div class="container-fluid py-5">
   <div class="container">
+
+    <% if (PAYMENT_PENDING) { %>
+    <div id="cjPaymentPendingAlert" class="alert alert-warning border-0 shadow-sm mb-4" role="status">
+      <div class="d-flex align-items-start gap-3">
+        <span class="spinner-border spinner-border-sm mt-1" aria-hidden="true"></span>
+        <div>
+          <h2 class="h5 text-primary mb-2">PayPal is confirming your payment</h2>
+          <p class="mb-1">Your payment request was received. Do not pay again and do not close this order as failed.</p>
+          <p class="small mb-0">Kasyora will create the CJ supplier order only after PayPal confirms the capture as completed.</p>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
     <div class="row g-4">
       <!-- Main Order Information -->
       <div class="col-12 col-lg-8">
@@ -251,7 +294,7 @@
                 <%= order.cjOrderNumber %>
               </h2>
 
-              <span class="badge bg-success">
+              <span class="badge <%= PAYMENT_PENDING ? 'bg-warning text-dark' : 'bg-success' %>">
                 <%= prettyStatus(order.paymentStatus) %>
               </span>
             </div>
@@ -271,11 +314,15 @@
 
               <div class="col-12 col-md-6">
                 <div class="small text-muted">
-                  Payment date
+                  <%= PAYMENT_PENDING ? 'Order created' : 'Payment date' %>
                 </div>
 
                 <div class="fw-semibold">
-                  <%= niceDate(order.paidAt || order.createdAt) %>
+                  <%= niceDate(
+                    PAYMENT_PENDING
+                      ? order.createdAt
+                      : order.paidAt || order.createdAt
+                  ) %>
                 </div>
               </div>
 
@@ -305,62 +352,51 @@
             </h3>
 
             <% ITEMS.forEach(function(item) { %>
-              <div class="row g-3 align-items-center border-top py-3">
-                <div class="col-4 col-md-2">
-                  <a
-                    href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>"
-                    class="d-block border rounded p-2"
-                  >
-                    <img
-                      src="<%= item.imageUrl %>"
-                      alt="<%= item.name %>"
-                      class="img-fluid w-100"
-                      style="height: 90px; object-fit: contain;"
-                    >
-                  </a>
-                </div>
+            <div class="row g-3 align-items-center border-top py-3">
+              <div class="col-4 col-md-2">
+                <a href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>" class="d-block border rounded p-2">
+                  <img src="<%= item.imageUrl %>" alt="<%= item.name %>" class="img-fluid w-100" style="height: 90px; object-fit: contain;">
+                </a>
+              </div>
 
-                <div class="col-8 col-md-5">
-                  <a
-                    href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>"
-                    class="text-decoration-none"
-                  >
-                    <div class="fw-bold text-primary">
-                      <%= item.name %>
-                    </div>
-                  </a>
-
-                  <div class="small text-muted mt-1">
-                    Variant:
-                    <%= item.variantName %>
-                  </div>
-
-                  <div class="small text-muted">
-                    SKU:
-                    <%= item.variantSku || 'Not available' %>
-                  </div>
-                </div>
-
-                <div class="col-6 col-md-2">
-                  <div class="small text-muted">
-                    Quantity
-                  </div>
-
-                  <div class="fw-semibold">
-                    <%= item.quantity %>
-                  </div>
-                </div>
-
-                <div class="col-6 col-md-3 text-md-end">
-                  <div class="small text-muted">
-                    Line total
-                  </div>
-
+              <div class="col-8 col-md-5">
+                <a href="/cj/product/<%= encodeURIComponent(item.cjProductId) %>" class="text-decoration-none">
                   <div class="fw-bold text-primary">
-                    <%= formatMoney(item.lineTotalIncVat) %>
+                    <%= item.name %>
                   </div>
+                </a>
+
+                <div class="small text-muted mt-1">
+                  Variant:
+                  <%= item.variantName %>
+                </div>
+
+                <div class="small text-muted">
+                  SKU:
+                  <%= item.variantSku || 'Not available' %>
                 </div>
               </div>
+
+              <div class="col-6 col-md-2">
+                <div class="small text-muted">
+                  Quantity
+                </div>
+
+                <div class="fw-semibold">
+                  <%= item.quantity %>
+                </div>
+              </div>
+
+              <div class="col-6 col-md-3 text-md-end">
+                <div class="small text-muted">
+                  Line total
+                </div>
+
+                <div class="fw-bold text-primary">
+                  <%= formatMoney(item.lineTotalIncVat) %>
+                </div>
+              </div>
+            </div>
             <% }) %>
           </div>
         </div>
@@ -386,9 +422,9 @@
                 </div>
 
                 <% if (DELIVERY.companyName) { %>
-                  <div>
-                    <%= DELIVERY.companyName %>
-                  </div>
+                <div>
+                  <%= DELIVERY.companyName %>
+                </div>
                 <% } %>
 
                 <div class="mt-2">
@@ -419,15 +455,15 @@
                 </div>
 
                 <% if (DELIVERY.addressLine2) { %>
-                  <div>
-                    <%= DELIVERY.addressLine2 %>
-                  </div>
+                <div>
+                  <%= DELIVERY.addressLine2 %>
+                </div>
                 <% } %>
 
                 <% if (DELIVERY.suburb) { %>
-                  <div>
-                    <%= DELIVERY.suburb %>
-                  </div>
+                <div>
+                  <%= DELIVERY.suburb %>
+                </div>
                 <% } %>
 
                 <div>
@@ -502,7 +538,7 @@
 
             <div class="d-flex justify-content-between align-items-center">
               <span class="fw-bold fs-5">
-                Paid total
+                <%= PAYMENT_PENDING ? 'Payment total' : 'Paid total' %>
               </span>
 
               <strong class="text-primary fs-4">
@@ -511,10 +547,10 @@
             </div>
 
             <% if (order.paypal?.captureId) { %>
-              <div class="small text-muted mt-4 text-break">
-                PayPal capture:
-                <%= order.paypal.captureId %>
-              </div>
+            <div class="small text-muted mt-4 text-break">
+              PayPal capture:
+              <%= order.paypal.captureId %>
+            </div>
             <% } %>
           </div>
         </div>
@@ -539,15 +575,15 @@
             </div>
 
             <% if (SHIPPING.deliveryEstimate) { %>
-              <div class="mb-3">
-                <div class="small text-muted">
-                  Estimated delivery
-                </div>
-
-                <div class="fw-semibold">
-                  <%= SHIPPING.deliveryEstimate %>
-                </div>
+            <div class="mb-3">
+              <div class="small text-muted">
+                Estimated delivery
               </div>
+
+              <div class="fw-semibold">
+                <%= SHIPPING.deliveryEstimate %>
+              </div>
+            </div>
             <% } %>
 
             <div class="mb-3">
@@ -561,27 +597,24 @@
             </div>
 
             <% if (TRACKING.trackingNumber) { %>
-              <div class="mb-3">
-                <div class="small text-muted">
-                  Tracking number
-                </div>
+            <div class="mb-3">
+              <div class="small text-muted">
+                Tracking number
+              </div>
 
-                <div class="fw-semibold text-break">
-                  <%= TRACKING.trackingNumber %>
-                </div>
+              <div class="fw-semibold text-break">
+                <%= TRACKING.trackingNumber %>
               </div>
+            </div>
             <% } else { %>
-              <div class="alert alert-light border small mb-0">
-                Tracking will appear after CJ creates and dispatches the supplier order.
-              </div>
+            <div class="alert alert-light border small mb-0">
+              Tracking will appear after CJ creates and dispatches the supplier order.
+            </div>
             <% } %>
           </div>
         </div>
 
-        <a
-          href="/store"
-          class="btn btn-primary btn-lg rounded-pill w-100"
-        >
+        <a href="/store" class="btn btn-primary btn-lg rounded-pill w-100">
           <i class="fas fa-shopping-bag me-2"></i>
           Continue Shopping
         </a>
@@ -589,5 +622,50 @@
     </div>
   </div>
 </div>
+
+
+<% if (PAYMENT_PENDING) { %>
+<script nonce="<%= nonce %>">
+  (function() {
+    const orderNumber = <%- JSON.stringify(String(order?.cjOrderNumber || '')) %>;
+    let attempts = 0;
+    const maxAttempts = 24;
+
+    async function checkPaymentStatus() {
+      attempts += 1;
+
+      try {
+        const response = await fetch(
+          '/api/cj-payment/status/' + encodeURIComponent(orderNumber), {
+            headers: {
+              Accept: 'application/json'
+            },
+            credentials: 'same-origin'
+          }
+        );
+
+        const data = await response.json().catch(function() {
+          return {};
+        });
+
+        if (response.ok && data.completed && data.redirectTo) {
+          window.location.replace(data.redirectTo);
+          return;
+        }
+
+        if (attempts < maxAttempts && response.ok && data.pending !== false) {
+          window.setTimeout(checkPaymentStatus, 5000);
+        }
+      } catch (error) {
+        if (attempts < maxAttempts) {
+          window.setTimeout(checkPaymentStatus, 5000);
+        }
+      }
+    }
+
+    window.setTimeout(checkPaymentStatus, 3000);
+  })();
+</script>
+<% } %>
 
 <%- include('../store/partials/footer') %>
