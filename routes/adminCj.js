@@ -6,38 +6,45 @@ const express = require('express');
 const CjApiCredential = require('../models/CjApiCredential');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require('../middleware/requireAdminPermission');
 
 const { logAdminAction } = require('../utils/logAdminAction');
 
-const {
-  CJ_API_ENABLED,
-  CJ_API_KEY,
-  CJ_API_BASE_URL,
-  maskSecret,
-} = require('../utils/cj/cjConfig');
+const { CJ_API_ENABLED, CJ_API_KEY, CJ_API_BASE_URL, maskSecret } = require('../utils/cj/cjConfig');
 
-const {
-  requestNewAccessToken,
-  forceRefreshAccessToken,
-} = require('../utils/cj/cjTokenManager');
+const { requestNewAccessToken, forceRefreshAccessToken } = require('../utils/cj/cjTokenManager');
 
 const { cjRequest } = require('../utils/cj/cjClient');
 
 const router = express.Router();
 
-router.use(
+/*
+ * CJ API credentials are sensitive.
+ *
+ * Do not use router.use(requireAdmin...) globally in this file.
+ * If this router is mounted globally in server.js, a global router.use()
+ * can accidentally protect public pages like store pages.
+ *
+ * Apply this gate only to the exact CJ API/admin credential routes below.
+ */
+const requireCjApiAdmin = [
   requireAdmin,
+  requireAdminRole(['super_admin']),
   requireAdminPermission('cj.manage'),
-);
+];
 
 function safeError(error) {
   return {
-    code: String(error?.code || 'CJ_ERROR').trim().slice(0, 100),
+    code: String(error?.code || 'CJ_ERROR')
+      .trim()
+      .slice(0, 100),
     message: String(error?.message || 'CJ request failed.')
       .trim()
       .slice(0, 1000),
-    requestId: String(error?.requestId || '').trim().slice(0, 200),
+    requestId: String(error?.requestId || '')
+      .trim()
+      .slice(0, 200),
   };
 }
 
@@ -49,27 +56,35 @@ async function loadCredentialSummary() {
   return credential || null;
 }
 
-router.get('/admin/cj', async (req, res) => {
-  const credential = await loadCredentialSummary();
+router.get('/admin/cj', requireCjApiAdmin, async (req, res) => {
+  try {
+    const credential = await loadCredentialSummary();
 
-  return res.render('admin/cj/health', {
-    layout: 'layout',
-    title: 'CJ Dropshipping',
-    active: 'admin-cj',
-    fullWidthPage: true,
+    return res.render('admin/cj/health', {
+      layout: 'layout',
+      title: 'CJ Dropshipping',
+      active: 'admin-cj',
+      fullWidthPage: true,
 
-    cjConfig: {
-      enabled: CJ_API_ENABLED,
-      apiKeyConfigured: Boolean(CJ_API_KEY),
-      apiKeyMasked: maskSecret(CJ_API_KEY),
-      baseUrl: CJ_API_BASE_URL,
-    },
+      cjConfig: {
+        enabled: CJ_API_ENABLED,
+        apiKeyConfigured: Boolean(CJ_API_KEY),
+        apiKeyMasked: maskSecret(CJ_API_KEY),
+        baseUrl: CJ_API_BASE_URL,
+      },
 
-    credential,
-  });
+      credential,
+    });
+  } catch (error) {
+    console.error('[CJ admin] Health page failed:', error?.stack || error);
+
+    req.flash('error', 'CJ admin page could not be loaded.');
+
+    return res.redirect('/admin/dashboard');
+  }
 });
 
-router.post('/admin/cj/authenticate', async (req, res) => {
+router.post('/admin/cj/authenticate', requireCjApiAdmin, async (req, res) => {
   try {
     /*
      * Remove only the previously stored CJ token values.
@@ -113,10 +128,7 @@ router.post('/admin/cj/authenticate', async (req, res) => {
       },
     });
 
-    req.flash(
-      'success',
-      'Fresh CJ API credentials obtained successfully.',
-    );
+    req.flash('success', 'Fresh CJ API credentials obtained successfully.');
 
     return res.redirect('/admin/cj');
   } catch (error) {
@@ -130,25 +142,20 @@ router.post('/admin/cj/authenticate', async (req, res) => {
       meta: safe,
     });
 
-    req.flash(
-      'error',
-      `CJ authentication failed: ${safe.message}`,
-    );
+    req.flash('error', `CJ authentication failed: ${safe.message}`);
 
     return res.redirect('/admin/cj');
   }
 });
 
-router.post('/admin/cj/refresh-token', async (req, res) => {
+router.post('/admin/cj/refresh-token', requireCjApiAdmin, async (req, res) => {
   try {
     let operation = 'REFRESH';
 
     try {
       await forceRefreshAccessToken();
     } catch (refreshError) {
-      const refreshErrorCode = String(
-        refreshError?.code || '',
-      ).trim();
+      const refreshErrorCode = String(refreshError?.code || '').trim();
 
       const refreshTokenRejected =
         refreshErrorCode === '1600003' ||
@@ -159,9 +166,7 @@ router.post('/admin/cj/refresh-token', async (req, res) => {
         throw refreshError;
       }
 
-      console.warn(
-        '[CJ admin] Refresh token rejected. Reauthenticating with the API key.',
-      );
+      console.warn('[CJ admin] Refresh token rejected. Reauthenticating with the API key.');
 
       await requestNewAccessToken();
       operation = 'REAUTHENTICATE';
@@ -183,10 +188,7 @@ router.post('/admin/cj/refresh-token', async (req, res) => {
         'CJ rejected the old refresh token, so Kasyora safely obtained new credentials using the API key.',
       );
     } else {
-      req.flash(
-        'success',
-        'CJ access token refreshed successfully.',
-      );
+      req.flash('success', 'CJ access token refreshed successfully.');
     }
 
     return res.redirect('/admin/cj');
@@ -201,16 +203,13 @@ router.post('/admin/cj/refresh-token', async (req, res) => {
       meta: safe,
     });
 
-    req.flash(
-      'error',
-      `CJ token refresh failed: ${safe.message}`,
-    );
+    req.flash('error', `CJ token refresh failed: ${safe.message}`);
 
     return res.redirect('/admin/cj');
   }
 });
 
-router.post('/admin/cj/health-test', async (req, res) => {
+router.post('/admin/cj/health-test', requireCjApiAdmin, async (req, res) => {
   const checkedAt = new Date();
 
   try {
@@ -248,9 +247,7 @@ router.post('/admin/cj/health-test', async (req, res) => {
       },
     });
 
-    const categoryCount = Array.isArray(response?.data)
-      ? response.data.length
-      : 0;
+    const categoryCount = Array.isArray(response?.data) ? response.data.length : 0;
 
     req.flash(
       'success',
@@ -289,10 +286,7 @@ router.post('/admin/cj/health-test', async (req, res) => {
       meta: safe,
     });
 
-    req.flash(
-      'error',
-      `CJ health test failed: ${safe.message}`,
-    );
+    req.flash('error', `CJ health test failed: ${safe.message}`);
 
     return res.redirect('/admin/cj');
   }

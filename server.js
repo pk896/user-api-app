@@ -672,6 +672,7 @@ const adminShippoRoutes = require('./routes/adminShippo');
 const adminCourierGuyRoutes = require('./routes/adminCourierGuy');
 const adminCjRoutes = require('./routes/adminCj');
 const adminCjProductsRoutes = require('./routes/adminCjProducts');
+const adminCjOrdersRoutes = require('./routes/adminCjOrders');
 const courierGuyCheckoutApiRoutes = require('./routes/courierGuyCheckoutApi');
 const productsRouter = require('./routes/products');
 const wholesaleRoutes = require('./routes/wholesale');
@@ -810,6 +811,10 @@ app.use(adminCjRoutes);
 // Separate CJ catalogue, variant selection, import,
 // pricing, and imported-product administration.
 app.use(adminCjProductsRoutes);
+
+// Separate CJ order administration.
+// This only reads and updates CjOrder.
+app.use(adminCjOrdersRoutes);
 
 app.use('/admin', adminPayoutsRoutes);
 
@@ -1242,7 +1247,7 @@ async function startServer() {
     );
   }
 
-  // =====================================================
+    // =====================================================
   // Courier Guy automatic shipment creation
   // Completely standalone from Shippo.
   // =====================================================
@@ -1259,6 +1264,28 @@ async function startServer() {
   } catch (error) {
     console.warn(
       '⚠️ Courier Guy automatic shipment worker not started:',
+      error?.message || error,
+    );
+  }
+
+  // =====================================================
+  // CJ automatic supplier order creation
+  // Completely standalone from internal orders, Shippo,
+  // and Courier Guy.
+  // =====================================================
+  try {
+    const {
+      startAutoCreateCjOrdersWorker,
+    } = require('./utils/cj/autoCreateCjOrders');
+
+    startAutoCreateCjOrdersWorker();
+
+    console.log(
+      '✅ CJ automatic supplier order worker initialized',
+    );
+  } catch (error) {
+    console.warn(
+      '⚠️ CJ automatic supplier order worker not started:',
       error?.message || error,
     );
   }

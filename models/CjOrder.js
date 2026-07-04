@@ -522,7 +522,6 @@ const CjPaypalSchema = new Schema(
       type: String,
       trim: true,
       default: '',
-      index: true,
     },
 
     orderStatus: {
@@ -536,7 +535,6 @@ const CjPaypalSchema = new Schema(
       type: String,
       trim: true,
       default: '',
-      index: true,
     },
 
     captureStatus: {
@@ -612,7 +610,6 @@ const CjSupplierOrderSchema = new Schema(
       type: String,
       trim: true,
       default: '',
-      index: true,
     },
 
     cjOrderNumber: {
@@ -745,7 +742,6 @@ const CjTrackingSchema = new Schema(
       type: String,
       trim: true,
       default: '',
-      index: true,
     },
 
     trackingUrl: {

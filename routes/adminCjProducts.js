@@ -8,6 +8,7 @@ const CjProduct = require('../models/CjProduct');
 const CjProductSyncLog = require('../models/CjProductSyncLog');
 
 const requireAdmin = require('../middleware/requireAdmin');
+const requireAdminRole = require('../middleware/requireAdminRole');
 const requireAdminPermission = require(
   '../middleware/requireAdminPermission',
 );
@@ -27,9 +28,19 @@ const {
 
 const router = express.Router();
 
+/*
+ * CJ product catalogue/import management belongs to the
+ * store and inventory departments.
+ *
+ * Allowed:
+ * - super_admin
+ * - store_admin with cj.products.manage
+ * - inventory_admin with cj.products.manage
+ */
 router.use(
   '/admin/cj/products',
   requireAdmin,
+  requireAdminRole(['super_admin', 'store_admin', 'inventory_admin']),
   requireAdminPermission('cj.products.manage'),
 );
 

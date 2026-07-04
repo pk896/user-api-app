@@ -72,12 +72,11 @@
 
   /*
    * CJ API credentials are sensitive.
-   * Only super_admin currently has "*" and may access /admin/cj.
-   *
-   * Do not expose this link to store_admin or inventory_admin.
+   * Keep this exactly aligned with routes/adminCj.js:
+   * only super_admin may access /admin/cj.
    */
   const canManageCjApi =
-    isSuper || hasPerm('cj.manage');
+    isSuper && hasPerm('cj.manage');
 
   /*
    * Stage 2 CJ catalogue and imported-product management.
@@ -95,9 +94,11 @@
     );
 
   /*
-   * Reserved for a later CJ orders and fulfilment stage.
-   * We calculate it now, but do not render a link until
-   * the CJ order route actually exists.
+   * CJ orders and supplier fulfilment.
+   *
+   * Allowed:
+   * - super_admin
+   * - shipping_admin with cj.orders.manage
    */
   const canManageCjOrders =
     isSuper ||
@@ -123,9 +124,15 @@
   } else if (canVerification) {
     primaryHref = '/admin/business-verifications';
     primaryText = 'Open Verification Admin';
+  } else if (canManageCjOrders) {
+    primaryHref = '/admin/cj/orders';
+    primaryText = 'Open CJ Orders Admin';
   } else if (canShipping) {
     primaryHref = '/admin/delivery-options';
     primaryText = 'Open Shipping Admin';
+  } else if (canManageCjProducts) {
+    primaryHref = '/admin/cj/products';
+    primaryText = 'Open CJ Products Admin';
   } else if (canStore) {
     primaryHref = '/admin/home-banners';
     primaryText = 'Open Store Admin';
@@ -144,10 +151,7 @@
       <div class="card-body p-4 p-md-5">
 
         <div class="d-flex justify-content-end mb-3">
-          <a
-            href="/admin-ui/index.html"
-            class="btn btn-outline-primary"
-          >
+          <a href="/admin-ui/index.html" class="btn btn-outline-primary">
             Open Admin UI
           </a>
         </div>
@@ -161,276 +165,195 @@
         </p>
 
         <div class="d-grid gap-2 d-sm-flex flex-wrap mb-4">
-          <a
-            href="<%= primaryHref %>"
-            class="btn btn-primary btn-lg"
-          >
+          <a href="<%= primaryHref %>" class="btn btn-primary btn-lg">
             <%= primaryText %>
           </a>
 
-          <form
-            action="/admin/logout"
-            method="POST"
-            class="m-0"
-          >
-            <button
-              type="submit"
-              class="btn btn-outline-danger btn-lg"
-            >
+          <form action="/admin/logout" method="POST" class="m-0">
+            <button type="submit" class="btn btn-outline-danger btn-lg">
               Logout
             </button>
           </form>
 
           <% if (isSuper) { %>
-            <a
-              href="/admin/admins"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Admins
-            </a>
+          <a href="/admin/admins" class="btn btn-outline-primary btn-lg">
+            Manage Admins
+          </a>
 
-            <a
-              href="/admin/admins/new"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Create Admin
-            </a>
+          <a href="/admin/admins/new" class="btn btn-outline-primary btn-lg">
+            Create Admin
+          </a>
 
-            <a
-              href="/admin/ceo-audit"
-              class="btn btn-outline-primary btn-lg"
-            >
-              CEO Audit Log
-            </a>
+          <a href="/admin/ceo-audit" class="btn btn-outline-primary btn-lg">
+            CEO Audit Log
+          </a>
           <% } %>
 
           <% if (canVerification) { %>
-            <a
-              href="/admin/business-verifications"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Business Verification
-            </a>
+          <a href="/admin/business-verifications" class="btn btn-outline-primary btn-lg">
+            Business Verification
+          </a>
           <% } %>
 
           <% if (canOrders) { %>
-            <a
-              href="/admin-ui/orders.html"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Orders
-            </a>
+          <a href="/admin-ui/orders.html" class="btn btn-outline-primary btn-lg">
+            Manage Orders
+          </a>
           <% } %>
 
           <% if (canShipping) { %>
-            <a
-              href="/admin/delivery-options"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Delivery Options
-            </a>
+          <a href="/admin/delivery-options" class="btn btn-outline-primary btn-lg">
+            Delivery Options
+          </a>
 
-            <a
-              href="/admin/warehouses"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Warehouses
-            </a>
+          <a href="/admin/warehouses" class="btn btn-outline-primary btn-lg">
+            Warehouses
+          </a>
 
-            <a
-              href="/admin/shippo"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Shippo Labels
-            </a>
+          <a href="/admin/shippo" class="btn btn-outline-primary btn-lg">
+            Shippo Labels
+          </a>
 
-            <a
-              href="/admin/courier-guy"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Courier Guy Shipments
-            </a>
+          <a href="/admin/courier-guy" class="btn btn-outline-primary btn-lg">
+            Courier Guy Shipments
+          </a>
           <% } %>
 
           <% if (canPayouts) { %>
-            <a
-              href="/admin/payouts"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Payouts
-            </a>
+          <a href="/admin/payouts" class="btn btn-outline-primary btn-lg">
+            Payouts
+          </a>
           <% } %>
 
           <% if (canStore) { %>
-            <a
-              href="/admin/home-banners"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Homepage Banners &amp; Edit Promo Offers
-            </a>
+          <a href="/admin/home-banners" class="btn btn-outline-primary btn-lg">
+            Manage Homepage Banners &amp; Edit Promo Offers
+          </a>
 
-            <a
-              href="/admin/bestseller-cards"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Bestseller Cards
-            </a>
+          <a href="/admin/bestseller-cards" class="btn btn-outline-primary btn-lg">
+            Manage Bestseller Cards
+          </a>
 
-            <a
-              href="/admin/bestseller-bottom-banners"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Bestseller Bottom Banners
-            </a>
+          <a href="/admin/bestseller-bottom-banners" class="btn btn-outline-primary btn-lg">
+            Manage Bestseller Bottom Banners
+          </a>
 
-            <a
-              href="/admin/shop-sidebar-banner"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Shop Sidebar Banner
-            </a>
+          <a href="/admin/shop-sidebar-banner" class="btn btn-outline-primary btn-lg">
+            Manage Shop Sidebar Banner
+          </a>
 
-            <a
-              href="/admin/shop-main-banner"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Shop Main Banner
-            </a>
+          <a href="/admin/shop-main-banner" class="btn btn-outline-primary btn-lg">
+            Manage Shop Main Banner
+          </a>
 
-            <a
-              href="/admin/shop-header-image"
-              class="btn btn-outline-primary btn-lg"
-            >
-              Manage Shop Header Image
-            </a>
+          <a href="/admin/shop-header-image" class="btn btn-outline-primary btn-lg">
+            Manage Shop Header Image
+          </a>
           <% } %>
         </div>
 
         <% if (canAccessAnyCjArea) { %>
-          <div class="card border-primary shadow-sm mb-4">
-            <div class="card-header bg-primary text-white">
-              <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                <div>
-                  <h2 class="h5 mb-1">
-                    CJ Dropshipping Department
-                  </h2>
+        <div class="card border-primary shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+              <div>
+                <h2 class="h5 mb-1">
+                  CJ Dropshipping Department
+                </h2>
 
-                  <div class="small opacity-75">
-                    Separate CJ catalogue, products, API, orders, and fulfilment administration.
-                  </div>
+                <div class="small opacity-75">
+                  Separate CJ catalogue, products, API, orders, and fulfilment administration.
                 </div>
-
-                <span class="badge bg-brand-green">
-                  Isolated Department
-                </span>
-              </div>
-            </div>
-
-            <div class="card-body">
-              <div class="d-grid gap-2 d-md-flex flex-wrap">
-
-                <% if (canManageCjApi) { %>
-                  <a
-                    href="/admin/cj"
-                    class="btn btn-primary"
-                  >
-                    CJ API Health &amp; Credentials
-                  </a>
-                <% } %>
-
-                <% if (canManageCjProducts) { %>
-                  <a
-                    href="/admin/cj/products"
-                    class="btn btn-outline-primary"
-                  >
-                    Browse CJ Catalogue
-                  </a>
-
-                  <a
-                    href="/admin/cj/products/imported"
-                    class="btn btn-brand-green"
-                  >
-                    Imported CJ Products
-                  </a>
-                <% } %>
-
-                <!--
-                  CJ order management is intentionally not displayed yet.
-                  The /admin/cj/orders route will be added during the later
-                  CJ order and fulfilment stage.
-                -->
               </div>
 
-              <% if (canManageCjApi) { %>
-                <div class="alert alert-warning mt-3 mb-0">
-                  <strong>CJ API credentials:</strong>
-                  This area controls sensitive CJ authentication and is restricted to the super admin.
-                </div>
-              <% } else if (canManageCjProducts) { %>
-                <div class="alert alert-info mt-3 mb-0">
-                  You may browse, import, price, activate, pause, and archive CJ products. You cannot view or change the private CJ API key.
-                </div>
-              <% } %>
+              <span class="badge bg-brand-green">
+                Isolated Department
+              </span>
             </div>
           </div>
+
+          <div class="card-body">
+            <div class="d-grid gap-2 d-md-flex flex-wrap">
+
+              <% if (canManageCjApi) { %>
+              <a href="/admin/cj" class="btn btn-primary">
+                CJ API Health &amp; Credentials
+              </a>
+              <% } %>
+
+              <% if (canManageCjProducts) { %>
+              <a href="/admin/cj/products" class="btn btn-outline-primary">
+                Browse CJ Catalogue
+              </a>
+
+              <a href="/admin/cj/products/imported" class="btn btn-brand-green">
+                Imported CJ Products
+              </a>
+              <% } %>
+
+              <% if (canManageCjOrders) { %>
+              <a href="/admin/cj/orders" class="btn btn-outline-primary">
+                CJ Orders &amp; Supplier Fulfilment
+              </a>
+              <% } %>
+            </div>
+
+            <% if (canManageCjApi) { %>
+            <div class="alert alert-warning mt-3 mb-0">
+              <strong>CJ API credentials:</strong>
+              This area controls sensitive CJ authentication and is restricted to the super admin.
+            </div>
+            <% } else if (canManageCjProducts) { %>
+            <div class="alert alert-info mt-3 mb-0">
+              You may browse, import, price, activate, pause, and archive CJ products. You cannot view or change the private CJ API key.
+            </div>
+            <% } else if (canManageCjOrders) { %>
+            <div class="alert alert-info mt-3 mb-0">
+              You may manage CJ supplier-order creation, retries, and fulfilment actions. You cannot view or change the private CJ API key.
+            </div>
+            <% } %>
+          </div>
+        </div>
         <% } %>
 
         <% if (admin) { %>
-          <div
-            class="alert alert-info mb-3"
-            role="alert"
-          >
-            <strong>Logged in as:</strong>
+        <div class="alert alert-info mb-3" role="alert">
+          <strong>Logged in as:</strong>
 
-            <span>
-              <%= admin.fullName || admin.name || admin.username || 'Admin' %>
-            </span>
+          <span>
+            <%= admin.fullName || admin.name || admin.username || 'Admin' %>
+          </span>
 
-            <% if (admin.role) { %>
-              <span class="ms-2 badge bg-primary">
-                <%= admin.role %>
-              </span>
-            <% } %>
-          </div>
+          <% if (admin.role) { %>
+          <span class="ms-2 badge bg-primary">
+            <%= admin.role %>
+          </span>
+          <% } %>
+        </div>
         <% } %>
 
         <% if (isSuper) { %>
-          <div
-            class="alert alert-success mb-3"
-            role="alert"
-          >
-            <strong>Super Admin:</strong>
-            You can create admins, reset passwords, and manage access from
+        <div class="alert alert-success mb-3" role="alert">
+          <strong>Super Admin:</strong>
+          You can create admins, reset passwords, and manage access from
 
-            <a
-              href="/admin/admins"
-              class="alert-link"
-            >
-              Manage Admins
-            </a>.
-          </div>
+          <a href="/admin/admins" class="alert-link">
+            Manage Admins
+          </a>.
+        </div>
         <% } else { %>
-          <div
-            class="alert alert-secondary mb-3"
-            role="alert"
-          >
-            <strong>Role Scope:</strong>
-            Your account should only see and open the pages allowed for your assigned admin role.
-          </div>
+        <div class="alert alert-secondary mb-3" role="alert">
+          <strong>Role Scope:</strong>
+          Your account should only see and open the pages allowed for your assigned admin role.
+        </div>
         <% } %>
 
-        <div
-          class="alert alert-warning mb-3"
-          role="alert"
-        >
+        <div class="alert alert-warning mb-3" role="alert">
           <strong>Warning:</strong>
           Administrative access is sensitive. Review every action carefully before proceeding.
         </div>
 
-        <div
-          class="alert alert-danger mb-0"
-          role="alert"
-        >
+        <div class="alert alert-danger mb-0" role="alert">
           <strong>Important:</strong>
           Unauthorized, destructive, fraudulent, or corrupt actions may trigger investigation, account restrictions, termination of access, and serious legal consequences.
         </div>
