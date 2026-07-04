@@ -128,10 +128,14 @@ function assertOrderCanBeSentToCj(order) {
     );
   }
 
-  if (String(order.supplierOrder?.createStatus || '').toUpperCase() !== 'PENDING') {
+  const supplierCreateStatus = String(
+    order.supplierOrder?.createStatus || '',
+  ).toUpperCase();
+
+  if (!['PENDING', 'PROCESSING'].includes(supplierCreateStatus)) {
     throw createCjOrderError(
-      'CJ_SUPPLIER_ORDER_NOT_PENDING',
-      'The CJ supplier order is not pending creation.',
+      'CJ_SUPPLIER_ORDER_NOT_READY',
+      'The CJ supplier order is not ready for creation.',
       409,
     );
   }
@@ -399,6 +403,13 @@ async function markCjCreationFailed(order, error, requestPayload = null) {
     error?.message || 'CJ supplier order creation failed.',
     2000,
   );
+
+  console.error('[CJ order create] Failed:', {
+    cjOrderNumber: order?.cjOrderNumber,
+    code: safeCode,
+    message: safeMessage,
+    requestId: safeString(error?.requestId, 200),
+  });
 
   order.status = 'PAID';
   order.paymentStatus = 'COMPLETED';
