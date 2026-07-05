@@ -53,8 +53,47 @@ function normalizeEmail(value) {
   return safeString(value, 320).toLowerCase();
 }
 
+function digitsOnly(value, maxLength = 100) {
+  return String(value ?? '')
+    .replace(/\D/g, '')
+    .slice(0, maxLength);
+}
+
 function normalizePhone(value) {
   return safeString(value, 50).replace(/[^\d+()\-\s]/g, '');
+}
+
+function normalizeCjSouthAfricaPhone(value) {
+  let digits = digitsOnly(value, 20);
+
+  if (digits.startsWith('0027')) {
+    digits = digits.slice(2);
+  }
+
+  /*
+   * CJ South Africa accepts either:
+   * - 9 digits without the leading zero, example: 632207320
+   * - 11 digits beginning with 27, example: 27632207320
+   */
+  if (/^27\d{9}$/.test(digits)) {
+    return digits;
+  }
+
+  if (/^0\d{9}$/.test(digits)) {
+    return digits.slice(1);
+  }
+
+  if (/^\d{9}$/.test(digits)) {
+    return digits;
+  }
+
+  return '';
+}
+
+function normalizeCjSouthAfricaConsigneeId(value) {
+  const digits = digitsOnly(value, 20);
+
+  return /^\d{13}$/.test(digits) ? digits : '';
 }
 
 function validEmail(value) {
@@ -188,6 +227,33 @@ function normalizeDeliveryAddress(body = {}) {
 
   if (!address.postalCode) {
     throw createCheckoutError('CJ_CHECKOUT_ADDRESS_INVALID', 'Postal code is required.');
+  }
+
+  if (address.countryCode === 'ZA') {
+    const cjPhone = normalizeCjSouthAfricaPhone(address.phone);
+
+    if (!cjPhone) {
+      throw createCheckoutError(
+        'CJ_CHECKOUT_ADDRESS_INVALID',
+        'For South Africa CJ delivery, enter a valid phone number like 0632207320, 632207320, or 27632207320.',
+      );
+    }
+
+    const cjConsigneeId = normalizeCjSouthAfricaConsigneeId(address.taxId);
+
+    if (!cjConsigneeId) {
+      throw createCheckoutError(
+        'CJ_CHECKOUT_ADDRESS_INVALID',
+        'For South Africa CJ delivery, the Tax ID / Consignee ID must be a 13 digit South African ID number with numbers only.',
+      );
+    }
+
+    /*
+     * Store the CJ-safe values in the session before PayPal payment.
+     * This prevents taking payment for an address CJ will reject later.
+     */
+    address.phone = cjPhone;
+    address.taxId = cjConsigneeId;
   }
 
   return address;

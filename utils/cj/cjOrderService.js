@@ -15,9 +15,7 @@ function safeString(value, max = 2000) {
 function safeNumber(value, fallback = 0) {
   const parsed = Number(value);
 
-  return Number.isFinite(parsed)
-    ? parsed
-    : fallback;
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function safeInteger(value, fallback = 1) {
@@ -46,6 +44,65 @@ function booleanFromEnv(value, fallback = false) {
   }
 
   return fallback;
+}
+
+function digitsOnly(value, maxLength = 100) {
+  return String(value ?? '')
+    .replace(/\D/g, '')
+    .slice(0, maxLength);
+}
+
+function normalizeCjSouthAfricaPhone(value) {
+  let digits = digitsOnly(value, 20);
+
+  if (digits.startsWith('0027')) {
+    digits = digits.slice(2);
+  }
+
+  /*
+   * CJ South Africa accepts either:
+   * - 9 digits without the leading zero, example: 632207320
+   * - 11 digits beginning with 27, example: 27632207320
+   */
+  if (/^27\d{9}$/.test(digits)) {
+    return digits;
+  }
+
+  if (/^0\d{9}$/.test(digits)) {
+    return digits.slice(1);
+  }
+
+  if (/^\d{9}$/.test(digits)) {
+    return digits;
+  }
+
+  return '';
+}
+
+function normalizeCjSouthAfricaConsigneeId(value) {
+  const digits = digitsOnly(value, 20);
+
+  return /^\d{13}$/.test(digits) ? digits : '';
+}
+
+function normalizeCjPhoneForOrder(address) {
+  const countryCode = safeString(address?.countryCode, 2).toUpperCase();
+
+  if (countryCode === 'ZA') {
+    return normalizeCjSouthAfricaPhone(address?.phone);
+  }
+
+  return safeString(address?.phone, 20);
+}
+
+function normalizeCjTaxIdForOrder(address) {
+  const countryCode = safeString(address?.countryCode, 2).toUpperCase();
+
+  if (countryCode === 'ZA') {
+    return normalizeCjSouthAfricaConsigneeId(address?.taxId);
+  }
+
+  return safeString(address?.taxId, 20);
 }
 
 function createCjOrderError(code, message, status = 400) {
@@ -89,11 +146,7 @@ function moneyValue(money) {
 
 function assertOrderCanBeSentToCj(order) {
   if (!order) {
-    throw createCjOrderError(
-      'CJ_ORDER_NOT_FOUND',
-      'The CJ order could not be found.',
-      404,
-    );
+    throw createCjOrderError('CJ_ORDER_NOT_FOUND', 'The CJ order could not be found.', 404);
   }
 
   if (String(order.department || '').toUpperCase() !== 'CJ') {
@@ -128,9 +181,7 @@ function assertOrderCanBeSentToCj(order) {
     );
   }
 
-  const supplierCreateStatus = String(
-    order.supplierOrder?.createStatus || '',
-  ).toUpperCase();
+  const supplierCreateStatus = String(order.supplierOrder?.createStatus || '').toUpperCase();
 
   if (!['PENDING', 'PROCESSING'].includes(supplierCreateStatus)) {
     throw createCjOrderError(
@@ -221,10 +272,7 @@ function buildCjCreateOrderPayload(order) {
     );
   }
 
-  const recipientName = [
-    safeString(address.firstName, 25),
-    safeString(address.lastName, 25),
-  ]
+  const recipientName = [safeString(address.firstName, 25), safeString(address.lastName, 25)]
     .filter(Boolean)
     .join(' ')
     .slice(0, 50);
@@ -235,6 +283,25 @@ function buildCjCreateOrderPayload(order) {
     throw createCjOrderError(
       'CJ_ORDER_LOGISTICS_NAME_MISSING',
       'The selected CJ logistics name is missing.',
+      409,
+    );
+  }
+
+  const shippingPhone = normalizeCjPhoneForOrder(address);
+  const taxId = normalizeCjTaxIdForOrder(address);
+
+  if (countryCode === 'ZA' && !shippingPhone) {
+    throw createCjOrderError(
+      'CJ_ORDER_PHONE_INVALID',
+      'CJ requires a South African phone number as 9 digits without the leading zero or 11 digits beginning with 27.',
+      409,
+    );
+  }
+
+  if (countryCode === 'ZA' && !taxId) {
+    throw createCjOrderError(
+      'CJ_ORDER_CONSIGNEE_ID_INVALID',
+      'CJ requires a 13 digit South African Consignee ID / Tax ID before this supplier order can be created.',
       409,
     );
   }
@@ -254,7 +321,7 @@ function buildCjCreateOrderPayload(order) {
 
     shippingCounty: safeString(address.suburb, 50),
 
-    shippingPhone: safeString(address.phone, 20),
+    shippingPhone,
 
     shippingCustomerName: recipientName,
 
@@ -269,7 +336,7 @@ function buildCjCreateOrderPayload(order) {
 
     email: safeString(address.email, 50),
 
-    taxId: safeString(address.taxId, 20),
+    taxId,
 
     remark: `Kasyora CJ order ${safeString(order.cjOrderNumber, 50)}`.slice(0, 500),
 
@@ -307,55 +374,28 @@ function buildCjCreateOrderPayload(order) {
 }
 
 function getCjResponseData(response) {
-  return response && typeof response === 'object'
-    ? response.data || {}
-    : {};
+  return response && typeof response === 'object' ? response.data || {} : {};
 }
 
 function getCreatedCjOrderId(data) {
-  return safeString(
-    data?.orderId ||
-      data?.shipmentOrderId ||
-      data?.id,
-    200,
-  );
+  return safeString(data?.orderId || data?.shipmentOrderId || data?.id, 200);
 }
 
 function getCreatedCjOrderNumber(data, fallback) {
-  return safeString(
-    data?.orderNumber ||
-      data?.orderNo ||
-      data?.orderCode ||
-      fallback,
-    200,
-  );
+  return safeString(data?.orderNumber || data?.orderNo || data?.orderCode || fallback, 200);
 }
 
 function getTrackingNumber(data) {
-  return safeString(
-    data?.trackingNumber ||
-      data?.trackingNo ||
-      data?.logisticTrackingNumber,
-    200,
-  );
+  return safeString(data?.trackingNumber || data?.trackingNo || data?.logisticTrackingNumber, 200);
 }
 
 function getTrackingUrl(data) {
-  return safeString(
-    data?.trackingUrl ||
-      data?.trackUrl ||
-      data?.logisticTrackingUrl,
-    2000,
-  );
+  return safeString(data?.trackingUrl || data?.trackUrl || data?.logisticTrackingUrl, 2000);
 }
 
 async function claimOrderForCjCreation(orderId) {
   if (!mongoose.Types.ObjectId.isValid(orderId)) {
-    throw createCjOrderError(
-      'CJ_ORDER_ID_INVALID',
-      'The CJ order ID is invalid.',
-      400,
-    );
+    throw createCjOrderError('CJ_ORDER_ID_INVALID', 'The CJ order ID is invalid.', 400);
   }
 
   const claimedOrder = await CjOrder.findOneAndUpdate(
@@ -384,7 +424,9 @@ async function claimOrderForCjCreation(orderId) {
     {
       new: true,
     },
-  ).select('+deliveryAddress.taxId +deliveryAddress.iossNumber +supplierOrder.createRequestSnapshot +supplierOrder.createResponseSnapshot');
+  ).select(
+    '+deliveryAddress.taxId +deliveryAddress.iossNumber +supplierOrder.createRequestSnapshot +supplierOrder.createResponseSnapshot',
+  );
 
   if (!claimedOrder) {
     throw createCjOrderError(
@@ -399,10 +441,7 @@ async function claimOrderForCjCreation(orderId) {
 
 async function markCjCreationFailed(order, error, requestPayload = null) {
   const safeCode = safeString(error?.code || 'CJ_ORDER_CREATE_FAILED', 100);
-  const safeMessage = safeString(
-    error?.message || 'CJ supplier order creation failed.',
-    2000,
-  );
+  const safeMessage = safeString(error?.message || 'CJ supplier order creation failed.', 2000);
 
   console.error('[CJ order create] Failed:', {
     cjOrderNumber: order?.cjOrderNumber,
@@ -521,11 +560,7 @@ async function createCjSupplierOrderForOrderId(orderId) {
 
 async function retryFailedCjSupplierOrder(orderId) {
   if (!mongoose.Types.ObjectId.isValid(orderId)) {
-    throw createCjOrderError(
-      'CJ_ORDER_ID_INVALID',
-      'The CJ order ID is invalid.',
-      400,
-    );
+    throw createCjOrderError('CJ_ORDER_ID_INVALID', 'The CJ order ID is invalid.', 400);
   }
 
   const order = await CjOrder.findOneAndUpdate(
