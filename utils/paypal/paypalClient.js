@@ -82,7 +82,32 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = getTimeoutMs()) {
 
       timeoutError.status = 504;
 
+      timeoutError.cause = error;
+
       throw timeoutError;
+    }
+
+    const networkMessage = safeString(error?.message || error, 1000).toLowerCase();
+
+    if (
+      networkMessage.includes('fetch failed') ||
+      networkMessage.includes('network') ||
+      networkMessage.includes('socket') ||
+      networkMessage.includes('timeout') ||
+      error?.code ||
+      error?.cause?.code
+    ) {
+      const networkError = new Error(
+        'PayPal API could not be reached. The payment status must be verified before continuing.',
+      );
+
+      networkError.code = 'PAYPAL_NETWORK_ERROR';
+
+      networkError.status = 503;
+
+      networkError.cause = error;
+
+      throw networkError;
     }
 
     throw error;

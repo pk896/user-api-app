@@ -5,6 +5,8 @@ const express = require('express');
 
 const CjProduct = require('../models/CjProduct');
 
+const COUNTRIES = require('../utils/countries');
+
 const { ensureCjCart, publicCjCart } = require('../utils/cj/cjCart');
 
 const {
@@ -61,6 +63,12 @@ function digitsOnly(value, maxLength = 100) {
 
 function normalizePhone(value) {
   return safeString(value, 50).replace(/[^\d+()\-\s]/g, '');
+}
+
+function isGloballyUsablePhone(value) {
+  const digits = digitsOnly(value, 30);
+
+  return digits.length >= 6 && digits.length <= 20;
 }
 
 function normalizeCjSouthAfricaPhone(value) {
@@ -155,6 +163,53 @@ function sendCheckoutError(res, error) {
 
     requestId: safeString(error?.requestId, 200),
   });
+}
+
+function buildPaymentNotice(query = {}) {
+  const issue = safeString(query.paymentIssue, 80).toUpperCase();
+
+  const cjOrderNumber = safeString(query.cjOrderNumber, 100);
+
+  if (!issue) {
+    return null;
+  }
+
+  if (issue === 'CAPTURE_FAILED_NO_MONEY') {
+    return {
+      type: 'danger',
+
+      title: 'PayPal payment was not completed',
+
+      message:
+        'PayPal did not confirm your payment. No money was confirmed by Kasyora and no CJ supplier order was created. Please try PayPal again.',
+
+      cjOrderNumber,
+    };
+  }
+
+  if (issue === 'CAPTURE_STATUS_UNKNOWN') {
+    return {
+      type: 'warning',
+
+      title: 'PayPal payment status could not be verified',
+
+      message:
+        'Kasyora could not verify the PayPal payment status. Please do not pay again if PayPal shows a charge. If PayPal shows no charge, you can safely try again.',
+
+      cjOrderNumber,
+    };
+  }
+
+  return {
+    type: 'danger',
+
+    title: 'CJ PayPal payment could not be completed',
+
+    message:
+      'The CJ PayPal payment could not be completed. No CJ supplier order was created. Please try again.',
+
+    cjOrderNumber,
+  };
 }
 
 function normalizeDeliveryAddress(body = {}) {
@@ -254,6 +309,11 @@ function normalizeDeliveryAddress(body = {}) {
      */
     address.phone = cjPhone;
     address.taxId = cjConsigneeId;
+  } else if (!isGloballyUsablePhone(address.phone)) {
+    throw createCheckoutError(
+      'CJ_CHECKOUT_ADDRESS_INVALID',
+      'Enter a reachable delivery phone number with 6 to 20 digits.',
+    );
   }
 
   return address;
@@ -541,6 +601,8 @@ router.get('/cj/checkout', async (req, res) => {
         ? req.session.cjCheckout
         : null;
 
+    const paymentNotice = buildPaymentNotice(req.query || {});
+
     return res.render('cj/checkout', {
       layout: 'layouts/store',
 
@@ -567,6 +629,12 @@ router.get('/cj/checkout', async (req, res) => {
       savedQuote: previousCheckout?.quote || null,
 
       savedSelectedShipping: previousCheckout?.selectedShipping || null,
+
+      paymentNotice,
+
+      countries: COUNTRIES,
+
+      COUNTRIES,
 
       baseCurrency: BASE_CURRENCY,
 

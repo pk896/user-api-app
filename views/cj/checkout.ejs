@@ -152,6 +152,25 @@
 
 <div class="container-fluid py-5">
   <div class="container">
+    <% if (typeof paymentNotice !== 'undefined' && paymentNotice) { %>
+    <div class="alert alert-<%= paymentNotice.type || 'warning' %> border-0 shadow-sm" role="alert">
+      <div class="fw-bold mb-1">
+        <%= paymentNotice.title || 'CJ PayPal payment notice' %>
+      </div>
+
+      <div>
+        <%= paymentNotice.message || 'Please check your payment and try again.' %>
+      </div>
+
+      <% if (paymentNotice.cjOrderNumber) { %>
+      <div class="small mt-2">
+        Local CJ order attempt:
+        <strong><%= paymentNotice.cjOrderNumber %></strong>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+
     <div id="cjCheckoutMessage" class="d-none" role="alert"></div>
 
     <div class="row g-4">
@@ -196,36 +215,67 @@
                     Phone number
                   </label>
 
-                  <input id="cjPhone" name="phone" type="tel" class="form-control" value="<%= SAVED_ADDRESS.phone || '' %>" placeholder="0632207320 or 27632207320" required>
+                  <input id="cjPhone" name="phone" type="tel" class="form-control" value="<%= SAVED_ADDRESS.phone || '' %>" placeholder="+1 555 123 4567" required>
 
-                  <div class="form-text">
+                  <div id="cjPhoneCountryHelp" class="form-text text-danger d-none">
                     For South Africa CJ delivery, use 0632207320, 632207320, or 27632207320. Kasyora will send CJ the correct digits-only format.
+                  </div>
+
+                  <div id="cjPhoneGlobalHelp" class="form-text text-danger d-none">
+                    Enter a reachable delivery phone number with 6 to 20 digits.
                   </div>
                 </div>
 
                 <div class="col-12 col-md-6">
-                  <label for="cjCountryCode" class="form-label fw-semibold">
+                  <label for="cjCountrySearch" class="form-label fw-semibold">
                     Destination country
                   </label>
 
-                  <select id="cjCountryCode" name="countryCode" class="form-select" required>
-                    <option value="">
-                      Select country
-                    </option>
+                  <input id="cjCountryCode" name="countryCode" type="hidden" value="<%= String(SAVED_ADDRESS.countryCode || '').toUpperCase() %>" required>
 
-                    <% (COUNTRIES || []).forEach(function(country) { %>
-                    <%
-                        const value = countryValue(country);
-                        const label = countryLabel(country);
-                      %>
+                  <div class="dropdown w-100">
+                    <button id="cjCountryDropdownButton" class="btn btn-light border w-100 d-flex align-items-center justify-content-between gap-2 text-start" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      <span class="d-inline-flex align-items-center gap-2 min-w-0">
+                        <img id="cjSelectedCountryFlag" src="" alt="" class="border rounded d-none" width="20" height="15" loading="lazy">
 
-                    <% if (value && label) { %>
-                    <option value="<%= value %>" <%= String(SAVED_ADDRESS.countryCode || '').toUpperCase() === value ? 'selected' : '' %>>
-                      <%= label %>
-                    </option>
-                    <% } %>
-                    <% }) %>
-                  </select>
+                        <span id="cjSelectedCountryText" class="text-muted">
+                          Select country
+                        </span>
+                      </span>
+
+                      <span aria-hidden="true">
+                        ▾
+                      </span>
+                    </button>
+
+                    <div class="dropdown-menu w-100 p-2 shadow" style="max-height: 320px; overflow-y: auto;">
+                      <input id="cjCountrySearch" type="text" class="form-control mb-2" placeholder="Search country..." autocomplete="off">
+
+                      <div id="cjCountryOptions">
+                        <% (COUNTRIES || []).forEach(function(country) { %>
+                        <%
+                            const value = countryValue(country);
+                            const label = countryLabel(country);
+                            const selected = String(SAVED_ADDRESS.countryCode || '').toUpperCase() === value;
+                          %>
+
+                        <% if (value && label) { %>
+                        <button type="button" class="dropdown-item d-flex align-items-center gap-2 rounded py-2 js-cj-country-option <%= selected ? 'active' : '' %>" data-code="<%= value %>" data-name="<%= label %>">
+                          <img src="https://flagcdn.com/20x15/<%= String(value || '').toLowerCase() %>.png" alt="" class="border rounded" width="20" height="15" loading="lazy">
+
+                          <span>
+                            <%= label %>
+                          </span>
+                        </button>
+                        <% } %>
+                        <% }) %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="form-text">
+                    Start typing to search and select the customer delivery country.
+                  </div>
                 </div>
 
                 <div class="col-12 col-md-6">
@@ -297,10 +347,10 @@
                     Tax ID / Consignee ID
                   </label>
 
-                  <input id="cjTaxId" name="taxId" type="text" inputmode="numeric" class="form-control" value="<%= SAVED_ADDRESS.taxId || '' %>" placeholder="13 digit SA ID number">
+                  <input id="cjTaxId" name="taxId" type="text" class="form-control" value="<%= SAVED_ADDRESS.taxId || '' %>" placeholder="Optional for most countries">
 
-                  <div class="form-text">
-                    Required for South Africa CJ delivery. Enter 13 digits only, no spaces or dashes.
+                  <div id="cjSouthAfricaTaxIdHelp" class="form-text text-danger d-none">
+                    Required for South Africa CJ delivery. Enter a 13 digit South African ID number with numbers only.
                   </div>
                 </div>
 
@@ -567,6 +617,50 @@
       'cjContinueToPaymentButton'
     );
 
+    const countrySelect = document.getElementById(
+      'cjCountryCode'
+    );
+
+    const countryDropdownButton = document.getElementById(
+      'cjCountryDropdownButton'
+    );
+
+    const selectedCountryFlag = document.getElementById(
+      'cjSelectedCountryFlag'
+    );
+
+    const selectedCountryText = document.getElementById(
+      'cjSelectedCountryText'
+    );
+
+    const countrySearchInput = document.getElementById(
+      'cjCountrySearch'
+    );
+
+    const countryOptionsContainer = document.getElementById(
+      'cjCountryOptions'
+    );
+
+    const phoneInput = document.getElementById(
+      'cjPhone'
+    );
+
+    const phoneCountryHelp = document.getElementById(
+      'cjPhoneCountryHelp'
+    );
+
+    const phoneGlobalHelp = document.getElementById(
+      'cjPhoneGlobalHelp'
+    );
+
+    const taxIdInput = document.getElementById(
+      'cjTaxId'
+    );
+
+    const southAfricaTaxIdHelp = document.getElementById(
+      'cjSouthAfricaTaxIdHelp'
+    );
+
     function formatMoney(amount) {
       const value = Number(amount || 0);
 
@@ -624,6 +718,381 @@
 
       messageElement.className = 'd-none';
       messageElement.textContent = '';
+    }
+
+    function cjDigitsOnly(value) {
+      return String(value || '')
+        .replace(/\D/g, '')
+        .slice(0, 30);
+    }
+
+    function isSouthAfricaPhone(value) {
+      let digits = cjDigitsOnly(value);
+
+      if (digits.startsWith('0027')) {
+        digits = digits.slice(2);
+      }
+
+      return (
+        /^27\d{9}$/.test(digits) ||
+        /^0\d{9}$/.test(digits) ||
+        /^\d{9}$/.test(digits)
+      );
+    }
+
+    function isGlobalPhoneUsable(value) {
+      const digits = cjDigitsOnly(value);
+
+      return digits.length >= 6 && digits.length <= 20;
+    }
+
+    function isSouthAfricaTaxId(value) {
+      return /^\d{13}$/.test(cjDigitsOnly(value));
+    }
+
+    function setFieldInvalid(input, isInvalid) {
+      if (!input) {
+        return;
+      }
+
+      input.classList.toggle('is-invalid', isInvalid);
+    }
+
+    function toggleHelp(element, shouldShow) {
+      if (!element) {
+        return;
+      }
+
+      element.classList.toggle('d-none', !shouldShow);
+    }
+
+    function validateCjCountrySensitiveFields(showErrors) {
+      const countryCode = String(countrySelect?.value || '')
+        .trim()
+        .toUpperCase();
+
+      const phoneValue = String(phoneInput?.value || '').trim();
+      const taxIdValue = String(taxIdInput?.value || '').trim();
+
+      const isSouthAfrica = countryCode === 'ZA';
+
+      const countryInvalid = !countryCode;
+
+      let phoneInvalid = false;
+      let southAfricaTaxIdInvalid = false;
+
+      if (phoneValue) {
+        phoneInvalid = isSouthAfrica ?
+          !isSouthAfricaPhone(phoneValue) :
+          !isGlobalPhoneUsable(phoneValue);
+      }
+
+      if (isSouthAfrica) {
+        southAfricaTaxIdInvalid = !isSouthAfricaTaxId(taxIdValue);
+      }
+
+      if (showErrors || phoneValue || taxIdValue || countryCode) {
+        countryDropdownButton?.classList.toggle(
+          'is-invalid',
+          countryInvalid
+        );
+
+        countryDropdownButton?.classList.toggle(
+          'border-danger',
+          countryInvalid
+        );
+
+        setFieldInvalid(phoneInput, phoneInvalid);
+        setFieldInvalid(taxIdInput, southAfricaTaxIdInvalid);
+
+        toggleHelp(
+          phoneCountryHelp,
+          isSouthAfrica && phoneInvalid
+        );
+
+        toggleHelp(
+          phoneGlobalHelp,
+          !isSouthAfrica && phoneInvalid
+        );
+
+        toggleHelp(
+          southAfricaTaxIdHelp,
+          southAfricaTaxIdInvalid
+        );
+      }
+
+      if (!countryInvalid) {
+        countryDropdownButton?.classList.remove(
+          'is-invalid',
+          'border-danger'
+        );
+      }
+
+      if (!phoneInvalid) {
+        setFieldInvalid(phoneInput, false);
+        toggleHelp(phoneCountryHelp, false);
+        toggleHelp(phoneGlobalHelp, false);
+      }
+
+      if (!southAfricaTaxIdInvalid) {
+        setFieldInvalid(taxIdInput, false);
+        toggleHelp(southAfricaTaxIdHelp, false);
+      }
+
+      return !countryInvalid && !phoneInvalid && !southAfricaTaxIdInvalid;
+    }
+
+    function bindCjCountrySensitiveGuidance() {
+      [
+        countrySelect,
+        phoneInput,
+        taxIdInput
+      ].forEach(function(element) {
+        element?.addEventListener(
+          'input',
+          function() {
+            validateCjCountrySensitiveFields(false);
+          }
+        );
+
+        element?.addEventListener(
+          'change',
+          function() {
+            validateCjCountrySensitiveFields(false);
+          }
+        );
+      });
+
+      validateCjCountrySensitiveFields(false);
+    }
+
+    function countryFlagUrl(countryCode) {
+      const code = String(countryCode || '')
+        .trim()
+        .toLowerCase();
+
+      return code ?
+        'https://flagcdn.com/20x15/' + code + '.png' :
+        '';
+    }
+
+    function closeCjCountryDropdown() {
+      if (!countryDropdownButton) {
+        return;
+      }
+
+      window.setTimeout(function() {
+        try {
+          const dropdownInstance =
+            bootstrap.Dropdown.getOrCreateInstance(
+              countryDropdownButton
+            );
+
+          dropdownInstance.hide();
+        } catch (error) {
+          // Safe fallback below handles the visible state.
+        }
+
+        const dropdownWrapper =
+          countryDropdownButton.closest('.dropdown');
+
+        const dropdownMenu =
+          dropdownWrapper?.querySelector('.dropdown-menu');
+
+        dropdownMenu?.classList.remove('show');
+
+        dropdownWrapper?.classList.remove('show');
+
+        countryDropdownButton.classList.remove('show');
+
+        countryDropdownButton.setAttribute(
+          'aria-expanded',
+          'false'
+        );
+
+        countryDropdownButton.blur();
+      }, 0);
+    }
+
+    function setCjSelectedCountry(countryCode, countryName) {
+      const cleanCode = String(countryCode || '')
+        .trim()
+        .toUpperCase();
+
+      const cleanName = String(countryName || '')
+        .trim();
+
+      if (countrySelect) {
+        countrySelect.value = cleanCode;
+
+        countrySelect.dispatchEvent(
+          new Event('input', {
+            bubbles: true
+          })
+        );
+
+        countrySelect.dispatchEvent(
+          new Event('change', {
+            bubbles: true
+          })
+        );
+      }
+
+      if (selectedCountryText) {
+        selectedCountryText.textContent =
+          cleanName || 'Select country';
+
+        selectedCountryText.classList.toggle(
+          'text-muted',
+          !cleanName
+        );
+      }
+
+      if (selectedCountryFlag) {
+        if (cleanCode) {
+          selectedCountryFlag.src =
+            countryFlagUrl(cleanCode);
+
+          selectedCountryFlag.classList.remove(
+            'd-none'
+          );
+        } else {
+          selectedCountryFlag.removeAttribute(
+            'src'
+          );
+
+          selectedCountryFlag.classList.add(
+            'd-none'
+          );
+        }
+      }
+
+      document
+        .querySelectorAll(
+          '.js-cj-country-option'
+        )
+        .forEach(function(option) {
+          option.classList.toggle(
+            'active',
+            String(option.dataset.code || '')
+            .trim()
+            .toUpperCase() === cleanCode
+          );
+        });
+    }
+
+    function bindCjCountryDropdown() {
+      const countryButtons = Array.from(
+        document.querySelectorAll(
+          '.js-cj-country-option'
+        )
+      );
+
+      countryButtons.forEach(function(button) {
+        button.addEventListener(
+          'click',
+          function() {
+            const countryCode =
+              button.dataset.code || '';
+
+            const countryName =
+              button.dataset.name ||
+              button.textContent ||
+              '';
+
+            setCjSelectedCountry(
+              countryCode,
+              countryName
+            );
+
+            closeCjCountryDropdown();
+          }
+        );
+      });
+
+      if (countrySearchInput) {
+        countrySearchInput.addEventListener(
+          'click',
+          function(event) {
+            event.stopPropagation();
+          }
+        );
+
+        countrySearchInput.addEventListener(
+          'keydown',
+          function(event) {
+            event.stopPropagation();
+          }
+        );
+
+        countrySearchInput.addEventListener(
+          'input',
+          function() {
+            const term = String(
+                countrySearchInput.value || ''
+              )
+              .trim()
+              .toLowerCase();
+
+            countryButtons.forEach(function(button) {
+              const countryCode = String(
+                button.dataset.code || ''
+              ).toLowerCase();
+
+              const countryName = String(
+                button.dataset.name ||
+                button.textContent ||
+                ''
+              ).toLowerCase();
+
+              const matches = !term ||
+                countryName.includes(term) ||
+                countryCode.includes(term);
+
+              button.classList.toggle(
+                'd-none',
+                !matches
+              );
+            });
+          }
+        );
+      }
+
+      countryDropdownButton?.addEventListener(
+        'shown.bs.dropdown',
+        function() {
+          if (countrySearchInput) {
+            countrySearchInput.value = '';
+
+            countryButtons.forEach(function(button) {
+              button.classList.remove('d-none');
+            });
+
+            countrySearchInput.focus();
+          }
+        }
+      );
+
+      const savedCode = String(
+          countrySelect?.value || ''
+        )
+        .trim()
+        .toUpperCase();
+
+      if (savedCode) {
+        const savedButton = countryButtons.find(
+          function(button) {
+            return String(button.dataset.code || '')
+              .trim()
+              .toUpperCase() === savedCode;
+          }
+        );
+
+        setCjSelectedCountry(
+          savedCode,
+          savedButton?.dataset?.name || ''
+        );
+      }
     }
 
     function formPayload() {
@@ -915,19 +1384,29 @@
       });
     }
 
+    bindCjCountryDropdown();
+
+    bindCjCountrySensitiveGuidance();
+
     addressForm?.addEventListener(
       'submit',
       async function(event) {
         event.preventDefault();
         clearMessage();
 
-        if (!addressForm.checkValidity()) {
+        const countrySensitiveFieldsAreValid =
+          validateCjCountrySensitiveFields(true);
+
+        if (
+          !addressForm.checkValidity() ||
+          !countrySensitiveFieldsAreValid
+        ) {
           addressForm.classList.add(
             'was-validated'
           );
 
           showMessage(
-            'Please complete every required delivery-address field.',
+            'Please correct the highlighted CJ delivery-address fields.',
             'error'
           );
 
