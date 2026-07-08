@@ -162,10 +162,10 @@
         <%= paymentNotice.message || 'Please check your payment and try again.' %>
       </div>
 
-      <% if (paymentNotice.cjOrderNumber) { %>
+      <% if (paymentNotice.paypalReference) { %>
       <div class="small mt-2">
-        Local CJ order attempt:
-        <strong><%= paymentNotice.cjOrderNumber %></strong>
+        PayPal checkout reference:
+        <strong><%= paymentNotice.paypalReference %></strong>
       </div>
       <% } %>
     </div>
@@ -352,6 +352,10 @@
                   <div id="cjSouthAfricaTaxIdHelp" class="form-text text-danger d-none">
                     Required for South Africa CJ delivery. Enter a 13 digit South African ID number with numbers only.
                   </div>
+
+                  <div id="cjBrazilTaxIdHelp" class="form-text text-danger d-none">
+                    Brazil CJ delivery requires the buyer CPF or CNPJ before payment. Enter CPF with 11 digits or CNPJ with 14 digits.
+                  </div>
                 </div>
 
                 <div class="col-12 col-md-6">
@@ -359,10 +363,14 @@
                     IOSS number
                   </label>
 
-                  <input id="cjIossNumber" name="iossNumber" type="text" class="form-control" value="<%= SAVED_ADDRESS.iossNumber || '' %>">
+                  <input id="cjIossNumber" name="iossNumber" type="text" class="form-control" value="" placeholder="Handled by Kasyora for EU orders" disabled>
 
-                  <div class="form-text">
-                    Optional and normally relevant only to qualifying EU orders.
+                  <div id="cjIossDefaultHelp" class="form-text">
+                    For EU CJ delivery, Kasyora must have its own valid IOSS number configured before payment.
+                  </div>
+
+                  <div id="cjIossRequiredHelp" class="form-text text-danger d-none">
+                    EU CJ delivery is temporarily unavailable because Kasyora has not configured a valid IOSS number yet.
                   </div>
                 </div>
 
@@ -661,6 +669,52 @@
       'cjSouthAfricaTaxIdHelp'
     );
 
+    const brazilTaxIdHelp = document.getElementById(
+      'cjBrazilTaxIdHelp'
+    );
+
+    const iossInput = document.getElementById(
+      'cjIossNumber'
+    );
+
+    const iossDefaultHelp = document.getElementById(
+      'cjIossDefaultHelp'
+    );
+
+    const iossRequiredHelp = document.getElementById(
+      'cjIossRequiredHelp'
+    );
+
+    const cjIossRequiredCountryCodes = new Set([
+      'AT',
+      'BE',
+      'BG',
+      'HR',
+      'CY',
+      'CZ',
+      'DK',
+      'EE',
+      'FI',
+      'FR',
+      'DE',
+      'GR',
+      'HU',
+      'IE',
+      'IT',
+      'LV',
+      'LT',
+      'LU',
+      'MT',
+      'NL',
+      'PL',
+      'PT',
+      'RO',
+      'SK',
+      'SI',
+      'ES',
+      'SE',
+    ]);
+
     function formatMoney(amount) {
       const value = Number(amount || 0);
 
@@ -696,11 +750,19 @@
         return;
       }
 
+      const safeType = String(type || 'danger')
+        .trim()
+        .toLowerCase();
+
+      const bootstrapType =
+        safeType === 'success' ||
+        safeType === 'warning' ||
+        safeType === 'info'
+          ? safeType
+          : 'danger';
+
       messageElement.className =
-        'alert alert-' +
-        (type === 'success' ?
-          'success' :
-          'danger');
+        'alert alert-' + bootstrapType;
 
       messageElement.textContent =
         String(message || '');
@@ -750,6 +812,18 @@
       return /^\d{13}$/.test(cjDigitsOnly(value));
     }
 
+    function buyerTaxDigits(value) {
+      return String(value || '')
+        .replace(/\D/g, '')
+        .slice(0, 30);
+    }
+
+    function isBrazilBuyerTaxId(value) {
+      const digits = buyerTaxDigits(value);
+
+      return digits.length === 11 || digits.length === 14;
+    }
+
     function setFieldInvalid(input, isInvalid) {
       if (!input) {
         return;
@@ -773,13 +847,21 @@
 
       const phoneValue = String(phoneInput?.value || '').trim();
       const taxIdValue = String(taxIdInput?.value || '').trim();
+      const iossValue = '';
 
       const isSouthAfrica = countryCode === 'ZA';
+      const isBrazil = countryCode === 'BR';
 
       const countryInvalid = !countryCode;
 
+      const iossRequired =
+        cjIossRequiredCountryCodes.has(countryCode);
+
+      const iossInvalid = iossRequired;
+
       let phoneInvalid = false;
       let southAfricaTaxIdInvalid = false;
+      let brazilTaxIdInvalid = false;
 
       if (phoneValue) {
         phoneInvalid = isSouthAfrica ?
@@ -791,7 +873,17 @@
         southAfricaTaxIdInvalid = !isSouthAfricaTaxId(taxIdValue);
       }
 
-      if (showErrors || phoneValue || taxIdValue || countryCode) {
+      if (isBrazil) {
+        brazilTaxIdInvalid = !isBrazilBuyerTaxId(taxIdValue);
+      }
+
+      if (
+        showErrors ||
+        phoneValue ||
+        taxIdValue ||
+        iossValue ||
+        countryCode
+      ) {
         countryDropdownButton?.classList.toggle(
           'is-invalid',
           countryInvalid
@@ -802,8 +894,20 @@
           countryInvalid
         );
 
-        setFieldInvalid(phoneInput, phoneInvalid);
-        setFieldInvalid(taxIdInput, southAfricaTaxIdInvalid);
+        setFieldInvalid(
+          phoneInput,
+          phoneInvalid
+        );
+
+        setFieldInvalid(
+          taxIdInput,
+          southAfricaTaxIdInvalid || brazilTaxIdInvalid
+        );
+
+        setFieldInvalid(
+          iossInput,
+          iossInvalid
+        );
 
         toggleHelp(
           phoneCountryHelp,
@@ -818,6 +922,21 @@
         toggleHelp(
           southAfricaTaxIdHelp,
           southAfricaTaxIdInvalid
+        );
+
+        toggleHelp(
+          brazilTaxIdHelp,
+          brazilTaxIdInvalid
+        );
+
+        toggleHelp(
+          iossRequiredHelp,
+          iossInvalid
+        );
+
+        toggleHelp(
+          iossDefaultHelp,
+          !iossInvalid
         );
       }
 
@@ -834,12 +953,25 @@
         toggleHelp(phoneGlobalHelp, false);
       }
 
-      if (!southAfricaTaxIdInvalid) {
+      if (!southAfricaTaxIdInvalid && !brazilTaxIdInvalid) {
         setFieldInvalid(taxIdInput, false);
         toggleHelp(southAfricaTaxIdHelp, false);
+        toggleHelp(brazilTaxIdHelp, false);
       }
 
-      return !countryInvalid && !phoneInvalid && !southAfricaTaxIdInvalid;
+      if (!iossInvalid) {
+        setFieldInvalid(iossInput, false);
+        toggleHelp(iossRequiredHelp, false);
+        toggleHelp(iossDefaultHelp, true);
+      }
+
+      return (
+        !countryInvalid &&
+        !phoneInvalid &&
+        !southAfricaTaxIdInvalid &&
+        !brazilTaxIdInvalid &&
+        !iossInvalid
+      );
     }
 
     function bindCjCountrySensitiveGuidance() {

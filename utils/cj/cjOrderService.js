@@ -173,6 +173,17 @@ function assertOrderCanBeSentToCj(order) {
     );
   }
 
+  if (
+    String(order.paypal?.captureStatus || '').toUpperCase() !== 'COMPLETED' ||
+    !safeString(order.paypal?.captureId, 200)
+  ) {
+    throw createCjOrderError(
+      'CJ_PAYPAL_CAPTURE_ID_REQUIRED',
+      'The CJ supplier order can only be created after PayPal returns a completed capture ID.',
+      409,
+    );
+  }
+
   if (String(order.fulfillmentStatus || '').toUpperCase() !== 'CJ_ORDER_PENDING') {
     throw createCjOrderError(
       'CJ_FULFILLMENT_NOT_READY',
@@ -410,6 +421,13 @@ async function claimOrderForCjCreation(orderId) {
 
       fulfillmentStatus: 'CJ_ORDER_PENDING',
 
+      'paypal.captureStatus': 'COMPLETED',
+
+      'paypal.captureId': {
+        $exists: true,
+        $ne: '',
+      },
+
       'supplierOrder.createStatus': 'PENDING',
     },
     {
@@ -572,6 +590,13 @@ async function retryFailedCjSupplierOrder(orderId) {
       status: 'PAID',
 
       paymentStatus: 'COMPLETED',
+
+      'paypal.captureStatus': 'COMPLETED',
+
+      'paypal.captureId': {
+        $exists: true,
+        $ne: '',
+      },
 
       'supplierOrder.createStatus': 'FAILED',
     },

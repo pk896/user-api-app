@@ -64,6 +64,13 @@ function eligibleCjOrderQuery() {
 
     fulfillmentStatus: 'CJ_ORDER_PENDING',
 
+    'paypal.captureStatus': 'COMPLETED',
+
+    'paypal.captureId': {
+      $exists: true,
+      $ne: '',
+    },
+
     'supplierOrder.createStatus': 'PENDING',
   };
 }

@@ -14,6 +14,14 @@ const {
   DEFAULT_ORIGIN_COUNTRY_CODE,
 } = require('../utils/cj/cjLogisticsService');
 
+const {
+  requiresCjIossNumber,
+  normalizeCjIossNumber,
+  getConfiguredCjIossNumber,
+} = require('../utils/cj/iossCountries');
+
+const { normalizeBuyerTaxId, validateCjBuyerTaxId } = require('../utils/cj/taxIdCountries');
+
 const router = express.Router();
 
 const BASE_CURRENCY =
@@ -133,6 +141,8 @@ function errorStatus(error) {
       'CJ_DESTINATION_COUNTRY_CODE_INVALID',
       'CJ_ORIGIN_COUNTRY_CODE_INVALID',
       'CJ_FREIGHT_PRODUCTS_EMPTY',
+      'CJ_CHECKOUT_IOSS_REQUIRED',
+      'CJ_CHECKOUT_BUYER_TAX_ID_REQUIRED',
     ].includes(code)
   ) {
     return 400;
@@ -168,7 +178,7 @@ function sendCheckoutError(res, error) {
 function buildPaymentNotice(query = {}) {
   const issue = safeString(query.paymentIssue, 80).toUpperCase();
 
-  const cjOrderNumber = safeString(query.cjOrderNumber, 100);
+  const paypalReference = safeString(query.paypalReference || query.cjOrderNumber, 100);
 
   if (!issue) {
     return null;
@@ -181,9 +191,22 @@ function buildPaymentNotice(query = {}) {
       title: 'PayPal payment was not completed',
 
       message:
-        'PayPal did not confirm your payment. No money was confirmed by Kasyora and no CJ supplier order was created. Please try PayPal again.',
+        'PayPal did not return a completed capture ID. Kasyora did not confirm money, did not create a CJ order, and did not create a CJ supplier order. You can safely try PayPal again only if PayPal shows no charge.',
 
-      cjOrderNumber,
+      paypalReference,
+    };
+  }
+
+  if (issue === 'CAPTURE_PENDING') {
+    return {
+      type: 'warning',
+
+      title: 'PayPal payment is still pending',
+
+      message:
+        'PayPal has not completed the capture yet. Kasyora has not created a CJ order or CJ supplier order. Please check PayPal before trying again.',
+
+      paypalReference,
     };
   }
 
@@ -194,9 +217,21 @@ function buildPaymentNotice(query = {}) {
       title: 'PayPal payment status could not be verified',
 
       message:
-        'Kasyora could not verify the PayPal payment status. Please do not pay again if PayPal shows a charge. If PayPal shows no charge, you can safely try again.',
+        'Kasyora could not verify PayPal after the capture request failed. No CJ order or CJ supplier order was created. Do not pay again if PayPal shows a charge. If PayPal shows no charge, you can try again.',
 
-      cjOrderNumber,
+      paypalReference,
+    };
+  }
+
+  if (issue === 'PAYPAL_CANCELLED') {
+    return {
+      type: 'info',
+
+      title: 'PayPal checkout was cancelled',
+
+      message: 'No CJ order was created and no CJ supplier order was created.',
+
+      paypalReference,
     };
   }
 
@@ -206,9 +241,9 @@ function buildPaymentNotice(query = {}) {
     title: 'CJ PayPal payment could not be completed',
 
     message:
-      'The CJ PayPal payment could not be completed. No CJ supplier order was created. Please try again.',
+      'The CJ PayPal payment could not be completed. Kasyora did not create a CJ order or CJ supplier order. Please try again only if PayPal shows no charge.',
 
-    cjOrderNumber,
+    paypalReference,
   };
 }
 
@@ -240,9 +275,9 @@ function normalizeDeliveryAddress(body = {}) {
 
     companyName: safeString(body.companyName, 200),
 
-    taxId: safeString(body.taxId, 200),
+    taxId: normalizeBuyerTaxId(body.taxId),
 
-    iossNumber: safeString(body.iossNumber, 200),
+    iossNumber: normalizeCjIossNumber(body.iossNumber),
   };
 
   if (!address.firstName) {
@@ -314,6 +349,39 @@ function normalizeDeliveryAddress(body = {}) {
       'CJ_CHECKOUT_ADDRESS_INVALID',
       'Enter a reachable delivery phone number with 6 to 20 digits.',
     );
+  }
+
+  if (requiresCjIossNumber(address.countryCode)) {
+    const configuredIossNumber = getConfiguredCjIossNumber();
+
+    if (!configuredIossNumber) {
+      throw createCheckoutError(
+        'CJ_CHECKOUT_IOSS_REQUIRED',
+        'EU CJ delivery is temporarily unavailable because Kasyora has not configured a valid IOSS number yet. Please choose a non-EU destination or contact support.',
+        400,
+      );
+    }
+
+    /*
+     * Use Kasyora's configured IOSS number.
+     * Do not trust customer-entered IOSS for production supplier orders.
+     */
+    address.iossNumber = configuredIossNumber;
+  }
+
+  const buyerTaxIdValidation = validateCjBuyerTaxId(address.countryCode, address.taxId);
+
+  if (!buyerTaxIdValidation.ok) {
+    throw createCheckoutError(
+      'CJ_CHECKOUT_BUYER_TAX_ID_REQUIRED',
+      buyerTaxIdValidation.message ||
+        'This destination requires the buyer Tax ID before CJ payment.',
+      400,
+    );
+  }
+
+  if (buyerTaxIdValidation.required) {
+    address.taxId = buyerTaxIdValidation.normalized;
   }
 
   return address;
