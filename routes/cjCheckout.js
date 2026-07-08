@@ -20,7 +20,11 @@ const {
   getConfiguredCjIossNumber,
 } = require('../utils/cj/iossCountries');
 
-const { normalizeBuyerTaxId, validateCjBuyerTaxId } = require('../utils/cj/taxIdCountries');
+const {
+  CJ_BUYER_TAX_ID_RULES,
+  normalizeBuyerTaxId,
+  validateCjBuyerTaxId,
+} = require('../utils/cj/taxIdCountries');
 
 const router = express.Router();
 
@@ -709,6 +713,8 @@ router.get('/cj/checkout', async (req, res) => {
       vatRate: DEFAULT_VAT_RATE,
 
       defaultOriginCountryCode: DEFAULT_ORIGIN_COUNTRY_CODE,
+
+      cjBuyerTaxIdRules: CJ_BUYER_TAX_ID_RULES,
     });
   } catch (error) {
     console.error('[CJ checkout] Page load failed:', error?.stack || error);
