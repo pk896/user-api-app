@@ -20,6 +20,10 @@
  * - Indonesia requires recipient NPWP / NIK / passport for many import shipments.
  * - Mexico requires recipient RFC / CURP for many import shipments.
  * - Peru requires recipient DNI / RUC / CE for many import shipments.
+ *
+ * Verified by CJ supplier-order rejection tests:
+ * - South Korea requires an individual taxpayer ID beginning with P followed by 12 digits.
+ * - Singapore requires a Tax ID in letter + 8 digits + letter format.
  */
 const CJ_BUYER_TAX_ID_RULES = {
   AR: {
@@ -97,6 +101,23 @@ const CJ_BUYER_TAX_ID_RULES = {
     allowedDigitLengths: [15, 16],
   },
 
+  KR: {
+    countryName: 'South Korea',
+
+    label: 'Personal Customs Code / Taxpayer ID',
+
+    placeholder: 'Required for South Korea',
+
+    examples: 'P100000000001',
+
+    message:
+      'Tax ID / Consignee ID is required for South Korea CJ delivery. Enter the buyer personal customs code or taxpayer ID before payment. It must begin with P followed by 12 digits, for example P100000000001.',
+
+    allowedDigitLengths: [],
+
+    allowedPattern: /^P\d{12}$/i,
+  },
+
   MX: {
     countryName: 'Mexico',
 
@@ -127,6 +148,23 @@ const CJ_BUYER_TAX_ID_RULES = {
       'Tax ID / Consignee ID is required for Peru CJ delivery. Enter the buyer DNI, RUC, or foreigner card number before payment. Use DNI with 8 digits or RUC with 11 digits.',
 
     allowedDigitLengths: [8, 9, 11],
+  },
+
+  SG: {
+    countryName: 'Singapore',
+
+    label: 'Tax ID / ID number',
+
+    placeholder: 'Required for Singapore',
+
+    examples: 'W12345678B',
+
+    message:
+      'Tax ID / Consignee ID is required for Singapore CJ delivery. Enter the buyer Tax ID before payment. It must use one letter, followed by 8 digits, followed by one letter, for example W12345678B.',
+
+    allowedDigitLengths: [],
+
+    allowedPattern: /^[A-Z]\d{8}[A-Z]$/i,
   },
 };
 

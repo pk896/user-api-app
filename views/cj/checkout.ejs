@@ -855,8 +855,9 @@
         lengthRules.includes(digits.length);
 
       /*
-       * Mexico RFC/CURP includes letters.
-       * Keep the same frontend shape as the backend rule.
+       * Some CJ Tax IDs include letters, so JSON cannot carry
+       * backend RegExp values to the browser. Keep these frontend
+       * pattern checks aligned with utils/cj/taxIdCountries.js.
        */
       let patternOk = false;
 
@@ -864,6 +865,16 @@
         patternOk =
           /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i.test(normalized) ||
           /^[A-Z][AEIOUX][A-Z]{2}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i.test(normalized);
+      }
+
+      if (rule?.countryName === 'South Korea') {
+        patternOk =
+          /^P\d{12}$/i.test(normalized);
+      }
+
+      if (rule?.countryName === 'Singapore') {
+        patternOk =
+          /^[A-Z]\d{8}[A-Z]$/i.test(normalized);
       }
 
       return lengthOk || patternOk;

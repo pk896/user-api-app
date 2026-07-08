@@ -198,13 +198,76 @@ const RAW_COUNTRIES = [
   { code: 'YE', name: 'Yemen' },
   { code: 'ZM', name: 'Zambia' },
   { code: 'ZW', name: 'Zimbabwe' },
+
+  /*
+   * Additional ISO-3166-1 alpha-2 shipping destinations.
+   *
+   * These are mostly territories / special regions, not all independent
+   * countries, but carriers and dropshipping platforms often use them
+   * as separate destination codes.
+   */
+  { code: 'AX', name: 'Åland Islands' },
+  { code: 'AS', name: 'American Samoa' },
+  { code: 'AI', name: 'Anguilla' },
+  { code: 'AQ', name: 'Antarctica' },
+  { code: 'AW', name: 'Aruba' },
+  { code: 'BM', name: 'Bermuda' },
+  { code: 'BQ', name: 'Bonaire, Sint Eustatius and Saba' },
+  { code: 'BV', name: 'Bouvet Island' },
+  { code: 'IO', name: 'British Indian Ocean Territory' },
+  { code: 'VG', name: 'British Virgin Islands' },
+  { code: 'KY', name: 'Cayman Islands' },
+  { code: 'CX', name: 'Christmas Island' },
+  { code: 'CC', name: 'Cocos (Keeling) Islands' },
+  { code: 'CK', name: 'Cook Islands' },
+  { code: 'CW', name: 'Curaçao' },
+  { code: 'FK', name: 'Falkland Islands' },
+  { code: 'FO', name: 'Faroe Islands' },
+  { code: 'GF', name: 'French Guiana' },
+  { code: 'PF', name: 'French Polynesia' },
+  { code: 'TF', name: 'French Southern Territories' },
+  { code: 'GI', name: 'Gibraltar' },
+  { code: 'GL', name: 'Greenland' },
+  { code: 'GP', name: 'Guadeloupe' },
+  { code: 'GU', name: 'Guam' },
+  { code: 'GG', name: 'Guernsey' },
+  { code: 'HM', name: 'Heard Island and McDonald Islands' },
+  { code: 'HK', name: 'Hong Kong' },
+  { code: 'IM', name: 'Isle of Man' },
+  { code: 'JE', name: 'Jersey' },
+  { code: 'MO', name: 'Macao' },
+  { code: 'MQ', name: 'Martinique' },
+  { code: 'YT', name: 'Mayotte' },
+  { code: 'MS', name: 'Montserrat' },
+  { code: 'NC', name: 'New Caledonia' },
+  { code: 'NU', name: 'Niue' },
+  { code: 'NF', name: 'Norfolk Island' },
+  { code: 'MP', name: 'Northern Mariana Islands' },
+  { code: 'PN', name: 'Pitcairn' },
+  { code: 'PR', name: 'Puerto Rico' },
+  { code: 'RE', name: 'Réunion' },
+  { code: 'BL', name: 'Saint Barthélemy' },
+  { code: 'SH', name: 'Saint Helena, Ascension and Tristan da Cunha' },
+  { code: 'MF', name: 'Saint Martin' },
+  { code: 'PM', name: 'Saint Pierre and Miquelon' },
+  { code: 'SX', name: 'Sint Maarten' },
+  { code: 'GS', name: 'South Georgia and the South Sandwich Islands' },
+  { code: 'SJ', name: 'Svalbard and Jan Mayen' },
+  { code: 'TW', name: 'Taiwan' },
+  { code: 'TK', name: 'Tokelau' },
+  { code: 'TC', name: 'Turks and Caicos Islands' },
+  { code: 'UM', name: 'United States Minor Outlying Islands' },
+  { code: 'VI', name: 'United States Virgin Islands' },
+  { code: 'WF', name: 'Wallis and Futuna' },
+  { code: 'EH', name: 'Western Sahara' },
 ];
 
-const COUNTRIES = RAW_COUNTRIES
-  .map((c) => ({
-    code: String(c.code || '').trim().toUpperCase(),
-    name: String(c.name || '').trim(),
-  }))
+const COUNTRIES = RAW_COUNTRIES.map((c) => ({
+  code: String(c.code || '')
+    .trim()
+    .toUpperCase(),
+  name: String(c.name || '').trim(),
+}))
   .filter((c) => c.code.length === 2 && c.name.length > 0)
   .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
 
