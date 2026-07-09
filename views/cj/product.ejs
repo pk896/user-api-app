@@ -3,44 +3,58 @@
   const CURRENCY = String(
     typeof baseCurrency !== 'undefined'
       ? baseCurrency
-      : ''
+      : product?.currency || ''
   ).trim().toUpperCase() || 'USD';
 
-  const VAT = Number.isFinite(Number(vatRate))
-    ? Number(vatRate)
-    : 0.15;
+  const VAT = Number(
+    typeof vatRate !== 'undefined'
+      ? vatRate
+      : product?.vatRate || 0.15
+  );
 
-  const variants = Array.isArray(product?.variants)
-    ? product.variants
-    : [];
+  const PRODUCT =
+    product && typeof product === 'object'
+      ? product
+      : {};
 
-  const images = Array.isArray(product?.images)
-    ? product.images
-    : [];
+  const VARIANTS =
+    Array.isArray(PRODUCT.variants)
+      ? PRODUCT.variants
+      : [];
 
-  const defaultVariant =
-    product?.defaultVariant ||
-    variants[0] ||
+  const DEFAULT_VARIANT =
+    PRODUCT.defaultVariant ||
+    VARIANTS[0] ||
     null;
 
-  function formatMoney(amount) {
+  const PRODUCT_IMAGES =
+    Array.isArray(PRODUCT.images)
+      ? PRODUCT.images.filter(Boolean)
+      : [];
+
+  const RELATED_PRODUCTS =
+    Array.isArray(relatedProducts)
+      ? relatedProducts
+      : [];
+
+  function formatMoney(amount, currency = CURRENCY) {
     const value = Number(amount || 0);
 
     try {
       const formatted = new Intl.NumberFormat(undefined, {
         style: 'currency',
-        currency: CURRENCY,
+        currency,
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       }).format(value);
 
-      if (CURRENCY === 'ZAR') {
+      if (currency === 'ZAR') {
         return formatted.replace(/^ZAR\s?/, 'R');
       }
 
       return formatted;
     } catch (error) {
-      return CURRENCY + ' ' + value.toFixed(2);
+      return currency + ' ' + value.toFixed(2);
     }
   }
 
@@ -50,9 +64,61 @@
       .replace(/>/g, '\\u003e')
       .replace(/&/g, '\\u0026');
   }
+
+  function variantLabel(variant) {
+    return String(
+      variant?.variantName ||
+      variant?.variantKey ||
+      variant?.variantSku ||
+      'Variant'
+    ).trim();
+  }
+
+  function inventoryText(variant) {
+    if (!variant) return 'Select a variant';
+
+    if (variant.inventoryKnown && Number(variant.totalInventory || 0) <= 0) {
+      return 'Out of stock';
+    }
+
+    if (variant.inventoryKnown) {
+      return Number(variant.totalInventory || 0) + ' available';
+    }
+
+    return 'Available';
+  }
 %>
 
-<!-- Page Header Start -->
+<style nonce="<%= nonce %>">
+  .cj-product-description img,
+  .cj-product-description video,
+  .cj-product-description iframe {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .cj-product-description table {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .cj-product-description {
+    overflow-x: hidden;
+  }
+
+  .cj-main-product-image {
+    max-height: 70vh;
+    object-fit: contain;
+  }
+
+  @media (max-width: 576px) {
+    .cj-main-product-image {
+      max-height: 420px;
+    }
+  }
+</style>
+
+<!-- Header Start -->
 <div class="container-fluid bg-light py-4 border-bottom">
   <div class="container">
     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
@@ -62,7 +128,7 @@
         </span>
 
         <h1 class="text-primary mb-1">
-          <%= product.name %>
+          <%= PRODUCT.name || 'CJ Product' %>
         </h1>
 
         <nav aria-label="breadcrumb">
@@ -72,9 +138,7 @@
             </li>
 
             <li class="breadcrumb-item">
-              <a href="/store#homeProductsSection">
-                CJ Products
-              </a>
+              <a href="/store#homeProductsSection">CJ Products</a>
             </li>
 
             <li class="breadcrumb-item active" aria-current="page">
@@ -84,19 +148,16 @@
         </nav>
       </div>
 
-      <a
-        href="/cj/cart"
-        class="btn btn-primary rounded-pill px-4"
-      >
+      <a href="/cj/cart" class="btn btn-primary rounded-pill px-4">
         <i class="fas fa-shopping-cart me-2"></i>
         View CJ Cart
       </a>
     </div>
   </div>
 </div>
-<!-- Page Header End -->
+<!-- Header End -->
 
-<!-- CJ Department Notice Start -->
+<!-- CJ Notice Start -->
 <div class="container-fluid px-0">
   <div class="alert alert-success rounded-0 border-0 mb-0">
     <div class="container">
@@ -104,494 +165,320 @@
         <i class="fas fa-globe fa-lg mt-1"></i>
 
         <div>
-          <strong>Separate CJ fulfilment flow</strong>
+          <strong>
+            Separate CJ fulfilment flow
+          </strong>
 
           <div class="small mt-1">
-            This product belongs to the CJ Dropshipping department.
-            It uses the separate CJ cart, checkout, payment, order
-            and fulfilment process.
+            This product belongs to the CJ Dropshipping department. It uses the separate CJ cart, checkout, payment, order and fulfilment process.
           </div>
         </div>
       </div>
     </div>
   </div>
 </div>
-<!-- CJ Department Notice End -->
+<!-- CJ Notice End -->
 
-<!-- Product Detail Start -->
 <div class="container-fluid py-5">
   <div class="container">
-    <div class="row g-5">
+    <div id="cjProductMessage" class="d-none" role="alert"></div>
+
+    <div class="row g-4 align-items-start">
       <!-- Images -->
       <div class="col-12 col-lg-6">
-        <div class="border rounded bg-white p-3 mb-3">
-          <div
-            class="d-flex align-items-center justify-content-center"
-            style="min-height: 420px;"
-          >
-            <img
-              id="cjMainProductImage"
-              src="<%= defaultVariant?.imageUrl || product.mainImageUrl %>"
-              alt="<%= product.name %>"
-              class="img-fluid"
-              style="max-height: 520px; object-fit: contain;"
-            >
-          </div>
-        </div>
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <div class="ratio ratio-1x1 bg-light rounded border">
+              <img
+                id="cjMainProductImage"
+                src="<%= DEFAULT_VARIANT?.imageUrl || PRODUCT.mainImageUrl || '' %>"
+                alt="<%= PRODUCT.name || 'CJ Product' %>"
+                class="w-100 h-100 p-3 cj-main-product-image"
+                loading="eager"
+              >
+            </div>
 
-        <% if (images.length > 1) { %>
-          <div class="row g-2">
-            <% images.slice(0, 8).forEach(function(image, index) { %>
-              <div class="col-3 col-md-2">
-                <button
-                  type="button"
-                  class="btn border rounded p-1 w-100 h-100 js-cj-image-thumbnail <%= index === 0 ? 'border-primary' : '' %>"
-                  data-image-url="<%= image %>"
-                  aria-label="View product image <%= index + 1 %>"
-                >
-                  <img
-                    src="<%= image %>"
-                    alt="<%= product.name %> image <%= index + 1 %>"
-                    class="img-fluid"
-                    style="height: 72px; width: 100%; object-fit: contain;"
+            <% if (PRODUCT_IMAGES.length > 1) { %>
+              <div class="d-flex gap-2 overflow-auto pt-3">
+                <% PRODUCT_IMAGES.forEach(function(imageUrl, index) { %>
+                  <button
+                    type="button"
+                    class="btn btn-light border p-1 flex-shrink-0 js-cj-product-image-thumb <%= index === 0 ? 'border-primary' : '' %>"
+                    data-image-url="<%= imageUrl %>"
+                    aria-label="View product image <%= index + 1 %>"
+                    style="width: 72px; height: 72px;"
                   >
-                </button>
-              </div>
-            <% }) %>
-          </div>
-        <% } %>
-      </div>
-
-      <!-- Product Information -->
-      <div class="col-12 col-lg-6">
-        <div class="d-flex flex-wrap gap-2 mb-3">
-          <span class="badge bg-success">
-            CJ Product
-          </span>
-
-          <% if (product.category?.name) { %>
-            <span class="badge bg-light text-dark border">
-              <%= product.category.name %>
-            </span>
-          <% } %>
-
-          <% if (product.productType) { %>
-            <span class="badge bg-light text-dark border">
-              <%= product.productType %>
-            </span>
-          <% } %>
-        </div>
-
-        <h2 class="text-primary mb-3">
-          <%= product.name %>
-        </h2>
-
-        <div class="mb-3">
-          <span class="text-muted me-2">Product SKU:</span>
-          <strong><%= product.productSku || 'Not available' %></strong>
-        </div>
-
-        <div class="border rounded bg-light p-3 mb-4">
-          <div class="small text-muted mb-1">
-            Selling price, including VAT
-          </div>
-
-          <div
-            id="cjSelectedPrice"
-            class="display-6 fw-bold text-primary"
-          >
-            <%= formatMoney(defaultVariant?.priceIncVat || 0) %>
-          </div>
-
-          <div class="small text-muted mt-1">
-            Excluding VAT:
-            <span id="cjSelectedPriceExVat">
-              <%= formatMoney(defaultVariant?.priceExVat || 0) %>
-            </span>
-          </div>
-
-          <% if (product.hasPriceRange) { %>
-            <div class="small text-muted mt-2">
-              Available variant range:
-              <%= formatMoney(product.minimumPriceIncVat) %>
-              –
-              <%= formatMoney(product.maximumPriceIncVat) %>
-            </div>
-          <% } %>
-        </div>
-
-        <!-- Variant Selection -->
-        <div class="mb-4">
-          <label
-            for="cjVariantSelect"
-            class="form-label fw-bold"
-          >
-            Select product variant
-          </label>
-
-          <select
-            id="cjVariantSelect"
-            class="form-select form-select-lg"
-          >
-            <% variants.forEach(function(variant) { %>
-              <option
-                value="<%= variant.cjVariantId %>"
-                <%= defaultVariant && String(defaultVariant.cjVariantId) === String(variant.cjVariantId) ? 'selected' : '' %>
-                <%= variant.available === false ? 'disabled' : '' %>
-              >
-                <%= variant.variantName %>
-                —
-                <%= formatMoney(variant.priceIncVat) %>
-                <% if (variant.inventoryKnown) { %>
-                  —
-                  <%= variant.totalInventory %> available
-                <% } %>
-              </option>
-            <% }) %>
-          </select>
-
-          <div class="form-text">
-            The selected variant determines the product image,
-            selling price, inventory and CJ fulfilment reference.
-          </div>
-        </div>
-
-        <!-- Selected Variant Details -->
-        <div class="border rounded p-3 mb-4">
-          <div class="row g-3">
-            <div class="col-12 col-md-6">
-              <div class="small text-muted">Variant SKU</div>
-              <div id="cjSelectedVariantSku" class="fw-semibold">
-                <%= defaultVariant?.variantSku || 'Not available' %>
-              </div>
-            </div>
-
-            <div class="col-12 col-md-6">
-              <div class="small text-muted">Availability</div>
-
-              <div
-                id="cjSelectedInventory"
-                class="fw-semibold"
-              >
-                <% if (defaultVariant?.inventoryKnown) { %>
-                  <%= defaultVariant.totalInventory %> unit(s)
-                <% } else { %>
-                  Checked again during checkout
-                <% } %>
-              </div>
-            </div>
-
-            <div class="col-12 col-md-6">
-              <div class="small text-muted">Weight</div>
-
-              <div id="cjSelectedWeight" class="fw-semibold">
-                <% if (defaultVariant?.weightGrams !== null && defaultVariant?.weightGrams !== undefined) { %>
-                  <%= defaultVariant.weightGrams %> g
-                <% } else { %>
-                  Not provided
-                <% } %>
-              </div>
-            </div>
-
-            <div class="col-12 col-md-6">
-              <div class="small text-muted">Variant ID</div>
-
-              <div
-                id="cjSelectedVariantId"
-                class="fw-semibold text-break"
-              >
-                <%= defaultVariant?.cjVariantId || 'Not available' %>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Quantity -->
-        <div class="row g-3 align-items-end mb-4">
-          <div class="col-12 col-sm-4">
-            <label
-              for="cjProductQuantity"
-              class="form-label fw-bold"
-            >
-              Quantity
-            </label>
-
-            <input
-              id="cjProductQuantity"
-              type="number"
-              class="form-control form-control-lg"
-              value="1"
-              min="1"
-              max="100"
-              step="1"
-            >
-          </div>
-
-          <div class="col-12 col-sm-8">
-            <button
-              id="cjAddToCartButton"
-              type="button"
-              class="btn btn-primary btn-lg rounded-pill w-100"
-              data-cj-product-id="<%= product.cjProductId %>"
-              data-cj-variant-id="<%= defaultVariant?.cjVariantId || '' %>"
-              <%= !defaultVariant ? 'disabled' : '' %>
-            >
-              <i class="fas fa-shopping-cart me-2"></i>
-              Add To CJ Cart
-            </button>
-          </div>
-        </div>
-
-        <div
-          id="cjProductMessage"
-          class="d-none"
-          role="alert"
-        ></div>
-
-        <div class="d-flex flex-wrap gap-2">
-          <a
-            href="/store#homeProductsSection"
-            class="btn btn-outline-primary rounded-pill px-4"
-          >
-            <i class="fas fa-arrow-left me-2"></i>
-            Continue Shopping
-          </a>
-
-          <a
-            href="/cj/cart"
-            class="btn btn-success rounded-pill px-4"
-          >
-            <i class="fas fa-shopping-basket me-2"></i>
-            Open CJ Cart
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- Product Detail End -->
-
-<!-- Description Start -->
-<div class="container-fluid bg-light py-5">
-  <div class="container">
-    <div class="card border-0 shadow-sm">
-      <div class="card-body p-4 p-lg-5">
-        <h3 class="text-primary mb-4">
-          Product Description
-        </h3>
-
-        <% if (product.descriptionHtml) { %>
-          <div class="cj-product-description">
-            <%- product.descriptionHtml %>
-          </div>
-        <% } else { %>
-          <p class="text-muted mb-0">
-            No detailed description is currently available for this CJ product.
-          </p>
-        <% } %>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- Description End -->
-
-<!-- Product Information Start -->
-<div class="container-fluid py-5">
-  <div class="container">
-    <h3 class="text-primary mb-4">
-      Product Information
-    </h3>
-
-    <div class="row g-4">
-      <div class="col-12 col-lg-6">
-        <div class="card h-100 border">
-          <div class="card-body">
-            <h5 class="card-title text-primary">
-              Product details
-            </h5>
-
-            <dl class="row mb-0">
-              <dt class="col-5">CJ Product ID</dt>
-              <dd class="col-7 text-break">
-                <%= product.cjProductId %>
-              </dd>
-
-              <dt class="col-5">Product SKU</dt>
-              <dd class="col-7 text-break">
-                <%= product.productSku || 'Not provided' %>
-              </dd>
-
-              <dt class="col-5">Category</dt>
-              <dd class="col-7">
-                <%= product.category?.name || 'CJ Product' %>
-              </dd>
-
-              <dt class="col-5">Product unit</dt>
-              <dd class="col-7">
-                <%= product.productUnit || 'Not provided' %>
-              </dd>
-
-              <dt class="col-5">HS code</dt>
-              <dd class="col-7">
-                <%= product.customs?.hsCode || 'Not provided' %>
-              </dd>
-            </dl>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-6">
-        <div class="card h-100 border">
-          <div class="card-body">
-            <h5 class="card-title text-primary">
-              Shipping information
-            </h5>
-
-            <dl class="row mb-0">
-              <dt class="col-6">Product weight</dt>
-              <dd class="col-6">
-                <% if (product.productWeightGrams !== null) { %>
-                  <%= product.productWeightGrams %> g
-                <% } else { %>
-                  Not provided
-                <% } %>
-              </dd>
-
-              <dt class="col-6">Packing weight</dt>
-              <dd class="col-6">
-                <% if (product.packingWeightGrams !== null) { %>
-                  <%= product.packingWeightGrams %> g
-                <% } else { %>
-                  Not provided
-                <% } %>
-              </dd>
-
-              <dt class="col-6">Material</dt>
-              <dd class="col-6">
-                <%= product.customs?.materialNameEn || 'Not provided' %>
-              </dd>
-
-              <dt class="col-6">Packing</dt>
-              <dd class="col-6">
-                <%= product.customs?.packingNameEn || 'Not provided' %>
-              </dd>
-            </dl>
-
-            <% if (Array.isArray(product.customs?.logisticsProperties) && product.customs.logisticsProperties.length) { %>
-              <div class="mt-3">
-                <div class="small text-muted mb-2">
-                  Logistics properties
-                </div>
-
-                <div class="d-flex flex-wrap gap-2">
-                  <% product.customs.logisticsProperties.forEach(function(property) { %>
-                    <span class="badge bg-light text-dark border">
-                      <%= property %>
-                    </span>
-                  <% }) %>
-                </div>
+                    <img
+                      src="<%= imageUrl %>"
+                      alt=""
+                      class="w-100 h-100"
+                      style="object-fit: contain;"
+                      loading="lazy"
+                    >
+                  </button>
+                <% }) %>
               </div>
             <% } %>
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
-<!-- Product Information End -->
 
-<!-- Related Products Start -->
-<% if (Array.isArray(relatedProducts) && relatedProducts.length > 0) { %>
-  <div class="container-fluid bg-light py-5">
-    <div class="container">
-      <div class="d-flex align-items-center justify-content-between mb-4">
-        <h3 class="text-primary mb-0">
+      <!-- Product Info -->
+      <div class="col-12 col-lg-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4">
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <span class="badge bg-success">
+                CJ Product
+              </span>
+
+              <% if (PRODUCT.category?.name) { %>
+                <span class="badge bg-light text-dark border">
+                  <%= PRODUCT.category.name %>
+                </span>
+              <% } %>
+
+              <% if (PRODUCT.productType) { %>
+                <span class="badge bg-light text-dark border">
+                  <%= PRODUCT.productType %>
+                </span>
+              <% } %>
+            </div>
+
+            <h2 class="text-primary mb-3">
+              <%= PRODUCT.name || 'CJ Product' %>
+            </h2>
+
+            <div class="text-muted mb-3">
+              Product SKU:
+              <strong><%= PRODUCT.productSku || '—' %></strong>
+            </div>
+
+            <div class="bg-light border rounded p-3 mb-4">
+              <div class="text-muted">
+                Selling price, including VAT
+              </div>
+
+              <div id="cjVariantPriceIncVat" class="display-6 fw-bold text-primary">
+                <%= DEFAULT_VARIANT ? formatMoney(DEFAULT_VARIANT.priceIncVat, DEFAULT_VARIANT.currency || CURRENCY) : formatMoney(PRODUCT.minimumPriceIncVat || 0) %>
+              </div>
+
+              <div class="text-muted">
+                Excluding VAT:
+                <span id="cjVariantPriceExVat">
+                  <%= DEFAULT_VARIANT ? formatMoney(DEFAULT_VARIANT.priceExVat, DEFAULT_VARIANT.currency || CURRENCY) : formatMoney(0) %>
+                </span>
+              </div>
+            </div>
+
+            <form id="cjAddToCartForm">
+              <input
+                id="cjProductId"
+                type="hidden"
+                value="<%= PRODUCT.cjProductId || '' %>"
+              >
+
+              <div class="mb-3">
+                <label for="cjVariantSelect" class="form-label fw-semibold">
+                  Select variant/Size/Color
+                </label>
+
+                <select id="cjVariantSelect" class="form-select form-select-lg" required>
+                  <% VARIANTS.forEach(function(variant) { %>
+                    <option
+                      value="<%= variant.cjVariantId %>"
+                      data-image-url="<%= variant.imageUrl || PRODUCT.mainImageUrl || '' %>"
+                      data-price-inc-vat="<%= Number(variant.priceIncVat || 0) %>"
+                      data-price-ex-vat="<%= Number(variant.priceExVat || 0) %>"
+                      data-currency="<%= variant.currency || CURRENCY %>"
+                      data-inventory-known="<%= variant.inventoryKnown ? '1' : '0' %>"
+                      data-total-inventory="<%= Number(variant.totalInventory || 0) %>"
+                      data-available="<%= variant.available ? '1' : '0' %>"
+                      <%= DEFAULT_VARIANT && String(DEFAULT_VARIANT.cjVariantId) === String(variant.cjVariantId) ? 'selected' : '' %>
+                    >
+                      <%= variantLabel(variant) %>
+                      —
+                      <%= formatMoney(variant.priceIncVat, variant.currency || CURRENCY) %>
+                      <% if (variant.inventoryKnown) { %>
+                        —
+                        <%= Number(variant.totalInventory || 0) %> available
+                      <% } %>
+                    </option>
+                  <% }) %>
+                </select>
+
+                <div class="form-text">
+                  The selected variant determines the product image, selling price, inventory and CJ fulfilment reference.
+                </div>
+              </div>
+
+              <div class="row g-3 align-items-end mb-4">
+                <div class="col-12 col-sm-5">
+                  <label for="cjQuantity" class="form-label fw-semibold">
+                    Quantity
+                  </label>
+
+                  <input
+                    id="cjQuantity"
+                    type="number"
+                    class="form-control form-control-lg"
+                    value="1"
+                    min="1"
+                    max="100"
+                    step="1"
+                    required
+                  >
+                </div>
+
+                <div class="col-12 col-sm-7">
+                  <div class="alert alert-light border mb-0">
+                    <div class="small text-muted">
+                      Variant status
+                    </div>
+
+                    <div id="cjVariantInventoryStatus" class="fw-semibold text-primary">
+                      <%= inventoryText(DEFAULT_VARIANT) %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-grid gap-2">
+                <button
+                  id="cjAddToCartButton"
+                  type="submit"
+                  class="btn btn-primary btn-lg rounded-pill"
+                  <%= DEFAULT_VARIANT && DEFAULT_VARIANT.available ? '' : 'disabled' %>
+                >
+                  <i class="fas fa-cart-plus me-2"></i>
+                  Add To CJ Cart
+                </button>
+
+                <a href="/cj/cart" class="btn btn-outline-primary rounded-pill">
+                  View CJ Cart
+                </a>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-4">
+          <div class="card-body">
+            <h3 class="h5 text-primary">
+              Product fulfilment details
+            </h3>
+
+            <dl class="row mb-0 small">
+              <dt class="col-6">
+                Product unit
+              </dt>
+              <dd class="col-6 text-end">
+                <%= PRODUCT.productUnit || '—' %>
+              </dd>
+
+              <dt class="col-6">
+                Product weight
+              </dt>
+              <dd class="col-6 text-end">
+                <%= PRODUCT.productWeightGrams ? PRODUCT.productWeightGrams + ' g' : '—' %>
+              </dd>
+
+              <dt class="col-6">
+                Packing weight
+              </dt>
+              <dd class="col-6 text-end">
+                <%= PRODUCT.packingWeightGrams ? PRODUCT.packingWeightGrams + ' g' : '—' %>
+              </dd>
+
+              <% if (PRODUCT.customs?.hsCode) { %>
+                <dt class="col-6">
+                  HS code
+                </dt>
+                <dd class="col-6 text-end">
+                  <%= PRODUCT.customs.hsCode %>
+                </dd>
+              <% } %>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% if (PRODUCT.descriptionHtml) { %>
+      <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-primary text-white">
+          <h3 class="h5 text-white mb-0">
+            Product Description
+          </h3>
+        </div>
+
+        <div class="card-body cj-product-description">
+          <%- PRODUCT.descriptionHtml %>
+        </div>
+      </div>
+    <% } %>
+
+    <% if (RELATED_PRODUCTS.length) { %>
+      <div class="mt-5">
+        <h3 class="text-primary mb-3">
           Related CJ Products
         </h3>
 
-        <a
-          href="/store#homeProductsSection"
-          class="btn btn-outline-primary rounded-pill"
-        >
-          View CJ Store
-        </a>
-      </div>
+        <div class="row g-3">
+          <% RELATED_PRODUCTS.forEach(function(related) { %>
+            <div class="col-12 col-md-6 col-xl-3">
+              <div class="card border-0 shadow-sm h-100">
+                <a href="/cj/product/<%= encodeURIComponent(related.cjProductId) %>" class="text-decoration-none">
+                  <div class="ratio ratio-1x1 bg-light">
+                    <img
+                      src="<%= related.mainImageUrl %>"
+                      alt="<%= related.name %>"
+                      class="w-100 h-100 p-3"
+                      style="object-fit: contain;"
+                      loading="lazy"
+                    >
+                  </div>
+                </a>
 
-      <div class="row g-4">
-        <% relatedProducts.forEach(function(relatedProduct) { %>
-          <div class="col-12 col-sm-6 col-lg-3">
-            <div class="card h-100 border shadow-sm">
-              <a
-                href="/cj/product/<%= encodeURIComponent(relatedProduct.cjProductId) %>"
-                class="text-decoration-none"
-              >
-                <div
-                  class="d-flex align-items-center justify-content-center p-3"
-                  style="height: 230px;"
-                >
-                  <img
-                    src="<%= relatedProduct.mainImageUrl %>"
-                    alt="<%= relatedProduct.name %>"
-                    class="img-fluid"
-                    style="max-height: 210px; object-fit: contain;"
-                  >
-                </div>
-              </a>
+                <div class="card-body d-flex flex-column">
+                  <h4 class="h6 text-primary">
+                    <%= related.name %>
+                  </h4>
 
-              <div class="card-body d-flex flex-column">
-                <div class="small text-muted mb-2">
-                  <%= relatedProduct.category?.name || 'CJ Product' %>
-                </div>
+                  <div class="small text-muted mb-3">
+                    <%= related.category?.name || 'CJ Product' %>
+                  </div>
 
-                <h5 class="card-title">
-                  <a
-                    href="/cj/product/<%= encodeURIComponent(relatedProduct.cjProductId) %>"
-                    class="text-decoration-none text-primary"
-                  >
-                    <%= relatedProduct.name %>
-                  </a>
-                </h5>
-
-                <div class="mt-auto">
-                  <div class="fw-bold text-primary fs-5 mb-3">
-                    <%= formatMoney(relatedProduct.minimumPriceIncVat) %>
-
-                    <% if (relatedProduct.hasPriceRange) { %>
-                      <span class="small text-muted fw-normal">
-                        and up
-                      </span>
-                    <% } %>
+                  <div class="fw-bold text-primary mt-auto">
+                    <%= formatMoney(related.minimumPriceIncVat || 0, related.currency || CURRENCY) %>
                   </div>
 
                   <a
-                    href="/cj/product/<%= encodeURIComponent(relatedProduct.cjProductId) %>"
-                    class="btn btn-primary rounded-pill w-100"
+                    href="/cj/product/<%= encodeURIComponent(related.cjProductId) %>"
+                    class="btn btn-outline-primary btn-sm mt-3"
                   >
-                    Select Variant
+                    View Product
                   </a>
                 </div>
               </div>
             </div>
-          </div>
-        <% }) %>
+          <% }) %>
+        </div>
       </div>
-    </div>
+    <% } %>
   </div>
-<% } %>
-<!-- Related Products End -->
-
-<%- include('../store/partials/footer') %>
-
-<script
-  id="cjProductVariantsData"
-  type="application/json"
-  nonce="<%= nonce %>"
-><%- safeJson(variants) %></script>
+</div>
 
 <script nonce="<%= nonce %>">
-  (function () {
-    const variantsElement = document.getElementById(
-      'cjProductVariantsData'
+  (function() {
+    const productVariants =
+      <%- safeJson(VARIANTS) %>;
+
+    const currency =
+      '<%= CURRENCY %>';
+
+    const productIdInput = document.getElementById(
+      'cjProductId'
     );
 
     const variantSelect = document.getElementById(
@@ -599,91 +486,61 @@
     );
 
     const quantityInput = document.getElementById(
-      'cjProductQuantity'
-    );
-
-    const addButton = document.getElementById(
-      'cjAddToCartButton'
+      'cjQuantity'
     );
 
     const mainImage = document.getElementById(
       'cjMainProductImage'
     );
 
-    const priceElement = document.getElementById(
-      'cjSelectedPrice'
+    const priceIncVatElement = document.getElementById(
+      'cjVariantPriceIncVat'
     );
 
     const priceExVatElement = document.getElementById(
-      'cjSelectedPriceExVat'
+      'cjVariantPriceExVat'
     );
 
-    const skuElement = document.getElementById(
-      'cjSelectedVariantSku'
+    const inventoryStatusElement = document.getElementById(
+      'cjVariantInventoryStatus'
     );
 
-    const inventoryElement = document.getElementById(
-      'cjSelectedInventory'
-    );
-
-    const weightElement = document.getElementById(
-      'cjSelectedWeight'
-    );
-
-    const variantIdElement = document.getElementById(
-      'cjSelectedVariantId'
+    const addButton = document.getElementById(
+      'cjAddToCartButton'
     );
 
     const messageElement = document.getElementById(
       'cjProductMessage'
     );
 
-    const currency = '<%= CURRENCY %>';
+    const addForm = document.getElementById(
+      'cjAddToCartForm'
+    );
 
-    let variants = [];
+    function formatMoney(amount, selectedCurrency) {
+      const safeCurrency =
+        String(selectedCurrency || currency || 'USD')
+          .trim()
+          .toUpperCase() || 'USD';
 
-    try {
-      variants = JSON.parse(
-        variantsElement?.textContent || '[]'
-      );
-    } catch (error) {
-      console.error(
-        'Could not parse CJ variant data:',
-        error
-      );
-    }
-
-    function formatMoney(amount) {
       const value = Number(amount || 0);
 
       try {
         const formatted = new Intl.NumberFormat(undefined, {
           style: 'currency',
-          currency: currency,
+          currency: safeCurrency,
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         }).format(value);
 
-        if (currency === 'ZAR') {
+        if (safeCurrency === 'ZAR') {
           return formatted.replace(/^ZAR\s?/, 'R');
         }
 
         return formatted;
       } catch (error) {
-        return currency + ' ' + value.toFixed(2);
+        return safeCurrency + ' ' + value.toFixed(2);
       }
-    }
-
-    function getSelectedVariant() {
-      const selectedId = String(
-        variantSelect?.value || ''
-      ).trim();
-
-      return variants.find(function (variant) {
-        return String(
-          variant?.cjVariantId || ''
-        ).trim() === selectedId;
-      }) || null;
     }
 
     function showMessage(message, type) {
@@ -691,15 +548,28 @@
         return;
       }
 
-      messageElement.className =
-        'alert mt-3 alert-' +
-        (type === 'success'
-          ? 'success'
-          : 'danger');
+      const safeType =
+        String(type || 'danger')
+          .trim()
+          .toLowerCase();
 
-      messageElement.textContent = String(
-        message || ''
-      );
+      const bootstrapType =
+        safeType === 'success' ||
+        safeType === 'warning' ||
+        safeType === 'info'
+          ? safeType
+          : 'danger';
+
+      messageElement.className =
+        'alert alert-' + bootstrapType + ' shadow-sm';
+
+      messageElement.textContent =
+        String(message || '');
+
+      messageElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
     }
 
     function clearMessage() {
@@ -711,230 +581,196 @@
       messageElement.textContent = '';
     }
 
-    function updateSelectedVariant() {
-      const variant = getSelectedVariant();
+    function selectedVariantFromOption() {
+      const option =
+        variantSelect?.selectedOptions?.[0];
 
-      clearMessage();
+      if (!option) {
+        return null;
+      }
 
-      if (!variant) {
+      const selectedId =
+        String(option.value || '').trim();
+
+      return productVariants.find(function(variant) {
+        return String(variant.cjVariantId || '').trim() === selectedId;
+      }) || null;
+    }
+
+    function updateSelectedVariantUi() {
+      const option =
+        variantSelect?.selectedOptions?.[0];
+
+      const variant =
+        selectedVariantFromOption();
+
+      if (!option || !variant) {
         if (addButton) {
           addButton.disabled = true;
-          addButton.setAttribute(
-            'data-cj-variant-id',
-            ''
-          );
         }
 
         return;
       }
 
-      if (mainImage && variant.imageUrl) {
-        mainImage.src = variant.imageUrl;
+      const imageUrl =
+        String(
+          variant.imageUrl ||
+          option.getAttribute('data-image-url') ||
+          ''
+        ).trim();
+
+      if (mainImage && imageUrl) {
+        mainImage.src = imageUrl;
       }
 
-      if (priceElement) {
-        priceElement.textContent = formatMoney(
-          variant.priceIncVat
-        );
+      if (priceIncVatElement) {
+        priceIncVatElement.textContent =
+          formatMoney(
+            variant.priceIncVat,
+            variant.currency
+          );
       }
 
       if (priceExVatElement) {
-        priceExVatElement.textContent = formatMoney(
-          variant.priceExVat
+        priceExVatElement.textContent =
+          formatMoney(
+            variant.priceExVat,
+            variant.currency
+          );
+      }
+
+      const inventoryKnown =
+        variant.inventoryKnown === true;
+
+      const totalInventory =
+        Math.max(
+          0,
+          Math.floor(Number(variant.totalInventory || 0))
         );
+
+      const available =
+        variant.available === true &&
+        (!inventoryKnown || totalInventory > 0);
+
+      if (inventoryStatusElement) {
+        inventoryStatusElement.textContent =
+          inventoryKnown
+            ? (
+                totalInventory > 0
+                  ? totalInventory + ' available'
+                  : 'Out of stock'
+              )
+            : 'Available';
       }
 
-      if (skuElement) {
-        skuElement.textContent =
-          variant.variantSku ||
-          'Not available';
-      }
+      if (quantityInput) {
+        quantityInput.max =
+          inventoryKnown && totalInventory > 0
+            ? String(Math.min(100, totalInventory))
+            : '100';
 
-      if (inventoryElement) {
-        inventoryElement.textContent =
-          variant.inventoryKnown
-            ? String(variant.totalInventory) +
-              ' unit(s)'
-            : 'Checked again during checkout';
-      }
-
-      if (weightElement) {
-        weightElement.textContent =
-          variant.weightGrams !== null &&
-          variant.weightGrams !== undefined
-            ? String(variant.weightGrams) + ' g'
-            : 'Not provided';
-      }
-
-      if (variantIdElement) {
-        variantIdElement.textContent =
-          variant.cjVariantId ||
-          'Not available';
+        if (Number(quantityInput.value || 1) > Number(quantityInput.max || 100)) {
+          quantityInput.value = quantityInput.max;
+        }
       }
 
       if (addButton) {
-        addButton.setAttribute(
-          'data-cj-variant-id',
-          variant.cjVariantId || ''
-        );
-
-        addButton.disabled =
-          variant.available === false;
-      }
-
-      if (
-        quantityInput &&
-        variant.inventoryKnown
-      ) {
-        quantityInput.max = String(
-          Math.max(
-            1,
-            Number(variant.totalInventory || 1)
-          )
-        );
-      } else if (quantityInput) {
-        quantityInput.max = '100';
+        addButton.disabled = !available;
       }
     }
 
     document
-      .querySelectorAll('.js-cj-image-thumbnail')
-      .forEach(function (button) {
-        button.addEventListener(
-          'click',
-          function () {
-            const imageUrl = String(
-              button.getAttribute(
-                'data-image-url'
-              ) || ''
+      .querySelectorAll('.js-cj-product-image-thumb')
+      .forEach(function(button) {
+        button.addEventListener('click', function() {
+          const imageUrl =
+            String(
+              button.getAttribute('data-image-url') || ''
             ).trim();
 
-            if (imageUrl && mainImage) {
-              mainImage.src = imageUrl;
-            }
-
-            document
-              .querySelectorAll(
-                '.js-cj-image-thumbnail'
-              )
-              .forEach(function (thumbnail) {
-                thumbnail.classList.remove(
-                  'border-primary'
-                );
-              });
-
-            button.classList.add(
-              'border-primary'
-            );
+          if (mainImage && imageUrl) {
+            mainImage.src = imageUrl;
           }
-        );
+
+          document
+            .querySelectorAll('.js-cj-product-image-thumb')
+            .forEach(function(otherButton) {
+              otherButton.classList.remove('border-primary');
+            });
+
+          button.classList.add('border-primary');
+        });
       });
 
     variantSelect?.addEventListener(
       'change',
-      updateSelectedVariant
-    );
-
-    quantityInput?.addEventListener(
-      'change',
-      function () {
-        const minimum = 1;
-        const maximum = Math.max(
-          minimum,
-          Number(quantityInput.max || 100)
-        );
-
-        let quantity = Math.floor(
-          Number(quantityInput.value || 1)
-        );
-
-        if (!Number.isFinite(quantity)) {
-          quantity = minimum;
-        }
-
-        quantity = Math.max(
-          minimum,
-          Math.min(maximum, quantity)
-        );
-
-        quantityInput.value =
-          String(quantity);
+      function() {
+        clearMessage();
+        updateSelectedVariantUi();
       }
     );
 
-    addButton?.addEventListener(
-      'click',
-      async function () {
-        const cjProductId = String(
-          addButton.getAttribute(
-            'data-cj-product-id'
-          ) || ''
-        ).trim();
+    addForm?.addEventListener(
+      'submit',
+      async function(event) {
+        event.preventDefault();
+        clearMessage();
 
-        const cjVariantId = String(
-          addButton.getAttribute(
-            'data-cj-variant-id'
-          ) || ''
-        ).trim();
+        const cjProductId =
+          String(productIdInput?.value || '').trim();
 
-        const quantity = Math.max(
-          1,
-          Math.min(
-            100,
-            Math.floor(
-              Number(
-                quantityInput?.value || 1
-              )
+        const cjVariantId =
+          String(variantSelect?.value || '').trim();
+
+        const quantity =
+          Math.max(
+            1,
+            Math.min(
+              100,
+              Math.floor(Number(quantityInput?.value || 1))
             )
-          )
-        );
+          );
 
         if (!cjProductId || !cjVariantId) {
           showMessage(
-            'Please select an available CJ variant.',
-            'error'
+            'Please select a CJ product variant before adding to cart.',
+            'warning'
           );
 
           return;
         }
 
         const originalHtml =
-          addButton.innerHTML;
+          addButton ? addButton.innerHTML : '';
 
-        addButton.disabled = true;
-        addButton.innerHTML =
-          '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
-          'Adding...';
-
-        clearMessage();
+        if (addButton) {
+          addButton.disabled = true;
+          addButton.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
+            'Adding To CJ Cart...';
+        }
 
         try {
-          const response = await fetch(
-            '/api/cj-cart/add',
-            {
-              method: 'POST',
+          const response = await fetch('/api/cj-cart/add', {
+            method: 'POST',
 
-              headers: {
-                'Content-Type':
-                  'application/json',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json'
+            },
 
-                Accept:
-                  'application/json'
-              },
+            credentials: 'same-origin',
 
-              credentials: 'same-origin',
-
-              body: JSON.stringify({
-                cjProductId,
-                cjVariantId,
-                quantity
-              })
-            }
-          );
+            body: JSON.stringify({
+              cjProductId,
+              cjVariantId,
+              quantity
+            })
+          });
 
           const data = await response
             .json()
-            .catch(function () {
+            .catch(function() {
               return {};
             });
 
@@ -944,31 +780,43 @@
           ) {
             throw new Error(
               data.message ||
-              'The CJ product could not be added to your cart.'
+              'The CJ product could not be added to cart.'
             );
           }
 
           showMessage(
             data.message ||
-            'CJ product added to your separate CJ cart.',
+            'CJ product added to the CJ cart.',
             'success'
           );
+
+          const redirectTo =
+            String(data.redirectTo || '/cj/cart').trim();
+
+          window.setTimeout(function() {
+            window.location.assign(
+              redirectTo.startsWith('/')
+                ? redirectTo
+                : '/cj/cart'
+            );
+          }, 500);
         } catch (error) {
           showMessage(
             error?.message ||
-            'The CJ product could not be added.',
-            'error'
+            'The CJ product could not be added to cart.',
+            'danger'
           );
-        } finally {
-          addButton.disabled = false;
-          addButton.innerHTML =
-            originalHtml;
 
-          updateSelectedVariant();
+          if (addButton) {
+            addButton.disabled = false;
+            addButton.innerHTML = originalHtml;
+          }
+
+          updateSelectedVariantUi();
         }
       }
     );
 
-    updateSelectedVariant();
+    updateSelectedVariantUi();
   })();
 </script>
