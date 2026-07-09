@@ -520,7 +520,7 @@
         </div>
 
         <!-- Shipping Options -->
-        <div id="cjShippingOptionsCard" class="card border-0 shadow-sm <%= SAVED_OPTIONS.length ? '' : 'd-none' %>">
+        <div id="cj-shipping-methods" class="card border-0 shadow-sm <%= SAVED_OPTIONS.length ? '' : 'd-none' %>">
           <div class="card-header bg-primary text-white py-3">
             <h4 class="text-white mb-0">
               CJ Shipping Methods
@@ -566,10 +566,12 @@
               <% }) %>
             </div>
 
-            <button id="cjContinueToPaymentButton" type="button" class="btn btn-success btn-lg rounded-pill w-100" <%= SAVED_SELECTED_SHIPPING ? '' : 'disabled' %>>
-              <i class="fas fa-lock me-2"></i>
-              Continue To CJ Payment
-            </button>
+            <div id="cj-continue-to-payment">
+              <button id="cjContinueToPaymentButton" type="button" class="btn btn-success btn-lg rounded-pill w-100" <%= SAVED_SELECTED_SHIPPING ? '' : 'disabled' %>>
+                <i class="fas fa-lock me-2"></i>
+                Continue To CJ Payment
+              </button>
+            </div>
 
             <div class="small text-muted text-center mt-3">
               Your payment will be completed securely through PayPal.
@@ -604,7 +606,11 @@
     );
 
     const optionsCard = document.getElementById(
-      'cjShippingOptionsCard'
+      'cj-shipping-methods'
+    );
+
+    const continuePaymentAnchor = document.getElementById(
+      'cj-continue-to-payment'
     );
 
     const optionsContainer = document.getElementById(
@@ -763,7 +769,7 @@
         .replace(/'/g, '&#039;');
     }
 
-    function showMessage(message, type) {
+    function showMessage(message, type, scrollToTop = true) {
       if (!messageElement) {
         return;
       }
@@ -785,10 +791,43 @@
       messageElement.textContent =
         String(message || '');
 
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
+      if (scrollToTop) {
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      }
+    }
+
+    function setCjCheckoutHashAndScroll(targetId) {
+      const cleanTargetId = String(targetId || '').trim();
+
+      if (!cleanTargetId) {
+        return;
+      }
+
+      const target = document.getElementById(cleanTargetId);
+
+      if (!target) {
+        return;
+      }
+
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(
+          null,
+          '',
+          '#' + cleanTargetId
+        );
+      } else {
+        window.location.hash = cleanTargetId;
+      }
+
+      window.setTimeout(function() {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 50);
     }
 
     function clearMessage() {
@@ -1550,7 +1589,12 @@
         showMessage(
           data.message ||
           'CJ shipping method selected successfully.',
-          'success'
+          'success',
+          false
+        );
+
+        setCjCheckoutHashAndScroll(
+          'cj-continue-to-payment'
         );
       } catch (error) {
         input.checked = false;
@@ -1700,10 +1744,9 @@
 
       bindShippingOptions();
 
-      optionsCard.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
+      setCjCheckoutHashAndScroll(
+        'cj-shipping-methods'
+      );
     }
 
     bindCjCountryDropdown();
@@ -1820,7 +1863,12 @@
           showMessage(
             data.message ||
             'CJ shipping methods calculated successfully.',
-            'success'
+            'success',
+            false
+          );
+
+          setCjCheckoutHashAndScroll(
+            'cj-shipping-methods'
           );
         } catch (error) {
           optionsCard?.classList.add(
