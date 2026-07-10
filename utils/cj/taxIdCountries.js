@@ -20,7 +20,8 @@
  * - Indonesia requires recipient NPWP / NIK / passport for many import shipments.
  * - Mexico requires recipient RFC / CURP for many import shipments.
  * - Peru requires recipient DNI / RUC / CE for many import shipments.
- * - South Africa accepts/requires the buyer South African ID for CJ Tax ID / Consignee ID.
+ * - South Africa requires the buyer South African ID number for CJ Tax ID / Consignee ID.
+ *   CJ supplier-order rejection confirmed: must be a 13 digit number without special characters.
  *
  * Verified by CJ supplier-order rejection tests:
  * - South Korea requires an individual taxpayer ID beginning with P followed by 12 digits.
@@ -179,7 +180,7 @@ const CJ_BUYER_TAX_ID_RULES = {
     examples: '8001015009087',
 
     message:
-      'Tax ID / Consignee ID is required for South Africa CJ delivery. Enter the buyer South African ID number before payment. It must be exactly 13 digits, for example 8001015009087.',
+      'Tax ID / Consignee ID is required for South Africa CJ delivery. Enter the buyer South African ID number before payment. CJ requires exactly 13 digits with no spaces, letters, hyphens, or special characters. Example: 8001015009087.',
 
     allowedDigitLengths: [13],
   },

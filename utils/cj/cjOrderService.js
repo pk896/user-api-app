@@ -6,6 +6,10 @@ const mongoose = require('mongoose');
 const CjOrder = require('../../models/CjOrder');
 const { cjRequest } = require('./cjClient');
 
+const {
+  validateCjBuyerTaxId,
+} = require('./taxIdCountries');
+
 function safeString(value, max = 2000) {
   return String(value ?? '')
     .trim()
@@ -91,6 +95,23 @@ function normalizeCjPhoneForOrder(address) {
 
 function normalizeCjTaxIdForOrder(address) {
   return safeString(address?.taxId, 50);
+}
+
+function assertCjBuyerTaxIdForOrder(countryCode, taxId) {
+  const validation = validateCjBuyerTaxId(countryCode, taxId);
+
+  if (!validation.ok) {
+    throw createCjOrderError(
+      'CJ_ORDER_BUYER_TAX_ID_INVALID',
+      validation.message ||
+        'CJ requires a valid buyer Tax ID / Consignee ID before this supplier order can be created.',
+      409,
+    );
+  }
+
+  return validation.required
+    ? validation.normalized
+    : safeString(taxId, 50);
 }
 
 function createCjOrderError(code, message, status = 400) {
@@ -297,13 +318,7 @@ function buildCjCreateOrderPayload(order) {
     );
   }
 
-  if (countryCode === 'ZA' && !/^\d{13}$/.test(taxId)) {
-    throw createCjOrderError(
-      'CJ_ORDER_CONSIGNEE_ID_INVALID',
-      'CJ requires a 13 digit South African Consignee ID / Tax ID before this supplier order can be created.',
-      409,
-    );
-  }
+  const buyerTaxId = assertCjBuyerTaxIdForOrder(countryCode, taxId);
 
   const payload = {
     orderNumber: safeString(order.cjOrderNumber, 50),
@@ -335,7 +350,7 @@ function buildCjCreateOrderPayload(order) {
 
     email: safeString(address.email, 50),
 
-    taxId,
+    taxId: buyerTaxId,
 
     remark: `Kasyora CJ order ${safeString(order.cjOrderNumber, 50)}`.slice(0, 500),
 
