@@ -363,10 +363,6 @@
                   <div id="cjTaxIdDynamicHelp" class="form-text text-muted d-none">
                     Tax ID / Consignee ID is required for this destination.
                   </div>
-
-                  <div id="cjSouthAfricaTaxIdHelp" class="form-text text-danger d-none">
-                    Tax ID / Consignee ID is required for South Africa CJ delivery. Enter a 13 digit South African ID number with numbers only.
-                  </div>
                 </div>
 
                 <div class="col-12 col-md-6">
@@ -685,9 +681,7 @@
       'cjTaxId'
     );
 
-    const southAfricaTaxIdHelp = document.getElementById(
-      'cjSouthAfricaTaxIdHelp'
-    );
+
 
     const taxIdRequiredBadge = document.getElementById(
       'cjTaxIdRequiredBadge'
@@ -865,10 +859,6 @@
       return digits.length >= 6 && digits.length <= 20;
     }
 
-    function isSouthAfricaTaxId(value) {
-      return /^\d{13}$/.test(cjDigitsOnly(value));
-    }
-
     function buyerTaxDigits(value) {
       return String(value || '')
         .replace(/\D/g, '')
@@ -894,9 +884,9 @@
         lengthRules.includes(digits.length);
 
       /*
-       * Some CJ Tax IDs include letters, so JSON cannot carry
-       * backend RegExp values to the browser. Keep these frontend
-       * pattern checks aligned with utils/cj/taxIdCountries.js.
+       * Some CJ Tax IDs use backend RegExp rules.
+       * JSON cannot carry RegExp values to the browser, so keep these
+       * frontend pattern checks aligned with utils/cj/taxIdCountries.js.
        */
       let patternOk = false;
 
@@ -921,7 +911,6 @@
 
     function updateTaxIdRequiredUi({
       countryCode,
-      isSouthAfrica,
       buyerTaxRule,
       taxIdInvalid,
       showTaxIdError
@@ -930,16 +919,12 @@
         String(buyerTaxRule?.countryName || '')
         .trim();
 
-      const taxIdRequired =
-        isSouthAfrica || Boolean(buyerTaxRule);
+      const taxIdRequired = Boolean(buyerTaxRule);
 
       if (taxIdInput) {
         taxIdInput.required = taxIdRequired;
 
-        if (isSouthAfrica) {
-          taxIdInput.placeholder =
-            'Required for South Africa';
-        } else if (buyerTaxRule) {
+        if (buyerTaxRule) {
           taxIdInput.placeholder =
             buyerTaxRule.placeholder ||
             (
@@ -1058,17 +1043,12 @@
       const iossInvalid = iossRequired;
 
       let phoneInvalid = false;
-      let southAfricaTaxIdInvalid = false;
       let buyerTaxIdInvalid = false;
 
       if (phoneValue) {
         phoneInvalid = isSouthAfrica ?
           !isSouthAfricaPhone(phoneValue) :
           !isGlobalPhoneUsable(phoneValue);
-      }
-
-      if (isSouthAfrica) {
-        southAfricaTaxIdInvalid = !isSouthAfricaTaxId(taxIdValue);
       }
 
       if (buyerTaxRequired) {
@@ -1078,9 +1058,7 @@
         );
       }
 
-      const taxIdInvalid =
-        southAfricaTaxIdInvalid ||
-        buyerTaxIdInvalid;
+      const taxIdInvalid = buyerTaxIdInvalid;
 
       /*
        * Important UI rule:
@@ -1097,10 +1075,9 @@
 
       updateTaxIdRequiredUi({
         countryCode,
-        isSouthAfrica,
         buyerTaxRule,
         taxIdInvalid,
-        showTaxIdError,
+        showTaxIdError
       });
 
       if (
@@ -1150,11 +1127,6 @@
         );
 
         toggleHelp(
-          southAfricaTaxIdHelp,
-          southAfricaTaxIdInvalid && showTaxIdError
-        );
-
-        toggleHelp(
           iossRequiredHelp,
           iossInvalid && showErrors
         );
@@ -1180,7 +1152,6 @@
 
       if (!taxIdInvalid) {
         setFieldInvalid(taxIdInput, false);
-        toggleHelp(southAfricaTaxIdHelp, false);
 
         if (taxIdDynamicHelp) {
           taxIdDynamicHelp.classList.remove('text-danger');
@@ -1197,7 +1168,6 @@
       return (
         !countryInvalid &&
         !phoneInvalid &&
-        !southAfricaTaxIdInvalid &&
         !buyerTaxIdInvalid &&
         !iossInvalid
       );

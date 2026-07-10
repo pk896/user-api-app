@@ -20,6 +20,7 @@
  * - Indonesia requires recipient NPWP / NIK / passport for many import shipments.
  * - Mexico requires recipient RFC / CURP for many import shipments.
  * - Peru requires recipient DNI / RUC / CE for many import shipments.
+ * - South Africa accepts/requires the buyer South African ID for CJ Tax ID / Consignee ID.
  *
  * Verified by CJ supplier-order rejection tests:
  * - South Korea requires an individual taxpayer ID beginning with P followed by 12 digits.
@@ -132,7 +133,8 @@ const CJ_BUYER_TAX_ID_RULES = {
 
     allowedDigitLengths: [],
 
-    allowedPattern: /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$|^[A-Z][AEIOUX][A-Z]{2}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i,
+    allowedPattern:
+      /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$|^[A-Z][AEIOUX][A-Z]{2}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i,
   },
 
   PE: {
@@ -165,6 +167,21 @@ const CJ_BUYER_TAX_ID_RULES = {
     allowedDigitLengths: [],
 
     allowedPattern: /^[A-Z]\d{8}[A-Z]$/i,
+  },
+
+  ZA: {
+    countryName: 'South Africa',
+
+    label: 'South African ID number',
+
+    placeholder: 'Required for South Africa',
+
+    examples: '8001015009087',
+
+    message:
+      'Tax ID / Consignee ID is required for South Africa CJ delivery. Enter the buyer South African ID number before payment. It must be exactly 13 digits, for example 8001015009087.',
+
+    allowedDigitLengths: [13],
   },
 };
 
@@ -216,17 +233,11 @@ function validateCjBuyerTaxId(countryCode, taxId) {
   const normalized = normalizeBuyerTaxId(taxId);
   const digits = buyerTaxIdDigits(normalized);
 
-  const lengthRules = Array.isArray(rule.allowedDigitLengths)
-    ? rule.allowedDigitLengths
-    : [];
+  const lengthRules = Array.isArray(rule.allowedDigitLengths) ? rule.allowedDigitLengths : [];
 
-  const lengthOk =
-    lengthRules.length > 0 &&
-    lengthRules.includes(digits.length);
+  const lengthOk = lengthRules.length > 0 && lengthRules.includes(digits.length);
 
-  const patternOk =
-    rule.allowedPattern instanceof RegExp &&
-    rule.allowedPattern.test(normalized);
+  const patternOk = rule.allowedPattern instanceof RegExp && rule.allowedPattern.test(normalized);
 
   const ok = lengthOk || patternOk;
 

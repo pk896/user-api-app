@@ -79,12 +79,6 @@ function normalizeCjSouthAfricaPhone(value) {
   return '';
 }
 
-function normalizeCjSouthAfricaConsigneeId(value) {
-  const digits = digitsOnly(value, 20);
-
-  return /^\d{13}$/.test(digits) ? digits : '';
-}
-
 function normalizeCjPhoneForOrder(address) {
   const countryCode = safeString(address?.countryCode, 2).toUpperCase();
 
@@ -96,13 +90,7 @@ function normalizeCjPhoneForOrder(address) {
 }
 
 function normalizeCjTaxIdForOrder(address) {
-  const countryCode = safeString(address?.countryCode, 2).toUpperCase();
-
-  if (countryCode === 'ZA') {
-    return normalizeCjSouthAfricaConsigneeId(address?.taxId);
-  }
-
-  return safeString(address?.taxId, 20);
+  return safeString(address?.taxId, 50);
 }
 
 function createCjOrderError(code, message, status = 400) {
@@ -309,7 +297,7 @@ function buildCjCreateOrderPayload(order) {
     );
   }
 
-  if (countryCode === 'ZA' && !taxId) {
+  if (countryCode === 'ZA' && !/^\d{13}$/.test(taxId)) {
     throw createCjOrderError(
       'CJ_ORDER_CONSIGNEE_ID_INVALID',
       'CJ requires a 13 digit South African Consignee ID / Tax ID before this supplier order can be created.',

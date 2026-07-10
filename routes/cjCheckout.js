@@ -110,12 +110,6 @@ function normalizeCjSouthAfricaPhone(value) {
   return '';
 }
 
-function normalizeCjSouthAfricaConsigneeId(value) {
-  const digits = digitsOnly(value, 20);
-
-  return /^\d{13}$/.test(digits) ? digits : '';
-}
-
 function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''));
 }
@@ -333,21 +327,12 @@ function normalizeDeliveryAddress(body = {}) {
       );
     }
 
-    const cjConsigneeId = normalizeCjSouthAfricaConsigneeId(address.taxId);
-
-    if (!cjConsigneeId) {
-      throw createCheckoutError(
-        'CJ_CHECKOUT_ADDRESS_INVALID',
-        'For South Africa CJ delivery, the Tax ID / Consignee ID must be a 13 digit South African ID number with numbers only.',
-      );
-    }
-
     /*
-     * Store the CJ-safe values in the session before PayPal payment.
-     * This prevents taking payment for an address CJ will reject later.
+     * Store the CJ-safe South Africa phone value in the session before PayPal payment.
+     * South Africa Tax ID / Consignee ID is now validated through CJ_BUYER_TAX_ID_RULES
+     * below, the same way as all other CJ Tax ID countries.
      */
     address.phone = cjPhone;
-    address.taxId = cjConsigneeId;
   } else if (!isGloballyUsablePhone(address.phone)) {
     throw createCheckoutError(
       'CJ_CHECKOUT_ADDRESS_INVALID',
