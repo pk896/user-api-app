@@ -1,0 +1,642 @@
+<!-- views/admin/cj/order-details.ejs -->
+<%
+  const ORDER = order && typeof order === 'object' ? order : {};
+  const address = ORDER.deliveryAddress || {};
+  const shipping = ORDER.selectedShipping || {};
+  const paypal = ORDER.paypal || {};
+  const supplierOrder = ORDER.supplierOrder || {};
+  const tracking = ORDER.tracking || {};
+  const items = Array.isArray(ORDER.items) ? ORDER.items : [];
+
+  function moneyValue(money) {
+    if (money && typeof money === 'object') {
+      return Number(money.value || 0);
+    }
+
+    return Number(money || 0);
+  }
+
+  function moneyCurrency(money, fallback) {
+    if (money && typeof money === 'object') {
+      return String(money.currency || fallback || ORDER.currency || process.env.BASE_CURRENCY || 'USD')
+        .trim()
+        .toUpperCase();
+    }
+
+    return String(fallback || ORDER.currency || process.env.BASE_CURRENCY || 'USD')
+      .trim()
+      .toUpperCase();
+  }
+
+  function formatMoney(money, fallbackCurrency) {
+    const value = moneyValue(money);
+    const currency = moneyCurrency(money, fallbackCurrency);
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+
+      if (currency === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return currency + ' ' + value.toFixed(2);
+    }
+  }
+
+  function niceDate(value) {
+    if (!value) return 'Not available';
+
+    try {
+      return new Date(value).toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return String(value || '');
+    }
+  }
+
+  function label(value) {
+    return String(value || 'Not available')
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/^\w/, function(letter) {
+        return letter.toUpperCase();
+      });
+  }
+
+  function safe(value, fallback) {
+    const text = String(value || '').trim();
+
+    return text || fallback || 'Not available';
+  }
+
+  function paymentBadge(status) {
+    const value = String(status || '').toUpperCase();
+
+    if (value === 'COMPLETED') return 'bg-success';
+    if (value === 'PENDING' || value === 'CREATED' || value === 'APPROVED') return 'bg-warning text-dark';
+    if (value === 'FAILED' || value === 'DECLINED' || value === 'CANCELLED') return 'bg-danger';
+
+    return 'bg-secondary';
+  }
+
+  function fulfillmentBadge(status) {
+    const value = String(status || '').toUpperCase();
+
+    if (value === 'CJ_ORDER_CREATED' || value === 'SHIPPED' || value === 'DELIVERED') return 'bg-success';
+    if (value === 'CJ_ORDER_PENDING' || value === 'PROCESSING') return 'bg-warning text-dark';
+    if (value === 'FAILED' || value === 'CANCELLED' || value === 'RETURNED') return 'bg-danger';
+
+    return 'bg-secondary';
+  }
+
+  function supplierBadge(status) {
+    const value = String(status || '').toUpperCase();
+
+    if (value === 'SUCCESS') return 'bg-success';
+    if (value === 'PENDING' || value === 'PROCESSING') return 'bg-warning text-dark';
+    if (value === 'FAILED') return 'bg-danger';
+
+    return 'bg-secondary';
+  }
+%>
+
+<div class="container-fluid px-0">
+  <div class="bg-light border-bottom py-4">
+    <div class="container-fluid px-3 px-md-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+          <span class="badge bg-success mb-2">
+            CJ Dropshipping Department
+          </span>
+
+          <h1 class="text-primary mb-1">
+            CJ Order Details
+          </h1>
+
+          <p class="text-muted mb-0 text-break">
+            <strong>Order:</strong>
+            <%= ORDER.cjOrderNumber %>
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+          <a href="/admin/cj/orders" class="btn btn-outline-primary rounded-pill px-4">
+            <i class="fas fa-arrow-left me-2"></i>
+            Back To CJ Orders
+          </a>
+
+          <% if (
+                ORDER.paymentStatus === 'COMPLETED' &&
+                ORDER.status === 'PAID' &&
+                ORDER.fulfillmentStatus === 'CJ_ORDER_PENDING' &&
+                paypal.captureStatus === 'COMPLETED' &&
+                paypal.captureId &&
+                supplierOrder.createStatus === 'PENDING'
+              ) { %>
+          <form method="POST" action="/admin/cj/orders/<%= ORDER._id %>/create-supplier-order">
+            <button type="submit" class="btn btn-primary rounded-pill px-4">
+              <i class="fas fa-sync-alt me-2"></i>
+              Create CJ Supplier Order
+            </button>
+          </form>
+          <% } %>
+
+          <% if (
+                ORDER.paymentStatus === 'COMPLETED' &&
+                ORDER.status === 'PAID' &&
+                paypal.captureStatus === 'COMPLETED' &&
+                paypal.captureId &&
+                supplierOrder.createStatus === 'FAILED'
+              ) { %>
+          <form method="POST" action="/admin/cj/orders/<%= ORDER._id %>/retry-supplier-order">
+            <button type="submit" class="btn btn-outline-primary rounded-pill px-4">
+              <i class="fas fa-redo me-2"></i>
+              Retry CJ Supplier Order
+            </button>
+          </form>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-fluid px-3 px-md-4 py-4">
+    <div class="row g-4">
+      <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Status
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="small text-muted">
+                Payment
+              </div>
+
+              <span class="badge <%= paymentBadge(ORDER.paymentStatus) %>">
+                <%= label(ORDER.paymentStatus) %>
+              </span>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Fulfilment
+              </div>
+
+              <span class="badge <%= fulfillmentBadge(ORDER.fulfillmentStatus) %>">
+                <%= label(ORDER.fulfillmentStatus) %>
+              </span>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                CJ supplier order
+              </div>
+
+              <span class="badge <%= supplierBadge(supplierOrder.createStatus) %>">
+                <%= label(supplierOrder.createStatus || 'NOT_CREATED') %>
+              </span>
+            </div>
+
+            <% if (supplierOrder.lastErrorMessage) { %>
+            <div class="alert alert-danger small mb-0">
+              <strong>CJ supplier error:</strong>
+
+              <div class="text-break mt-1">
+                <%= supplierOrder.lastErrorMessage %>
+              </div>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Payment
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="small text-muted">
+                PayPal order ID
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(paypal.orderId) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                PayPal capture ID
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(paypal.captureId) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Capture status
+              </div>
+
+              <div>
+                <%= label(paypal.captureStatus) %>
+              </div>
+            </div>
+
+            <div>
+              <div class="small text-muted">
+                Paid at
+              </div>
+
+              <div>
+                <%= niceDate(ORDER.paidAt || paypal.capturedAt) %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Totals
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                Products excluding VAT
+              </span>
+
+              <strong>
+                <%= formatMoney(ORDER.productSubtotalExVat, ORDER.currency) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                Product VAT
+              </span>
+
+              <strong>
+                <%= formatMoney(ORDER.productVatAmount, ORDER.currency) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                Products including VAT
+              </span>
+
+              <strong>
+                <%= formatMoney(ORDER.productTotalIncVat, ORDER.currency) %>
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">
+                CJ shipping
+              </span>
+
+              <strong>
+                <%= formatMoney(ORDER.shippingTotal, ORDER.currency) %>
+              </strong>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fw-bold">
+                Payable total
+              </span>
+
+              <strong class="text-primary fs-5">
+                <%= formatMoney(ORDER.payableTotal, ORDER.currency) %>
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Delivery Address
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Customer
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe([address.firstName, address.lastName].filter(Boolean).join(' ')) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Email
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(address.email || ORDER.customerEmail) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Phone
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(address.phone) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Company
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(address.companyName) %>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="small text-muted">
+                  Address
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(address.addressLine1) %>
+
+                  <% if (address.houseNumber) { %>
+                    , <%= address.houseNumber %>
+                  <% } %>
+
+                  <% if (address.addressLine2) { %>
+                    , <%= address.addressLine2 %>
+                  <% } %>
+
+                  <% if (address.suburb) { %>
+                    , <%= address.suburb %>
+                  <% } %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  City / Province
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe([address.city, address.province].filter(Boolean).join(', ')) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Postal / Country
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe([address.postalCode, address.countryCode].filter(Boolean).join(', ')) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Tax ID / Consignee ID
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(address.taxId) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  IOSS number
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(address.iossNumber) %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              CJ Shipping / Supplier Order
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Logistics
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(shipping.logisticsName) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Delivery estimate
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(shipping.deliveryEstimate) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Origin / Destination
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe([shipping.originCountryCode, shipping.destinationCountryCode].filter(Boolean).join(' → ')) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Quote request ID
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(shipping.quoteRequestId || ORDER.metadata?.quoteRequestId) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  CJ order ID
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(supplierOrder.cjOrderId) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  CJ order number
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(supplierOrder.cjOrderNumber) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Tracking number
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(supplierOrder.trackingNumber || tracking.trackingNumber) %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="small text-muted">
+                  Tracking status
+                </div>
+
+                <div class="fw-semibold text-break">
+                  <%= safe(tracking.status) %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h2 class="h5 text-white mb-0">
+              Items
+            </h2>
+
+            <span class="small">
+              <%= Number(ORDER.itemCount || 0) %>
+              item<%= Number(ORDER.itemCount || 0) === 1 ? '' : 's' %>
+            </span>
+          </div>
+
+          <div class="card-body p-0">
+            <% if (!items.length) { %>
+            <div class="p-4 text-muted">
+              No CJ items found on this order.
+            </div>
+            <% } else { %>
+            <div class="table-responsive">
+              <table class="table align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Product</th>
+                    <th>Variant</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <% items.forEach(function(item) { %>
+                  <tr>
+                    <td>
+                      <div class="d-flex gap-3 align-items-center">
+                        <% if (item.imageUrl) { %>
+                        <img src="<%= item.imageUrl %>" alt="" class="border rounded" style="width: 56px; height: 56px; object-fit: contain;">
+                        <% } %>
+
+                        <div>
+                          <div class="fw-semibold text-break">
+                            <%= item.name %>
+                          </div>
+
+                          <div class="small text-muted text-break">
+                            CJ product:
+                            <%= item.cjProductId %>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td class="text-break">
+                      <div>
+                        <%= item.variantName %>
+                      </div>
+
+                      <div class="small text-muted">
+                        SKU:
+                        <%= item.variantSku || item.cjVariantId %>
+                      </div>
+                    </td>
+
+                    <td>
+                      <%= Number(item.quantity || 0) %>
+                    </td>
+
+                    <td>
+                      <%= formatMoney(item.unitPriceIncVat, ORDER.currency) %>
+                    </td>
+
+                    <td class="fw-semibold">
+                      <%= formatMoney(item.lineTotalIncVat, ORDER.currency) %>
+                    </td>
+                  </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

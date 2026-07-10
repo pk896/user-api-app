@@ -17,9 +17,7 @@ const {
   retryFailedCjSupplierOrder,
 } = require('../utils/cj/cjOrderService');
 
-const {
-  runAutoCreateCjOrders,
-} = require('../utils/cj/autoCreateCjOrders');
+const { runAutoCreateCjOrders } = require('../utils/cj/autoCreateCjOrders');
 
 const router = express.Router();
 
@@ -65,9 +63,7 @@ function safeError(error) {
 function getAdminId(req) {
   const value = req.admin?._id || req.session?.admin?._id || null;
 
-  return mongoose.Types.ObjectId.isValid(value)
-    ? value
-    : null;
+  return mongoose.Types.ObjectId.isValid(value) ? value : null;
 }
 
 function buildOrderQuery(req) {
@@ -114,15 +110,7 @@ function buildOrderQuery(req) {
     query.fulfillmentStatus = fulfillmentStatus;
   }
 
-  if (
-    [
-      'NOT_CREATED',
-      'PENDING',
-      'PROCESSING',
-      'SUCCESS',
-      'FAILED',
-    ].includes(supplierStatus)
-  ) {
+  if (['NOT_CREATED', 'PENDING', 'PROCESSING', 'SUCCESS', 'FAILED'].includes(supplierStatus)) {
     query['supplierOrder.createStatus'] = supplierStatus;
   }
 
@@ -245,6 +233,107 @@ router.get('/admin/cj/orders', async (req, res) => {
   }
 });
 
+router.get('/admin/cj/orders/:orderId', async (req, res) => {
+  const orderId = safeString(req.params.orderId, 100);
+
+  try {
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      req.flash('error', 'Invalid CJ order ID.');
+
+      return res.redirect('/admin/cj/orders');
+    }
+
+    const order = await CjOrder.findOne({
+      _id: orderId,
+      department: 'CJ',
+    })
+      .select(
+        [
+          'cjOrderNumber',
+          'customerEmail',
+          'status',
+          'paymentStatus',
+          'fulfillmentStatus',
+          'currency',
+          'vatRate',
+          'items',
+          'itemCount',
+          'productSubtotalExVat',
+          'productVatAmount',
+          'productTotalIncVat',
+          'shippingTotal',
+          'payableTotal',
+
+          /*
+           * Do not select the complete deliveryAddress parent together
+           * with its child fields because MongoDB treats that as a path
+           * collision. Select each address field explicitly.
+           *
+           * taxId and iossNumber are select:false in models/CjOrder.js,
+           * so they must use the leading "+".
+           */
+          'deliveryAddress.firstName',
+          'deliveryAddress.lastName',
+          'deliveryAddress.email',
+          'deliveryAddress.phone',
+          'deliveryAddress.companyName',
+          'deliveryAddress.addressLine1',
+          'deliveryAddress.addressLine2',
+          'deliveryAddress.houseNumber',
+          'deliveryAddress.suburb',
+          'deliveryAddress.city',
+          'deliveryAddress.province',
+          'deliveryAddress.postalCode',
+          'deliveryAddress.countryCode',
+          '+deliveryAddress.taxId',
+          '+deliveryAddress.iossNumber',
+
+          'selectedShipping',
+          'payer',
+          'paypal.orderId',
+          'paypal.orderStatus',
+          'paypal.captureId',
+          'paypal.captureStatus',
+          'paypal.amount',
+          'paypal.capturedAt',
+          'paypal.purchaseUnitReferenceId',
+          'paypal.customId',
+          'paypal.invoiceId',
+          'supplierOrder',
+          'tracking',
+          'metadata',
+          'paidAt',
+          'cancelledAt',
+          'lastPaymentErrorCode',
+          'lastPaymentErrorMessage',
+          'createdAt',
+          'updatedAt',
+        ].join(' '),
+      )
+      .lean();
+
+    if (!order) {
+      req.flash('error', 'CJ order could not be found.');
+
+      return res.redirect('/admin/cj/orders');
+    }
+
+    return res.render('admin/cj/order-details', {
+      layout: 'layout',
+      title: `CJ Order ${order.cjOrderNumber}`,
+      active: 'admin-cj-orders',
+      fullWidthPage: true,
+      order,
+    });
+  } catch (error) {
+    console.error('[CJ orders admin] Detail failed:', error?.stack || error);
+
+    req.flash('error', 'CJ order details could not be loaded.');
+
+    return res.redirect('/admin/cj/orders');
+  }
+});
+
 router.post('/admin/cj/orders/run-auto-create', async (req, res) => {
   try {
     const result = await runAutoCreateCjOrders({
@@ -286,6 +375,9 @@ router.post('/admin/cj/orders/run-auto-create', async (req, res) => {
 
 router.post('/admin/cj/orders/:orderId/create-supplier-order', async (req, res) => {
   const orderId = safeString(req.params.orderId, 100);
+  const redirectTo = mongoose.Types.ObjectId.isValid(orderId)
+    ? `/admin/cj/orders/${encodeURIComponent(orderId)}`
+    : '/admin/cj/orders';
 
   try {
     const result = await createCjSupplierOrderForOrderId(orderId);
@@ -310,7 +402,7 @@ router.post('/admin/cj/orders/:orderId/create-supplier-order', async (req, res) 
       req.flash('error', `CJ supplier order failed: ${result.message}`);
     }
 
-    return res.redirect('/admin/cj/orders');
+    return res.redirect(redirectTo);
   } catch (error) {
     const safe = safeError(error);
 
@@ -325,12 +417,15 @@ router.post('/admin/cj/orders/:orderId/create-supplier-order', async (req, res) 
 
     req.flash('error', `CJ supplier order could not be created: ${safe.message}`);
 
-    return res.redirect('/admin/cj/orders');
+    return res.redirect(redirectTo);
   }
 });
 
 router.post('/admin/cj/orders/:orderId/retry-supplier-order', async (req, res) => {
   const orderId = safeString(req.params.orderId, 100);
+  const redirectTo = mongoose.Types.ObjectId.isValid(orderId)
+    ? `/admin/cj/orders/${encodeURIComponent(orderId)}`
+    : '/admin/cj/orders';
 
   try {
     const result = await retryFailedCjSupplierOrder(orderId);
@@ -355,7 +450,7 @@ router.post('/admin/cj/orders/:orderId/retry-supplier-order', async (req, res) =
       req.flash('error', `CJ supplier order retry failed: ${result.message}`);
     }
 
-    return res.redirect('/admin/cj/orders');
+    return res.redirect(redirectTo);
   } catch (error) {
     const safe = safeError(error);
 
@@ -370,7 +465,7 @@ router.post('/admin/cj/orders/:orderId/retry-supplier-order', async (req, res) =
 
     req.flash('error', `CJ supplier order retry could not run: ${safe.message}`);
 
-    return res.redirect('/admin/cj/orders');
+    return res.redirect(redirectTo);
   }
 });
 
