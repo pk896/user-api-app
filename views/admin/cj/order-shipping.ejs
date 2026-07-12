@@ -1,0 +1,305 @@
+<!-- views/admin/cj/order-shipping.ejs -->
+<%
+  const ORDER = order && typeof order === 'object' ? order : {};
+  const QUOTE = quote && typeof quote === 'object' ? quote : {};
+  const address = ORDER.deliveryAddress || {};
+  const currentShipping = ORDER.selectedShipping || {};
+  const options = Array.isArray(QUOTE.options) ? QUOTE.options : [];
+
+  function moneyValue(value) {
+    if (value && typeof value === 'object') {
+      const parsedObjectValue = Number(value.value || 0);
+
+      return Number.isFinite(parsedObjectValue) ? parsedObjectValue : 0;
+    }
+
+    const parsed = Number(value || 0);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function formatMoney(value, currency) {
+    const amount = moneyValue(value);
+    const safeCurrency = String(currency || process.env.BASE_CURRENCY || ORDER.currency || 'USD')
+      .trim()
+      .toUpperCase();
+
+    try {
+      const formatted = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: safeCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(amount);
+
+      if (safeCurrency === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return safeCurrency + ' ' + amount.toFixed(2);
+    }
+  }
+
+  function safe(value, fallback) {
+    const text = String(value || '').trim();
+
+    return text || fallback || 'Not available';
+  }
+
+  function niceDate(value) {
+    if (!value) return 'Not available';
+
+    try {
+      return new Date(value).toLocaleString('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return String(value || '');
+    }
+  }
+%>
+
+<div class="container-fluid px-0">
+  <div class="bg-light border-bottom py-4">
+    <div class="container-fluid px-3 px-md-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+          <span class="badge bg-success mb-2">
+            CJ Dropshipping Department
+          </span>
+
+          <h1 class="text-primary mb-1">
+            Recalculate CJ Shipping
+          </h1>
+
+          <p class="text-muted mb-0 text-break">
+            <strong>Order:</strong>
+            <%= ORDER.cjOrderNumber %>
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+          <a href="/admin/cj/orders/<%= ORDER._id %>" class="btn btn-outline-primary rounded-pill px-4">
+            <i class="fas fa-arrow-left me-2"></i>
+            Back To Order Details
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-fluid px-3 px-md-4 py-4">
+    <div class="alert alert-warning border-0 shadow-sm">
+      <strong>Important:</strong>
+      This saves a fresh CJ logistics method for supplier-order creation.
+      It does not change the paid PayPal amount, product totals, VAT, or customer payable total.
+    </div>
+
+    <div class="row g-4">
+      <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Edited Delivery Details
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="small text-muted">
+                Customer
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe([address.firstName, address.lastName].filter(Boolean).join(' ')) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Address
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(address.addressLine1) %>
+                <% if (address.houseNumber) { %>
+                , <%= address.houseNumber %>
+                <% } %>
+                <% if (address.suburb) { %>
+                , <%= address.suburb %>
+                <% } %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                City / Province
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe([address.city, address.province].filter(Boolean).join(', ')) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Postal / Country
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe([address.postalCode, address.countryCode].filter(Boolean).join(', ')) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Tax ID / Consignee ID
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(address.taxId) %>
+              </div>
+            </div>
+
+            <div>
+              <div class="small text-muted">
+                IOSS number
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(address.iossNumber) %>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Current Saved CJ Shipping
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="small text-muted">
+                Logistics
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(currentShipping.logisticsName) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Delivery estimate
+              </div>
+
+              <div class="fw-semibold text-break">
+                <%= safe(currentShipping.deliveryEstimate) %>
+              </div>
+            </div>
+
+            <div>
+              <div class="small text-muted">
+                Saved shipping amount
+              </div>
+
+              <div class="fw-semibold">
+                <%= formatMoney(currentShipping.shippingAmount, currentShipping.currency || ORDER.currency) %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-8">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between gap-2">
+            <h2 class="h5 text-white mb-0">
+              Fresh CJ Shipping Options
+            </h2>
+
+            <span class="small">
+              Quote expires:
+              <%= niceDate(QUOTE.expiresAt) %>
+            </span>
+          </div>
+
+          <div class="card-body">
+            <% if (!options.length) { %>
+            <div class="alert alert-danger mb-0">
+              CJ did not return any shipping methods for this edited address.
+            </div>
+            <% } else { %>
+            <form method="POST" action="/admin/cj/orders/<%= ORDER._id %>/shipping/select">
+              <div class="vstack gap-3">
+                <% options.forEach(function(option, index) { %>
+                <label class="border rounded-3 p-3 d-block">
+                  <div class="d-flex gap-3 align-items-start">
+                    <input class="form-check-input mt-1" type="radio" name="optionId" value="<%= option.id %>" <%= index === 0 ? 'checked' : '' %> required>
+
+                    <div class="flex-grow-1">
+                      <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                        <div>
+                          <div class="fw-bold text-primary">
+                            <%= option.logisticsName %>
+                          </div>
+
+                          <% if (option.deliveryEstimate) { %>
+                          <div class="small text-muted">
+                            Delivery estimate:
+                            <%= option.deliveryEstimate %>
+                          </div>
+                          <% } %>
+
+                          <% if (option.message) { %>
+                          <div class="small text-muted text-break mt-1">
+                            <%= option.message %>
+                          </div>
+                          <% } %>
+                        </div>
+
+                        <div class="text-md-end">
+                          <div class="fw-bold">
+                            <%= formatMoney(option.shippingAmount, option.currency) %>
+                          </div>
+
+                          <div class="small text-muted">
+                            Freight USD:
+                            $<%= Number(option.freightUsd || 0).toFixed(2) %>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </label>
+                <% }) %>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mt-4">
+                <button type="submit" class="btn btn-primary rounded-pill px-4">
+                  <i class="fas fa-save me-2"></i>
+                  Save Selected CJ Shipping
+                </button>
+
+                <a href="/admin/cj/orders/<%= ORDER._id %>" class="btn btn-outline-primary rounded-pill px-4">
+                  Cancel
+                </a>
+              </div>
+            </form>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

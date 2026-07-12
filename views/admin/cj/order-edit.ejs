@@ -1,0 +1,296 @@
+<!-- views/admin/cj/order-edit.ejs -->
+<%
+  const ORDER = order && typeof order === 'object' ? order : {};
+  const address = ORDER.deliveryAddress || {};
+  const supplierOrder = ORDER.supplierOrder || {};
+  const paypal = ORDER.paypal || {};
+
+  function safe(value, fallback) {
+    const text = String(value || '').trim();
+
+    return text || fallback || '';
+  }
+
+  function label(value) {
+    return String(value || 'Not available')
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/^\w/, function(letter) {
+        return letter.toUpperCase();
+      });
+  }
+
+  const canRetryAfterEdit =
+    ORDER.status === 'PAID' &&
+    ORDER.paymentStatus === 'COMPLETED' &&
+    paypal.captureStatus === 'COMPLETED' &&
+    paypal.captureId &&
+    supplierOrder.createStatus === 'FAILED';
+%>
+
+<div class="container-fluid px-0">
+  <div class="bg-light border-bottom py-4">
+    <div class="container-fluid px-3 px-md-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+          <span class="badge bg-success mb-2">
+            CJ Dropshipping Department
+          </span>
+
+          <h1 class="text-primary mb-1">
+            Edit CJ Order Delivery Details
+          </h1>
+
+          <p class="text-muted mb-0 text-break">
+            <strong>Order:</strong>
+            <%= ORDER.cjOrderNumber %>
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+          <a href="/admin/cj/orders/<%= ORDER._id %>" class="btn btn-outline-primary rounded-pill px-4">
+            <i class="fas fa-arrow-left me-2"></i>
+            Back To Order Details
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-fluid px-3 px-md-4 py-4">
+    <div class="alert alert-warning border-0 shadow-sm">
+      <strong>Important:</strong>
+      Edit only delivery details needed before creating or retrying the CJ supplier order.
+      Do not use this page to change paid totals, products, PayPal payment, or selected shipping.
+    </div>
+
+    <div class="row g-4">
+      <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Current Status
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="small text-muted">
+                Payment
+              </div>
+
+              <div class="fw-semibold">
+                <%= label(ORDER.paymentStatus) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                Fulfilment
+              </div>
+
+              <div class="fw-semibold">
+                <%= label(ORDER.fulfillmentStatus) %>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">
+                CJ supplier order
+              </div>
+
+              <div class="fw-semibold">
+                <%= label(supplierOrder.createStatus || 'NOT_CREATED') %>
+              </div>
+            </div>
+
+            <% if (supplierOrder.lastErrorMessage) { %>
+            <div class="alert alert-danger small mb-0">
+              <strong>Last CJ error:</strong>
+
+              <div class="text-break mt-1">
+                <%= supplierOrder.lastErrorMessage %>
+              </div>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-8">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Delivery Details
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <form method="POST" action="/admin/cj/orders/<%= ORDER._id %>/edit" class="row g-3">
+              <div class="col-12 col-md-6">
+                <label for="firstName" class="form-label fw-semibold">
+                  First name
+                </label>
+
+                <input id="firstName" name="firstName" type="text" class="form-control" value="<%= safe(address.firstName) %>" required>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="lastName" class="form-label fw-semibold">
+                  Last name
+                </label>
+
+                <input id="lastName" name="lastName" type="text" class="form-control" value="<%= safe(address.lastName) %>" required>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="email" class="form-label fw-semibold">
+                  Email
+                </label>
+
+                <input id="email" name="email" type="email" class="form-control" value="<%= safe(address.email || ORDER.customerEmail) %>" required>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="phone" class="form-label fw-semibold">
+                  Phone
+                </label>
+
+                <input id="phone" name="phone" type="text" class="form-control" value="<%= safe(address.phone) %>" required>
+
+                <% if (String(address.countryCode || '').toUpperCase() === 'ZA') { %>
+                <div class="form-text">
+                  South Africa CJ phone can be 0632207320, 632207320, or 27632207320.
+                  Kasyora saves the CJ-safe format.
+                </div>
+                <% } %>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="countryCode" class="form-label fw-semibold">
+                  Country
+                </label>
+
+                <input id="countryCode" type="text" class="form-control" value="<%= safe(address.countryCode) %>" readonly>
+
+                <div class="form-text">
+                  Country is locked because the customer already paid using this CJ shipping quote.
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="province" class="form-label fw-semibold">
+                  Province or state
+                </label>
+
+                <input id="province" name="province" type="text" class="form-control" value="<%= safe(address.province) %>" required>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="city" class="form-label fw-semibold">
+                  City
+                </label>
+
+                <input id="city" name="city" type="text" class="form-control" value="<%= safe(address.city) %>" required>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="suburb" class="form-label fw-semibold">
+                  Suburb
+                </label>
+
+                <input id="suburb" name="suburb" type="text" class="form-control" value="<%= safe(address.suburb) %>">
+              </div>
+
+              <div class="col-12 col-md-8">
+                <label for="addressLine1" class="form-label fw-semibold">
+                  Street address
+                </label>
+
+                <input id="addressLine1" name="addressLine1" type="text" class="form-control" value="<%= safe(address.addressLine1) %>" required>
+              </div>
+
+              <div class="col-12 col-md-4">
+                <label for="houseNumber" class="form-label fw-semibold">
+                  House number
+                </label>
+
+                <input id="houseNumber" name="houseNumber" type="text" class="form-control" value="<%= safe(address.houseNumber) %>">
+              </div>
+
+              <div class="col-12">
+                <label for="addressLine2" class="form-label fw-semibold">
+                  Apartment, suite or additional address
+                </label>
+
+                <input id="addressLine2" name="addressLine2" type="text" class="form-control" value="<%= safe(address.addressLine2) %>">
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="postalCode" class="form-label fw-semibold">
+                  Postal code
+                </label>
+
+                <input id="postalCode" name="postalCode" type="text" class="form-control" value="<%= safe(address.postalCode) %>" required>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="companyName" class="form-label fw-semibold">
+                  Company name
+                </label>
+
+                <input id="companyName" name="companyName" type="text" class="form-control" value="<%= safe(address.companyName) %>">
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="taxId" class="form-label fw-semibold">
+                  Tax ID / Consignee ID
+                </label>
+
+                <input id="taxId" name="taxId" type="text" class="form-control" value="<%= safe(address.taxId) %>">
+
+                <% if (String(address.countryCode || '').toUpperCase() === 'ZA') { %>
+                <div class="form-text">
+                  South Africa CJ requires exactly 13 digits with no spaces, letters, hyphens, or special characters.
+                </div>
+                <% } %>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label for="iossNumber" class="form-label fw-semibold">
+                  IOSS number
+                </label>
+
+                <input id="iossNumber" name="iossNumber" type="text" class="form-control" value="<%= safe(address.iossNumber) %>">
+
+                <div class="form-text">
+                  Use only if this CJ destination requires IOSS and Kasyora has a valid configured IOSS number.
+                </div>
+              </div>
+
+              <div class="col-12 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary rounded-pill px-4">
+                  <i class="fas fa-save me-2"></i>
+                  Save Delivery Details
+                </button>
+
+                <a href="/admin/cj/orders/<%= ORDER._id %>" class="btn btn-outline-primary rounded-pill px-4">
+                  Cancel
+                </a>
+              </div>
+            </form>
+
+            <% if (canRetryAfterEdit) { %>
+            <hr>
+
+            <div class="alert alert-info mb-0">
+              After saving corrected details, go back to the order details page and click
+              <strong>Retry CJ Supplier Order</strong>.
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

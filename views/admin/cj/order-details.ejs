@@ -5,8 +5,65 @@
   const shipping = ORDER.selectedShipping || {};
   const paypal = ORDER.paypal || {};
   const supplierOrder = ORDER.supplierOrder || {};
-  const tracking = ORDER.tracking || {};
+    const tracking = ORDER.tracking || {};
   const items = Array.isArray(ORDER.items) ? ORDER.items : [];
+
+  const canEditDeliveryDetails =
+    String(ORDER.status || '').toUpperCase() === 'PAID' &&
+    String(ORDER.paymentStatus || '').toUpperCase() === 'COMPLETED' &&
+    ['CJ_ORDER_PENDING', 'FAILED'].includes(
+      String(ORDER.fulfillmentStatus || '').toUpperCase()
+    ) &&
+    ['PENDING', 'FAILED'].includes(
+      String(supplierOrder.createStatus || '').toUpperCase()
+    );
+
+  const shippingRecalculationRequired =
+    ORDER.metadata &&
+    ORDER.metadata.adminShippingRequired === true;
+
+  const shippingAdjustment =
+    ORDER.metadata && typeof ORDER.metadata === 'object'
+      ? ORDER.metadata.adminShippingAdjustment || null
+      : null;
+
+  const hasShippingAdjustment =
+    shippingAdjustment &&
+    typeof shippingAdjustment === 'object';
+
+  const originalPaidShippingTotal =
+    hasShippingAdjustment && shippingAdjustment.originalPaidShippingTotal
+      ? shippingAdjustment.originalPaidShippingTotal
+      : ORDER.shippingTotal;
+
+  const adminFulfillmentShippingAmount =
+    hasShippingAdjustment && shippingAdjustment.adminFulfillmentShippingAmount
+      ? shippingAdjustment.adminFulfillmentShippingAmount
+      : shipping.shippingAmount;
+
+  const shippingDifference =
+    hasShippingAdjustment && shippingAdjustment.difference
+      ? shippingAdjustment.difference
+      : {
+          value: moneyValue(adminFulfillmentShippingAmount) - moneyValue(originalPaidShippingTotal),
+          currency: moneyCurrency(adminFulfillmentShippingAmount, ORDER.currency),
+        };
+
+  const shippingDifferenceValue = moneyValue(shippingDifference);
+
+  const shippingDifferenceLabel =
+    shippingDifferenceValue > 0
+      ? 'Kasyora loss / extra cost'
+      : shippingDifferenceValue < 0
+        ? 'Kasyora gain / saving'
+        : 'No shipping difference';
+
+  const shippingDifferenceClass =
+    shippingDifferenceValue > 0
+      ? 'text-danger'
+      : shippingDifferenceValue < 0
+        ? 'text-success'
+        : 'text-muted';
 
   function moneyValue(money) {
     if (money && typeof money === 'object') {
@@ -138,7 +195,20 @@
             Back To CJ Orders
           </a>
 
+          <% if (canEditDeliveryDetails) { %>
+          <a href="/admin/cj/orders/<%= ORDER._id %>/edit" class="btn btn-primary rounded-pill px-4">
+            <i class="fas fa-edit me-2"></i>
+            Edit Delivery Details
+          </a>
+
+          <a href="/admin/cj/orders/<%= ORDER._id %>/shipping" class="btn btn-outline-primary rounded-pill px-4">
+            <i class="fas fa-truck me-2"></i>
+            Recalculate CJ Shipping
+          </a>
+          <% } %>
+
           <% if (
+                !shippingRecalculationRequired &&
                 ORDER.paymentStatus === 'COMPLETED' &&
                 ORDER.status === 'PAID' &&
                 ORDER.fulfillmentStatus === 'CJ_ORDER_PENDING' &&
@@ -155,6 +225,7 @@
           <% } %>
 
           <% if (
+                !shippingRecalculationRequired &&
                 ORDER.paymentStatus === 'COMPLETED' &&
                 ORDER.status === 'PAID' &&
                 paypal.captureStatus === 'COMPLETED' &&
@@ -174,6 +245,13 @@
   </div>
 
   <div class="container-fluid px-3 px-md-4 py-4">
+    <% if (shippingRecalculationRequired) { %>
+    <div class="alert alert-warning border-0 shadow-sm">
+      <strong>Fresh CJ shipping required:</strong>
+      Delivery details were edited after payment. Recalculate CJ Shipping and save a fresh shipping method before creating or retrying the CJ supplier order.
+    </div>
+    <% } %>
+
     <div class="row g-4">
       <div class="col-12 col-xl-4">
         <div class="card border-0 shadow-sm h-100">
@@ -283,7 +361,7 @@
         <div class="card border-0 shadow-sm h-100">
           <div class="card-header bg-primary text-white">
             <h2 class="h5 text-white mb-0">
-              Totals
+              Customer Paid Totals
             </h2>
           </div>
 
@@ -320,7 +398,7 @@
 
             <div class="d-flex justify-content-between mb-2">
               <span class="text-muted">
-                CJ shipping
+                Original paid CJ shipping
               </span>
 
               <strong>
@@ -332,12 +410,102 @@
 
             <div class="d-flex justify-content-between align-items-center">
               <span class="fw-bold">
-                Payable total
+                Original PayPal paid total
               </span>
 
               <strong class="text-primary fs-5">
                 <%= formatMoney(ORDER.payableTotal, ORDER.currency) %>
               </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between gap-2">
+            <h2 class="h5 text-white mb-0">
+              Admin Fulfilment Shipping Totals
+            </h2>
+
+            <% if (shipping.selectedByAdmin || ORDER.metadata?.adminShippingRecalculatedAt) { %>
+            <span class="small">
+              Recalculated by admin
+            </span>
+            <% } %>
+          </div>
+
+          <div class="card-body">
+            <div class="row g-4">
+              <div class="col-12 col-lg-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-muted mb-1">
+                    Customer paid checkout shipping
+                  </div>
+
+                  <div class="fw-bold fs-5">
+                    <%= formatMoney(originalPaidShippingTotal, ORDER.currency) %>
+                  </div>
+
+                  <div class="small text-muted mt-2">
+                    This is the shipping amount included in the captured PayPal payment.
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-muted mb-1">
+                    Kasyora CJ fulfilment shipping
+                  </div>
+
+                  <div class="fw-bold fs-5">
+                    <%= formatMoney(adminFulfillmentShippingAmount, ORDER.currency) %>
+                  </div>
+
+                  <div class="small text-muted mt-2">
+                    This is the admin-selected CJ shipping cost used for supplier-order fulfilment.
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-muted mb-1">
+                    <%= shippingDifferenceLabel %>
+                  </div>
+
+                  <div class="fw-bold fs-5 <%= shippingDifferenceClass %>">
+                    <%= formatMoney(shippingDifference, ORDER.currency) %>
+                  </div>
+
+                  <div class="small text-muted mt-2">
+                    <% if (shippingDifferenceValue > 0) { %>
+                    New CJ fulfilment shipping is higher than the customer paid shipping. Kasyora absorbs this extra cost unless handled manually.
+                    <% } else if (shippingDifferenceValue < 0) { %>
+                    New CJ fulfilment shipping is lower than the customer paid shipping. Kasyora has a shipping saving unless a manual refund is issued.
+                    <% } else { %>
+                    New CJ fulfilment shipping matches the customer paid shipping.
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="alert alert-info mb-0">
+                  <strong>Accounting note:</strong>
+                  Customer paid totals are not changed after PayPal capture. Admin fulfilment shipping is tracked separately so Kasyora can see the shipping gain or loss.
+                </div>
+              </div>
+
+              <% if (hasShippingAdjustment && shippingAdjustment.merchantAction) { %>
+              <div class="col-12">
+                <div class="alert alert-light border mb-0">
+                  <strong>Suggested merchant action:</strong>
+                  <%= shippingAdjustment.merchantAction %>
+                </div>
+              </div>
+              <% } %>
             </div>
           </div>
         </div>
@@ -402,15 +570,15 @@
                   <%= safe(address.addressLine1) %>
 
                   <% if (address.houseNumber) { %>
-                    , <%= address.houseNumber %>
+                  , <%= address.houseNumber %>
                   <% } %>
 
                   <% if (address.addressLine2) { %>
-                    , <%= address.addressLine2 %>
+                  , <%= address.addressLine2 %>
                   <% } %>
 
                   <% if (address.suburb) { %>
-                    , <%= address.suburb %>
+                  , <%= address.suburb %>
                   <% } %>
                 </div>
               </div>
@@ -507,6 +675,12 @@
                 <div class="fw-semibold text-break">
                   <%= safe(shipping.quoteRequestId || ORDER.metadata?.quoteRequestId) %>
                 </div>
+
+                <% if (shipping.selectedByAdmin || ORDER.metadata?.adminShippingRecalculatedAt) { %>
+                <div class="small text-success mt-1">
+                  Recalculated and selected by admin
+                </div>
+                <% } %>
               </div>
 
               <div class="col-12 col-md-6">
