@@ -80,10 +80,7 @@ function money(value, currency) {
   return {
     value: round2(value),
 
-    currency: safeString(
-      currency || process.env.BASE_CURRENCY || 'USD',
-      3,
-    ).toUpperCase(),
+    currency: safeString(currency || process.env.BASE_CURRENCY || 'USD', 3).toUpperCase(),
   };
 }
 
@@ -357,11 +354,88 @@ function buildAdminShippingOrderSelectFields() {
   ].join(' ');
 }
 
-function normalizeAdminQuoteOptions(options, productTotalIncVat) {
-  return (Array.isArray(options) ? options : []).map((option) => {
+function normalizeShippingMethodIdentity(value) {
+  return safeString(value, 300).toLowerCase().replace(/\s+/g, ' ');
+}
+
+function shippingOptionMatchesSavedMethod(option, savedShipping) {
+  if (!option || !savedShipping) {
+    return false;
+  }
+
+  const optionIdentifiers = [option.id, option.optionId, option.logisticsOptionId, option.channelId]
+    .map((value) => safeString(value, 300))
+    .filter(Boolean);
+
+  const savedIdentifiers = [
+    savedShipping.id,
+    savedShipping.optionId,
+    savedShipping.logisticsOptionId,
+    savedShipping.channelId,
+  ]
+    .map((value) => safeString(value, 300))
+    .filter(Boolean);
+
+  const hasMatchingIdentifier = optionIdentifiers.some((identifier) => {
+    return savedIdentifiers.includes(identifier);
+  });
+
+  if (hasMatchingIdentifier) {
+    return true;
+  }
+
+  const optionName = normalizeShippingMethodIdentity(option.logisticsName);
+
+  const savedName = normalizeShippingMethodIdentity(savedShipping.logisticsName);
+
+  if (!optionName || !savedName || optionName !== savedName) {
+    return false;
+  }
+
+  const optionModel = normalizeShippingMethodIdentity(option.logisticsModel);
+
+  const savedModel = normalizeShippingMethodIdentity(savedShipping.logisticsModel);
+
+  /*
+   * When both methods have a logistics model, require the models
+   * to match as well. If CJ did not supply a model on either side,
+   * the matching logistics name is the safest available fallback.
+   */
+  if (optionModel && savedModel) {
+    return optionModel === savedModel;
+  }
+
+  return true;
+}
+
+function normalizeAdminQuoteOptions(
+  options,
+  productTotalIncVat,
+  { customerPaidShippingValue = 0, customerPaidShippingCurrency = '', savedShipping = null } = {},
+) {
+  const paidShippingValue = round2(Math.max(0, safeNumber(customerPaidShippingValue, 0)));
+
+  const paidShippingCurrency = moneyCurrency(
+    {
+      currency: customerPaidShippingCurrency,
+    },
+    process.env.BASE_CURRENCY || 'USD',
+  );
+
+  const normalizedOptions = (Array.isArray(options) ? options : []).map((option) => {
     const shippingAmount = round2(option?.freight?.value);
 
-    return {
+    const currency = safeString(
+      option?.freight?.currency || process.env.BASE_CURRENCY || 'USD',
+      3,
+    ).toUpperCase();
+
+    const sameCurrency = currency === paidShippingCurrency;
+
+    const isWithinCustomerPaidShipping =
+      sameCurrency && shippingAmount <= paidShippingValue + 0.009;
+
+    const normalizedOption = {
       id: safeString(option?.id, 300),
 
       logisticsName: safeString(option?.logisticsName, 300),
@@ -380,10 +454,7 @@ function normalizeAdminQuoteOptions(options, productTotalIncVat) {
 
       shippingAmount,
 
-      currency: safeString(
-        option?.freight?.currency || process.env.BASE_CURRENCY || 'USD',
-        3,
-      ).toUpperCase(),
+      currency,
 
       taxesFeeUsd: round2(option?.taxesFeeUsd),
 
@@ -413,8 +484,64 @@ function normalizeAdminQuoteOptions(options, productTotalIncVat) {
       productTotalIncVat: round2(productTotalIncVat),
 
       payableTotal: round2(productTotalIncVat + shippingAmount),
+
+      customerPaidShippingValue: paidShippingValue,
+
+      customerPaidShippingCurrency: paidShippingCurrency,
+
+      isWithinCustomerPaidShipping,
+
+      isSameAsPreviousShipping: false,
+
+      isRecommended: false,
+
+      recommendationReason: '',
     };
+
+    normalizedOption.isSameAsPreviousShipping = shippingOptionMatchesSavedMethod(
+      normalizedOption,
+      savedShipping,
+    );
+
+    return normalizedOption;
   });
+
+  /*
+   * CJ logistics service already returns options from cheapest
+   * to most expensive, but sort again here so this admin rule
+   * does not depend on another service's ordering.
+   */
+  normalizedOptions.sort((left, right) => {
+    return safeNumber(left?.shippingAmount, 0) - safeNumber(right?.shippingAmount, 0);
+  });
+
+  const eligibleOptions = normalizedOptions.filter(
+    (option) => option.isWithinCustomerPaidShipping === true,
+  );
+
+  /*
+   * Recommendation priority:
+   *
+   * 1. The exact previously selected method, when CJ still offers it
+   *    and its fresh price is not above what the customer paid.
+   * 2. Otherwise, the cheapest method that does not exceed the
+   *    customer's paid shipping amount.
+   */
+  const matchingPreviousOption = eligibleOptions.find(
+    (option) => option.isSameAsPreviousShipping === true,
+  );
+
+  const recommendedOption = matchingPreviousOption || eligibleOptions[0] || null;
+
+  if (recommendedOption) {
+    recommendedOption.isRecommended = true;
+
+    recommendedOption.recommendationReason = matchingPreviousOption
+      ? 'Same method previously selected by the customer'
+      : 'Cheapest method within the customer-paid shipping limit';
+  }
+
+  return normalizedOptions;
 }
 
 function getAdminCjShippingQuoteStore(req) {
@@ -895,10 +1022,15 @@ router.post('/admin/cj/orders/:orderId/edit', async (req, res) => {
 
     req.flash(
       'success',
-      'CJ order delivery details updated. Recalculate CJ Shipping before retrying the CJ supplier order.',
+      'CJ order delivery details updated. You must now save a fresh CJ shipping method before the supplier order can be created or retried.',
     );
 
-    return res.redirect(redirectTo);
+    /*
+     * Continue directly into the mandatory shipping recalculation.
+     * The supplier-order service remains blocked until an eligible
+     * fresh method is selected and adminShippingRequired becomes false.
+     */
+    return res.redirect(`/admin/cj/orders/${encodeURIComponent(orderId)}/shipping`);
   } catch (error) {
     const safe = safeError(error);
 
@@ -973,7 +1105,26 @@ router.get('/admin/cj/orders/:orderId/shipping', async (req, res) => {
 
     const productTotalIncVat = round2(moneyValue(order.productTotalIncVat));
 
-    const options = normalizeAdminQuoteOptions(freight.options, productTotalIncVat);
+    /*
+     * The limit comes from shippingTotal because that is the
+     * shipping amount included in the already captured customer order.
+     *
+     * Do not use selectedShipping.shippingAmount as the limit because
+     * selectedShipping can later be replaced by an admin fulfilment
+     * method while shippingTotal must remain the original paid amount.
+     */
+    const customerPaidShippingValue = round2(moneyValue(order.shippingTotal));
+
+    const customerPaidShippingCurrency = moneyCurrency(
+      order.shippingTotal,
+      order.currency || process.env.BASE_CURRENCY || 'USD',
+    );
+
+    const options = normalizeAdminQuoteOptions(freight.options, productTotalIncVat, {
+      customerPaidShippingValue,
+      customerPaidShippingCurrency,
+      savedShipping: order.selectedShipping,
+    });
 
     if (!options.length) {
       req.flash(
@@ -983,6 +1134,13 @@ router.get('/admin/cj/orders/:orderId/shipping', async (req, res) => {
 
       return res.redirect(`/admin/cj/orders/${encodeURIComponent(orderId)}`);
     }
+
+    const eligibleOptions = options.filter(
+      (option) => option.isWithinCustomerPaidShipping === true,
+    );
+
+    const recommendedOption =
+      eligibleOptions.find((option) => option.isRecommended === true) || null;
 
     const quote = {
       source: 'CJ',
@@ -996,6 +1154,16 @@ router.get('/admin/cj/orders/:orderId/shipping', async (req, res) => {
       currency: safeString(process.env.BASE_CURRENCY || order.currency || 'USD', 3).toUpperCase(),
 
       productTotalIncVat,
+
+      customerPaidShippingValue,
+
+      customerPaidShippingCurrency,
+
+      eligibleOptionIds: eligibleOptions
+        .map((option) => safeString(option.id, 300))
+        .filter(Boolean),
+
+      recommendedOptionId: safeString(recommendedOption?.id, 300),
 
       options,
 
@@ -1112,6 +1280,56 @@ router.post('/admin/cj/orders/:orderId/shipping/select', async (req, res) => {
       );
 
       return res.redirect(redirectTo);
+    }
+
+    const customerPaidShippingValue = round2(moneyValue(order.shippingTotal));
+
+    const customerPaidShippingCurrency = moneyCurrency(
+      order.shippingTotal,
+      order.currency || process.env.BASE_CURRENCY || 'USD',
+    );
+
+    const selectedShippingValue = round2(safeNumber(selectedOption.shippingAmount, 0));
+
+    const selectedShippingCurrency = moneyCurrency(
+      {
+        currency: selectedOption.currency || quote.currency,
+      },
+      process.env.BASE_CURRENCY || 'USD',
+    );
+
+    if (selectedShippingCurrency !== customerPaidShippingCurrency) {
+      req.flash(
+        'error',
+        'The selected CJ shipping currency does not match the currency used for the customer-paid shipping amount. Please recalculate shipping.',
+      );
+
+      return res.redirect(`/admin/cj/orders/${encodeURIComponent(orderId)}/shipping`);
+    }
+
+    if (
+      selectedOption.isWithinCustomerPaidShipping !== true ||
+      selectedShippingValue > customerPaidShippingValue + 0.009
+    ) {
+      req.flash(
+        'error',
+        `You cannot select this CJ shipping method because it costs more than the shipping amount paid by the customer. Select a method costing no more than ${customerPaidShippingCurrency} ${customerPaidShippingValue.toFixed(2)}.`,
+      );
+
+      return res.redirect(`/admin/cj/orders/${encodeURIComponent(orderId)}/shipping`);
+    }
+
+    const eligibleOptionIds = Array.isArray(quote.eligibleOptionIds)
+      ? quote.eligibleOptionIds.map((value) => safeString(value, 300)).filter(Boolean)
+      : [];
+
+    if (!eligibleOptionIds.includes(safeString(selectedOption.id, 300))) {
+      req.flash(
+        'error',
+        'The selected CJ shipping method is not an approved option from the fresh admin shipping quote.',
+      );
+
+      return res.redirect(`/admin/cj/orders/${encodeURIComponent(orderId)}/shipping`);
     }
 
     const selectedShipping = buildSelectedShippingFromAdminQuote(quote, selectedOption);

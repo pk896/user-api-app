@@ -6,9 +6,7 @@ const mongoose = require('mongoose');
 const CjOrder = require('../../models/CjOrder');
 const { cjRequest } = require('./cjClient');
 
-const {
-  validateCjBuyerTaxId,
-} = require('./taxIdCountries');
+const { validateCjBuyerTaxId } = require('./taxIdCountries');
 
 function safeString(value, max = 2000) {
   return String(value ?? '')
@@ -20,6 +18,10 @@ function safeNumber(value, fallback = 0) {
   const parsed = Number(value);
 
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function round2(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
 }
 
 function safeInteger(value, fallback = 1) {
@@ -109,9 +111,7 @@ function assertCjBuyerTaxIdForOrder(countryCode, taxId) {
     );
   }
 
-  return validation.required
-    ? validation.normalized
-    : safeString(taxId, 50);
+  return validation.required ? validation.normalized : safeString(taxId, 50);
 }
 
 function createCjOrderError(code, message, status = 400) {
@@ -227,10 +227,51 @@ function assertOrderCanBeSentToCj(order) {
     );
   }
 
+  if (order?.metadata?.adminShippingRequired === true) {
+    throw createCjOrderError(
+      'CJ_ADMIN_SHIPPING_RECALCULATION_REQUIRED',
+      'This CJ order was edited after payment. Recalculate CJ Shipping and save an eligible fresh shipping method before creating the CJ supplier order.',
+      409,
+    );
+  }
+
   if (!order.selectedShipping || typeof order.selectedShipping !== 'object') {
     throw createCjOrderError(
       'CJ_ORDER_SHIPPING_MISSING',
       'The selected CJ shipping method is missing.',
+      409,
+    );
+  }
+
+  const customerPaidShippingValue = moneyValue(order.shippingTotal);
+
+  const fulfilmentShippingValue = moneyValue(order.selectedShipping.shippingAmount);
+
+  const customerPaidCurrency = safeString(
+    order.shippingTotal?.currency || order.currency || process.env.BASE_CURRENCY || 'USD',
+    3,
+  ).toUpperCase();
+
+  const fulfilmentShippingCurrency = safeString(
+    order.selectedShipping?.shippingAmount?.currency ||
+      order.selectedShipping?.currency ||
+      process.env.BASE_CURRENCY ||
+      'USD',
+    3,
+  ).toUpperCase();
+
+  if (customerPaidCurrency !== fulfilmentShippingCurrency) {
+    throw createCjOrderError(
+      'CJ_ADMIN_SHIPPING_CURRENCY_MISMATCH',
+      'The selected CJ fulfilment shipping currency does not match the customer-paid shipping currency.',
+      409,
+    );
+  }
+
+  if (round2(fulfilmentShippingValue) > round2(customerPaidShippingValue) + 0.009) {
+    throw createCjOrderError(
+      'CJ_ADMIN_SHIPPING_ABOVE_CUSTOMER_PAID_LIMIT',
+      'The selected CJ fulfilment shipping method costs more than the shipping amount paid by the customer.',
       409,
     );
   }
@@ -432,6 +473,14 @@ async function claimOrderForCjCreation(orderId) {
       },
 
       'supplierOrder.createStatus': 'PENDING',
+
+      /*
+       * Never claim an admin-edited CJ order until fresh
+       * eligible shipping has been saved.
+       */
+      'metadata.adminShippingRequired': {
+        $ne: true,
+      },
     },
     {
       $set: {
@@ -602,6 +651,10 @@ async function retryFailedCjSupplierOrder(orderId) {
       },
 
       'supplierOrder.createStatus': 'FAILED',
+
+      'metadata.adminShippingRequired': {
+        $ne: true,
+      },
     },
     {
       $set: {
@@ -620,7 +673,7 @@ async function retryFailedCjSupplierOrder(orderId) {
   if (!order) {
     throw createCjOrderError(
       'CJ_ORDER_RETRY_NOT_ALLOWED',
-      'Only a paid CJ order with failed supplier creation can be retried.',
+      'Only a paid CJ order with failed supplier creation and completed shipping recalculation can be retried.',
       409,
     );
   }

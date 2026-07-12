@@ -72,6 +72,14 @@ function eligibleCjOrderQuery() {
     },
 
     'supplierOrder.createStatus': 'PENDING',
+
+    /*
+     * An admin-edited order must never be sent automatically
+     * until a fresh eligible CJ shipping method has been saved.
+     */
+    'metadata.adminShippingRequired': {
+      $ne: true,
+    },
   };
 }
 

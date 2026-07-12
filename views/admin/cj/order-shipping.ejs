@@ -6,6 +6,28 @@
   const currentShipping = ORDER.selectedShipping || {};
   const options = Array.isArray(QUOTE.options) ? QUOTE.options : [];
 
+  const customerPaidShippingValue = Number(
+    QUOTE.customerPaidShippingValue || 0
+  );
+
+  const customerPaidShippingCurrency = String(
+    QUOTE.customerPaidShippingCurrency ||
+    ORDER.shippingTotal?.currency ||
+    ORDER.currency ||
+    process.env.BASE_CURRENCY ||
+    'USD'
+  )
+    .trim()
+    .toUpperCase();
+
+  const recommendedOptionId = String(
+    QUOTE.recommendedOptionId || ''
+  ).trim();
+
+  const eligibleOptions = options.filter(function(option) {
+    return option.isWithinCustomerPaidShipping === true;
+  });
+
   function moneyValue(value) {
     if (value && typeof value === 'object') {
       const parsedObjectValue = Number(value.value || 0);
@@ -97,9 +119,28 @@
 
   <div class="container-fluid px-3 px-md-4 py-4">
     <div class="alert alert-warning border-0 shadow-sm">
-      <strong>Important:</strong>
-      This saves a fresh CJ logistics method for supplier-order creation.
-      It does not change the paid PayPal amount, product totals, VAT, or customer payable total.
+      <div class="fw-bold mb-1">
+        Mandatory shipping recalculation
+      </div>
+
+      <div>
+        Save one fresh CJ shipping method before creating or retrying
+        the supplier order. The selected method cannot cost more than
+        the shipping amount already paid by the customer.
+      </div>
+
+      <div class="mt-2">
+        <strong>Customer-paid shipping limit:</strong>
+        <%= formatMoney(
+          customerPaidShippingValue,
+          customerPaidShippingCurrency
+        ) %>
+      </div>
+
+      <div class="small mt-2">
+        Customer PayPal totals, product totals, VAT, and payable total
+        will not be changed.
+      </div>
     </div>
 
     <div class="row g-4">
@@ -240,19 +281,90 @@
               CJ did not return any shipping methods for this edited address.
             </div>
             <% } else { %>
+
+            <% if (!eligibleOptions.length) { %>
+            <div class="alert alert-danger">
+              <div class="fw-bold mb-1">
+                No shipping method can be selected
+              </div>
+
+              <div>
+                Every fresh CJ shipping method costs more than the
+                shipping amount paid by the customer.
+              </div>
+
+              <div class="mt-2">
+                <strong>Maximum allowed:</strong>
+                <%= formatMoney(
+                  customerPaidShippingValue,
+                  customerPaidShippingCurrency
+                ) %>
+              </div>
+
+              <div class="small mt-2">
+                Review the edited address or handle the order manually.
+                Kasyora will not create the CJ supplier order with a
+                shipping method above the customer-paid limit.
+              </div>
+            </div>
+            <% } %>
+
             <form method="POST" action="/admin/cj/orders/<%= ORDER._id %>/shipping/select">
               <div class="vstack gap-3">
-                <% options.forEach(function(option, index) { %>
-                <label class="border rounded-3 p-3 d-block">
+                <% options.forEach(function(option) { %>
+                <%
+                  const isEligible =
+                    option.isWithinCustomerPaidShipping === true;
+
+                  const isRecommended =
+                    option.isRecommended === true ||
+                    String(option.id || '') === recommendedOptionId;
+                %>
+
+                <label class="border rounded-3 p-3 d-block <%= isRecommended ? 'border-primary border-2' : '' %> <%= !isEligible ? 'bg-light text-muted' : '' %>">
                   <div class="d-flex gap-3 align-items-start">
-                    <input class="form-check-input mt-1" type="radio" name="optionId" value="<%= option.id %>" <%= index === 0 ? 'checked' : '' %> required>
+                    <input class="form-check-input mt-1" type="radio" name="optionId" value="<%= option.id %>" <%= isRecommended && isEligible ? 'checked' : '' %> <%= !isEligible ? 'disabled' : '' %> required>
 
                     <div class="flex-grow-1">
                       <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
                         <div>
-                          <div class="fw-bold text-primary">
-                            <%= option.logisticsName %>
+                          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                            <div class="fw-bold text-primary">
+                              <%= option.logisticsName %>
+                            </div>
+
+                            <% if (isRecommended) { %>
+                            <span class="badge bg-primary">
+                              Recommended
+                            </span>
+                            <% } %>
+
+                            <% if (option.isSameAsPreviousShipping) { %>
+                            <span class="badge bg-success">
+                              Previous shipping method
+                            </span>
+                            <% } %>
+
+                            <% if (!isEligible) { %>
+                            <span class="badge bg-danger">
+                              Not allowed
+                            </span>
+                            <% } %>
                           </div>
+
+                          <% if (isRecommended && option.recommendationReason) { %>
+                          <div class="small text-success fw-semibold mb-1">
+                            <i class="fas fa-check-circle me-1"></i>
+                            <%= option.recommendationReason %>
+                          </div>
+                          <% } %>
+
+                          <% if (!isEligible) { %>
+                          <div class="small text-danger fw-semibold mb-1">
+                            This method costs more than the shipping
+                            amount paid by the customer and cannot be selected.
+                          </div>
+                          <% } %>
 
                           <% if (option.deliveryEstimate) { %>
                           <div class="small text-muted">
@@ -269,8 +381,19 @@
                         </div>
 
                         <div class="text-md-end">
-                          <div class="fw-bold">
-                            <%= formatMoney(option.shippingAmount, option.currency) %>
+                          <div class="fw-bold <%= isEligible ? 'text-primary' : 'text-danger' %>">
+                            <%= formatMoney(
+                              option.shippingAmount,
+                              option.currency
+                            ) %>
+                          </div>
+
+                          <div class="small text-muted">
+                            Customer-paid limit:
+                            <%= formatMoney(
+                              customerPaidShippingValue,
+                              customerPaidShippingCurrency
+                            ) %>
                           </div>
 
                           <div class="small text-muted">
@@ -286,13 +409,13 @@
               </div>
 
               <div class="d-flex flex-wrap gap-2 mt-4">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">
+                <button type="submit" class="btn btn-primary rounded-pill px-4" <%= !eligibleOptions.length ? 'disabled' : '' %>>
                   <i class="fas fa-save me-2"></i>
                   Save Selected CJ Shipping
                 </button>
 
                 <a href="/admin/cj/orders/<%= ORDER._id %>" class="btn btn-outline-primary rounded-pill px-4">
-                  Cancel
+                  Return To Order
                 </a>
               </div>
             </form>
