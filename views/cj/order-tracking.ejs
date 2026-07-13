@@ -1,0 +1,555 @@
+<!--views/cj/order-tracking.ejs-->
+<%
+  const ORDER =
+    publicOrder &&
+    typeof publicOrder === 'object'
+      ? publicOrder
+      : null;
+
+  const FORM =
+    form &&
+    typeof form === 'object'
+      ? form
+      : {};
+
+  const WAS_SEARCHED =
+    searched === true;
+
+  const ERROR_MESSAGE =
+    String(errorMessage || '').trim();
+
+  const ITEMS =
+    Array.isArray(ORDER?.items)
+      ? ORDER.items
+      : [];
+
+  const EVENTS =
+    Array.isArray(ORDER?.events)
+      ? ORDER.events
+      : [];
+
+  const PROGRESS_STEP =
+    Number(ORDER?.trackingProgressStep || 1);
+
+  function progressClass(step) {
+    return PROGRESS_STEP >= step
+      ? 'bg-primary text-white'
+      : 'bg-light text-muted border';
+  }
+%>
+
+<!-- Header Start -->
+<div
+  class="container-fluid page-header py-5"
+  style="<%= shopHeaderImage && shopHeaderImage.image ? '--page-header-image: url(' + shopHeaderImage.image + ')' : '' %>"
+>
+  <h1 class="text-center text-white display-6">
+    Track Your CJ Order
+  </h1>
+
+  <ol class="breadcrumb justify-content-center mb-0">
+    <li class="breadcrumb-item">
+      <a href="/store">
+        Shopping home
+      </a>
+    </li>
+
+    <li class="breadcrumb-item">
+      <a href="/store/order-tracking">
+        Internal order tracking
+      </a>
+    </li>
+
+    <li class="breadcrumb-item active text-white">
+      CJ order tracking
+    </li>
+  </ol>
+</div>
+<!-- Header End -->
+
+<div class="container-fluid py-5">
+  <div class="container py-4">
+    <div class="alert alert-success border-0 shadow-sm mb-4">
+      <div class="d-flex align-items-start gap-3">
+        <i class="fas fa-globe fa-lg mt-1"></i>
+
+        <div>
+          <div class="fw-bold">
+            CJ Dropshipping order tracking
+          </div>
+
+          <div class="small mt-1">
+            This page tracks only orders purchased through Kasyora’s
+            separate CJ Dropshipping department.
+          </div>
+
+          <div class="mt-2">
+            Looking for an internal Kasyora seller order?
+
+            <a
+              href="/store/order-tracking"
+              class="alert-link"
+            >
+              Open internal order tracking
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4 align-items-start">
+      <div class="col-12 col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Find your CJ order
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <% if (ERROR_MESSAGE) { %>
+            <div
+              class="alert alert-danger"
+              role="alert"
+            >
+              <%= ERROR_MESSAGE %>
+            </div>
+            <% } %>
+
+            <form
+              action="/store/cj-order-tracking#cjOrderTrackingResult"
+              method="POST"
+              class="d-grid gap-3"
+            >
+              <div>
+                <label
+                  for="cjOrderNumber"
+                  class="form-label text-primary fw-semibold"
+                >
+                  CJ order number
+                </label>
+
+                <input
+                  id="cjOrderNumber"
+                  name="cjOrderNumber"
+                  type="text"
+                  class="form-control"
+                  value="<%= FORM.cjOrderNumber || '' %>"
+                  placeholder="Example: CJ-20260712-ABC123"
+                  autocomplete="off"
+                  required
+                >
+
+                <div class="form-text">
+                  Use the Kasyora CJ order number shown on your CJ order confirmation.
+                </div>
+              </div>
+
+              <div>
+                <label
+                  for="cjTrackingEmail"
+                  class="form-label text-primary fw-semibold"
+                >
+                  Checkout email address
+                </label>
+
+                <input
+                  id="cjTrackingEmail"
+                  name="email"
+                  type="email"
+                  class="form-control"
+                  value="<%= FORM.email || '' %>"
+                  placeholder="you@example.com"
+                  autocomplete="email"
+                  required
+                >
+              </div>
+
+              <button
+                type="submit"
+                class="btn btn-primary rounded-pill py-3"
+              >
+                <i class="fas fa-search-location me-2"></i>
+                Track CJ Order
+              </button>
+
+              <div class="small text-muted">
+                For privacy, tracking information is shown only when the
+                CJ order number and checkout email match.
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-7">
+        <% if (!WAS_SEARCHED) { %>
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4 p-lg-5">
+            <div class="text-center">
+              <div class="mb-3">
+                <i class="fas fa-box-open fa-3x text-primary"></i>
+              </div>
+
+              <h2 class="h4 text-primary">
+                Track your CJ shipment
+              </h2>
+
+              <p class="text-muted mb-0">
+                Enter your CJ order number and checkout email to see the
+                supplier-order status, carrier, tracking number, delivery
+                estimate, products, and latest shipment updates.
+              </p>
+            </div>
+          </div>
+        </div>
+        <% } %>
+
+        <% if (ORDER) { %>
+        <div
+          id="cjOrderTrackingResult"
+          class="card border-0 shadow-sm mb-4"
+        >
+          <div class="card-header bg-primary text-white">
+            <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+              <h2 class="h5 text-white mb-0">
+                CJ Order Summary
+              </h2>
+
+              <span class="small">
+                <%= ORDER.createdAt || '' %>
+              </span>
+            </div>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    CJ order number
+                  </div>
+
+                  <div class="fw-bold text-break">
+                    <%= ORDER.cjOrderNumber || 'Not available' %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    Customer email
+                  </div>
+
+                  <div class="fw-bold text-break">
+                    <%= ORDER.customerEmail || 'Not available' %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase mb-1">
+                    Payment
+                  </div>
+
+                  <span class="badge bg-<%= ORDER.paymentStatusClass %> <%= ORDER.paymentStatusClass === 'warning' ? 'text-dark' : 'text-white' %>">
+                    <%= ORDER.paymentStatus %>
+                  </span>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase mb-1">
+                    Fulfilment
+                  </div>
+
+                  <span class="badge bg-<%= ORDER.fulfillmentStatusClass %> <%= ORDER.fulfillmentStatusClass === 'warning' ? 'text-dark' : 'text-white' %>">
+                    <%= ORDER.fulfillmentStatus %>
+                  </span>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase mb-1">
+                    Tracking
+                  </div>
+
+                  <span class="badge bg-<%= ORDER.trackingStatusClass %> <%= ORDER.trackingStatusClass === 'warning' ? 'text-dark' : 'text-white' %>">
+                    <%= ORDER.trackingStatus %>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Delivery Progress
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="row g-3 text-center">
+              <div class="col-6 col-md">
+                <div class="rounded-3 p-3 h-100 <%= progressClass(1) %>">
+                  <i class="fas fa-receipt mb-2"></i>
+
+                  <div class="small fw-semibold">
+                    Order paid
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-6 col-md">
+                <div class="rounded-3 p-3 h-100 <%= progressClass(2) %>">
+                  <i class="fas fa-box mb-2"></i>
+
+                  <div class="small fw-semibold">
+                    Processing
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-6 col-md">
+                <div class="rounded-3 p-3 h-100 <%= progressClass(3) %>">
+                  <i class="fas fa-shipping-fast mb-2"></i>
+
+                  <div class="small fw-semibold">
+                    In transit
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-6 col-md">
+                <div class="rounded-3 p-3 h-100 <%= progressClass(4) %>">
+                  <i class="fas fa-truck mb-2"></i>
+
+                  <div class="small fw-semibold">
+                    Out for delivery
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-md">
+                <div class="rounded-3 p-3 h-100 <%= progressClass(5) %>">
+                  <i class="fas fa-check-circle mb-2"></i>
+
+                  <div class="small fw-semibold">
+                    Delivered
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Shipping Details
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    Carrier / logistics
+                  </div>
+
+                  <div class="fw-bold">
+                    <%= ORDER.carrier || 'Not available yet' %>
+                  </div>
+
+                  <% if (ORDER.service && ORDER.service !== ORDER.carrier) { %>
+                  <div class="small text-muted mt-1">
+                    <%= ORDER.service %>
+                  </div>
+                  <% } %>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    Tracking number
+                  </div>
+
+                  <div class="fw-bold text-break">
+                    <%= ORDER.trackingNumber || 'Not available yet' %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    Estimated delivery
+                  </div>
+
+                  <div class="fw-bold">
+                    <%= ORDER.deliveryEstimate %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    Last tracking update
+                  </div>
+
+                  <div class="fw-bold">
+                    <%= ORDER.lastTrackingUpdate || ORDER.updatedAt || 'Not available' %>
+                  </div>
+                </div>
+              </div>
+
+              <% if (ORDER.destinationCountryCode) { %>
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="small text-primary fw-semibold text-uppercase">
+                    Destination
+                  </div>
+
+                  <div class="fw-bold">
+                    <%= ORDER.destinationCountryCode %>
+                  </div>
+                </div>
+              </div>
+              <% } %>
+
+              <% if (ORDER.trackingUrl) { %>
+              <div class="col-12">
+                <a
+                  href="<%= ORDER.trackingUrl %>"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn btn-success rounded-pill px-4"
+                >
+                  <i class="fas fa-external-link-alt me-2"></i>
+                  Open Carrier Tracking
+                </a>
+              </div>
+              <% } else { %>
+              <div class="col-12">
+                <div class="alert alert-light border mb-0">
+                  The carrier tracking link is not available yet.
+                  Please check again after the CJ supplier dispatches the order.
+                </div>
+              </div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Items In This CJ Order
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <% if (ITEMS.length) { %>
+            <div class="d-grid gap-3">
+              <% ITEMS.forEach(function(item) { %>
+              <div class="border rounded-3 p-3">
+                <div class="d-flex gap-3 align-items-center">
+                  <% if (item.imageUrl) { %>
+                  <img
+                    src="<%= item.imageUrl %>"
+                    alt="<%= item.name %>"
+                    class="rounded border flex-shrink-0"
+                    style="width: 72px; height: 72px; object-fit: contain;"
+                  >
+                  <% } %>
+
+                  <div class="flex-grow-1">
+                    <div class="fw-bold">
+                      <%= item.name %>
+                    </div>
+
+                    <% if (item.variantName) { %>
+                    <div class="small text-muted mt-1">
+                      <%= item.variantName %>
+                    </div>
+                    <% } %>
+
+                    <div class="small text-muted mt-1">
+                      Quantity:
+                      <%= item.quantity %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <% }) %>
+            </div>
+            <% } else { %>
+            <div class="alert alert-light border mb-0">
+              No public item information is available for this CJ order.
+            </div>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 text-white mb-0">
+              Tracking Updates
+            </h2>
+          </div>
+
+          <div class="card-body p-4">
+            <% if (EVENTS.length) { %>
+            <div class="d-grid gap-3">
+              <% EVENTS.forEach(function(event) { %>
+              <div class="border rounded-3 p-3">
+                <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                  <span class="fw-bold text-primary">
+                    <%= event.status %>
+                  </span>
+
+                  <span class="small text-muted">
+                    <%= event.occurredAt %>
+                  </span>
+                </div>
+
+                <% if (event.description) { %>
+                <div class="mt-2">
+                  <%= event.description %>
+                </div>
+                <% } %>
+
+                <% if (event.location) { %>
+                <div class="small text-muted mt-2">
+                  <i class="fas fa-map-marker-alt me-1"></i>
+                  <%= event.location %>
+                </div>
+                <% } %>
+              </div>
+              <% }) %>
+            </div>
+            <% } else { %>
+            <div class="alert alert-light border mb-0">
+              No detailed shipment events are available yet.
+              The main tracking status above will update when Kasyora receives
+              new tracking information.
+            </div>
+            <% } %>
+          </div>
+        </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../store/partials/footer') %>

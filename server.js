@@ -169,19 +169,11 @@ const paypalWebhooks = require('./routes/paypalWebhooks');
 
 // Separate CJ PayPal webhook.
 // This route reads and updates only CjOrder.
-app.use(
-  '/webhooks/cj-paypal',
-  express.raw({ type: '*/*' }),
-  cjPaypalWebhooks,
-);
+app.use('/webhooks/cj-paypal', express.raw({ type: '*/*' }), cjPaypalWebhooks);
 
 // Existing internal Kasyora PayPal webhook.
 // Keep this route and its internal Order logic unchanged.
-app.use(
-  '/webhooks',
-  express.raw({ type: '*/*' }),
-  paypalWebhooks,
-);
+app.use('/webhooks', express.raw({ type: '*/*' }), paypalWebhooks);
 
 const COUNTRIES = require('./utils/countries');
 const { CATEGORIES } = require('./utils/category');
@@ -215,8 +207,7 @@ app.use(cors(corsOptions));
 
 // ✅ Mark admin-ui requests so CSP can be relaxed only there
 app.use((req, res, next) => {
-  res.locals.isAdminUi =
-    req.path.startsWith('/admin-ui') || req.path.startsWith('/seller-ui');
+  res.locals.isAdminUi = req.path.startsWith('/admin-ui') || req.path.startsWith('/seller-ui');
   next();
 });
 
@@ -228,8 +219,7 @@ app.use((req, res, next) => {
 
 // 4) Helmet with CSP
 app.use((req, res, next) => {
-  const isDashboardUi =
-    req.path.startsWith('/admin-ui') || req.path.startsWith('/seller-ui');
+  const isDashboardUi = req.path.startsWith('/admin-ui') || req.path.startsWith('/seller-ui');
 
   const directives = {
     defaultSrc: ["'self'"],
@@ -237,93 +227,89 @@ app.use((req, res, next) => {
     scriptSrc: isDashboardUi
       ? [
           "'self'",
-          "https://cdn.jsdelivr.net",
-          "https://cdnjs.cloudflare.com",
-          "https://unpkg.com",
-          "https://ajax.googleapis.com",
-          "https://apis.google.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-          "https://www.paypalobjects.com",
+          'https://cdn.jsdelivr.net',
+          'https://cdnjs.cloudflare.com',
+          'https://unpkg.com',
+          'https://ajax.googleapis.com',
+          'https://apis.google.com',
+          'https://www.paypal.com',
+          'https://www.sandbox.paypal.com',
+          'https://www.paypalobjects.com',
         ]
       : [
           "'self'",
           `'nonce-${res.locals.nonce}'`,
-          "https://cdn.jsdelivr.net",
-          "https://cdnjs.cloudflare.com",
-          "https://ajax.googleapis.com",
-          "https://apis.google.com",
-          "https://www.paypal.com",
-          "https://www.sandbox.paypal.com",
-          "https://www.paypalobjects.com",
+          'https://cdn.jsdelivr.net',
+          'https://cdnjs.cloudflare.com',
+          'https://ajax.googleapis.com',
+          'https://apis.google.com',
+          'https://www.paypal.com',
+          'https://www.sandbox.paypal.com',
+          'https://www.paypalobjects.com',
         ],
 
     styleSrc: [
       "'self'",
       "'unsafe-inline'",
-      "https://cdn.jsdelivr.net",
-      "https://cdnjs.cloudflare.com",
-      "https://fonts.googleapis.com",
+      'https://cdn.jsdelivr.net',
+      'https://cdnjs.cloudflare.com',
+      'https://fonts.googleapis.com',
     ],
 
     styleSrcElem: [
       "'self'",
       "'unsafe-inline'",
-      "https://cdn.jsdelivr.net",
-      "https://cdnjs.cloudflare.com",
-      "https://fonts.googleapis.com",
+      'https://cdn.jsdelivr.net',
+      'https://cdnjs.cloudflare.com',
+      'https://fonts.googleapis.com',
     ],
 
     fontSrc: [
       "'self'",
-      "data:",
-      "https://fonts.gstatic.com",
-      "https://cdn.jsdelivr.net",
-      "https://cdnjs.cloudflare.com",
+      'data:',
+      'https://fonts.gstatic.com',
+      'https://cdn.jsdelivr.net',
+      'https://cdnjs.cloudflare.com',
     ],
 
     imgSrc: [
       "'self'",
-      "data:",
-      "blob:",
+      'data:',
+      'blob:',
 
       // Existing Kasyora image providers
-      "https://*.amazonaws.com",
-      "https://*.cloudinary.com",
-      "https://www.paypalobjects.com",
-      "https://www.paypal.com",
-      "https://www.sandbox.paypal.com",
-      "https://flagcdn.com",
-      "https://images.unsplash.com",
-      "https://plus.unsplash.com",
+      'https://*.amazonaws.com',
+      'https://*.cloudinary.com',
+      'https://www.paypalobjects.com',
+      'https://www.paypal.com',
+      'https://www.sandbox.paypal.com',
+      'https://flagcdn.com',
+      'https://images.unsplash.com',
+      'https://plus.unsplash.com',
 
       // CJ Dropshipping product and variant images
-      "https://cjdropshipping.com",
-      "https://*.cjdropshipping.com",
+      'https://cjdropshipping.com',
+      'https://*.cjdropshipping.com',
 
       // Some CJ catalogue records use Alibaba/Aliyun image storage
-      "https://*.alicdn.com",
-      "https://*.aliyuncs.com",
+      'https://*.alicdn.com',
+      'https://*.aliyuncs.com',
     ],
 
     connectSrc: [
       "'self'",
-      "http://localhost:3000",
-      "ws://localhost:3000",
-      "https://api-m.paypal.com",
-      "https://api-m.sandbox.paypal.com",
-      "https://api.paypal.com",
-      "https://api.sandbox.paypal.com",
-      "https://www.paypal.com",
-      "https://www.sandbox.paypal.com",
-      "https://www.paypalobjects.com",
+      'http://localhost:3000',
+      'ws://localhost:3000',
+      'https://api-m.paypal.com',
+      'https://api-m.sandbox.paypal.com',
+      'https://api.paypal.com',
+      'https://api.sandbox.paypal.com',
+      'https://www.paypal.com',
+      'https://www.sandbox.paypal.com',
+      'https://www.paypalobjects.com',
     ],
 
-    frameSrc: [
-      "'self'",
-      "https://www.paypal.com",
-      "https://www.sandbox.paypal.com",
-    ],
+    frameSrc: ["'self'", 'https://www.paypal.com', 'https://www.sandbox.paypal.com'],
 
     objectSrc: ["'none'"],
     baseUri: ["'self'"],
@@ -334,9 +320,9 @@ app.use((req, res, next) => {
   if (isDashboardUi) {
     directives.scriptSrcElem = [
       "'self'",
-      "https://cdn.jsdelivr.net",
-      "https://cdnjs.cloudflare.com",
-      "https://unpkg.com",
+      'https://cdn.jsdelivr.net',
+      'https://cdnjs.cloudflare.com',
+      'https://unpkg.com',
     ];
   }
 
@@ -408,13 +394,13 @@ app.use('/profile/edit', sensitiveLimiter);
 app.use('/business/login', sensitiveLimiter);
 app.use('/business/change-email', sensitiveLimiter);
 app.use('/business/profile/edit-bank', sensitiveLimiter);
-app.use('/profile/update-details', sensitiveLimiter)
+app.use('/profile/update-details', sensitiveLimiter);
 app.use('/business/profile', sensitiveLimiter);
 app.use('/business/password/forgot', sensitiveLimiter);
 app.use('/business/password/reset', sensitiveLimiter); // ✅ covers /business/password/reset/:token
 
 // admin routes ratelimiter protection
-app.use('/admin/login', sensitiveLimiter)
+app.use('/admin/login', sensitiveLimiter);
 app.use('/admin/payouts/create', sensitiveLimiter);
 app.use('/admin/payouts/sync-recent', sensitiveLimiter);
 app.use('/admin/payouts', sensitiveLimiter); // optional: protects list page too
@@ -519,9 +505,7 @@ app.get(
   '/auth/google',
   (req, res, next) => {
     const rt =
-      safeReturnTo(req.query.returnTo) ||
-      safeReturnTo(req.get('referer')) ||
-      '/users/dashboard';
+      safeReturnTo(req.query.returnTo) || safeReturnTo(req.get('referer')) || '/users/dashboard';
 
     req.session.returnTo = rt;
 
@@ -558,8 +542,7 @@ app.get(
       cjCart: req.session?.cjCart || null,
 
       // Controls which catalogue and cart are visible.
-      storeDepartment:
-        req.session?.storeDepartment || 'internal',
+      storeDepartment: req.session?.storeDepartment || 'internal',
 
       theme: req.session?.theme || null,
       returnTo: req.session?.returnTo || null,
@@ -585,10 +568,7 @@ app.get(
         req.session.cjCart = keep.cjCart;
       }
 
-      req.session.storeDepartment =
-        keep.storeDepartment === 'cj'
-          ? 'cj'
-          : 'internal';
+      req.session.storeDepartment = keep.storeDepartment === 'cj' ? 'cj' : 'internal';
 
       if (keep.theme) {
         req.session.theme = keep.theme;
@@ -652,7 +632,7 @@ const adminInventoryStatsApi = require('./routes/adminInventoryStatsApi');
 const adminAppUsersStatsApi = require('./routes/adminAppUsersStatsApi');
 const adminOrdersStatsApi = require('./routes/adminOrdersStatsApi');
 const adminGrossSalesMetricApi = require('./routes/adminGrossSalesMetricApi');
-const adminChartsApiRouter = require("./routes/adminChartsApi");
+const adminChartsApiRouter = require('./routes/adminChartsApi');
 const sellerStatsApi = require('./routes/sellerStatsApi');
 const sellerEarningsApi = require('./routes/sellerEarningsApi');
 const sellerInventoryApi = require('./routes/sellerInventoryApi');
@@ -710,6 +690,13 @@ const passwordResetRoutes = require('./routes/passwordReset');
 const ratingsRouter = require('./routes/productRatings');
 const orderTrackingRoutes = require('./routes/orderTracking');
 const publicOrderTrackingRoutes = require('./routes/publicOrderTracking');
+
+/*
+ * Separate public CJ order tracking.
+ * This router reads only CjOrder.
+ */
+const publicCjOrderTrackingRoutes = require('./routes/publicCjOrderTracking');
+
 const adminBizVerifyRoutes = require('./routes/adminBusinessVerification');
 const adminPayoutsRoutes = require('./routes/adminPayouts');
 const adminPlatformFeesMetricApi = require('./routes/adminPlatformFeesMetricApi');
@@ -767,7 +754,7 @@ app.use('/api/admin', adminAverageOrderValueMetricApi);
 app.use('/api/admin', adminPendingOrdersMetricApi);
 app.use('/api/admin', adminOrdersNeedingLabelsMetricApi);
 app.use('/admin/api/dashboard', adminDashboardRouter);
-app.use("/api/admin/charts", adminChartsApiRouter);
+app.use('/api/admin/charts', adminChartsApiRouter);
 // Public API for checkout
 app.use('/api', deliveryOptionsApi);
 
@@ -851,7 +838,21 @@ app.use('/', cjCheckoutRoutes);
 // It writes only to CjOrder and never to the internal Order model.
 app.use('/', cjPaymentRoutes);
 
+/*
+ * Separate public CJ order tracking.
+ * URL: /store/cj-order-tracking
+ *
+ * This reads only CjOrder and does not touch the
+ * internal Kasyora Order tracking router.
+ */
+app.use('/', publicCjOrderTrackingRoutes);
+
+/*
+ * Existing internal Kasyora public tracking.
+ * This continues to read only the internal Order model.
+ */
 app.use('/', publicOrderTrackingRoutes);
+
 app.use('/', storePagesRoutes);
 
 // Demands & Matches
@@ -926,8 +927,7 @@ app.use('/admin-ui', (req, res, next) => {
   }
 
   return requireAdmin(req, res, () => {
-    const normalizedPath =
-      req.path === '' || req.path === '/' ? '/index.html' : req.path;
+    const normalizedPath = req.path === '' || req.path === '/' ? '/index.html' : req.path;
 
     const rule = ADMIN_UI_PAGE_RULES[normalizedPath];
 
@@ -957,7 +957,7 @@ app.use(
   express.static(adminDistPath, {
     extensions: ['html'],
     index: 'index.html',
-  })
+  }),
 );
 
 app.get('/admin-ui', requireAdmin, (req, res) => {
@@ -997,7 +997,7 @@ app.use(
   express.static(sellerUiPath, {
     extensions: ['html'],
     index: 'index.html',
-  })
+  }),
 );
 
 app.get('/seller-ui', requireBusiness, (req, res) => {
@@ -1026,19 +1026,10 @@ app.get('/cart/count', (req, res) => {
 // Separate CJ cart count API
 app.get('/cj/cart/count', (req, res) => {
   try {
-    const items = Array.isArray(
-      req.session?.cjCart?.items,
-    )
-      ? req.session.cjCart.items
-      : [];
+    const items = Array.isArray(req.session?.cjCart?.items) ? req.session.cjCart.items : [];
 
     const count = items.reduce(
-      (sum, item) =>
-        sum +
-        Math.max(
-          0,
-          Math.floor(Number(item?.quantity || 0)),
-        ),
+      (sum, item) => sum + Math.max(0, Math.floor(Number(item?.quantity || 0))),
       0,
     );
 
@@ -1048,10 +1039,7 @@ app.get('/cj/cart/count', (req, res) => {
       count,
     });
   } catch (error) {
-    console.error(
-      '❌ Failed to fetch CJ cart count:',
-      error,
-    );
+    console.error('❌ Failed to fetch CJ cart count:', error);
 
     return res.status(500).json({
       success: false,
@@ -1069,9 +1057,7 @@ app.get('/cj/cart/count', (req, res) => {
 app.post('/store/department/internal', (req, res) => {
   req.session.storeDepartment = 'internal';
 
-  const returnTo =
-    safeReturnTo(req.body?.returnTo) ||
-    '/store';
+  const returnTo = safeReturnTo(req.body?.returnTo) || '/store';
 
   req.session.save(() => {
     return res.redirect(returnTo);
@@ -1081,9 +1067,7 @@ app.post('/store/department/internal', (req, res) => {
 app.post('/store/department/cj', (req, res) => {
   req.session.storeDepartment = 'cj';
 
-  const returnTo =
-    safeReturnTo(req.body?.returnTo) ||
-    '/cj';
+  const returnTo = safeReturnTo(req.body?.returnTo) || '/cj';
 
   req.session.save(() => {
     return res.redirect(returnTo);
@@ -1170,7 +1154,10 @@ app.use('/', staticPagesRoutes);
 --------------------------------------- */
 app.use(async (req, res) => {
   let shopHeaderImage = null;
-  const baseCurrency = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+  const baseCurrency =
+    String(process.env.BASE_CURRENCY || '')
+      .trim()
+      .toUpperCase() || 'USD';
 
   try {
     const ShopHeaderImage = require('./models/ShopHeaderImage');
@@ -1228,26 +1215,21 @@ async function startServer() {
     });
   }
 
-    // =====================================================
+  // =====================================================
   // Shippo automatic label buying
   // Completely standalone from The Courier Guy.
   // =====================================================
   try {
-    const {
-      startAutoBuyLoop,
-    } = require('./utils/shippo/autoBuyLabels');
+    const { startAutoBuyLoop } = require('./utils/shippo/autoBuyLabels');
 
     startAutoBuyLoop();
 
     console.log('✅ Shippo auto-buy loop initialized');
   } catch (error) {
-    console.warn(
-      '⚠️ Shippo auto-buy loop not started:',
-      error?.message || error,
-    );
+    console.warn('⚠️ Shippo auto-buy loop not started:', error?.message || error);
   }
 
-    // =====================================================
+  // =====================================================
   // Courier Guy automatic shipment creation
   // Completely standalone from Shippo.
   // =====================================================
@@ -1258,14 +1240,9 @@ async function startServer() {
 
     startCourierGuyAutoCreateWorker();
 
-    console.log(
-      '✅ Courier Guy automatic shipment worker initialized',
-    );
+    console.log('✅ Courier Guy automatic shipment worker initialized');
   } catch (error) {
-    console.warn(
-      '⚠️ Courier Guy automatic shipment worker not started:',
-      error?.message || error,
-    );
+    console.warn('⚠️ Courier Guy automatic shipment worker not started:', error?.message || error);
   }
 
   // =====================================================
@@ -1274,20 +1251,13 @@ async function startServer() {
   // and Courier Guy.
   // =====================================================
   try {
-    const {
-      startAutoCreateCjOrdersWorker,
-    } = require('./utils/cj/autoCreateCjOrders');
+    const { startAutoCreateCjOrdersWorker } = require('./utils/cj/autoCreateCjOrders');
 
     startAutoCreateCjOrdersWorker();
 
-    console.log(
-      '✅ CJ automatic supplier order worker initialized',
-    );
+    console.log('✅ CJ automatic supplier order worker initialized');
   } catch (error) {
-    console.warn(
-      '⚠️ CJ automatic supplier order worker not started:',
-      error?.message || error,
-    );
+    console.warn('⚠️ CJ automatic supplier order worker not started:', error?.message || error);
   }
 
   // Start the server
