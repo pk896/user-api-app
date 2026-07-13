@@ -4,9 +4,12 @@
 const mongoose = require('mongoose');
 
 const CjOrder = require('../../models/CjOrder');
+
 const { cjRequest } = require('./cjClient');
 
 const { validateCjBuyerTaxId } = require('./taxIdCountries');
+
+const { sendCjOrderEventEmailsSafely } = require('./cjOrderEmailService');
 
 function safeString(value, max = 2000) {
   return String(value ?? '')
@@ -609,6 +612,21 @@ async function createCjSupplierOrderForOrderId(orderId) {
     }
 
     await order.save();
+
+    /*
+     * Tell the customer that CJ accepted the supplier order.
+     */
+    await sendCjOrderEventEmailsSafely(order, 'CJ_ORDER_CREATED', {
+      source: 'cj-supplier-order-create',
+    });
+
+    /*
+     * The local tracking state is now PROCESSING.
+     * This is a separate once-only status update.
+     */
+    await sendCjOrderEventEmailsSafely(order, 'PROCESSING', {
+      source: 'cj-supplier-order-create',
+    });
 
     return {
       ok: true,

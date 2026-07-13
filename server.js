@@ -1245,19 +1245,53 @@ async function startServer() {
     console.warn('⚠️ Courier Guy automatic shipment worker not started:', error?.message || error);
   }
 
-  // =====================================================
+    // =====================================================
   // CJ automatic supplier order creation
   // Completely standalone from internal orders, Shippo,
   // and Courier Guy.
   // =====================================================
   try {
-    const { startAutoCreateCjOrdersWorker } = require('./utils/cj/autoCreateCjOrders');
+    const {
+      startAutoCreateCjOrdersWorker,
+    } = require(
+      './utils/cj/autoCreateCjOrders',
+    );
 
     startAutoCreateCjOrdersWorker();
 
-    console.log('✅ CJ automatic supplier order worker initialized');
+    console.log(
+      '✅ CJ automatic supplier order worker initialized',
+    );
   } catch (error) {
-    console.warn('⚠️ CJ automatic supplier order worker not started:', error?.message || error);
+    console.warn(
+      '⚠️ CJ automatic supplier order worker not started:',
+      error?.message || error,
+    );
+  }
+
+  // =====================================================
+  // CJ shipment tracking synchronisation
+  //
+  // This worker reads and updates only CjOrder.
+  // It does not use internal Order, Shippo or Courier Guy.
+  // =====================================================
+  try {
+    const {
+      startCjTrackingSyncWorker,
+    } = require(
+      './utils/cj/autoSyncCjTracking',
+    );
+
+    startCjTrackingSyncWorker();
+
+    console.log(
+      '✅ CJ shipment tracking worker initialized',
+    );
+  } catch (error) {
+    console.warn(
+      '⚠️ CJ shipment tracking worker not started:',
+      error?.message || error,
+    );
   }
 
   // Start the server

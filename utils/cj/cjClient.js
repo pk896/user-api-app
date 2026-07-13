@@ -17,6 +17,10 @@ const {
   requestNewAccessToken,
 } = require('./cjTokenManager');
 
+const {
+  scheduleCjApiCall,
+} = require('./cjApiRateLimiter');
+
 function safeString(value, max = 1000) {
   return String(value ?? '')
     .trim()
@@ -128,14 +132,25 @@ async function performRequest({
   const requestBody =
     body === undefined ? undefined : JSON.stringify(body);
 
-  const response = await fetchWithTimeout(
-    buildUrl(pathname, query),
-    {
-      method,
-      headers: requestHeaders,
-      body: requestBody,
-    },
-  );
+  /*
+   * Every normal CJ request uses the shared CJ queue.
+   *
+   * This prevents the supplier-order worker, tracking
+   * worker, catalogue and freight calculator from
+   * exceeding CJ's one-request-per-second limit.
+   */
+  const response =
+    await scheduleCjApiCall(() => {
+      return fetchWithTimeout(
+        buildUrl(pathname, query),
+        {
+          method,
+          headers:
+            requestHeaders,
+          body: requestBody,
+        },
+      );
+    });
 
   return parseCjResponse(response);
 }

@@ -13,6 +13,10 @@ const {
   assertCjConfigured,
 } = require('./cjConfig');
 
+const {
+  scheduleCjApiCall,
+} = require('./cjApiRateLimiter');
+
 let tokenPromise = null;
 
 function safeString(value, max = 2000) {
@@ -204,19 +208,27 @@ async function saveTokenResponse(data, mode) {
 async function requestNewAccessToken() {
   assertCjConfigured();
 
-  const response = await fetchWithTimeout(
-    `${CJ_API_BASE_URL}/authentication/getAccessToken`,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        apiKey: CJ_API_KEY,
-      }),
-    },
-  );
+  const response =
+    await scheduleCjApiCall(() => {
+      return fetchWithTimeout(
+        `${CJ_API_BASE_URL}/authentication/getAccessToken`,
+        {
+          method: 'POST',
+
+          headers: {
+            Accept:
+              'application/json',
+
+            'Content-Type':
+              'application/json',
+          },
+
+          body: JSON.stringify({
+            apiKey: CJ_API_KEY,
+          }),
+        },
+      );
+    });
 
   const body = await parseCjResponse(response);
 
@@ -234,19 +246,28 @@ async function refreshExistingAccessToken(refreshToken) {
     throw error;
   }
 
-  const response = await fetchWithTimeout(
-    `${CJ_API_BASE_URL}/authentication/refreshAccessToken`,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        refreshToken: cleanRefreshToken,
-      }),
-    },
-  );
+  const response =
+    await scheduleCjApiCall(() => {
+      return fetchWithTimeout(
+        `${CJ_API_BASE_URL}/authentication/refreshAccessToken`,
+        {
+          method: 'POST',
+
+          headers: {
+            Accept:
+              'application/json',
+
+            'Content-Type':
+              'application/json',
+          },
+
+          body: JSON.stringify({
+            refreshToken:
+              cleanRefreshToken,
+          }),
+        },
+      );
+    });
 
   const body = await parseCjResponse(response);
 

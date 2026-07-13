@@ -7,6 +7,8 @@ const mongoose = require('mongoose');
 
 const CjOrder = require('../models/CjOrder');
 
+const { sendCjOrderEventEmailsSafely } = require('../utils/cj/cjOrderEmailService');
+
 const { convertMoneyAmount, FX_PROVIDER } = require('../utils/fx/getFxRate');
 
 const {
@@ -221,13 +223,9 @@ async function capturePaypalOrderWithRetry({ paypalOrderId, requestId }) {
 }
 
 async function getPaypalOrderWithRetry(paypalOrderId) {
-  return retryPaypalOperation(
-    'status lookup',
-    () => getPaypalOrder(paypalOrderId),
-    {
-      attempts: 3,
-    },
-  );
+  return retryPaypalOperation('status lookup', () => getPaypalOrder(paypalOrderId), {
+    attempts: 3,
+  });
 }
 
 function publicBaseUrlFromRequest(req) {
@@ -337,7 +335,11 @@ function checkoutFromSession(req) {
 
   const quoteExpiresAt = quote.expiresAt ? new Date(quote.expiresAt) : null;
 
-  if (!quoteExpiresAt || Number.isNaN(quoteExpiresAt.getTime()) || quoteExpiresAt.getTime() <= Date.now()) {
+  if (
+    !quoteExpiresAt ||
+    Number.isNaN(quoteExpiresAt.getTime()) ||
+    quoteExpiresAt.getTime() <= Date.now()
+  ) {
     throw createPaymentError(
       'CJ_PAYMENT_QUOTE_EXPIRED',
       'Your CJ shipping quotation has expired. Please calculate shipping again.',
@@ -347,7 +349,11 @@ function checkoutFromSession(req) {
 
   const selectedShipping = checkout.selectedShipping;
 
-  if (!selectedShipping || typeof selectedShipping !== 'object' || selectedShipping.source !== 'CJ') {
+  if (
+    !selectedShipping ||
+    typeof selectedShipping !== 'object' ||
+    selectedShipping.source !== 'CJ'
+  ) {
     throw createPaymentError(
       'CJ_PAYMENT_SHIPPING_MISSING',
       'Please select a CJ shipping method before continuing to payment.',
@@ -421,9 +427,15 @@ function buildOrderItems(items) {
       vatRate: Number(item?.vatRate || 0),
       weightGrams: Number.isFinite(Number(item?.weightGrams)) ? Number(item.weightGrams) : null,
       dimensionsMm: {
-        length: Number.isFinite(Number(item?.dimensionsMm?.length)) ? Number(item.dimensionsMm.length) : null,
-        width: Number.isFinite(Number(item?.dimensionsMm?.width)) ? Number(item.dimensionsMm.width) : null,
-        height: Number.isFinite(Number(item?.dimensionsMm?.height)) ? Number(item.dimensionsMm.height) : null,
+        length: Number.isFinite(Number(item?.dimensionsMm?.length))
+          ? Number(item.dimensionsMm.length)
+          : null,
+        width: Number.isFinite(Number(item?.dimensionsMm?.width))
+          ? Number(item.dimensionsMm.width)
+          : null,
+        height: Number.isFinite(Number(item?.dimensionsMm?.height))
+          ? Number(item.dimensionsMm.height)
+          : null,
       },
       inventoryKnown: item?.inventoryKnown === true,
       inventorySnapshot: Math.max(0, Math.floor(Number(item?.inventorySnapshot || 0))),
@@ -473,11 +485,15 @@ function buildSelectedShipping({ quote, selectedShipping }) {
     tariffUsd: money(selectedShipping?.tariffUsd, 'USD'),
     remoteFeeUsd: money(selectedShipping?.remoteFeeUsd, 'USD'),
     fxSnapshot: {
-      rate: Number.isFinite(Number(selectedShipping?.fxSnapshot?.rate)) ? Number(selectedShipping.fxSnapshot.rate) : null,
+      rate: Number.isFinite(Number(selectedShipping?.fxSnapshot?.rate))
+        ? Number(selectedShipping.fxSnapshot.rate)
+        : null,
       from: safeString(selectedShipping?.fxSnapshot?.from || 'USD', 3).toUpperCase(),
       to: safeString(selectedShipping?.fxSnapshot?.to || BASE_CURRENCY, 3).toUpperCase(),
       provider: safeString(selectedShipping?.fxSnapshot?.provider, 100),
-      convertedAt: selectedShipping?.fxSnapshot?.convertedAt ? new Date(selectedShipping.fxSnapshot.convertedAt) : null,
+      convertedAt: selectedShipping?.fxSnapshot?.convertedAt
+        ? new Date(selectedShipping.fxSnapshot.convertedAt)
+        : null,
     },
     selectedAt: selectedShipping?.selectedAt ? new Date(selectedShipping.selectedAt) : new Date(),
     message: safeString(selectedShipping?.message, 2000),
@@ -567,7 +583,9 @@ function buildPaypalPayloadForCjCheckout({ req, paypalAmount, orderNumber, deliv
         },
         shipping: {
           name: {
-            full_name: `${deliveryAddress.firstName} ${deliveryAddress.lastName}`.trim().slice(0, 300),
+            full_name: `${deliveryAddress.firstName} ${deliveryAddress.lastName}`
+              .trim()
+              .slice(0, 300),
           },
           address: {
             address_line_1: [deliveryAddress.houseNumber, deliveryAddress.addressLine1]
@@ -603,7 +621,9 @@ function paypalAmountFromPendingPayment(pendingPayment) {
         from: safeString(pendingPayment?.paypalAmount?.fx?.from || BASE_CURRENCY, 3).toUpperCase(),
         to: safeString(pendingPayment?.paypalAmount?.fx?.to || pendingCurrency, 3).toUpperCase(),
         provider: safeString(pendingPayment?.paypalAmount?.fx?.provider, 100),
-        convertedAt: pendingPayment?.paypalAmount?.fx?.convertedAt ? new Date(pendingPayment.paypalAmount.fx.convertedAt) : new Date(),
+        convertedAt: pendingPayment?.paypalAmount?.fx?.convertedAt
+          ? new Date(pendingPayment.paypalAmount.fx.convertedAt)
+          : new Date(),
       },
     };
   }
@@ -612,14 +632,15 @@ function paypalAmountFromPendingPayment(pendingPayment) {
 }
 
 function captureIsCompleted(capture) {
-  return Boolean(safeString(capture?.id, 200)) && safeString(capture?.status, 100).toUpperCase() === 'COMPLETED';
+  return (
+    Boolean(safeString(capture?.id, 200)) &&
+    safeString(capture?.status, 100).toUpperCase() === 'COMPLETED'
+  );
 }
 
 async function createCjOrderAfterCompletedPaypalCapture({ req, paypalResponse, capture }) {
   const pendingPayment =
-    req.session?.cjPayment && req.session.cjPayment.source === 'CJ'
-      ? req.session.cjPayment
-      : null;
+    req.session?.cjPayment && req.session.cjPayment.source === 'CJ' ? req.session.cjPayment : null;
 
   if (!pendingPayment?.paypalOrderId) {
     throw createPaymentError(
@@ -666,10 +687,7 @@ async function createCjOrderAfterCompletedPaypalCapture({ req, paypalResponse, c
     department: 'CJ',
     paymentStatus: 'COMPLETED',
     'paypal.captureStatus': 'COMPLETED',
-    $or: [
-      { 'paypal.orderId': paypalOrderId },
-      { 'paypal.captureId': captureId },
-    ],
+    $or: [{ 'paypal.orderId': paypalOrderId }, { 'paypal.captureId': captureId }],
   });
 
   if (existingPaidOrder) {
@@ -711,7 +729,10 @@ async function createCjOrderAfterCompletedPaypalCapture({ req, paypalResponse, c
     }),
     paypal: {
       orderId: paypalOrderId,
-      orderStatus: safeString(paypalResponse?.status || pendingPayment.paypalOrderStatus || 'COMPLETED', 100).toUpperCase(),
+      orderStatus: safeString(
+        paypalResponse?.status || pendingPayment.paypalOrderStatus || 'COMPLETED',
+        100,
+      ).toUpperCase(),
       captureId,
       captureStatus: 'COMPLETED',
       capturedAt: capture?.create_time ? new Date(capture.create_time) : new Date(),
@@ -811,6 +832,24 @@ async function finalizeCompletedCjPayment({ req, order, paypalResponse, capture 
 
   await order.save();
 
+  /*
+   * Send the CJ order confirmation only after the completed
+   * PayPal capture and paid CjOrder have been committed.
+   *
+   * The email service is idempotent, so the PayPal webhook
+   * cannot send a duplicate confirmation.
+   */
+  await sendCjOrderEventEmailsSafely(order, 'PAYMENT_COMPLETED', {
+    source: 'cj-payment-direct-capture',
+  });
+
+  /*
+   * This is the first fulfilment status after payment.
+   */
+  await sendCjOrderEventEmailsSafely(order, 'CJ_ORDER_PENDING', {
+    source: 'cj-payment-direct-capture',
+  });
+
   req.session.cjCart = {
     source: 'CJ',
     items: [],
@@ -876,9 +915,7 @@ async function recoverCompletedPaymentFromPaypal({ req, paypalOrderId }) {
 
 async function clearStalePendingPaymentBeforeNewAttempt(req) {
   const pendingPayment =
-    req.session?.cjPayment && req.session.cjPayment.source === 'CJ'
-      ? req.session.cjPayment
-      : null;
+    req.session?.cjPayment && req.session.cjPayment.source === 'CJ' ? req.session.cjPayment : null;
 
   const paypalOrderId = safeString(pendingPayment?.paypalOrderId, 200);
 
@@ -907,7 +944,10 @@ async function clearStalePendingPaymentBeforeNewAttempt(req) {
       return recovered.order;
     }
   } catch (error) {
-    console.warn('[CJ payment] Could not verify stale PayPal order before new attempt:', error?.message || error);
+    console.warn(
+      '[CJ payment] Could not verify stale PayPal order before new attempt:',
+      error?.message || error,
+    );
   }
 
   delete req.session.cjPayment;
@@ -933,7 +973,8 @@ router.post('/api/cj-payment/create', async (req, res) => {
         res.status(409).json({
           success: false,
           code: 'CJ_PAYMENT_ORDER_ALREADY_PAID',
-          message: 'This CJ checkout already has a completed PayPal payment. Opening the confirmed CJ order instead.',
+          message:
+            'This CJ checkout already has a completed PayPal payment. Opening the confirmed CJ order instead.',
           redirectTo: `/cj/order/success/${encodeURIComponent(existingCompletedOrder.cjOrderNumber)}`,
         }),
       );
@@ -1001,7 +1042,8 @@ router.post('/api/cj-payment/create', async (req, res) => {
         return res.status(500).json({
           success: false,
           code: 'CJ_PAYMENT_SESSION_SAVE_FAILED',
-          message: 'PayPal checkout was created, but Kasyora could not save the checkout session. No CJ order was created.',
+          message:
+            'PayPal checkout was created, but Kasyora could not save the checkout session. No CJ order was created.',
         });
       }
 
@@ -1032,9 +1074,7 @@ router.get('/cj/payment/return', async (req, res) => {
   const paypalOrderId = safeString(req.query?.token, 200);
 
   const pendingPayment =
-    req.session?.cjPayment && req.session.cjPayment.source === 'CJ'
-      ? req.session.cjPayment
-      : null;
+    req.session?.cjPayment && req.session.cjPayment.source === 'CJ' ? req.session.cjPayment : null;
 
   const pendingOrderNumber = safeString(pendingPayment?.cjOrderNumber, 100);
 
@@ -1088,7 +1128,10 @@ router.get('/cj/payment/return', async (req, res) => {
           );
         }
 
-        const recoveredStatus = safeString(recovered.capture?.status || recovered.paypalOrder?.status, 100).toUpperCase();
+        const recoveredStatus = safeString(
+          recovered.capture?.status || recovered.paypalOrder?.status,
+          100,
+        ).toUpperCase();
 
         if (recoveredStatus === 'PENDING') {
           delete req.session.cjPayment;
@@ -1198,9 +1241,7 @@ router.get('/cj/payment/cancel', async (req, res) => {
   const paypalOrderId = safeString(req.query?.token, 200);
 
   const pendingPayment =
-    req.session?.cjPayment && req.session.cjPayment.source === 'CJ'
-      ? req.session.cjPayment
-      : null;
+    req.session?.cjPayment && req.session.cjPayment.source === 'CJ' ? req.session.cjPayment : null;
 
   if (
     pendingPayment?.paypalOrderId &&
