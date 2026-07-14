@@ -134,7 +134,14 @@ const {
   PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET,
   PAYPAL_MODE = 'sandbox',
+
+  // Kasyora's accounting, cart, shipping and order currency.
   BASE_CURRENCY,
+
+  // Currency that is actually sent to PayPal.
+  // Example: BASE_CURRENCY=ZAR and PAYPAL_CHECKOUT_CURRENCY=USD.
+  PAYPAL_CHECKOUT_CURRENCY = 'USD',
+
   VAT_RATE = '0.15',
   BRAND_NAME = 'Kasyora',
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
@@ -155,7 +162,53 @@ const upperCcy = (() => {
   const c = String(BASE_CURRENCY || 'USD')
     .trim()
     .toUpperCase();
-  return /^[A-Z]{3}$/.test(c) ? c : 'USD'; // fallback to USD if invalid
+
+  return /^[A-Z]{3}$/.test(c) ? c : 'USD';
+})();
+
+const SUPPORTED_PAYPAL_CURRENCIES = new Set([
+  'AUD',
+  'BRL',
+  'CAD',
+  'CNY',
+  'CZK',
+  'DKK',
+  'EUR',
+  'HKD',
+  'HUF',
+  'ILS',
+  'JPY',
+  'MYR',
+  'MXN',
+  'TWD',
+  'NZD',
+  'NOK',
+  'PHP',
+  'PLN',
+  'GBP',
+  'SGD',
+  'SEK',
+  'CHF',
+  'THB',
+  'USD',
+]);
+
+const paypalCheckoutCcy = (() => {
+  const currency = String(PAYPAL_CHECKOUT_CURRENCY || 'USD')
+    .trim()
+    .toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error('PAYPAL_CHECKOUT_CURRENCY must be a valid three-letter currency code.');
+  }
+
+  if (!SUPPORTED_PAYPAL_CURRENCIES.has(currency)) {
+    throw new Error(
+      `PAYPAL_CHECKOUT_CURRENCY=${currency} is not supported by this PayPal checkout flow.`,
+    );
+  }
+
+  return currency;
 })();
 
 const vatRate = (() => {
@@ -344,6 +397,49 @@ function toMoney2(v, fallback = '0.00') {
   if (n === null) return fallback;
   return n.toFixed(2);
 }
+
+async function convertCheckoutAmountToPaypal(amount) {
+  const normalizedAmount = normalizeMoneyNumber(amount);
+
+  if (normalizedAmount === null || normalizedAmount < 0) {
+    const err = new Error('Invalid checkout amount supplied for PayPal conversion.');
+    err.code = 'PAYPAL_CHECKOUT_AMOUNT_INVALID';
+    throw err;
+  }
+
+  const baseAmount = Number(normalizedAmount.toFixed(2));
+
+  if (upperCcy === paypalCheckoutCcy) {
+    return {
+      value: baseAmount,
+      currency: paypalCheckoutCcy,
+      fx: null,
+    };
+  }
+
+  const converted = await convertMoneyAmount(baseAmount, upperCcy, paypalCheckoutCcy);
+
+  const convertedValue = normalizeMoneyNumber(converted?.value);
+  const convertedCurrency = String(converted?.currency || '')
+    .trim()
+    .toUpperCase();
+
+  if (convertedValue === null || convertedValue < 0 || convertedCurrency !== paypalCheckoutCcy) {
+    const err = new Error(
+      `Could not safely convert ${upperCcy} checkout amount to ${paypalCheckoutCcy}.`,
+    );
+
+    err.code = 'PAYPAL_CHECKOUT_FX_FAILED';
+    throw err;
+  }
+
+  return {
+    value: Number(convertedValue.toFixed(2)),
+    currency: convertedCurrency,
+    fx: converted?.fx || null,
+  };
+}
+
 function toQty(v, fallback = 1) {
   const n = normalizeMoneyNumber(v);
   if (n === null) return fallback;
@@ -1639,7 +1735,8 @@ router.get('/checkout', async (req, res) => {
     themeCss: themeCssFrom(req),
     nonce: resNonce(req),
     paypalClientId: String(PAYPAL_CLIENT_ID || '').trim(),
-    currency: upperCcy,
+    currency: paypalCheckoutCcy,
+    baseCurrency: upperCcy,
     brandName: BRAND_NAME_N,
     vatRate,
     // COUNTRIES,
@@ -1665,10 +1762,16 @@ router.get('/orders', requireAnyAuth, (req, res) => {
 router.get('/config', (req, res) => {
   res.json({
     clientId: String(PAYPAL_CLIENT_ID || '').trim(),
-    currency: upperCcy,
+
+    // Currency used by the PayPal checkout.
+    currency: paypalCheckoutCcy,
+
     intent: 'capture',
     mode: PAYPAL_MODE_N,
+
+    // Currency used by Kasyora for cart, shipping and order accounting.
     baseCurrency: upperCcy,
+
     brandName: BRAND_NAME_N,
   });
 });
@@ -2258,7 +2361,7 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     }
 
     const {
-      items: ppItems,
+      items: basePaypalItems,
       subTotal,
       vatTotal,
       delivery: del,
@@ -2276,28 +2379,100 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       deliveryDollars,
     );
 
+    /*
+     * Kasyora keeps all checkout, shipping and order accounting in BASE_CURRENCY.
+     * Only the values sent to PayPal are converted to PAYPAL_CHECKOUT_CURRENCY.
+     */
+    const convertedPaypalItems = [];
+
+    for (const item of basePaypalItems) {
+      const convertedUnit = await convertCheckoutAmountToPaypal(item?.unit_amount?.value);
+
+      convertedPaypalItems.push({
+        ...item,
+        unit_amount: {
+          currency_code: paypalCheckoutCcy,
+          value: convertedUnit.value.toFixed(2),
+        },
+      });
+    }
+
+    /*
+     * Calculate PayPal item_total from the converted unit amounts.
+     * This prevents PayPal rounding mismatches.
+     */
+    const paypalItemTotal = Number(
+      convertedPaypalItems
+        .reduce((sum, item) => {
+          const unitAmount = normalizeMoneyNumber(item?.unit_amount?.value) || 0;
+          const quantity = toQty(item?.quantity, 1);
+
+          return sum + unitAmount * quantity;
+        }, 0)
+        .toFixed(2),
+    );
+
+    const convertedVat = await convertCheckoutAmountToPaypal(vatTotal);
+    const convertedShipping = await convertCheckoutAmountToPaypal(del);
+
+    const paypalVatTotal = Number(convertedVat.value.toFixed(2));
+    const paypalShippingTotal = Number(convertedShipping.value.toFixed(2));
+
+    const paypalGrandTotal = Number(
+      (paypalItemTotal + paypalVatTotal + paypalShippingTotal).toFixed(2),
+    );
+
+    if (!Number.isFinite(paypalGrandTotal) || paypalGrandTotal <= 0) {
+      return res.status(422).json({
+        ok: false,
+        code: 'PAYPAL_CHECKOUT_TOTAL_INVALID',
+        message: 'The converted PayPal checkout total is invalid.',
+      });
+    }
+
     const orderBody = {
       intent: 'CAPTURE',
+
       purchase_units: [
         {
           reference_id: `PK-${Date.now()}`,
+
           amount: {
-            currency_code: upperCcy,
-            value: grand.toFixed(2),
+            currency_code: paypalCheckoutCcy,
+            value: paypalGrandTotal.toFixed(2),
+
             breakdown: {
-              item_total: { currency_code: upperCcy, value: subTotal.toFixed(2) },
-              tax_total: { currency_code: upperCcy, value: vatTotal.toFixed(2) },
-              shipping: { currency_code: upperCcy, value: del.toFixed(2) },
+              item_total: {
+                currency_code: paypalCheckoutCcy,
+                value: paypalItemTotal.toFixed(2),
+              },
+
+              tax_total: {
+                currency_code: paypalCheckoutCcy,
+                value: paypalVatTotal.toFixed(2),
+              },
+
+              shipping: {
+                currency_code: paypalCheckoutCcy,
+                value: paypalShippingTotal.toFixed(2),
+              },
             },
           },
-          items: ppItems,
+
+          items: convertedPaypalItems,
+
           description: `Shipping: ${deliveryName}`.slice(0, 127),
+
           shipping: {
-            name: { full_name: shippingInput.fullName },
+            name: {
+              full_name: shippingInput.fullName,
+            },
+
             address: shippingInput.address,
           },
         },
       ],
+
       application_context: {
         brand_name: BRAND_NAME_N,
         user_action: 'PAY_NOW',
@@ -2344,11 +2519,34 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     }
 
     if (!ppRes.ok) {
-      console.error('PayPal create error:', ppRes.status, data);
+      const paypalIssue = safeStr(
+        data?.details?.[0]?.issue || data?.name || 'PAYPAL_CREATE_FAILED',
+        200,
+      );
+
+      const paypalDescription = safeStr(
+        data?.details?.[0]?.description ||
+          data?.message ||
+          `PayPal create order failed with HTTP ${ppRes.status}.`,
+        1000,
+      );
+
+      console.error('PayPal create error:', {
+        status: ppRes.status,
+        issue: paypalIssue,
+        description: paypalDescription,
+        debugId: paypalCreateDebugId,
+        response: data,
+      });
+
       return res.status(502).json({
         ok: false,
-        code: 'PAYPAL_CREATE_FAILED',
-        message: `PayPal create order failed (${ppRes.status}).`,
+        code: paypalIssue,
+        message:
+          paypalIssue === 'CURRENCY_NOT_SUPPORTED'
+            ? 'The PayPal checkout currency is not supported. Please contact Kasyora support.'
+            : paypalDescription,
+        debugId: paypalCreateDebugId || undefined,
         details:
           String(process.env.NODE_ENV || '').toLowerCase() === 'production' ? undefined : data,
       });
@@ -2365,10 +2563,26 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       deliveryDays,
       deliveryPrice: del,
 
+      /*
+       * Kasyora accounting values.
+       */
       subTotal,
       vatTotal,
       grandTotal: grand,
       currency: upperCcy,
+
+      /*
+       * PayPal checkout values.
+       * These are used later to verify that PayPal captured the exact
+       * expected converted amount and currency.
+       */
+      paypalAmount: {
+        itemTotal: paypalItemTotal,
+        taxTotal: paypalVatTotal,
+        shipping: paypalShippingTotal,
+        grandTotal: paypalGrandTotal,
+        currency: paypalCheckoutCcy,
+      },
 
       quoteFingerprint,
       ...(pendingShippo ? { shippo: pendingShippo } : {}),
@@ -2452,8 +2666,76 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
       });
     }
 
+    const paypalOrderStatus = safeStr(capture?.status, 50).toUpperCase();
+
     const pu = capture?.purchase_units?.[0] || {};
-    const cap0 = Array.isArray(pu?.payments?.captures) ? pu.payments.captures[0] : null;
+
+    const captures = Array.isArray(pu?.payments?.captures) ? pu.payments.captures : [];
+
+    const cap0 =
+      captures.find((entry) => safeStr(entry?.status, 50).toUpperCase() === 'COMPLETED') ||
+      captures[0] ||
+      null;
+
+    const captureId = safeStr(cap0?.id, 128);
+    const captureStatus = safeStr(cap0?.status, 50).toUpperCase();
+
+    if (paypalOrderStatus !== 'COMPLETED' || !captureId || captureStatus !== 'COMPLETED') {
+      console.error('[internal PayPal capture incomplete]', {
+        orderID,
+        paypalOrderStatus,
+        captureId: captureId || null,
+        captureStatus: captureStatus || null,
+      });
+
+      return res.status(409).json({
+        ok: false,
+        code: 'PAYPAL_CAPTURE_NOT_COMPLETED',
+        message: 'PayPal did not return a completed payment capture. No Kasyora order was created.',
+      });
+    }
+
+    const expectedPaypalAmount = normalizeMoneyNumber(pending?.paypalAmount?.grandTotal);
+
+    const expectedPaypalCurrency = safeStr(pending?.paypalAmount?.currency, 3).toUpperCase();
+
+    const capturedPaypalAmount = normalizeMoneyNumber(cap0?.amount?.value);
+
+    const capturedPaypalCurrency = safeStr(cap0?.amount?.currency_code, 3).toUpperCase();
+
+    if (
+      expectedPaypalAmount === null ||
+      capturedPaypalAmount === null ||
+      Math.abs(expectedPaypalAmount - capturedPaypalAmount) >= 0.01
+    ) {
+      console.error('[internal PayPal capture amount mismatch]', {
+        orderID,
+        expectedPaypalAmount,
+        capturedPaypalAmount,
+      });
+
+      return res.status(409).json({
+        ok: false,
+        code: 'PAYPAL_CAPTURE_AMOUNT_MISMATCH',
+        message:
+          'The amount captured by PayPal did not match the amount expected by Kasyora. The order was not created.',
+      });
+    }
+
+    if (!expectedPaypalCurrency || capturedPaypalCurrency !== expectedPaypalCurrency) {
+      console.error('[internal PayPal capture currency mismatch]', {
+        orderID,
+        expectedPaypalCurrency,
+        capturedPaypalCurrency,
+      });
+
+      return res.status(409).json({
+        ok: false,
+        code: 'PAYPAL_CAPTURE_CURRENCY_MISMATCH',
+        message:
+          'The currency captured by PayPal did not match the expected checkout currency. The order was not created.',
+      });
+    }
 
     const payer = capture?.payer || {};
     const payerName = payer?.name || {};
@@ -2524,8 +2806,6 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
         value: String(pending?.grandTotal || '0'),
         currency_code: upperCcy,
       };
-
-    const captureId = cap0?.id || null;
 
     const srb = cap0?.seller_receivable_breakdown || null;
     const paypalFeeVal = srb?.paypal_fee?.value ?? null;
@@ -2644,9 +2924,14 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
               }
             : {}),
 
+          /*
+           * The canonical Kasyora order amount stays in BASE_CURRENCY.
+           * The separate capture record below stores the actual PayPal
+           * transaction currency and PayPal amount.
+           */
           amount: {
-            value: toMoney2(finalAmount.value || '0'),
-            currency: finalAmount.currency_code || upperCcy,
+            value: toMoney2(pending?.grandTotal || '0'),
+            currency: upperCcy,
           },
 
           breakdown: pending
@@ -2852,11 +3137,28 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
 
     req.session.lastOrderSnapshot = {
       ...buildSessionSnapshot(orderID, pending),
+
       shipping: shippingAddress,
+
+      /*
+       * Display the customer's Kasyora order total in BASE_CURRENCY.
+       */
       amount: {
-        value: Number(normalizeMoneyNumber(finalAmount?.value) ?? pending?.grandTotal ?? 0),
+        value: Number(normalizeMoneyNumber(pending?.grandTotal) ?? 0),
       },
-      currency: String(finalAmount?.currency_code || pending?.currency || upperCcy).toUpperCase(),
+
+      currency: upperCcy,
+
+      /*
+       * Keep the PayPal transaction details separately for auditing.
+       */
+      paypal: {
+        orderId: orderID,
+        captureId,
+        amount: capturedPaypalAmount,
+        currency: capturedPaypalCurrency,
+        status: captureStatus,
+      },
     };
 
     req.session.cart = { items: [] };

@@ -60,8 +60,21 @@ async function loadProductsForCart(cart, { Product } = {}) {
   const unique = [...new Set(ids)];
   if (!unique.length) return [];
 
-  const prods = await Product.find({ customId: { $in: unique } })
-    .select('customId name shipping')
+  const prods = await Product.find({
+    customId: {
+      $in: unique,
+    },
+  })
+    /*
+     * madeCode is the product's ISO-3166-1 alpha-2
+     * manufacturing-origin country code.
+     *
+     * Example:
+     * ZA = manufactured in South Africa
+     * CN = manufactured in China
+     * US = manufactured in the United States
+     */
+    .select('customId name made madeCode shipping')
     .lean();
 
   const map = new Map(prods.map((p) => [String(p.customId), p]));
@@ -104,7 +117,7 @@ function validateCartProductsShippingOrThrow(pairs) {
 
   if (missingList.length) {
     const err = new Error(
-      `Shipping is unavailable because these products are missing shipping measurements: ${missingList.join(' | ')}`
+      `Shipping is unavailable because these products are missing shipping measurements: ${missingList.join(' | ')}`,
     );
     err.code = 'PRODUCT_SHIPPING_MISSING';
     throw err;

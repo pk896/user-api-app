@@ -36,7 +36,20 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
     throw err;
   }
 
-  const originCountry = normalizeCountryCode(envStr('SHIPPO_FROM_COUNTRY', 'ZA')) || 'ZA';
+  /*
+   * Customs item origin means the country where the product was
+   * manufactured or produced.
+   *
+   * It is NOT:
+   * - the pickup warehouse country;
+   * - the customer's destination country;
+   * - SHIPPO_FROM_COUNTRY.
+   *
+   * This dedicated fallback is used only when an older product
+   * does not yet have a valid madeCode.
+   */
+  const defaultProductOriginCountry =
+    normalizeCountryCode(envStr('SHIPPO_DEFAULT_PRODUCT_ORIGIN_COUNTRY', 'ZA')) || 'ZA';
   const currency = upperCcy;
   const massUnit = 'kg';
 
@@ -47,7 +60,7 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
 
   const exporterRef = (() => {
     const pref = 'UNIC';
-    const dest = clip((toCountry ? String(toCountry).toUpperCase() : 'XX'), 2);
+    const dest = clip(toCountry ? String(toCountry).toUpperCase() : 'XX', 2);
     const ts = Math.floor(Date.now() / 1000);
     return clip(`${pref}-${dest}-${ts}`, 20);
   })();
@@ -55,35 +68,52 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
   const signer = envStr('SHIPPO_FROM_NAME', BRAND_NAME_N) || BRAND_NAME_N;
 
   const items = pairs.map((row, i) => {
-    const p = row.product;
-    const it = row.cartItem;
+    const product = row.product;
+    const cartItem = row.cartItem;
 
-    const qty = toQty(it?.qty ?? it?.quantity, 1);
+    const quantity = toQty(cartItem?.qty ?? cartItem?.quantity, 1);
 
-    const name = String(p?.name || it?.name || it?.title || `Item ${i + 1}`).slice(0, 50);
+    const name = String(product?.name || cartItem?.name || cartItem?.title || `Item ${i + 1}`)
+      .trim()
+      .slice(0, 50);
 
-    const unitVal = normalizeMoneyNumber(it?.price ?? it?.unitPrice) ?? 0;
-    const totalVal = +(Number(unitVal) * qty).toFixed(2);
+    const unitValue = normalizeMoneyNumber(cartItem?.price ?? cartItem?.unitPrice) ?? 0;
 
-    const sh = p?.shipping || {};
-    const kgEach = kgFrom(sh?.weight?.value, sh?.weight?.unit);
-    const totalKg = +(kgEach * qty).toFixed(3);
+    const totalValue = Number((Number(unitValue) * quantity).toFixed(2));
+
+    const shipping = product?.shipping || {};
+
+    const kgEach = kgFrom(shipping?.weight?.value, shipping?.weight?.unit);
+
+    const totalKg = Number((kgEach * quantity).toFixed(3));
+
+    /*
+     * Product.madeCode is stored lowercase in MongoDB,
+     * so normalizeCountryCode() converts it safely to the
+     * uppercase two-letter code required by Shippo.
+     */
+    const productOriginCountry =
+      normalizeCountryCode(product?.madeCode) || defaultProductOriginCountry;
 
     return {
       description: name,
-      quantity: qty,
+
+      quantity,
+
       net_weight: String(Math.max(0.001, totalKg)),
+
       mass_unit: massUnit,
-      value_amount: String(Math.max(0, totalVal)),
+
+      value_amount: String(Math.max(0, totalValue)),
+
       value_currency: currency,
-      origin_country: originCountry,
+
+      origin_country: productOriginCountry,
     };
   });
 
   const rawEelPfc =
-  typeof getShippoEelPfc === 'function'
-    ? String(getShippoEelPfc() || '').trim()
-    : '';
+    typeof getShippoEelPfc === 'function' ? String(getShippoEelPfc() || '').trim() : '';
 
   const eelPfc = rawEelPfc || 'NOEEI_30_37_a'; // ✅ hard fallback (never empty)
 
@@ -98,13 +128,24 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
     items,
   };
 
-  // ✅ temporary debug log (safe)
+  const customsItemOrigins = [
+    ...new Set(
+      payload.items.map((item) => normalizeCountryCode(item?.origin_country)).filter(Boolean),
+    ),
+  ];
+
   console.log('[Shippo customs payload]', {
     eel_pfc: payload.eel_pfc,
+
     exporter_reference: payload.exporter_reference,
+
     itemsCount: Array.isArray(payload.items) ? payload.items.length : 0,
-    originCountry,
-    toCountry,
+
+    itemOrigins: customsItemOrigins,
+
+    defaultProductOriginCountry,
+
+    toCountry: normalizeCountryCode(toCountry),
   });
 
   const res = await fetchWithTimeout(
@@ -114,16 +155,16 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
       headers: shippoHeaders(),
       body: JSON.stringify(payload),
     },
-    SHIPPO_TIMEOUT_MS
+    SHIPPO_TIMEOUT_MS,
   );
 
   const json = await res.json().catch(() => ({}));
 
   if (!res.ok) {
     const msg =
-      (Array.isArray(json?.messages) && json.messages.length)
+      Array.isArray(json?.messages) && json.messages.length
         ? JSON.stringify(json.messages)
-        : (json?.detail || json?.message || JSON.stringify(json));
+        : json?.detail || json?.message || JSON.stringify(json);
     const err = new Error(`Shippo customs declaration error (${res.status}): ${msg}`);
     err.code = 'SHIPPO_CUSTOMS_FAILED';
     throw err;
@@ -132,9 +173,9 @@ async function shippoCreateCustomsDeclaration({ cart, toCountry }, deps = {}) {
   const status = String(json?.object_status || '').toUpperCase();
   if (status && status !== 'SUCCESS') {
     const msg =
-      (Array.isArray(json?.messages) && json.messages.length)
+      Array.isArray(json?.messages) && json.messages.length
         ? JSON.stringify(json.messages)
-        : (json?.detail || json?.message || JSON.stringify(json));
+        : json?.detail || json?.message || JSON.stringify(json);
     const err = new Error(`Shippo customs declaration object_status=${status}: ${msg}`);
     err.code = 'SHIPPO_CUSTOMS_OBJECT_ERROR';
     throw err;

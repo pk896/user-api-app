@@ -458,12 +458,144 @@ async function pollTransactionUntilDone(
   return cur;
 }
 
+function normalizeShippoMessages(value) {
+  const output = [];
+
+  function visit(entry) {
+    if (entry === null || entry === undefined) {
+      return;
+    }
+
+    if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
+      const text = String(entry).trim();
+
+      if (text) {
+        output.push({
+          source: '',
+          code: '',
+          text,
+        });
+      }
+
+      return;
+    }
+
+    if (Array.isArray(entry)) {
+      entry.forEach(visit);
+      return;
+    }
+
+    if (typeof entry !== 'object') {
+      return;
+    }
+
+    const source = String(entry.source || entry.provider || entry.carrier || '').trim();
+
+    const code = String(entry.code || entry.error_code || entry.errorCode || '').trim();
+
+    const text = String(
+      entry.text || entry.message || entry.description || entry.detail || entry.error || '',
+    ).trim();
+
+    if (source || code || text) {
+      output.push({
+        source,
+        code,
+        text,
+      });
+    }
+
+    for (const nested of Object.values(entry)) {
+      if (nested && typeof nested === 'object') {
+        visit(nested);
+      }
+    }
+  }
+
+  visit(value);
+
+  const seen = new Set();
+
+  return output.filter((message) => {
+    const key = [message.source, message.code, message.text].join('|').toLowerCase();
+
+    if (!key.replace(/\|/g, '').trim()) {
+      return false;
+    }
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function shippoMessageText(message) {
+  const source = String(message?.source || '').trim();
+  const code = String(message?.code || '').trim();
+  const text = String(message?.text || '').trim();
+
+  return [source, code, text].filter(Boolean).join(' — ');
+}
+
 function providerToShippoCarrierToken(providerName) {
   const raw = String(providerName || '')
     .trim()
     .toLowerCase();
   if (!raw) return null;
   return raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function buildShippoLabelFailure(transaction, chosenRate) {
+  const messages = normalizeShippoMessages(
+    transaction?.messages ||
+      transaction?.validation_results ||
+      transaction?.meta ||
+      transaction?.detail ||
+      null,
+  );
+
+  const provider = String(chosenRate?.provider || transaction?.provider || 'Carrier').trim();
+
+  const combined = messages.map(shippoMessageText).filter(Boolean).join(' | ');
+
+  const normalized = combined.toLowerCase();
+
+  let code = 'SHIPPO_CARRIER_REJECTED_LABEL';
+
+  let message = combined
+    ? `${provider} rejected the Shippo label: ${combined}`
+    : `${provider} rejected the Shippo label, but did not return a detailed reason.`;
+
+  /*
+   * Known DHL account rejection.
+   * We are not blocking DHL. We are only translating the carrier's
+   * response into a clear message for the administrator.
+   */
+  if (normalized.includes('sv031') || normalized.includes('cash customer type account')) {
+    code = 'SHIPPO_DHL_CASH_ACCOUNT_REJECTED';
+
+    message =
+      'DHL Express rejected the label because the connected DHL account is registered as a Cash Customer account. DHL requires the account to be enabled or approved for label purchases through Shippo. Contact DHL Express customer service or your DHL account representative and provide error code SV031.';
+  }
+
+  if (
+    normalized.includes('submissiondatetooold') ||
+    (normalized.includes('submission date') && normalized.includes('older than 24'))
+  ) {
+    code = 'SHIPPO_SUBMISSION_DATE_TOO_OLD';
+
+    message =
+      'The carrier rejected the label because the saved shipment submission date is older than 24 hours. Create a fresh shipment and obtain a new rate before purchasing the label.';
+  }
+
+  return {
+    code,
+    message,
+    messages,
+  };
 }
 
 // ======================================================
@@ -536,18 +668,43 @@ async function createLabelForOrder(order, opts = {}) {
   if (!tx?.label_url) tx = await pollTransactionUntilDone(tx);
 
   if (!tx?.label_url) {
-    const status = tx?.status || tx?.object_status || 'UNKNOWN';
-    const messages = tx?.messages || tx?.validation_results || tx?.meta || null;
+    const status = String(tx?.status || tx?.object_status || 'UNKNOWN')
+      .trim()
+      .toUpperCase();
 
-    const err = new Error('Shippo did not return a label_url.');
-    err.code = 'SHIPPO_NO_LABEL_URL';
+    const failure = buildShippoLabelFailure(tx, chosenRate);
+
+    const err = new Error(failure.message);
+
+    err.code = failure.code;
+
     err.shippo = {
       status,
-      messages,
+      messages: failure.messages,
+
+      transactionId: String(tx?.object_id || '').trim(),
+
+      rateId: String(chosenRate?.object_id || rateId || '').trim(),
+
+      shipmentId: String(shipment?.object_id || shipmentId || '').trim(),
+
+      provider: String(chosenRate?.provider || tx?.provider || '').trim(),
+
+      servicelevel: String(
+        chosenRate?.servicelevel?.name || chosenRate?.servicelevel?.token || '',
+      ).trim(),
+
+      carrierAccount: String(
+        chosenRate?.carrier_account?.object_id ||
+          chosenRate?.carrier_account?.id ||
+          chosenRate?.carrier_account ||
+          '',
+      ).trim(),
+
       transaction: tx,
       chosenRate,
-      shipmentId: shipment?.object_id || shipmentId || null,
     };
+
     throw err;
   }
 

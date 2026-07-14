@@ -669,19 +669,79 @@ router.post(
       } catch (e) {
         const shippo = e?.shippo || e?.details || null;
 
-        console.error('❌ Shippo STRICT payer purchase failed:', {
-          message: e?.message,
-          code: e?.code,
+        const terminalDetails = {
+          message: e?.message || 'Shippo failed while buying the payer-selected rate.',
+
+          code: e?.code || 'SHIPPO_LABEL_PURCHASE_FAILED',
+
+          orderId: order.orderId,
+
           payerRateId,
           payerShipmentId,
+
+          provider: shippo?.provider || shippo?.chosenRate?.provider || '',
+
+          servicelevel:
+            shippo?.servicelevel ||
+            shippo?.chosenRate?.servicelevel?.name ||
+            shippo?.chosenRate?.servicelevel?.token ||
+            '',
+
+          carrierAccount: shippo?.carrierAccount || shippo?.chosenRate?.carrier_account || '',
+
+          status: shippo?.status || shippo?.transaction?.status || '',
+
+          transactionId: shippo?.transactionId || shippo?.transaction?.object_id || '',
+
+          messages: Array.isArray(shippo?.messages) ? shippo.messages : [],
+
           shippo,
+        };
+
+        /*
+         * console.dir with depth:null prevents Node from replacing
+         * nested Shippo messages with [Object] or [Array].
+         */
+        console.error('❌ Shippo STRICT payer purchase failed:');
+
+        console.dir(terminalDetails, {
+          depth: null,
+          colors: false,
+          maxArrayLength: null,
+          maxStringLength: null,
         });
 
         return res.status(502).json({
           ok: false,
-          message: e?.message || 'Shippo failed (strict payer rate)',
-          shippo,
-          debug: { orderId: order.orderId, payerRateId, payerShipmentId },
+
+          code: e?.code || 'SHIPPO_LABEL_PURCHASE_FAILED',
+
+          message: e?.message || 'Shippo failed while buying the payer-selected rate.',
+
+          shippo: {
+            status: terminalDetails.status,
+
+            provider: terminalDetails.provider,
+
+            servicelevel: terminalDetails.servicelevel,
+
+            carrierAccount: terminalDetails.carrierAccount,
+
+            transactionId: terminalDetails.transactionId,
+
+            rateId: shippo?.rateId || payerRateId,
+
+            shipmentId: shippo?.shipmentId || payerShipmentId,
+
+            messages: terminalDetails.messages,
+          },
+
+          debug: {
+            orderId: order.orderId,
+
+            payerRateId,
+            payerShipmentId,
+          },
         });
       }
 

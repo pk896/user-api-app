@@ -1751,22 +1751,89 @@
         }
 
         function setSmartCountrySelected(codeUpper, triggerChange) {
-          const code = String(codeUpper || DEFAULT_COUNTRY).toUpperCase();
+          const requestedCode = String(
+              codeUpper || DEFAULT_COUNTRY,
+            )
+            .trim()
+            .toUpperCase();
 
-          // update hidden select value
-          el.shipCountry.value = code;
+          const match = COUNTRIES.find(country =>
+            String(country?.code || '')
+            .trim()
+            .toUpperCase() === requestedCode
+          );
 
-          // update active class
-          el.coCountryList.querySelectorAll('.co-country-option').forEach(o => {
-            o.classList.toggle('active', String(o.dataset.value || '').toUpperCase() === code);
+          if (!match) {
+            console.error(
+              '[checkout country] Unknown country code:',
+              requestedCode,
+            );
+
+            showToast(
+              'Please select a valid delivery country.',
+              'error',
+            );
+
+            return;
+          }
+
+          const code = String(match.code)
+            .trim()
+            .toUpperCase();
+
+          /*
+           * Save the selected country in both places:
+           * 1. visible custom dropdown wrapper;
+           * 2. real hidden HTML select used by readShipTo().
+           */
+          el.coCountryDropdown.dataset.countryCode = code;
+
+          Array.from(el.shipCountry.options).forEach(option => {
+            option.selected =
+              String(option.value || '')
+              .trim()
+              .toUpperCase() === code;
           });
 
-          // update visible selected "button" area (flag + text)
-          const match = COUNTRIES.find(c => String(c.code || '').toUpperCase() === code);
-          const name = match ? String(match.name || code) : code;
+          el.shipCountry.value = code;
+
+          const hiddenCode = String(
+              el.shipCountry.value || '',
+            )
+            .trim()
+            .toUpperCase();
+
+          if (hiddenCode !== code) {
+            console.error(
+              '[checkout country] Hidden country did not synchronize:', {
+                requestedCode: code,
+                hiddenCode,
+              },
+            );
+
+            showToast(
+              'The country selection could not be saved. Please select it again.',
+              'error',
+            );
+
+            return;
+          }
+
+          el.coCountryList
+            .querySelectorAll('.co-country-option')
+            .forEach(option => {
+              option.classList.toggle(
+                'active',
+                String(option.dataset.value || '')
+                .trim()
+                .toUpperCase() === code,
+              );
+            });
+
+          const name =
+            String(match.name || code).trim() || code;
 
           if (el.coCountrySelectedText) {
-            // wipe and rebuild selected display inside the text span
             el.coCountrySelectedText.innerHTML = '';
 
             const img = document.createElement('img');
@@ -1775,15 +1842,20 @@
             img.loading = 'lazy';
             img.src = flagUrl(code);
 
-            const txt = document.createElement('span');
-            txt.textContent = `${name} (${code})`;
+            const text = document.createElement('span');
+            text.textContent = `${name} (${code})`;
 
             el.coCountrySelectedText.appendChild(img);
-            el.coCountrySelectedText.appendChild(txt);
+            el.coCountrySelectedText.appendChild(text);
           }
 
+          console.log('[checkout country selected]', {
+            visibleCountry: code,
+            hiddenCountry: hiddenCode,
+          });
+
           if (triggerChange) {
-            onAddressChange(); // ✅ keeps Shippo quote + PayPal gating flow
+            onAddressChange();
           }
         }
       }
@@ -1799,7 +1871,14 @@
         addressReady: false,
         cartReady: false,
         paypalMounted: false,
+
+        /*
+         * Only one shipping quote runs at a time.
+         * If the address changes while a quote is running,
+         * quoteQueued forces a new quote immediately afterward.
+         */
         quoteInFlight: false,
+        quoteQueued: false,
 
         // Shippo quote identity
         shippoShipmentId: null,
@@ -1884,19 +1963,70 @@
       });
 
       function readShipTo() {
-        const v = (x) => String(x || '').trim();
+        const value = input =>
+          String(input || '').trim();
+
+        const visibleCountry = value(
+          el.coCountryDropdown?.dataset?.countryCode,
+        ).toUpperCase();
+
+        const hiddenCountry = value(
+          el.shipCountry?.value,
+        ).toUpperCase();
+
+        /*
+         * Never send a quote when the visible dropdown and the
+         * real hidden country field disagree.
+         */
+        if (
+          visibleCountry &&
+          hiddenCountry &&
+          visibleCountry !== hiddenCountry
+        ) {
+          const error = new Error(
+            `Country selection is out of sync. The page shows ${visibleCountry}, but the shipping field contains ${hiddenCountry}. Please select the country again.`,
+          );
+
+          error.code =
+            'CHECKOUT_COUNTRY_OUT_OF_SYNC';
+
+          throw error;
+        }
+
+        const country =
+          visibleCountry || hiddenCountry;
+
+        if (!/^[A-Z]{2}$/.test(country)) {
+          const error = new Error(
+            'Please select a valid delivery country.',
+          );
+
+          error.code =
+            'CHECKOUT_COUNTRY_REQUIRED';
+
+          throw error;
+        }
 
         return {
-          name: v(el.shipName && el.shipName.value),
-          phone: v(el.shipPhone && el.shipPhone.value),
-          email: v(el.shipEmail && el.shipEmail.value),
-          street1: v(el.shipLine1 && el.shipLine1.value),
-          street2: v(el.shipLine2 && el.shipLine2.value),
-          city: v(el.shipCity && el.shipCity.value),
-          state: v(el.shipState && el.shipState.value),
-          zip: v(el.shipZip && el.shipZip.value),
-          country: v(el.shipCountry && el.shipCountry.value) || DEFAULT_COUNTRY,
-          is_residential: true
+          name: value(el.shipName?.value),
+
+          phone: value(el.shipPhone?.value),
+
+          email: value(el.shipEmail?.value),
+
+          street1: value(el.shipLine1?.value),
+
+          street2: value(el.shipLine2?.value),
+
+          city: value(el.shipCity?.value),
+
+          state: value(el.shipState?.value),
+
+          zip: value(el.shipZip?.value),
+
+          country,
+
+          is_residential: true,
         };
       }
 
@@ -1964,38 +2094,122 @@
       }
 
       function onAddressChange() {
-        const to = readShipTo();
-        const v = validateShipTo(to);
+        let to;
+
+        try {
+          to = readShipTo();
+        } catch (error) {
+          _addressRevision += 1;
+
+          state.shipTo = null;
+          state.addressReady = false;
+          state.deliveryReady = false;
+          state.selectedDelivery = null;
+          state.selectedShippingProvider = '';
+
+          if (state.quoteInFlight) {
+            state.quoteQueued = true;
+          }
+
+          if (el.shipHint) {
+            el.shipHint.textContent =
+              `⚠️ ${error?.message || 'Please check the delivery country.'}`;
+          }
+
+          if (el.shipSummary) {
+            el.shipSummary.textContent =
+              'Country selection needs attention';
+          }
+
+          blockPayment(
+            'Please correct the shipping country.',
+          );
+
+          return;
+        }
+
+        /*
+         * Any field change invalidates a quote that may already
+         * be running for the previous address.
+         */
+        _addressRevision += 1;
+
+        if (state.quoteInFlight) {
+          state.quoteQueued = true;
+        }
+
+        const validation =
+          validateShipTo(to);
 
         state.shipTo = to;
-        state.addressReady = v.ok;
+        state.addressReady = validation.ok;
 
-        // Hide old notice until the new Shippo quote confirms if this is international
+        /*
+         * Remove any previously selected rate because it belongs
+         * to the previous address.
+         */
+        state.deliveryReady = false;
+        state.selectedDelivery = null;
+        state.selectedShippingProvider = '';
+
+        state.courierGuyQuoteId = null;
+        state.shippoShipmentId = null;
+
+        state.courierGuyRates = [];
+        state.shippoRates = [];
+
+        if (el.deliverySelect) {
+          el.deliverySelect.disabled = true;
+          el.deliverySelect.innerHTML =
+            '<option value="">Address changed — loading new rates…</option>';
+        }
+
         state.isInternational = false;
         state.fromCountry = '';
         state.toCountry = '';
-        updateCustomsNotice();
 
-        // Update collapsible header summary + auto-collapse when valid
+        updateCustomsNotice();
+        updateSummary();
+
         if (el.shipSummary) {
-          if (v.ok) {
-            const match = COUNTRIES.find(c => String(c.code || '').toUpperCase() === String(to.country || '').toUpperCase());
-            const countryNice = match ? match.name : to.country;
-            const short = `${to.name} — ${to.city}, ${countryNice}`;
-            el.shipSummary.textContent = short;
+          if (validation.ok) {
+            const match = COUNTRIES.find(country =>
+              String(country?.code || '')
+              .trim()
+              .toUpperCase() ===
+              String(to.country || '')
+              .trim()
+              .toUpperCase()
+            );
+
+            const countryName =
+              match?.name || to.country;
+
+            el.shipSummary.textContent =
+              `${to.name} — ${to.city}, ${countryName}`;
           } else {
-            el.shipSummary.textContent = 'Not completed yet';
+            el.shipSummary.textContent =
+              'Not completed yet';
           }
         }
 
         if (el.shipHint) {
-          el.shipHint.textContent = v.ok ? '✅ Shipping address OK.' : ('⚠️ ' + v.message);
+          el.shipHint.textContent =
+            validation.ok ?
+            `✅ Shipping address OK. Country: ${to.country}.` :
+            `⚠️ ${validation.message}`;
         }
 
-        // ✅ Re-quote Shippo rates after user edits address (debounced)
         clearTimeout(_shippoQuoteTimer);
+
         _shippoQuoteTimer = setTimeout(() => {
-          if (state.addressReady && state.cartReady && state.items.length) loadDeliveryOptions();
+          if (
+            state.addressReady &&
+            state.cartReady &&
+            state.items.length
+          ) {
+            loadDeliveryOptions();
+          }
         }, 650);
 
         maybeEnablePayment();
@@ -2120,10 +2334,30 @@
 
       let _shippoQuoteTimer = null;
 
+      /*
+       * This number changes every time the delivery address changes.
+       * A quote is accepted only when it belongs to the latest revision.
+       */
+      let _addressRevision = 0;
+
       async function loadDeliveryOptions() {
-        if (state.quoteInFlight) return;
+        /*
+         * When another quote is already running, remember that a
+         * new quote is required. Do not silently discard the request.
+         */
+        if (state.quoteInFlight) {
+          state.quoteQueued = true;
+          return;
+        }
 
         state.quoteInFlight = true;
+        state.quoteQueued = false;
+
+        /*
+         * Remember which exact address revision this request uses.
+         */
+        const quoteAddressRevision =
+          _addressRevision;
 
         state.deliveryReady = false;
         state.selectedDelivery = null;
@@ -2223,6 +2457,29 @@
               courierGuyPromise,
               shippoPromise,
             ]);
+
+          /*
+           * The customer changed the address or country while these
+           * requests were running. Never display the old response.
+           */
+          if (
+            quoteAddressRevision !==
+            _addressRevision
+          ) {
+            console.warn(
+              '[shipping quote ignored: address changed]', {
+                quoteAddressRevision,
+                currentAddressRevision: _addressRevision,
+
+                quotedCountry: shipToNow.country,
+
+                currentCountry: state.shipTo?.country || '',
+              },
+            );
+
+            state.quoteQueued = true;
+            return;
+          }
 
           const courierGuyResult =
             results[0].status === 'fulfilled' ?
@@ -2445,8 +2702,26 @@
           );
         } finally {
           state.quoteInFlight = false;
+
           updateSummary();
           maybeEnablePayment();
+
+          /*
+           * The address changed while the previous request was running.
+           * Immediately request rates for the newest address.
+           */
+          if (
+            state.quoteQueued &&
+            state.addressReady &&
+            state.cartReady &&
+            state.items.length
+          ) {
+            state.quoteQueued = false;
+
+            window.setTimeout(() => {
+              loadDeliveryOptions();
+            }, 0);
+          }
         }
       }
 
