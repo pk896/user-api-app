@@ -19,6 +19,60 @@ const {
 
 const router = express.Router();
 
+/*
+ * Prevent two Courier Guy quote requests from running at the same
+ * time for the same checkout session.
+ *
+ * Without this lock:
+ * - request A creates quote A;
+ * - request B creates quote B;
+ * - quote B overwrites quote A in the session;
+ * - the customer selects quote A;
+ * - remember-rate sees quote B and incorrectly reports "expired".
+ */
+const courierGuyQuoteLocks = new Map();
+
+async function withCourierGuyQuoteLock(req, work) {
+  const sessionKey = String(req.sessionID || req.session?.id || '').trim();
+
+  /*
+   * A normal Express session request should always have sessionID.
+   * Use a request-specific fallback rather than combining unrelated
+   * customers under one shared lock.
+   */
+  const lockKey = sessionKey || `request-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const previousTail = courierGuyQuoteLocks.get(lockKey) || Promise.resolve();
+
+  /*
+   * Ignore an earlier rejected task so that it does not permanently
+   * block future quote requests.
+   */
+  const safePreviousTail = previousTail.catch(() => undefined);
+
+  let releaseCurrentLock;
+
+  const currentGate = new Promise((resolve) => {
+    releaseCurrentLock = resolve;
+  });
+
+  const currentTail = safePreviousTail.then(() => currentGate);
+
+  courierGuyQuoteLocks.set(lockKey, currentTail);
+
+  await safePreviousTail;
+
+  try {
+    return await work();
+  } finally {
+    releaseCurrentLock();
+
+    if (courierGuyQuoteLocks.get(lockKey) === currentTail) {
+      courierGuyQuoteLocks.delete(lockKey);
+    }
+  }
+}
+
 function normalizeText(value, max = 300) {
   return String(value || '')
     .trim()
@@ -314,134 +368,185 @@ async function convertCourierGuyRatesToBaseCurrency(rates) {
 // ======================================================
 router.post('/courier-guy/quote', express.json(), async (req, res) => {
   try {
-    const config = getCourierGuyConfig();
+    return await withCourierGuyQuoteLock(req, async () => {
+      const config = getCourierGuyConfig();
 
-    if (!config.enabled) {
-      return res.status(503).json({
-        ok: false,
-        code: 'COURIER_GUY_DISABLED',
-        message: 'The Courier Guy rates are currently disabled.',
+      if (!config.enabled) {
+        return res.status(503).json({
+          ok: false,
+          code: 'COURIER_GUY_DISABLED',
+          message: 'The Courier Guy rates are currently disabled.',
+        });
+      }
+
+      const cart = req.session?.cart || {
+        items: [],
+      };
+
+      if (!Array.isArray(cart.items) || cart.items.length === 0) {
+        return res.status(422).json({
+          ok: false,
+          code: 'CART_EMPTY',
+          message: 'Cart is empty.',
+        });
+      }
+
+      const shippingInput = shippingInputFromRequest(req);
+
+      /*
+       * The current Courier Guy sandbox flow supports
+       * South African delivery addresses only.
+       */
+      if (shippingInput.address.country_code !== 'ZA') {
+        return res.status(422).json({
+          ok: false,
+          code: 'COURIER_GUY_COUNTRY_UNSUPPORTED',
+
+          message:
+            'The Courier Guy rates are currently available only for South African delivery addresses.',
+        });
+      }
+
+      const signature = cartSignature(cart);
+
+      /*
+       * This is deliberately read inside the session lock.
+       *
+       * A second simultaneous request waits for the first
+       * request to save its quote and then reuses that quote.
+       */
+      const currentQuote = req.session?.courierGuyQuote || null;
+
+      const now = Date.now();
+
+      const fresh = Number(currentQuote?.expiresAt) > now;
+
+      const reusableQuote =
+        currentQuote &&
+        fresh &&
+        currentQuote.cartSig === signature &&
+        sameAddress(currentQuote.shippingInput, shippingInput) &&
+        Array.isArray(currentQuote.rates) &&
+        currentQuote.rates.length > 0;
+
+      if (reusableQuote) {
+        console.log('[Courier Guy quote reused]', {
+          quoteId: currentQuote.quoteId,
+
+          sessionId: req.sessionID || '',
+
+          ageMs: now - Number(currentQuote.createdAt || now),
+
+          rates: currentQuote.rates.length,
+        });
+
+        return res.json({
+          ok: true,
+          cached: true,
+
+          quoteId: currentQuote.quoteId,
+
+          rates: currentQuote.rates,
+
+          warehouse: currentQuote.warehouse || null,
+        });
+      }
+
+      const warehouse = await resolveWarehouseForCart(cart, {
+        to: destinationFromShippingInput(shippingInput),
+
+        Warehouse,
       });
-    }
 
-    const cart = req.session?.cart || {
-      items: [],
-    };
+      if (!warehouse) {
+        return res.status(422).json({
+          ok: false,
 
-    if (!Array.isArray(cart.items) || cart.items.length === 0) {
-      return res.status(422).json({
-        ok: false,
-        code: 'CART_EMPTY',
-        message: 'Cart is empty.',
+          code: 'COURIER_GUY_WAREHOUSE_NOT_FOUND',
+
+          message: 'No active warehouse is available for this delivery address.',
+        });
+      }
+
+      const result = await getCourierGuyRates({
+        cart,
+        shippingInput,
+        warehouse,
+        Product,
       });
-    }
 
-    const shippingInput = shippingInputFromRequest(req);
+      /*
+       * Shiplogic normally returns Courier Guy prices in ZAR.
+       * Convert them to Kasyora's BASE_CURRENCY before exposing
+       * them to Checkout and PayPal.
+       */
+      const convertedRates = await convertCourierGuyRatesToBaseCurrency(result.rates);
 
-    // Courier Guy sandbox integration is currently
-    // configured for South African domestic shipments.
-    if (shippingInput.address.country_code !== 'ZA') {
-      return res.status(422).json({
-        ok: false,
-        code: 'COURIER_GUY_COUNTRY_UNSUPPORTED',
-        message:
-          'The Courier Guy rates are currently available only for South African delivery addresses.',
+      const rates = convertedRates.map(publicRate);
+
+      if (!rates.length) {
+        return res.status(502).json({
+          ok: false,
+
+          code: 'COURIER_GUY_NO_RATES',
+
+          message: 'The Courier Guy returned no usable rates in the checkout currency.',
+        });
+      }
+
+      const createdAt = Date.now();
+
+      const expiresAt = createdAt + 5 * 60 * 1000;
+
+      const quoteId = ['CG', createdAt, Math.random().toString(36).slice(2, 10)].join('-');
+
+      req.session.courierGuyQuote = {
+        quoteId,
+        cartSig: signature,
+        shippingInput,
+
+        warehouseId: String(warehouse._id || ''),
+
+        warehouseCode: warehouse.code || '',
+
+        warehouse: publicWarehouseMeta(warehouse),
+
+        rates,
+        createdAt,
+        expiresAt,
+
+        requestPayload: result.payload,
+      };
+
+      req.session.courierGuySelectedRate = null;
+
+      await new Promise((resolve) => {
+        if (req.session && typeof req.session.save === 'function') {
+          req.session.save(() => resolve());
+        } else {
+          resolve();
+        }
       });
-    }
 
-    const signature = cartSignature(cart);
-    const currentQuote = req.session?.courierGuyQuote || null;
+      console.log('[Courier Guy quote created]', {
+        quoteId,
+        sessionId: req.sessionID || '',
 
-    const fresh = currentQuote?.createdAt && Date.now() - currentQuote.createdAt < 5 * 60 * 1000;
+        warehouse: warehouse.code || '',
 
-    if (
-      currentQuote &&
-      fresh &&
-      currentQuote.cartSig === signature &&
-      sameAddress(currentQuote.shippingInput, shippingInput) &&
-      Array.isArray(currentQuote.rates) &&
-      currentQuote.rates.length
-    ) {
+        rates: rates.length,
+
+        expiresAt: new Date(expiresAt).toISOString(),
+      });
+
       return res.json({
         ok: true,
-        cached: true,
-        quoteId: currentQuote.quoteId,
-        rates: currentQuote.rates,
-        warehouse: currentQuote.warehouse || null,
+        cached: false,
+        quoteId,
+        rates,
+
+        warehouse: publicWarehouseMeta(warehouse),
       });
-    }
-
-    const warehouse = await resolveWarehouseForCart(cart, {
-      to: destinationFromShippingInput(shippingInput),
-      Warehouse,
-    });
-
-    if (!warehouse) {
-      return res.status(422).json({
-        ok: false,
-        code: 'COURIER_GUY_WAREHOUSE_NOT_FOUND',
-        message: 'No active warehouse is available for this delivery address.',
-      });
-    }
-
-    const result = await getCourierGuyRates({
-      cart,
-      shippingInput,
-      warehouse,
-      Product,
-    });
-
-    // Shiplogic normally returns South African Courier Guy
-    // prices in ZAR. Convert them into the application
-    // BASE_CURRENCY before checkout and PayPal use them.
-    const convertedRates = await convertCourierGuyRatesToBaseCurrency(result.rates);
-
-    const rates = convertedRates.map(publicRate);
-
-    if (!rates.length) {
-      return res.status(502).json({
-        ok: false,
-        code: 'COURIER_GUY_NO_RATES',
-        message: 'The Courier Guy returned no usable rates in the checkout currency.',
-      });
-    }
-
-    const quoteId = ['CG', Date.now(), Math.random().toString(36).slice(2, 10)].join('-');
-
-    req.session.courierGuyQuote = {
-      quoteId,
-      cartSig: signature,
-      shippingInput,
-
-      warehouseId: String(warehouse._id || ''),
-
-      warehouseCode: warehouse.code || '',
-
-      warehouse: publicWarehouseMeta(warehouse),
-
-      rates,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 5 * 60 * 1000,
-
-      requestPayload: result.payload,
-    };
-
-    req.session.courierGuySelectedRate = null;
-
-    await new Promise((resolve) => {
-      if (req.session && typeof req.session.save === 'function') {
-        req.session.save(() => resolve());
-      } else {
-        resolve();
-      }
-    });
-
-    return res.json({
-      ok: true,
-      cached: false,
-      quoteId,
-      rates,
-      warehouse: publicWarehouseMeta(warehouse),
     });
   } catch (error) {
     console.error('POST /payment/courier-guy/quote error:', error?.stack || error);
@@ -456,7 +561,9 @@ router.post('/courier-guy/quote', express.json(), async (req, res) => {
 
     return res.status(status).json({
       ok: false,
+
       code: error?.code || 'COURIER_GUY_QUOTE_FAILED',
+
       message: error?.message || 'The Courier Guy rates could not be loaded.',
     });
   }
@@ -481,13 +588,79 @@ router.post('/courier-guy/remember-rate', express.json(), async (req, res) => {
 
     const quote = req.session?.courierGuyQuote || null;
 
-    const fresh = quote?.createdAt && Date.now() - quote.createdAt < 5 * 60 * 1000;
+    const now = Date.now();
 
-    if (!quote || !fresh || quote.quoteId !== quoteId) {
+    if (!quote) {
+      console.warn('[Courier Guy remember-rate rejected]', {
+        reason: 'QUOTE_MISSING',
+        receivedQuoteId: quoteId,
+        currentQuoteId: null,
+        rateId,
+        sessionId: req.sessionID || '',
+      });
+
       return res.status(409).json({
         ok: false,
+
+        code: 'COURIER_GUY_QUOTE_MISSING',
+
+        message: 'The Courier Guy quote is no longer available. Reload the rates and select again.',
+      });
+    }
+
+    const expiresAt = Number(quote.expiresAt || Number(quote.createdAt || 0) + 5 * 60 * 1000);
+
+    const fresh = Number.isFinite(expiresAt) && expiresAt > now;
+
+    if (!fresh) {
+      console.warn('[Courier Guy remember-rate rejected]', {
+        reason: 'QUOTE_EXPIRED',
+        receivedQuoteId: quoteId,
+
+        currentQuoteId: quote.quoteId || '',
+
+        rateId,
+
+        createdAt: quote.createdAt || null,
+
+        expiresAt: quote.expiresAt || null,
+
+        now,
+
+        sessionId: req.sessionID || '',
+      });
+
+      return res.status(409).json({
+        ok: false,
+
         code: 'COURIER_GUY_QUOTE_EXPIRED',
+
         message: 'The Courier Guy quote expired. Reload the rates and select again.',
+      });
+    }
+
+    if (String(quote.quoteId || '') !== quoteId) {
+      console.warn('[Courier Guy remember-rate rejected]', {
+        reason: 'QUOTE_ID_REPLACED',
+
+        receivedQuoteId: quoteId,
+
+        currentQuoteId: quote.quoteId || '',
+
+        rateId,
+
+        quoteAgeMs: now - Number(quote.createdAt || now),
+
+        sessionId: req.sessionID || '',
+      });
+
+      return res.status(409).json({
+        ok: false,
+
+        code: 'COURIER_GUY_QUOTE_REPLACED',
+
+        message:
+          'A newer Courier Guy quote replaced the selected quote. Please select the rate again.',
       });
     }
 
