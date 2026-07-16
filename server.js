@@ -444,13 +444,39 @@ app.use(
 
 app.use(flash());
 
+/*
+ * Customer display currency.
+ *
+ * This runs after express-session because the selected currency is
+ * stored in req.session.userCurrency.
+ *
+ * It runs before store, cart, checkout and department middleware so
+ * every later route receives the same currency context.
+ */
+const userCurrencyMiddleware = require('./middleware/userCurrency');
+
+app.use(userCurrencyMiddleware);
+
+/*
+ * Customer currency selection endpoints:
+ *
+ * GET  /currency
+ * POST /currency/select
+ * POST /currency/reset
+ */
+const currencyRoutes = require('./routes/currency');
+
+app.use('/currency', currencyRoutes);
+
 // Store department and separate cart summaries.
 // This does not mix or modify either cart.
 const storeDepartment = require('./middleware/storeDepartment');
+
 app.use(storeDepartment);
 
 // Date helpers middleware
 const { attachDateHelpers } = require('./middleware/dates');
+
 app.use(attachDateHelpers);
 
 // Passport configuration
@@ -1245,28 +1271,19 @@ async function startServer() {
     console.warn('⚠️ Courier Guy automatic shipment worker not started:', error?.message || error);
   }
 
-    // =====================================================
+  // =====================================================
   // CJ automatic supplier order creation
   // Completely standalone from internal orders, Shippo,
   // and Courier Guy.
   // =====================================================
   try {
-    const {
-      startAutoCreateCjOrdersWorker,
-    } = require(
-      './utils/cj/autoCreateCjOrders',
-    );
+    const { startAutoCreateCjOrdersWorker } = require('./utils/cj/autoCreateCjOrders');
 
     startAutoCreateCjOrdersWorker();
 
-    console.log(
-      '✅ CJ automatic supplier order worker initialized',
-    );
+    console.log('✅ CJ automatic supplier order worker initialized');
   } catch (error) {
-    console.warn(
-      '⚠️ CJ automatic supplier order worker not started:',
-      error?.message || error,
-    );
+    console.warn('⚠️ CJ automatic supplier order worker not started:', error?.message || error);
   }
 
   // =====================================================
@@ -1276,22 +1293,13 @@ async function startServer() {
   // It does not use internal Order, Shippo or Courier Guy.
   // =====================================================
   try {
-    const {
-      startCjTrackingSyncWorker,
-    } = require(
-      './utils/cj/autoSyncCjTracking',
-    );
+    const { startCjTrackingSyncWorker } = require('./utils/cj/autoSyncCjTracking');
 
     startCjTrackingSyncWorker();
 
-    console.log(
-      '✅ CJ shipment tracking worker initialized',
-    );
+    console.log('✅ CJ shipment tracking worker initialized');
   } catch (error) {
-    console.warn(
-      '⚠️ CJ shipment tracking worker not started:',
-      error?.message || error,
-    );
+    console.warn('⚠️ CJ shipment tracking worker not started:', error?.message || error);
   }
 
   // Start the server

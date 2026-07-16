@@ -4,11 +4,48 @@
     ? Number(vatRate)
     : 0.15;
 
-  const CURRENCY = String(
+  /*
+   * BASE_CURRENCY is Kasyora's authoritative internal currency.
+   * DISPLAY_CURRENCY is the customer's selected presentation currency.
+   *
+   * Product, cart, order, payout and PayPal source values remain in
+   * BASE_CURRENCY. Only visible amounts are converted here.
+   */
+  const BASE_CURRENCY = String(
     typeof baseCurrency !== 'undefined'
       ? baseCurrency
-      : ''
+      : 'USD'
   ).trim().toUpperCase() || 'USD';
+
+  const CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : BASE_CURRENCY
+  ).trim().toUpperCase() || BASE_CURRENCY;
+
+  const CURRENCY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
+
+  const CURRENCY_RATE =
+    Number.isFinite(CURRENCY_RATE_RAW) &&
+    CURRENCY_RATE_RAW > 0
+      ? CURRENCY_RATE_RAW
+      : 1;
+
+  function convertBaseToDisplay(amount) {
+    const baseAmount = Number(amount || 0);
+
+    if (!Number.isFinite(baseAmount)) {
+      return 0;
+    }
+
+    return Number(
+      (baseAmount * CURRENCY_RATE).toFixed(2)
+    );
+  }
 
   const ACTIVE_DEPARTMENT = String(
     typeof storeDepartment !== 'undefined'
@@ -43,20 +80,28 @@
       };
 
   function formatMoney(amount) {
-    const n = Number(amount || 0);
+    const convertedAmount =
+      convertBaseToDisplay(amount);
 
-    const formatted = new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: CURRENCY,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(n);
+    try {
+      const formatted = new Intl.NumberFormat(
+        undefined,
+        {
+          style: 'currency',
+          currency: CURRENCY,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }
+      ).format(convertedAmount);
 
-    if (CURRENCY === 'ZAR') {
-      return formatted.replace(/^ZAR\s?/, 'R');
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return `${CURRENCY} ${convertedAmount.toFixed(2)}`;
     }
-
-    return formatted;
   }
 
   function storeProductPayload(product) {
@@ -118,12 +163,10 @@
 
     <div class="col-lg-4 text-center text-lg-end">
       <div class="d-inline-flex align-items-center" style="height: 45px;">
-        <div class="dropdown">
-          <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small><%= CURRENCY === 'ZAR' ? 'R' : CURRENCY %></small></a>
-          <div class="dropdown-menu rounded">
-            <a href="#" class="dropdown-item"> Euro</a>
-            <a href="#" class="dropdown-item"> Dolar</a>
-          </div>
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+            currencyReturnTo: '/store'
+          }) %>
         </div>
 
         <div class="dropdown">
@@ -205,6 +248,37 @@
   </div>
 </div>
 <!-- Topbar End -->
+
+<%
+  const SHOW_CURRENCY_WARNING =
+    typeof currencyConversionAvailable !== 'undefined' &&
+    currencyConversionAvailable === false;
+
+  const CURRENCY_WARNING_TEXT =
+    typeof currencyConversionMessage !== 'undefined'
+      ? String(currencyConversionMessage || '').trim()
+      : '';
+%>
+
+<% if (SHOW_CURRENCY_WARNING && CURRENCY_WARNING_TEXT) { %>
+<div class="container mt-3">
+  <div class="alert alert-warning border shadow-sm mb-0" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fas fa-exclamation-triangle text-primary mt-1" aria-hidden="true"></i>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
+        </div>
+
+        <div class="small">
+          <%= CURRENCY_WARNING_TEXT %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
 
 <!-- Navbar & Hero Start -->
 <div class="container-fluid nav-bar p-0">
@@ -315,6 +389,18 @@
               </div>
             </div>
             <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
+
+            <div class="nav-item d-block d-lg-none px-3 py-2 mb-2">
+              <div class="small fw-bold text-white mb-1">
+                Display currency
+              </div>
+
+              <div class="bg-white rounded px-2 py-1 d-inline-flex">
+                <%- include('partials/currency-selector', {
+                  currencyReturnTo: '/store'
+                }) %>
+              </div>
+            </div>
 
             <div class="nav-item dropdown d-block d-lg-none mb-3">
               <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
@@ -1387,6 +1473,8 @@
   }
 </style>
 
+<%- include('partials/currency-client') %>
+
 <% if (!IS_CJ_DEPARTMENT) { %>
 <%- include('partials/cart-script-listing') %>
 <% } %>
@@ -1394,27 +1482,33 @@
 <% if (IS_CJ_DEPARTMENT) { %>
 <script nonce="<%= nonce %>">
   (function() {
-    const CURRENCY = "<%= CURRENCY %>";
-
     function formatMoney(amount) {
-      const n = Number(amount || 0);
+      if (
+        window.KasyoraCurrency &&
+        typeof window.KasyoraCurrency.formatBaseAmount === 'function'
+      ) {
+        return window.KasyoraCurrency.formatBaseAmount(
+          amount
+        );
+      }
 
-      try {
-        const formatted = new Intl.NumberFormat(undefined, {
+      const fallbackAmount = Number(amount || 0);
+      const fallbackCurrency =
+        "<%= BASE_CURRENCY %>";
+
+      return new Intl.NumberFormat(
+        undefined,
+        {
           style: 'currency',
-          currency: CURRENCY,
+          currency: fallbackCurrency,
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
-        }).format(n);
-
-        if (CURRENCY === 'ZAR') {
-          return formatted.replace(/^ZAR\s?/, 'R');
         }
-
-        return formatted;
-      } catch (error) {
-        return CURRENCY + ' ' + n.toFixed(2);
-      }
+      ).format(
+        Number.isFinite(fallbackAmount)
+          ? fallbackAmount
+          : 0
+      );
     }
 
     function showMessage(message, type) {

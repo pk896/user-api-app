@@ -1,10 +1,65 @@
 <!--views/checkout.ejs-->
 <%
-  const CO_NONCE      = typeof nonce !== 'undefined' ? nonce : '';
-  const CO_CLIENT_ID  = typeof paypalClientId !== 'undefined' ? paypalClientId : '';
-  const CO_CCY        = typeof currency !== 'undefined' ? currency : 'USD';
-  const CO_BRAND      = typeof brandName !== 'undefined' ? brandName : 'Kasyora.com';
-  const CO_VAT        = typeof vatRate !== 'undefined' ? Number(vatRate) : 0.15;
+  const CO_NONCE =
+    typeof nonce !== 'undefined'
+      ? nonce
+      : '';
+
+  const CO_CLIENT_ID =
+    typeof paypalClientId !== 'undefined'
+      ? String(paypalClientId || '').trim()
+      : '';
+
+  /*
+   * Currency sent to the PayPal SDK and captured by PayPal.
+   * This must remain separate from the customer display currency.
+   */
+  const CO_PAYPAL_CURRENCY = String(
+    typeof currency !== 'undefined'
+      ? currency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
+
+  /*
+   * Authoritative Kasyora cart, shipping, order and accounting currency.
+   */
+  const CO_BASE_CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
+
+  /*
+   * Customer-selected presentation currency.
+   * This affects only visible values on the checkout page.
+   */
+  const CO_DISPLAY_CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : CO_BASE_CURRENCY
+  ).trim().toUpperCase() || CO_BASE_CURRENCY;
+
+  const CO_DISPLAY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
+
+  const CO_DISPLAY_RATE =
+    Number.isFinite(CO_DISPLAY_RATE_RAW) &&
+    CO_DISPLAY_RATE_RAW > 0
+      ? CO_DISPLAY_RATE_RAW
+      : 1;
+
+  const CO_BRAND =
+    typeof brandName !== 'undefined'
+      ? brandName
+      : 'Kasyora.com';
+
+  const CO_VAT =
+    typeof vatRate !== 'undefined'
+      ? Number(vatRate)
+      : 0.15;
 %>
 
 <section class="co-page container-fluid px-0 py-0" aria-label="Checkout">
@@ -62,11 +117,23 @@
 
       <div class="co-title-row">
         <h1 class="co-title">Secure Checkout</h1>
-        <span class="co-badge">Protected</span>
+
+        <div class="d-flex align-items-center gap-2">
+          <div class="bg-white rounded px-2 py-1">
+            <%- include('store/partials/currency-selector', {
+              currencyReturnTo: '/payment/checkout'
+            }) %>
+          </div>
+
+          <span class="co-badge">Protected</span>
+        </div>
       </div>
 
       <p class="co-subtitle">
-        Your payment is processed securely by PayPal.
+        Prices are displayed in
+        <strong><%= CO_DISPLAY_CURRENCY %></strong>.
+        PayPal securely processes the payment in
+        <strong><%= CO_PAYPAL_CURRENCY %></strong>.
       </p>
 
       <div class="co-steps" aria-label="Steps">
@@ -77,6 +144,38 @@
       </div>
     </div>
   </header>
+
+  <%
+    const CO_SHOW_CURRENCY_WARNING =
+      typeof currencyConversionAvailable !== 'undefined' &&
+      currencyConversionAvailable === false;
+
+    const CO_CURRENCY_WARNING_TEXT =
+      typeof currencyConversionMessage !== 'undefined'
+        ? String(currencyConversionMessage || '').trim()
+        : '';
+  %>
+
+  <% if (
+    CO_SHOW_CURRENCY_WARNING &&
+    CO_CURRENCY_WARNING_TEXT
+  ) { %>
+  <div class="alert alert-warning border shadow-sm mx-2 mx-lg-auto mb-3" role="alert" style="max-width: 1100px;">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fas fa-exclamation-triangle text-primary mt-1" aria-hidden="true"></i>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
+        </div>
+
+        <div class="small">
+          <%= CO_CURRENCY_WARNING_TEXT %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
 
   <!-- ===== Content ===== -->
   <div class="co-grid row gx-0 gy-0 gx-lg-4 gy-lg-4">
@@ -310,7 +409,14 @@
 
             <div class="co-note">
               <span aria-hidden="true">💡</span>
-              <span>Prices include VAT where applicable.</span>
+
+              <span>
+                Prices include VAT where applicable.
+                Displayed in
+                <strong><%= CO_DISPLAY_CURRENCY %></strong>;
+                PayPal payment is processed in
+                <strong><%= CO_PAYPAL_CURRENCY %></strong>.
+              </span>
             </div>
           </div>
         </div>
@@ -417,20 +523,46 @@
   <script id="checkout-config" type="application/json" nonce="<%= CO_NONCE %>">
     <%- JSON.stringify({
       VAT_RATE: Number(CO_VAT),
-      CURRENCY: CO_CCY,
+
+      /*
+       * Authoritative Kasyora currency.
+       * Cart, shipping and total calculations remain in this currency.
+       */
+      BASE_CURRENCY: CO_BASE_CURRENCY,
+
+      /*
+       * Customer presentation currency.
+       * This must never be sent as the authoritative payment amount.
+       */
+      DISPLAY_CURRENCY: CO_DISPLAY_CURRENCY,
+
+      /*
+       * BASE_CURRENCY → DISPLAY_CURRENCY.
+       */
+      DISPLAY_RATE: Number(CO_DISPLAY_RATE),
+
+      /*
+       * Currency loaded into the PayPal SDK.
+       */
+      PAYPAL_CURRENCY: CO_PAYPAL_CURRENCY,
+
       BRAND_NAME: CO_BRAND,
 
-      DEFAULT_COUNTRY: (typeof defaultCountry !== 'undefined' && defaultCountry)
-        ? String(defaultCountry).toUpperCase()
-        : 'ZA',
+      DEFAULT_COUNTRY:
+        typeof defaultCountry !== 'undefined' &&
+        defaultCountry
+          ? String(defaultCountry).toUpperCase()
+          : 'ZA',
 
-      // ✅ from utils/countries.js (already sorted)
-      COUNTRIES: (Array.isArray(COUNTRIES) ? COUNTRIES : [])
+      COUNTRIES:
+        Array.isArray(COUNTRIES)
+          ? COUNTRIES
+          : []
     }) %>
   </script>
 
   <!-- PayPal SDK (paths unchanged) -->
-  <script nonce="<%= CO_NONCE %>" src="https://www.paypal.com/sdk/js?client-id=<%= encodeURIComponent(CO_CLIENT_ID) %>&components=buttons&currency=<%= encodeURIComponent(CO_CCY) %>&intent=capture&enable-funding=card"></script>
+  <script nonce="<%= CO_NONCE %>" src="https://www.paypal.com/sdk/js?client-id=<%= encodeURIComponent(CO_CLIENT_ID) %>&components=buttons&currency=<%= encodeURIComponent(CO_PAYPAL_CURRENCY) %>&intent=capture&enable-funding=card"></script>
 
   <style nonce="<%= CO_NONCE %>">
     /* ===== Bootstrap-safe checkout helpers ===== */
@@ -458,13 +590,15 @@
 
     /* ===== Hero ===== */
     .co-hero {
+      position: relative;
+      z-index: 1050;
       border-radius: 18px;
       padding: .9rem;
       margin-bottom: 0 !important;
       background: linear-gradient(135deg, rgba(124, 58, 237, 1), rgba(37, 99, 235, 1));
       color: #fff;
       box-shadow: var(--shadow);
-      overflow: hidden;
+      overflow: visible;
     }
 
     .co-hero-inner {
@@ -579,6 +713,8 @@
     }
 
     .co-grid {
+      position: relative;
+      z-index: 1;
       max-width: 1100px;
       margin: 0 auto 0;
     }
@@ -1620,9 +1756,34 @@
         cfg = {};
       }
 
-      const VAT_RATE = Number(cfg.VAT_RATE || 0);
-      const CURRENCY = String(cfg.CURRENCY || 'USD');
-      const DEFAULT_COUNTRY = String(cfg.DEFAULT_COUNTRY || 'ZA').toUpperCase();
+      const VAT_RATE =
+        Number(cfg.VAT_RATE || 0);
+
+      const BASE_CURRENCY = String(
+        cfg.BASE_CURRENCY || 'USD'
+      ).trim().toUpperCase() || 'USD';
+
+      const DISPLAY_CURRENCY = String(
+        cfg.DISPLAY_CURRENCY ||
+        BASE_CURRENCY
+      ).trim().toUpperCase() || BASE_CURRENCY;
+
+      const DISPLAY_RATE_RAW =
+        Number(cfg.DISPLAY_RATE || 1);
+
+      const DISPLAY_RATE =
+        Number.isFinite(DISPLAY_RATE_RAW) &&
+        DISPLAY_RATE_RAW > 0 ?
+        DISPLAY_RATE_RAW :
+        1;
+
+      const PAYPAL_CURRENCY = String(
+        cfg.PAYPAL_CURRENCY || 'USD'
+      ).trim().toUpperCase() || 'USD';
+
+      const DEFAULT_COUNTRY = String(
+        cfg.DEFAULT_COUNTRY || 'ZA'
+      ).toUpperCase();
 
       // ✅ countries from server (utils/countries.js)
       const COUNTRIES = Array.isArray(cfg.COUNTRIES) ? cfg.COUNTRIES : [];
@@ -1896,17 +2057,60 @@
         toCountry: '',
       };
 
-      function formatCurrency(amount, currency = CURRENCY) {
-        const symbols = {
-          USD: '$',
-          ZAR: 'R',
-          EUR: '€',
-          GBP: '£',
-          AUD: 'A$',
-          CAD: 'C$'
-        };
-        const sym = symbols[String(currency || '').toUpperCase()] || (currency + ' ');
-        return sym + Number(amount || 0).toFixed(2);
+      /*
+       * Convert an authoritative BASE_CURRENCY amount only for display.
+       *
+       * This function must never be used to create, capture or verify
+       * the PayPal transaction amount.
+       */
+      function convertBaseToDisplay(amount) {
+        const baseAmount =
+          Number(amount || 0);
+
+        if (!Number.isFinite(baseAmount)) {
+          return 0;
+        }
+
+        return Math.round(
+          (
+            baseAmount *
+            DISPLAY_RATE +
+            Number.EPSILON
+          ) *
+          100
+        ) / 100;
+      }
+
+      function formatCurrency(amount) {
+        const displayAmount =
+          convertBaseToDisplay(amount);
+
+        try {
+          const formatted =
+            new Intl.NumberFormat(
+              undefined, {
+                style: 'currency',
+                currency: DISPLAY_CURRENCY,
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }
+            ).format(displayAmount);
+
+          if (DISPLAY_CURRENCY === 'ZAR') {
+            return formatted.replace(
+              /^ZAR\s?/,
+              'R'
+            );
+          }
+
+          return formatted;
+        } catch (error) {
+          return (
+            DISPLAY_CURRENCY +
+            ' ' +
+            displayAmount.toFixed(2)
+          );
+        }
       }
 
       function updateCustomsNotice() {
@@ -2250,13 +2454,27 @@
       }
 
       function updateSummary() {
-        const t = calculateTotals();
-        el.sumSubtotal.textContent = formatCurrency(t.subtotal);
-        el.sumVat.textContent = formatCurrency(t.vat);
-        const shipCcy = state.selectedDelivery?.currency || CURRENCY;
-        el.sumShipping.textContent = formatCurrency(t.shipping, shipCcy);
-        el.sumTotal.textContent = formatCurrency(t.total);
-        el.vatRate.textContent = (VAT_RATE * 100).toFixed(0);
+        const totals =
+          calculateTotals();
+
+        /*
+         * calculateTotals() remains authoritative BASE_CURRENCY.
+         * Conversion happens only while writing visible text.
+         */
+        el.sumSubtotal.textContent =
+          formatCurrency(totals.subtotal);
+
+        el.sumVat.textContent =
+          formatCurrency(totals.vat);
+
+        el.sumShipping.textContent =
+          formatCurrency(totals.shipping);
+
+        el.sumTotal.textContent =
+          formatCurrency(totals.total);
+
+        el.vatRate.textContent =
+          (VAT_RATE * 100).toFixed(0);
       }
 
       function blockPayment(message) {
@@ -2597,8 +2815,7 @@
 
                 option.textContent =
                   `${service}${description} — ${formatCurrency(
-                    rate.amount,
-                    rate.currency || CURRENCY
+                    rate.amount
                   )}`;
 
                 courierGroup.appendChild(
@@ -2648,8 +2865,7 @@
 
               option.textContent =
                 `${provider} ${service}${estimate} — ${formatCurrency(
-                  rate.amount,
-                  rate.currency || CURRENCY
+                  rate.amount
                 )}`;
 
               shippoGroup.appendChild(
@@ -2802,7 +3018,7 @@
                 amount: Number(selected.amount || 0),
 
                 currency: selected.currency ||
-                  CURRENCY,
+                  BASE_CURRENCY,
 
                 days: Number(selected.days || 0),
               }),

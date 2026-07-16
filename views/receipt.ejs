@@ -1,10 +1,65 @@
 <!-- views/receipt.ejs -->
 <%
   var NONCE = (typeof nonce !== 'undefined') ? nonce : (typeof NONCE !== 'undefined' ? NONCE : '');
-  var o = order || {};
+    var o = order || {};
 
   // Resolve id across shapes
-  var ORDER_ID = String(o.id || o.orderId || o.paypalOrderId || '').trim();
+  var ORDER_ID =
+    String(
+      o.id ||
+      o.orderId ||
+      o.paypalOrderId ||
+      ''
+    ).trim();
+
+  /*
+   * The receipt's official currency comes from the stored order.
+   * BASE_CURRENCY is used only as a defensive fallback for older orders.
+   */
+  var RECEIPT_BASE_CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : ''
+  ).trim().toUpperCase();
+
+  var RECEIPT_ORDER_CURRENCY = String(
+    o.currency ||
+    (o.amount && o.amount.currency_code) ||
+    RECEIPT_BASE_CURRENCY ||
+    ''
+  ).trim().toUpperCase();
+
+  /*
+   * Customer-selected presentation currency.
+   * This is shown only as an approximate secondary equivalent.
+   */
+  var RECEIPT_DISPLAY_CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : RECEIPT_ORDER_CURRENCY
+  ).trim().toUpperCase() || RECEIPT_ORDER_CURRENCY;
+
+  var RECEIPT_DISPLAY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
+
+  var RECEIPT_DISPLAY_RATE =
+    Number.isFinite(RECEIPT_DISPLAY_RATE_RAW) &&
+    RECEIPT_DISPLAY_RATE_RAW > 0
+      ? RECEIPT_DISPLAY_RATE_RAW
+      : 1;
+
+  var SHOW_RECEIPT_DISPLAY_EQUIVALENT =
+    RECEIPT_DISPLAY_CURRENCY &&
+    RECEIPT_ORDER_CURRENCY &&
+    RECEIPT_DISPLAY_CURRENCY !== RECEIPT_ORDER_CURRENCY;
+
+  var RECEIPT_RETURN_TO =
+    ORDER_ID
+      ? '/payment/receipt/' + encodeURIComponent(ORDER_ID)
+      : '/store';
 
   // Safe helpers
   function pickStr(){
@@ -46,17 +101,75 @@
   var labelUrl = safeHttpUrl(pickStr(tr.labelUrl, shippo.labelUrl, shippo.label_url));
   var fulfillmentStatus = pickStr(o.fulfillmentStatus, tr.status, shippo.tracking_status);
 
-  // Currency + formatter
-  var C = String(o.currency || (o.amount && o.amount.currency_code) || 'USD').toUpperCase();
-  var symMap = { USD:'$', ZAR:'R', EUR:'€', GBP:'£' };
-  function money(n){
-    var v = Number(n || 0);
+    /*
+   * Format the authoritative stored order amount.
+   * This is the official receipt value.
+   */
+  function formatCurrencyAmount(amount, currencyCode) {
+    var value = Number(amount || 0);
+    var code = String(currencyCode || '').trim().toUpperCase();
+
+    if (!Number.isFinite(value)) {
+      value = 0;
+    }
+
+    if (!code) {
+      return value.toFixed(2);
+    }
+
     try {
-      if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
-        return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: C, currencyDisplay: 'symbol' }).format(v);
+      var formatted = new Intl.NumberFormat(
+        'en-ZA',
+        {
+          style: 'currency',
+          currency: code,
+          currencyDisplay: 'symbol',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }
+      ).format(value);
+
+      if (code === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
       }
-    } catch(e) {}
-    return (symMap[C] || (C + ' ')) + v.toFixed(2);
+
+      return formatted;
+    } catch (error) {
+      return code + ' ' + value.toFixed(2);
+    }
+  }
+
+  function money(amount) {
+    return formatCurrencyAmount(
+      amount,
+      RECEIPT_ORDER_CURRENCY
+    );
+  }
+
+  function convertOrderToDisplay(amount) {
+    var orderAmount = Number(amount || 0);
+
+    if (!Number.isFinite(orderAmount)) {
+      return 0;
+    }
+
+    /*
+     * Current Kasyora orders are stored in BASE_CURRENCY.
+     * DISPLAY_RATE converts BASE_CURRENCY to the selected currency.
+     */
+    return Number(
+      (
+        orderAmount *
+        RECEIPT_DISPLAY_RATE
+      ).toFixed(2)
+    );
+  }
+
+  function displayMoney(amount) {
+    return formatCurrencyAmount(
+      convertOrderToDisplay(amount),
+      RECEIPT_DISPLAY_CURRENCY
+    );
   }
 
   // --- Normalize items from multiple possible sources ---
@@ -129,25 +242,65 @@
 %>
 
 <main class="rcpt <%= (themeCss && themeCss.indexOf('dark') !== -1) ? 'dark-theme' : 'light-theme' %>">
+  <%
+    var RECEIPT_SHOW_CURRENCY_WARNING =
+      typeof currencyConversionAvailable !== 'undefined' &&
+      currencyConversionAvailable === false;
+
+    var RECEIPT_CURRENCY_WARNING_TEXT =
+      typeof currencyConversionMessage !== 'undefined'
+        ? String(currencyConversionMessage || '').trim()
+        : '';
+  %>
+
+  <% if (
+    RECEIPT_SHOW_CURRENCY_WARNING &&
+    RECEIPT_CURRENCY_WARNING_TEXT
+  ) { %>
+  <div class="alert alert-warning border shadow-sm m-3" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <span class="text-primary fw-bold" aria-hidden="true">
+        ⚠
+      </span>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
+        </div>
+
+        <div class="small">
+          <%= RECEIPT_CURRENCY_WARNING_TEXT %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
   <!-- Header -->
   <div class="rcpt-header">
     <div class="rcpt-brand">
       <svg class="rcpt-logo" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <span class="rcpt-brand-name">Receipt</span>
     </div>
     <div class="rcpt-actions">
+      <div class="rcpt-currency-selector">
+        <%- include('store/partials/currency-selector', {
+          currencyReturnTo: RECEIPT_RETURN_TO
+        }) %>
+      </div>
+
       <a href="/products/sales" class="rcpt-action-btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         Shop
       </a>
       <button id="btnPrintReceipt" class="rcpt-action-btn rcpt-action-print">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M6 14h12v8H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M6 14h12v8H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         Print
       </button>
@@ -170,35 +323,64 @@
         <span class="rcpt-label">Status</span>
         <span class="rcpt-status"><%= o.status || '—' %></span>
       </div>
+
+      <div class="rcpt-currency-note">
+        Official receipt amounts are recorded in
+        <strong>
+          <%= RECEIPT_ORDER_CURRENCY || 'the order currency' %>
+        </strong>.
+
+        <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+        Approximate equivalents are also shown in
+        <strong><%= RECEIPT_DISPLAY_CURRENCY %></strong>.
+        <% } %>
+      </div>
     </div>
 
     <!-- Items -->
     <div class="rcpt-card rcpt-items">
       <h3 class="rcpt-section-title">Items</h3>
       <% if (!items.length) { %>
-        <p class="rcpt-empty">No items in this order</p>
+      <p class="rcpt-empty">No items in this order</p>
       <% } else { %>
-        <div class="rcpt-items-list">
-          <% items.forEach(function(it, index){ %>
-            <div class="rcpt-item <%= index === items.length - 1 ? 'last-item' : '' %>">
-              <div class="rcpt-item-name">
-                <%= it.name %>
+      <div class="rcpt-items-list">
+        <% items.forEach(function(it, index){ %>
+        <div class="rcpt-item <%= index === items.length - 1 ? 'last-item' : '' %>">
+          <div class="rcpt-item-name">
+            <%= it.name %>
 
-                <% if (it.badges && it.badges.length) { %>
-                  <div class="rcpt-item-badges">
-                    <% it.badges.forEach(function(b){ %>
-                      <span class="rcpt-badge"><%= b.k %>: <%= b.v %></span>
-                    <% }); %>
-                  </div>
-                <% } %>
-              </div>
-              <div class="rcpt-item-details">
-                <span class="rcpt-item-qty"><%= it.qty %> × <%= money(it.unit) %></span>
-                <span class="rcpt-item-total"><%= money(it.line) %></span>
-              </div>
+            <% if (it.badges && it.badges.length) { %>
+            <div class="rcpt-item-badges">
+              <% it.badges.forEach(function(b){ %>
+              <span class="rcpt-badge"><%= b.k %>: <%= b.v %></span>
+              <% }); %>
             </div>
-          <% }); %>
+            <% } %>
+          </div>
+          <div class="rcpt-item-details">
+            <span class="rcpt-item-qty">
+              <%= it.qty %> × <%= money(it.unit) %>
+
+              <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+              <small class="rcpt-display-equivalent">
+                ≈ <%= displayMoney(it.unit) %> each
+              </small>
+              <% } %>
+            </span>
+
+            <span class="rcpt-item-total">
+              <%= money(it.line) %>
+
+              <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+              <small class="rcpt-display-equivalent">
+                ≈ <%= displayMoney(it.line) %>
+              </small>
+              <% } %>
+            </span>
+          </div>
         </div>
+        <% }); %>
+      </div>
       <% } %>
     </div>
 
@@ -206,125 +388,175 @@
     <div class="rcpt-card rcpt-totals">
       <div class="rcpt-total-row">
         <span>Subtotal</span>
-        <span><%= money(t_sub) %></span>
+
+        <span class="rcpt-money-stack">
+          <strong><%= money(t_sub) %></strong>
+
+          <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+          <small class="rcpt-display-equivalent">
+            ≈ <%= displayMoney(t_sub) %>
+          </small>
+          <% } %>
+        </span>
       </div>
+
       <% if (t_tax > 0) { %>
-        <div class="rcpt-total-row">
-          <span>Tax/VAT</span>
-          <span><%= money(t_tax) %></span>
-        </div>
+      <div class="rcpt-total-row">
+        <span>Tax/VAT</span>
+
+        <span class="rcpt-money-stack">
+          <strong><%= money(t_tax) %></strong>
+
+          <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+          <small class="rcpt-display-equivalent">
+            ≈ <%= displayMoney(t_tax) %>
+          </small>
+          <% } %>
+        </span>
+      </div>
       <% } %>
+
       <% if (t_ship > 0) { %>
-        <div class="rcpt-total-row">
-          <span>Shipping</span>
-          <span><%= money(t_ship) %></span>
-        </div>
+      <div class="rcpt-total-row">
+        <span>Shipping</span>
+
+        <span class="rcpt-money-stack">
+          <strong><%= money(t_ship) %></strong>
+
+          <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+          <small class="rcpt-display-equivalent">
+            ≈ <%= displayMoney(t_ship) %>
+          </small>
+          <% } %>
+        </span>
+      </div>
       <% } %>
+
       <div class="rcpt-total-row rcpt-grand-total">
         <span>Total</span>
-        <span><%= money(t_tot) %></span>
+
+        <span class="rcpt-money-stack">
+          <strong><%= money(t_tot) %></strong>
+
+          <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+          <small class="rcpt-display-equivalent">
+            ≈ <%= displayMoney(t_tot) %>
+          </small>
+          <% } %>
+        </span>
       </div>
     </div>
 
     <!-- Delivery -->
     <% if (o.delivery || o.shipping) { %>
-      <div class="rcpt-card rcpt-delivery">
-        <h3 class="rcpt-section-title">Delivery</h3>
-        
-        <% if (o.delivery) { %>
-          <div class="rcpt-delivery-info">
-            <div class="rcpt-delivery-row">
-              <span class="rcpt-label">Method</span>
-              <span class="rcpt-value"><%= o.delivery.name || 'Standard' %></span>
-            </div>
-            <% if (o.delivery.deliveryDays != null) { %>
-              <div class="rcpt-delivery-row">
-                <span class="rcpt-label">Est. Delivery</span>
-                <span class="rcpt-value">
-                  <%= o.delivery.deliveryDays %> day<%= Number(o.delivery.deliveryDays) === 1 ? '' : 's' %>
-                </span>
-              </div>
-            <% } %>
-            <% if (o.delivery.amount != null && o.delivery.amount > 0) { %>
-              <div class="rcpt-delivery-row">
-                <span class="rcpt-label">Cost</span>
-                <span class="rcpt-value"><%= money(o.delivery.amount) %></span>
-              </div>
-            <% } %>
-          </div>
+    <div class="rcpt-card rcpt-delivery">
+      <h3 class="rcpt-section-title">Delivery</h3>
+
+      <% if (o.delivery) { %>
+      <div class="rcpt-delivery-info">
+        <div class="rcpt-delivery-row">
+          <span class="rcpt-label">Method</span>
+          <span class="rcpt-value"><%= o.delivery.name || 'Standard' %></span>
+        </div>
+        <% if (o.delivery.deliveryDays != null) { %>
+        <div class="rcpt-delivery-row">
+          <span class="rcpt-label">Est. Delivery</span>
+          <span class="rcpt-value">
+            <%= o.delivery.deliveryDays %> day<%= Number(o.delivery.deliveryDays) === 1 ? '' : 's' %>
+          </span>
+        </div>
         <% } %>
+        <% if (o.delivery.amount != null && o.delivery.amount > 0) { %>
+        <div class="rcpt-delivery-row">
+          <span class="rcpt-label">Cost</span>
 
-        <% if (o.shipping) { %>
-          <div class="rcpt-address">
-            <div class="rcpt-address-label">Shipping Address</div>
-            <% if (shipName) { %>
-              <div class="rcpt-address-name"><%= shipName %></div>
+          <span class="rcpt-value rcpt-money-stack">
+            <strong>
+              <%= money(o.delivery.amount) %>
+            </strong>
+
+            <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
+            <small class="rcpt-display-equivalent">
+              ≈ <%= displayMoney(o.delivery.amount) %>
+            </small>
             <% } %>
-            <div class="rcpt-address-details">
-              <%= [a1, a2].filter(function(p){ return !!p; }).join(', ') %>
-              <br>
-              <%= [city, state, zip].filter(function(p){ return !!p; }).join(', ') %>
-              <br>
-              <%= country || '' %>
-
-              <% if (shipEmail || shipPhone) { %>
-                <div class="rcpt-contact">
-                  <% if (shipEmail) { %>
-                    <div class="rcpt-contact-row">
-                      <span class="rcpt-contact-k">Email</span>
-                      <span class="rcpt-contact-v"><%= shipEmail %></span>
-                    </div>
-                  <% } %>
-                  <% if (shipPhone) { %>
-                    <div class="rcpt-contact-row">
-                      <span class="rcpt-contact-k">Phone</span>
-                      <span class="rcpt-contact-v"><%= shipPhone %></span>
-                    </div>
-                  <% } %>
-                </div>
-              <% } %>
-            </div>
-          </div>
+          </span>
+        </div>
         <% } %>
       </div>
+      <% } %>
+
+      <% if (o.shipping) { %>
+      <div class="rcpt-address">
+        <div class="rcpt-address-label">Shipping Address</div>
+        <% if (shipName) { %>
+        <div class="rcpt-address-name"><%= shipName %></div>
+        <% } %>
+        <div class="rcpt-address-details">
+          <%= [a1, a2].filter(function(p){ return !!p; }).join(', ') %>
+          <br>
+          <%= [city, state, zip].filter(function(p){ return !!p; }).join(', ') %>
+          <br>
+          <%= country || '' %>
+
+          <% if (shipEmail || shipPhone) { %>
+          <div class="rcpt-contact">
+            <% if (shipEmail) { %>
+            <div class="rcpt-contact-row">
+              <span class="rcpt-contact-k">Email</span>
+              <span class="rcpt-contact-v"><%= shipEmail %></span>
+            </div>
+            <% } %>
+            <% if (shipPhone) { %>
+            <div class="rcpt-contact-row">
+              <span class="rcpt-contact-k">Phone</span>
+              <span class="rcpt-contact-v"><%= shipPhone %></span>
+            </div>
+            <% } %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+    </div>
     <% } %>
 
     <% if (trackingNumber || trackingUrl || labelUrl || fulfillmentStatus) { %>
-      <div class="rcpt-card rcpt-shipment">
-        <h3 class="rcpt-section-title">Shipment & Tracking</h3>
+    <div class="rcpt-card rcpt-shipment">
+      <h3 class="rcpt-section-title">Shipment & Tracking</h3>
 
-        <% if (fulfillmentStatus) { %>
-          <div class="rcpt-delivery-row">
-            <span class="rcpt-label">Fulfillment</span>
-            <span class="rcpt-value"><%= fulfillmentStatus %></span>
-          </div>
-        <% } %>
-
-        <% if (trackingNumber) { %>
-          <div class="rcpt-delivery-row">
-            <span class="rcpt-label">Tracking #</span>
-            <span class="rcpt-value rcpt-mono"><%= trackingNumber %></span>
-          </div>
-        <% } %>
-
-        <% if (trackingUrl) { %>
-          <div class="rcpt-link-row">
-            <a class="rcpt-link-btn rcpt-link-track" href="<%= trackingUrl %>" target="_blank" rel="noopener noreferrer">
-              Open Tracking
-            </a>
-          </div>
-        <% } %>
-
-        <% if (labelUrl) { %>
-          <div class="rcpt-link-row">
-            <a class="rcpt-link-btn rcpt-link-label" href="<%= labelUrl %>" target="_blank" rel="noopener noreferrer">
-              Download Shipping Label (PDF)
-            </a>
-          </div>
-        <% } %>
+      <% if (fulfillmentStatus) { %>
+      <div class="rcpt-delivery-row">
+        <span class="rcpt-label">Fulfillment</span>
+        <span class="rcpt-value"><%= fulfillmentStatus %></span>
       </div>
+      <% } %>
+
+      <% if (trackingNumber) { %>
+      <div class="rcpt-delivery-row">
+        <span class="rcpt-label">Tracking #</span>
+        <span class="rcpt-value rcpt-mono"><%= trackingNumber %></span>
+      </div>
+      <% } %>
+
+      <% if (trackingUrl) { %>
+      <div class="rcpt-link-row">
+        <a class="rcpt-link-btn rcpt-link-track" href="<%= trackingUrl %>" target="_blank" rel="noopener noreferrer">
+          Open Tracking
+        </a>
+      </div>
+      <% } %>
+
+      <% if (labelUrl) { %>
+      <div class="rcpt-link-row">
+        <a class="rcpt-link-btn rcpt-link-label" href="<%= labelUrl %>" target="_blank" rel="noopener noreferrer">
+          Download Shipping Label (PDF)
+        </a>
+      </div>
+      <% } %>
+    </div>
     <% } %>
-  
+
     <!-- Footer Note -->
     <div class="rcpt-footer">
       <p class="rcpt-footer-note">
@@ -346,7 +578,7 @@
     --purple: #7C3AED;
     --green: #22C55E;
     --black: #0F172A;
-    
+
     /* Compact design */
     --bg: #F0FDF4;
     --text: var(--black);
@@ -359,7 +591,7 @@
     --space-sm: 12px;
     --space-md: 16px;
     --space-lg: 20px;
-    
+
     /* Typography */
     --font-xs: 12px;
     --font-sm: 13px;
@@ -405,6 +637,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    overflow: visible;
     padding: var(--space-sm) var(--space-md);
     background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
     color: white;
@@ -589,22 +822,56 @@
   .rcpt-item-total {
     font-weight: 600;
     color: var(--green);
+    text-align: right;
   }
 
-  .rcpt-item-badges{
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-  margin-top:6px;
-}
+  .rcpt-money-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+  }
 
-  .rcpt-badge{
+  .rcpt-display-equivalent {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .rcpt-currency-note {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    color: var(--muted);
+    font-size: var(--font-xs);
+    line-height: 1.5;
+    text-align: left;
+  }
+
+  .rcpt-currency-selector {
+    position: relative;
+    z-index: 1050;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 2px 4px;
+  }
+
+  .rcpt-item-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .rcpt-badge {
     font-size: 11px;
     font-weight: 700;
     padding: 3px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(124,58,237,.28);
-    background: rgba(124,58,237,.12);
+    border: 1px solid rgba(124, 58, 237, .28);
+    background: rgba(124, 58, 237, .12);
     color: var(--text);
   }
 
@@ -675,8 +942,8 @@
     line-height: 1.4;
   }
 
-    /* Contact lines under shipping address */
-  .rcpt-contact{
+  /* Contact lines under shipping address */
+  .rcpt-contact {
     margin-top: 10px;
     padding-top: 10px;
     border-top: 1px dashed var(--border);
@@ -684,33 +951,33 @@
     gap: 6px;
   }
 
-  .rcpt-contact-row{
-    display:flex;
+  .rcpt-contact-row {
+    display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 10px;
     font-size: var(--font-sm);
   }
 
-  .rcpt-contact-k{
+  .rcpt-contact-k {
     color: var(--muted);
     font-weight: 600;
     flex: 0 0 auto;
   }
 
-  .rcpt-contact-v{
+  .rcpt-contact-v {
     font-weight: 600;
     text-align: right;
     word-break: break-word;
   }
 
   /* Shipment card */
-  .rcpt-shipment{
-    border-color: rgba(37,99,235,.35);
-    background: rgba(37,99,235,.04);
+  .rcpt-shipment {
+    border-color: rgba(37, 99, 235, .35);
+    background: rgba(37, 99, 235, .04);
   }
 
-  .rcpt-mono{
+  .rcpt-mono {
     font-family: 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
     font-size: var(--font-sm);
     color: var(--blue);
@@ -719,35 +986,35 @@
     border-radius: 6px;
   }
 
-  .rcpt-link-row{
+  .rcpt-link-row {
     margin-top: 10px;
-    display:flex;
+    display: flex;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .rcpt-link-btn{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
+  .rcpt-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 8px 12px;
     border-radius: 10px;
-    text-decoration:none;
+    text-decoration: none;
     font-weight: 700;
     font-size: var(--font-sm);
     border: 1px solid transparent;
-    cursor:pointer;
+    cursor: pointer;
   }
 
-  .rcpt-link-track{
-    background: rgba(37,99,235,.12);
-    border-color: rgba(37,99,235,.35);
+  .rcpt-link-track {
+    background: rgba(37, 99, 235, .12);
+    border-color: rgba(37, 99, 235, .35);
     color: var(--blue);
   }
 
-  .rcpt-link-label{
-    background: rgba(124,58,237,.12);
-    border-color: rgba(124,58,237,.35);
+  .rcpt-link-label {
+    background: rgba(124, 58, 237, .12);
+    border-color: rgba(124, 58, 237, .35);
     color: var(--purple);
   }
 
@@ -784,22 +1051,23 @@
 
   /* Print Styles */
   @media print {
+
     .rcpt-header,
     .rcpt-footer {
       display: none !important;
     }
-    
+
     .rcpt-content {
       padding: 0;
       max-width: 100%;
     }
-    
+
     body {
       background: white !important;
       color: black !important;
       font-size: 12px !important;
     }
-    
+
     .rcpt-card {
       box-shadow: none !important;
       border: 1px solid #ddd !important;
@@ -807,7 +1075,7 @@
       padding: 12px !important;
       break-inside: avoid;
     }
-    
+
     .rcpt-grand-total {
       color: black !important;
     }
@@ -819,24 +1087,24 @@
       --space-md: 12px;
       --space-lg: 16px;
     }
-    
+
     .rcpt-header {
       padding: 8px 12px;
     }
-    
+
     .rcpt-content {
       padding: 12px;
     }
-    
+
     .rcpt-card {
       padding: 12px;
     }
-    
+
     .rcpt-action-btn {
       padding: 5px 8px;
       font-size: 11px;
     }
-    
+
     .rcpt-info-row,
     .rcpt-total-row,
     .rcpt-delivery-row {
@@ -849,7 +1117,7 @@
     .rcpt-content {
       padding: 16px;
     }
-    
+
     .rcpt-card {
       padding: 16px;
     }
@@ -860,7 +1128,7 @@
     .rcpt-content {
       padding: 24px;
     }
-    
+
     .rcpt-card {
       padding: 20px;
     }
@@ -872,6 +1140,7 @@
       opacity: 0;
       transform: translateY(10px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -882,10 +1151,21 @@
     animation: slideIn 0.3s ease-out forwards;
   }
 
-  .rcpt-card:nth-child(1) { animation-delay: 0.1s; }
-  .rcpt-card:nth-child(2) { animation-delay: 0.2s; }
-  .rcpt-card:nth-child(3) { animation-delay: 0.3s; }
-  .rcpt-card:nth-child(4) { animation-delay: 0.4s; }
+  .rcpt-card:nth-child(1) {
+    animation-delay: 0.1s;
+  }
+
+  .rcpt-card:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .rcpt-card:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  .rcpt-card:nth-child(4) {
+    animation-delay: 0.4s;
+  }
 </style>
 
 <script nonce="<%= NONCE %>">

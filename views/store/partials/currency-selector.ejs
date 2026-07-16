@@ -1,0 +1,94 @@
+<!--views/store/partials/currency-selector.ejs-->
+<%
+  const CURRENCY_SELECTOR_ACTIVE = String(
+    typeof userCurrency !== 'undefined'
+      ? userCurrency
+      : (
+          typeof displayCurrency !== 'undefined'
+            ? displayCurrency
+            : 'USD'
+        )
+  ).trim().toUpperCase() || 'USD';
+
+  const CURRENCY_SELECTOR_OPTIONS =
+    Array.isArray(
+      typeof supportedUserCurrencies !== 'undefined'
+        ? supportedUserCurrencies
+        : null
+    )
+      ? supportedUserCurrencies
+      : [];
+
+  const CURRENCY_SELECTOR_RETURN_TO =
+    typeof currencyReturnTo !== 'undefined' &&
+    currencyReturnTo
+      ? String(currencyReturnTo)
+      : '/store';
+%>
+
+<div class="dropdown">
+  <button
+    type="button"
+    class="btn btn-sm border-0 dropdown-toggle text-muted d-inline-flex align-items-center gap-1 px-1"
+    data-bs-toggle="dropdown"
+    aria-expanded="false"
+    aria-label="Choose display currency"
+  >
+    <i class="fas fa-coins text-primary" aria-hidden="true"></i>
+
+    <span class="fw-semibold">
+      <%= CURRENCY_SELECTOR_ACTIVE %>
+    </span>
+  </button>
+
+  <div class="dropdown-menu dropdown-menu-end rounded shadow-sm border-0 p-2">
+    <div class="px-2 pt-1 pb-2">
+      <div class="small fw-bold text-primary">
+        Display currency
+      </div>
+
+      <div class="small text-muted">
+        Payments remain securely processed in USD.
+      </div>
+    </div>
+
+    <% CURRENCY_SELECTOR_OPTIONS.forEach(function(currencyOption) { %>
+      <form
+        method="post"
+        action="/currency/select"
+        class="m-0"
+      >
+        <input
+          type="hidden"
+          name="currency"
+          value="<%= currencyOption.code %>"
+        >
+
+        <input
+          type="hidden"
+          name="returnTo"
+          value="<%= CURRENCY_SELECTOR_RETURN_TO %>"
+        >
+
+        <button
+          type="submit"
+          class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 <%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'active bg-primary text-white' : '' %>"
+        >
+          <span>
+            <span class="fw-semibold">
+              <%= currencyOption.symbol %>
+            </span>
+
+            <span class="ms-2">
+              <%= currencyOption.name %>
+            </span>
+          </span>
+
+          <small class="<%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'text-white' : 'text-muted' %>">
+            <%= currencyOption.code %>
+          </small>
+        </button>
+      </form>
+    <% }) %>
+  </div>
+</div>

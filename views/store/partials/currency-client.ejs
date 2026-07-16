@@ -1,0 +1,55 @@
+<!--views/store/partials/currency-client.ejs-->
+<script nonce="<%= nonce %>">
+  (function () {
+    const BASE_CURRENCY = "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : 'USD').trim().toUpperCase() || 'USD' %>";
+    const DISPLAY_CURRENCY = "<%= String(typeof displayCurrency !== 'undefined' ? displayCurrency : BASE_CURRENCY).trim().toUpperCase() || BASE_CURRENCY %>";
+    const DISPLAY_RATE = Number("<%= Number(typeof displayRate !== 'undefined' ? displayRate : 1) %>") || 1;
+
+    function roundCurrency(value) {
+      return Math.round(
+        (Number(value || 0) + Number.EPSILON) * 100
+      ) / 100;
+    }
+
+    function convertBaseToDisplay(amount) {
+      const baseAmount = Number(amount || 0);
+
+      if (!Number.isFinite(baseAmount)) {
+        return 0;
+      }
+
+      return roundCurrency(
+        baseAmount * DISPLAY_RATE
+      );
+    }
+
+    function formatDisplayMoneyFromBase(amount) {
+      const displayAmount =
+        convertBaseToDisplay(amount);
+
+      const formatted = new Intl.NumberFormat(
+        undefined,
+        {
+          style: 'currency',
+          currency: DISPLAY_CURRENCY,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }
+      ).format(displayAmount);
+
+      if (DISPLAY_CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    }
+
+    window.KasyoraCurrency = Object.freeze({
+      baseCurrency: BASE_CURRENCY,
+      displayCurrency: DISPLAY_CURRENCY,
+      displayRate: DISPLAY_RATE,
+      convertBaseToDisplay: convertBaseToDisplay,
+      formatBaseAmount: formatDisplayMoneyFromBase
+    });
+  })();
+</script>

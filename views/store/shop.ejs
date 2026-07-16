@@ -4,23 +4,73 @@
     ? Number(vatRate)
     : 0.15;
 
-  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+    /*
+   * BASE_CURRENCY remains Kasyora's authoritative internal currency.
+   * CURRENCY is only the customer's selected display currency.
+   */
+  const BASE_CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
 
-  function formatMoney(amount) {
-    const n = Number(amount || 0);
+  const CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : BASE_CURRENCY
+  ).trim().toUpperCase() || BASE_CURRENCY;
 
-    const formatted = new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: CURRENCY,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(n);
+  const CURRENCY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
 
-    if (CURRENCY === 'ZAR') {
-      return formatted.replace(/^ZAR\s?/, 'R');
+  const CURRENCY_RATE =
+    Number.isFinite(CURRENCY_RATE_RAW) &&
+    CURRENCY_RATE_RAW > 0
+      ? CURRENCY_RATE_RAW
+      : 1;
+
+  function convertBaseToDisplay(amount) {
+    const baseAmount = Number(amount || 0);
+
+    if (!Number.isFinite(baseAmount)) {
+      return 0;
     }
 
-    return formatted;
+    return Number(
+      (baseAmount * CURRENCY_RATE).toFixed(2)
+    );
+  }
+
+  function formatMoney(amount) {
+    const convertedAmount =
+      convertBaseToDisplay(amount);
+
+    try {
+      const formatted = new Intl.NumberFormat(
+        undefined,
+        {
+          style: 'currency',
+          currency: CURRENCY,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }
+      ).format(convertedAmount);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return (
+        CURRENCY +
+        ' ' +
+        convertedAmount.toFixed(2)
+      );
+    }
   }
 
   function storeProductPayload(product) {
@@ -53,749 +103,738 @@
 
     return '/store/shop?' + params.join('&') + '#shopProductsSection';
   }
+
+    const SHOP_CURRENCY_RETURN_TO =
+    shopPageUrl(
+      Number.isFinite(Number(currentPage))
+        ? Number(currentPage)
+        : 1
+    );
 %>
 
 <!-- Spinner Start -->
 <div id="spinner" class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
-    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-        <span class="sr-only">Loading...</span>
-    </div>
+  <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+    <span class="sr-only">Loading...</span>
+  </div>
 </div>
 <!-- Spinner End -->
 
 <!-- Topbar Start -->
 <div class="container-fluid px-5 d-none border-bottom d-lg-block">
-    <div class="row gx-0 align-items-center">
-        <div class="col-lg-4 text-center text-lg-start mb-lg-0">
-            <div class="d-inline-flex align-items-center" style="height: 45px;">
-                <a href="#" class="text-muted me-2"> Help</a><small> / </small>
-                <a href="#" class="text-muted mx-2"> Support</a><small> / </small>
-                <a href="#" class="text-muted ms-2"> Contact</a>
-            </div>
-        </div>
-        <div class="col-lg-4 text-center d-flex align-items-center justify-content-center">
-            <small class="text-dark">Call Us:</small>
-            <a href="#" class="text-muted">(+012) 1234 567890</a>
-        </div>
-        <div class="col-lg-4 text-center text-lg-end">
-            <div class="d-inline-flex align-items-center" style="height: 45px;">
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small><%= CURRENCY === 'ZAR' ? 'R' : CURRENCY %></small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="#" class="dropdown-item"> Euro</a>
-                        <a href="#" class="dropdown-item"> Dolar</a>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small> English</small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="#" class="dropdown-item"> English</a>
-                        <a href="#" class="dropdown-item"> Turkish</a>
-                        <a href="#" class="dropdown-item"> Spanol</a>
-                        <a href="#" class="dropdown-item"> Italiano</a>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i class="fa fa-home me-2"></i> My Dashboard</small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="/business/login" class="dropdown-item"> My Account</a>
-                        <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
-                        <a href="#" class="dropdown-item"> Notifications</a>
-                        <a href="#" class="dropdown-item"> Media</a>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="row gx-0 align-items-center">
+    <div class="col-lg-4 text-center text-lg-start mb-lg-0">
+      <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <a href="#" class="text-muted me-2"> Help</a><small> / </small>
+        <a href="#" class="text-muted mx-2"> Support</a><small> / </small>
+        <a href="#" class="text-muted ms-2"> Contact</a>
+      </div>
     </div>
+    <div class="col-lg-4 text-center d-flex align-items-center justify-content-center">
+      <small class="text-dark">Call Us:</small>
+      <a href="#" class="text-muted">(+012) 1234 567890</a>
+    </div>
+    <div class="col-lg-4 text-center text-lg-end">
+      <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+                      currencyReturnTo: SHOP_CURRENCY_RETURN_TO
+                    }) %>
+        </div>
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small> English</small></a>
+          <div class="dropdown-menu rounded">
+            <a href="#" class="dropdown-item"> English</a>
+            <a href="#" class="dropdown-item"> Turkish</a>
+            <a href="#" class="dropdown-item"> Spanol</a>
+            <a href="#" class="dropdown-item"> Italiano</a>
+          </div>
+        </div>
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i class="fa fa-home me-2"></i> My Dashboard</small></a>
+          <div class="dropdown-menu rounded">
+            <a href="/business/login" class="dropdown-item"> My Account</a>
+            <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
+            <a href="#" class="dropdown-item"> Notifications</a>
+            <a href="#" class="dropdown-item"> Media</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 <div class="container-fluid px-5 py-4 d-none d-lg-block">
-    <div class="row gx-0 align-items-center text-center">
-        <div class="col-md-4 col-lg-3 text-center text-lg-start">
-            <div class="d-inline-flex align-items-center">
-                <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
-                    <img
-                        src="/images/branding/logo-unincorporate.png"
-                        alt="Kasyora.com"
-                        class="img-fluid me-2"
-                        style="max-height: 52px; width: auto;"
-                    >
-                    <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
-                        Kasyora.com
-                    </span>
-                </a>
-            </div>
-        </div>
-        <div class="col-md-4 col-lg-6 text-center">
-            <div class="position-relative ps-4">
-                <div class="d-flex border rounded-pill">
-                    <input
-                        id="shopKeywordInput"
-                        class="form-control border-0 rounded-pill w-100 py-3"
-                        type="text"
-                        data-bs-target="#dropdownToggle123"
-                        value="<%= selectedKeyword || '' %>"
-                        placeholder="Search products by name or keywords"
-                    >
-                    <select id="shopCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="" <%= !selectedCategory ? 'selected' : '' %>>All Category</option>
-                        <% (CATEGORIES || []).forEach(function(category) { %>
-                            <option value="<%= category.value %>" <%= selectedCategory === category.value ? 'selected' : '' %>>
-                                <%= category.label %>
-                            </option>
-                        <% }) %>
-                    </select>
-                    <button id="shopKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i class="fas fa-search"></i></button>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-lg-3 text-center text-lg-end">
-            <div class="d-inline-flex align-items-center">
-                <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
-                <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
-                <a href="/store/cart" id="shopTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
-                    <span class="rounded-circle btn-md-square border">
-                        <i class="fas fa-shopping-cart"></i>
-                    </span>
-                    <span class="text-dark ms-2 store-cart-total">0.00</span>
-                </a>
-            </div>
-        </div>
+  <div class="row gx-0 align-items-center text-center">
+    <div class="col-md-4 col-lg-3 text-center text-lg-start">
+      <div class="d-inline-flex align-items-center">
+        <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2" style="max-height: 52px; width: auto;">
+          <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
+            Kasyora.com
+          </span>
+        </a>
+      </div>
     </div>
+    <div class="col-md-4 col-lg-6 text-center">
+      <div class="position-relative ps-4">
+        <div class="d-flex border rounded-pill">
+          <input id="shopKeywordInput" class="form-control border-0 rounded-pill w-100 py-3" type="text" data-bs-target="#dropdownToggle123" value="<%= selectedKeyword || '' %>" placeholder="Search products by name or keywords">
+          <select id="shopCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
+            <option value="" <%= !selectedCategory ? 'selected' : '' %>>All Category</option>
+            <% (CATEGORIES || []).forEach(function(category) { %>
+            <option value="<%= category.value %>" <%= selectedCategory === category.value ? 'selected' : '' %>>
+              <%= category.label %>
+            </option>
+            <% }) %>
+          </select>
+          <button id="shopKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i class="fas fa-search"></i></button>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 col-lg-3 text-center text-lg-end">
+      <div class="d-inline-flex align-items-center">
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
+        <a href="/store/cart" id="shopTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+          <span class="rounded-circle btn-md-square border">
+            <i class="fas fa-shopping-cart"></i>
+          </span>
+          <span class="text-dark ms-2 store-cart-total">
+            <%= formatMoney(0) %>
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Topbar End -->
 
+<%
+  const SHOW_CURRENCY_WARNING =
+    typeof currencyConversionAvailable !== 'undefined' &&
+    currencyConversionAvailable === false;
+
+  const CURRENCY_WARNING_TEXT =
+    typeof currencyConversionMessage !== 'undefined'
+      ? String(currencyConversionMessage || '').trim()
+      : '';
+%>
+
+<% if (SHOW_CURRENCY_WARNING && CURRENCY_WARNING_TEXT) { %>
+<div class="container mt-3">
+  <div class="alert alert-warning border shadow-sm mb-0" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fas fa-exclamation-triangle text-primary mt-1" aria-hidden="true"></i>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
+        </div>
+
+        <div class="small">
+          <%= CURRENCY_WARNING_TEXT %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
 <!-- Navbar & Hero Start -->
 <div class="container-fluid nav-bar p-0">
-    <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
-        <div class="col-lg-3 d-none d-lg-block">
-            <nav class="navbar navbar-light position-relative" style="width: 250px;">
-                <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#allCat">
-                    <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
-                </button>
-                <div class="collapse navbar-collapse rounded-bottom" id="allCat">
-                    <div class="navbar-nav ms-auto py-0">
-                        <ul class="list-unstyled categories-bars">
-                            <li>
-                                <div class="categories-bars-item">
-                                    <a href="#" class="shop-category-link" data-category="">All Categories</a>
-                                    <span></span>
-                                </div>
-                            </li>
-                            <% (CATEGORIES || []).forEach(function(category) { %>
-                                <li>
-                                    <div class="categories-bars-item">
-                                        <a href="#" class="shop-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                                        <span></span>
-                                    </div>
-                                </li>
-                            <% }) %>
-                        </ul>
-                    </div>
+  <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
+    <div class="col-lg-3 d-none d-lg-block">
+      <nav class="navbar navbar-light position-relative" style="width: 250px;">
+        <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#allCat">
+          <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
+        </button>
+        <div class="collapse navbar-collapse rounded-bottom" id="allCat">
+          <div class="navbar-nav ms-auto py-0">
+            <ul class="list-unstyled categories-bars">
+              <li>
+                <div class="categories-bars-item">
+                  <a href="#" class="shop-category-link" data-category="">All Categories</a>
+                  <span></span>
                 </div>
-            </nav>
-        </div>
-        <div class="col-12 col-lg-9">
-            <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
-                <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
-                    <img
-                        src="/images/branding/logo-unincorporate.png"
-                        alt="Kasyora.com"
-                        class="img-fluid me-2 flex-shrink-0"
-                        style="max-height: 38px; width: auto;"
-                    >
-                    <span class="h5 text-white m-0 text-truncate fw-bold">
-                        Kasyora.com
-                    </span>
-                </a>
-                <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="fa fa-bars fa-1x"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarCollapse">
-                    <div class="navbar-nav ms-auto py-0">
-                        <a href="/store" class="nav-item nav-link">Shopping home</a>
-                        <a href="/store/shop" class="nav-item nav-link active">Shop</a>
-                        <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
-                        <div class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
-                            <div class="dropdown-menu m-0">
-                                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
-                                <a href="/store/cart" class="dropdown-item">Cart</a>
-                                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
-                                <a href="/business/login" class="dropdown-item">Accounts</a>
-                                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
-                            </div>
-                        </div>
-                        <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
-                        <div class="nav-item dropdown d-block d-lg-none mb-3">
-                            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
-                            <div class="dropdown-menu m-0">
-                                <ul class="list-unstyled categories-bars">
-                                    <li>
-                                        <div class="categories-bars-item">
-                                            <a href="#" class="shop-category-link" data-category="">All Categories</a>
-                                            <span></span>
-                                        </div>
-                                    </li>
-                                    <% (CATEGORIES || []).forEach(function(category) { %>
-                                        <li>
-                                            <div class="categories-bars-item">
-                                                <a href="#" class="shop-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                                                <span></span>
-                                            </div>
-                                        </li>
-                                    <% }) %>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <a href="" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i class="fa fa-mobile-alt me-2"></i> +263 456 7890</a>
+              </li>
+              <% (CATEGORIES || []).forEach(function(category) { %>
+              <li>
+                <div class="categories-bars-item">
+                  <a href="#" class="shop-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                  <span></span>
                 </div>
-            </nav>
+              </li>
+              <% }) %>
+            </ul>
+          </div>
         </div>
+      </nav>
     </div>
+    <div class="col-12 col-lg-9">
+      <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
+        <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
+          <span class="h5 text-white m-0 text-truncate fw-bold">
+            Kasyora.com
+          </span>
+        </a>
+        <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="fa fa-bars fa-1x"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+          <div class="navbar-nav ms-auto py-0">
+            <a href="/store" class="nav-item nav-link">Shopping home</a>
+            <a href="/store/shop" class="nav-item nav-link active">Shop</a>
+            <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
+              <div class="dropdown-menu m-0">
+                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
+                <a href="/store/cart" class="dropdown-item">Cart</a>
+                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
+                <a href="/business/login" class="dropdown-item">Accounts</a>
+                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
+              </div>
+            </div>
+            <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
+
+            <div class="nav-item d-block d-lg-none px-3 py-2 mb-2">
+              <div class="small fw-bold text-white mb-1">
+                Display currency
+              </div>
+
+              <div class="bg-white rounded px-2 py-1 d-inline-flex">
+                <%- include('partials/currency-selector', {
+                                  currencyReturnTo: SHOP_CURRENCY_RETURN_TO
+                                }) %>
+              </div>
+            </div>
+
+            <div class="nav-item dropdown d-block d-lg-none mb-3">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
+              <div class="dropdown-menu m-0">
+                <ul class="list-unstyled categories-bars">
+                  <li>
+                    <div class="categories-bars-item">
+                      <a href="#" class="shop-category-link" data-category="">All Categories</a>
+                      <span></span>
+                    </div>
+                  </li>
+                  <% (CATEGORIES || []).forEach(function(category) { %>
+                  <li>
+                    <div class="categories-bars-item">
+                      <a href="#" class="shop-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                      <span></span>
+                    </div>
+                  </li>
+                  <% }) %>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <a href="" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i class="fa fa-mobile-alt me-2"></i> +263 456 7890</a>
+        </div>
+      </nav>
+    </div>
+  </div>
 </div>
 <!-- Navbar & Hero End -->
 
 <!-- Single Page Header start -->
 <div class="container-fluid page-header py-5" style="<%= shopHeaderImage && shopHeaderImage.image ? '--page-header-image: url(' + shopHeaderImage.image + ')' : '' %>">
-    <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Shop Page</h1>
-    <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
-        <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
-        <li class="breadcrumb-item"><a href="#">Pages</a></li>
-        <li class="breadcrumb-item active text-white">Shop</li>
-    </ol>
+  <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Shop Page</h1>
+  <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
+    <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
+    <li class="breadcrumb-item"><a href="#">Pages</a></li>
+    <li class="breadcrumb-item active text-white">Shop</li>
+  </ol>
 </div>
 <!-- Single Page Header End -->
 
 <!-- Searvices Start -->
 <div class="container-fluid px-0">
-    <div class="row g-0 justify-content-center">
-        <div class="col-6 col-lg-4 border-start border-end wow fadeInUp" data-wow-delay="0.1s">
-            <div class="p-4">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-life-ring fa-2x text-primary"></i>
-                    <div class="ms-4">
-                        <h6 class="text-uppercase mb-2">Support 24/7</h6>
-                        <p class="mb-0">We support online 24 hrs a day</p>
-                    </div>
-                </div>
-            </div>
+  <div class="row g-0 justify-content-center">
+    <div class="col-6 col-lg-4 border-start border-end wow fadeInUp" data-wow-delay="0.1s">
+      <div class="p-4">
+        <div class="d-flex align-items-center">
+          <i class="fas fa-life-ring fa-2x text-primary"></i>
+          <div class="ms-4">
+            <h6 class="text-uppercase mb-2">Support 24/7</h6>
+            <p class="mb-0">We support online 24 hrs a day</p>
+          </div>
         </div>
-        <div class="col-6 col-lg-4 border-end wow fadeInUp" data-wow-delay="0.2s">
-            <div class="p-4">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-lock fa-2x text-primary"></i>
-                    <div class="ms-4">
-                        <h6 class="text-uppercase mb-2">Secure Payment</h6>
-                        <p class="mb-0">We Value Your Security</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
+    <div class="col-6 col-lg-4 border-end wow fadeInUp" data-wow-delay="0.2s">
+      <div class="p-4">
+        <div class="d-flex align-items-center">
+          <i class="fas fa-lock fa-2x text-primary"></i>
+          <div class="ms-4">
+            <h6 class="text-uppercase mb-2">Secure Payment</h6>
+            <p class="mb-0">We Value Your Security</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Searvices End -->
 
 <!-- Products Offer Start -->
 <div class="container-fluid bg-light py-5">
-    <div class="container">
-        <div class="row g-4">
-            <% if (promoOfferLeft) { %>
-                <div class="col-lg-6 wow fadeInLeft" data-wow-delay="0.2s">
-                    <a href="<%= promoOfferLeft.url %>" class="d-flex align-items-center justify-content-between border bg-white rounded p-4">
-                        <div>
-                            <p class="text-muted mb-3"><%= promoOfferLeft.eyebrowText %></p>
-                            <h3 class="text-primary"><%= promoOfferLeft.title %></h3>
+  <div class="container">
+    <div class="row g-4">
+      <% if (promoOfferLeft) { %>
+      <div class="col-lg-6 wow fadeInLeft" data-wow-delay="0.2s">
+        <a href="<%= promoOfferLeft.url %>" class="d-flex align-items-center justify-content-between border bg-white rounded p-4">
+          <div>
+            <p class="text-muted mb-3"><%= promoOfferLeft.eyebrowText %></p>
+            <h3 class="text-primary"><%= promoOfferLeft.title %></h3>
 
-                            <% if (promoOfferLeft.discountText) { %>
-                                <% const leftDiscountParts = promoOfferLeft.discountText.trim().split(' '); %>
-                                <h1 class="display-3 text-secondary mb-0">
-                                    <%= leftDiscountParts[0] || '' %>
-                                    <span class="text-primary fw-normal">
-                                        <%= leftDiscountParts.slice(1).join(' ') || '' %>
-                                    </span>
-                                </h1>
-                            <% } %>
-                        </div>
-                        <img src="<%= promoOfferLeft.image %>" class="img-fluid" alt="<%= promoOfferLeft.productName %>">
-                    </a>
-                </div>
+            <% if (promoOfferLeft.discountText) { %>
+            <% const leftDiscountParts = promoOfferLeft.discountText.trim().split(' '); %>
+            <h1 class="display-3 text-secondary mb-0">
+              <%= leftDiscountParts[0] || '' %>
+              <span class="text-primary fw-normal">
+                <%= leftDiscountParts.slice(1).join(' ') || '' %>
+              </span>
+            </h1>
             <% } %>
+          </div>
+          <img src="<%= promoOfferLeft.image %>" class="img-fluid" alt="<%= promoOfferLeft.productName %>">
+        </a>
+      </div>
+      <% } %>
 
-            <% if (promoOfferRight) { %>
-                <div class="col-lg-6 wow fadeInRight" data-wow-delay="0.3s">
-                    <a href="<%= promoOfferRight.url %>" class="d-flex align-items-center justify-content-between border bg-white rounded p-4">
-                        <div>
-                            <p class="text-muted mb-3"><%= promoOfferRight.eyebrowText %></p>
-                            <h3 class="text-primary"><%= promoOfferRight.title %></h3>
+      <% if (promoOfferRight) { %>
+      <div class="col-lg-6 wow fadeInRight" data-wow-delay="0.3s">
+        <a href="<%= promoOfferRight.url %>" class="d-flex align-items-center justify-content-between border bg-white rounded p-4">
+          <div>
+            <p class="text-muted mb-3"><%= promoOfferRight.eyebrowText %></p>
+            <h3 class="text-primary"><%= promoOfferRight.title %></h3>
 
-                            <% if (promoOfferRight.discountText) { %>
-                                <% const rightDiscountParts = promoOfferRight.discountText.trim().split(' '); %>
-                                <h1 class="display-3 text-secondary mb-0">
-                                    <%= rightDiscountParts[0] || '' %>
-                                    <span class="text-primary fw-normal">
-                                        <%= rightDiscountParts.slice(1).join(' ') || '' %>
-                                    </span>
-                                </h1>
-                            <% } %>
-                        </div>
-                        <img src="<%= promoOfferRight.image %>" class="img-fluid" alt="<%= promoOfferRight.productName %>">
-                    </a>
-                </div>
+            <% if (promoOfferRight.discountText) { %>
+            <% const rightDiscountParts = promoOfferRight.discountText.trim().split(' '); %>
+            <h1 class="display-3 text-secondary mb-0">
+              <%= rightDiscountParts[0] || '' %>
+              <span class="text-primary fw-normal">
+                <%= rightDiscountParts.slice(1).join(' ') || '' %>
+              </span>
+            </h1>
             <% } %>
-        </div>
+          </div>
+          <img src="<%= promoOfferRight.image %>" class="img-fluid" alt="<%= promoOfferRight.productName %>">
+        </a>
+      </div>
+      <% } %>
     </div>
+  </div>
 </div>
 <!-- Products Offer End -->
 
 <!-- Shop Page Start -->
 <div class="container-fluid shop py-5">
-    <div class="container py-5">
-        <div class="row g-4">
-            <div class="col-lg-3 wow fadeInUp" data-wow-delay="0.1s">
-                <div class="featured-product mb-4">
-                    <h4 class="mb-3">Featured products</h4>
+  <div class="container py-5">
+    <div class="row g-4">
+      <div class="col-lg-3 wow fadeInUp" data-wow-delay="0.1s">
+        <div class="featured-product mb-4">
+          <h4 class="mb-3">Featured products</h4>
 
-                    <% (featuredSidebarProducts || []).forEach(function(product) { %>
-                        <a href="<%= product.url %>" class="featured-product-item mb-3 d-flex text-decoration-none text-dark">
-                            <div class="rounded me-4" style="width: 100px; height: 100px;">
-                                <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
-                            </div>
-                            <div>
-                                <h6 class="mb-2"><%= product.category %></h6>
-                                <div class="mb-2">
-                                    <%- include('../partials/rating-stars', {
+          <% (featuredSidebarProducts || []).forEach(function(product) { %>
+          <a href="<%= product.url %>" class="featured-product-item mb-3 d-flex text-decoration-none text-dark">
+            <div class="rounded me-4" style="width: 100px; height: 100px;">
+              <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
+            </div>
+            <div>
+              <h6 class="mb-2"><%= product.category %></h6>
+              <div class="mb-2">
+                <%- include('../partials/rating-stars', {
                                         avg: Number(product.avgRating || 0),
                                         count: Number(product.ratingsCount || 0),
                                         nonce
                                     }) %>
-                                </div>
-                                <div class="d-flex mb-2 align-items-center flex-wrap">
-                                    <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></h5>
-                                    <small class="text-muted me-2">incl. VAT</small>
-                                    <% if (product.oldPrice) { %>
-                                        <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(product.oldPrice) %></h5>
-                                    <% } %>
-                                </div>
-                            </div>
-                        </a>
-                    <% }) %>
-
-                    <div class="d-flex justify-content-center my-4">
-                        <a href="/products/sales" class="btn btn-primary px-4 py-3 rounded-pill w-100">View More</a>
-                    </div>
-                </div>
-                <% if (shopSidebarBanner) { %>
-                    <a href="<%= shopSidebarBanner.url %>">
-                        <div class="position-relative">
-                            <img src="<%= shopSidebarBanner.image %>" class="img-fluid w-100 rounded" alt="<%= shopSidebarBanner.productName || shopSidebarBanner.title %>">
-                            <div class="text-center position-absolute d-flex flex-column align-items-center justify-content-center rounded p-4" style="width: 100%; height: 100%; top: 0; right: 0; background: rgba(242, 139, 0, 0.3);">
-                                <h5 class="display-6 text-primary"><%= shopSidebarBanner.title %></h5>
-                                <h4 class="text-secondary"><%= shopSidebarBanner.subtitle %></h4>
-                                <span class="btn btn-primary rounded-pill px-4"><%= shopSidebarBanner.buttonText || 'Shop Now' %></span>
-                            </div>
-                        </div>
-                    </a>
+              </div>
+              <div class="d-flex mb-2 align-items-center flex-wrap">
+                <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></h5>
+                <small class="text-muted me-2">incl. VAT</small>
+                <% if (product.oldPrice) { %>
+                <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(product.oldPrice) %></h5>
                 <% } %>
-
-                <div class="product-tags py-4 top-rated-sales-wrap">
-                    <h4 class="mb-3 text-primary">TOP RATED PRODUCTS</h4>
-
-                    <% if ((topRatedTagProducts || []).length > 0) { %>
-                        <div class="row g-2 g-md-3 top-rated-sales-grid">
-                            <% topRatedTagProducts.forEach(function(item) { %>
-                                <div class="col-6 col-md-4 col-lg-12">
-                                    <a
-                                        href="<%= item.url %>"
-                                        class="text-decoration-none text-reset d-block h-100"
-                                        title="<%= item.name %>"
-                                    >
-                                        <div class="product-card position-relative h-100">
-                                            <div class="image-holder">
-                                                <img
-                                                    src="<%= item.image %>"
-                                                    alt="<%= item.name %>"
-                                                    class="img-fluid"
-                                                    loading="lazy"
-                                                >
-                                            </div>
-
-                                            <div class="card-detail">
-                                                <h3 class="card-title text-uppercase">
-                                                    <span><%= item.name || 'Untitled Product' %></span>
-                                                </h3>
-                                                <span class="item-price text-primary">
-                                                    <%= formatMoney(Number(item.price || 0) * (1 + VAT)) %>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </a>
-                                </div>
-                            <% }) %>
-                        </div>
-                    <% } else { %>
-                        <div class="small text-muted">No top rated products available right now.</div>
-                    <% } %>
-                </div>
+              </div>
             </div>
+          </a>
+          <% }) %>
 
-            <div class="col-lg-9 wow fadeInUp" data-wow-delay="0.1s">
-                <% if (shopMainBanner) { %>
-                    <div class="rounded mb-4 position-relative">
-                        <img src="<%= shopMainBanner.image %>" class="img-fluid rounded w-100" style="height: 250px;" alt="<%= shopMainBanner.productName || shopMainBanner.title %>">
-                        <div class="position-absolute rounded d-flex flex-column align-items-center justify-content-center text-center" style="width: 100%; height: 250px; top: 0; left: 0; background: rgba(242, 139, 0, 0.3);">
-                            <h4 class="display-5 text-primary"><%= shopMainBanner.title %></h4>
-                            <h3 class="display-4 text-white mb-4"><%= shopMainBanner.subtitle %></h3>
-                            <span class="btn btn-primary rounded-pill"><%= shopMainBanner.buttonText || 'Shop Now' %></span>
-                        </div>
-                    </div>
-                <% } %>
+          <div class="d-flex justify-content-center my-4">
+            <a href="/products/sales" class="btn btn-primary px-4 py-3 rounded-pill w-100">View More</a>
+          </div>
+        </div>
+        <% if (shopSidebarBanner) { %>
+        <a href="<%= shopSidebarBanner.url %>">
+          <div class="position-relative">
+            <img src="<%= shopSidebarBanner.image %>" class="img-fluid w-100 rounded" alt="<%= shopSidebarBanner.productName || shopSidebarBanner.title %>">
+            <div class="text-center position-absolute d-flex flex-column align-items-center justify-content-center rounded p-4" style="width: 100%; height: 100%; top: 0; right: 0; background: rgba(242, 139, 0, 0.3);">
+              <h5 class="display-6 text-primary"><%= shopSidebarBanner.title %></h5>
+              <h4 class="text-secondary"><%= shopSidebarBanner.subtitle %></h4>
+              <span class="btn btn-primary rounded-pill px-4"><%= shopSidebarBanner.buttonText || 'Shop Now' %></span>
+            </div>
+          </div>
+        </a>
+        <% } %>
 
-                <div class="row g-4">
-                    <div class="col-xl-7">
-                        <div class="input-group w-100 mx-auto d-flex">
-                            <input
-                                id="shopKeywordInputSecondary"
-                                type="search"
-                                class="form-control p-3"
-                                value="<%= selectedKeyword || '' %>"
-                                placeholder="keywords"
-                                aria-describedby="search-icon-1"
-                            >
-                            <button
-                                id="shopKeywordSearchBtnSecondary"
-                                type="button"
-                                class="input-group-text p-3 border-0 bg-primary text-white"
-                            >
-                                <i class="fa fa-search"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 text-end">
-                        <div class="bg-light ps-3 py-3 rounded d-flex justify-content-between">
-                            <label for="shopSortSelect">Sort By:</label>
-                            <select id="shopSortSelect" name="sort" class="border-0 form-select-sm bg-light me-3">
-                                <option value="default" <%= (selectedSort || 'default') === 'default' ? 'selected' : '' %>>Default Sorting</option>
-                                <option value="popular" <%= selectedSort === 'popular' ? 'selected' : '' %>>Popularity</option>
-                                <option value="newest" <%= selectedSort === 'newest' ? 'selected' : '' %>>Newness</option>
-                                <option value="rating" <%= selectedSort === 'rating' ? 'selected' : '' %>>Average Rating</option>
-                                <option value="price_asc" <%= selectedSort === 'price_asc' ? 'selected' : '' %>>Low to high</option>
-                                <option value="price_desc" <%= selectedSort === 'price_desc' ? 'selected' : '' %>>High to low</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-lg-4 col-xl-2">
-                        <ul class="nav nav-pills d-inline-flex text-center py-2 px-2 rounded bg-light mb-4">
-                            <li class="nav-item me-4">
-                                <a class="bg-light" data-bs-toggle="pill" href="#tab-5">
-                                    <i class="fas fa-th fa-3x text-primary"></i>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="bg-light active" data-bs-toggle="pill" href="#tab-6">
-                                    <i class="fas fa-bars fa-3x text-primary"></i>
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
+        <div class="product-tags py-4 top-rated-sales-wrap">
+          <h4 class="mb-3 text-primary">TOP RATED PRODUCTS</h4>
+
+          <% if ((topRatedTagProducts || []).length > 0) { %>
+          <div class="row g-2 g-md-3 top-rated-sales-grid">
+            <% topRatedTagProducts.forEach(function(item) { %>
+            <div class="col-6 col-md-4 col-lg-12">
+              <a href="<%= item.url %>" class="text-decoration-none text-reset d-block h-100" title="<%= item.name %>">
+                <div class="product-card position-relative h-100">
+                  <div class="image-holder">
+                    <img src="<%= item.image %>" alt="<%= item.name %>" class="img-fluid" loading="lazy">
+                  </div>
+
+                  <div class="card-detail">
+                    <h3 class="card-title text-uppercase">
+                      <span><%= item.name || 'Untitled Product' %></span>
+                    </h3>
+                    <span class="item-price text-primary">
+                      <%= formatMoney(Number(item.price || 0) * (1 + VAT)) %>
+                    </span>
+                  </div>
                 </div>
+              </a>
+            </div>
+            <% }) %>
+          </div>
+          <% } else { %>
+          <div class="small text-muted">No top rated products available right now.</div>
+          <% } %>
+        </div>
+      </div>
 
-                <div id="shopProductsSection" class="tab-content">
-                    <div id="tab-5" class="tab-pane fade p-0">
-                        <div class="row g-4 product">
-                            <% (shopProducts || []).forEach(function(product) { %>
-                                <div
-                                    class="col-lg-4 shop-filter-card"
-                                    data-category="<%= String(product.category || '').trim().toLowerCase() %>"
-                                    data-search="<%= [
+      <div class="col-lg-9 wow fadeInUp" data-wow-delay="0.1s">
+        <% if (shopMainBanner) { %>
+        <div class="rounded mb-4 position-relative">
+          <img src="<%= shopMainBanner.image %>" class="img-fluid rounded w-100" style="height: 250px;" alt="<%= shopMainBanner.productName || shopMainBanner.title %>">
+          <div class="position-absolute rounded d-flex flex-column align-items-center justify-content-center text-center" style="width: 100%; height: 250px; top: 0; left: 0; background: rgba(242, 139, 0, 0.3);">
+            <h4 class="display-5 text-primary"><%= shopMainBanner.title %></h4>
+            <h3 class="display-4 text-white mb-4"><%= shopMainBanner.subtitle %></h3>
+            <span class="btn btn-primary rounded-pill"><%= shopMainBanner.buttonText || 'Shop Now' %></span>
+          </div>
+        </div>
+        <% } %>
+
+        <div class="row g-4">
+          <div class="col-xl-7">
+            <div class="input-group w-100 mx-auto d-flex">
+              <input id="shopKeywordInputSecondary" type="search" class="form-control p-3" value="<%= selectedKeyword || '' %>" placeholder="keywords" aria-describedby="search-icon-1">
+              <button id="shopKeywordSearchBtnSecondary" type="button" class="input-group-text p-3 border-0 bg-primary text-white">
+                <i class="fa fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-xl-3 text-end">
+            <div class="bg-light ps-3 py-3 rounded d-flex justify-content-between">
+              <label for="shopSortSelect">Sort By:</label>
+              <select id="shopSortSelect" name="sort" class="border-0 form-select-sm bg-light me-3">
+                <option value="default" <%= (selectedSort || 'default') === 'default' ? 'selected' : '' %>>Default Sorting</option>
+                <option value="popular" <%= selectedSort === 'popular' ? 'selected' : '' %>>Popularity</option>
+                <option value="newest" <%= selectedSort === 'newest' ? 'selected' : '' %>>Newness</option>
+                <option value="rating" <%= selectedSort === 'rating' ? 'selected' : '' %>>Average Rating</option>
+                <option value="price_asc" <%= selectedSort === 'price_asc' ? 'selected' : '' %>>Low to high</option>
+                <option value="price_desc" <%= selectedSort === 'price_desc' ? 'selected' : '' %>>High to low</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-lg-4 col-xl-2">
+            <ul class="nav nav-pills d-inline-flex text-center py-2 px-2 rounded bg-light mb-4">
+              <li class="nav-item me-4">
+                <a class="bg-light" data-bs-toggle="pill" href="#tab-5">
+                  <i class="fas fa-th fa-3x text-primary"></i>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="bg-light active" data-bs-toggle="pill" href="#tab-6">
+                  <i class="fas fa-bars fa-3x text-primary"></i>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="shopProductsSection" class="tab-content">
+          <div id="tab-5" class="tab-pane fade p-0">
+            <div class="row g-4 product">
+              <% (shopProducts || []).forEach(function(product) { %>
+              <div class="col-lg-4 shop-filter-card" data-category="<%= String(product.category || '').trim().toLowerCase() %>" data-search="<%= [
                                         product.name,
                                         product.category,
                                         product.type,
                                         product.manufacturer,
                                         product.description,
                                         Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
-                                    ].filter(Boolean).join(' ').toLowerCase() %>"
-                                >
-                                    <div class="product-item rounded wow fadeInUp js-store-product-card" data-wow-delay="0.1s">
-                                        <div class="product-item-inner border rounded">
-                                            <div class="product-item-inner-item">
-                                                <img src="<%= product.image %>" class="img-fluid w-100 rounded-top" alt="<%= product.name %>">
-                                                <% if (product.isNew) { %>
-                                                    <div class="product-new">New</div>
-                                                <% } %>
-                                                <div class="product-details">
-                                                    <a href="<%= product.url %>"><i class="fa fa-eye fa-1x"></i></a>
-                                                </div>
-                                            </div>
-                                            <div class="text-center rounded-bottom p-4">
-                                                <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
-                                                <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
-                                                <% if (product.oldPrice) { %>
-                                                    <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
-                                                <% } %>
-                                                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                                                <small class="text-muted ms-2">incl. VAT</small>
-                                            </div>
-                                        </div>
-                                        <div class="product-item-add border border-top-0 rounded-bottom text-center p-4 pt-0">
-                                            <a
-                                                href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
-                                                class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cart"
-                                                data-pid="<%= product.customId %>"
-                                                data-product="<%= storeProductPayload(product) %>"
-                                            >
-                                                <i class="fas fa-shopping-cart me-2"></i> Add To Cart
-                                            </a>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <%- include('../partials/rating-stars', {
+                                    ].filter(Boolean).join(' ').toLowerCase() %>">
+                <div class="product-item rounded wow fadeInUp js-store-product-card" data-wow-delay="0.1s">
+                  <div class="product-item-inner border rounded">
+                    <div class="product-item-inner-item">
+                      <img src="<%= product.image %>" class="img-fluid w-100 rounded-top" alt="<%= product.name %>">
+                      <% if (product.isNew) { %>
+                      <div class="product-new">New</div>
+                      <% } %>
+                      <div class="product-details">
+                        <a href="<%= product.url %>"><i class="fa fa-eye fa-1x"></i></a>
+                      </div>
+                    </div>
+                    <div class="text-center rounded-bottom p-4">
+                      <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
+                      <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
+                      <% if (product.oldPrice) { %>
+                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <% } %>
+                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                      <small class="text-muted ms-2">incl. VAT</small>
+                    </div>
+                  </div>
+                  <div class="product-item-add border border-top-0 rounded-bottom text-center p-4 pt-0">
+                    <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%= storeProductPayload(product) %>">
+                      <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                    </a>
+                    <div class="d-flex justify-content-between align-items-center">
+                      <div>
+                        <%- include('../partials/rating-stars', {
                                                         avg: Number(product.avgRating || 0),
                                                         count: Number(product.ratingsCount || 0),
                                                         nonce
                                                     }) %>
-                                                </div>
-                                                <div class="d-flex">
-                                                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                                                        <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
-                                                    </a>
-                                                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                                                        <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            <% }) %>
-
-                            <div class="col-12 wow fadeInUp" data-wow-delay="0.1s">
-                                <div class="pagination d-flex justify-content-center mt-5 flex-wrap">
-                                    <% if (hasPrevPage) { %>
-                                        <a href="<%= shopPageUrl(currentPage - 1) %>" class="rounded">&laquo;</a>
-                                    <% } else { %>
-                                        <span class="rounded disabled">&laquo;</span>
-                                    <% } %>
-
-                                    <% for (let page = 1; page <= totalPages; page++) { %>
-                                        <a
-                                            href="<%= shopPageUrl(page) %>"
-                                            class="rounded <%= page === currentPage ? 'active' : '' %>"
-                                        >
-                                            <%= page %>
-                                        </a>
-                                    <% } %>
-
-                                    <% if (hasNextPage) { %>
-                                        <a href="<%= shopPageUrl(currentPage + 1) %>" class="rounded">&raquo;</a>
-                                    <% } else { %>
-                                        <span class="rounded disabled">&raquo;</span>
-                                    <% } %>
-                                </div>
-                            </div>
-                        </div>
+                      </div>
+                      <div class="d-flex">
+                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                          <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
+                        </a>
+                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                          <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
+                        </a>
+                      </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+              <% }) %>
 
-                    <div id="tab-6" class="products tab-pane fade show p-0 active">
-                        <div class="row g-4 product products-mini">
-                            <% (shopProducts || []).forEach(function(product) { %>
-                                <div
-                                    class="col-lg-6 col-xl-4 wow fadeInUp shop-filter-card"
-                                    data-wow-delay="0.1s"
-                                    data-category="<%= String(product.category || '').trim().toLowerCase() %>"
-                                    data-search="<%= [
+              <div class="col-12 wow fadeInUp" data-wow-delay="0.1s">
+                <div class="pagination d-flex justify-content-center mt-5 flex-wrap">
+                  <% if (hasPrevPage) { %>
+                  <a href="<%= shopPageUrl(currentPage - 1) %>" class="rounded">&laquo;</a>
+                  <% } else { %>
+                  <span class="rounded disabled">&laquo;</span>
+                  <% } %>
+
+                  <% for (let page = 1; page <= totalPages; page++) { %>
+                  <a href="<%= shopPageUrl(page) %>" class="rounded <%= page === currentPage ? 'active' : '' %>">
+                    <%= page %>
+                  </a>
+                  <% } %>
+
+                  <% if (hasNextPage) { %>
+                  <a href="<%= shopPageUrl(currentPage + 1) %>" class="rounded">&raquo;</a>
+                  <% } else { %>
+                  <span class="rounded disabled">&raquo;</span>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-6" class="products tab-pane fade show p-0 active">
+            <div class="row g-4 product products-mini">
+              <% (shopProducts || []).forEach(function(product) { %>
+              <div class="col-lg-6 col-xl-4 wow fadeInUp shop-filter-card" data-wow-delay="0.1s" data-category="<%= String(product.category || '').trim().toLowerCase() %>" data-search="<%= [
                                         product.name,
                                         product.category,
                                         product.type,
                                         product.manufacturer,
                                         product.description,
                                         Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
-                                    ].filter(Boolean).join(' ').toLowerCase() %>"
-                                >
-                                    <div class="products-mini-item border js-store-product-card">
-                                        <div class="row g-0">
-                                            <div class="col-5">
-                                                <div class="products-mini-img border-end h-100 d-flex align-items-center">
-                                                    <img src="<%= product.image %>" class="img-fluid w-100 h-auto" alt="<%= product.name %>">
-                                                    <div class="products-mini-icon rounded-circle bg-primary">
-                                                        <a href="<%= product.url %>"><i class="fa fa-eye fa-1x text-white"></i></a>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="col-7">
-                                                <div class="products-mini-content p-3">
-                                                    <span class="d-block mb-2" style="color: #f28b00;"><%= product.category %></span>
-                                                    <span class="d-block h4"><%= product.name %></span>
-
-                                                    <% if (product.oldPrice) { %>
-                                                        <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
-                                                    <% } %>
-
-                                                    <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                                                    <small class="text-muted ms-2">incl. VAT</small>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="products-mini-add border p-3">
-                                            <a
-                                                href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
-                                                class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart"
-                                                data-pid="<%= product.customId %>"
-                                                data-product='<%- storeProductPayload(product) %>'
-                                            >
-                                                <i class="fas fa-shopping-cart me-2"></i> Add To Cart
-                                            </a>
-
-                                            <div class="d-flex">
-                                                <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                                                    <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
-                                                </a>
-                                                <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                                                    <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            <% }) %>
-
-                            <div class="col-12 wow fadeInUp" data-wow-delay="0.1s">
-                                <div class="pagination d-flex justify-content-center mt-5 flex-wrap">
-                                    <% if (hasPrevPage) { %>
-                                        <a href="<%= shopPageUrl(currentPage - 1) %>" class="rounded">&laquo;</a>
-                                    <% } else { %>
-                                        <span class="rounded disabled">&laquo;</span>
-                                    <% } %>
-
-                                    <% for (let page = 1; page <= totalPages; page++) { %>
-                                        <a
-                                            href="<%= shopPageUrl(page) %>"
-                                            class="rounded <%= page === currentPage ? 'active' : '' %>"
-                                        >
-                                            <%= page %>
-                                        </a>
-                                    <% } %>
-
-                                    <% if (hasNextPage) { %>
-                                        <a href="<%= shopPageUrl(currentPage + 1) %>" class="rounded">&raquo;</a>
-                                    <% } else { %>
-                                        <span class="rounded disabled">&raquo;</span>
-                                    <% } %>
-                                </div>
-                            </div>
+                                    ].filter(Boolean).join(' ').toLowerCase() %>">
+                <div class="products-mini-item border js-store-product-card">
+                  <div class="row g-0">
+                    <div class="col-5">
+                      <div class="products-mini-img border-end h-100 d-flex align-items-center">
+                        <img src="<%= product.image %>" class="img-fluid w-100 h-auto" alt="<%= product.name %>">
+                        <div class="products-mini-icon rounded-circle bg-primary">
+                          <a href="<%= product.url %>"><i class="fa fa-eye fa-1x text-white"></i></a>
                         </div>
+                      </div>
                     </div>
+
+                    <div class="col-7">
+                      <div class="products-mini-content p-3">
+                        <span class="d-block mb-2" style="color: #f28b00;"><%= product.category %></span>
+                        <span class="d-block h4"><%= product.name %></span>
+
+                        <% if (product.oldPrice) { %>
+                        <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                        <% } %>
+
+                        <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                        <small class="text-muted ms-2">incl. VAT</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="products-mini-add border p-3">
+                    <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
+                      <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                    </a>
+
+                    <div class="d-flex">
+                      <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                        <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
+                      </a>
+                      <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                        <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
+                      </a>
+                    </div>
+                  </div>
                 </div>
+              </div>
+              <% }) %>
+
+              <div class="col-12 wow fadeInUp" data-wow-delay="0.1s">
+                <div class="pagination d-flex justify-content-center mt-5 flex-wrap">
+                  <% if (hasPrevPage) { %>
+                  <a href="<%= shopPageUrl(currentPage - 1) %>" class="rounded">&laquo;</a>
+                  <% } else { %>
+                  <span class="rounded disabled">&laquo;</span>
+                  <% } %>
+
+                  <% for (let page = 1; page <= totalPages; page++) { %>
+                  <a href="<%= shopPageUrl(page) %>" class="rounded <%= page === currentPage ? 'active' : '' %>">
+                    <%= page %>
+                  </a>
+                  <% } %>
+
+                  <% if (hasNextPage) { %>
+                  <a href="<%= shopPageUrl(currentPage + 1) %>" class="rounded">&raquo;</a>
+                  <% } else { %>
+                  <span class="rounded disabled">&raquo;</span>
+                  <% } %>
+                </div>
+              </div>
             </div>
+          </div>
         </div>
-     </div>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Shop Page End -->
 
 <!-- Product Banner Start -->
 <div class="container-fluid py-5">
-    <div class="container pb-5">
-        <div class="row g-4">
-            <% if (midBannerLeft) { %>
-            <div class="col-lg-6 wow fadeInLeft" data-wow-delay="0.1s">
-                <a href="<%= midBannerLeft.url %>">
-                    <div class="bg-primary rounded position-relative">
-                        <img src="<%= midBannerLeft.image %>" class="img-fluid w-100 rounded" alt="<%= midBannerLeft.productName || midBannerLeft.title %>">
-                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center rounded p-4" style="background: rgba(255, 255, 255, 0.5);">
-                            <h3 class="display-5 text-primary">
-                                <%= midBannerLeft.title %>
-                                <% if (midBannerLeft.subtitle) { %>
-                                <br> <span><%= midBannerLeft.subtitle %></span>
-                                <% } %>
-                            </h3>
-                            <p class="fs-4 text-muted"><%= midBannerLeft.priceText %></p>
-                            <span class="btn btn-primary rounded-pill align-self-start py-2 px-4">
-                                <%= midBannerLeft.buttonText || 'Shop Now' %>
-                            </span>
-                        </div>
-                    </div>
-                </a>
+  <div class="container pb-5">
+    <div class="row g-4">
+      <% if (midBannerLeft) { %>
+      <div class="col-lg-6 wow fadeInLeft" data-wow-delay="0.1s">
+        <a href="<%= midBannerLeft.url %>">
+          <div class="bg-primary rounded position-relative">
+            <img src="<%= midBannerLeft.image %>" class="img-fluid w-100 rounded" alt="<%= midBannerLeft.productName || midBannerLeft.title %>">
+            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center rounded p-4" style="background: rgba(255, 255, 255, 0.5);">
+              <h3 class="display-5 text-primary">
+                <%= midBannerLeft.title %>
+                <% if (midBannerLeft.subtitle) { %>
+                <br> <span><%= midBannerLeft.subtitle %></span>
+                <% } %>
+              </h3>
+              <p class="fs-4 text-muted"><%= midBannerLeft.priceText %></p>
+              <span class="btn btn-primary rounded-pill align-self-start py-2 px-4">
+                <%= midBannerLeft.buttonText || 'Shop Now' %>
+              </span>
             </div>
-            <% } %>
+          </div>
+        </a>
+      </div>
+      <% } %>
 
-            <% if (midBannerRight) { %>
-            <div class="col-lg-6 wow fadeInRight" data-wow-delay="0.2s">
-                <a href="<%= midBannerRight.url %>">
-                    <div class="text-center bg-primary rounded position-relative">
-                        <img src="<%= midBannerRight.image %>" class="img-fluid w-100" alt="<%= midBannerRight.productName || midBannerRight.title %>">
-                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center rounded p-4" style="background: rgba(242, 139, 0, 0.5);">
-                            <h2 class="display-2 text-secondary"><%= midBannerRight.title %></h2>
-                            <h4 class="display-5 text-white mb-4"><%= midBannerRight.subtitle %></h4>
-                            <span class="btn btn-secondary rounded-pill align-self-center py-2 px-4">
-                                <%= midBannerRight.buttonText || 'Shop Now' %>
-                            </span>
-                        </div>
-                    </div>
-                </a>
+      <% if (midBannerRight) { %>
+      <div class="col-lg-6 wow fadeInRight" data-wow-delay="0.2s">
+        <a href="<%= midBannerRight.url %>">
+          <div class="text-center bg-primary rounded position-relative">
+            <img src="<%= midBannerRight.image %>" class="img-fluid w-100" alt="<%= midBannerRight.productName || midBannerRight.title %>">
+            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center rounded p-4" style="background: rgba(242, 139, 0, 0.5);">
+              <h2 class="display-2 text-secondary"><%= midBannerRight.title %></h2>
+              <h4 class="display-5 text-white mb-4"><%= midBannerRight.subtitle %></h4>
+              <span class="btn btn-secondary rounded-pill align-self-center py-2 px-4">
+                <%= midBannerRight.buttonText || 'Shop Now' %>
+              </span>
             </div>
-            <% } %>
-        </div>
+          </div>
+        </a>
+      </div>
+      <% } %>
     </div>
+  </div>
 </div>
 <!-- Product Banner End -->
 
 <div class="container-fluid py-5">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-6 wow fadeInUp" data-wow-delay="0.1s">
-                <div class="product-categories mb-0">
-                    <h4 class="mb-4">Products Categories</h4>
-                    <ul class="list-unstyled mb-0">
-                        <li class="mb-2">
-                            <div class="categories-item">
-                                <a href="#" class="text-dark shop-category-link" data-category="">
-                                    <i class="fas fa-apple-alt text-secondary me-2"></i>All Categories
-                                </a>
-                                <span></span>
-                            </div>
-                        </li>
-                        <% (CATEGORIES || []).forEach(function(category) { %>
-                            <li class="mb-2">
-                                <div class="categories-item">
-                                    <a href="#" class="text-dark shop-category-link" data-category="<%= category.value %>">
-                                        <i class="fas fa-apple-alt text-secondary me-2"></i><%= category.label %>
-                                    </a>
-                                    <span></span>
-                                </div>
-                            </li>
-                        <% }) %>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="col-lg-6 wow fadeInUp" data-wow-delay="0.2s">
-                <div class="additional-product mb-0">
-                    <h4 class="mb-4">Additional Products</h4>
-                    <div class="additional-product-item mb-2">
-                        <input type="radio" class="me-2" id="ShopBottomCategories-1" name="ShopBottomCategories" value="Accessories">
-                        <label for="ShopBottomCategories-1" class="text-dark"> Accessories</label>
-                    </div>
-                    <div class="additional-product-item mb-2">
-                        <input type="radio" class="me-2" id="ShopBottomCategories-2" name="ShopBottomCategories" value="Electronics & Computer">
-                        <label for="ShopBottomCategories-2" class="text-dark"> Electronics & Computer</label>
-                    </div>
-                    <div class="additional-product-item mb-2">
-                        <input type="radio" class="me-2" id="ShopBottomCategories-3" name="ShopBottomCategories" value="Laptops & Desktops">
-                        <label for="ShopBottomCategories-3" class="text-dark"> Laptops & Desktops</label>
-                    </div>
-                    <div class="additional-product-item mb-2">
-                        <input type="radio" class="me-2" id="ShopBottomCategories-4" name="ShopBottomCategories" value="Mobiles & Tablets">
-                        <label for="ShopBottomCategories-4" class="text-dark"> Mobiles & Tablets</label>
-                    </div>
-                    <div class="additional-product-item mb-0">
-                        <input type="radio" class="me-2" id="ShopBottomCategories-5" name="ShopBottomCategories" value="SmartPhone & Smart TV">
-                        <label for="ShopBottomCategories-5" class="text-dark"> SmartPhone & Smart TV</label>
-                    </div>
-                </div>
-            </div>
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-lg-6 wow fadeInUp" data-wow-delay="0.1s">
+        <div class="product-categories mb-0">
+          <h4 class="mb-4">Products Categories</h4>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="categories-item">
+                <a href="#" class="text-dark shop-category-link" data-category="">
+                  <i class="fas fa-apple-alt text-secondary me-2"></i>All Categories
+                </a>
+                <span></span>
+              </div>
+            </li>
+            <% (CATEGORIES || []).forEach(function(category) { %>
+            <li class="mb-2">
+              <div class="categories-item">
+                <a href="#" class="text-dark shop-category-link" data-category="<%= category.value %>">
+                  <i class="fas fa-apple-alt text-secondary me-2"></i><%= category.label %>
+                </a>
+                <span></span>
+              </div>
+            </li>
+            <% }) %>
+          </ul>
         </div>
+      </div>
+
+      <div class="col-lg-6 wow fadeInUp" data-wow-delay="0.2s">
+        <div class="additional-product mb-0">
+          <h4 class="mb-4">Additional Products</h4>
+          <div class="additional-product-item mb-2">
+            <input type="radio" class="me-2" id="ShopBottomCategories-1" name="ShopBottomCategories" value="Accessories">
+            <label for="ShopBottomCategories-1" class="text-dark"> Accessories</label>
+          </div>
+          <div class="additional-product-item mb-2">
+            <input type="radio" class="me-2" id="ShopBottomCategories-2" name="ShopBottomCategories" value="Electronics & Computer">
+            <label for="ShopBottomCategories-2" class="text-dark"> Electronics & Computer</label>
+          </div>
+          <div class="additional-product-item mb-2">
+            <input type="radio" class="me-2" id="ShopBottomCategories-3" name="ShopBottomCategories" value="Laptops & Desktops">
+            <label for="ShopBottomCategories-3" class="text-dark"> Laptops & Desktops</label>
+          </div>
+          <div class="additional-product-item mb-2">
+            <input type="radio" class="me-2" id="ShopBottomCategories-4" name="ShopBottomCategories" value="Mobiles & Tablets">
+            <label for="ShopBottomCategories-4" class="text-dark"> Mobiles & Tablets</label>
+          </div>
+          <div class="additional-product-item mb-0">
+            <input type="radio" class="me-2" id="ShopBottomCategories-5" name="ShopBottomCategories" value="SmartPhone & Smart TV">
+            <label for="ShopBottomCategories-5" class="text-dark"> SmartPhone & Smart TV</label>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <style nonce="<%= nonce %>">
@@ -807,7 +846,7 @@
 
   .top-rated-sales-grid .product-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .08);
   }
 
   .top-rated-sales-grid .image-holder {
@@ -882,7 +921,7 @@
 <%- include('partials/footer') %>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const select = document.getElementById('shopCategorySelect');
     const sortSelect = document.getElementById('shopSortSelect');
     const keywordInput = document.getElementById('shopKeywordInput');
@@ -910,106 +949,106 @@
     }
 
     function goToShop(categoryValue) {
-        const params = new URLSearchParams();
-        const keyword = getKeyword();
-        const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
-        const sortValue = sortSelect ? String(sortSelect.value || 'default').trim() : 'default';
+      const params = new URLSearchParams();
+      const keyword = getKeyword();
+      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+      const sortValue = sortSelect ? String(sortSelect.value || 'default').trim() : 'default';
 
-        syncKeywordInputs(keyword);
+      syncKeywordInputs(keyword);
 
-        if (keyword) {
-            params.set('keyword', keyword);
-        }
+      if (keyword) {
+        params.set('keyword', keyword);
+      }
 
-        if (category) {
-            params.set('category', category);
-        }
+      if (category) {
+        params.set('category', category);
+      }
 
-        if (sortValue && sortValue !== 'default') {
-            params.set('sort', sortValue);
-        }
+      if (sortValue && sortValue !== 'default') {
+        params.set('sort', sortValue);
+      }
 
-        params.set('page', '1');
+      params.set('page', '1');
 
-        const queryString = params.toString();
-        window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';
+      const queryString = params.toString();
+      window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';
     }
 
-    links.forEach(function (link) {
-      link.addEventListener('click', function (event) {
+    links.forEach(function(link) {
+      link.addEventListener('click', function(event) {
         event.preventDefault();
         goToShop(link.getAttribute('data-category'));
       });
     });
 
-    select.addEventListener('change', function () {
-        goToShop(select.value);
-        });
+    select.addEventListener('change', function() {
+      goToShop(select.value);
+    });
 
-        if (sortSelect) {
-        sortSelect.addEventListener('change', function () {
-            goToShop(select ? select.value : '');
-        });
+    if (sortSelect) {
+      sortSelect.addEventListener('change', function() {
+        goToShop(select ? select.value : '');
+      });
     }
 
     if (keywordInput) {
-        keywordInput.addEventListener('input', function () {
-            const keyword = String(keywordInput.value || '').trim();
-            const category = String(select ? (select.value || '') : '').trim();
-            const sortValue = String(sortSelect ? (sortSelect.value || 'default') : 'default').trim();
+      keywordInput.addEventListener('input', function() {
+        const keyword = String(keywordInput.value || '').trim();
+        const category = String(select ? (select.value || '') : '').trim();
+        const sortValue = String(sortSelect ? (sortSelect.value || 'default') : 'default').trim();
 
-            syncKeywordInputs(keyword);
+        syncKeywordInputs(keyword);
 
-            if (!keyword) {
-            if (category || (sortValue && sortValue !== 'default')) {
-                goToShop(category);
-            } else {
-                window.location.href = '/store/shop#shopProductsSection';
-            }
-            }
-        });
-
-        keywordInput.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-            event.preventDefault();
-            goToShop(select.value);
-            }
-        });
+        if (!keyword) {
+          if (category || (sortValue && sortValue !== 'default')) {
+            goToShop(category);
+          } else {
+            window.location.href = '/store/shop#shopProductsSection';
+          }
         }
+      });
 
-        if (keywordInputSecondary) {
-        keywordInputSecondary.addEventListener('input', function () {
-            const keyword = String(keywordInputSecondary.value || '').trim();
-            const category = String(select ? (select.value || '') : '').trim();
-            const sortValue = String(sortSelect ? (sortSelect.value || 'default') : 'default').trim();
+      keywordInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select.value);
+        }
+      });
+    }
 
-            syncKeywordInputs(keyword);
+    if (keywordInputSecondary) {
+      keywordInputSecondary.addEventListener('input', function() {
+        const keyword = String(keywordInputSecondary.value || '').trim();
+        const category = String(select ? (select.value || '') : '').trim();
+        const sortValue = String(sortSelect ? (sortSelect.value || 'default') : 'default').trim();
 
-            if (!keyword) {
-            if (category || (sortValue && sortValue !== 'default')) {
-                goToShop(category);
-            } else {
-                window.location.href = '/store/shop#shopProductsSection';
-            }
-            }
-        });
+        syncKeywordInputs(keyword);
 
-        keywordInputSecondary.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-            event.preventDefault();
-            goToShop(select.value);
-            }
-        });
+        if (!keyword) {
+          if (category || (sortValue && sortValue !== 'default')) {
+            goToShop(category);
+          } else {
+            window.location.href = '/store/shop#shopProductsSection';
+          }
+        }
+      });
+
+      keywordInputSecondary.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          goToShop(select.value);
+        }
+      });
     }
 
     if (keywordBtn) {
-      keywordBtn.addEventListener('click', function () {
+      keywordBtn.addEventListener('click', function() {
         goToShop(select.value);
       });
     }
 
     if (keywordBtnSecondary) {
-      keywordBtnSecondary.addEventListener('click', function () {
+      keywordBtnSecondary.addEventListener('click', function() {
         goToShop(select.value);
       });
     }
@@ -1017,43 +1056,48 @@
 </script>
 
 <style nonce="<%= nonce %>">
-  .store-cart-link.cart-flash-active .fa-shopping-cart{
+  .store-cart-link.cart-flash-active .fa-shopping-cart {
     animation: cartPurpleFlash 3s infinite;
     position: relative;
     z-index: 1;
   }
 
-  .store-cart-link.cart-flash-active .rounded-circle{
+  .store-cart-link.cart-flash-active .rounded-circle {
     animation: cartCirclePurpleFlash 3s infinite;
   }
 
-  @keyframes cartPurpleFlash{
-    0%, 100%{
+  @keyframes cartPurpleFlash {
+
+    0%,
+    100% {
       color: inherit;
     }
 
-    50%{
+    50% {
       color: #fff;
     }
   }
 
-  @keyframes cartCirclePurpleFlash{
-    0%, 100%{
+  @keyframes cartCirclePurpleFlash {
+
+    0%,
+    100% {
       background-color: transparent;
       border-color: inherit;
     }
 
-    50%{
+    50% {
       background-color: #7C3AED;
       border-color: #7C3AED;
     }
   }
 </style>
 
+<%- include('partials/currency-client') %>
 <%- include('partials/cart-script-listing') %>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const topCart = document.getElementById('shopTopCartAmount');
     if (!topCart) return;
 
@@ -1090,24 +1134,15 @@
 </script>
 
 <!-- Mobile Floating Cart Start -->
-<div
-    id="mobileFloatingCart"
-    class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3"
-    style="z-index: 1080;"
->
-    <a
-        href="/store/cart"
-        class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link"
-        style="font-size: 0.85rem;"
-    >
-        <span
-            class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1"
-            style="width: 24px; height: 24px;"
-        >
-            <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
-        </span>
-        <span class="store-cart-total text-white fw-semibold">0.00</span>
-    </a>
+<div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
+  <a href="/store/cart" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" style="font-size: 0.85rem;">
+    <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
+      <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
+    </span>
+    <span class="store-cart-total text-white fw-semibold">
+      <%= formatMoney(0) %>
+    </span>
+  </a>
 </div>
 <!-- Mobile Floating Cart End -->
 

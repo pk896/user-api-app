@@ -1,57 +1,142 @@
 <!--views/thank-you.ejs-->
 <%
-  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
-  const THEME_CLASS = themeCss && themeCss.includes('dark') ? 'dark-theme' : 'light-theme';
+  const NONCE =
+    typeof nonce !== 'undefined'
+      ? nonce
+      : '';
+
+  const THEME_CLASS =
+    themeCss &&
+    themeCss.includes('dark')
+      ? 'dark-theme'
+      : 'light-theme';
+
+  /*
+   * Authoritative Kasyora order/accounting currency.
+   * Stored order values remain in this currency.
+   */
+  const TY_BASE_CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
+
+  /*
+   * Customer-selected presentation currency.
+   * This affects only visible amounts on the Thank You page.
+   */
+  const TY_DISPLAY_CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : TY_BASE_CURRENCY
+  ).trim().toUpperCase() || TY_BASE_CURRENCY;
+
+  const TY_DISPLAY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
+
+  const TY_DISPLAY_RATE =
+    Number.isFinite(TY_DISPLAY_RATE_RAW) &&
+    TY_DISPLAY_RATE_RAW > 0
+      ? TY_DISPLAY_RATE_RAW
+      : 1;
 %>
 
 <% if (success && success.length > 0) { %>
-  <div class="flash flash-success" role="status">✅ <%= success %></div>
+<div class="flash flash-success" role="status">✅ <%= success %></div>
 <% } %>
 <% if (error && error.length > 0) { %>
-  <div class="flash flash-error" role="alert">❌ <%= error %></div>
+<div class="flash flash-error" role="alert">❌ <%= error %></div>
 <% } %>
 
 <main class="ty-page <%= THEME_CLASS %>">
+  <%
+    const TY_SHOW_CURRENCY_WARNING =
+      typeof currencyConversionAvailable !== 'undefined' &&
+      currencyConversionAvailable === false;
+
+    const TY_CURRENCY_WARNING_TEXT =
+      typeof currencyConversionMessage !== 'undefined'
+        ? String(currencyConversionMessage || '').trim()
+        : '';
+  %>
+
+  <% if (
+    TY_SHOW_CURRENCY_WARNING &&
+    TY_CURRENCY_WARNING_TEXT
+  ) { %>
+  <div class="alert alert-warning border shadow-sm mb-4" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <span class="text-primary fw-bold" aria-hidden="true">
+        ⚠
+      </span>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
+        </div>
+
+        <div class="small">
+          <%= TY_CURRENCY_WARNING_TEXT %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
   <header class="ty-head">
     <div class="ty-title">
       <div class="brand-badge">
         <svg class="check-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span>Order Confirmed</span>
       </div>
       <h1>Thank you for your purchase!</h1>
+
       <p class="muted">
         Your order has been received and is being processed
         <span id="tyOrderIdWrap" hidden>
           — <strong id="tyOrderId">—</strong>
-          <a id="viewOrderLink" class="inline-link" href="#" target="_blank" rel="noopener" hidden>View this order</a>
+
+          <a id="viewOrderLink" class="inline-link" href="#" target="_blank" rel="noopener" hidden>
+            View this order
+          </a>
         </span>
+      </p>
+
+      <p class="muted ty-currency-note">
+        Order amounts are displayed in
+        <strong><%= TY_DISPLAY_CURRENCY %></strong>.
+        Your payment and stored order values remain in
+        <strong><%= TY_BASE_CURRENCY %></strong>.
       </p>
     </div>
 
     <nav class="btns" aria-label="Post-purchase actions">
       <a href="/products/sales" class="btn btn-primary" id="btnShop">
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         Continue shopping
       </a>
       <a id="btnReceipt" href="#" class="btn btn-secondary" hidden>
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         View receipt
       </a>
       <a id="btnTrackOrder" href="/store/order-tracking" class="btn btn-secondary">
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         Track this order
       </a>
       <button id="btnPrint" class="btn btn-ghost" type="button" aria-label="Print receipt">
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         Print
       </button>
@@ -64,7 +149,7 @@
         <h2 id="totalsTitle">Order Summary</h2>
         <div class="status-badge" id="statusBadge">Processing</div>
       </div>
-      
+
       <div id="totalsBox" class="totals">
         <div class="row"><span>Subtotal</span><span id="tSubtotal">—</span></div>
         <div class="row"><span>VAT/Tax</span><span id="tVat">—</span></div>
@@ -85,7 +170,7 @@
         <div class="detail-item">
           <span class="detail-label">
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             Status
           </span>
@@ -94,7 +179,7 @@
         <div class="detail-item">
           <span class="detail-label">
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             Date
           </span>
@@ -103,7 +188,7 @@
         <div class="detail-item">
           <span class="detail-label">
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             Amount Paid
           </span>
@@ -112,7 +197,7 @@
         <div class="detail-item">
           <span class="detail-label">
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             Items
           </span>
@@ -129,7 +214,7 @@
       <div class="delivery-content">
         <div class="delivery-method">
           <svg class="delivery-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M16 16H5.6c-.88 0-1.6-.72-1.6-1.6V5.6C4 4.72 4.72 4 5.6 4h9.8c.88 0 1.6.72 1.6 1.6V16zm0 0l2.4 2.4 2.4-2.4m-4.8 0h4.8m-4.8 0V9.6a1.6 1.6 0 011.6-1.6h2.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 16H5.6c-.88 0-1.6-.72-1.6-1.6V5.6C4 4.72 4.72 4 5.6 4h9.8c.88 0 1.6.72 1.6 1.6V16zm0 0l2.4 2.4 2.4-2.4m-4.8 0h4.8m-4.8 0V9.6a1.6 1.6 0 011.6-1.6h2.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           <div>
             <div class="delivery-label">Shipping Method</div>
@@ -185,7 +270,7 @@
     --purple: #7C3AED;
     --green: #22C55E;
     --black: #0F172A;
-    
+
     /* Green as primary body color */
     --bg: #F0FDF4;
     --text: #0F172A;
@@ -213,7 +298,8 @@
     padding: 0;
   }
 
-  html, body {
+  html,
+  body {
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -267,6 +353,11 @@
   .muted {
     color: var(--muted);
     font-size: clamp(14px, 4vw, 16px);
+  }
+
+  .ty-currency-note {
+    margin-top: 8px;
+    font-size: 13px;
   }
 
   .inline-link {
@@ -589,6 +680,7 @@
       opacity: 0;
       transform: translateY(-10px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -612,19 +704,19 @@
     .ty-page {
       padding: 12px;
     }
-    
+
     .btn {
       flex: 1 1 100%;
     }
-    
+
     .cards-container {
       gap: 16px;
     }
-    
+
     .card {
       padding: 16px;
     }
-    
+
     .details-grid {
       grid-template-columns: 1fr;
     }
@@ -634,7 +726,7 @@
     .btn {
       flex: 1 1 calc(50% - 6px);
     }
-    
+
     .details-grid {
       grid-template-columns: repeat(2, 1fr);
     }
@@ -645,25 +737,25 @@
       max-width: 680px;
       padding: 24px;
     }
-    
+
     .cards-container {
       grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .totals-card,
     .details-card {
       grid-column: span 1;
     }
-    
+
     .delivery-card,
     .items-card {
       grid-column: span 2;
     }
-    
+
     .btns {
       justify-content: flex-start;
     }
-    
+
     .btn {
       flex: 0 1 auto;
       min-width: 180px;
@@ -672,23 +764,24 @@
 
   /* Print Styles */
   @media print {
+
     .btns,
     .flash,
     .next-steps {
       display: none !important;
     }
-    
+
     .ty-page {
       max-width: 100%;
       padding: 0;
       background: white !important;
     }
-    
+
     body {
       background: white !important;
       color: black !important;
     }
-    
+
     .card {
       box-shadow: none !important;
       border: 1px solid #ddd !important;
@@ -706,184 +799,320 @@
   }
 </style>
 
+<script id="thank-you-currency-config" type="application/json" nonce="<%= NONCE %>">
+  <%- JSON.stringify({
+    BASE_CURRENCY: TY_BASE_CURRENCY,
+    DISPLAY_CURRENCY: TY_DISPLAY_CURRENCY,
+    DISPLAY_RATE: Number(TY_DISPLAY_RATE)
+  }) %>
+</script>
+
 <script nonce="<%= NONCE %>">
-(function () {
-  function qs(sel, ctx){ return (ctx||document).querySelector(sel); }
-  function qsa(sel, ctx){ return Array.from((ctx||document).querySelectorAll(sel)); }
-  function qsp(name){
-    var m = location.search.match(new RegExp('[?&]'+name+'=([^&]+)'));
-    return m ? decodeURIComponent(m[1]) : '';
-  }
-  function moneyFmt(currency){
-    var C=(currency||'USD').toUpperCase();
-    var sym={USD:'$',ZAR:'R',EUR:'€',GBP:'£'}[C]||(C+' ');
-    return function(n){ return sym + Number(n||0).toFixed(2); };
-  }
-  function fetchJsonSafe(url){
-    return fetch(url, { credentials:'same-origin' })
-      .then(function(r){
-        var ct=(r.headers.get('content-type')||'').toLowerCase();
-        if(!r.ok) return {ok:false,status:r.status,json:null};
-        if(!ct.includes('application/json')) return {ok:false,status:r.status,json:null};
-        return r.json().then(function(j){return {ok:true,status:r.status,json:j};});
-      })
-      .catch(function(){return {ok:false,status:0,json:null};});
-  }
-
-  document.addEventListener('DOMContentLoaded', function(){
-    var btnPrint = qs('#btnPrint');
-    if (btnPrint) btnPrint.addEventListener('click', function(){ window.print(); });
-
-    // Order ID handling
-    var orderId = qsp('orderId') || qsp('id') || '';
-    var tyWrap = qs('#tyOrderIdWrap');
-    var tyId = qs('#tyOrderId');
-    var viewLink = qs('#viewOrderLink');
-    var btnReceipt = qs('#btnReceipt');
-
-    if (orderId && tyWrap && tyId) {
-      tyWrap.hidden = false;
-      tyId.textContent = orderId;
-
-      var recHref = '/payment/receipt/' + encodeURIComponent(orderId);
-      var trackHref = '/store/order-tracking?orderId=' + encodeURIComponent(orderId);
-
-      if (viewLink)  { viewLink.href = recHref; viewLink.hidden = false; }
-      if (btnReceipt){ btnReceipt.href = recHref; btnReceipt.hidden = false; }
-
-      var btnTrackOrder = qs('#btnTrackOrder');
-      if (btnTrackOrder) {
-        btnTrackOrder.href = trackHref;
-      }
+  (function() {
+    function qs(sel, ctx) {
+      return (ctx || document).querySelector(sel);
     }
-    if (!orderId) return;
 
-    // Fetch order details
-    fetchJsonSafe('/payment/order/' + encodeURIComponent(orderId))
-      .then(function(res){
-        if (!res.ok || !res.json || !res.json.success) return;
-        var o = res.json.order || {};
-        var C = (o.currency || 'USD').toUpperCase();
-        var money = moneyFmt(C);
+    function qsa(sel, ctx) {
+      return Array.from((ctx || document).querySelectorAll(sel));
+    }
 
-        // Update status badge
-        var statusBadge = qs('#statusBadge');
-        if (statusBadge && o.status) {
-          statusBadge.textContent = o.status.charAt(0).toUpperCase() + o.status.slice(1);
-          if (o.status.toLowerCase() === 'completed') {
-            statusBadge.style.background = 'linear-gradient(135deg, var(--green) 0%, #16A34A 100%)';
+    function qsp(name) {
+      var m = location.search.match(new RegExp('[?&]' + name + '=([^&]+)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+    var currencyConfigEl =
+      document.getElementById(
+        'thank-you-currency-config'
+      );
+
+    var currencyConfig = {};
+
+    try {
+      currencyConfig = JSON.parse(
+        currencyConfigEl ?
+        currencyConfigEl.textContent :
+        '{}'
+      );
+    } catch (error) {
+      currencyConfig = {};
+    }
+
+    var BASE_CURRENCY = String(
+      currencyConfig.BASE_CURRENCY || ''
+    ).trim().toUpperCase();
+
+    var DISPLAY_CURRENCY = String(
+      currencyConfig.DISPLAY_CURRENCY ||
+      BASE_CURRENCY
+    ).trim().toUpperCase() || BASE_CURRENCY;
+
+    var DISPLAY_RATE_RAW = Number(
+      currencyConfig.DISPLAY_RATE || 1
+    );
+
+    var DISPLAY_RATE =
+      Number.isFinite(DISPLAY_RATE_RAW) &&
+      DISPLAY_RATE_RAW > 0 ?
+      DISPLAY_RATE_RAW :
+      1;
+
+    function convertBaseToDisplay(amount) {
+      var baseAmount =
+        Number(amount || 0);
+
+      if (!Number.isFinite(baseAmount)) {
+        return 0;
+      }
+
+      return Math.round(
+        (
+          baseAmount *
+          DISPLAY_RATE +
+          Number.EPSILON
+        ) *
+        100
+      ) / 100;
+    }
+
+    function moneyFmt() {
+      return function(amount) {
+        var displayAmount =
+          convertBaseToDisplay(amount);
+
+        try {
+          var formatted =
+            new Intl.NumberFormat(
+              undefined, {
+                style: 'currency',
+                currency: DISPLAY_CURRENCY,
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }
+            ).format(displayAmount);
+
+          if (DISPLAY_CURRENCY === 'ZAR') {
+            return formatted.replace(
+              /^ZAR\s?/,
+              'R'
+            );
           }
+
+          return formatted;
+        } catch (error) {
+          return (
+            DISPLAY_CURRENCY +
+            ' ' +
+            displayAmount.toFixed(2)
+          );
+        }
+      };
+    }
+
+    function fetchJsonSafe(url) {
+      return fetch(url, {
+          credentials: 'same-origin'
+        })
+        .then(function(r) {
+          var ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (!r.ok) return {
+            ok: false,
+            status: r.status,
+            json: null
+          };
+          if (!ct.includes('application/json')) return {
+            ok: false,
+            status: r.status,
+            json: null
+          };
+          return r.json().then(function(j) {
+            return {
+              ok: true,
+              status: r.status,
+              json: j
+            };
+          });
+        })
+        .catch(function() {
+          return {
+            ok: false,
+            status: 0,
+            json: null
+          };
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var btnPrint = qs('#btnPrint');
+      if (btnPrint) btnPrint.addEventListener('click', function() {
+        window.print();
+      });
+
+      // Order ID handling
+      var orderId = qsp('orderId') || qsp('id') || '';
+      var tyWrap = qs('#tyOrderIdWrap');
+      var tyId = qs('#tyOrderId');
+      var viewLink = qs('#viewOrderLink');
+      var btnReceipt = qs('#btnReceipt');
+
+      if (orderId && tyWrap && tyId) {
+        tyWrap.hidden = false;
+        tyId.textContent = orderId;
+
+        var recHref = '/payment/receipt/' + encodeURIComponent(orderId);
+        var trackHref = '/store/order-tracking?orderId=' + encodeURIComponent(orderId);
+
+        if (viewLink) {
+          viewLink.href = recHref;
+          viewLink.hidden = false;
+        }
+        if (btnReceipt) {
+          btnReceipt.href = recHref;
+          btnReceipt.hidden = false;
         }
 
-        // Show and update meta box
-        var metaBox = qs('#metaBox');
-        if (metaBox) {
-          metaBox.hidden = false;
-          var ordStatus = qs('#ordStatus');
-          if (ordStatus) ordStatus.textContent = o.status ? o.status.charAt(0).toUpperCase() + o.status.slice(1) : '—';
-          
-          var ordDate = qs('#ordDate');
-          if (ordDate && o.createdAt) {
-            ordDate.textContent = new Date(o.createdAt).toLocaleDateString('en-US', {
-              weekday: 'short',
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            });
-          }
-          
-          var paidVal = (o.amount && o.amount.value != null) ? o.amount.value : (o.totals ? o.totals.total : null);
-          var ordPaid = qs('#ordPaid');
-          if (ordPaid) ordPaid.textContent = (paidVal != null) ? money(paidVal) : '—';
-          
-          // Item count
-          var itemCount = qs('#itemCount');
-          if (itemCount && o.items && Array.isArray(o.items)) {
-            itemCount.textContent = o.items.length + ' item' + (o.items.length !== 1 ? 's' : '');
-          }
+        var btnTrackOrder = qs('#btnTrackOrder');
+        if (btnTrackOrder) {
+          btnTrackOrder.href = trackHref;
         }
+      }
+      if (!orderId) return;
 
-        // Update totals
-        var itemTotal = o.breakdown && o.breakdown.itemTotal ? o.breakdown.itemTotal.value : (o.totals ? o.totals.subtotal : null);
-        var taxTotal  = o.breakdown && o.breakdown.taxTotal  ? o.breakdown.taxTotal.value  : (o.totals ? o.totals.tax : null);
-        var shipTotal = o.breakdown && o.breakdown.shipping  ? o.breakdown.shipping.value  : (o.delivery ? o.delivery.amount : null);
-        var grandTot  = (o.amount && (o.amount.value != null)) ? o.amount.value : (o.totals ? o.totals.total : null);
+      // Fetch order details
+      fetchJsonSafe('/payment/order/' + encodeURIComponent(orderId))
+        .then(function(res) {
+          if (!res.ok || !res.json || !res.json.success) return;
+          var o =
+            res.json.order || {};
 
-        var tSub=qs('#tSubtotal'), tVat=qs('#tVat'), tShip=qs('#tShipping'), tTot=qs('#tTotal');
-        if (tSub)  tSub.textContent  = (itemTotal!=null) ? money(itemTotal) : '—';
-        if (tVat)  tVat.textContent  = (taxTotal!=null)  ? money(taxTotal)  : '—';
-        if (tShip) tShip.textContent = (shipTotal!=null) ? money(shipTotal) : '—';
-        if (tTot)  tTot.textContent  = (grandTot!=null)  ? money(grandTot)  : '—';
+          /*
+           * The API values remain authoritative order values.
+           * money() converts them only when displaying this page.
+           */
+          var money =
+            moneyFmt();
 
-        // Delivery information
-        if (o.delivery && (o.delivery.name || (o.delivery.deliveryDays != null))) {
-          var dBox = qs('#deliveryBox');
-          if (dBox) {
-            dBox.hidden = false;
-            var dName = qs('#delName');
-            var dEta = qs('#delEta');
-            if (dName) dName.textContent = o.delivery.name || 'Standard Delivery';
-            if (dEta) {
-              if (o.delivery.deliveryDays != null) {
-                var days = Number(o.delivery.deliveryDays);
-                var date = new Date();
-                date.setDate(date.getDate() + days);
-                dEta.textContent = 'Estimated delivery: ' + date.toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric'
-                });
-              } else {
-                dEta.textContent = 'Delivery date to be confirmed';
+          // Update status badge
+          var statusBadge = qs('#statusBadge');
+          if (statusBadge && o.status) {
+            statusBadge.textContent = o.status.charAt(0).toUpperCase() + o.status.slice(1);
+            if (o.status.toLowerCase() === 'completed') {
+              statusBadge.style.background = 'linear-gradient(135deg, var(--green) 0%, #16A34A 100%)';
+            }
+          }
+
+          // Show and update meta box
+          var metaBox = qs('#metaBox');
+          if (metaBox) {
+            metaBox.hidden = false;
+            var ordStatus = qs('#ordStatus');
+            if (ordStatus) ordStatus.textContent = o.status ? o.status.charAt(0).toUpperCase() + o.status.slice(1) : '—';
+
+            var ordDate = qs('#ordDate');
+            if (ordDate && o.createdAt) {
+              ordDate.textContent = new Date(o.createdAt).toLocaleDateString('en-US', {
+                weekday: 'short',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+            }
+
+            var paidVal = (o.amount && o.amount.value != null) ? o.amount.value : (o.totals ? o.totals.total : null);
+            var ordPaid = qs('#ordPaid');
+            if (ordPaid) ordPaid.textContent = (paidVal != null) ? money(paidVal) : '—';
+
+            // Item count
+            var itemCount = qs('#itemCount');
+            if (itemCount && o.items && Array.isArray(o.items)) {
+              itemCount.textContent = o.items.length + ' item' + (o.items.length !== 1 ? 's' : '');
+            }
+          }
+
+          // Update totals
+          var itemTotal = o.breakdown && o.breakdown.itemTotal ? o.breakdown.itemTotal.value : (o.totals ? o.totals.subtotal : null);
+          var taxTotal = o.breakdown && o.breakdown.taxTotal ? o.breakdown.taxTotal.value : (o.totals ? o.totals.tax : null);
+          var shipTotal = o.breakdown && o.breakdown.shipping ? o.breakdown.shipping.value : (o.delivery ? o.delivery.amount : null);
+          var grandTot = (o.amount && (o.amount.value != null)) ? o.amount.value : (o.totals ? o.totals.total : null);
+
+          var tSub = qs('#tSubtotal'),
+            tVat = qs('#tVat'),
+            tShip = qs('#tShipping'),
+            tTot = qs('#tTotal');
+          if (tSub) tSub.textContent = (itemTotal != null) ? money(itemTotal) : '—';
+          if (tVat) tVat.textContent = (taxTotal != null) ? money(taxTotal) : '—';
+          if (tShip) tShip.textContent = (shipTotal != null) ? money(shipTotal) : '—';
+          if (tTot) tTot.textContent = (grandTot != null) ? money(grandTot) : '—';
+
+          // Delivery information
+          if (o.delivery && (o.delivery.name || (o.delivery.deliveryDays != null))) {
+            var dBox = qs('#deliveryBox');
+            if (dBox) {
+              dBox.hidden = false;
+              var dName = qs('#delName');
+              var dEta = qs('#delEta');
+              if (dName) dName.textContent = o.delivery.name || 'Standard Delivery';
+              if (dEta) {
+                if (o.delivery.deliveryDays != null) {
+                  var days = Number(o.delivery.deliveryDays);
+                  var date = new Date();
+                  date.setDate(date.getDate() + days);
+                  dEta.textContent = 'Estimated delivery: ' + date.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                  });
+                } else {
+                  dEta.textContent = 'Delivery date to be confirmed';
+                }
               }
             }
           }
-        }
 
-        // Items list
-        if (o.items && Array.isArray(o.items) && o.items.length > 0) {
-          var itemsBox = qs('#itemsBox');
-          var itemsList = qs('#itemsList');
-          if (itemsBox && itemsList) {
-            itemsBox.hidden = false;
-            itemsList.innerHTML = '';
-            
-            o.items.forEach(function(item, index) {
-              var div = document.createElement('div');
-              div.className = 'item-row';
-              var qty = Number(item.quantity || 1);
+          // Items list
+          if (o.items && Array.isArray(o.items) && o.items.length > 0) {
+            var itemsBox = qs('#itemsBox');
+            var itemsList = qs('#itemsList');
+            if (itemsBox && itemsList) {
+              itemsBox.hidden = false;
+              itemsList.innerHTML = '';
 
-              // price can be: { value }, number, or string (depending on old orders)
-              // so we normalize safely:
-              var unit =
-                (item.price && item.price.value != null) ? Number(item.price.value) :
-                (item.unitPrice != null) ? Number(item.unitPrice) :
-                (item.unit_amount && item.unit_amount.value != null) ? Number(item.unit_amount.value) :
-                Number(item.price);
+              o.items.forEach(function(item, index) {
+                var div = document.createElement('div');
+                div.className = 'item-row';
+                var qty = Number(item.quantity || 1);
 
-              if (!Number.isFinite(unit)) unit = 0;
+                // price can be: { value }, number, or string (depending on old orders)
+                // so we normalize safely:
+                var unit =
+                  (item.price && item.price.value != null) ? Number(item.price.value) :
+                  (item.unitPrice != null) ? Number(item.unitPrice) :
+                  (item.unit_amount && item.unit_amount.value != null) ? Number(item.unit_amount.value) :
+                  Number(item.price);
 
-              div.innerHTML = `
+                if (!Number.isFinite(unit)) unit = 0;
+
+                div.innerHTML = `
                 <span class="item-name">${item.name || 'Item ' + (index + 1)}</span>
                 <span class="item-qty">${qty} × ${money(unit)}</span>
                 <span class="item-line">${money(unit * qty)}</span>
               `;
-              itemsList.appendChild(div);
-            });
+                itemsList.appendChild(div);
+              });
+            }
           }
-        }
-      })
-      .catch(function(e){ 
-        console.warn('Order details fetch failed:', e);
-        // Show error state
-        var statusBadge = qs('#statusBadge');
-        if (statusBadge) {
-          statusBadge.textContent = 'Error';
-          statusBadge.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
-        }
-      });
-  });
-})();
+        })
+        .catch(function(e) {
+          console.warn('Order details fetch failed:', e);
+          // Show error state
+          var statusBadge = qs('#statusBadge');
+          if (statusBadge) {
+            statusBadge.textContent = 'Error';
+            statusBadge.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
+          }
+        });
+    });
+  })();
 </script>

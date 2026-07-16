@@ -4,24 +4,76 @@
     ? Number(vatRate)
     : 0.15;
 
-  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+  /*
+   * BASE_CURRENCY remains Kasyora's authoritative accounting,
+   * cart, order and payment currency.
+   *
+   * CURRENCY is only the customer's selected display currency.
+   */
+  const BASE_CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
 
-  function formatMoney(amount) {
-    const n = Number(amount || 0);
+  const CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : BASE_CURRENCY
+  ).trim().toUpperCase() || BASE_CURRENCY;
 
-    const formatted = new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: CURRENCY,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(n);
+  const CURRENCY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
 
-    if (CURRENCY === 'ZAR') {
-      return formatted.replace(/^ZAR\s?/, 'R');
+  const CURRENCY_RATE =
+    Number.isFinite(CURRENCY_RATE_RAW) &&
+    CURRENCY_RATE_RAW > 0
+      ? CURRENCY_RATE_RAW
+      : 1;
+
+  function convertBaseToDisplay(amount) {
+    const baseAmount = Number(amount || 0);
+
+    if (!Number.isFinite(baseAmount)) {
+      return 0;
     }
 
-    return formatted;
+    return Number(
+      (baseAmount * CURRENCY_RATE).toFixed(2)
+    );
   }
+
+  function formatMoney(amount) {
+    const convertedAmount =
+      convertBaseToDisplay(amount);
+
+    try {
+      const formatted = new Intl.NumberFormat(
+        undefined,
+        {
+          style: 'currency',
+          currency: CURRENCY,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }
+      ).format(convertedAmount);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return (
+        CURRENCY +
+        ' ' +
+        convertedAmount.toFixed(2)
+      );
+    }
+  }  
 
   const cartGrossTotal = Number(cartSubtotal || 0);
   const cartNetSubtotal = VAT > 0 ? (cartGrossTotal / (1 + VAT)) : cartGrossTotal;
@@ -29,354 +81,362 @@
 %>
 
 <!-- Spinner Start -->
-<div id="spinner"
-    class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
-    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-        <span class="sr-only">Loading...</span>
-    </div>
+<div id="spinner" class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
+  <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+    <span class="sr-only">Loading...</span>
+  </div>
 </div>
 <!-- Spinner End -->
 
 <!-- Topbar Start -->
 <div class="container-fluid px-5 d-none border-bottom d-lg-block">
-    <div class="row gx-0 align-items-center">
-        <div class="col-lg-4 text-center text-lg-start mb-lg-0">
-            <div class="d-inline-flex align-items-center" style="height: 45px;">
-                <a href="#" class="text-muted me-2"> Help</a><small> / </small>
-                <a href="#" class="text-muted mx-2"> Support</a><small> / </small>
-                <a href="/store/contact" class="text-muted ms-2"> Contact</a>
-            </div>
-        </div>
-        <div class="col-lg-4 text-center d-flex align-items-center justify-content-center">
-            <small class="text-dark">Call Us:</small>
-            <a href="#" class="text-muted">(+27) 234 567 890</a>
-        </div>
-
-        <div class="col-lg-4 text-center text-lg-end">
-            <div class="d-inline-flex align-items-center" style="height: 45px;">
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small><%= CURRENCY === 'ZAR' ? 'R' : CURRENCY %></small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="#" class="dropdown-item"> Euro</a>
-                        <a href="#" class="dropdown-item"> Dolar</a>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>English</small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="#" class="dropdown-item"> English</a>
-                        <a href="#" class="dropdown-item"> Turkish</a>
-                        <a href="#" class="dropdown-item"> Spanol</a>
-                        <a href="#" class="dropdown-item"> Italiano</a>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i
-                                class="fa fa-home me-2"></i> My Dashboard</small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="/business/login" class="dropdown-item"> My Account</a>
-                        <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
-                        <a href="#" class="dropdown-item"> Notifications</a>
-                        <a href="#" class="dropdown-item"> Media</a>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="row gx-0 align-items-center">
+    <div class="col-lg-4 text-center text-lg-start mb-lg-0">
+      <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <a href="#" class="text-muted me-2"> Help</a><small> / </small>
+        <a href="#" class="text-muted mx-2"> Support</a><small> / </small>
+        <a href="/store/contact" class="text-muted ms-2"> Contact</a>
+      </div>
     </div>
+    <div class="col-lg-4 text-center d-flex align-items-center justify-content-center">
+      <small class="text-dark">Call Us:</small>
+      <a href="#" class="text-muted">(+27) 234 567 890</a>
+    </div>
+
+    <div class="col-lg-4 text-center text-lg-end">
+      <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+                      currencyReturnTo: '/store/cart'
+                    }) %>
+        </div>
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>English</small></a>
+          <div class="dropdown-menu rounded">
+            <a href="#" class="dropdown-item"> English</a>
+            <a href="#" class="dropdown-item"> Turkish</a>
+            <a href="#" class="dropdown-item"> Spanol</a>
+            <a href="#" class="dropdown-item"> Italiano</a>
+          </div>
+        </div>
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i class="fa fa-home me-2"></i> My Dashboard</small></a>
+          <div class="dropdown-menu rounded">
+            <a href="/business/login" class="dropdown-item"> My Account</a>
+            <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
+            <a href="#" class="dropdown-item"> Notifications</a>
+            <a href="#" class="dropdown-item"> Media</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="container-fluid px-5 py-4 d-none d-lg-block">
-    <div class="row gx-0 align-items-center text-center">
-        <div class="col-md-4 col-lg-3 text-center text-lg-start">
-            <div class="d-inline-flex align-items-center">
-                <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
-                    <img
-                        src="/images/branding/logo-unincorporate.png"
-                        alt="Kasyora.com"
-                        class="img-fluid me-2"
-                        style="max-height: 52px; width: auto;"
-                    >
-                    <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
-                        Kasyora.com
-                    </span>
-                </a>
-            </div>
-        </div>
-        <div class="col-md-4 col-lg-6 text-center">
-            <div class="position-relative ps-4">
-                <div class="d-flex border rounded-pill">
-                    <input
-                        id="cartKeywordInput"
-                        class="form-control border-0 rounded-pill w-100 py-3"
-                        type="text"
-                        data-bs-target="#dropdownToggle123"
-                        placeholder="Search products by name or keywords"
-                    >
-                    <select id="cartCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="">All Category</option>
-                        <% (CATEGORIES || []).forEach(function(category) { %>
-                            <option value="<%= category.value %>"><%= category.label %></option>
-                        <% }) %>
-                    </select>
-                    <button id="cartKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
-                            class="fas fa-search"></i></button>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-lg-3 text-center text-lg-end">
-            <div class="d-inline-flex align-items-center">
-                <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span
-                        class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
-                <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span
-                        class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
-                <a href="/store/cart" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
-                    <span class="rounded-circle btn-md-square border">
-                        <i class="fas fa-shopping-cart"></i>
-                    </span>
-                    <span class="text-dark ms-2 store-cart-total"><%= formatMoney(cartGrossTotal) %></span>
-                </a>
-            </div>
-        </div>
+  <div class="row gx-0 align-items-center text-center">
+    <div class="col-md-4 col-lg-3 text-center text-lg-start">
+      <div class="d-inline-flex align-items-center">
+        <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2" style="max-height: 52px; width: auto;">
+          <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
+            Kasyora.com
+          </span>
+        </a>
+      </div>
     </div>
+    <div class="col-md-4 col-lg-6 text-center">
+      <div class="position-relative ps-4">
+        <div class="d-flex border rounded-pill">
+          <input id="cartKeywordInput" class="form-control border-0 rounded-pill w-100 py-3" type="text" data-bs-target="#dropdownToggle123" placeholder="Search products by name or keywords">
+          <select id="cartCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
+            <option value="">All Category</option>
+            <% (CATEGORIES || []).forEach(function(category) { %>
+            <option value="<%= category.value %>"><%= category.label %></option>
+            <% }) %>
+          </select>
+          <button id="cartKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i class="fas fa-search"></i></button>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 col-lg-3 text-center text-lg-end">
+      <div class="d-inline-flex align-items-center">
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
+        <a href="/store/cart" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+          <span class="rounded-circle btn-md-square border">
+            <i class="fas fa-shopping-cart"></i>
+          </span>
+          <span class="text-dark ms-2 store-cart-total"><%= formatMoney(cartGrossTotal) %></span>
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Topbar End -->
 
-<!-- Navbar & Hero Start -->
-<div class="container-fluid nav-bar p-0">
-    <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
-        <div class="col-lg-3 d-none d-lg-block">
-            <nav class="navbar navbar-light position-relative" style="width: 250px;">
-                <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#allCat">
-                    <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
-                </button>
-                <div class="collapse navbar-collapse rounded-bottom" id="allCat">
-                    <div class="navbar-nav ms-auto py-0">
-                        <ul class="list-unstyled categories-bars">
-                            <li>
-                                <div class="categories-bars-item">
-                                    <a href="/store/shop" class="cart-category-link" data-category="">All Categories</a>
-                                    <span></span>
-                                </div>
-                            </li>
-                            <% (CATEGORIES || []).forEach(function(category) { %>
-                                <li>
-                                    <div class="categories-bars-item">
-                                        <a href="/store/shop" class="cart-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                                        <span></span>
-                                    </div>
-                                </li>
-                            <% }) %>
-                        </ul>
-                    </div>
-                </div>
-            </nav>
+<%
+  const SHOW_CURRENCY_WARNING =
+    typeof currencyConversionAvailable !== 'undefined' &&
+    currencyConversionAvailable === false;
+
+  const CURRENCY_WARNING_TEXT =
+    typeof currencyConversionMessage !== 'undefined'
+      ? String(currencyConversionMessage || '').trim()
+      : '';
+%>
+
+<% if (SHOW_CURRENCY_WARNING && CURRENCY_WARNING_TEXT) { %>
+<div class="container mt-3">
+  <div class="alert alert-warning border shadow-sm mb-0" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fas fa-exclamation-triangle text-primary mt-1" aria-hidden="true"></i>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
         </div>
 
-        <div class="col-12 col-lg-9">
-            <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
-                <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
-                    <img
-                        src="/images/branding/logo-unincorporate.png"
-                        alt="Kasyora.com"
-                        class="img-fluid me-2 flex-shrink-0"
-                        style="max-height: 38px; width: auto;"
-                    >
-                    <span class="h5 text-white m-0 text-truncate fw-bold">
-                        Kasyora.com
-                    </span>
-                </a>
-                <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse"
-                    data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="fa fa-bars fa-1x"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarCollapse">
-                    <div class="navbar-nav ms-auto py-0">
-                        <a href="/store" class="nav-item nav-link">Shopping home</a>
-                        <a href="/store/shop" class="nav-item nav-link">Shop</a>
-                        <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
-                        <div class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
-                            <div class="dropdown-menu m-0">
-                                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
-                                <a href="/store/cart" class="dropdown-item">Cart</a>
-                                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
-                                <a href="/business/login" class="dropdown-item">Accounts</a>
-                                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
-                            </div>
-                        </div>
-                        <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
-                        <div class="nav-item dropdown d-block d-lg-none mb-3">
-                            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
-                            <div class="dropdown-menu m-0">
-                                <ul class="list-unstyled categories-bars">
-                                    <li>
-                                        <div class="categories-bars-item">
-                                            <a href="/store/shop" class="cart-category-link" data-category="">All Categories</a>
-                                            <span></span>
-                                        </div>
-                                    </li>
-                                    <% (CATEGORIES || []).forEach(function(category) { %>
-                                        <li>
-                                            <div class="categories-bars-item">
-                                                <a href="/store/shop" class="cart-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                                                <span></span>
-                                            </div>
-                                        </li>
-                                    <% }) %>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <a href="#" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i
-                            class="fa fa-mobile-alt me-2"></i> +273 456 890</a>
-                </div>
-            </nav>
+        <div class="small">
+          <%= CURRENCY_WARNING_TEXT %>
         </div>
+      </div>
     </div>
+  </div>
+</div>
+<% } %>
+
+<!-- Navbar & Hero Start -->
+<div class="container-fluid nav-bar p-0">
+  <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
+    <div class="col-lg-3 d-none d-lg-block">
+      <nav class="navbar navbar-light position-relative" style="width: 250px;">
+        <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#allCat">
+          <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
+        </button>
+        <div class="collapse navbar-collapse rounded-bottom" id="allCat">
+          <div class="navbar-nav ms-auto py-0">
+            <ul class="list-unstyled categories-bars">
+              <li>
+                <div class="categories-bars-item">
+                  <a href="/store/shop" class="cart-category-link" data-category="">All Categories</a>
+                  <span></span>
+                </div>
+              </li>
+              <% (CATEGORIES || []).forEach(function(category) { %>
+              <li>
+                <div class="categories-bars-item">
+                  <a href="/store/shop" class="cart-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                  <span></span>
+                </div>
+              </li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+      </nav>
+    </div>
+
+    <div class="col-12 col-lg-9">
+      <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
+        <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
+          <span class="h5 text-white m-0 text-truncate fw-bold">
+            Kasyora.com
+          </span>
+        </a>
+        <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="fa fa-bars fa-1x"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+          <div class="navbar-nav ms-auto py-0">
+            <a href="/store" class="nav-item nav-link">Shopping home</a>
+            <a href="/store/shop" class="nav-item nav-link">Shop</a>
+            <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
+              <div class="dropdown-menu m-0">
+                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
+                <a href="/store/cart" class="dropdown-item">Cart</a>
+                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
+                <a href="/business/login" class="dropdown-item">Accounts</a>
+                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
+              </div>
+            </div>
+            <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
+
+            <div class="nav-item d-block d-lg-none px-3 py-2 mb-2">
+              <div class="small fw-bold text-white mb-1">
+                Display currency
+              </div>
+
+              <div class="bg-white rounded px-2 py-1 d-inline-flex">
+                <%- include('partials/currency-selector', {
+                                  currencyReturnTo: '/store/cart'
+                                }) %>
+              </div>
+            </div>
+
+            <div class="nav-item dropdown d-block d-lg-none mb-3">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
+              <div class="dropdown-menu m-0">
+                <ul class="list-unstyled categories-bars">
+                  <li>
+                    <div class="categories-bars-item">
+                      <a href="/store/shop" class="cart-category-link" data-category="">All Categories</a>
+                      <span></span>
+                    </div>
+                  </li>
+                  <% (CATEGORIES || []).forEach(function(category) { %>
+                  <li>
+                    <div class="categories-bars-item">
+                      <a href="/store/shop" class="cart-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                      <span></span>
+                    </div>
+                  </li>
+                  <% }) %>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <a href="#" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i class="fa fa-mobile-alt me-2"></i> +273 456 890</a>
+        </div>
+      </nav>
+    </div>
+  </div>
 </div>
 <!-- Navbar & Hero End -->
 
 <!-- Single Page Header start -->
 <div class="container-fluid page-header py-5" style="<%= shopHeaderImage && shopHeaderImage.image ? '--page-header-image: url(' + shopHeaderImage.image + ')' : '' %>">
-    <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Cart Page</h1>
-    <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
-        <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
-        <li class="breadcrumb-item"><a href="/store/shop">Pages</a></li>
-        <li class="breadcrumb-item active text-white">Cart Page</li>
-    </ol>
+  <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Cart Page</h1>
+  <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
+    <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
+    <li class="breadcrumb-item"><a href="/store/shop">Pages</a></li>
+    <li class="breadcrumb-item active text-white">Cart Page</li>
+  </ol>
 </div>
 <!-- Single Page Header End -->
 
 <!-- Cart Page Start -->
 <div class="container-fluid py-5">
-    <div class="container py-5">
-        <div class="table-responsive">
-            <table class="table align-middle cart-table cart-table-brand mb-0">
-                <thead>
-                    <tr>
-                        <th scope="col">Name</th>
-                        <th scope="col">Model</th>
-                        <th scope="col">Price</th>
-                        <th scope="col">Quantity</th>
-                        <th scope="col">Total</th>
-                        <th scope="col">Handle</th>
-                    </tr>
-                </thead>
-                <tbody id="cartTableBody">
-                    <% if (!(cartItems || []).length) { %>
-                        <tr>
-                            <td colspan="6" class="text-center py-5">
-                                <h5 class="mb-3">Your cart is empty</h5>
-                                <a href="/store/shop" class="btn btn-primary rounded-pill px-4 py-2">Continue Shopping</a>
-                            </td>
-                        </tr>
-                    <% } %>
+  <div class="container py-5">
+    <div class="table-responsive">
+      <table class="table align-middle cart-table cart-table-brand mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Model</th>
+            <th scope="col">Price</th>
+            <th scope="col">Quantity</th>
+            <th scope="col">Total</th>
+            <th scope="col">Handle</th>
+          </tr>
+        </thead>
+        <tbody id="cartTableBody">
+          <% if (!(cartItems || []).length) { %>
+          <tr>
+            <td colspan="6" class="text-center py-5">
+              <h5 class="mb-3">Your cart is empty</h5>
+              <a href="/store/shop" class="btn btn-primary rounded-pill px-4 py-2">Continue Shopping</a>
+            </td>
+          </tr>
+          <% } %>
 
-                    <% (cartItems || []).forEach(function(item) { %>
-                        <tr
-                            class="cart-row"
-                            data-pid="<%= item.customId %>"
-                            data-variant-size="<%= item.variants && item.variants.size ? item.variants.size : '' %>"
-                            data-variant-color="<%= item.variants && item.variants.color ? item.variants.color : '' %>"
-                        >
-                            <th scope="row">
-                                <div class="py-3">
-                                    <div class="cart-name-box rounded-3 p-3 text-white h-100">
-                                        <p class="mb-2 fw-bold text-break"><%= item.name %></p>
-                                        <% if (item.variants && (item.variants.size || item.variants.color)) { %>
-                                            <div class="small text-white text-break">
-                                                <% if (item.variants.size) { %><span class="fw-semibold">Size:</span> <%= item.variants.size %><% } %>
-                                                <% if (item.variants.size && item.variants.color) { %> | <% } %>
-                                                <% if (item.variants.color) { %><span class="fw-semibold">Color:</span> <%= item.variants.color %><% } %>
-                                            </div>
-                                        <% } %>
-                                    </div>
-                                </div>
-                            </th>
-                            <td>
-                                <div class="py-3">
-                                    <div class="rounded-3 p-3 text-break fw-semibold">
-                                        <%= item.customId || 'N/A' %>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                               <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0)) %></p> 
-                            </td>
-                            <td>
-                                <div class="input-group quantity py-4" style="width: 100px;">
-                                    <div class="input-group-btn">
-                                        <button type="button" class="btn btn-sm btn-minus rounded-circle bg-light border js-cart-decrease">
-                                            <i class="fa fa-minus"></i>
-                                        </button>
-                                    </div>
-                                    <input
-                                        type="text"
-                                        class="form-control form-control-sm text-center border-0"
-                                        value="<%= Number(item.quantity || 0) %>"
-                                        readonly
-                                    >
-                                    <div class="input-group-btn">
-                                        <button type="button" class="btn btn-sm btn-plus rounded-circle bg-light border js-cart-increase">
-                                            <i class="fa fa-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %></p>
-                            </td>
-                            <td class="py-4">
-                                <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">
-                                    <i class="fa fa-times text-danger"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    <% }) %>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="mt-5">
-            <input type="text" class="border-0 border-bottom rounded me-5 py-3 mb-4" placeholder="Coupon Code">
-            <button class="btn btn-primary rounded-pill px-4 py-3" type="button">Apply Coupon</button>
-        </div>
-
-        <div class="row g-4 justify-content-end">
-            <div class="col-8"></div>
-            <div class="col-sm-8 col-md-7 col-lg-6 col-xl-4">
-                <div class="bg-light rounded">
-                    <div class="p-4">
-                        <h1 class="display-6 mb-4">Cart <span class="fw-normal">Total</span></h1>
-
-                        <div class="d-flex justify-content-between mb-3">
-                            <h5 class="mb-0 me-4">Subtotal (excl. VAT):</h5>
-                            <p class="mb-0" id="cartSubtotal"><%= formatMoney(cartNetSubtotal) %></p>
-                        </div>
-
-                        <div class="d-flex justify-content-between mb-3">
-                            <h5 class="mb-0 me-4">VAT (<%= (VAT * 100).toFixed(0) %>%):</h5>
-                            <p class="mb-0" id="cartVatTotal"><%= formatMoney(cartVatAmount) %></p>
-                        </div>
-
-                        <div class="d-flex justify-content-between mb-0">
-                            <h5 class="mb-0 me-4">Total (incl. VAT):</h5>
-                            <p class="mb-0 fw-bold" id="cartGrandTotal"><%= formatMoney(cartGrossTotal) %></p>
-                        </div>
-
-                        <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">
-                            Shipping is not included in the cart total yet. You will select your shipping rate in Checkout.
-                        </div>
-                    </div>
-
-                    <a href="/payment/checkout" class="btn btn-primary rounded-pill px-4 py-3 text-uppercase mb-4 ms-4">
-                        Proceed Checkout
-                    </a>
+          <% (cartItems || []).forEach(function(item) { %>
+          <tr class="cart-row" data-pid="<%= item.customId %>" data-variant-size="<%= item.variants && item.variants.size ? item.variants.size : '' %>" data-variant-color="<%= item.variants && item.variants.color ? item.variants.color : '' %>">
+            <th scope="row">
+              <div class="py-3">
+                <div class="cart-name-box rounded-3 p-3 text-white h-100">
+                  <p class="mb-2 fw-bold text-break"><%= item.name %></p>
+                  <% if (item.variants && (item.variants.size || item.variants.color)) { %>
+                  <div class="small text-white text-break">
+                    <% if (item.variants.size) { %><span class="fw-semibold">Size:</span> <%= item.variants.size %><% } %>
+                    <% if (item.variants.size && item.variants.color) { %> | <% } %>
+                    <% if (item.variants.color) { %><span class="fw-semibold">Color:</span> <%= item.variants.color %><% } %>
+                  </div>
+                  <% } %>
                 </div>
-            </div>
-        </div>
+              </div>
+            </th>
+            <td>
+              <div class="py-3">
+                <div class="rounded-3 p-3 text-break fw-semibold">
+                  <%= item.customId || 'N/A' %>
+                </div>
+              </div>
+            </td>
+            <td>
+              <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0)) %></p>
+            </td>
+            <td>
+              <div class="input-group quantity py-4" style="width: 100px;">
+                <div class="input-group-btn">
+                  <button type="button" class="btn btn-sm btn-minus rounded-circle bg-light border js-cart-decrease">
+                    <i class="fa fa-minus"></i>
+                  </button>
+                </div>
+                <input type="text" class="form-control form-control-sm text-center border-0" value="<%= Number(item.quantity || 0) %>" readonly>
+                <div class="input-group-btn">
+                  <button type="button" class="btn btn-sm btn-plus rounded-circle bg-light border js-cart-increase">
+                    <i class="fa fa-plus"></i>
+                  </button>
+                </div>
+              </div>
+            </td>
+            <td>
+              <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %></p>
+            </td>
+            <td class="py-4">
+              <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">
+                <i class="fa fa-times text-danger"></i>
+              </button>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
     </div>
+
+    <div class="mt-5">
+      <input type="text" class="border-0 border-bottom rounded me-5 py-3 mb-4" placeholder="Coupon Code">
+      <button class="btn btn-primary rounded-pill px-4 py-3" type="button">Apply Coupon</button>
+    </div>
+
+    <div class="row g-4 justify-content-end">
+      <div class="col-8"></div>
+      <div class="col-sm-8 col-md-7 col-lg-6 col-xl-4">
+        <div class="bg-light rounded">
+          <div class="p-4">
+            <h1 class="display-6 mb-4">Cart <span class="fw-normal">Total</span></h1>
+
+            <div class="d-flex justify-content-between mb-3">
+              <h5 class="mb-0 me-4">Subtotal (excl. VAT):</h5>
+              <p class="mb-0" id="cartSubtotal"><%= formatMoney(cartNetSubtotal) %></p>
+            </div>
+
+            <div class="d-flex justify-content-between mb-3">
+              <h5 class="mb-0 me-4">VAT (<%= (VAT * 100).toFixed(0) %>%):</h5>
+              <p class="mb-0" id="cartVatTotal"><%= formatMoney(cartVatAmount) %></p>
+            </div>
+
+            <div class="d-flex justify-content-between mb-0">
+              <h5 class="mb-0 me-4">Total (incl. VAT):</h5>
+              <p class="mb-0 fw-bold" id="cartGrandTotal"><%= formatMoney(cartGrossTotal) %></p>
+            </div>
+
+            <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">
+              Shipping is not included in the cart total yet. You will select your shipping rate in Checkout.
+            </div>
+          </div>
+
+          <a href="/payment/checkout" class="btn btn-primary rounded-pill px-4 py-3 text-uppercase mb-4 ms-4">
+            Proceed Checkout
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Cart Page End -->
 
@@ -458,43 +518,48 @@
 <%- include('partials/footer') %>
 
 <style nonce="<%= nonce %>">
-  .store-cart-link.cart-flash-active .fa-shopping-cart{
+  .store-cart-link.cart-flash-active .fa-shopping-cart {
     animation: cartPurpleFlash 3s infinite;
     position: relative;
     z-index: 1;
   }
 
-  .store-cart-link.cart-flash-active .rounded-circle{
+  .store-cart-link.cart-flash-active .rounded-circle {
     animation: cartCirclePurpleFlash 3s infinite;
   }
 
-  @keyframes cartPurpleFlash{
-    0%, 100%{
+  @keyframes cartPurpleFlash {
+
+    0%,
+    100% {
       color: inherit;
     }
 
-    50%{
+    50% {
       color: #fff;
     }
   }
 
-  @keyframes cartCirclePurpleFlash{
-    0%, 100%{
+  @keyframes cartCirclePurpleFlash {
+
+    0%,
+    100% {
       background-color: transparent;
       border-color: inherit;
     }
 
-    50%{
+    50% {
       background-color: #7C3AED;
       border-color: #7C3AED;
     }
   }
 </style>
 
+<%- include('partials/currency-client') %>
 <%- include('partials/cart-script-cart-page') %>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const cartLink = document.querySelector('.store-cart-link');
     const cartTotal = document.querySelector('.store-cart-total');
 
@@ -512,7 +577,7 @@
 </script>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const select = document.getElementById('cartCategorySelect');
     const keywordInput = document.getElementById('cartKeywordInput');
     const keywordBtn = document.getElementById('cartKeywordSearchBtn');
@@ -523,42 +588,42 @@
     }
 
     function goToShop(categoryValue, keywordValue) {
-        const selectedCategory = normalize(categoryValue);
-        const keyword = normalize(keywordValue);
+      const selectedCategory = normalize(categoryValue);
+      const keyword = normalize(keywordValue);
 
-        const params = new URLSearchParams();
+      const params = new URLSearchParams();
 
-        if (selectedCategory) {
-            params.set('category', selectedCategory);
-        }
+      if (selectedCategory) {
+        params.set('category', selectedCategory);
+      }
 
-        if (keyword) {
-            params.set('keyword', keyword);
-        }
+      if (keyword) {
+        params.set('keyword', keyword);
+      }
 
-        const query = params.toString();
-        window.location.href = query ? `/store/shop?${query}#shopProductsSection` : '/store/shop#shopProductsSection';
+      const query = params.toString();
+      window.location.href = query ? `/store/shop?${query}#shopProductsSection` : '/store/shop#shopProductsSection';
     }
 
     function currentKeyword() {
       return normalize(keywordInput ? keywordInput.value : '');
     }
 
-    links.forEach(function (link) {
-      link.addEventListener('click', function (event) {
+    links.forEach(function(link) {
+      link.addEventListener('click', function(event) {
         event.preventDefault();
         goToShop(link.getAttribute('data-category') || '', currentKeyword());
       });
     });
 
     if (select) {
-      select.addEventListener('change', function () {
+      select.addEventListener('change', function() {
         goToShop(select.value || '', currentKeyword());
       });
     }
 
     if (keywordInput) {
-      keywordInput.addEventListener('keydown', function (event) {
+      keywordInput.addEventListener('keydown', function(event) {
         if (event.key === 'Enter') {
           event.preventDefault();
           goToShop(select ? select.value : '', keywordInput.value);
@@ -567,7 +632,7 @@
     }
 
     if (keywordBtn) {
-      keywordBtn.addEventListener('click', function () {
+      keywordBtn.addEventListener('click', function() {
         goToShop(select ? select.value : '', currentKeyword());
       });
     }

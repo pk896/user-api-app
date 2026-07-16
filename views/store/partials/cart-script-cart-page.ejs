@@ -1,25 +1,62 @@
 <!--views/store/partials/cart-script-cart-page.ejs-->
 
 <script nonce="<%= nonce %>">
-  (function () {
-    const CURRENCY = "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD' %>";
-
+  (function() {
+    /*
+     * All item and cart amounts received from /api/cart remain in
+     * Kasyora's authoritative BASE_CURRENCY.
+     *
+     * The shared client helper converts only the visible values.
+     */
     function formatMoney(amount) {
-      const n = Number(amount || 0);
-
-      const formatted = new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: CURRENCY,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(n);
-
-      if (CURRENCY === 'ZAR') {
-        return formatted.replace(/^ZAR\s?/, 'R');
+      if (
+        window.KasyoraCurrency &&
+        typeof window.KasyoraCurrency.formatBaseAmount === 'function'
+      ) {
+        return window.KasyoraCurrency.formatBaseAmount(
+          amount
+        );
       }
 
-      return formatted;
+      const fallbackAmount = Number(amount || 0);
+      const fallbackCurrency =
+        "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : 'USD').trim().toUpperCase() || 'USD' %>";
+
+      try {
+        return new Intl.NumberFormat(
+          undefined, {
+            style: 'currency',
+            currency: fallbackCurrency,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }
+        ).format(
+          Number.isFinite(fallbackAmount) ?
+          fallbackAmount :
+          0
+        );
+      } catch (error) {
+        return (
+          fallbackCurrency +
+          ' ' +
+          (
+            Number.isFinite(fallbackAmount) ?
+            fallbackAmount :
+            0
+          ).toFixed(2)
+        );
+      }
     }
+
+    const VAT_RATE_RAW = Number(
+      "<%= Number(typeof vatRate !== 'undefined' && vatRate !== null ? vatRate : 0.15) %>"
+    );
+
+    const VAT_RATE =
+      Number.isFinite(VAT_RATE_RAW) &&
+      VAT_RATE_RAW >= 0 ?
+      VAT_RATE_RAW :
+      0;
 
     function round2(n) {
       return Math.round(Number(n || 0) * 100) / 100;
@@ -39,14 +76,17 @@
     function getCartSummary(items) {
       const list = Array.isArray(items) ? items : [];
 
-      return list.reduce(function (acc, item) {
+      return list.reduce(function(acc, item) {
         const quantity = Number(item.quantity || 0);
         const price = Number(item.price || 0);
 
         acc.count += quantity;
         acc.total += price * quantity;
         return acc;
-      }, { count: 0, total: 0 });
+      }, {
+        count: 0,
+        total: 0
+      });
     }
 
     function escapeHtml(value) {
@@ -60,24 +100,65 @@
 
     function renderCart(items) {
       const body = document.getElementById('cartTableBody');
-      const subtotalEl = document.getElementById('cartSubtotal');
-      const totalEl = document.getElementById('cartGrandTotal');
-      const headerTotals = document.querySelectorAll('.store-cart-total');
-      const cartLinks = document.querySelectorAll('.store-cart-link');
+      const subtotalEl =
+        document.getElementById('cartSubtotal');
+
+      const vatEl =
+        document.getElementById('cartVatTotal');
+
+      const totalEl =
+        document.getElementById('cartGrandTotal');
+
+      const headerTotals =
+        document.querySelectorAll('.store-cart-total');
+
+      const cartLinks =
+        document.querySelectorAll('.store-cart-link');
 
       if (!body) return;
 
-      const list = Array.isArray(items) ? items : [];
+      const list = Array.isArray(items) ?
+        items : [];
+
       const summary = getCartSummary(list);
 
-      if (subtotalEl) subtotalEl.textContent = formatMoney(summary.total);
-      if (totalEl) totalEl.textContent = formatMoney(summary.total);
+      /*
+       * Cart item prices already include VAT.
+       * Keep the calculation in BASE_CURRENCY and convert only
+       * when writing the visible text.
+       */
+      const grossTotal =
+        round2(summary.total);
 
-      headerTotals.forEach(function (el) {
-        el.textContent = formatMoney(summary.total);
+      const netSubtotal =
+        VAT_RATE > 0 ?
+        round2(grossTotal / (1 + VAT_RATE)) :
+        grossTotal;
+
+      const vatTotal =
+        round2(grossTotal - netSubtotal);
+
+      if (subtotalEl) {
+        subtotalEl.textContent =
+          formatMoney(netSubtotal);
+      }
+
+      if (vatEl) {
+        vatEl.textContent =
+          formatMoney(vatTotal);
+      }
+
+      if (totalEl) {
+        totalEl.textContent =
+          formatMoney(grossTotal);
+      }
+
+      headerTotals.forEach(function(el) {
+        el.textContent =
+          formatMoney(grossTotal);
       });
 
-      cartLinks.forEach(function (link) {
+      cartLinks.forEach(function(link) {
         if (summary.count > 0) {
           link.classList.add('cart-flash-active');
         } else {
@@ -97,7 +178,7 @@
         return;
       }
 
-      body.innerHTML = list.map(function (item) {
+      body.innerHTML = list.map(function(item) {
         const size = item.variants && item.variants.size ? item.variants.size : '';
         const color = item.variants && item.variants.color ? item.variants.color : '';
         const lineTotal = Number(item.price || 0) * Number(item.quantity || 0);
@@ -107,13 +188,13 @@
           '  <th scope="row">',
           '    <div class="py-4">',
           '      <p class="mb-1">' + escapeHtml(item.name || 'Product') + '</p>',
-          (size || color)
-            ? '      <small class="text-muted">' +
-                (size ? ('Size: ' + escapeHtml(size)) : '') +
-                (size && color ? ' | ' : '') +
-                (color ? ('Color: ' + escapeHtml(color)) : '') +
-              '</small>'
-            : '',
+          (size || color) ?
+          '      <small class="text-muted">' +
+          (size ? ('Size: ' + escapeHtml(size)) : '') +
+          (size && color ? ' | ' : '') +
+          (color ? ('Color: ' + escapeHtml(color)) : '') +
+          '</small>' :
+          '',
           '    </div>',
           '  </th>',
           '  <td><p class="mb-0 py-4">' + escapeHtml(item.customId || 'N/A') + '</p></td>',
@@ -159,7 +240,7 @@
       return data;
     }
 
-    document.addEventListener('click', async function (event) {
+    document.addEventListener('click', async function(event) {
       const row = event.target.closest('.cart-row');
       if (!row) return;
 
@@ -168,19 +249,28 @@
 
       try {
         if (event.target.closest('.js-cart-increase')) {
-          const data = await postCart('/api/cart/increase', { pid: pid, variants: variants });
+          const data = await postCart('/api/cart/increase', {
+            pid: pid,
+            variants: variants
+          });
           renderCart(data.items || []);
           return;
         }
 
         if (event.target.closest('.js-cart-decrease')) {
-          const data = await postCart('/api/cart/decrease', { pid: pid, variants: variants });
+          const data = await postCart('/api/cart/decrease', {
+            pid: pid,
+            variants: variants
+          });
           renderCart(data.items || []);
           return;
         }
 
         if (event.target.closest('.js-cart-remove')) {
-          const data = await postCart('/api/cart/remove', { pid: pid, variants: variants });
+          const data = await postCart('/api/cart/remove', {
+            pid: pid,
+            variants: variants
+          });
           renderCart(data.items || []);
         }
       } catch (err) {
