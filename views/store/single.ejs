@@ -1,33 +1,124 @@
 <!--views/store/single.ejs-->
 <%
-  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
+  const VAT = (
+    typeof vatRate !== 'undefined' &&
+    vatRate !== null
+  )
     ? Number(vatRate)
     : 0.15;
 
-  const CURRENCY = String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD';
+  /*
+   * BASE_CURRENCY remains Kasyora's authoritative product,
+   * cart, VAT, shipping, order and accounting currency.
+   *
+   * CURRENCY is only the customer's selected display currency.
+   * Product and cart source values are never changed here.
+   */
+  const BASE_CURRENCY = String(
+    typeof baseCurrency !== 'undefined'
+      ? baseCurrency
+      : 'USD'
+  ).trim().toUpperCase() || 'USD';
 
-  function formatMoney(amount) {
-    const n = Number(amount || 0);
+  const CURRENCY = String(
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
+      : BASE_CURRENCY
+  ).trim().toUpperCase() || BASE_CURRENCY;
 
-    const formatted = new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: CURRENCY,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(n);
+  const CURRENCY_RATE_RAW = Number(
+    typeof displayRate !== 'undefined'
+      ? displayRate
+      : 1
+  );
 
-    if (CURRENCY === 'ZAR') {
-      return formatted.replace(/^ZAR\s?/, 'R');
+  const CURRENCY_RATE =
+    Number.isFinite(CURRENCY_RATE_RAW) &&
+    CURRENCY_RATE_RAW > 0
+      ? CURRENCY_RATE_RAW
+      : 1;
+
+  /*
+   * Convert only visible values.
+   * The original amount remains a BASE_CURRENCY amount.
+   */
+  function convertBaseToDisplay(amount) {
+    const baseAmount = Number(amount || 0);
+
+    if (!Number.isFinite(baseAmount)) {
+      return 0;
     }
 
-    return formatted;
+    return Number(
+      (
+        baseAmount *
+        CURRENCY_RATE
+      ).toFixed(2)
+    );
   }
 
-  const avgRating = Number((product && product.avgRating) || 0);
-  const ratingsCount = Number((product && product.ratingsCount) || 0);
+  function formatMoney(amount) {
+    const convertedAmount =
+      convertBaseToDisplay(amount);
+
+    try {
+      const formatted = new Intl.NumberFormat(
+        undefined,
+        {
+          style: 'currency',
+          currency: CURRENCY,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }
+      ).format(convertedAmount);
+
+      if (CURRENCY === 'ZAR') {
+        return formatted.replace(/^ZAR\s?/, 'R');
+      }
+
+      return formatted;
+    } catch (error) {
+      return (
+        CURRENCY +
+        ' ' +
+        convertedAmount.toFixed(2)
+      );
+    }
+  }
+
+  const SINGLE_PRODUCT_ID = String(
+    product && product.customId
+      ? product.customId
+      : ''
+  ).trim();
+
+  /*
+   * Return the customer to this exact product after changing
+   * their display currency.
+   */
+  const SINGLE_CURRENCY_RETURN_TO =
+    SINGLE_PRODUCT_ID
+      ? (
+          '/store/product/' +
+          encodeURIComponent(SINGLE_PRODUCT_ID)
+        )
+      : '/store/shop';
+
+  const avgRating = Number(
+    (product && product.avgRating) || 0
+  );
+
+  const ratingsCount = Number(
+    (product && product.ratingsCount) || 0
+  );
+
   const ratingSummaryText =
-    (ratingsCount > 0)
-      ? `${avgRating.toFixed(1)} • ${ratingsCount} review${ratingsCount === 1 ? '' : 's'}`
+    ratingsCount > 0
+      ? (
+          `${avgRating.toFixed(1)} • ` +
+          `${ratingsCount} review` +
+          `${ratingsCount === 1 ? '' : 's'}`
+        )
       : 'No reviews yet';
 
   function storeProductPayload(product) {
@@ -35,296 +126,328 @@
       customId: product.customId || '',
       name: product.name || '',
       image: product.image || product.imageUrl || '',
-      sizes: Array.isArray(product.sizes) ? product.sizes : [],
-      colors: Array.isArray(product.colors) ? product.colors : [],
-      colorImages: Array.isArray(product.colorImages) ? product.colorImages : []
+      sizes: Array.isArray(product.sizes)
+        ? product.sizes
+        : [],
+      colors: Array.isArray(product.colors)
+        ? product.colors
+        : [],
+      colorImages: Array.isArray(product.colorImages)
+        ? product.colorImages
+        : []
     }));
   }
 %>
 
 <!-- Spinner Start -->
-<div id="spinner"
-    class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
-    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-        <span class="sr-only">Loading...</span>
-    </div>
+<div id="spinner" class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
+  <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+    <span class="sr-only">Loading...</span>
+  </div>
 </div>
 <!-- Spinner End -->
 
 <!-- Topbar Start -->
 <div class="container-fluid px-5 d-none border-bottom d-lg-block">
-    <div class="row gx-0 align-items-center">
-        <div class="col-lg-4 text-center text-lg-start mb-lg-0">
-            <div class="d-inline-flex align-items-center" style="height: 45px;">
-                <a href="#" class="text-muted me-2"> Help</a><small> / </small>
-                <a href="#" class="text-muted mx-2"> Support</a><small> / </small>
-                <a href="/store/contact" class="text-muted ms-2"> Contact</a>
-            </div>
-        </div>
-        <div class="col-lg-4 text-center d-flex align-items-center justify-content-center">
-            <small class="text-dark">Call Us:</small>
-            <a href="#" class="text-muted">(+012) 1234 567890</a>
-        </div>
-
-        <div class="col-lg-4 text-center text-lg-end">
-            <div class="d-inline-flex align-items-center" style="height: 45px;">
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted me-2" data-bs-toggle="dropdown"><small><%= CURRENCY === 'ZAR' ? 'R' : CURRENCY %></small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="#" class="dropdown-item"> Euro</a>
-                        <a href="#" class="dropdown-item"> Dolar</a>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>English</small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="#" class="dropdown-item"> English</a>
-                        <a href="#" class="dropdown-item"> Turkish</a>
-                        <a href="#" class="dropdown-item"> Spanol</a>
-                        <a href="#" class="dropdown-item"> Italiano</a>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i
-                                class="fa fa-home me-2"></i> My Dashboard</small></a>
-                    <div class="dropdown-menu rounded">
-                        <a href="/business/login" class="dropdown-item"> My Account</a>
-                        <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
-                        <a href="#" class="dropdown-item"> Notifications</a>
-                        <a href="#" class="dropdown-item"> Media</a>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="row gx-0 align-items-center">
+    <div class="col-lg-4 text-center text-lg-start mb-lg-0">
+      <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <a href="#" class="text-muted me-2"> Help</a><small> / </small>
+        <a href="#" class="text-muted mx-2"> Support</a><small> / </small>
+        <a href="/store/contact" class="text-muted ms-2"> Contact</a>
+      </div>
     </div>
+    <div class="col-lg-4 text-center d-flex align-items-center justify-content-center">
+      <small class="text-dark">Call Us:</small>
+      <a href="#" class="text-muted">(+012) 1234 567890</a>
+    </div>
+
+    <div class="col-lg-4 text-center text-lg-end">
+      <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+                      currencyReturnTo: SINGLE_CURRENCY_RETURN_TO
+                    }) %>
+        </div>
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>English</small></a>
+          <div class="dropdown-menu rounded">
+            <a href="#" class="dropdown-item"> English</a>
+            <a href="#" class="dropdown-item"> Turkish</a>
+            <a href="#" class="dropdown-item"> Spanol</a>
+            <a href="#" class="dropdown-item"> Italiano</a>
+          </div>
+        </div>
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i class="fa fa-home me-2"></i> My Dashboard</small></a>
+          <div class="dropdown-menu rounded">
+            <a href="/business/login" class="dropdown-item"> My Account</a>
+            <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
+            <a href="#" class="dropdown-item"> Notifications</a>
+            <a href="#" class="dropdown-item"> Media</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="container-fluid px-5 py-4 d-none d-lg-block">
-    <div class="row gx-0 align-items-center text-center">
-        <div class="col-md-4 col-lg-3 text-center text-lg-start">
-            <div class="d-inline-flex align-items-center">
-                <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
-                    <img
-                        src="/images/branding/logo-unincorporate.png"
-                        alt="Kasyora.com"
-                        class="img-fluid me-2"
-                        style="max-height: 52px; width: auto;"
-                    >
-                    <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
-                        Kasyora.com
-                    </span>
-                </a>
-            </div>
-        </div>
-        <div class="col-md-4 col-lg-6 text-center">
-            <div class="position-relative ps-4">
-                <div class="d-flex border rounded-pill">
-                    <input
-                        id="singleKeywordInput"
-                        class="form-control border-0 rounded-pill w-100 py-3"
-                        type="text"
-                        data-bs-target="#dropdownToggle123"
-                        placeholder="Search products by name or keywords"
-                    >
-                    <select id="singleCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
-                        <option value="">All Category</option>
-                        <% (CATEGORIES || []).forEach(function(category) { %>
-                            <option value="<%= category.value %>"><%= category.label %></option>
-                        <% }) %>
-                    </select>
-                    <button id="singleKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i
-                            class="fas fa-search"></i></button>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-lg-3 text-center text-lg-end">
-            <div class="d-inline-flex align-items-center">
-                <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span
-                        class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
-                <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span
-                        class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
-                <a href="/store/cart" id="singleTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
-                    <span class="rounded-circle btn-md-square border">
-                        <i class="fas fa-shopping-cart"></i>
-                    </span>
-                    <span class="text-dark ms-2 store-cart-total">0.00</span>
-                </a>
-            </div>
-        </div>
+  <div class="row gx-0 align-items-center text-center">
+    <div class="col-md-4 col-lg-3 text-center text-lg-start">
+      <div class="d-inline-flex align-items-center">
+        <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2" style="max-height: 52px; width: auto;">
+          <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
+            Kasyora.com
+          </span>
+        </a>
+      </div>
     </div>
+    <div class="col-md-4 col-lg-6 text-center">
+      <div class="position-relative ps-4">
+        <div class="d-flex border rounded-pill">
+          <input id="singleKeywordInput" class="form-control border-0 rounded-pill w-100 py-3" type="text" data-bs-target="#dropdownToggle123" placeholder="Search products by name or keywords">
+          <select id="singleCategorySelect" class="form-select text-dark border-0 border-start rounded-0 p-3" style="width: 200px;">
+            <option value="">All Category</option>
+            <% (CATEGORIES || []).forEach(function(category) { %>
+            <option value="<%= category.value %>"><%= category.label %></option>
+            <% }) %>
+          </select>
+          <button id="singleKeywordSearchBtn" type="button" class="btn btn-primary rounded-pill py-3 px-5" style="border: 0;"><i class="fas fa-search"></i></button>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 col-lg-3 text-center text-lg-end">
+      <div class="d-inline-flex align-items-center">
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
+        <a href="/store/cart" id="singleTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+          <span class="rounded-circle btn-md-square border">
+            <i class="fas fa-shopping-cart"></i>
+          </span>
+          <span class="text-dark ms-2 store-cart-total">
+            <%= formatMoney(0) %>
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Topbar End -->
 
 <!-- Navbar & Hero Start -->
 <div class="container-fluid nav-bar p-0">
-    <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
-        <div class="col-lg-3 d-none d-lg-block">
-            <nav class="navbar navbar-light position-relative" style="width: 250px;">
-                <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#allCat">
-                    <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
-                </button>
-                <div class="collapse navbar-collapse rounded-bottom" id="allCat">
-                    <div class="navbar-nav ms-auto py-0">
-                        <ul class="list-unstyled categories-bars">
-                            <li>
-                                <div class="categories-bars-item">
-                                    <a href="/store/shop" class="single-category-link" data-category="">All Categories</a>
-                                    <span></span>
-                                </div>
-                            </li>
-                            <% (CATEGORIES || []).forEach(function(category) { %>
-                                <li>
-                                    <div class="categories-bars-item">
-                                        <a href="/store/shop" class="single-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                                        <span></span>
-                                    </div>
-                                </li>
-                            <% }) %>
-                        </ul>
-                    </div>
+  <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
+    <div class="col-lg-3 d-none d-lg-block">
+      <nav class="navbar navbar-light position-relative" style="width: 250px;">
+        <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#allCat">
+          <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
+        </button>
+        <div class="collapse navbar-collapse rounded-bottom" id="allCat">
+          <div class="navbar-nav ms-auto py-0">
+            <ul class="list-unstyled categories-bars">
+              <li>
+                <div class="categories-bars-item">
+                  <a href="/store/shop" class="single-category-link" data-category="">All Categories</a>
+                  <span></span>
                 </div>
-            </nav>
-        </div>
-        <div class="col-12 col-lg-9">
-            <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
-                <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
-                    <img
-                        src="/images/branding/logo-unincorporate.png"
-                        alt="Kasyora.com"
-                        class="img-fluid me-2 flex-shrink-0"
-                        style="max-height: 38px; width: auto;"
-                    >
-                    <span class="h5 text-white m-0 text-truncate fw-bold">
-                        Kasyora.com
-                    </span>
-                </a>
-                <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse"
-                    data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="fa fa-bars fa-1x"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarCollapse">
-                    <div class="navbar-nav ms-auto py-0">
-                        <a href="/store" class="nav-item nav-link">Shopping home</a>
-                        <a href="/store/shop" class="nav-item nav-link">Shop</a>
-                        <a href="<%= product.url %>" class="nav-item nav-link active">Single Page</a>
-                        <div class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
-                            <div class="dropdown-menu m-0">
-                                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
-                                <a href="/store/cart" class="dropdown-item">Cart</a>
-                                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
-                                <a href="/business/login" class="dropdown-item">Accounts</a>
-                                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
-                            </div>
-                        </div>
-                        <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
-                        <div class="nav-item dropdown d-block d-lg-none mb-3">
-                            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
-                            <div class="dropdown-menu m-0">
-                                <ul class="list-unstyled categories-bars">
-                                    <li>
-                                        <div class="categories-bars-item">
-                                            <a href="/store/shop" class="single-category-link" data-category="">All Categories</a>
-                                            <span></span>
-                                        </div>
-                                    </li>
-                                    <% (CATEGORIES || []).forEach(function(category) { %>
-                                        <li>
-                                            <div class="categories-bars-item">
-                                                <a href="/store/shop" class="single-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                                                <span></span>
-                                            </div>
-                                        </li>
-                                    <% }) %>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <a href="#" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i
-                            class="fa fa-mobile-alt me-2"></i> +263 456 7890</a>
+              </li>
+              <% (CATEGORIES || []).forEach(function(category) { %>
+              <li>
+                <div class="categories-bars-item">
+                  <a href="/store/shop" class="single-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                  <span></span>
                 </div>
-            </nav>
+              </li>
+              <% }) %>
+            </ul>
+          </div>
         </div>
+      </nav>
     </div>
+    <div class="col-12 col-lg-9">
+      <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
+        <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
+          <span class="h5 text-white m-0 text-truncate fw-bold">
+            Kasyora.com
+          </span>
+        </a>
+        <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="fa fa-bars fa-1x"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+          <div class="navbar-nav ms-auto py-0">
+            <a href="/store" class="nav-item nav-link">Shopping home</a>
+            <a href="/store/shop" class="nav-item nav-link">Shop</a>
+            <a href="<%= product.url %>" class="nav-item nav-link active">Single Page</a>
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
+              <div class="dropdown-menu m-0">
+                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
+                <a href="/store/cart" class="dropdown-item">Cart</a>
+                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
+                <a href="/business/login" class="dropdown-item">Accounts</a>
+                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
+              </div>
+            </div>
+            <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
+
+            <div class="nav-item d-block d-lg-none px-3 py-2 mb-2">
+              <div class="small fw-bold text-white mb-1">
+                Display currency
+              </div>
+
+              <div class="bg-white rounded px-2 py-1 d-inline-flex">
+                <%- include('partials/currency-selector', {
+                                currencyReturnTo: SINGLE_CURRENCY_RETURN_TO
+                                }) %>
+              </div>
+            </div>
+
+            <div class="nav-item dropdown d-block d-lg-none mb-3">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
+              <div class="dropdown-menu m-0">
+                <ul class="list-unstyled categories-bars">
+                  <li>
+                    <div class="categories-bars-item">
+                      <a href="/store/shop" class="single-category-link" data-category="">All Categories</a>
+                      <span></span>
+                    </div>
+                  </li>
+                  <% (CATEGORIES || []).forEach(function(category) { %>
+                  <li>
+                    <div class="categories-bars-item">
+                      <a href="/store/shop" class="single-category-link" data-category="<%= category.value %>"><%= category.label %></a>
+                      <span></span>
+                    </div>
+                  </li>
+                  <% }) %>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <a href="#" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i class="fa fa-mobile-alt me-2"></i> +263 456 7890</a>
+        </div>
+      </nav>
+    </div>
+  </div>
 </div>
 <!-- Navbar & Hero End -->
 
 <!-- Single Page Header start -->
 <div class="container-fluid page-header py-5" style="<%= shopHeaderImage && shopHeaderImage.image ? '--page-header-image: url(' + shopHeaderImage.image + ')' : '' %>">
-    <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Single Product</h1>
-    <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
-        <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
-        <li class="breadcrumb-item"><a href="/store/shop">Pages</a></li>
-        <li class="breadcrumb-item active text-white">Single Product</li>
-    </ol>
+  <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Single Product</h1>
+  <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
+    <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
+    <li class="breadcrumb-item"><a href="/store/shop">Pages</a></li>
+    <li class="breadcrumb-item active text-white">Single Product</li>
+  </ol>
 </div>
 <!-- Single Page Header End -->
 
+<%
+  const SINGLE_SHOW_CURRENCY_WARNING =
+    typeof currencyConversionAvailable !== 'undefined' &&
+    currencyConversionAvailable === false;
+
+  const SINGLE_CURRENCY_WARNING_TEXT =
+    typeof currencyConversionMessage !== 'undefined'
+      ? String(currencyConversionMessage || '').trim()
+      : '';
+%>
+
+<% if (
+  SINGLE_SHOW_CURRENCY_WARNING &&
+  SINGLE_CURRENCY_WARNING_TEXT
+) { %>
+<div class="container mt-4">
+  <div class="alert alert-warning border shadow-sm mb-0" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fas fa-exclamation-triangle text-primary mt-1" aria-hidden="true"></i>
+
+      <div>
+        <div class="fw-bold text-primary">
+          Currency display notice
+        </div>
+
+        <div class="small">
+          <%= SINGLE_CURRENCY_WARNING_TEXT %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
 <!-- Single Products Start -->
 <div class="container-fluid shop py-5">
-    <div class="container py-5">
-        <div class="row g-4">
-            <div class="col-lg-5 col-xl-3 order-2 order-xl-2 wow fadeInUp" data-wow-delay="0.1s">
-                <div class="input-group w-100 mx-auto d-flex mb-4">
-                    <input
-                        id="singleKeywordInputSecondary"
-                        type="search"
-                        class="form-control p-3"
-                        placeholder="keywords"
-                        aria-describedby="single-search-icon-1"
-                    >
-                    <button
-                        id="singleKeywordSearchBtnSecondary"
-                        type="button"
-                        class="input-group-text p-3 border-0 bg-primary text-white"
-                    >
-                        <i class="fa fa-search"></i>
-                    </button>
-                </div>
+  <div class="container py-5">
+    <div class="row g-4">
+      <div class="col-lg-5 col-xl-3 order-2 order-xl-2 wow fadeInUp" data-wow-delay="0.1s">
+        <div class="input-group w-100 mx-auto d-flex mb-4">
+          <input id="singleKeywordInputSecondary" type="search" class="form-control p-3" placeholder="keywords" aria-describedby="single-search-icon-1">
+          <button id="singleKeywordSearchBtnSecondary" type="button" class="input-group-text p-3 border-0 bg-primary text-white">
+            <i class="fa fa-search"></i>
+          </button>
+        </div>
 
-                <% if (shopSidebarBanner) { %>
-                    <a href="<%= shopSidebarBanner.url %>">
-                        <div class="position-relative">
-                            <img src="<%= shopSidebarBanner.image %>" class="img-fluid w-100 rounded" alt="<%= shopSidebarBanner.productName || shopSidebarBanner.title %>">
-                            <div class="text-center position-absolute d-flex flex-column align-items-center justify-content-center rounded p-4"
-                                style="width: 100%; height: 100%; top: 0; right: 0; background: rgba(242, 139, 0, 0.3);">
-                                <h5 class="display-6 text-primary"><%= shopSidebarBanner.title %></h5>
-                                <h4 class="text-secondary"><%= shopSidebarBanner.subtitle %></h4>
-                                <span class="btn btn-primary rounded-pill px-4"><%= shopSidebarBanner.buttonText || 'Shop Now' %></span>
-                            </div>
-                        </div>
-                    </a>
-                <% } %>
+        <% if (shopSidebarBanner) { %>
+        <a href="<%= shopSidebarBanner.url %>">
+          <div class="position-relative">
+            <img src="<%= shopSidebarBanner.image %>" class="img-fluid w-100 rounded" alt="<%= shopSidebarBanner.productName || shopSidebarBanner.title %>">
+            <div class="text-center position-absolute d-flex flex-column align-items-center justify-content-center rounded p-4" style="width: 100%; height: 100%; top: 0; right: 0; background: rgba(242, 139, 0, 0.3);">
+              <h5 class="display-6 text-primary"><%= shopSidebarBanner.title %></h5>
+              <h4 class="text-secondary"><%= shopSidebarBanner.subtitle %></h4>
+              <span class="btn btn-primary rounded-pill px-4"><%= shopSidebarBanner.buttonText || 'Shop Now' %></span>
             </div>
+          </div>
+        </a>
+        <% } %>
+      </div>
 
-                        <div class="col-lg-7 col-xl-9 order-1 order-xl-1 wow fadeInUp" data-wow-delay="0.1s">
-                <div class="row g-4 single-product">
-                    <div class="col-xl-6">
-                        <div class="single-carousel owl-carousel">
-                            <div class="single-item"
-                                data-dot="<img class='img-fluid' src='<%= product.image %>' alt='<%= product.name %>'>">
-                                <div class="single-inner bg-light rounded">
-                                    <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+      <div class="col-lg-7 col-xl-9 order-1 order-xl-1 wow fadeInUp" data-wow-delay="0.1s">
+        <div class="row g-4 single-product">
+          <div class="col-xl-6">
+            <div class="single-carousel owl-carousel">
+              <div class="single-item" data-dot="<img class='img-fluid' src='<%= product.image %>' alt='<%= product.name %>'>">
+                <div class="single-inner bg-light rounded">
+                  <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
+                </div>
+              </div>
+            </div>
+          </div>
 
-                    <div class="col-xl-6 js-single-product-card">
-                        <h4 class="fw-bold mb-3"><%= product.name %></h4>
-                        <p class="mb-3">Category: <%= product.category %></p>
-                        <h5 class="fw-bold mb-1"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></h5>
-                        <p class="text-muted mb-3">incl. VAT</p>   
-                        <div class="d-flex mb-4">
-                            <%- include('../partials/rating-stars', {
+          <div class="col-xl-6 js-single-product-card">
+            <h4 class="fw-bold mb-3"><%= product.name %></h4>
+            <p class="mb-3">Category: <%= product.category %></p>
+            <h5 class="fw-bold text-primary mb-1">
+              <%= formatMoney(
+                            Number(product.price || 0) *
+                            (1 + VAT)
+                            ) %>
+            </h5>
+
+            <p class="text-muted mb-1">
+              incl. VAT
+            </p>
+
+            <p class="small text-muted mb-3">
+              Displayed in
+              <strong><%= CURRENCY %></strong>.
+              Cart and order values remain securely calculated in
+              <strong><%= BASE_CURRENCY %></strong>.
+            </p>
+            <div class="d-flex mb-4">
+              <%- include('../partials/rating-stars', {
                                 avg: Number(product.avgRating || 0),
                                 count: Number(product.ratingsCount || 0),
                                 nonce
-                            }) %> 
-                        </div>
+                            }) %>
+            </div>
 
-                        <%
+            <%
                             const SHARE_SITE_URL = String(typeof siteUrl !== 'undefined' ? siteUrl : '').replace(/\/+$/, '');
 
                             function shareAbsoluteUrl(value) {
@@ -343,366 +466,328 @@
                             const shareProductFullText = shareProductUrl;
                         %>
 
-                        <div class="mb-3 d-flex flex-wrap gap-2 js-product-share-wrap"
-                            data-share-title="<%= product.name || 'Product' %>"
-                            data-share-text="<%= shareProductText %>"
-                            data-share-url="<%= shareProductUrl %>"
-                            data-share-image="<%= shareProductImage %>"
-                        >
-                            <a
-                                href="https://www.facebook.com/sharer/sharer.php?u=<%= encodeURIComponent(shareProductUrl) %>"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-primary d-inline-block rounded text-white py-1 px-4"
-                                aria-label="Share <%= product.name %> on Facebook"
-                            >
-                                <i class="fab fa-facebook-f me-1"></i> Facebook
-                            </a>
+            <div class="mb-3 d-flex flex-wrap gap-2 js-product-share-wrap" data-share-title="<%= product.name || 'Product' %>" data-share-text="<%= shareProductText %>" data-share-url="<%= shareProductUrl %>" data-share-image="<%= shareProductImage %>">
+              <a href="https://www.facebook.com/sharer/sharer.php?u=<%= encodeURIComponent(shareProductUrl) %>" target="_blank" rel="noopener noreferrer" class="btn btn-primary d-inline-block rounded text-white py-1 px-4" aria-label="Share <%= product.name %> on Facebook">
+                <i class="fab fa-facebook-f me-1"></i> Facebook
+              </a>
 
-                            <a
-                                href="https://api.whatsapp.com/send?text=<%= encodeURIComponent(shareProductFullText) %>"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-success d-inline-block rounded text-white py-1 px-4"
-                                aria-label="Share <%= product.name %> on WhatsApp"
-                            >
-                                <i class="fab fa-whatsapp me-1"></i> WhatsApp
-                            </a>
+              <a href="https://api.whatsapp.com/send?text=<%= encodeURIComponent(shareProductFullText) %>" target="_blank" rel="noopener noreferrer" class="btn btn-success d-inline-block rounded text-white py-1 px-4" aria-label="Share <%= product.name %> on WhatsApp">
+                <i class="fab fa-whatsapp me-1"></i> WhatsApp
+              </a>
 
-                            <button
-                                type="button"
-                                class="btn btn-primary d-inline-block rounded text-white py-1 px-4 js-product-native-share"
-                                aria-label="Share <%= product.name %> to other apps"
-                            >
-                                <i class="fas fa-share-alt me-1"></i> More
-                            </button>
-                        </div>
+              <button type="button" class="btn btn-primary d-inline-block rounded text-white py-1 px-4 js-product-native-share" aria-label="Share <%= product.name %> to other apps">
+                <i class="fas fa-share-alt me-1"></i> More
+              </button>
+            </div>
 
-                        <div class="d-flex flex-column mb-3">
-                            <small>Product SKU: <%= product.customId || 'N/A' %></small>
-                            <small>Available: <strong class="text-primary"><%= product.stock %> items in stock</strong></small>
-                        </div>
-                        <p class="mb-4"><%= product.name %> is one of our available products.</p>
-                        <p class="mb-4"><%= product.category %> product ready for viewing in the store.</p>
+            <div class="d-flex flex-column mb-3">
+              <small>Product SKU: <%= product.customId || 'N/A' %></small>
+              <small>Available: <strong class="text-primary"><%= product.stock %> items in stock</strong></small>
+            </div>
+            <p class="mb-4"><%= product.name %> is one of our available products.</p>
+            <p class="mb-4"><%= product.category %> product ready for viewing in the store.</p>
 
-                        <div class="input-group quantity mb-5" style="width: 100px;">
-                            <div class="input-group-btn">
-                                <button class="btn btn-sm btn-minus rounded-circle bg-light border">
-                                    <i class="fa fa-minus"></i>
-                                </button>
-                            </div>
-                            <input type="text" class="form-control form-control-sm text-center border-0" value="1">
-                            <div class="input-group-btn">
-                                <button class="btn btn-sm btn-plus rounded-circle bg-light border">
-                                    <i class="fa fa-plus"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <a
-                            href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
-                            class="btn btn-primary border border-secondary rounded-pill px-4 py-2 mb-4 text-primary js-single-add-to-cart"
-                            data-pid="<%= product.customId %>"
-                            data-product="<%= storeProductPayload(product) %>"
-                            data-in-cart="0"
-                            data-cart-variants=""
-                        >
-                           <i class="fa fa-shopping-bag me-2 text-white"></i> Add to cart
-                        </a>
-                    </div>
-                    <div class="col-lg-12">
-                        <div class="reviews-card" id="reviewsCard">
-                            <div class="reviews-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-                                <h3 class="mb-0">Customer Reviews</h3>
+            <div class="input-group quantity mb-5" style="width: 100px;">
+              <div class="input-group-btn">
+                <button class="btn btn-sm btn-minus rounded-circle bg-light border">
+                  <i class="fa fa-minus"></i>
+                </button>
+              </div>
+              <input type="text" class="form-control form-control-sm text-center border-0" value="1">
+              <div class="input-group-btn">
+                <button class="btn btn-sm btn-plus rounded-circle bg-light border">
+                  <i class="fa fa-plus"></i>
+                </button>
+              </div>
+            </div>
+            <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border border-secondary rounded-pill px-4 py-2 mb-4 text-primary js-single-add-to-cart" data-pid="<%= product.customId %>" data-product="<%= storeProductPayload(product) %>" data-in-cart="0" data-cart-variants="">
+              <i class="fa fa-shopping-bag me-2 text-white"></i> Add to cart
+            </a>
+          </div>
+          <div class="col-lg-12">
+            <div class="reviews-card" id="reviewsCard">
+              <div class="reviews-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                <h3 class="mb-0">Customer Reviews</h3>
 
-                                <div class="rating-summary" id="ratingSummary">
-                                    <div id="ratingStarsWrap">
-                                        <%- include('../partials/rating-stars', { avg: avgRating, count: ratingsCount, nonce }) %>
-                                    </div>
-                                    <span class="rating-text d-block mt-2" id="ratingText"><%= ratingSummaryText %></span>
-                                </div>
-                            </div>
+                <div class="rating-summary" id="ratingSummary">
+                  <div id="ratingStarsWrap">
+                    <%- include('../partials/rating-stars', { avg: avgRating, count: ratingsCount, nonce }) %>
+                  </div>
+                  <span class="rating-text d-block mt-2" id="ratingText"><%= ratingSummaryText %></span>
+                </div>
+              </div>
 
-                            <div class="reviews-content mb-4" id="reviewsList">
-                                <div class="review-item" id="reviewsLoadingRow">
-                                    <div class="review-stars">Loading…</div>
-                                    <p class="review-text mb-1">Fetching latest customer ratings.</p>
-                                    <span class="review-author"></span>
-                                </div>
-                            </div>
+              <div class="reviews-content mb-4" id="reviewsList">
+                <div class="review-item" id="reviewsLoadingRow">
+                  <div class="review-stars">Loading…</div>
+                  <p class="review-text mb-1">Fetching latest customer ratings.</p>
+                  <span class="review-author"></span>
+                </div>
+              </div>
 
-                            <input type="hidden" id="pdCustomId" value="<%= product.customId %>">
+              <input type="hidden" id="pdCustomId" value="<%= product.customId %>">
 
-                            <div class="rate-box" id="rateBox">
-                                <div class="rate-box-head d-flex justify-content-between align-items-center mb-3">
-                                    <h3 class="rate-title mb-0">Rate this product</h3>
-                                    <a class="rate-jump text-decoration-none" href="#rateBox">Write a review</a>
-                                </div>
-                                <%- include('../partials/rating-form', {
+              <div class="rate-box" id="rateBox">
+                <div class="rate-box-head d-flex justify-content-between align-items-center mb-3">
+                  <h3 class="rate-title mb-0">Rate this product</h3>
+                  <a class="rate-jump text-decoration-none" href="#rateBox">Write a review</a>
+                </div>
+                <%- include('../partials/rating-form', {
                                     productId: product.customId,
                                     myRating: (typeof myRating !== 'undefined' ? myRating : null),
                                     nonce
                                 }) %>
-                            </div>
-                        </div>
-                    </div>                   
-                </div>
+              </div>
             </div>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 <!-- Single Products End -->
 
 <!-- Related Product Start -->
 <div class="container-fluid related-product products productList overflow-hidden">
-    <div class="container products-mini py-5">
-        <div class="mx-auto text-center mb-5" style="max-width: 900px;">
-            <h4 class="text-primary border-bottom border-primary border-2 d-inline-block p-2 title-border-radius wow fadeInUp"
-                data-wow-delay="0.1s">Related Products</h4>
-            <h1 class="mb-0 display-3 wow fadeInUp" data-wow-delay="0.3s">Related Product Items</h1>
-        </div>
-
-        <div class="productList-carousel owl-carousel">
-            <% (relatedProducts || []).forEach(function(product) { %>
-                <div class="productImg-carousel productList-item store-filter-card js-store-product-card" data-category="<%= (product.category || '').toLowerCase() %>">
-                    <div class="productImg-item border rounded">
-                        <div class="row g-0">
-                            <div class="col-4">
-                                <div class="p-3">
-                                    <img src="<%= product.image %>" class="img-fluid w-100" alt="<%= product.name %>">
-                                </div>
-                            </div>
-
-                            <div class="col-8">
-                                <div class="p-3">
-                                    <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
-                                    <a href="<%= product.url %>" class="d-block h4 mb-2"><%= product.name %></a>
-
-                                    <% if (product.oldPrice) { %>
-                                        <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
-                                    <% } %>
-
-                                    <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                                    <small class="text-muted ms-2">incl. VAT</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="products-mini-add border-top p-3">
-                            <a
-                                href="<%= product.url %>"
-                                class="btn btn-primary border-secondary rounded-pill py-2 px-4"
-                            >
-                                <i class="fas fa-eye me-2"></i> View Product
-                            </a>
-
-                            <div class="d-flex">
-                                <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                                    <span class="rounded-circle btn-sm-square border">
-                                        <i class="fas fa-random"></i>
-                                    </span>
-                                </a>
-
-                                <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                                    <span class="rounded-circle btn-sm-square border">
-                                        <i class="fas fa-heart"></i>
-                                    </span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            <% }) %>
-        </div>
+  <div class="container products-mini py-5">
+    <div class="mx-auto text-center mb-5" style="max-width: 900px;">
+      <h4 class="text-primary border-bottom border-primary border-2 d-inline-block p-2 title-border-radius wow fadeInUp" data-wow-delay="0.1s">Related Products</h4>
+      <h1 class="mb-0 display-3 wow fadeInUp" data-wow-delay="0.3s">Related Product Items</h1>
     </div>
+
+    <div class="productList-carousel owl-carousel">
+      <% (relatedProducts || []).forEach(function(product) { %>
+      <div class="productImg-carousel productList-item store-filter-card js-store-product-card" data-category="<%= (product.category || '').toLowerCase() %>">
+        <div class="productImg-item border rounded">
+          <div class="row g-0">
+            <div class="col-4">
+              <div class="p-3">
+                <img src="<%= product.image %>" class="img-fluid w-100" alt="<%= product.name %>">
+              </div>
+            </div>
+
+            <div class="col-8">
+              <div class="p-3">
+                <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
+                <a href="<%= product.url %>" class="d-block h4 mb-2"><%= product.name %></a>
+
+                <% if (product.oldPrice) { %>
+                <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                <% } %>
+
+                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                <small class="text-muted ms-2">incl. VAT</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="products-mini-add border-top p-3">
+            <a href="<%= product.url %>" class="btn btn-primary border-secondary rounded-pill py-2 px-4">
+              <i class="fas fa-eye me-2"></i> View Product
+            </a>
+
+            <div class="d-flex">
+              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                <span class="rounded-circle btn-sm-square border">
+                  <i class="fas fa-random"></i>
+                </span>
+              </a>
+
+              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                <span class="rounded-circle btn-sm-square border">
+                  <i class="fas fa-heart"></i>
+                </span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
 </div>
 <!-- Related Product End -->
 
 <!-- Related Products Grid Start -->
 <div id="relatedProductsGridSection" class="container-fluid product pt-5">
-    <div class="container py-5">
-        <div class="tab-class">
-            <div class="row g-4">
-                <div class="col-12 text-start wow fadeInLeft" data-wow-delay="0.1s">
-                    <h1>Related Products</h1>
-                </div>
-            </div>
+  <div class="container py-5">
+    <div class="tab-class">
+      <div class="row g-4">
+        <div class="col-12 text-start wow fadeInLeft" data-wow-delay="0.1s">
+          <h1>Related Products</h1>
+        </div>
+      </div>
 
-            <div class="tab-content">
-                <div class="products tab-pane fade show p-0 active">
-                    <div class="row g-4 product products-mini">
-                        <% (relatedProducts || []).forEach(function(product) { %>
-                            <div
-                                class="col-lg-6 col-xl-4 wow fadeInUp bestseller-filter-card"
-                                data-wow-delay="0.1s"
-                                data-category="<%= String(product.category || '').trim().toLowerCase() %>"
-                                data-search="<%= [
+      <div class="tab-content">
+        <div class="products tab-pane fade show p-0 active">
+          <div class="row g-4 product products-mini">
+            <% (relatedProducts || []).forEach(function(product) { %>
+            <div class="col-lg-6 col-xl-4 wow fadeInUp bestseller-filter-card" data-wow-delay="0.1s" data-category="<%= String(product.category || '').trim().toLowerCase() %>" data-search="<%= [
                                     product.name,
                                     product.category,
                                     product.type,
                                     product.manufacturer,
                                     product.description,
                                     Array.isArray(product.keywords) ? product.keywords.join(' ') : ''
-                                ].filter(Boolean).join(' ').toLowerCase() %>"
-                            >
-                                <div class="products-mini-item border js-store-product-card">
-                                    <div class="row g-0">
-                                        <div class="col-5">
-                                            <div class="products-mini-img border-end h-100 d-flex align-items-center">
-                                                <img src="<%= product.image %>" class="img-fluid w-100 h-auto" alt="<%= product.name %>">
-                                                <div class="products-mini-icon rounded-circle bg-primary">
-                                                    <a href="<%= product.url %>">
-                                                        <i class="fa fa-eye fa-1x text-white"></i>
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-7">
-                                            <div class="products-mini-content p-3">
-                                                <span class="d-block mb-2" style="color: #f28b00;"><%= product.category %></span>
-                                                <span class="d-block h4"><%= product.name %></span>
-
-                                                <% if (product.oldPrice) { %>
-                                                    <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
-                                                <% } %>
-
-                                                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                                                <small class="text-muted ms-2">incl. VAT</small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="products-mini-add border p-3">
-                                        <a
-                                            href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1"
-                                            class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart"
-                                            data-pid="<%= product.customId %>"
-                                            data-product='<%- storeProductPayload(product) %>'
-                                        >
-                                            <i class="fas fa-shopping-cart me-2"></i> Add To Cart
-                                        </a>
-
-                                        <div class="d-flex">
-                                            <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                                                <span class="rounded-circle btn-sm-square border">
-                                                    <i class="fas fa-random"></i>
-                                                </span>
-                                            </a>
-
-                                            <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                                                <span class="rounded-circle btn-sm-square border">
-                                                    <i class="fas fa-heart"></i>
-                                                </span>
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <% }) %>
+                                ].filter(Boolean).join(' ').toLowerCase() %>">
+              <div class="products-mini-item border js-store-product-card">
+                <div class="row g-0">
+                  <div class="col-5">
+                    <div class="products-mini-img border-end h-100 d-flex align-items-center">
+                      <img src="<%= product.image %>" class="img-fluid w-100 h-auto" alt="<%= product.name %>">
+                      <div class="products-mini-icon rounded-circle bg-primary">
+                        <a href="<%= product.url %>">
+                          <i class="fa fa-eye fa-1x text-white"></i>
+                        </a>
+                      </div>
                     </div>
+                  </div>
+
+                  <div class="col-7">
+                    <div class="products-mini-content p-3">
+                      <span class="d-block mb-2" style="color: #f28b00;"><%= product.category %></span>
+                      <span class="d-block h4"><%= product.name %></span>
+
+                      <% if (product.oldPrice) { %>
+                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <% } %>
+
+                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                      <small class="text-muted ms-2">incl. VAT</small>
+                    </div>
+                  </div>
                 </div>
+
+                <div class="products-mini-add border p-3">
+                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
+                    <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                  </a>
+
+                  <div class="d-flex">
+                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                      <span class="rounded-circle btn-sm-square border">
+                        <i class="fas fa-random"></i>
+                      </span>
+                    </a>
+
+                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                      <span class="rounded-circle btn-sm-square border">
+                        <i class="fas fa-heart"></i>
+                      </span>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
+            <% }) %>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 <!-- Related Products Grid End -->
 
 <div class="container-fluid py-5">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-6 order-2 order-lg-1 wow fadeInUp" data-wow-delay="0.1s">
-                <div class="product-categories">
-                    <h4 class="mb-4">Products Categories</h4>
-                    <ul class="list-unstyled mb-0">
-                        <li class="mb-2">
-                            <div class="categories-item">
-                                <a href="/store/shop" class="text-dark single-category-link" data-category="">
-                                    <i class="fas fa-apple-alt text-secondary me-2"></i>All Categories
-                                </a>
-                                <span></span>
-                            </div>
-                        </li>
-                        <% (CATEGORIES || []).forEach(function(category) { %>
-                            <li class="mb-2">
-                                <div class="categories-item">
-                                    <a href="/store/shop" class="text-dark single-category-link" data-category="<%= category.value %>">
-                                        <i class="fas fa-apple-alt text-secondary me-2"></i><%= category.label %>
-                                    </a>
-                                    <span></span>
-                                </div>
-                            </li>
-                        <% }) %>
-                    </ul>
-                </div>
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-lg-6 order-2 order-lg-1 wow fadeInUp" data-wow-delay="0.1s">
+        <div class="product-categories">
+          <h4 class="mb-4">Products Categories</h4>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="categories-item">
+                <a href="/store/shop" class="text-dark single-category-link" data-category="">
+                  <i class="fas fa-apple-alt text-secondary me-2"></i>All Categories
+                </a>
+                <span></span>
+              </div>
+            </li>
+            <% (CATEGORIES || []).forEach(function(category) { %>
+            <li class="mb-2">
+              <div class="categories-item">
+                <a href="/store/shop" class="text-dark single-category-link" data-category="<%= category.value %>">
+                  <i class="fas fa-apple-alt text-secondary me-2"></i><%= category.label %>
+                </a>
+                <span></span>
+              </div>
+            </li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+
+      <div class="col-lg-6 order-1 order-lg-2 wow fadeInUp" data-wow-delay="0.2s">
+        <div class="featured-product">
+          <h4 class="mb-4">Featured products</h4>
+
+          <% (featuredSidebarProducts || []).forEach(function(item) { %>
+          <a href="<%= item.url %>" class="featured-product-item mb-3 d-flex text-decoration-none text-dark">
+            <div class="rounded me-4" style="width: 100px; height: 100px;">
+              <img src="<%= item.image %>" class="img-fluid rounded" alt="<%= item.name %>">
             </div>
-
-            <div class="col-lg-6 order-1 order-lg-2 wow fadeInUp" data-wow-delay="0.2s">
-                <div class="featured-product">
-                    <h4 class="mb-4">Featured products</h4>
-
-                    <% (featuredSidebarProducts || []).forEach(function(item) { %>
-                    <a href="<%= item.url %>" class="featured-product-item mb-3 d-flex text-decoration-none text-dark">
-                        <div class="rounded me-4" style="width: 100px; height: 100px;">
-                            <img src="<%= item.image %>" class="img-fluid rounded" alt="<%= item.name %>">
-                        </div>
-                        <div>
-                            <h6 class="mb-2"><%= item.category %></h6>
-                            <div class="mb-2">
-                                <%- include('../partials/rating-stars', {
+            <div>
+              <h6 class="mb-2"><%= item.category %></h6>
+              <div class="mb-2">
+                <%- include('../partials/rating-stars', {
                                     avg: Number(item.avgRating || 0),
                                     count: Number(item.ratingsCount || 0),
                                     nonce
                                 }) %>
-                            </div>
-                            <div class="d-flex mb-2 align-items-center flex-wrap">
-                                <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(item.price || 0) * (1 + VAT)) %></h5>
-                                <small class="text-muted me-2">incl. VAT</small>
-                                <% if (item.oldPrice) { %>
-                                    <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(item.oldPrice) %></h5>
-                                <% } %>
-                            </div>
-                        </div>
-                    </a>
-                    <% }) %>
-
-                    <div class="d-flex justify-content-center mt-4">
-                        <a href="/products/sales" class="btn btn-primary px-4 py-3 rounded-pill w-100">View More</a>
-                    </div>
-                </div>
+              </div>
+              <div class="d-flex mb-2 align-items-center flex-wrap">
+                <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(item.price || 0) * (1 + VAT)) %></h5>
+                <small class="text-muted me-2">incl. VAT</small>
+                <% if (item.oldPrice) { %>
+                <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(item.oldPrice) %></h5>
+                <% } %>
+              </div>
             </div>
+          </a>
+          <% }) %>
+
+          <div class="d-flex justify-content-center mt-4">
+            <a href="/products/sales" class="btn btn-primary px-4 py-3 rounded-pill w-100">View More</a>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <style nonce="<%= nonce %>">
   .store-cart-link.cart-flash-active .fa-shopping-cart,
-    .store-cart-link.cart-flash-active .fas.fa-shopping-cart{
+  .store-cart-link.cart-flash-active .fas.fa-shopping-cart {
     animation: cartPurpleFlash 3s infinite;
     position: relative;
     z-index: 1;
-    }
+  }
 
-  .store-cart-link.cart-flash-active .rounded-circle{
+  .store-cart-link.cart-flash-active .rounded-circle {
     animation: cartCirclePurpleFlash 3s infinite;
   }
 
-  @keyframes cartPurpleFlash{
-    0%, 100%{
+  @keyframes cartPurpleFlash {
+
+    0%,
+    100% {
       color: inherit;
     }
 
-    50%{
+    50% {
       color: #fff;
     }
   }
 
-  @keyframes cartCirclePurpleFlash{
-    0%, 100%{
+  @keyframes cartCirclePurpleFlash {
+
+    0%,
+    100% {
       background-color: transparent;
       border-color: inherit;
     }
 
-    50%{
+    50% {
       background-color: #7C3AED;
       border-color: #7C3AED;
     }
@@ -712,7 +797,7 @@
 <%- include('partials/footer') %>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const topCart = document.getElementById('singleTopCartAmount');
     if (!topCart) return;
 
@@ -726,27 +811,27 @@
     }
 
     function syncTopCartSticky() {
-        if (cartAmountNumber() > 0) {
-            topCart.classList.add(
-            'position-fixed',
-            'top-0',
-            'end-0',
-            'mt-5',
-            'me-5',
-            'cart-flash-active'
-            );
-            topCart.style.zIndex = '1080';
-        } else {
-            topCart.classList.remove(
-            'position-fixed',
-            'top-0',
-            'end-0',
-            'mt-5',
-            'me-5',
-            'cart-flash-active'
-            );
-            topCart.style.zIndex = '';
-        }
+      if (cartAmountNumber() > 0) {
+        topCart.classList.add(
+          'position-fixed',
+          'top-0',
+          'end-0',
+          'mt-5',
+          'me-5',
+          'cart-flash-active'
+        );
+        topCart.style.zIndex = '1080';
+      } else {
+        topCart.classList.remove(
+          'position-fixed',
+          'top-0',
+          'end-0',
+          'mt-5',
+          'me-5',
+          'cart-flash-active'
+        );
+        topCart.style.zIndex = '';
+      }
     }
 
     syncTopCartSticky();
@@ -763,7 +848,7 @@
 </script>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const select = document.getElementById('singleCategorySelect');
     const keywordInput = document.getElementById('singleKeywordInput');
     const keywordInputSecondary = document.getElementById('singleKeywordInputSecondary');
@@ -776,21 +861,21 @@
     }
 
     function goToShop(categoryValue, keywordValue) {
-        const selectedCategory = normalize(categoryValue);
-        const keyword = normalize(keywordValue);
+      const selectedCategory = normalize(categoryValue);
+      const keyword = normalize(keywordValue);
 
-        const params = new URLSearchParams();
+      const params = new URLSearchParams();
 
-        if (selectedCategory) {
-            params.set('category', selectedCategory);
-        }
+      if (selectedCategory) {
+        params.set('category', selectedCategory);
+      }
 
-        if (keyword) {
-            params.set('keyword', keyword);
-        }
+      if (keyword) {
+        params.set('keyword', keyword);
+      }
 
-        const query = params.toString();
-        window.location.href = query ? `/store/shop?${query}#shopProductsSection` : '/store/shop#shopProductsSection';
+      const query = params.toString();
+      window.location.href = query ? `/store/shop?${query}#shopProductsSection` : '/store/shop#shopProductsSection';
     }
 
     function currentKeyword() {
@@ -809,25 +894,25 @@
       }
     }
 
-    links.forEach(function (link) {
-      link.addEventListener('click', function (event) {
+    links.forEach(function(link) {
+      link.addEventListener('click', function(event) {
         event.preventDefault();
         goToShop(link.getAttribute('data-category') || '', currentKeyword());
       });
     });
 
     if (select) {
-      select.addEventListener('change', function () {
+      select.addEventListener('change', function() {
         goToShop(select.value || '', currentKeyword());
       });
     }
 
     if (keywordInput) {
-      keywordInput.addEventListener('input', function () {
+      keywordInput.addEventListener('input', function() {
         syncInputs('primary');
       });
 
-      keywordInput.addEventListener('keydown', function (event) {
+      keywordInput.addEventListener('keydown', function(event) {
         if (event.key === 'Enter') {
           event.preventDefault();
           goToShop(select ? select.value : '', keywordInput.value);
@@ -836,11 +921,11 @@
     }
 
     if (keywordInputSecondary) {
-      keywordInputSecondary.addEventListener('input', function () {
+      keywordInputSecondary.addEventListener('input', function() {
         syncInputs('secondary');
       });
 
-      keywordInputSecondary.addEventListener('keydown', function (event) {
+      keywordInputSecondary.addEventListener('keydown', function(event) {
         if (event.key === 'Enter') {
           event.preventDefault();
           goToShop(select ? select.value : '', keywordInputSecondary.value);
@@ -849,13 +934,13 @@
     }
 
     if (keywordBtn) {
-      keywordBtn.addEventListener('click', function () {
+      keywordBtn.addEventListener('click', function() {
         goToShop(select ? select.value : '', currentKeyword());
       });
     }
 
     if (keywordBtnSecondary) {
-      keywordBtnSecondary.addEventListener('click', function () {
+      keywordBtnSecondary.addEventListener('click', function() {
         goToShop(select ? select.value : '', currentKeyword());
       });
     }
@@ -863,119 +948,125 @@
 </script>
 
 <script nonce="<%= nonce %>">
-(function(){
-  const $ = (s, c = document) => c.querySelector(s);
+  (function() {
+    const $ = (s, c = document) => c.querySelector(s);
 
-  const customIdEl = $('#pdCustomId');
-  const customId = (customIdEl && customIdEl.value) ? String(customIdEl.value) : '';
-  if (!customId) return;
+    const customIdEl = $('#pdCustomId');
+    const customId = (customIdEl && customIdEl.value) ? String(customIdEl.value) : '';
+    if (!customId) return;
 
-  const ratingText = $('#ratingText');
-  const reviewsList = $('#reviewsList');
-  const loadingRow = $('#reviewsLoadingRow');
-  const ratingStarsWrap = $('#ratingStarsWrap');
+    const ratingText = $('#ratingText');
+    const reviewsList = $('#reviewsList');
+    const loadingRow = $('#reviewsLoadingRow');
+    const ratingStarsWrap = $('#ratingStarsWrap');
 
-  function starsText(n) {
-    const s = Math.max(0, Math.min(5, parseInt(n || 0, 10)));
-    return '★★★★★'.slice(0, s) + '☆☆☆☆☆'.slice(0, 5 - s);
-  }
-
-  function renderAvgStars(avg, count) {
-    const a = Number(avg || 0);
-    const c = Number(count || 0);
-
-    const full = Math.floor(a);
-    const frac = a - full;
-    const half = frac >= 0.5;
-
-    let starsHtml = '';
-    for (let i = 1; i <= 5; i++) {
-      const isFull = i <= full;
-      const isHalf = (!isFull && i === full + 1 && half);
-      starsHtml += `<span class="rs-star ${isFull ? 'on' : (isHalf ? 'half' : 'off')}">★</span>`;
+    function starsText(n) {
+      const s = Math.max(0, Math.min(5, parseInt(n || 0, 10)));
+      return '★★★★★'.slice(0, s) + '☆☆☆☆☆'.slice(0, 5 - s);
     }
 
-    const aria = (c > 0)
-      ? `Average rating ${a.toFixed(1)} out of 5 based on ${c} reviews`
-      : `No ratings yet`;
+    function renderAvgStars(avg, count) {
+      const a = Number(avg || 0);
+      const c = Number(count || 0);
 
-    const meta = (c > 0)
-      ? `<span class="rs-avg">${a.toFixed(1)}</span><span class="rs-count">(${c})</span>`
-      : `<span class="rs-none">No ratings</span>`;
+      const full = Math.floor(a);
+      const frac = a - full;
+      const half = frac >= 0.5;
 
-    return `
+      let starsHtml = '';
+      for (let i = 1; i <= 5; i++) {
+        const isFull = i <= full;
+        const isHalf = (!isFull && i === full + 1 && half);
+        starsHtml += `<span class="rs-star ${isFull ? 'on' : (isHalf ? 'half' : 'off')}">★</span>`;
+      }
+
+      const aria = (c > 0) ?
+        `Average rating ${a.toFixed(1)} out of 5 based on ${c} reviews` :
+        `No ratings yet`;
+
+      const meta = (c > 0) ?
+        `<span class="rs-avg">${a.toFixed(1)}</span><span class="rs-count">(${c})</span>` :
+        `<span class="rs-none">No ratings</span>`;
+
+      return `
       <div class="rs" aria-label="${aria}">
         <div class="rs-stars" aria-hidden="true">${starsHtml}</div>
         <div class="rs-meta">${meta}</div>
       </div>
     `;
-  }
-
-  function formatDate(iso) {
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return '';
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    } catch {
-      return '';
     }
-  }
 
-  function escapeHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  async function loadRatings() {
-    try {
-      const url = `/api/products/${encodeURIComponent(customId)}/ratings?fresh=1&limit=3&page=1`;
-      const res = await fetch(url, { credentials: 'same-origin' });
-      const data = await res.json();
-
-      if (!res.ok || !data || !data.ok) {
-        throw new Error((data && data.error) ? data.error : 'Failed');
+    function formatDate(iso) {
+      try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      } catch {
+        return '';
       }
+    }
 
-      const avg = Number((data.product && data.product.avgRating) ? data.product.avgRating : 0);
-      const cnt = Number((data.product && data.product.ratingsCount) ? data.product.ratingsCount : 0);
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
 
-      if (ratingText) {
-        ratingText.textContent = (cnt > 0)
-          ? `${avg.toFixed(1)} • ${cnt} review${cnt === 1 ? '' : 's'}`
-          : 'No reviews yet';
-      }
+    async function loadRatings() {
+      try {
+        const url = `/api/products/${encodeURIComponent(customId)}/ratings?fresh=1&limit=3&page=1`;
+        const res = await fetch(url, {
+          credentials: 'same-origin'
+        });
+        const data = await res.json();
 
-      if (ratingStarsWrap) {
-        ratingStarsWrap.innerHTML = renderAvgStars(avg, cnt);
-      }
+        if (!res.ok || !data || !data.ok) {
+          throw new Error((data && data.error) ? data.error : 'Failed');
+        }
 
-      if (!reviewsList) return;
-      if (loadingRow) loadingRow.remove();
+        const avg = Number((data.product && data.product.avgRating) ? data.product.avgRating : 0);
+        const cnt = Number((data.product && data.product.ratingsCount) ? data.product.ratingsCount : 0);
 
-      const items = Array.isArray(data.items) ? data.items : [];
+        if (ratingText) {
+          ratingText.textContent = (cnt > 0) ?
+            `${avg.toFixed(1)} • ${cnt} review${cnt === 1 ? '' : 's'}` :
+            'No reviews yet';
+        }
 
-      if (!items.length) {
-        reviewsList.innerHTML = `
+        if (ratingStarsWrap) {
+          ratingStarsWrap.innerHTML = renderAvgStars(avg, cnt);
+        }
+
+        if (!reviewsList) return;
+        if (loadingRow) loadingRow.remove();
+
+        const items = Array.isArray(data.items) ? data.items : [];
+
+        if (!items.length) {
+          reviewsList.innerHTML = `
           <div class="review-item">
             <div class="review-stars">☆☆☆☆☆</div>
             <p class="review-text mb-1">No reviews yet. Be the first to rate this product.</p>
             <span class="review-author"></span>
           </div>
         `;
-        return;
-      }
+          return;
+        }
 
-      reviewsList.innerHTML = items.map((item) => {
-        const title = item.title ? `<h6 class="mb-1">${escapeHtml(item.title)}</h6>` : '';
-        const body = item.body ? `<p class="review-text mb-1">${escapeHtml(item.body)}</p>` : '<p class="review-text mb-1">No written comment.</p>';
-        const who = item.raterType === 'business' ? 'Business buyer' : (item.raterType === 'user' ? 'Customer' : 'Guest');
-        const when = formatDate(item.createdAt);
+        reviewsList.innerHTML = items.map((item) => {
+          const title = item.title ? `<h6 class="mb-1">${escapeHtml(item.title)}</h6>` : '';
+          const body = item.body ? `<p class="review-text mb-1">${escapeHtml(item.body)}</p>` : '<p class="review-text mb-1">No written comment.</p>';
+          const who = item.raterType === 'business' ? 'Business buyer' : (item.raterType === 'user' ? 'Customer' : 'Guest');
+          const when = formatDate(item.createdAt);
 
-        return `
+          return `
           <div class="review-item mb-3">
             <div class="review-stars">${starsText(item.stars)}</div>
             ${title}
@@ -983,26 +1074,26 @@
             <span class="review-author d-block text-muted">${escapeHtml(who)}${when ? ` • ${escapeHtml(when)}` : ''}</span>
           </div>
         `;
-      }).join('');
-    } catch (err) {
-      if (reviewsList) {
-        reviewsList.innerHTML = `
+        }).join('');
+      } catch (err) {
+        if (reviewsList) {
+          reviewsList.innerHTML = `
           <div class="review-item">
             <div class="review-stars">Error</div>
             <p class="review-text mb-1">Could not load ratings right now.</p>
             <span class="review-author"></span>
           </div>
         `;
+        }
       }
     }
-  }
 
-  loadRatings();
-})();
+    loadRatings();
+  })();
 </script>
 
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     const shareWrap = document.querySelector('.js-product-share-wrap');
     if (!shareWrap) return;
 
@@ -1010,8 +1101,8 @@
       return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
-    document.querySelectorAll('.js-product-native-share').forEach(function (button) {
-      button.addEventListener('click', async function () {
+    document.querySelectorAll('.js-product-native-share').forEach(function(button) {
+      button.addEventListener('click', async function() {
         const title = cleanText(shareWrap.getAttribute('data-share-title')) || document.title;
         const text = cleanText(shareWrap.getAttribute('data-share-text')) || title;
         const url = cleanText(shareWrap.getAttribute('data-share-url')) || window.location.href;
@@ -1036,7 +1127,7 @@
           const originalText = button.innerHTML;
           button.innerHTML = '<i class="fas fa-check me-1"></i> Product Copied';
 
-          setTimeout(function () {
+          setTimeout(function() {
             button.innerHTML = originalText;
           }, 2000);
         } catch (error) {
@@ -1047,27 +1138,19 @@
   })();
 </script>
 
+<%- include('partials/currency-client') %>
 <%- include('partials/cart-script-single') %>
 
 <!-- Mobile Floating Cart Start -->
-<div
-    id="mobileFloatingCart"
-    class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3"
-    style="z-index: 1080;"
->
-    <a
-        href="/store/cart"
-        class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link"
-        style="font-size: 0.85rem;"
-    >
-        <span
-            class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1"
-            style="width: 24px; height: 24px;"
-        >
-            <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
-        </span>
-        <span class="store-cart-total text-white fw-semibold">0.00</span>
-    </a>
+<div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
+  <a href="/store/cart" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" style="font-size: 0.85rem;">
+    <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
+      <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
+    </span>
+    <span class="store-cart-total text-white fw-semibold">
+      <%= formatMoney(0) %>
+    </span>
+  </a>
 </div>
 <!-- Mobile Floating Cart End -->
 

@@ -1,24 +1,68 @@
 <!--views/store/partials/cart-script-single.ejs-->
 <script nonce="<%= nonce %>">
-  (function () {
+  (function() {
     let activeChooserCard = null;
-    const CURRENCY = "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : '').trim().toUpperCase() || 'USD' %>";
 
+    /*
+     * All cart prices returned by /api/cart remain authoritative
+     * BASE_CURRENCY amounts.
+     *
+     * The shared window.KasyoraCurrency helper converts only the
+     * visible amount into the customer's selected display currency.
+     */
     function formatMoney(amount) {
-      const n = Number(amount || 0);
-
-      const formatted = new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: CURRENCY,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(n);
-
-      if (CURRENCY === 'ZAR') {
-        return formatted.replace(/^ZAR\s?/, 'R');
+      if (
+        window.KasyoraCurrency &&
+        typeof window.KasyoraCurrency.formatBaseAmount === 'function'
+      ) {
+        return window.KasyoraCurrency.formatBaseAmount(
+          amount
+        );
       }
 
-      return formatted;
+      /*
+       * Defensive fallback:
+       * if the shared helper is unavailable, show the original
+       * BASE_CURRENCY amount with the correct BASE_CURRENCY label.
+       *
+       * Never attach a selected display-currency label to an
+       * amount that has not been converted.
+       */
+      const fallbackAmount = Number(amount || 0);
+
+      const fallbackCurrency =
+        "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : 'USD').trim().toUpperCase() || 'USD' %>";
+
+      try {
+        const formatted = new Intl.NumberFormat(
+          undefined, {
+            style: 'currency',
+            currency: fallbackCurrency,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }
+        ).format(
+          Number.isFinite(fallbackAmount) ?
+          fallbackAmount :
+          0
+        );
+
+        if (fallbackCurrency === 'ZAR') {
+          return formatted.replace(/^ZAR\s?/, 'R');
+        }
+
+        return formatted;
+      } catch (error) {
+        return (
+          fallbackCurrency +
+          ' ' +
+          (
+            Number.isFinite(fallbackAmount) ?
+            fallbackAmount :
+            0
+          ).toFixed(2)
+        );
+      }
     }
 
     function round2(n) {
@@ -28,14 +72,17 @@
     function getCartSummary(items) {
       const list = Array.isArray(items) ? items : [];
 
-      return list.reduce(function (acc, item) {
+      return list.reduce(function(acc, item) {
         const quantity = Number(item.quantity || 0);
         const price = Number(item.price || 0);
 
         acc.count += quantity;
         acc.total += price * quantity;
         return acc;
-      }, { count: 0, total: 0 });
+      }, {
+        count: 0,
+        total: 0
+      });
     }
 
     function updateCartHeader(items) {
@@ -43,7 +90,7 @@
       const totalEls = document.querySelectorAll('.store-cart-total');
       const mobileFloatingCart = document.getElementById('mobileFloatingCart');
 
-      totalEls.forEach(function (el) {
+      totalEls.forEach(function(el) {
         el.textContent = formatMoney(summary.total);
       });
 
@@ -70,7 +117,7 @@
 
       document.body.appendChild(wrapper);
 
-      window.setTimeout(function () {
+      window.setTimeout(function() {
         wrapper.remove();
       }, 3000);
     }
@@ -87,20 +134,22 @@
     function normalizeArray(value) {
       if (!Array.isArray(value)) return [];
       return value
-        .map(function (item) { return String(item || '').trim(); })
+        .map(function(item) {
+          return String(item || '').trim();
+        })
         .filter(Boolean);
     }
 
     function normalizeColorImages(value) {
       if (!Array.isArray(value)) return [];
       return value
-        .map(function (entry) {
+        .map(function(entry) {
           return {
             color: String(entry && entry.color ? entry.color : '').trim(),
             imageUrl: String(entry && entry.imageUrl ? entry.imageUrl : '').trim()
           };
         })
-        .filter(function (entry) {
+        .filter(function(entry) {
           return entry.color && entry.imageUrl;
         });
     }
@@ -150,7 +199,7 @@
       const picked = String(color || '').trim().toLowerCase();
       if (!picked) return product.image || '';
 
-      const match = (product.colorImages || []).find(function (entry) {
+      const match = (product.colorImages || []).find(function(entry) {
         return String(entry.color || '').trim().toLowerCase() === picked;
       });
 
@@ -195,11 +244,11 @@
         status.className = 'js-variant-status small text-secondary mb-2';
       }
 
-      chooser.querySelectorAll('.js-color-choice').forEach(function (btn) {
+      chooser.querySelectorAll('.js-color-choice').forEach(function(btn) {
         btn.className = 'btn btn-sm rounded-pill d-inline-flex align-items-center gap-1 js-color-choice';
       });
 
-      chooser.querySelectorAll('.js-size-choice').forEach(function (btn) {
+      chooser.querySelectorAll('.js-size-choice').forEach(function(btn) {
         btn.className = 'btn btn-sm rounded-pill js-size-choice';
       });
 
@@ -380,15 +429,15 @@
       }
 
       if (colorOptions) {
-        colorOptions.innerHTML = (product.colors || []).map(function (color) {
+        colorOptions.innerHTML = (product.colors || []).map(function(color) {
           const img = getColorImage(product, color);
           return [
             '<button type="button" class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1 js-color-choice" data-color="' + escapeHtml(color) + '" style="border-color: #7C3AED; color: #7C3AED; background-color: #fff;">',
-            img
-              ? '<span class="rounded-circle border overflow-hidden d-inline-flex align-items-center justify-content-center bg-white" style="width: 22px; height: 22px; border-color: #D4AF37 !important;">' +
-                  '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(color) + '" style="width: 100%; height: 100%; object-fit: contain;">' +
-                '</span>'
-              : '',
+            img ?
+            '<span class="rounded-circle border overflow-hidden d-inline-flex align-items-center justify-content-center bg-white" style="width: 22px; height: 22px; border-color: #D4AF37 !important;">' +
+            '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(color) + '" style="width: 100%; height: 100%; object-fit: contain;">' +
+            '</span>' :
+            '',
             '<span class="small">' + escapeHtml(color) + '</span>',
             '</button>'
           ].join('');
@@ -396,7 +445,7 @@
       }
 
       if (sizeOptions) {
-        sizeOptions.innerHTML = (product.sizes || []).map(function (size) {
+        sizeOptions.innerHTML = (product.sizes || []).map(function(size) {
           return '<button type="button" class="btn btn-sm rounded-pill js-size-choice" data-size="' + escapeHtml(size) + '" style="border-color: #D4AF37; color: #7C3AED; background-color: #fff;">' + escapeHtml(size) + '</button>';
         }).join('');
       }
@@ -432,7 +481,7 @@
       chooser.classList.remove('d-none');
       applyChooserLayout(chooser, button);
 
-      window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function() {
         applyChooserLayout(chooser, button);
 
         const preview = chooser.querySelector('.js-variant-preview');
@@ -440,7 +489,7 @@
           if (preview.complete) {
             applyChooserLayout(chooser, button);
           } else {
-            preview.onload = function () {
+            preview.onload = function() {
               applyChooserLayout(chooser, button);
             };
           }
@@ -464,7 +513,9 @@
     async function refreshCartHeader() {
       try {
         const res = await fetch('/api/cart', {
-          headers: { 'Accept': 'application/json' }
+          headers: {
+            'Accept': 'application/json'
+          }
         });
 
         const data = await res.json();
@@ -492,7 +543,9 @@
 
       const res = await fetch(url, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' }
+        headers: {
+          'Accept': 'application/json'
+        }
       });
 
       const data = await res.json();
@@ -545,7 +598,7 @@
     function normVariants(v) {
       const source = v && typeof v === 'object' ? v : {};
       const output = {};
-      Object.keys(source).sort().forEach(function (key) {
+      Object.keys(source).sort().forEach(function(key) {
         output[key] = String(source[key] == null ? '' : source[key]).trim();
       });
       return output;
@@ -571,14 +624,14 @@
 
     function getMatchingCartQuantity(items, pid, variants) {
       const list = Array.isArray(items) ? items : [];
-      const match = list.find(function (item) {
+      const match = list.find(function(item) {
         return cartLineMatches(item, pid, variants);
       });
 
       return match ? Number(match.quantity || 1) : 0;
     }
 
-    document.addEventListener('click', async function (event) {
+    document.addEventListener('click', async function(event) {
       const minusBtn = event.target.closest('.btn-minus');
       const plusBtn = event.target.closest('.btn-plus');
       const qtyInput = document.querySelector('.quantity input.form-control');
@@ -654,7 +707,7 @@
       }
     });
 
-    document.addEventListener('click', function (event) {
+    document.addEventListener('click', function(event) {
       const colorBtn = event.target.closest('.js-color-choice');
       if (colorBtn) {
         event.preventDefault();
@@ -668,7 +721,7 @@
 
         chooser.setAttribute('data-selected-color', colorBtn.getAttribute('data-color') || '');
 
-        chooser.querySelectorAll('.js-color-choice').forEach(function (btn) {
+        chooser.querySelectorAll('.js-color-choice').forEach(function(btn) {
           btn.classList.remove('active');
         });
         colorBtn.classList.add('active');
@@ -690,7 +743,7 @@
 
         chooser.setAttribute('data-selected-size', sizeBtn.getAttribute('data-size') || '');
 
-        chooser.querySelectorAll('.js-size-choice').forEach(function (btn) {
+        chooser.querySelectorAll('.js-size-choice').forEach(function(btn) {
           btn.classList.remove('active');
         });
         sizeBtn.classList.add('active');
@@ -699,7 +752,7 @@
       }
     });
 
-    document.addEventListener('click', async function (event) {
+    document.addEventListener('click', async function(event) {
       const confirmBtn = event.target.closest('.js-variant-confirm');
       if (confirmBtn) {
         event.preventDefault();
@@ -760,9 +813,9 @@
       const isSingle = button.classList.contains('js-single-add-to-cart');
 
       if (product && requiresChooser(product)) {
-        const card = isSingle
-          ? button.closest('.js-single-product-card')
-          : button.closest('.js-store-product-card');
+        const card = isSingle ?
+          button.closest('.js-single-product-card') :
+          button.closest('.js-store-product-card');
 
         openChooser(card, button, product, isSingle);
         return;
@@ -801,7 +854,7 @@
       }
     });
 
-    document.addEventListener('click', function (event) {
+    document.addEventListener('click', function(event) {
       if (event.target.closest('.js-variant-chooser')) return;
       if (event.target.closest('.js-single-add-to-cart')) return;
       if (event.target.closest('.js-add-to-cart')) return;
@@ -811,7 +864,7 @@
       }
     });
 
-    window.addEventListener('resize', function () {
+    window.addEventListener('resize', function() {
       if (!activeChooserCard) return;
 
       const chooser = activeChooserCard.querySelector('.js-variant-chooser');
@@ -824,7 +877,7 @@
       applyChooserLayout(chooser, button);
     });
 
-    window.addEventListener('scroll', function () {
+    window.addEventListener('scroll', function() {
       if (!activeChooserCard) return;
       closeChooser(activeChooserCard);
     }, true);
