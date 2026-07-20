@@ -62,12 +62,51 @@ function mapStoreProduct(p) {
   };
 }
 
-function getStoreDepartment(req) {
-  return String(req.session?.storeDepartment || '')
+function normalizeStoreDepartment(value) {
+  return String(value || '')
     .trim()
     .toLowerCase() === 'cj'
     ? 'cj'
     : 'internal';
+}
+
+function getStoreDepartment(req) {
+  /*
+   * A department explicitly supplied in the URL must win.
+   *
+   * Examples:
+   * /store?department=cj
+   * /store/shop?department=cj
+   * /store/bestseller?department=cj
+   *
+   * After resolving it, keep the same department in the session
+   * so later store requests remain in the selected department.
+   */
+  const requestedDepartment = String(req.query?.department || '')
+    .trim()
+    .toLowerCase();
+
+  const hasRequestedDepartment = requestedDepartment === 'cj' || requestedDepartment === 'internal';
+
+  const storeDepartment = hasRequestedDepartment
+    ? normalizeStoreDepartment(requestedDepartment)
+    : normalizeStoreDepartment(req.session?.storeDepartment);
+
+  if (req.session) {
+    req.session.storeDepartment = storeDepartment;
+  }
+
+  return storeDepartment;
+}
+
+function buildStoreDepartmentUrl(pathname, storeDepartment, hash = '') {
+  const department = normalizeStoreDepartment(storeDepartment);
+
+  const params = new URLSearchParams();
+
+  params.set('department', department);
+
+  return String(pathname || '/store') + '?' + params.toString() + String(hash || '');
 }
 
 function getEnabledCjVariants(product) {
@@ -719,21 +758,27 @@ router.get('/store', async (req, res) => {
       })
       .lean();
 
+    /*
+     * Every homepage hero call-to-action must open the real
+     * Shop page while preserving the currently active department.
+     *
+     * Stored slide URLs are intentionally not used here because
+     * they may point to an internal product or may omit the
+     * active store department.
+     */
+    const activeHeroShopUrl = buildStoreDepartmentUrl(
+      '/store/shop',
+      storeDepartment,
+      '#shopProductsSection',
+    );
+
     const heroSlides = heroSlidesRaw.map((slide) => ({
       title: slide.title || '',
       subtitle: slide.subtitle || '',
       description: slide.description || '',
       image: slide.image || '',
       buttonText: slide.buttonText || 'Shop Now',
-
-      /*
-       * In CJ mode, do not allow a stored internal-product URL
-       * to take the customer into the internal department.
-       */
-      buttonUrl:
-        storeDepartment === 'cj'
-          ? '/store?department=cj#homeProductsSection'
-          : slide.buttonUrl || '/store/shop',
+      buttonUrl: activeHeroShopUrl,
     }));
 
     if (storeDepartment === 'cj') {
@@ -1727,12 +1772,121 @@ router.get('/store/contact', async (req, res) => {
 });
 
 router.get('/store/bestseller', async (req, res) => {
+  const storeDepartment = getStoreDepartment(req);
+
   try {
     const keyword = String(req.query.keyword || '').trim();
+
     const category = String(req.query.category || '').trim();
 
+    /*
+     * ==================================================
+     * CJ DROPSHIPPING BESTSELLER DEPARTMENT
+     * ==================================================
+     *
+     * This branch reads only CjProduct.
+     * It never reads internal Product, BestsellerCard
+     * or BestsellerBottomBanner records.
+     */
+    if (storeDepartment === 'cj') {
+      const cjProducts = await loadCjHomepageProducts({
+        keyword,
+        category,
+      });
+
+      const sortedCjProducts = [...cjProducts].sort((left, right) => {
+        const popularityDifference = Number(right.popular === true) - Number(left.popular === true);
+
+        if (popularityDifference !== 0) {
+          return popularityDifference;
+        }
+
+        const ratingDifference = Number(right.avgRating || 0) - Number(left.avgRating || 0);
+
+        if (ratingDifference !== 0) {
+          return ratingDifference;
+        }
+
+        const ratingsCountDifference =
+          Number(right.ratingsCount || 0) - Number(left.ratingsCount || 0);
+
+        if (ratingsCountDifference !== 0) {
+          return ratingsCountDifference;
+        }
+
+        return String(left.name || '').localeCompare(String(right.name || ''));
+      });
+
+      const bestSellerProducts = sortedCjProducts.slice(0, 6);
+
+      const allProducts = cjProducts.slice(0, 8);
+
+      const newArrivals = cjProducts.slice(0, 4);
+
+      const featuredProducts = [...cjProducts]
+        .sort((left, right) => {
+          return Number(right.enabledVariantCount || 0) - Number(left.enabledVariantCount || 0);
+        })
+        .slice(0, 4);
+
+      const topSellingProducts = sortedCjProducts.slice(0, 4);
+
+      const productListProducts = cjProducts.slice(0, 12);
+
+      const shopHeaderImage = await ShopHeaderImage.findOne({
+        active: true,
+      })
+        .sort({
+          updatedAt: -1,
+        })
+        .lean();
+
+      return res.render('store/bestseller', {
+        layout: 'layouts/store',
+        title: 'CJ Bestsellers | Kasyora',
+
+        storeDepartment: 'cj',
+        productSource: 'CJ',
+
+        bestSellerProducts,
+        allProducts,
+        newArrivals,
+        featuredProducts,
+        topSellingProducts,
+        productListProducts,
+
+        /*
+         * These marketing records reference internal
+         * Product custom IDs and must never appear
+         * inside the CJ department.
+         */
+        bestsellerLeft: null,
+        bestsellerRight: null,
+        bottomBannerLeft: null,
+        bottomBannerRight: null,
+
+        shopHeaderImage,
+
+        selectedKeyword: keyword,
+        selectedCategory: category,
+
+        baseCurrency: BASE_CURRENCY,
+        vatRate: VAT_RATE,
+      });
+    }
+
+    /*
+     * ==================================================
+     * INTERNAL KASYORA BESTSELLER DEPARTMENT
+     * ==================================================
+     *
+     * Preserve the existing internal product,
+     * banner and sales-history flow.
+     */
     const bestsellerQuery = {
-      stock: { $gt: 0 },
+      stock: {
+        $gt: 0,
+      },
     };
 
     if (category) {
@@ -1842,45 +1996,65 @@ router.get('/store/bestseller', async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    res.render('store/bestseller', {
+    return res.render('store/bestseller', {
       layout: 'layouts/store',
       title: 'Bestseller',
+
+      storeDepartment: 'internal',
+      productSource: 'INTERNAL',
+
       bestSellerProducts,
       allProducts,
       newArrivals,
       featuredProducts,
       topSellingProducts,
       productListProducts,
+
       bestsellerLeft,
       bestsellerRight,
       bottomBannerLeft,
       bottomBannerRight,
+
       shopHeaderImage,
+
       selectedKeyword: keyword,
       selectedCategory: category,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
     });
   } catch (err) {
     console.error('❌ store bestseller error:', err);
-    res.render('store/bestseller', {
+
+    return res.render('store/bestseller', {
       layout: 'layouts/store',
-      title: 'Bestseller',
+
+      title: storeDepartment === 'cj' ? 'CJ Bestsellers | Kasyora' : 'Bestseller',
+
+      storeDepartment,
+
+      productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
+
       bestSellerProducts: [],
       allProducts: [],
       newArrivals: [],
       featuredProducts: [],
       topSellingProducts: [],
       productListProducts: [],
+
       bestsellerLeft: null,
       bestsellerRight: null,
       bottomBannerLeft: null,
       bottomBannerRight: null,
+
       shopHeaderImage: null,
-      selectedKeyword: '',
-      selectedCategory: '',
+
+      selectedKeyword: String(req.query.keyword || '').trim(),
+
+      selectedCategory: String(req.query.category || '').trim(),
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
     });
   }
 });

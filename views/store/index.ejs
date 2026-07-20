@@ -57,6 +57,31 @@
 
   const IS_CJ_DEPARTMENT = ACTIVE_DEPARTMENT === 'cj';
 
+    /*
+   * Store-page navigation must always carry the selected
+   * department explicitly.
+   *
+   * This prevents CJ pages from accidentally reopening the
+   * internal storefront and prevents internal pages from
+   * accidentally reopening the CJ storefront.
+   */
+  const ACTIVE_HOME_URL =
+    '/store?department=' +
+    encodeURIComponent(ACTIVE_DEPARTMENT);
+
+  const ACTIVE_HOME_PRODUCTS_URL =
+    ACTIVE_HOME_URL +
+    '#homeProductsSection';
+
+  const ACTIVE_SHOP_URL =
+    '/store/shop?department=' +
+    encodeURIComponent(ACTIVE_DEPARTMENT) +
+    '#shopProductsSection';
+
+  const ACTIVE_BESTSELLER_URL =
+    '/store/bestseller?department=' +
+    encodeURIComponent(ACTIVE_DEPARTMENT);
+
   const ACTIVE_CART_URL = IS_CJ_DEPARTMENT
     ? '/cj/cart'
     : '/store/cart';
@@ -65,9 +90,11 @@
     ? '/cj/checkout'
     : '/payment/checkout';
 
-  const ACTIVE_SHOP_URL = IS_CJ_DEPARTMENT
-    ? '/store?department=cj#homeProductsSection'
-    : '/store/shop';
+  /*
+   * Currency selection must return to the same department.
+   */
+  const INDEX_CURRENCY_RETURN_TO =
+    ACTIVE_HOME_URL;
 
   const ACTIVE_CART = (
     typeof activeStoreCart !== 'undefined' &&
@@ -165,7 +192,7 @@
       <div class="d-inline-flex align-items-center" style="height: 45px;">
         <div class="me-2">
           <%- include('partials/currency-selector', {
-            currencyReturnTo: '/store'
+            currencyReturnTo: INDEX_CURRENCY_RETURN_TO
           }) %>
         </div>
 
@@ -196,7 +223,7 @@
   <div class="row gx-0 align-items-center text-center">
     <div class="col-md-4 col-lg-3 text-center text-lg-start">
       <div class="d-inline-flex align-items-center">
-        <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
+        <a href="<%= ACTIVE_HOME_URL %>" class="navbar-brand p-0 d-inline-flex align-items-center">
           <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2" style="max-height: 52px; width: auto;">
           <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
             Kasyora.com
@@ -312,7 +339,7 @@
     </div>
     <div class="col-12 col-lg-9">
       <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
-        <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
+        <a href="<%= ACTIVE_HOME_URL %>" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
           <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
           <span class="h5 text-white m-0 text-truncate fw-bold">
             Kasyora.com
@@ -323,7 +350,7 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <div class="navbar-nav ms-auto py-0">
-            <a href="/store" class="nav-item nav-link active">
+            <a href="<%= ACTIVE_HOME_URL %>" class="nav-item nav-link active">
               Shopping home
             </a>
 
@@ -342,7 +369,7 @@
 
               <div class="dropdown-menu m-0 p-2">
                 <form action="/store/department/internal" method="POST" class="m-0 mb-2">
-                  <input type="hidden" name="returnTo" value="/store">
+                  <input type="hidden" name="returnTo" value="/store?department=internal">
 
                   <button type="submit" class="dropdown-item rounded <%= !IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
                     <i class="fas fa-warehouse me-2"></i>
@@ -351,7 +378,7 @@
                 </form>
 
                 <form action="/store/department/cj" method="POST" class="m-0">
-                  <input type="hidden" name="returnTo" value="/store">
+                  <input type="hidden" name="returnTo" value="/store?department=cj">
 
                   <button type="submit" class="dropdown-item rounded <%= IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
                     <i class="fas fa-globe me-2"></i>
@@ -365,11 +392,9 @@
             <div class="nav-item dropdown">
               <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
               <div class="dropdown-menu m-0">
-                <% if (!IS_CJ_DEPARTMENT) { %>
-                <a href="/store/bestseller" class="dropdown-item">
+                <a href="<%= ACTIVE_BESTSELLER_URL %>" class="dropdown-item">
                   Bestseller
                 </a>
-                <% } %>
 
                 <a href="<%= ACTIVE_CART_URL %>" class="dropdown-item">
                   <%= IS_CJ_DEPARTMENT ? 'CJ Cart' : 'Cart' %>
@@ -397,7 +422,7 @@
 
               <div class="bg-white rounded px-2 py-1 d-inline-flex">
                 <%- include('partials/currency-selector', {
-                  currencyReturnTo: '/store'
+                  currencyReturnTo: INDEX_CURRENCY_RETURN_TO
                 }) %>
               </div>
             </div>
@@ -1381,117 +1406,255 @@
 
 <script nonce="<%= nonce %>">
   (function() {
-    const select = document.getElementById('storeCategorySelect');
-    const keywordInput = document.getElementById('storeKeywordInput');
-    const keywordInputSecondary = document.getElementById('storeKeywordInputSecondary');
-    const keywordBtn = document.getElementById('storeKeywordSearchBtn');
-    const keywordBtnSecondary = document.getElementById('storeKeywordSearchBtnSecondary');
-    const links = Array.from(document.querySelectorAll('.store-category-link'));
+    const select =
+      document.getElementById(
+        'storeCategorySelect'
+      );
 
-    if (!select) return;
+    const keywordInput =
+      document.getElementById(
+        'storeKeywordInput'
+      );
+
+    const keywordInputSecondary =
+      document.getElementById(
+        'bestsellerKeywordInputSecondary'
+      );
+
+    const keywordBtn =
+      document.getElementById(
+        'storeKeywordSearchBtn'
+      );
+
+    const keywordBtnSecondary =
+      document.getElementById(
+        'bestsellerKeywordSearchBtnSecondary'
+      );
+
+    const links = Array.from(
+      document.querySelectorAll(
+        '.store-category-link'
+      )
+    );
+
+    if (!select) {
+      return;
+    }
 
     function getKeyword() {
-      const primaryValue = keywordInput ? String(keywordInput.value || '').trim() : '';
-      const secondaryValue = keywordInputSecondary ? String(keywordInputSecondary.value || '').trim() : '';
-      return primaryValue || secondaryValue;
+      const primaryValue =
+        keywordInput ?
+        String(
+          keywordInput.value || ''
+        ).trim() :
+        '';
+
+      const secondaryValue =
+        keywordInputSecondary ?
+        String(
+          keywordInputSecondary.value || ''
+        ).trim() :
+        '';
+
+      return (
+        primaryValue ||
+        secondaryValue
+      );
     }
 
     function syncKeywordInputs(keyword) {
-      if (keywordInput) keywordInput.value = keyword;
-      if (keywordInputSecondary) keywordInputSecondary.value = keyword;
+      if (keywordInput) {
+        keywordInput.value = keyword;
+      }
+
+      if (keywordInputSecondary) {
+        keywordInputSecondary.value =
+          keyword;
+      }
     }
 
-    function goToHomeProducts(categoryValue) {
-      const params = new URLSearchParams();
-      const keyword = getKeyword();
-      const category = String(categoryValue != null ? categoryValue : (select.value || '')).trim();
+    function buildHomeProductsUrl(
+      keyword,
+      category
+    ) {
+      const params =
+        new URLSearchParams();
 
-      syncKeywordInputs(keyword);
+      /*
+       * The active department is always included,
+       * even when no keyword or category is selected.
+       */
+      params.set(
+        'department',
+        '<%= ACTIVE_DEPARTMENT %>'
+      );
 
       if (keyword) {
-        params.set('keyword', keyword);
+        params.set(
+          'keyword',
+          keyword
+        );
       }
 
       if (category) {
-        params.set('category', category);
+        params.set(
+          'category',
+          category
+        );
       }
 
-      const queryString = params.toString();
+      return (
+        '/store?' +
+        params.toString() +
+        '#homeProductsSection'
+      );
+    }
 
-      window.location.href = queryString ?
-        '/store?' + queryString + '#homeProductsSection' :
-        '/store#homeProductsSection';
+    function goToHomeProducts(
+      categoryValue
+    ) {
+      const keyword = getKeyword();
+
+      const category = String(
+        categoryValue != null ?
+        categoryValue :
+        select.value || ''
+      ).trim();
+
+      syncKeywordInputs(keyword);
+
+      window.location.href =
+        buildHomeProductsUrl(
+          keyword,
+          category
+        );
     }
 
     links.forEach(function(link) {
-      link.addEventListener('click', function(event) {
-        event.preventDefault();
-        goToHomeProducts(link.getAttribute('data-category'));
-      });
+      link.addEventListener(
+        'click',
+        function(event) {
+          event.preventDefault();
+
+          goToHomeProducts(
+            link.getAttribute(
+              'data-category'
+            )
+          );
+        }
+      );
     });
 
-    select.addEventListener('change', function() {
-      goToHomeProducts(select.value);
-    });
+    select.addEventListener(
+      'change',
+      function() {
+        goToHomeProducts(
+          select.value
+        );
+      }
+    );
 
     if (keywordInput) {
-      keywordInput.addEventListener('input', function() {
-        const keyword = String(keywordInput.value || '').trim();
-        const category = String(select ? (select.value || '') : '').trim();
+      keywordInput.addEventListener(
+        'input',
+        function() {
+          const keyword = String(
+            keywordInput.value || ''
+          ).trim();
 
-        syncKeywordInputs(keyword);
+          const category = String(
+            select ?
+            select.value || '' :
+            ''
+          ).trim();
 
-        if (!keyword) {
-          if (category) {
-            goToHomeProducts(category);
-          } else {
-            window.location.href = '/store#homeProductsSection';
+          syncKeywordInputs(keyword);
+
+          if (!keyword) {
+            window.location.href =
+              buildHomeProductsUrl(
+                '',
+                category
+              );
           }
         }
-      });
+      );
 
-      keywordInput.addEventListener('keydown', function(event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          goToHomeProducts(select.value);
+      keywordInput.addEventListener(
+        'keydown',
+        function(event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+
+            goToHomeProducts(
+              select.value
+            );
+          }
         }
-      });
+      );
     }
 
     if (keywordInputSecondary) {
-      keywordInputSecondary.addEventListener('input', function() {
-        const keyword = String(keywordInputSecondary.value || '').trim();
-        const category = String(select ? (select.value || '') : '').trim();
+      keywordInputSecondary.addEventListener(
+        'input',
+        function() {
+          const keyword = String(
+            keywordInputSecondary.value ||
+            ''
+          ).trim();
 
-        syncKeywordInputs(keyword);
+          const category = String(
+            select ?
+            select.value || '' :
+            ''
+          ).trim();
 
-        if (!keyword) {
-          if (category) {
-            goToHomeProducts(category);
-          } else {
-            window.location.href = '/store#homeProductsSection';
+          syncKeywordInputs(keyword);
+
+          if (!keyword) {
+            window.location.href =
+              buildHomeProductsUrl(
+                '',
+                category
+              );
           }
         }
-      });
+      );
 
-      keywordInputSecondary.addEventListener('keydown', function(event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          goToHomeProducts(select.value);
+      keywordInputSecondary.addEventListener(
+        'keydown',
+        function(event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+
+            goToHomeProducts(
+              select.value
+            );
+          }
         }
-      });
+      );
     }
 
     if (keywordBtn) {
-      keywordBtn.addEventListener('click', function() {
-        goToHomeProducts(select.value);
-      });
+      keywordBtn.addEventListener(
+        'click',
+        function() {
+          goToHomeProducts(
+            select.value
+          );
+        }
+      );
     }
 
     if (keywordBtnSecondary) {
-      keywordBtnSecondary.addEventListener('click', function() {
-        goToHomeProducts(select.value);
-      });
+      keywordBtnSecondary.addEventListener(
+        'click',
+        function() {
+          goToHomeProducts(
+            select.value
+          );
+        }
+      );
     }
   })();
 </script>
@@ -1558,17 +1721,16 @@
         "<%= BASE_CURRENCY %>";
 
       return new Intl.NumberFormat(
-        undefined,
-        {
+        undefined, {
           style: 'currency',
           currency: fallbackCurrency,
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         }
       ).format(
-        Number.isFinite(fallbackAmount)
-          ? fallbackAmount
-          : 0
+        Number.isFinite(fallbackAmount) ?
+        fallbackAmount :
+        0
       );
     }
 

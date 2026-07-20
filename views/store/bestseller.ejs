@@ -85,8 +85,75 @@
     }
   }
 
-  function bestsellerPageUrl() {
+  const ACTIVE_DEPARTMENT = String(
+    typeof storeDepartment !== 'undefined'
+      ? storeDepartment
+      : 'internal'
+  ).trim().toLowerCase() === 'cj'
+    ? 'cj'
+    : 'internal';
+
+  const IS_CJ_DEPARTMENT =
+    ACTIVE_DEPARTMENT === 'cj';
+
+  const ACTIVE_HOME_URL =
+    '/store?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    );
+
+  const ACTIVE_SHOP_URL =
+    '/store/shop?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    ) +
+    '#shopProductsSection';
+
+  const ACTIVE_BESTSELLER_URL =
+    '/store/bestseller?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    ) +
+    '#bestsellerProductsSection';
+
+  const ACTIVE_CART_URL =
+    IS_CJ_DEPARTMENT
+      ? '/cj/cart'
+      : '/store/cart';
+
+  const ACTIVE_CHECKOUT_URL =
+    IS_CJ_DEPARTMENT
+      ? '/cj/checkout'
+      : '/payment/checkout';
+
+  const ACTIVE_CART = (
+    typeof activeStoreCart !== 'undefined' &&
+    activeStoreCart
+  )
+    ? activeStoreCart
+    : {
+        count: 0,
+        total: 0
+      };
+
+  function bestsellerPageUrlForDepartment(
+    department
+  ) {
+    const safeDepartment =
+      String(department || '')
+        .trim()
+        .toLowerCase() === 'cj'
+        ? 'cj'
+        : 'internal';
+
     const params = [];
+
+    params.push(
+      'department=' +
+      encodeURIComponent(
+        safeDepartment
+      )
+    );
 
     const keyword = String(
       typeof selectedKeyword !== 'undefined'
@@ -114,35 +181,95 @@
       );
     }
 
-    const query = params.join('&');
+    return (
+      '/store/bestseller?' +
+      params.join('&') +
+      '#bestsellerProductsSection'
+    );
+  }
 
-    return query
-      ? (
-          '/store/bestseller?' +
-          query +
-          '#bestsellerProductsSection'
-        )
-      : '/store/bestseller#bestsellerProductsSection';
+  function bestsellerPageUrl() {
+    return bestsellerPageUrlForDepartment(
+      ACTIVE_DEPARTMENT
+    );
   }
 
   const BESTSELLER_CURRENCY_RETURN_TO =
     bestsellerPageUrl();
 
+  const INTERNAL_BESTSELLER_RETURN_TO =
+    bestsellerPageUrlForDepartment(
+      'internal'
+    );
+
+  const CJ_BESTSELLER_RETURN_TO =
+    bestsellerPageUrlForDepartment(
+      'cj'
+    );
+
   function storeProductPayload(product) {
-    return encodeURIComponent(JSON.stringify({
-      customId: product.customId || '',
-      name: product.name || '',
-      image: product.image || product.imageUrl || '',
-      sizes: Array.isArray(product.sizes)
-        ? product.sizes
-        : [],
-      colors: Array.isArray(product.colors)
-        ? product.colors
-        : [],
-      colorImages: Array.isArray(product.colorImages)
-        ? product.colorImages
-        : []
-    }));
+    const source = String(
+      product?.source || ''
+    ).trim().toUpperCase();
+
+    if (source === 'CJ') {
+      return encodeURIComponent(
+        JSON.stringify({
+          source: 'CJ',
+
+          cjProductId:
+            product.cjProductId || '',
+
+          cjVariantId:
+            product.defaultCjVariantId || '',
+
+          name:
+            product.name || '',
+
+          image:
+            product.image ||
+            product.imageUrl ||
+            '',
+
+          variants:
+            Array.isArray(product.variants)
+              ? product.variants
+              : []
+        })
+      );
+    }
+
+    return encodeURIComponent(
+      JSON.stringify({
+        source: 'INTERNAL',
+
+        customId:
+          product.customId || '',
+
+        name:
+          product.name || '',
+
+        image:
+          product.image ||
+          product.imageUrl ||
+          '',
+
+        sizes:
+          Array.isArray(product.sizes)
+            ? product.sizes
+            : [],
+
+        colors:
+          Array.isArray(product.colors)
+            ? product.colors
+            : [],
+
+        colorImages:
+          Array.isArray(product.colorImages)
+            ? product.colorImages
+            : []
+      })
+    );
   }
 %>
 
@@ -204,7 +331,7 @@
   <div class="row gx-0 align-items-center text-center">
     <div class="col-md-4 col-lg-3 text-center text-lg-start">
       <div class="d-inline-flex align-items-center">
-        <a href="/store" class="navbar-brand p-0 d-inline-flex align-items-center">
+        <a href="<%= ACTIVE_HOME_URL %>" class="navbar-brand p-0 d-inline-flex align-items-center">
           <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2" style="max-height: 52px; width: auto;">
           <span class="fw-bold text-primary" style="font-size: 1.5rem; line-height: 1;">
             Kasyora.com
@@ -232,12 +359,15 @@
       <div class="d-inline-flex align-items-center">
         <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
         <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
-        <a href="/store/cart" id="bestsellerTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+        <a href="<%= ACTIVE_CART_URL %>" id="bestsellerTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link" data-store-department="<%= ACTIVE_DEPARTMENT %>">
           <span class="rounded-circle btn-md-square border">
             <i class="fas fa-shopping-cart"></i>
           </span>
+
           <span class="text-dark ms-2 store-cart-total">
-            <%= formatMoney(0) %>
+            <%= formatMoney(
+              Number(ACTIVE_CART.total || 0)
+            ) %>
           </span>
         </a>
       </div>
@@ -278,7 +408,7 @@
     </div>
     <div class="col-12 col-lg-9">
       <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
-        <a href="/store" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
+        <a href="<%= ACTIVE_HOME_URL %>" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
           <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
           <span class="h5 text-white m-0 text-truncate fw-bold">
             Kasyora.com
@@ -289,20 +419,83 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <div class="navbar-nav ms-auto py-0">
-            <a href="/store" class="nav-item nav-link">Shopping home</a>
-            <a href="/store/shop" class="nav-item nav-link">Shop</a>
-            <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
+            <a href="<%= ACTIVE_HOME_URL %>" class="nav-item nav-link">
+              Shopping home
+            </a>
+
+            <a href="<%= ACTIVE_SHOP_URL %>" class="nav-item nav-link">
+              Shop
+            </a>
+
             <div class="nav-item dropdown">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
-              <div class="dropdown-menu m-0">
-                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
-                <a href="/store/cart" class="dropdown-item">Cart</a>
-                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
-                <a href="/business/login" class="dropdown-item">Accounts</a>
-                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-store me-1"></i>
+
+                <%= IS_CJ_DEPARTMENT
+                  ? 'CJ Store'
+                  : 'Kasyora Store' %>
+              </a>
+
+              <div class="dropdown-menu m-0 p-2">
+                <form action="/store/department/internal" method="POST" class="m-0 mb-2">
+                  <input type="hidden" name="returnTo" value="<%= INTERNAL_BESTSELLER_RETURN_TO %>">
+
+                  <button type="submit" class="dropdown-item rounded <%= !IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
+                    <i class="fas fa-warehouse me-2"></i>
+                    Kasyora In Store
+                  </button>
+                </form>
+
+                <form action="/store/department/cj" method="POST" class="m-0">
+                  <input type="hidden" name="returnTo" value="<%= CJ_BESTSELLER_RETURN_TO %>">
+
+                  <button type="submit" class="dropdown-item rounded <%= IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
+                    <i class="fas fa-globe me-2"></i>
+                    Kasyora CJ Store
+                  </button>
+                </form>
               </div>
             </div>
-            <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
+
+            <a href="/products/sales" class="nav-item nav-link">
+              Fast liner
+            </a>
+
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle active" data-bs-toggle="dropdown">
+                Pages
+              </a>
+
+              <div class="dropdown-menu m-0">
+                <a href="<%= ACTIVE_BESTSELLER_URL %>" class="dropdown-item active">
+                  Bestseller
+                </a>
+
+                <a href="<%= ACTIVE_CART_URL %>" class="dropdown-item">
+                  <%= IS_CJ_DEPARTMENT
+                    ? 'CJ Cart'
+                    : 'Cart' %>
+                </a>
+
+                <a href="<%= ACTIVE_CHECKOUT_URL %>" class="dropdown-item">
+                  <%= IS_CJ_DEPARTMENT
+                    ? 'CJ Checkout'
+                    : 'Checkout' %>
+                </a>
+
+                <a href="/business/login" class="dropdown-item">
+                  Accounts
+                </a>
+
+                <a href="/store/order-tracking" class="dropdown-item">
+                  Order status
+                </a>
+              </div>
+            </div>
+
+            <a href="/store/contact" class="nav-item nav-link me-2">
+              Contact
+            </a>
 
             <div class="nav-item d-block d-lg-none px-3 py-2 mb-2">
               <div class="small fw-bold text-white mb-1">
@@ -350,12 +543,57 @@
 <div class="container-fluid page-header py-5" style="<%= shopHeaderImage && shopHeaderImage.image ? '--page-header-image: url(' + shopHeaderImage.image + ')' : '' %>">
   <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Bestseller Products</h1>
   <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
-    <li class="breadcrumb-item"><a href="/store">Shopping home</a></li>
-    <li class="breadcrumb-item"><a href="/store/shop">Pages</a></li>
-    <li class="breadcrumb-item active text-white">Bestseller</li>
+    <li class="breadcrumb-item">
+      <a href="<%= ACTIVE_HOME_URL %>">
+        Shopping home
+      </a>
+    </li>
+
+    <li class="breadcrumb-item">
+      <a href="<%= ACTIVE_SHOP_URL %>">
+        Shop
+      </a>
+    </li>
+
+    <li class="breadcrumb-item active text-white">
+      Bestseller
+    </li>
   </ol>
 </div>
 <!-- Single Page Header End -->
+
+<div class="container-fluid px-0">
+  <div class="alert rounded-0 mb-0 border-0 <%= IS_CJ_DEPARTMENT ? 'alert-success' : 'alert-primary' %>">
+    <div class="container d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 py-2">
+      <div>
+        <strong>
+          <i class="fas fa-store me-2"></i>
+
+          <%= IS_CJ_DEPARTMENT
+            ? 'Kasyora CJ Store Bestsellers'
+            : 'Kasyora In Store Bestsellers' %>
+        </strong>
+
+        <div class="small mt-1">
+          <% if (IS_CJ_DEPARTMENT) { %>
+          These products come only from the separate CJ Dropshipping catalogue.
+          They use the CJ cart, checkout, payment and order flow.
+          <% } else { %>
+          These products come only from Kasyora’s internal sellers and suppliers.
+          <% } %>
+        </div>
+      </div>
+
+      <a href="<%= ACTIVE_CART_URL %>" class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-primary' %> rounded-pill px-4">
+        <i class="fas fa-shopping-cart me-2"></i>
+
+        <%= IS_CJ_DEPARTMENT
+          ? 'View CJ Cart'
+          : 'View Cart' %>
+      </a>
+    </div>
+  </div>
+</div>
 
 <%
   const BESTSELLER_SHOW_CURRENCY_WARNING =
@@ -461,10 +699,14 @@
 <!-- Products Offer End -->
 
 <!-- Bestseller Products Start -->
-<div class="container-fluid products pt-5">
+<div id="bestsellerProductsSection" class="container-fluid products pt-5">
   <div class="container products-mini py-5">
     <div class="mx-auto text-center mb-5" style="max-width: 700px;">
-      <h4 class="text-primary mb-4 border-bottom border-primary border-2 d-inline-block p-2 title-border-radius wow fadeInUp" data-wow-delay="0.1s">Bestseller Products</h4>
+      <h4 class="text-primary mb-4 border-bottom border-primary border-2 d-inline-block p-2 title-border-radius wow fadeInUp" data-wow-delay="0.1s">
+        <%= IS_CJ_DEPARTMENT
+          ? 'CJ Bestseller Products'
+          : 'Kasyora Bestseller Products' %>
+      </h4>
       <p class="mb-2 wow fadeInUp" data-wow-delay="0.2s">
         Discover our top-selling products, chosen for their quality,
         reliability, and customer satisfaction. Shop the most popular
@@ -512,19 +754,71 @@
             </div>
           </div>
           <div class="products-mini-add border p-3">
-            <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%= storeProductPayload(product) %>">
-              <i class="fas fa-shopping-cart me-2"></i> Buy
+            <%
+              const bestsellerIsCjProduct =
+                String(product?.source || '')
+                  .trim()
+                  .toUpperCase() === 'CJ';
+
+              const bestsellerDefaultCjVariant =
+                Array.isArray(product?.variants)
+                  ? (
+                      product.variants.find(
+                        function(variant) {
+                          return (
+                            String(
+                              variant?.cjVariantId || ''
+                            ) ===
+                            String(
+                              product?.defaultCjVariantId || ''
+                            )
+                          );
+                        }
+                      ) ||
+                      product.variants[0]
+                    )
+                  : null;
+            %>
+
+            <% if (bestsellerIsCjProduct) { %>
+            <% if (bestsellerDefaultCjVariant?.cjVariantId) { %>
+            <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= bestsellerDefaultCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+              <i class="fas fa-shopping-cart me-2"></i>
+              Add To CJ Cart
+            </button>
+            <% } else { %>
+            <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4">
+              <i class="fas fa-eye me-2"></i>
+              Select Variant
             </a>
+            <% } %>
+            <% } else { %>
+            <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+              <i class="fas fa-shopping-cart me-2"></i>
+              Buy
+            </a>
+            <% } %>
+
             <div class="my-3">
               <%- include('../partials/rating-stars', {
-                                avg: Number(product.avgRating || 0),
-                                count: Number(product.ratingsCount || 0),
-                                nonce
-                            }) %>
+                avg: Number(product.avgRating || 0),
+                count: Number(product.ratingsCount || 0),
+                nonce
+              }) %>
             </div>
+
             <div class="d-flex">
-              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span></a>
-              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0"><span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span></a>
+              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                <span class="rounded-circle btn-sm-square border">
+                  <i class="fas fa-random"></i>
+                </span>
+              </a>
+
+              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                <span class="rounded-circle btn-sm-square border">
+                  <i class="fas fa-heart"></i>
+                </span>
+              </a>
             </div>
           </div>
         </div>
@@ -536,7 +830,7 @@
 <!-- Bestseller Products End -->
 
 <!-- Our Products Start -->
-<div id="bestsellerProductsSection" class="container-fluid product pt-5">
+<div class="container-fluid product pt-5">
   <div class="container py-5">
     <div class="tab-class">
       <div class="row g-4">
@@ -951,6 +1245,12 @@
 
     function goToBestseller(categoryValue) {
       const params = new URLSearchParams();
+
+      params.set(
+        'department',
+        '<%= ACTIVE_DEPARTMENT %>'
+      );
+
       const keyword = getKeyword();
       const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
 
@@ -990,7 +1290,8 @@
           if (category) {
             goToBestseller(category);
           } else {
-            window.location.href = '/store/bestseller#bestsellerProductsSection';
+            window.location.href =
+              '/store/bestseller?department=<%= ACTIVE_DEPARTMENT %>#bestsellerProductsSection';
           }
         }
       });
@@ -1014,7 +1315,8 @@
           if (category) {
             goToBestseller(category);
           } else {
-            window.location.href = '/store/bestseller#bestsellerProductsSection';
+            window.location.href =
+              '/store/bestseller?department=<%= ACTIVE_DEPARTMENT %>#bestsellerProductsSection';
           }
         }
       });
@@ -1080,7 +1382,320 @@
 </style>
 
 <%- include('partials/currency-client') %>
+
+<% if (!IS_CJ_DEPARTMENT) { %>
 <%- include('partials/cart-script-listing') %>
+<% } %>
+
+<% if (IS_CJ_DEPARTMENT) { %>
+<script nonce="<%= nonce %>">
+  (function() {
+    function formatCjCartMoney(amount) {
+      if (
+        window.KasyoraCurrency &&
+        typeof window.KasyoraCurrency.formatBaseAmount === 'function'
+      ) {
+        return window.KasyoraCurrency.formatBaseAmount(
+          amount
+        );
+      }
+
+      const fallbackAmount =
+        Number(amount || 0);
+
+      const fallbackCurrency =
+        '<%= BASE_CURRENCY %>';
+
+      try {
+        return new Intl.NumberFormat(
+          undefined, {
+            style: 'currency',
+            currency: fallbackCurrency,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }
+        ).format(
+          Number.isFinite(fallbackAmount) ?
+          fallbackAmount :
+          0
+        );
+      } catch (error) {
+        return (
+          fallbackCurrency +
+          ' ' +
+          (
+            Number.isFinite(fallbackAmount) ?
+            fallbackAmount :
+            0
+          ).toFixed(2)
+        );
+      }
+    }
+
+    function showCjCartMessage(
+      message,
+      type
+    ) {
+      const existing =
+        document.getElementById(
+          'cjStoreCartMessage'
+        );
+
+      if (existing) {
+        existing.remove();
+      }
+
+      const alert =
+        document.createElement('div');
+
+      alert.id =
+        'cjStoreCartMessage';
+
+      alert.className =
+        'alert alert-' +
+        (
+          type === 'success' ?
+          'success' :
+          'danger'
+        ) +
+        ' position-fixed top-0 end-0 mt-3 me-3 shadow';
+
+      alert.style.zIndex =
+        '2000';
+
+      alert.style.maxWidth =
+        '420px';
+
+      alert.setAttribute(
+        'role',
+        'alert'
+      );
+
+      alert.textContent =
+        String(message || '');
+
+      document.body.appendChild(
+        alert
+      );
+
+      window.setTimeout(
+        function() {
+          alert.remove();
+        },
+        5000
+      );
+    }
+
+    function updateCjCartDisplay(data) {
+      const itemCount = Number(
+        data?.itemCount ??
+        data?.count ??
+        0
+      );
+
+      const total = Number(
+        data?.totalIncVat ??
+        data?.total ??
+        0
+      );
+
+      document
+        .querySelectorAll(
+          '.store-cart-total'
+        )
+        .forEach(function(element) {
+          element.textContent =
+            formatCjCartMoney(total);
+        });
+
+      document
+        .querySelectorAll(
+          '.store-cart-link'
+        )
+        .forEach(function(link) {
+          link.href =
+            '/cj/cart';
+
+          if (itemCount > 0) {
+            link.classList.add(
+              'cart-flash-active'
+            );
+          } else {
+            link.classList.remove(
+              'cart-flash-active'
+            );
+          }
+        });
+
+      const mobileFloatingCart =
+        document.getElementById(
+          'mobileFloatingCart'
+        );
+
+      if (mobileFloatingCart) {
+        if (itemCount > 0) {
+          mobileFloatingCart.classList.remove(
+            'd-none'
+          );
+        } else {
+          mobileFloatingCart.classList.add(
+            'd-none'
+          );
+        }
+      }
+    }
+
+    async function addCjItem(button) {
+      const cjProductId = String(
+        button.getAttribute(
+          'data-cj-product-id'
+        ) || ''
+      ).trim();
+
+      const cjVariantId = String(
+        button.getAttribute(
+          'data-cj-variant-id'
+        ) || ''
+      ).trim();
+
+      if (
+        !cjProductId ||
+        !cjVariantId
+      ) {
+        throw new Error(
+          'This CJ product does not have a valid selected variant.'
+        );
+      }
+
+      const originalHtml =
+        button.innerHTML;
+
+      button.disabled = true;
+
+      button.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
+        'Adding To CJ Cart...';
+
+      try {
+        const response =
+          await fetch(
+            '/api/cj-cart/add', {
+              method: 'POST',
+
+              headers: {
+                'Content-Type': 'application/json',
+
+                Accept: 'application/json'
+              },
+
+              credentials: 'same-origin',
+
+              body: JSON.stringify({
+                cjProductId: cjProductId,
+
+                cjVariantId: cjVariantId,
+
+                quantity: 1
+              })
+            }
+          );
+
+        const data =
+          await response
+          .json()
+          .catch(function() {
+            return {};
+          });
+
+        if (
+          !response.ok ||
+          data.success === false
+        ) {
+          throw new Error(
+            data.message ||
+            'The CJ product could not be added to the CJ cart.'
+          );
+        }
+
+        updateCjCartDisplay(data);
+
+        showCjCartMessage(
+          data.message ||
+          'CJ product added to your separate CJ cart.',
+          'success'
+        );
+      } finally {
+        button.disabled = false;
+        button.innerHTML =
+          originalHtml;
+      }
+    }
+
+    document.addEventListener(
+      'click',
+      async function(event) {
+        const button =
+          event.target.closest(
+            '.js-add-to-cj-cart'
+          );
+
+        if (!button) {
+          return;
+        }
+
+        event.preventDefault();
+
+        try {
+          await addCjItem(
+            button
+          );
+        } catch (error) {
+          showCjCartMessage(
+            error?.message ||
+            'Failed to add the CJ product.',
+            'error'
+          );
+        }
+      }
+    );
+
+    async function loadCjCart() {
+      try {
+        const response =
+          await fetch(
+            '/api/cj-cart', {
+              headers: {
+                Accept: 'application/json'
+              },
+
+              credentials: 'same-origin'
+            }
+          );
+
+        const data =
+          await response
+          .json()
+          .catch(function() {
+            return {};
+          });
+
+        if (response.ok) {
+          updateCjCartDisplay(
+            data
+          );
+        }
+      } catch (error) {
+        console.error(
+          'Failed to load the active CJ cart:',
+          error
+        );
+      }
+    }
+
+    loadCjCart();
+  })();
+</script>
+<% } %>
 
 <script nonce="<%= nonce %>">
   (function() {
@@ -1121,12 +1736,15 @@
 
 <!-- Mobile Floating Cart Start -->
 <div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
-  <a href="/store/cart" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" style="font-size: 0.85rem;">
+  <a href="<%= ACTIVE_CART_URL %>" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" data-store-department="<%= ACTIVE_DEPARTMENT %>" style="font-size: 0.85rem;">
     <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
       <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
     </span>
+
     <span class="store-cart-total text-white fw-semibold">
-      <%= formatMoney(0) %>
+      <%= formatMoney(
+        Number(ACTIVE_CART.total || 0)
+      ) %>
     </span>
   </a>
 </div>
