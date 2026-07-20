@@ -5,6 +5,13 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Product = require('../models/Product');
+
+/*
+ * CJ Fast Liner products remain completely separate from
+ * Kasyora's internal seller and supplier Product model.
+ */
+const CjProduct = require('../models/CjProduct');
+
 const SupplierProduct = require('../models/SupplierProduct');
 const SupplyRequest = require('../models/SupplyRequest');
 
@@ -29,7 +36,326 @@ router.use((req, _res, next) => {
  * ------------------------------------------- */
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const BUCKET = process.env.AWS_BUCKET_NAME;
-const BASE_CURRENCY = String(process.env.BASE_CURRENCY || '').trim().toUpperCase() || 'USD';
+const BASE_CURRENCY =
+  String(process.env.BASE_CURRENCY || '')
+    .trim()
+    .toUpperCase() || 'USD';
+
+const VAT_RATE = Number(process.env.VAT_RATE || 0.15);
+
+/*
+ * Resolve the active storefront department.
+ *
+ * A department explicitly supplied in the URL wins and is
+ * saved in the session so navigation remains consistent.
+ */
+function normalizeSalesDepartment(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase() === 'cj'
+    ? 'cj'
+    : 'internal';
+}
+
+function getSalesDepartment(req) {
+  const queryDepartment = String(req.query?.department || '')
+    .trim()
+    .toLowerCase();
+
+  if (queryDepartment === 'cj' || queryDepartment === 'internal') {
+    const normalized = normalizeSalesDepartment(queryDepartment);
+
+    if (req.session) {
+      req.session.storeDepartment = normalized;
+    }
+
+    return normalized;
+  }
+
+  return normalizeSalesDepartment(req.session?.storeDepartment);
+}
+
+function getEnabledSalesCjVariants(product) {
+  return Array.isArray(product?.variants)
+    ? product.variants.filter(
+        (variant) =>
+          variant?.isEnabled === true &&
+          Number.isFinite(Number(variant?.sellingPriceExVat?.value)) &&
+          Number(variant?.sellingPriceExVat?.value) >= 0,
+      )
+    : [];
+}
+
+function getSalesCjVariantPrice(variant) {
+  const value = Number(variant?.sellingPriceExVat?.value);
+
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/*
+ * Give internal products one common card structure.
+ *
+ * The original Product document remains internal and is
+ * never mixed with CjProduct in the database or cart.
+ */
+function mapInternalSalesProduct(product) {
+  return {
+    source: 'INTERNAL',
+    isCj: false,
+
+    id: String(product?.customId || '').trim(),
+
+    customId: String(product?.customId || '').trim(),
+
+    name: String(product?.name || 'Product').trim(),
+
+    description: String(product?.description || '').trim(),
+
+    image: String(product?.imageUrl || '').trim(),
+
+    imageUrl: String(product?.imageUrl || '').trim(),
+
+    category: String(product?.category || product?.type || 'Product').trim(),
+
+    type: String(product?.type || '').trim(),
+
+    keywords: Array.isArray(product?.keywords) ? product.keywords : [],
+
+    price: Number(product?.price || 0),
+
+    stock: Number(product?.stock || 0),
+
+    sale: Boolean(product?.isOnSale),
+
+    popular: Boolean(product?.isPopular),
+
+    soldCount: Number(product?.soldCount || 0),
+
+    soldOrders: Number(product?.soldOrders || 0),
+
+    avgRating: Math.max(0, Math.min(5, Number(product?.avgRating || 0))),
+
+    ratingsCount: Math.max(0, Math.floor(Number(product?.ratingsCount || 0))),
+
+    sizes: Array.isArray(product?.sizes) ? product.sizes : [],
+
+    colors: Array.isArray(product?.colors) ? product.colors : [],
+
+    colorImages: Array.isArray(product?.colorImages) ? product.colorImages : [],
+
+    variants: [],
+
+    defaultCjVariantId: '',
+
+    url: '/store/product/' + encodeURIComponent(String(product?.customId || '').trim()),
+  };
+}
+
+/*
+ * Give CJ products the same display-card structure while
+ * preserving their separate CJ IDs, variants and URLs.
+ */
+function mapCjSalesProduct(product) {
+  const enabledVariants = getEnabledSalesCjVariants(product);
+
+  const pricedVariants = enabledVariants
+    .map((variant) => ({
+      cjVariantId: String(variant?.cjVariantId || '').trim(),
+
+      variantSku: String(variant?.variantSku || '').trim(),
+
+      variantName: String(variant?.variantName || '').trim(),
+
+      imageUrl: String(variant?.imageUrl || '').trim(),
+
+      isEnabled: variant?.isEnabled === true,
+
+      sellingPriceExVat: {
+        value: getSalesCjVariantPrice(variant),
+
+        currency: String(
+          variant?.sellingPriceExVat?.currency || product?.pricing?.baseCurrency || BASE_CURRENCY,
+        )
+          .trim()
+          .toUpperCase(),
+      },
+    }))
+    .filter(
+      (variant) =>
+        variant.cjVariantId && Number.isFinite(Number(variant?.sellingPriceExVat?.value)),
+    );
+
+  const defaultVariant = pricedVariants[0] || null;
+
+  const prices = pricedVariants.map((variant) => Number(variant.sellingPriceExVat.value));
+
+  const lowestPrice = prices.length > 0 ? Math.min(...prices) : null;
+
+  const categoryName = String(
+    product?.category?.name ||
+      product?.category?.secondName ||
+      product?.category?.firstName ||
+      product?.productType ||
+      'CJ Product',
+  ).trim();
+
+  const cjProductId = String(product?.cjProductId || '').trim();
+
+  return {
+    source: 'CJ',
+    isCj: true,
+
+    id: cjProductId,
+
+    /*
+     * Compatibility value for shared card markup only.
+     * It must never be submitted to the internal cart.
+     */
+    customId: cjProductId,
+
+    cjProductId,
+
+    name: String(product?.name || 'CJ Product').trim(),
+
+    description: String(product?.descriptionHtml || '').trim(),
+
+    image: String(defaultVariant?.imageUrl || product?.mainImageUrl || '').trim(),
+
+    imageUrl: String(defaultVariant?.imageUrl || product?.mainImageUrl || '').trim(),
+
+    category: categoryName,
+
+    type: String(product?.productType || '').trim(),
+
+    keywords: [
+      product?.name,
+      product?.productSku,
+      categoryName,
+      product?.productType,
+      ...pricedVariants.map((variant) => variant.variantSku),
+      ...pricedVariants.map((variant) => variant.variantName),
+    ]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+
+    price: lowestPrice === null ? 0 : Number(lowestPrice.toFixed(2)),
+
+    /*
+     * CJ inventory is validated by the separate CJ cart and
+     * checkout flow. This compatibility value only indicates
+     * that enabled variants exist.
+     */
+    stock: pricedVariants.length,
+
+    sale: false,
+
+    popular: Number(product?.cjListedNumber || 0) > 0,
+
+    soldCount: Number(product?.cjListedNumber || 0),
+
+    soldOrders: 0,
+
+    avgRating: Math.max(0, Math.min(5, Number(product?.avgRating || 0))),
+
+    ratingsCount: Math.max(0, Math.floor(Number(product?.ratingsCount || 0))),
+
+    sizes: [],
+    colors: [],
+    colorImages: [],
+
+    variants: pricedVariants,
+
+    defaultCjVariantId: defaultVariant?.cjVariantId || '',
+
+    url: '/cj/product/' + encodeURIComponent(cjProductId),
+  };
+}
+
+function buildCjSalesQuery({ keyword, category }) {
+  const query = {
+    status: 'active',
+
+    variants: {
+      $elemMatch: {
+        isEnabled: true,
+
+        'sellingPriceExVat.value': {
+          $gte: 0,
+        },
+      },
+    },
+  };
+
+  if (category) {
+    query.$or = [
+      {
+        'category.name': category,
+      },
+      {
+        'category.firstName': category,
+      },
+      {
+        'category.secondName': category,
+      },
+      {
+        productType: category,
+      },
+    ];
+  }
+
+  if (keyword) {
+    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const keywordRegex = new RegExp(escapedKeyword, 'i');
+
+    const keywordConditions = [
+      {
+        name: keywordRegex,
+      },
+      {
+        originalName: keywordRegex,
+      },
+      {
+        productSku: keywordRegex,
+      },
+      {
+        productType: keywordRegex,
+      },
+      {
+        'category.name': keywordRegex,
+      },
+      {
+        'category.firstName': keywordRegex,
+      },
+      {
+        'category.secondName': keywordRegex,
+      },
+      {
+        'variants.variantSku': keywordRegex,
+      },
+      {
+        'variants.variantName': keywordRegex,
+      },
+    ];
+
+    if (Array.isArray(query.$or)) {
+      query.$and = [
+        {
+          $or: query.$or,
+        },
+        {
+          $or: keywordConditions,
+        },
+      ];
+
+      delete query.$or;
+    } else {
+      query.$or = keywordConditions;
+    }
+  }
+
+  return query;
+}
 
 if (!BUCKET) {
   console.warn('⚠️ AWS_BUCKET_NAME missing — uploads will fail.');
@@ -86,31 +412,18 @@ function parseListField(value, options = {}) {
   };
 
   if (Array.isArray(value)) {
-    return [...new Set(
-      value
-        .map(normalizeItem)
-        .filter(Boolean)
-    )];
+    return [...new Set(value.map(normalizeItem).filter(Boolean))];
   }
 
   if (!value || typeof value !== 'string') return [];
 
-  return [...new Set(
-    value
-      .split(',')
-      .map(normalizeItem)
-      .filter(Boolean)
-  )];
+  return [...new Set(value.split(',').map(normalizeItem).filter(Boolean))];
 }
 
 function normalizeColorImageInputs(body) {
   const colorsRaw = body.colorImageColors;
 
-  const colors = Array.isArray(colorsRaw)
-    ? colorsRaw
-    : colorsRaw !== undefined
-      ? [colorsRaw]
-      : [];
+  const colors = Array.isArray(colorsRaw) ? colorsRaw : colorsRaw !== undefined ? [colorsRaw] : [];
 
   return colors
     .map((color, index) => ({
@@ -254,7 +567,9 @@ async function buildEditedColorImagesFromRequest(req, currentColorImages = []) {
   const currentByColor = new Map();
 
   (Array.isArray(currentColorImages) ? currentColorImages : []).forEach((entry) => {
-    const colorKey = String(entry && entry.color ? entry.color : '').trim().toLowerCase();
+    const colorKey = String(entry && entry.color ? entry.color : '')
+      .trim()
+      .toLowerCase();
     if (colorKey && entry.imageUrl) {
       currentByColor.set(colorKey, entry.imageUrl);
     }
@@ -312,7 +627,9 @@ function numOrNull(v) {
 }
 
 function pickEnum(v, allowed, fallback) {
-  const s = String(v || '').trim().toLowerCase();
+  const s = String(v || '')
+    .trim()
+    .toLowerCase();
   return allowed.includes(s) ? s : fallback;
 }
 
@@ -332,7 +649,7 @@ function requireShippingFieldsOrThrow({ shipWeightValue, shipLen, shipWid, shipH
 
   if (bad.length) {
     const err = new Error(
-      `Shipping is required. Fix: ${bad.join(', ')}. Please enter per-item weight and dimensions (no box).`
+      `Shipping is required. Fix: ${bad.join(', ')}. Please enter per-item weight and dimensions (no box).`,
     );
     err.code = 'PRODUCT_SHIPPING_MISSING';
     throw err;
@@ -464,112 +781,339 @@ router.get(
   },
 );
 
-// GET: Public sales products page
+// GET: Public Fast Liner products page
 router.get('/sales', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
+
     const cat = String(req.query.cat || '').trim();
+
     const requestedPage = Number(req.query.page || 1);
+
+    const storeDepartment = getSalesDepartment(req);
+
+    const isCjDepartment = storeDepartment === 'cj';
+
     const perPage = 20;
 
-    const salesQuery = {
-      stock: { $gt: 0 },
-    };
-
-    if (cat) {
-      salesQuery.category = cat;
-    }
-
-    if (q) {
-      const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const qRegex = new RegExp(escapedQ, 'i');
-
-      salesQuery.$or = [
-        { name: qRegex },
-        { category: qRegex },
-        { type: qRegex },
-        { description: qRegex },
-        { keywords: qRegex },
-      ];
-    }
-
-    const totalProducts = await Product.countDocuments(salesQuery);
-    const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
-    const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
-    const skip = (currentPage - 1) * perPage;
-
-    const products = await Product.find(salesQuery)
-      .sort({ createdAt: -1, _id: -1 })
-      .skip(skip)
-      .limit(perPage)
-      .lean();
-
-    products.forEach((p) => {
-      p.sale = !!p.isOnSale;
-      p.popular = !!p.isPopular;
-    });
-
+    let products = [];
     let relatedProducts = [];
+    let topRatedProducts = [];
 
-    if (q && products.length) {
-      const shownIds = products.map((p) => p._id);
-      const firstProduct = products[0];
+    let totalProducts = 0;
+    let totalPages = 1;
+    let currentPage = 1;
 
-      const relatedQuery = {
-        stock: { $gt: 0 },
-        _id: { $nin: shownIds },
+    /*
+     * Separate CJ Fast Liner branch.
+     *
+     * This branch reads only CjProduct and never queries or
+     * modifies Kasyora's internal Product commerce records.
+     */
+    if (isCjDepartment) {
+      const cjSalesQuery = buildCjSalesQuery({
+        keyword: q,
+        category: cat,
+      });
+
+      totalProducts = await CjProduct.countDocuments(cjSalesQuery);
+
+      totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
+
+      currentPage = Math.min(
+        Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1),
+        totalPages,
+      );
+
+      const skip = (currentPage - 1) * perPage;
+
+      const cjRows = await CjProduct.find(cjSalesQuery)
+        .sort({
+          cjListedNumber: -1,
+          avgRating: -1,
+          ratingsCount: -1,
+          updatedAt: -1,
+          _id: -1,
+        })
+        .skip(skip)
+        .limit(perPage)
+        .lean();
+
+      products = cjRows
+        .map(mapCjSalesProduct)
+        .filter((product) => product.cjProductId && product.variants.length > 0);
+
+      /*
+       * Desktop sidebar:
+       * "Most Rated" means the greatest number of published
+       * ratings first. Average rating breaks equal counts.
+       */
+      const topRatedCjRows = await CjProduct.find({
+        status: 'active',
+
+        ratingsCount: {
+          $gt: 0,
+        },
+
+        variants: {
+          $elemMatch: {
+            isEnabled: true,
+
+            'sellingPriceExVat.value': {
+              $gte: 0,
+            },
+          },
+        },
+      })
+        .sort({
+          ratingsCount: -1,
+          avgRating: -1,
+          cjListedNumber: -1,
+          updatedAt: -1,
+          _id: -1,
+        })
+        .limit(10)
+        .lean();
+
+      topRatedProducts = topRatedCjRows
+        .map(mapCjSalesProduct)
+        .filter((product) => product.cjProductId && product.variants.length > 0);
+
+      if (q && products.length > 0) {
+        const shownCjIds = cjRows.map((product) => product._id);
+
+        const firstProduct = cjRows[0];
+
+        const relatedQuery = {
+          status: 'active',
+
+          _id: {
+            $nin: shownCjIds,
+          },
+
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
+
+              'sellingPriceExVat.value': {
+                $gte: 0,
+              },
+            },
+          },
+        };
+
+        if (cat) {
+          relatedQuery.$or = [
+            {
+              'category.name': cat,
+            },
+            {
+              'category.firstName': cat,
+            },
+            {
+              'category.secondName': cat,
+            },
+            {
+              productType: cat,
+            },
+          ];
+        } else if (firstProduct?.category?.id) {
+          relatedQuery['category.id'] = firstProduct.category.id;
+        } else if (firstProduct?.category?.name) {
+          relatedQuery['category.name'] = firstProduct.category.name;
+        } else if (firstProduct?.productType) {
+          relatedQuery.productType = firstProduct.productType;
+        }
+
+        const relatedCjRows = await CjProduct.find(relatedQuery)
+          .sort({
+            cjListedNumber: -1,
+            avgRating: -1,
+            ratingsCount: -1,
+            updatedAt: -1,
+            _id: -1,
+          })
+          .limit(8)
+          .lean();
+
+        relatedProducts = relatedCjRows
+          .map(mapCjSalesProduct)
+          .filter((product) => product.cjProductId && product.variants.length > 0);
+      }
+    } else {
+      /*
+       * Existing internal Kasyora Fast Liner branch.
+       *
+       * This branch reads only Product and keeps all internal
+       * cart, checkout, order and supplier logic unchanged.
+       */
+      const salesQuery = {
+        stock: {
+          $gt: 0,
+        },
       };
 
       if (cat) {
-        relatedQuery.category = cat;
-      } else {
-        const orConditions = [];
-
-        if (firstProduct.category) {
-          orConditions.push({ category: firstProduct.category });
-        }
-
-        if (firstProduct.type) {
-          orConditions.push({ type: firstProduct.type });
-        }
-
-        if (orConditions.length > 0) {
-          relatedQuery.$or = orConditions;
-        }
+        salesQuery.category = cat;
       }
 
-      relatedProducts = await Product.find(relatedQuery)
-        .sort({ isPopular: -1, soldCount: -1, createdAt: -1, _id: -1 })
-        .limit(8)
+      if (q) {
+        const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const qRegex = new RegExp(escapedQ, 'i');
+
+        salesQuery.$or = [
+          {
+            name: qRegex,
+          },
+          {
+            category: qRegex,
+          },
+          {
+            type: qRegex,
+          },
+          {
+            description: qRegex,
+          },
+          {
+            keywords: qRegex,
+          },
+        ];
+      }
+
+      totalProducts = await Product.countDocuments(salesQuery);
+
+      totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
+
+      currentPage = Math.min(
+        Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1),
+        totalPages,
+      );
+
+      const skip = (currentPage - 1) * perPage;
+
+      const productRows = await Product.find(salesQuery)
+        .sort({
+          createdAt: -1,
+          _id: -1,
+        })
+        .skip(skip)
+        .limit(perPage)
         .lean();
 
-      relatedProducts.forEach((p) => {
-        p.sale = !!p.isOnSale;
-        p.popular = !!p.isPopular;
-      });
+      products = productRows.map(mapInternalSalesProduct);
+
+      const topRatedRows = await Product.find({
+        stock: {
+          $gt: 0,
+        },
+
+        ratingsCount: {
+          $gt: 0,
+        },
+      })
+        .sort({
+          ratingsCount: -1,
+          avgRating: -1,
+          soldCount: -1,
+          createdAt: -1,
+          _id: -1,
+        })
+        .limit(10)
+        .lean();
+
+      topRatedProducts = topRatedRows.map(mapInternalSalesProduct);
+
+      if (q && productRows.length > 0) {
+        const shownIds = productRows.map((product) => product._id);
+
+        const firstProduct = productRows[0];
+
+        const relatedQuery = {
+          stock: {
+            $gt: 0,
+          },
+
+          _id: {
+            $nin: shownIds,
+          },
+        };
+
+        if (cat) {
+          relatedQuery.category = cat;
+        } else {
+          const orConditions = [];
+
+          if (firstProduct.category) {
+            orConditions.push({
+              category: firstProduct.category,
+            });
+          }
+
+          if (firstProduct.type) {
+            orConditions.push({
+              type: firstProduct.type,
+            });
+          }
+
+          if (orConditions.length > 0) {
+            relatedQuery.$or = orConditions;
+          }
+        }
+
+        const relatedRows = await Product.find(relatedQuery)
+          .sort({
+            isPopular: -1,
+            soldCount: -1,
+            createdAt: -1,
+            _id: -1,
+          })
+          .limit(8)
+          .lean();
+
+        relatedProducts = relatedRows.map(mapInternalSalesProduct);
+      }
     }
 
-    res.render('sales-products', {
-      title: 'Shop Products',
+    return res.render('sales-products', {
+      title: isCjDepartment ? 'CJ Fast Liner Products' : 'Kasyora Fast Liner Products',
+
       products,
       relatedProducts,
+      topRatedProducts,
+
+      storeDepartment,
+
+      productSource: isCjDepartment ? 'CJ' : 'INTERNAL',
+
       selectedQ: q,
       selectedCat: cat,
+
       currentPage,
       totalPages,
+
       hasPrevPage: currentPage > 1,
+
       hasNextPage: currentPage < totalPages,
+
       themeCss: res.locals.themeCss,
+
       success: req.flash('success'),
+
       error: req.flash('error'),
+
       nonce: res.locals.nonce,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+
+      vatRate: VAT_RATE,
+
       baseCurrency: BASE_CURRENCY,
     });
   } catch (err) {
     console.error('❌ Failed to load sales page:', err);
+
     req.flash('error', 'Could not load products.');
-    res.redirect('/');
+
+    return res.redirect('/');
   }
 });
 
@@ -672,8 +1216,12 @@ router.post(
       const customIdPattern = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9-]{10,36}$/;
       const mainImageFile = Array.isArray(req.files?.imageFile) ? req.files.imageFile[0] : null;
 
-      const role = String(req.body.role || '').trim().toLowerCase();
-      const type = String(req.body.type || '').trim().toLowerCase();
+      const role = String(req.body.role || '')
+        .trim()
+        .toLowerCase();
+      const type = String(req.body.type || '')
+        .trim()
+        .toLowerCase();
       const needsVariants =
         role === 'clothes' || role === 'shoes' || type === 'clothes' || type === 'shoes';
 
@@ -695,7 +1243,8 @@ router.post(
       if (!customIdInput) {
         fieldErrors.id = 'Custom ID is required.';
       } else if (!customIdPattern.test(customIdInput)) {
-        fieldErrors.id = 'Custom ID must be 10-36 characters, include letters and numbers, and use only letters, numbers, or hyphens.';
+        fieldErrors.id =
+          'Custom ID must be 10-36 characters, include letters and numbers, and use only letters, numbers, or hyphens.';
       }
 
       if (!String(name || '').trim()) {
@@ -752,7 +1301,7 @@ router.post(
           req,
           oldInput,
           fieldErrors,
-          'Please fill the highlighted fields and submit again.'
+          'Please fill the highlighted fields and submit again.',
         );
         return res.redirect('/products/add');
       }
@@ -760,7 +1309,9 @@ router.post(
       const numericPrice = Number(price);
 
       const colorRows = normalizeColorImageInputs(req.body);
-      const colorImageFiles = Array.isArray(req.files?.colorImageFiles) ? req.files.colorImageFiles : [];
+      const colorImageFiles = Array.isArray(req.files?.colorImageFiles)
+        ? req.files.colorImageFiles
+        : [];
 
       if (colorRows.length > 7 || colorImageFiles.length > 7) {
         stashAddProductFormState(
@@ -769,7 +1320,7 @@ router.post(
           {
             colors: 'You can upload a maximum of 7 color images.',
           },
-          'You can upload a maximum of 7 color images.'
+          'You can upload a maximum of 7 color images.',
         );
         return res.redirect('/products/add');
       }
@@ -785,7 +1336,7 @@ router.post(
           {
             colors: 'Add at least one color image. Enter a color name and upload its image file.',
           },
-          'Please add at least one color image before saving.'
+          'Please add at least one color image before saving.',
         );
         return res.redirect('/products/add');
       }
@@ -799,12 +1350,12 @@ router.post(
 
       const fallbackColor =
         String(req.body.color || '').trim() ||
-        (parsedColors[0] || '') ||
-        (uploadedColorImages[0]?.color || '');
+        parsedColors[0] ||
+        '' ||
+        uploadedColorImages[0]?.color ||
+        '';
 
-      const fallbackSize =
-        String(req.body.size || '').trim() ||
-        (parsedSizes[0] || '');
+      const fallbackSize = String(req.body.size || '').trim() || parsedSizes[0] || '';
 
       if (uploadedColorImages.length > 0) {
         uploadedColorImages.forEach((entry) => {
@@ -867,7 +1418,7 @@ router.post(
 
       let rawSaved = await Product.collection.findOne(
         { _id: savedProduct._id },
-        { projection: { createdAt: 1, updatedAt: 1 } }
+        { projection: { createdAt: 1, updatedAt: 1 } },
       );
 
       if (!rawSaved?.createdAt) {
@@ -876,14 +1427,11 @@ router.post(
         await Product.collection.updateOne(
           {
             _id: savedProduct._id,
-            $or: [
-              { createdAt: { $exists: false } },
-              { createdAt: null },
-            ],
+            $or: [{ createdAt: { $exists: false } }, { createdAt: null }],
           },
           {
             $set: { createdAt: fallbackCreatedAt },
-          }
+          },
         );
       }
 
@@ -902,7 +1450,7 @@ router.post(
           req,
           oldInput,
           { id: 'That Product ID already exists. Try another.' },
-          'Please fix the highlighted field and submit again.'
+          'Please fix the highlighted field and submit again.',
         );
         return res.redirect('/products/add');
       }
@@ -914,17 +1462,12 @@ router.post(
           req,
           oldInput,
           mongooseFieldErrors,
-          'Please fix the highlighted fields and submit again.'
+          'Please fix the highlighted fields and submit again.',
         );
         return res.redirect('/products/add');
       }
 
-      stashAddProductFormState(
-        req,
-        oldInput,
-        {},
-        `Failed to add product: ${err.message}`
-      );
+      stashAddProductFormState(req, oldInput, {}, `Failed to add product: ${err.message}`);
       return res.redirect('/products/add');
     }
   },
@@ -936,7 +1479,9 @@ router.post(
 router.get('/all', requireBusiness, async (req, res) => {
   try {
     const business = req.business || req.session.business;
-    const products = await Product.find({ business: business._id }).sort({ createdAt: -1, _id: -1 }).lean();
+    const products = await Product.find({ business: business._id })
+      .sort({ createdAt: -1, _id: -1 })
+      .lean();
 
     res.render('all-products', {
       title: 'My Products',
@@ -957,7 +1502,7 @@ router.get('/all', requireBusiness, async (req, res) => {
 // Add near bottom of routes/products.js
 router.get('/stats/summary', requireBusiness, async (req, res) => {
   try {
-    const bizId = (req.business?._id) || (req.session.business?._id);
+    const bizId = req.business?._id || req.session.business?._id;
     const prods = await Product.find({ business: bizId })
       .select('name stock soldCount soldOrders')
       .lean();
@@ -1214,34 +1759,40 @@ router.get('/view/:id', async (req, res) => {
 /* ===========================================================
  * ✏️ GET: Edit Product (only own)
  * =========================================================== */
-router.get('/edit/:id', requireBusiness, requireVerifiedBusiness, requireOfficialNumberVerified, async (req, res) => {
-  try {
-    const business = req.business || req.session.business;
-    const product = await Product.findOne({
-      customId: req.params.id,
-      business: business._id,
-    }).lean();
+router.get(
+  '/edit/:id',
+  requireBusiness,
+  requireVerifiedBusiness,
+  requireOfficialNumberVerified,
+  async (req, res) => {
+    try {
+      const business = req.business || req.session.business;
+      const product = await Product.findOne({
+        customId: req.params.id,
+        business: business._id,
+      }).lean();
 
-    if (!product) {
-      req.flash('error', '❌ Product not found or unauthorized.');
-      return res.redirect('/products/all');
+      if (!product) {
+        req.flash('error', '❌ Product not found or unauthorized.');
+        return res.redirect('/products/all');
+      }
+
+      res.render('edit-product', {
+        title: `Edit: ${product.name}`,
+        product,
+        business,
+        success: req.flash('success'),
+        error: req.flash('error'),
+        themeCss: res.locals.themeCss,
+        nonce: res.locals.nonce,
+      });
+    } catch (err) {
+      console.error('❌ Failed to load product for edit:', err);
+      req.flash('error', '❌ Could not load product for editing.');
+      res.redirect('/products/all');
     }
-
-    res.render('edit-product', {
-      title: `Edit: ${product.name}`,
-      product,
-      business,
-      success: req.flash('success'),
-      error: req.flash('error'),
-      themeCss: res.locals.themeCss,
-      nonce: res.locals.nonce,
-    });
-  } catch (err) {
-    console.error('❌ Failed to load product for edit:', err);
-    req.flash('error', '❌ Could not load product for editing.');
-    res.redirect('/products/all');
-  }
-});
+  },
+);
 
 router.post(
   '/edit/:id',
@@ -1276,7 +1827,7 @@ router.post(
         if (!Number.isFinite(numStock) || numStock < 0) {
           req.flash('error', '❌ Stock must be a valid number 0 or greater.');
           return res.redirect(
-            source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock'
+            source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock',
           );
         }
 
@@ -1288,11 +1839,11 @@ router.post(
         if (isWholesaleImportedProduct) {
           req.flash(
             'warning',
-            'Stock was not changed because this product was imported from a supplier. Stock is controlled by approved wholesale requests.'
+            'Stock was not changed because this product was imported from a supplier. Stock is controlled by approved wholesale requests.',
           );
 
           return res.redirect(
-            source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock'
+            source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock',
           );
         }
 
@@ -1308,7 +1859,7 @@ router.post(
           },
           {
             $set: { stock: nextStock },
-          }
+          },
         );
 
         if (!result.matchedCount) {
@@ -1319,7 +1870,7 @@ router.post(
         req.flash('success', `✅ Stock updated for "${product.name}".`);
 
         return res.redirect(
-          source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock'
+          source === 'low-stock-page' ? '/products/low-stock' : '/products/out-of-stock',
         );
       }
 
@@ -1362,7 +1913,7 @@ router.post(
           // Stock must come from approved supplier requests / wholesale purchases.
           req.flash(
             'warning',
-            'Stock was not changed because this product was imported from a supplier. Stock is controlled by approved wholesale requests.'
+            'Stock was not changed because this product was imported from a supplier. Stock is controlled by approved wholesale requests.',
           );
         } else {
           const numStock = Number(req.body.stock);
@@ -1480,9 +2031,13 @@ router.post(
       product.colorImages = await buildEditedColorImagesFromRequest(req, product.colorImages || []);
 
       const afterBuildImageUrls = getProductImageUrls(product);
-      newlyUploadedEditUrls = [...new Set(newlyUploadedEditUrls.concat(
-        afterBuildImageUrls.filter((url) => !beforeColorImageUrls.includes(url))
-      ))];
+      newlyUploadedEditUrls = [
+        ...new Set(
+          newlyUploadedEditUrls.concat(
+            afterBuildImageUrls.filter((url) => !beforeColorImageUrls.includes(url)),
+          ),
+        ),
+      ];
 
       await product.save();
 
@@ -1492,7 +2047,7 @@ router.post(
       return res.redirect('/products/all');
     } catch (err) {
       console.error('❌ Error updating product:', err);
-      
+
       if (Array.isArray(newlyUploadedEditUrls)) {
         for (const url of newlyUploadedEditUrls) {
           await deleteSingleFileFromS3ByUrl(url);
@@ -1567,30 +2122,24 @@ router.get('/delete/:id', requireBusiness, requireVerifiedBusiness, async (req, 
       const supplyRequestFilter = {
         seller: business._id,
         importedAt: { $ne: null },
-        $or: [
-          { importedProduct: product._id },
-          { _id: product.sourceSupplyRequest || null },
-        ],
+        $or: [{ importedProduct: product._id }, { _id: product.sourceSupplyRequest || null }],
       };
 
-      await SupplyRequest.updateMany(
-        supplyRequestFilter,
-        {
-          $set: {
-            importDeletedAt: new Date(),
-            returnedQuantity: sellerStockLeft,
-            deletedImportedProductSnapshot: {
-              customId: String(product.customId || '').trim(),
-              name: String(product.name || '').trim(),
-              imageUrl: String(product.imageUrl || '').trim(),
-              stockReturned: sellerStockLeft,
-              sellerStockAtDelete: sellerStockLeft,
-              soldCountAtDelete,
-              deletedAt: new Date(),
-            },
+      await SupplyRequest.updateMany(supplyRequestFilter, {
+        $set: {
+          importDeletedAt: new Date(),
+          returnedQuantity: sellerStockLeft,
+          deletedImportedProductSnapshot: {
+            customId: String(product.customId || '').trim(),
+            name: String(product.name || '').trim(),
+            imageUrl: String(product.imageUrl || '').trim(),
+            stockReturned: sellerStockLeft,
+            sellerStockAtDelete: sellerStockLeft,
+            soldCountAtDelete,
+            deletedAt: new Date(),
           },
         },
-      );
+      });
     }
 
     await Product.deleteOne({
@@ -1681,15 +2230,15 @@ router.use((err, req, res, _next) => {
 router.get('/admin/cleanup-orphans', async (req, res) => {
   try {
     const businesses = await Business.find({}).select('_id').lean();
-    const validIds = businesses.map(b => b._id);
+    const validIds = businesses.map((b) => b._id);
 
     const result = await Product.deleteMany({
-      business: { $nin: validIds }
+      business: { $nin: validIds },
     });
 
     return res.json({
       ok: true,
-      deleted: result.deletedCount
+      deleted: result.deletedCount,
     });
   } catch (err) {
     console.error(err);

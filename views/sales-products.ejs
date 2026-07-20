@@ -85,12 +85,141 @@
     }
   }
 
+  const ACTIVE_DEPARTMENT = String(
+    typeof storeDepartment !== 'undefined'
+      ? storeDepartment
+      : 'internal'
+  ).trim().toLowerCase() === 'cj'
+    ? 'cj'
+    : 'internal';
+
+  const IS_CJ_DEPARTMENT =
+    ACTIVE_DEPARTMENT === 'cj';
+
+  const ACTIVE_HOME_URL =
+    '/store?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    );
+
+  const ACTIVE_SHOP_URL =
+    '/store/shop?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    ) +
+    '#shopProductsSection';
+
+  const ACTIVE_BESTSELLER_URL =
+    '/store/bestseller?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    ) +
+    '#bestsellerProductsSection';
+
+  const ACTIVE_FAST_LINER_URL =
+    '/products/sales?department=' +
+    encodeURIComponent(
+      ACTIVE_DEPARTMENT
+    );
+
+  const ACTIVE_CART_URL =
+    IS_CJ_DEPARTMENT
+      ? '/cj/cart'
+      : '/store/cart';
+
+  const ACTIVE_CHECKOUT_URL =
+    IS_CJ_DEPARTMENT
+      ? '/cj/checkout'
+      : '/payment/checkout';
+
+  function salesProductPayload(product) {
+    const source = String(
+      product?.source || ''
+    ).trim().toUpperCase();
+
+    if (source === 'CJ') {
+      return encodeURIComponent(
+        JSON.stringify({
+          source: 'CJ',
+
+          cjProductId:
+            product.cjProductId || '',
+
+          cjVariantId:
+            product.defaultCjVariantId || '',
+
+          name:
+            product.name || '',
+
+          image:
+            product.image ||
+            product.imageUrl ||
+            '',
+
+          variants:
+            Array.isArray(product.variants)
+              ? product.variants
+              : []
+        })
+      );
+    }
+
+    return encodeURIComponent(
+      JSON.stringify({
+        source: 'INTERNAL',
+
+        customId:
+          product.customId || '',
+
+        name:
+          product.name || '',
+
+        image:
+          product.image ||
+          product.imageUrl ||
+          '',
+
+        sizes:
+          Array.isArray(product.sizes)
+            ? product.sizes
+            : [],
+
+        colors:
+          Array.isArray(product.colors)
+            ? product.colors
+            : [],
+
+        colorImages:
+          Array.isArray(product.colorImages)
+            ? product.colorImages
+            : []
+      })
+    );
+  }
+
   /*
    * Preserve the current search, category and page after the
    * customer changes display currency.
    */
-  function salesPageUrl() {
+  function salesPageUrlForDepartment(
+    department,
+    pageOverride
+  ) {
+    const safeDepartment =
+      String(department || '')
+        .trim()
+        .toLowerCase() === 'cj'
+        ? 'cj'
+        : 'internal';
+
     const params = [];
+
+    params.push(
+      'department=' +
+      encodeURIComponent(
+        safeDepartment
+      )
+    );
 
     const keyword = String(
       typeof selectedQ !== 'undefined'
@@ -105,9 +234,13 @@
     ).trim();
 
     const pageNumber = Number(
-      typeof currentPage !== 'undefined'
-        ? currentPage
-        : 1
+      pageOverride !== undefined
+        ? pageOverride
+        : (
+            typeof currentPage !== 'undefined'
+              ? currentPage
+              : 1
+          )
     );
 
     if (keyword) {
@@ -130,19 +263,41 @@
     ) {
       params.push(
         'page=' +
-        encodeURIComponent(pageNumber)
+        encodeURIComponent(
+          pageNumber
+        )
       );
     }
 
-    const query = params.join('&');
+    return (
+      '/products/sales?' +
+      params.join('&')
+    );
+  }
 
-    return query
-      ? '/products/sales?' + query
-      : '/products/sales';
+  function salesPageUrl(
+    pageOverride
+  ) {
+    return salesPageUrlForDepartment(
+      ACTIVE_DEPARTMENT,
+      pageOverride
+    );
   }
 
   const SALES_CURRENCY_RETURN_TO =
     salesPageUrl();
+
+  const INTERNAL_SALES_RETURN_TO =
+    salesPageUrlForDepartment(
+      'internal',
+      1
+    );
+
+  const CJ_SALES_RETURN_TO =
+    salesPageUrlForDepartment(
+      'cj',
+      1
+    );
 %>
 <section class="sales-ministore py-3">
   <style nonce="<%= nonce %>">
@@ -159,6 +314,16 @@
       background: var(--ms-light);
       position: relative;
       min-height: 60vh;
+
+      /*
+      * Break Fast Liner out of any parent Bootstrap container
+      * so the entire page reaches both viewport edges.
+      */
+      width: 100vw;
+      max-width: 100vw;
+      margin-left: calc(50% - 50vw);
+      margin-right: calc(50% - 50vw);
+      overflow-x: hidden;
     }
 
     .sales-toolbar {
@@ -364,6 +529,73 @@
       text-align: center;
     }
 
+    .sales-desktop-layout {
+      width: 100%;
+    }
+
+    .sales-main-column {
+      min-width: 0;
+    }
+
+    .sales-rated-sidebar {
+      position: sticky;
+      top: 82px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    .sales-rated-sidebar-card {
+      background: #fff;
+      border: 0;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .05);
+    }
+
+    .sales-rated-product {
+      background: #fff;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+
+    .sales-rated-product:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 18px rgba(0, 0, 0, .08);
+    }
+
+    .sales-rated-product-image {
+      width: 86px;
+      height: 86px;
+      flex: 0 0 86px;
+      background: var(--ms-blue);
+      overflow: hidden;
+    }
+
+    .sales-rated-product-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 6px;
+    }
+
+    .sales-product-rating {
+      min-height: 24px;
+    }
+
+    @media (min-width: 1200px) {
+      .sales-ministore>.container-fluid {
+        width: 100%;
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+      }
+
+      .sales-grid .col-xl-4 {
+        flex: 0 0 auto;
+        width: 33.333333%;
+      }
+    }
+
     /* Smart page loader */
     .sales-page-loader {
       position: fixed;
@@ -477,7 +709,7 @@
     </div>
   </div>
 
-  <div class="container-fluid px-0 px-md-3">
+  <div class="container-fluid px-0">
     <%
     const SALES_SHOW_CURRENCY_WARNING =
       typeof currencyConversionAvailable !== 'undefined' &&
@@ -510,8 +742,66 @@
     </div>
     <% } %>
 
+    <div class="bg-white border shadow-sm mb-3">
+      <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 p-3">
+        <div>
+          <div class="small text-muted text-uppercase fw-bold mb-1">
+            Fast Liner Department
+          </div>
+
+          <h1 class="h4 text-primary mb-1">
+            <%= IS_CJ_DEPARTMENT
+              ? 'Kasyora CJ Store Fast Liner'
+              : 'Kasyora In Store Fast Liner' %>
+          </h1>
+
+          <div class="small text-muted">
+            <% if (IS_CJ_DEPARTMENT) { %>
+            CJ products use their own cart, checkout, payment and order flow.
+            <% } else { %>
+            These products belong to Kasyora’s internal seller and supplier flow.
+            <% } %>
+          </div>
+        </div>
+
+        <div class="d-flex flex-column flex-sm-row gap-2">
+          <form action="/store/department/internal" method="POST" class="m-0">
+            <input type="hidden" name="returnTo" value="<%= INTERNAL_SALES_RETURN_TO %>">
+
+            <button type="submit" class="btn <%= !IS_CJ_DEPARTMENT ? 'btn-primary' : 'btn-outline-primary' %> w-100">
+              <i class="fas fa-warehouse me-2"></i>
+              Kasyora In Store
+            </button>
+          </form>
+
+          <form action="/store/department/cj" method="POST" class="m-0">
+            <input type="hidden" name="returnTo" value="<%= CJ_SALES_RETURN_TO %>">
+
+            <button type="submit" class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-outline-success' %> w-100">
+              <i class="fas fa-globe me-2"></i>
+              Kasyora CJ Store
+            </button>
+          </form>
+
+          <a href="<%= ACTIVE_HOME_URL %>" class="btn btn-outline-secondary">
+            <i class="fas fa-home me-2"></i>
+            Store Home
+          </a>
+
+          <a href="<%= ACTIVE_CART_URL %>" class="btn btn-outline-primary">
+            <i class="fas fa-shopping-cart me-2"></i>
+            <%= IS_CJ_DEPARTMENT
+              ? 'CJ Cart'
+              : 'Cart' %>
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="sales-toolbar pb-2">
       <form method="GET" action="/products/sales" class="sales-search-card p-2 p-md-3" id="salesSearchForm">
+        <input type="hidden" name="department" value="<%= ACTIVE_DEPARTMENT %>">
+
         <div class="row g-2 align-items-center">
           <div class="col-12 col-md-4">
             <input id="salesKeywordInput" type="text" name="q" class="form-control" placeholder="Search products..." value="<%= selectedQ || '' %>">
@@ -548,66 +838,237 @@
       </form>
     </div>
 
-    <% if (!products || !products.length) { %>
-    <div class="sales-empty mt-3">
-      <h5 class="mb-0">No products found</h5>
-    </div>
-    <% } else { %>
-    <div class="row g-2 g-md-3 mt-1 sales-grid">
-      <% products.forEach(product => { %>
-      <%
-            const image = product.imageUrl || '/images/no-image.png';
-            const basePrice = Number(product.price || 0);
-            const vatPrice = basePrice * (1 + VAT);
+    <div class="row g-3 sales-desktop-layout align-items-start">
+      <main class="col-12 col-xl-9 sales-main-column">
+        <% if (!products || !products.length) { %>
+        <div class="sales-empty mt-3">
+          <h5 class="mb-2">
+            No products found
+          </h5>
+
+          <a href="<%= ACTIVE_FAST_LINER_URL %>" class="btn btn-primary">
+            Clear Search
+          </a>
+        </div>
+        <% } else { %>
+        <div class="row g-2 g-md-3 mt-1 sales-grid">
+          <% products.forEach(function(product) { %>
+          <%
+            const image =
+              product.imageUrl ||
+              product.image ||
+              '/images/no-image.png';
+
+            const basePrice =
+              Number(product.price || 0);
+
+            const vatPrice =
+              basePrice * (1 + VAT);
+
+            const productIsCj =
+              String(product.source || '')
+                .trim()
+                .toUpperCase() === 'CJ';
+
+            const defaultCjVariant =
+              Array.isArray(product.variants)
+                ? (
+                    product.variants.find(
+                      function(variant) {
+                        return (
+                          String(
+                            variant?.cjVariantId || ''
+                          ) ===
+                          String(
+                            product?.defaultCjVariantId || ''
+                          )
+                        );
+                      }
+                    ) ||
+                    product.variants[0]
+                  )
+                : null;
           %>
 
-      <div class="col-6 col-md-4 col-lg-3">
-        <a href="/store/product/<%= product.customId %>" class="text-decoration-none text-reset d-block h-100 sales-nav-link" aria-label="Open <%= product.name || 'product' %>">
-          <div class="product-card position-relative h-100">
-            <div class="image-holder">
-              <img src="<%= image %>" alt="<%= product.name %>" class="img-fluid" loading="lazy">
-            </div>
+          <div class="col-6 col-md-4 col-lg-3 col-xl-4">
+            <div class="product-card position-relative h-100 d-flex flex-column">
+              <a href="<%= product.url %>" class="text-decoration-none text-reset d-block sales-nav-link" aria-label="Open <%= product.name || 'product' %>">
+                <div class="image-holder">
+                  <img src="<%= image %>" alt="<%= product.name %>" class="img-fluid" loading="lazy">
+                </div>
+              </a>
 
-            <div class="card-detail">
-              <h3 class="card-title text-uppercase">
-                <span><%= product.name || 'Untitled Product' %></span>
-              </h3>
-              <span class="item-price text-primary"><%= formatMoney(vatPrice) %></span>
+              <div class="card-detail d-flex flex-column flex-grow-1 px-2 pb-3">
+                <a href="<%= product.url %>" class="text-decoration-none sales-nav-link">
+                  <h3 class="card-title text-uppercase">
+                    <span>
+                      <%= product.name || 'Untitled Product' %>
+                    </span>
+                  </h3>
+                </a>
+
+                <span class="item-price text-primary">
+                  <%= formatMoney(vatPrice) %>
+                </span>
+
+                <small class="text-muted d-block mb-2">
+                  incl. VAT
+                </small>
+
+                <div class="sales-product-rating mb-3">
+                  <%- include('partials/rating-stars', {
+                    avg: Number(product.avgRating || 0),
+                    count: Number(product.ratingsCount || 0),
+                    nonce
+                  }) %>
+                </div>
+
+                <div class="mt-auto d-grid px-1">
+                  <% if (productIsCj) { %>
+                  <% if (defaultCjVariant?.cjVariantId) { %>
+                  <button type="button" class="btn btn-primary btn-sm js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= defaultCjVariant.cjVariantId %>" data-product="<%- salesProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-1"></i>
+                    Add To CJ Cart
+                  </button>
+                  <% } else { %>
+                  <a href="<%= product.url %>" class="btn btn-outline-primary btn-sm sales-nav-link">
+                    Select Variant
+                  </a>
+                  <% } %>
+                  <% } else { %>
+                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary btn-sm js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- salesProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-1"></i>
+                    Add To Cart
+                  </a>
+                  <% } %>
+                </div>
+              </div>
             </div>
           </div>
-        </a>
-      </div>
-      <% }) %>
-    </div>
+          <% }) %>
+        </div>
 
-    <% if (typeof hasPrevPage !== 'undefined' || typeof hasNextPage !== 'undefined') { %>
-    <div class="d-flex justify-content-between align-items-center mt-4 sales-pager">
-      <% if (hasPrevPage) { %>
-      <a href="/products/sales?<%= new URLSearchParams({
-                q: selectedQ || '',
-                cat: selectedCat || '',
-                page: String(currentPage - 1)
-              }).toString() %>" class="btn btn-outline-dark sales-nav-link">
-        Previous
-      </a>
-      <% } else { %>
-      <span></span>
-      <% } %>
+        <% if (
+          typeof hasPrevPage !== 'undefined' ||
+          typeof hasNextPage !== 'undefined'
+        ) { %>
+        <div class="d-flex justify-content-between align-items-center mt-4 sales-pager">
+          <% if (hasPrevPage) { %>
+          <a href="<%= salesPageUrl(currentPage - 1) %>" class="btn btn-outline-dark sales-nav-link">
+            Previous
+          </a>
+          <% } else { %>
+          <span></span>
+          <% } %>
 
-      <% if (hasNextPage) { %>
-      <a href="/products/sales?<%= new URLSearchParams({
-                q: selectedQ || '',
-                cat: selectedCat || '',
-                page: String(currentPage + 1)
-              }).toString() %>" class="btn btn-dark sales-nav-link">
-        Next
-      </a>
-      <% } else { %>
-      <span></span>
-      <% } %>
+          <div class="small text-muted">
+            Page
+            <strong><%= currentPage %></strong>
+            of
+            <strong><%= totalPages %></strong>
+          </div>
+
+          <% if (hasNextPage) { %>
+          <a href="<%= salesPageUrl(currentPage + 1) %>" class="btn btn-dark sales-nav-link">
+            Next
+          </a>
+          <% } else { %>
+          <span></span>
+          <% } %>
+        </div>
+        <% } %>
+        <% } %>
+      </main>
+
+      <aside class="col-xl-3 d-none d-xl-block">
+        <div class="sales-rated-sidebar">
+          <div class="sales-rated-sidebar-card p-3">
+            <div class="border-bottom pb-3 mb-3">
+              <div class="small text-muted text-uppercase fw-bold">
+                Customer favourites
+              </div>
+
+              <h2 class="h4 text-primary mb-1">
+                Most Rated Products
+              </h2>
+
+              <p class="small text-muted mb-0">
+                Products with the highest number of published ratings in the active department.
+              </p>
+            </div>
+
+            <% if (
+              topRatedProducts &&
+              topRatedProducts.length
+            ) { %>
+            <div class="d-grid gap-3">
+              <% topRatedProducts.forEach(function(product, index) { %>
+              <%
+                const ratedImage =
+                  product.imageUrl ||
+                  product.image ||
+                  '/images/no-image.png';
+
+                const ratedPrice =
+                  Number(product.price || 0) *
+                  (1 + VAT);
+              %>
+
+              <a href="<%= product.url %>" class="sales-rated-product text-decoration-none text-dark d-flex gap-3 p-2 sales-nav-link">
+                <div class="sales-rated-product-image">
+                  <img src="<%= ratedImage %>" alt="<%= product.name || 'Product' %>" loading="lazy">
+                </div>
+
+                <div class="min-w-0 flex-grow-1">
+                  <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                    <span class="badge bg-primary">
+                      #<%= index + 1 %>
+                    </span>
+
+                    <span class="small text-muted">
+                      <%= Number(product.ratingsCount || 0) %>
+                      ratings
+                    </span>
+                  </div>
+
+                  <div class="fw-bold small text-primary mb-1">
+                    <%= product.name || 'Product' %>
+                  </div>
+
+                  <div class="mb-1">
+                    <%- include('partials/rating-stars', {
+                      avg: Number(product.avgRating || 0),
+                      count: Number(product.ratingsCount || 0),
+                      nonce
+                    }) %>
+                  </div>
+
+                  <div class="fw-bold">
+                    <%= formatMoney(ratedPrice) %>
+                  </div>
+                </div>
+              </a>
+              <% }) %>
+            </div>
+            <% } else { %>
+            <div class="alert alert-light border mb-0">
+              No rated products are available in this department yet.
+            </div>
+            <% } %>
+
+            <div class="d-grid gap-2 mt-4">
+              <a href="<%= ACTIVE_BESTSELLER_URL %>" class="btn btn-outline-primary sales-nav-link">
+                View Bestsellers
+              </a>
+
+              <a href="<%= ACTIVE_SHOP_URL %>" class="btn btn-primary sales-nav-link">
+                View Full Store
+              </a>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
-    <% } %>
-    <% } %>
 
     <% if (selectedQ && relatedProducts && relatedProducts.length) { %>
     <div class="related-products-wrap">
@@ -621,23 +1082,47 @@
       <div class="row g-2 g-md-3 mt-1 related-grid">
         <% relatedProducts.forEach(product => { %>
         <%
-              const relatedImage = product.imageUrl || '/images/no-image.png';
-              const relatedBasePrice = Number(product.price || 0);
-              const relatedVatPrice = relatedBasePrice * (1 + VAT);
-            %>
+          const relatedImage =
+            product.imageUrl ||
+            product.image ||
+            '/images/no-image.png';
+
+          const relatedBasePrice =
+            Number(product.price || 0);
+
+          const relatedVatPrice =
+            relatedBasePrice * (1 + VAT);
+        %>
 
         <div class="col-6 col-md-4 col-lg-3">
-          <a href="/store/product/<%= product.customId %>" class="text-decoration-none text-reset d-block h-100 sales-nav-link" aria-label="Open <%= product.name || 'product' %>">
+          <a href="<%= product.url %>" class="text-decoration-none text-reset d-block h-100 sales-nav-link" aria-label="Open <%= product.name || 'product' %>">
             <div class="product-card position-relative h-100">
               <div class="image-holder">
                 <img src="<%= relatedImage %>" alt="<%= product.name %>" class="img-fluid" loading="lazy">
               </div>
 
-              <div class="card-detail">
+              <div class="card-detail px-2 pb-3">
                 <h3 class="card-title text-uppercase">
-                  <span><%= product.name || 'Untitled Product' %></span>
+                  <span>
+                    <%= product.name || 'Untitled Product' %>
+                  </span>
                 </h3>
-                <span class="item-price text-primary"><%= formatMoney(relatedVatPrice) %></span>
+
+                <span class="item-price text-primary">
+                  <%= formatMoney(relatedVatPrice) %>
+                </span>
+
+                <small class="text-muted d-block mb-2">
+                  incl. VAT
+                </small>
+
+                <div class="sales-product-rating">
+                  <%- include('partials/rating-stars', {
+                    avg: Number(product.avgRating || 0),
+                    count: Number(product.ratingsCount || 0),
+                    nonce
+                  }) %>
+                </div>
               </div>
             </div>
           </a>
@@ -650,10 +1135,11 @@
 
   <!-- Floating Cart Total Start -->
   <div id="salesFloatingCart" class="d-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
-    <a href="/store/cart" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1" style="font-size: 0.85rem;">
+    <a href="<%= ACTIVE_CART_URL %>" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1" style="font-size: 0.85rem;">
       <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
         <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
       </span>
+
       <span id="salesFloatingCartTotal" class="text-white fw-semibold">
         <%= formatMoney(0) %>
       </span>
@@ -662,6 +1148,178 @@
   <!-- Floating Cart Total End -->
 
   <%- include('store/partials/currency-client') %>
+
+  <% if (!IS_CJ_DEPARTMENT) { %>
+  <%- include('store/partials/cart-script-listing') %>
+  <% } %>
+
+  <% if (IS_CJ_DEPARTMENT) { %>
+  <script nonce="<%= nonce %>">
+    (function() {
+      function showCjSalesMessage(
+        message,
+        success
+      ) {
+        const previous =
+          document.getElementById(
+            'cjSalesCartMessage'
+          );
+
+        if (previous) {
+          previous.remove();
+        }
+
+        const alert =
+          document.createElement('div');
+
+        alert.id =
+          'cjSalesCartMessage';
+
+        alert.className =
+          'alert alert-' +
+          (
+            success ?
+            'success' :
+            'danger'
+          ) +
+          ' position-fixed top-0 end-0 mt-3 me-3 shadow';
+
+        alert.style.zIndex =
+          '2000';
+
+        alert.style.maxWidth =
+          '420px';
+
+        alert.textContent =
+          String(message || '');
+
+        document.body.appendChild(
+          alert
+        );
+
+        window.setTimeout(
+          function() {
+            alert.remove();
+          },
+          5000
+        );
+      }
+
+      document.addEventListener(
+        'click',
+        async function(event) {
+          const button =
+            event.target.closest(
+              '.js-add-to-cj-cart'
+            );
+
+          if (!button) {
+            return;
+          }
+
+          event.preventDefault();
+
+          const cjProductId =
+            String(
+              button.getAttribute(
+                'data-cj-product-id'
+              ) || ''
+            ).trim();
+
+          const cjVariantId =
+            String(
+              button.getAttribute(
+                'data-cj-variant-id'
+              ) || ''
+            ).trim();
+
+          if (
+            !cjProductId ||
+            !cjVariantId
+          ) {
+            showCjSalesMessage(
+              'Select a valid CJ product variant.',
+              false
+            );
+
+            return;
+          }
+
+          const originalHtml =
+            button.innerHTML;
+
+          button.disabled = true;
+
+          button.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2"></span>' +
+            'Adding...';
+
+          try {
+            const response =
+              await fetch(
+                '/api/cj-cart/add', {
+                  method: 'POST',
+
+                  headers: {
+                    'Content-Type': 'application/json',
+
+                    Accept: 'application/json'
+                  },
+
+                  credentials: 'same-origin',
+
+                  body: JSON.stringify({
+                    cjProductId,
+                    cjVariantId,
+                    quantity: 1
+                  })
+                }
+              );
+
+            const data =
+              await response
+              .json()
+              .catch(function() {
+                return {};
+              });
+
+            if (
+              !response.ok ||
+              data.success === false
+            ) {
+              throw new Error(
+                data.message ||
+                'The CJ product could not be added.'
+              );
+            }
+
+            showCjSalesMessage(
+              data.message ||
+              'CJ product added to your CJ cart.',
+              true
+            );
+
+            window.dispatchEvent(
+              new Event(
+                'pageshow'
+              )
+            );
+          } catch (error) {
+            showCjSalesMessage(
+              error?.message ||
+              'Failed to add the CJ product.',
+              false
+            );
+          } finally {
+            button.disabled = false;
+            button.innerHTML =
+              originalHtml;
+          }
+        }
+      );
+    })();
+  </script>
+  <% } %>
 
   <script nonce="<%= nonce %>">
     (function() {
@@ -748,23 +1406,56 @@
         if (!floatingCart || !floatingCartTotal) return;
 
         try {
-          const response = await fetch('/api/cart', {
-            headers: {
-              Accept: 'application/json'
-            },
-            credentials: 'same-origin'
-          });
+          const response = await fetch(
+            '<%= IS_CJ_DEPARTMENT ? "/api/cj-cart" : "/api/cart" %>', {
+              headers: {
+                Accept: 'application/json'
+              },
+              credentials: 'same-origin'
+            }
+          );
 
           if (!response.ok) throw new Error('Could not load cart.');
 
-          const data = await response.json();
-          const items = Array.isArray(data.items) ? data.items : [];
+          const data =
+            await response.json();
 
-          const total = items.reduce(function(sum, item) {
-            const price = Number(item.price || 0);
-            const quantity = Number(item.quantity || item.qty || 0);
-            return sum + (price * quantity);
-          }, 0);
+          let total = 0;
+
+          if ('<%= ACTIVE_DEPARTMENT %>' === 'cj') {
+            total = Number(
+              data.totalIncVat ??
+              data.total ??
+              0
+            );
+          } else {
+            const items =
+              Array.isArray(data.items) ?
+              data.items : [];
+
+            total = items.reduce(
+              function(sum, item) {
+                const price =
+                  Number(item.price || 0);
+
+                const quantity =
+                  Number(
+                    item.quantity ||
+                    item.qty ||
+                    0
+                  );
+
+                return (
+                  sum +
+                  (
+                    price *
+                    quantity
+                  )
+                );
+              },
+              0
+            );
+          }
 
           if (total > 0) {
             floatingCartTotal.textContent = formatSalesCartMoney(total);
@@ -778,8 +1469,20 @@
       }
 
       function goToSales(categoryValue) {
-        const params = new URLSearchParams();
-        const keyword = String(keywordInput ? keywordInput.value : '').trim();
+        const params =
+          new URLSearchParams();
+
+        params.set(
+          'department',
+          '<%= ACTIVE_DEPARTMENT %>'
+        );
+
+        const keyword =
+          String(
+            keywordInput ?
+            keywordInput.value :
+            ''
+          ).trim();
         const category = String(
           categoryValue != null ? categoryValue : (categorySelect ? categorySelect.value : '')
         ).trim();
@@ -794,7 +1497,9 @@
 
         const queryString = params.toString();
         showLoader();
-        window.location.href = queryString ? '/products/sales?' + queryString : '/products/sales';
+        window.location.href =
+          '/products/sales?' +
+          queryString;
       }
 
       window.addEventListener('load', function() {
@@ -826,7 +1531,8 @@
           if (category) {
             goToSales(category);
           } else {
-            window.location.href = '/products/sales';
+            window.location.href =
+              '/products/sales?department=<%= ACTIVE_DEPARTMENT %>';
           }
         }
       });
