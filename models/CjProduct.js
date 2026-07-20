@@ -436,6 +436,30 @@ const cjProductSchema = new mongoose.Schema(
       default: [],
     },
 
+    /*
+     * Published CJ rating aggregates.
+     *
+     * These values are maintained only by the separate
+     * CJ rating utilities and routes.
+     *
+     * They must never be calculated from or written by
+     * the internal Kasyora Rating/Product flow.
+     */
+    avgRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+      index: true,
+    },
+
+    ratingsCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
+
     pricing: {
       baseCurrency: {
         type: String,
@@ -558,14 +582,22 @@ cjProductSchema.index({
   updatedAt: -1,
 });
 
+/*
+ * Supports CJ shop sorting by real published ratings.
+ */
+cjProductSchema.index({
+  status: 1,
+  avgRating: -1,
+  ratingsCount: -1,
+  updatedAt: -1,
+});
+
 cjProductSchema.index({
   'variants.cjVariantId': 1,
 });
 
 cjProductSchema.virtual('enabledVariants').get(function enabledVariants() {
-  return Array.isArray(this.variants)
-    ? this.variants.filter((variant) => variant.isEnabled)
-    : [];
+  return Array.isArray(this.variants) ? this.variants.filter((variant) => variant.isEnabled) : [];
 });
 
 cjProductSchema.set('toJSON', {

@@ -61,6 +61,113 @@
       ? relatedProducts
       : [];
 
+  /*
+  * Separate CJ rating data supplied by routes/cjStore.js.
+  */
+  const CJ_REVIEWS =
+    Array.isArray(cjReviews)
+      ? cjReviews
+      : [];
+
+  const MY_CJ_RATING =
+    myCjRating &&
+    typeof myCjRating === 'object'
+      ? myCjRating
+      : null;
+
+  const CURRENT_RATING_ACTOR =
+    currentRatingActor &&
+    typeof currentRatingActor === 'object'
+      ? currentRatingActor
+      : {
+          type: 'guest',
+          id: null,
+          displayName: 'Guest'
+        };
+
+  const CJ_AVG_RATING = Math.max(
+    0,
+    Math.min(
+      5,
+      Number(PRODUCT.avgRating || 0)
+    )
+  );
+
+  const CJ_RATINGS_COUNT = Math.max(
+    0,
+    Math.floor(
+      Number(PRODUCT.ratingsCount || 0)
+    )
+  );
+
+  function cjReviewBelongsToCurrentActor(review) {
+    if (
+      !review ||
+      !CURRENT_RATING_ACTOR.id
+    ) {
+      return false;
+    }
+
+    if (
+      CURRENT_RATING_ACTOR.type === 'user' &&
+      review.raterType === 'user'
+    ) {
+      return (
+        String(review.raterUser || '') ===
+        String(CURRENT_RATING_ACTOR.id)
+      );
+    }
+
+    if (
+      CURRENT_RATING_ACTOR.type === 'business' &&
+      review.raterType === 'business'
+    ) {
+      return (
+        String(review.raterBusiness || '') ===
+        String(CURRENT_RATING_ACTOR.id)
+      );
+    }
+
+    return false;
+  }
+
+  function cjReviewerLabel(review) {
+    if (cjReviewBelongsToCurrentActor(review)) {
+      return 'Your review';
+    }
+
+    if (review?.raterType === 'business') {
+      return 'Verified business customer';
+    }
+
+    if (review?.raterType === 'user') {
+      return 'Verified Kasyora customer';
+    }
+
+    return 'Guest customer';
+  }
+
+  function cjReviewDate(value) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    try {
+      return new Intl.DateTimeFormat(
+        undefined,
+        {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        }
+      ).format(date);
+    } catch (error) {
+      return date.toLocaleDateString();
+    }
+  }
+
   function convertBaseToDisplay(amount) {
     const baseAmount = Number(amount || 0);
 
@@ -309,9 +416,23 @@
         <div class="card border-0 shadow-sm rounded-0">
           <div class="card-body p-3 p-sm-4">
 
-            <h2 class="text-primary mb-3">
+            <h2 class="text-primary mb-2">
               <%= PRODUCT.name || 'CJ Product' %>
             </h2>
+
+            <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-2 mb-3">
+              <%- include('../partials/rating-stars', {
+                avg: CJ_AVG_RATING,
+                count: CJ_RATINGS_COUNT,
+                nonce
+              }) %>
+
+              <a href="#cjRatingsSection" class="small text-decoration-none">
+                <%= CJ_RATINGS_COUNT > 0
+                    ? 'Read customer reviews'
+                    : 'Be the first to rate this product' %>
+              </a>
+            </div>
 
             <div class="text-muted mb-3">
               Product SKU:
@@ -467,6 +588,214 @@
     </div>
     <% } %>
 
+    <!-- CJ Ratings Start -->
+    <div id="cjRatingsSection" class="mt-5 px-2 px-lg-0">
+      <div class="row g-4 align-items-start">
+        <div class="col-12 col-lg-5">
+          <div class="mb-3">
+            <span class="badge bg-success mb-2">
+              CJ Product Ratings
+            </span>
+
+            <h3 class="text-primary mb-2">
+              Customer ratings and reviews
+            </h3>
+
+            <p class="text-muted mb-3">
+              These ratings belong only to this CJ Dropshipping product.
+            </p>
+
+            <div class="card border-0 shadow-sm mb-4">
+              <div class="card-body p-3 p-md-4">
+                <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-3">
+                  <div class="display-4 fw-bold text-primary">
+                    <%= CJ_AVG_RATING.toFixed(1) %>
+                  </div>
+
+                  <div>
+                    <%- include('../partials/rating-stars', {
+                      avg: CJ_AVG_RATING,
+                      count: CJ_RATINGS_COUNT,
+                      nonce
+                    }) %>
+
+                    <div class="small text-muted mt-2">
+                      Based on
+                      <strong><%= CJ_RATINGS_COUNT %></strong>
+                      published
+                      <%= CJ_RATINGS_COUNT === 1
+                          ? 'rating'
+                          : 'ratings' %>.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <%- include('../partials/cj-rating-form', {
+            cjProductId: PRODUCT.cjProductId,
+            myCjRating: MY_CJ_RATING,
+            nonce
+          }) %>
+
+          <% if (
+            MY_CJ_RATING &&
+            CURRENT_RATING_ACTOR.type !== 'guest'
+          ) { %>
+          <div class="card border-danger mt-3">
+            <div class="card-body p-3">
+              <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                <div>
+                  <div class="fw-semibold text-danger">
+                    Delete your CJ rating
+                  </div>
+
+                  <div class="small text-muted">
+                    This permanently removes your rating and review.
+                  </div>
+                </div>
+
+                <form method="POST" action="/cj-ratings/ratings/<%= MY_CJ_RATING._id %>/delete" class="m-0">
+                  <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill px-3">
+                    <i class="fas fa-trash-alt me-1"></i>
+                    Delete Rating
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+          <% } %>
+
+          <% if (
+            MY_CJ_RATING &&
+            CURRENT_RATING_ACTOR.type === 'guest'
+          ) { %>
+          <div class="alert alert-light border mt-3 mb-0">
+            <div class="small text-muted">
+              Guest ratings can be updated from this browser using the same CJ rating cookie.
+            </div>
+          </div>
+          <% } %>
+        </div>
+
+        <div class="col-12 col-lg-7">
+          <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+            <h3 class="h5 text-primary mb-0">
+              Published reviews
+            </h3>
+
+            <span class="badge bg-primary rounded-pill">
+              <%= CJ_RATINGS_COUNT %>
+            </span>
+          </div>
+
+          <% if (CJ_REVIEWS.length > 0) { %>
+          <div class="d-grid gap-3">
+            <% CJ_REVIEWS.forEach(function(review) { %>
+            <div class="card border shadow-sm">
+              <div class="card-body p-3 p-md-4">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-start gap-3 mb-3">
+                  <div>
+                    <div class="fw-bold text-primary">
+                      <%= cjReviewerLabel(review) %>
+                    </div>
+
+                    <% if (cjReviewDate(review.createdAt)) { %>
+                    <div class="small text-muted mt-1">
+                      <i class="far fa-calendar-alt me-1"></i>
+                      <%= cjReviewDate(review.createdAt) %>
+                    </div>
+                    <% } %>
+                  </div>
+
+                  <%- include('../partials/rating-stars', {
+                    avg: Number(review.stars || 0),
+                    count: 1,
+                    nonce
+                  }) %>
+                </div>
+
+                <% if (review.title) { %>
+                <h4 class="h6 mb-2">
+                  <%= review.title %>
+                </h4>
+                <% } %>
+
+                <% if (review.body) { %>
+                <p class="text-muted mb-3">
+                  <%= review.body %>
+                </p>
+                <% } else { %>
+                <p class="small text-muted fst-italic mb-3">
+                  This customer submitted a star rating without a written review.
+                </p>
+                <% } %>
+
+                <div class="d-flex flex-wrap justify-content-end gap-2">
+                  <% if (
+                    cjReviewBelongsToCurrentActor(review) &&
+                    CURRENT_RATING_ACTOR.type !== 'guest'
+                  ) { %>
+                  <a href="#cj-rating-form-<%= String(PRODUCT.cjProductId || '').replace(/[^a-zA-Z0-9_-]/g, '') || 'cj-product' %>" class="btn btn-outline-primary btn-sm rounded-pill">
+                    <i class="fas fa-edit me-1"></i>
+                    Update
+                  </a>
+
+                  <form method="POST" action="/cj-ratings/ratings/<%= review._id %>/delete" class="m-0">
+                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
+                      <i class="fas fa-trash-alt me-1"></i>
+                      Delete
+                    </button>
+                  </form>
+                  <% } else if (
+                    CURRENT_RATING_ACTOR.type === 'user' ||
+                    CURRENT_RATING_ACTOR.type === 'business'
+                  ) { %>
+                  <form method="POST" action="/cj-ratings/ratings/<%= review._id %>/flag" class="m-0">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill">
+                      <i class="fas fa-flag me-1"></i>
+                      Report
+                    </button>
+                  </form>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+            <% }) %>
+          </div>
+          <% } else { %>
+          <div class="card border-0 shadow-sm">
+            <div class="card-body text-center p-4 p-md-5">
+              <i class="far fa-star fa-3x text-primary mb-3"></i>
+
+              <h4 class="h5 text-primary">
+                No ratings yet
+              </h4>
+
+              <p class="text-muted mb-0">
+                Be the first customer to rate this CJ product.
+              </p>
+            </div>
+          </div>
+          <% } %>
+
+          <% if (CJ_RATINGS_COUNT > CJ_REVIEWS.length) { %>
+          <div class="alert alert-light border mt-3 mb-0">
+            <div class="small text-muted">
+              Showing the latest
+              <%= CJ_REVIEWS.length %>
+              of
+              <%= CJ_RATINGS_COUNT %>
+              published ratings.
+            </div>
+          </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+    <!-- CJ Ratings End -->
+
     <% if (RELATED_PRODUCTS.length) { %>
     <div class="mt-5 px-2 px-lg-0">
       <h3 class="text-primary mb-3">
@@ -488,8 +817,16 @@
                 <%= related.name %>
               </h4>
 
-              <div class="small text-muted mb-3">
+              <div class="small text-muted mb-2">
                 <%= related.category?.name || 'CJ Product' %>
+              </div>
+
+              <div class="mb-3">
+                <%- include('../partials/rating-stars', {
+                  avg: Number(related.avgRating || 0),
+                  count: Number(related.ratingsCount || 0),
+                  nonce
+                }) %>
               </div>
 
               <div class="fw-bold text-primary mt-auto">

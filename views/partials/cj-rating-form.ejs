@@ -1,0 +1,185 @@
+<!--views/partials/cj-rating-form.ejs-->
+<%
+  /*
+   * Expected values:
+   *
+   * cjProductId
+   * myCjRating
+   * nonce
+   *
+   * This form submits only to the separate CJ rating router.
+   */
+  const CJ_EXISTING_RATING =
+    myCjRating &&
+    typeof myCjRating === 'object'
+      ? myCjRating
+      : {};
+
+  const CJ_SELECTED_STARS = Math.max(
+    0,
+    Math.min(
+      5,
+      Number(
+        CJ_EXISTING_RATING.stars || 0
+      )
+    )
+  );
+
+  const CJ_RATING_PRODUCT_ID =
+    String(cjProductId || '')
+      .trim();
+
+  const CJ_RATING_UID =
+    CJ_RATING_PRODUCT_ID
+      .replace(/[^a-zA-Z0-9_-]/g, '') ||
+    'cj-product';
+
+  const CJ_RATING_REDIRECT =
+    '/cj/product/' +
+    encodeURIComponent(
+      CJ_RATING_PRODUCT_ID
+    ) +
+    '#cjRatingsSection';
+%>
+
+<form
+  id="cj-rating-form-<%= CJ_RATING_UID %>"
+  method="POST"
+  action="/cj-ratings/ratings/submit/<%= encodeURIComponent(CJ_RATING_PRODUCT_ID) %>"
+  class="card border-0 shadow-sm"
+>
+  <input
+    type="hidden"
+    name="redirect"
+    value="<%= CJ_RATING_REDIRECT %>"
+  >
+
+  <div class="card-body p-3 p-md-4">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 border-bottom pb-3 mb-4">
+      <div>
+        <h3 class="h5 text-primary mb-1">
+          Rate this CJ product
+        </h3>
+
+        <div class="small text-muted">
+          Your rating belongs only to this CJ Dropshipping product.
+        </div>
+      </div>
+
+      <% if (CJ_SELECTED_STARS > 0) { %>
+      <span class="badge bg-success rounded-pill px-3 py-2">
+        Your rating:
+        <%= CJ_SELECTED_STARS %>
+        ★
+      </span>
+      <% } %>
+    </div>
+
+    <fieldset class="mb-4">
+      <legend class="form-label fw-semibold mb-2">
+        Choose a rating
+      </legend>
+
+      <div
+        class="d-flex flex-wrap gap-2"
+        role="radiogroup"
+        aria-label="Choose a rating from 1 to 5 stars"
+      >
+        <% for (let star = 1; star <= 5; star++) { %>
+        <div>
+          <input
+            type="radio"
+            class="btn-check"
+            name="stars"
+            id="cj-rating-<%= CJ_RATING_UID %>-<%= star %>"
+            value="<%= star %>"
+            autocomplete="off"
+            required
+            <%= CJ_SELECTED_STARS === star ? 'checked' : '' %>
+          >
+
+          <label
+            class="btn btn-outline-primary rounded-pill px-3"
+            for="cj-rating-<%= CJ_RATING_UID %>-<%= star %>"
+          >
+            <span class="text-warning me-1">
+              ★
+            </span>
+
+            <%= star %>
+          </label>
+        </div>
+        <% } %>
+      </div>
+
+      <div class="form-text mt-2">
+        Select 1 star for poor or 5 stars for excellent.
+      </div>
+    </fieldset>
+
+    <div class="mb-3">
+      <label
+        for="cj-rating-title-<%= CJ_RATING_UID %>"
+        class="form-label fw-semibold"
+      >
+        Review title
+        <span class="text-muted fw-normal">
+          (optional)
+        </span>
+      </label>
+
+      <input
+        id="cj-rating-title-<%= CJ_RATING_UID %>"
+        type="text"
+        name="title"
+        class="form-control"
+        maxlength="120"
+        value="<%= CJ_EXISTING_RATING.title || '' %>"
+        placeholder="Summarize your experience"
+        autocomplete="off"
+      >
+
+      <div class="form-text">
+        Maximum 120 characters.
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label
+        for="cj-rating-body-<%= CJ_RATING_UID %>"
+        class="form-label fw-semibold"
+      >
+        Review
+        <span class="text-muted fw-normal">
+          (optional)
+        </span>
+      </label>
+
+      <textarea
+        id="cj-rating-body-<%= CJ_RATING_UID %>"
+        name="body"
+        class="form-control"
+        rows="4"
+        maxlength="2000"
+        placeholder="Share your experience with this CJ product"
+      ><%= CJ_EXISTING_RATING.body || '' %></textarea>
+
+      <div class="form-text">
+        Maximum 2,000 characters.
+      </div>
+    </div>
+
+    <div class="d-grid d-sm-flex justify-content-sm-end">
+      <button
+        type="submit"
+        class="btn btn-primary rounded-pill px-4"
+      >
+        <i class="fas fa-star me-2"></i>
+
+        <%= CJ_SELECTED_STARS > 0
+            ? 'Update CJ Rating'
+            : 'Submit CJ Rating' %>
+      </button>
+    </div>
+  </div>
+</form>

@@ -45,47 +45,127 @@
   }
 
   function formatMoney(amount) {
-    const convertedAmount =
-      convertBaseToDisplay(amount);
+  const convertedAmount =
+    convertBaseToDisplay(amount);
 
-    try {
-      const formatted = new Intl.NumberFormat(
-        undefined,
-        {
-          style: 'currency',
-          currency: CURRENCY,
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }
-      ).format(convertedAmount);
-
-      if (CURRENCY === 'ZAR') {
-        return formatted.replace(/^ZAR\s?/, 'R');
+  try {
+    const formatted = new Intl.NumberFormat(
+      undefined,
+      {
+        style: 'currency',
+        currency: CURRENCY,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
       }
+    ).format(convertedAmount);
 
-      return formatted;
-    } catch (error) {
-      return (
-        CURRENCY +
-        ' ' +
-        convertedAmount.toFixed(2)
-      );
+    if (CURRENCY === 'ZAR') {
+      return formatted.replace(/^ZAR\s?/, 'R');
     }
+
+    return formatted;
+  } catch (error) {
+    return (
+      CURRENCY +
+      ' ' +
+      convertedAmount.toFixed(2)
+    );
   }
+}
+
+const ACTIVE_DEPARTMENT = String(
+  typeof storeDepartment !== 'undefined'
+    ? storeDepartment
+    : 'internal'
+).trim().toLowerCase() === 'cj'
+  ? 'cj'
+  : 'internal';
+
+const IS_CJ_DEPARTMENT =
+  ACTIVE_DEPARTMENT === 'cj';
+
+const ACTIVE_CART_URL =
+  IS_CJ_DEPARTMENT
+    ? '/cj/cart'
+    : '/store/cart';
+
+const ACTIVE_CHECKOUT_URL =
+  IS_CJ_DEPARTMENT
+    ? '/cj/checkout'
+    : '/payment/checkout';
+
+const ACTIVE_SHOP_URL =
+  '/store/shop';
+
+const ACTIVE_CART = (
+  typeof activeStoreCart !== 'undefined' &&
+  activeStoreCart
+)
+  ? activeStoreCart
+  : {
+      count: 0,
+      total: 0
+    };
 
   function storeProductPayload(product) {
+    const source = String(
+      product?.source || ''
+    ).trim().toUpperCase();
+
+    if (source === 'CJ') {
+      return encodeURIComponent(JSON.stringify({
+        source: 'CJ',
+        cjProductId:
+          product.cjProductId || '',
+        cjVariantId:
+          product.defaultCjVariantId || '',
+        name:
+          product.name || '',
+        image:
+          product.image ||
+          product.imageUrl ||
+          '',
+        variants:
+          Array.isArray(product.variants)
+            ? product.variants
+            : []
+      }));
+    }
+
     return encodeURIComponent(JSON.stringify({
-      customId: product.customId || '',
-      name: product.name || '',
-      image: product.image || product.imageUrl || '',
-      sizes: Array.isArray(product.sizes) ? product.sizes : [],
-      colors: Array.isArray(product.colors) ? product.colors : [],
-      colorImages: Array.isArray(product.colorImages) ? product.colorImages : []
+      source: 'INTERNAL',
+      customId:
+        product.customId || '',
+      name:
+        product.name || '',
+      image:
+        product.image ||
+        product.imageUrl ||
+        '',
+      sizes:
+        Array.isArray(product.sizes)
+          ? product.sizes
+          : [],
+      colors:
+        Array.isArray(product.colors)
+          ? product.colors
+          : [],
+      colorImages:
+        Array.isArray(product.colorImages)
+          ? product.colorImages
+          : []
     }));
   }
 
   function shopPageUrl(pageNumber) {
     const params = [];
+
+    params.push(
+      'department=' +
+      encodeURIComponent(
+        ACTIVE_DEPARTMENT
+      )
+    );
 
     if (selectedKeyword) {
       params.push('keyword=' + encodeURIComponent(selectedKeyword));
@@ -195,12 +275,15 @@
       <div class="d-inline-flex align-items-center">
         <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
         <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
-        <a href="/store/cart" id="shopTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link">
+        <a href="<%= ACTIVE_CART_URL %>" id="shopTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link" data-store-department="<%= ACTIVE_DEPARTMENT %>">
           <span class="rounded-circle btn-md-square border">
             <i class="fas fa-shopping-cart"></i>
           </span>
+
           <span class="text-dark ms-2 store-cart-total">
-            <%= formatMoney(0) %>
+            <%= formatMoney(
+              Number(ACTIVE_CART.total || 0)
+            ) %>
           </span>
         </a>
       </div>
@@ -283,17 +366,75 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <div class="navbar-nav ms-auto py-0">
-            <a href="/store" class="nav-item nav-link">Shopping home</a>
-            <a href="/store/shop" class="nav-item nav-link active">Shop</a>
-            <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
+            <a href="/store" class="nav-item nav-link">
+              Shopping home
+            </a>
+
+            <a href="<%= ACTIVE_SHOP_URL %>" class="nav-item nav-link active">
+              Shop
+            </a>
+
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-store me-1"></i>
+
+                <%= IS_CJ_DEPARTMENT
+                    ? 'CJ Store'
+                    : 'Kasyora Store' %>
+              </a>
+
+              <div class="dropdown-menu m-0 p-2">
+                <form action="/store/department/internal" method="POST" class="m-0 mb-2">
+                  <input type="hidden" name="returnTo" value="<%= SHOP_CURRENCY_RETURN_TO %>">
+
+                  <button type="submit" class="dropdown-item rounded <%= !IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
+                    <i class="fas fa-warehouse me-2"></i>
+                    Kasyora In Store
+                  </button>
+                </form>
+
+                <form action="/store/department/cj" method="POST" class="m-0">
+                  <input type="hidden" name="returnTo" value="<%= SHOP_CURRENCY_RETURN_TO %>">
+
+                  <button type="submit" class="dropdown-item rounded <%= IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
+                    <i class="fas fa-globe me-2"></i>
+                    Kasyora CJ Store
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <a href="/products/sales" class="nav-item nav-link">
+              Fast liner
+            </a>
             <div class="nav-item dropdown">
               <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
               <div class="dropdown-menu m-0">
-                <a href="/store/bestseller" class="dropdown-item">Bestseller</a>
-                <a href="/store/cart" class="dropdown-item">Cart</a>
-                <a href="/payment/checkout" class="dropdown-item">Checkout</a>
-                <a href="/business/login" class="dropdown-item">Accounts</a>
-                <a href="/store/order-tracking" class="dropdown-item">Order status</a>
+                <% if (!IS_CJ_DEPARTMENT) { %>
+                <a href="/store/bestseller" class="dropdown-item">
+                  Bestseller
+                </a>
+                <% } %>
+
+                <a href="<%= ACTIVE_CART_URL %>" class="dropdown-item">
+                  <%= IS_CJ_DEPARTMENT
+                      ? 'CJ Cart'
+                      : 'Cart' %>
+                </a>
+
+                <a href="<%= ACTIVE_CHECKOUT_URL %>" class="dropdown-item">
+                  <%= IS_CJ_DEPARTMENT
+                      ? 'CJ Checkout'
+                      : 'Checkout' %>
+                </a>
+
+                <a href="/business/login" class="dropdown-item">
+                  Accounts
+                </a>
+
+                <a href="/store/order-tracking" class="dropdown-item">
+                  Order status
+                </a>
               </div>
             </div>
             <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
@@ -350,6 +491,40 @@
   </ol>
 </div>
 <!-- Single Page Header End -->
+
+<div class="container-fluid px-0">
+  <div class="alert rounded-0 mb-0 border-0 <%= IS_CJ_DEPARTMENT ? 'alert-success' : 'alert-primary' %>">
+    <div class="container d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 py-2">
+      <div>
+        <strong>
+          <i class="fas fa-store me-2"></i>
+
+          <%= IS_CJ_DEPARTMENT
+              ? 'Kasyora CJ Store'
+              : 'Kasyora In Store' %>
+        </strong>
+
+        <div class="small mt-1">
+          <% if (IS_CJ_DEPARTMENT) { %>
+          You are browsing products fulfilled through the separate
+          CJ Dropshipping cart, checkout, payment and order flow.
+          <% } else { %>
+          You are browsing products supplied through Kasyora’s
+          internal seller and supplier commerce flow.
+          <% } %>
+        </div>
+      </div>
+
+      <a href="<%= ACTIVE_CART_URL %>" class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-primary' %> rounded-pill px-4">
+        <i class="fas fa-shopping-cart me-2"></i>
+
+        <%= IS_CJ_DEPARTMENT
+            ? 'View CJ Cart'
+            : 'View Cart' %>
+      </a>
+    </div>
+  </div>
+</div>
 
 <!-- Searvices Start -->
 <div class="container-fluid px-0">
@@ -436,6 +611,7 @@
 <div class="container-fluid shop py-5">
   <div class="container py-5">
     <div class="row g-4">
+      <% if (!IS_CJ_DEPARTMENT) { %>
       <div class="col-lg-3 wow fadeInUp" data-wow-delay="0.1s">
         <div class="featured-product mb-4">
           <h4 class="mb-3">Featured products</h4>
@@ -513,8 +689,9 @@
           <% } %>
         </div>
       </div>
+      <% } %>
 
-      <div class="col-lg-9 wow fadeInUp" data-wow-delay="0.1s">
+      <div class="<%= IS_CJ_DEPARTMENT ? 'col-12' : 'col-lg-9' %> wow fadeInUp" data-wow-delay="0.1s">
         <% if (shopMainBanner) { %>
         <div class="rounded mb-4 position-relative">
           <img src="<%= shopMainBanner.image %>" class="img-fluid rounded w-100" style="height: 250px;" alt="<%= shopMainBanner.productName || shopMainBanner.title %>">
@@ -542,7 +719,9 @@
                 <option value="default" <%= (selectedSort || 'default') === 'default' ? 'selected' : '' %>>Default Sorting</option>
                 <option value="popular" <%= selectedSort === 'popular' ? 'selected' : '' %>>Popularity</option>
                 <option value="newest" <%= selectedSort === 'newest' ? 'selected' : '' %>>Newness</option>
-                <option value="rating" <%= selectedSort === 'rating' ? 'selected' : '' %>>Average Rating</option>
+                <option value="rating" <%= selectedSort === 'rating' ? 'selected' : '' %>>
+                  Average Rating
+                </option>
                 <option value="price_asc" <%= selectedSort === 'price_asc' ? 'selected' : '' %>>Low to high</option>
                 <option value="price_desc" <%= selectedSort === 'price_desc' ? 'selected' : '' %>>High to low</option>
               </select>
@@ -565,6 +744,27 @@
         </div>
 
         <div id="shopProductsSection" class="tab-content">
+          <% if (!(shopProducts || []).length) { %>
+          <div class="alert alert-light border shadow-sm text-center py-5">
+            <i class="fas fa-search fa-3x text-primary mb-3"></i>
+
+            <h3 class="text-primary">
+              No products found
+            </h3>
+
+            <p class="text-muted mb-4">
+              No
+              <%= IS_CJ_DEPARTMENT
+                  ? 'CJ Dropshipping'
+                  : 'Kasyora internal' %>
+              products matched the selected search or category.
+            </p>
+
+            <a href="/store/shop?department=<%= encodeURIComponent(ACTIVE_DEPARTMENT) %>#shopProductsSection" class="btn btn-primary rounded-pill px-4">
+              View All Products
+            </a>
+          </div>
+          <% } %>
           <div id="tab-5" class="tab-pane fade p-0">
             <div class="row g-4 product">
               <% (shopProducts || []).forEach(function(product) { %>
@@ -598,23 +798,62 @@
                     </div>
                   </div>
                   <div class="product-item-add border border-top-0 rounded-bottom text-center p-4 pt-0">
-                    <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%= storeProductPayload(product) %>">
-                      <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                    <%
+                      const gridIsCjProduct =
+                        String(product?.source || '')
+                          .trim()
+                          .toUpperCase() === 'CJ';
+
+                      const gridDefaultCjVariant =
+                        Array.isArray(product?.variants)
+                          ? product.variants.find(function(variant) {
+                              return (
+                                String(variant?.cjVariantId || '') ===
+                                String(product?.defaultCjVariantId || '')
+                              );
+                            }) || product.variants[0]
+                          : null;
+                    %>
+
+                    <% if (gridIsCjProduct) { %>
+                    <% if (gridDefaultCjVariant?.cjVariantId) { %>
+                    <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= gridDefaultCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+                      <i class="fas fa-shopping-cart me-2"></i>
+                      Add To CJ Cart
+                    </button>
+                    <% } else { %>
+                    <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4 mb-4">
+                      <i class="fas fa-eye me-2"></i>
+                      Select Variant
                     </a>
+                    <% } %>
+                    <% } else { %>
+                    <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 mb-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+                      <i class="fas fa-shopping-cart me-2"></i>
+                      Add To Cart
+                    </a>
+                    <% } %>
+
                     <div class="d-flex justify-content-between align-items-center">
                       <div>
                         <%- include('../partials/rating-stars', {
-                                                        avg: Number(product.avgRating || 0),
-                                                        count: Number(product.ratingsCount || 0),
-                                                        nonce
-                                                    }) %>
+                          avg: Number(product.avgRating || 0),
+                          count: Number(product.ratingsCount || 0),
+                          nonce
+                        }) %>
                       </div>
+
                       <div class="d-flex">
                         <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                          <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
+                          <span class="rounded-circle btn-sm-square border">
+                            <i class="fas fa-random"></i>
+                          </span>
                         </a>
+
                         <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                          <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
+                          <span class="rounded-circle btn-sm-square border">
+                            <i class="fas fa-heart"></i>
+                          </span>
                         </a>
                       </div>
                     </div>
@@ -685,17 +924,64 @@
                   </div>
 
                   <div class="products-mini-add border p-3">
-                    <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
-                      <i class="fas fa-shopping-cart me-2"></i> Add To Cart
-                    </a>
+                    <%
+                      const listIsCjProduct =
+                        String(product?.source || '')
+                          .trim()
+                          .toUpperCase() === 'CJ';
 
-                    <div class="d-flex">
-                      <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                        <span class="rounded-circle btn-sm-square border"><i class="fas fa-random"></i></span>
-                      </a>
-                      <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                        <span class="rounded-circle btn-sm-square border"><i class="fas fa-heart"></i></span>
-                      </a>
+                      const listDefaultCjVariant =
+                        Array.isArray(product?.variants)
+                          ? product.variants.find(function(variant) {
+                              return (
+                                String(variant?.cjVariantId || '') ===
+                                String(product?.defaultCjVariantId || '')
+                              );
+                            }) || product.variants[0]
+                          : null;
+                    %>
+
+                    <% if (listIsCjProduct) { %>
+                    <% if (listDefaultCjVariant?.cjVariantId) { %>
+                    <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= listDefaultCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+                      <i class="fas fa-shopping-cart me-2"></i>
+                      Add To CJ Cart
+                    </button>
+                    <% } else { %>
+                    <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4">
+                      <i class="fas fa-eye me-2"></i>
+                      Select Variant
+                    </a>
+                    <% } %>
+                    <% } else { %>
+                    <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+                      <i class="fas fa-shopping-cart me-2"></i>
+                      Add To Cart
+                    </a>
+                    <% } %>
+
+                    <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                      <div>
+                        <%- include('../partials/rating-stars', {
+                          avg: Number(product.avgRating || 0),
+                          count: Number(product.ratingsCount || 0),
+                          nonce
+                        }) %>
+                      </div>
+
+                      <div class="d-flex">
+                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
+                          <span class="rounded-circle btn-sm-square border">
+                            <i class="fas fa-random"></i>
+                          </span>
+                        </a>
+
+                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                          <span class="rounded-circle btn-sm-square border">
+                            <i class="fas fa-heart"></i>
+                          </span>
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -950,6 +1236,12 @@
 
     function goToShop(categoryValue) {
       const params = new URLSearchParams();
+
+      params.set(
+        'department',
+        '<%= ACTIVE_DEPARTMENT %>'
+      );
+
       const keyword = getKeyword();
       const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
       const sortValue = sortSelect ? String(sortSelect.value || 'default').trim() : 'default';
@@ -1003,7 +1295,8 @@
           if (category || (sortValue && sortValue !== 'default')) {
             goToShop(category);
           } else {
-            window.location.href = '/store/shop#shopProductsSection';
+            window.location.href =
+              '/store/shop?department=<%= ACTIVE_DEPARTMENT %>#shopProductsSection';
           }
         }
       });
@@ -1028,7 +1321,8 @@
           if (category || (sortValue && sortValue !== 'default')) {
             goToShop(category);
           } else {
-            window.location.href = '/store/shop#shopProductsSection';
+            window.location.href =
+              '/store/shop?department=<%= ACTIVE_DEPARTMENT %>#shopProductsSection';
           }
         }
       });
@@ -1094,7 +1388,306 @@
 </style>
 
 <%- include('partials/currency-client') %>
+
+<% if (!IS_CJ_DEPARTMENT) { %>
 <%- include('partials/cart-script-listing') %>
+<% } %>
+
+<% if (IS_CJ_DEPARTMENT) { %>
+<script nonce="<%= nonce %>">
+  (function() {
+    const mobileFloatingCart =
+      document.getElementById(
+        'mobileFloatingCart'
+      );
+
+    function formatCjCartMoney(amount) {
+      if (
+        window.KasyoraCurrency &&
+        typeof window.KasyoraCurrency.formatBaseAmount === 'function'
+      ) {
+        return window.KasyoraCurrency.formatBaseAmount(
+          amount
+        );
+      }
+
+      const fallbackAmount =
+        Number(amount || 0);
+
+      const fallbackCurrency =
+        '<%= BASE_CURRENCY %>';
+
+      try {
+        const formatted =
+          new Intl.NumberFormat(
+            undefined, {
+              style: 'currency',
+              currency: fallbackCurrency,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }
+          ).format(
+            Number.isFinite(fallbackAmount) ?
+            fallbackAmount :
+            0
+          );
+
+        if (fallbackCurrency === 'ZAR') {
+          return formatted.replace(
+            /^ZAR\s?/,
+            'R'
+          );
+        }
+
+        return formatted;
+      } catch (error) {
+        return (
+          fallbackCurrency +
+          ' ' +
+          (
+            Number.isFinite(fallbackAmount) ?
+            fallbackAmount :
+            0
+          ).toFixed(2)
+        );
+      }
+    }
+
+    function showCjCartMessage(message, type) {
+      const existing =
+        document.getElementById(
+          'cjStoreCartMessage'
+        );
+
+      if (existing) {
+        existing.remove();
+      }
+
+      const alert =
+        document.createElement('div');
+
+      alert.id = 'cjStoreCartMessage';
+
+      alert.className =
+        'alert alert-' +
+        (
+          type === 'success' ?
+          'success' :
+          'danger'
+        ) +
+        ' position-fixed top-0 end-0 mt-3 me-3 shadow';
+
+      alert.style.zIndex = '2000';
+      alert.style.maxWidth = '420px';
+
+      alert.setAttribute(
+        'role',
+        'alert'
+      );
+
+      alert.textContent =
+        String(message || '');
+
+      document.body.appendChild(alert);
+
+      window.setTimeout(function() {
+        alert.remove();
+      }, 5000);
+    }
+
+    function updateCjCartDisplay(data) {
+      const itemCount = Number(
+        data?.itemCount ??
+        data?.count ??
+        0
+      );
+
+      const total = Number(
+        data?.totalIncVat ??
+        data?.total ??
+        0
+      );
+
+      document
+        .querySelectorAll(
+          '.store-cart-total'
+        )
+        .forEach(function(element) {
+          element.textContent =
+            formatCjCartMoney(total);
+        });
+
+      document
+        .querySelectorAll(
+          '.store-cart-link'
+        )
+        .forEach(function(link) {
+          link.href = '/cj/cart';
+
+          if (itemCount > 0) {
+            link.classList.add(
+              'cart-flash-active'
+            );
+          } else {
+            link.classList.remove(
+              'cart-flash-active'
+            );
+          }
+        });
+
+      if (mobileFloatingCart) {
+        if (itemCount > 0) {
+          mobileFloatingCart.classList.remove(
+            'd-none'
+          );
+        } else {
+          mobileFloatingCart.classList.add(
+            'd-none'
+          );
+        }
+      }
+    }
+
+    async function addCjItem(button) {
+      const cjProductId = String(
+        button.getAttribute(
+          'data-cj-product-id'
+        ) || ''
+      ).trim();
+
+      const cjVariantId = String(
+        button.getAttribute(
+          'data-cj-variant-id'
+        ) || ''
+      ).trim();
+
+      if (
+        !cjProductId ||
+        !cjVariantId
+      ) {
+        throw new Error(
+          'This CJ product does not have a valid selected variant.'
+        );
+      }
+
+      const originalHtml =
+        button.innerHTML;
+
+      button.disabled = true;
+
+      button.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
+        'Adding To CJ Cart...';
+
+      try {
+        const response = await fetch(
+          '/api/cj-cart/add', {
+            method: 'POST',
+
+            headers: {
+              'Content-Type': 'application/json',
+
+              Accept: 'application/json'
+            },
+
+            credentials: 'same-origin',
+
+            body: JSON.stringify({
+              cjProductId,
+              cjVariantId,
+              quantity: 1
+            })
+          }
+        );
+
+        const data = await response
+          .json()
+          .catch(function() {
+            return {};
+          });
+
+        if (
+          !response.ok ||
+          data.success === false
+        ) {
+          throw new Error(
+            data.message ||
+            'The CJ product could not be added to the CJ cart.'
+          );
+        }
+
+        updateCjCartDisplay(data);
+
+        showCjCartMessage(
+          data.message ||
+          'CJ product added to your separate CJ cart.',
+          'success'
+        );
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+      }
+    }
+
+    document.addEventListener(
+      'click',
+      async function(event) {
+        const button =
+          event.target.closest(
+            '.js-add-to-cj-cart'
+          );
+
+        if (!button) {
+          return;
+        }
+
+        event.preventDefault();
+
+        try {
+          await addCjItem(button);
+        } catch (error) {
+          showCjCartMessage(
+            error?.message ||
+            'Failed to add the CJ product.',
+            'error'
+          );
+        }
+      }
+    );
+
+    async function loadCjCart() {
+      try {
+        const response = await fetch(
+          '/api/cj-cart', {
+            headers: {
+              Accept: 'application/json'
+            },
+
+            credentials: 'same-origin'
+          }
+        );
+
+        const data = await response
+          .json()
+          .catch(function() {
+            return {};
+          });
+
+        if (response.ok) {
+          updateCjCartDisplay(data);
+        }
+      } catch (error) {
+        console.error(
+          'Failed to load the active CJ cart:',
+          error
+        );
+      }
+    }
+
+    loadCjCart();
+  })();
+</script>
+<% } %>
 
 <script nonce="<%= nonce %>">
   (function() {
@@ -1135,12 +1728,15 @@
 
 <!-- Mobile Floating Cart Start -->
 <div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
-  <a href="/store/cart" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" style="font-size: 0.85rem;">
+  <a href="<%= ACTIVE_CART_URL %>" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" data-store-department="<%= ACTIVE_DEPARTMENT %>" style="font-size: 0.85rem;">
     <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
       <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
     </span>
+
     <span class="store-cart-total text-white fw-semibold">
-      <%= formatMoney(0) %>
+      <%= formatMoney(
+        Number(ACTIVE_CART.total || 0)
+      ) %>
     </span>
   </a>
 </div>

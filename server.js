@@ -714,6 +714,18 @@ const notificationsRoutes = require('./routes/notifications');
 const wishlistRoutes = require('./routes/wishlist');
 const passwordResetRoutes = require('./routes/passwordReset');
 const ratingsRouter = require('./routes/productRatings');
+
+/*
+ * Separate CJ product rating routes.
+ *
+ * This router reads and writes only:
+ * - CjProduct
+ * - CjRating
+ *
+ * It does not use the internal Product or Rating models.
+ */
+const cjRatingsRouter = require('./routes/cjRatings');
+
 const orderTrackingRoutes = require('./routes/orderTracking');
 const publicOrderTrackingRoutes = require('./routes/publicOrderTracking');
 
@@ -743,6 +755,25 @@ if (ratingsRouter) {
   app.use('/productRatings', ratingsRouter);
   // console.log('✅ Ratings router mounted at /productRatings');
 }
+
+/*
+ * Separate CJ product rating flow.
+ *
+ * Final routes include:
+ *
+ * GET
+ * /cj-ratings/api/products/:cjProductId/ratings
+ *
+ * POST
+ * /cj-ratings/ratings/submit/:cjProductId
+ *
+ * POST
+ * /cj-ratings/ratings/:ratingId/flag
+ *
+ * POST
+ * /cj-ratings/ratings/:ratingId/delete
+ */
+app.use('/cj-ratings', cjRatingsRouter);
 
 // API first
 

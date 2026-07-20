@@ -1,6 +1,5 @@
 // routes/storePages.js
 'use strict';
-
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
@@ -80,9 +79,7 @@ function getEnabledCjVariants(product) {
 function getCjVariantPriceExVat(variant) {
   const value = Number(variant?.sellingPriceExVat?.value);
 
-  return Number.isFinite(value) && value >= 0
-    ? Number(value.toFixed(2))
-    : null;
+  return Number.isFinite(value) && value >= 0 ? Number(value.toFixed(2)) : null;
 }
 
 function mapCjStoreProduct(product) {
@@ -100,48 +97,26 @@ function mapCjStoreProduct(product) {
         cjVariantId: String(variant.cjVariantId || '').trim(),
         variantSku: String(variant.variantSku || '').trim(),
         variantName: String(
-          variant.variantName ||
-            variant.variantKey ||
-            variant.variantSku ||
-            'Variant',
+          variant.variantName || variant.variantKey || variant.variantSku || 'Variant',
         ).trim(),
-        imageUrl: String(
-          variant.imageUrl ||
-            product.mainImageUrl ||
-            '',
-        ).trim(),
+        imageUrl: String(variant.imageUrl || product.mainImageUrl || '').trim(),
         priceExVat,
-        weightGrams:
-          Number.isFinite(Number(variant.weightGrams))
-            ? Number(variant.weightGrams)
-            : null,
+        weightGrams: Number.isFinite(Number(variant.weightGrams))
+          ? Number(variant.weightGrams)
+          : null,
         inventoryKnown: variant.inventoryKnown === true,
-        totalInventory: Math.max(
-          0,
-          Number(variant.totalInventory || 0),
-        ),
+        totalInventory: Math.max(0, Number(variant.totalInventory || 0)),
       };
     })
-    .filter(
-      (variant) =>
-        variant &&
-        variant.cjVariantId &&
-        variant.variantSku,
-    );
+    .filter((variant) => variant && variant.cjVariantId && variant.variantSku);
 
   const prices = validVariants
     .map((variant) => Number(variant.priceExVat))
     .filter((value) => Number.isFinite(value) && value >= 0);
 
-  const lowestPrice =
-    prices.length > 0
-      ? Math.min(...prices)
-      : 0;
+  const lowestPrice = prices.length > 0 ? Math.min(...prices) : 0;
 
-  const firstVariant =
-    validVariants.length > 0
-      ? validVariants[0]
-      : null;
+  const firstVariant = validVariants.length > 0 ? validVariants[0] : null;
 
   const categoryName = String(
     product?.category?.name ||
@@ -170,21 +145,11 @@ function mapCjStoreProduct(product) {
 
     name: String(product.name || 'CJ Product').trim(),
 
-    description: String(
-      product.descriptionHtml || '',
-    ).trim(),
+    description: String(product.descriptionHtml || '').trim(),
 
-    image: String(
-      firstVariant?.imageUrl ||
-        product.mainImageUrl ||
-        '',
-    ).trim(),
+    image: String(firstVariant?.imageUrl || product.mainImageUrl || '').trim(),
 
-    imageUrl: String(
-      firstVariant?.imageUrl ||
-        product.mainImageUrl ||
-        '',
-    ).trim(),
+    imageUrl: String(firstVariant?.imageUrl || product.mainImageUrl || '').trim(),
 
     category: categoryName,
     role: 'cj',
@@ -223,26 +188,28 @@ function mapCjStoreProduct(product) {
      */
     stock: validVariants.length,
 
-    rating: 0,
-    avgRating: 0,
-    ratingsCount: 0,
+    /*
+     * Real CJ rating aggregates maintained by CjRating.
+     *
+     * These values come from CjProduct only and remain
+     * separate from the internal Rating model.
+     */
+    rating: Math.max(0, Math.min(5, Number(product.avgRating || 0))),
+
+    avgRating: Math.max(0, Math.min(5, Number(product.avgRating || 0))),
+
+    ratingsCount: Math.max(0, Math.floor(Number(product.ratingsCount || 0))),
 
     variants: validVariants,
     enabledVariantCount: validVariants.length,
 
-    defaultCjVariantId:
-      firstVariant?.cjVariantId || '',
+    defaultCjVariantId: firstVariant?.cjVariantId || '',
 
-    url: `/cj/product/${encodeURIComponent(
-      String(product.cjProductId || '').trim(),
-    )}`,
+    url: `/cj/product/${encodeURIComponent(String(product.cjProductId || '').trim())}`,
   };
 }
 
-function buildCjHomepageQuery({
-  keyword,
-  category,
-}) {
+function buildCjHomepageQuery({ keyword, category }) {
   const query = {
     status: 'active',
 
@@ -266,15 +233,9 @@ function buildCjHomepageQuery({
   }
 
   if (keyword) {
-    const escapedKeyword = keyword.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      '\\$&',
-    );
+    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const keywordRegex = new RegExp(
-      escapedKeyword,
-      'i',
-    );
+    const keywordRegex = new RegExp(escapedKeyword, 'i');
 
     const keywordConditions = [
       { name: keywordRegex },
@@ -307,10 +268,7 @@ function buildCjHomepageQuery({
   return query;
 }
 
-async function loadCjHomepageProducts({
-  keyword,
-  category,
-}) {
+async function loadCjHomepageProducts({ keyword, category }) {
   const query = buildCjHomepageQuery({
     keyword,
     category,
@@ -328,11 +286,100 @@ async function loadCjHomepageProducts({
   return rows
     .map(mapCjStoreProduct)
     .filter(
+      (product) => product.cjProductId && product.enabledVariantCount > 0 && product.price >= 0,
+    );
+}
+
+async function loadCjShopProducts({ keyword, category, selectedSort, requestedPage, perPage }) {
+  const query = buildCjHomepageQuery({
+    keyword,
+    category,
+  });
+
+  /*
+   * CJ selling prices live inside the variants array.
+   * Mapping first gives every product one safe lowest
+   * selling price excluding VAT.
+   *
+   * This also ensures disabled or invalid CJ variants
+   * are never shown on the public shop page.
+   */
+  const rows = await CjProduct.find(query)
+    .sort({
+      updatedAt: -1,
+      importedAt: -1,
+      _id: -1,
+    })
+    .lean();
+
+  let products = rows
+    .map(mapCjStoreProduct)
+    .filter(
       (product) =>
         product.cjProductId &&
         product.enabledVariantCount > 0 &&
-        product.price >= 0,
+        Number.isFinite(Number(product.price)) &&
+        Number(product.price) >= 0,
     );
+
+  if (selectedSort === 'popular') {
+    products.sort((left, right) => {
+      const popularDifference = Number(right.popular === true) - Number(left.popular === true);
+
+      if (popularDifference !== 0) {
+        return popularDifference;
+      }
+
+      return String(left.name || '').localeCompare(String(right.name || ''));
+    });
+  } else if (selectedSort === 'price_asc') {
+    products.sort((left, right) => Number(left.price || 0) - Number(right.price || 0));
+  } else if (selectedSort === 'price_desc') {
+    products.sort((left, right) => Number(right.price || 0) - Number(left.price || 0));
+  } else if (selectedSort === 'rating') {
+    /*
+     * Sort only by the separate CJ rating aggregates.
+     *
+     * Products with the highest average appear first.
+     * When averages match, the product with more published
+     * ratings appears first.
+     */
+    products.sort((left, right) => {
+      const averageDifference = Number(right.avgRating || 0) - Number(left.avgRating || 0);
+
+      if (averageDifference !== 0) {
+        return averageDifference;
+      }
+
+      const countDifference = Number(right.ratingsCount || 0) - Number(left.ratingsCount || 0);
+
+      if (countDifference !== 0) {
+        return countDifference;
+      }
+
+      return String(left.name || '').localeCompare(String(right.name || ''));
+    });
+  }
+  const totalProducts = products.length;
+
+  const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
+
+  const safeRequestedPage = Number.isFinite(Number(requestedPage))
+    ? Math.floor(Number(requestedPage))
+    : 1;
+
+  const currentPage = Math.min(Math.max(safeRequestedPage, 1), totalPages);
+
+  const skip = (currentPage - 1) * perPage;
+
+  products = products.slice(skip, skip + perPage);
+
+  return {
+    products,
+    totalProducts,
+    totalPages,
+    currentPage,
+  };
 }
 
 function mapPromoOffer(offer, product) {
@@ -652,13 +699,9 @@ router.get('/store', async (req, res) => {
   const storeDepartment = getStoreDepartment(req);
 
   try {
-    const keyword = String(
-      req.query.keyword || '',
-    ).trim();
+    const keyword = String(req.query.keyword || '').trim();
 
-    const category = String(
-      req.query.category || '',
-    ).trim();
+    const category = String(req.query.category || '').trim();
 
     /*
      * Shared marketing slides may remain visible in both departments.
@@ -706,29 +749,21 @@ router.get('/store', async (req, res) => {
        */
       const allProducts = cjProducts.slice(0, 8);
 
-      const newArrivals = [...cjProducts]
-        .slice(0, 8);
+      const newArrivals = [...cjProducts].slice(0, 8);
 
       const featuredProducts = [...cjProducts]
         .sort((a, b) => {
-          return (
-            Number(b.enabledVariantCount || 0) -
-            Number(a.enabledVariantCount || 0)
-          );
+          return Number(b.enabledVariantCount || 0) - Number(a.enabledVariantCount || 0);
         })
         .slice(0, 8);
 
       const bestSellerProducts = [...cjProducts]
         .sort((a, b) => {
-          return (
-            Number(b.popular || 0) -
-            Number(a.popular || 0)
-          );
+          return Number(b.popular || 0) - Number(a.popular || 0);
         })
         .slice(0, 8);
 
-      const productListProducts =
-        cjProducts.slice(0, 12);
+      const productListProducts = cjProducts.slice(0, 12);
 
       return res.render('store/index', {
         layout: 'layouts/store',
@@ -778,15 +813,9 @@ router.get('/store', async (req, res) => {
     }
 
     if (keyword) {
-      const escapedKeyword = keyword.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        '\\$&',
-      );
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      const keywordRegex = new RegExp(
-        escapedKeyword,
-        'i',
-      );
+      const keywordRegex = new RegExp(escapedKeyword, 'i');
 
       baseQuery.$or = [
         { name: keywordRegex },
@@ -799,18 +828,14 @@ router.get('/store', async (req, res) => {
       ];
     }
 
-    const allProductsRaw = await Product.find(
-      baseQuery,
-    )
+    const allProductsRaw = await Product.find(baseQuery)
       .sort({
         createdAt: -1,
       })
       .limit(8)
       .lean();
 
-    const newArrivalsRaw = await Product.find(
-      baseQuery,
-    )
+    const newArrivalsRaw = await Product.find(baseQuery)
       .sort({
         createdAt: -1,
         _id: -1,
@@ -818,87 +843,70 @@ router.get('/store', async (req, res) => {
       .limit(8)
       .lean();
 
-    const featuredProductsRaw =
-      await getFeaturedProducts(8);
+    const featuredProductsRaw = await getFeaturedProducts(8);
 
-    const bestSellerProductsRaw =
-      await Product.find(baseQuery)
-        .sort({
-          soldCount: -1,
-          createdAt: -1,
-        })
-        .limit(8)
-        .lean();
-
-    const productListProductsRaw =
-      await Product.find(baseQuery)
-        .sort({
-          createdAt: -1,
-        })
-        .limit(12)
-        .lean();
-
-    const allProducts =
-      allProductsRaw.map(mapStoreProduct);
-
-    const newArrivals =
-      newArrivalsRaw.map(mapStoreProduct);
-
-    const featuredProducts =
-      featuredProductsRaw.map(mapStoreProduct);
-
-    const bestSellerProducts =
-      bestSellerProductsRaw.map(mapStoreProduct);
-
-    const productListProducts =
-      productListProductsRaw.map(mapStoreProduct);
-
-    const featuredBanner =
-      await FeaturedBanner.findOne({
-        active: true,
+    const bestSellerProductsRaw = await Product.find(baseQuery)
+      .sort({
+        soldCount: -1,
+        createdAt: -1,
       })
-        .sort({
-          updatedAt: -1,
-        })
-        .lean();
+      .limit(8)
+      .lean();
+
+    const productListProductsRaw = await Product.find(baseQuery)
+      .sort({
+        createdAt: -1,
+      })
+      .limit(12)
+      .lean();
+
+    const allProducts = allProductsRaw.map(mapStoreProduct);
+
+    const newArrivals = newArrivalsRaw.map(mapStoreProduct);
+
+    const featuredProducts = featuredProductsRaw.map(mapStoreProduct);
+
+    const bestSellerProducts = bestSellerProductsRaw.map(mapStoreProduct);
+
+    const productListProducts = productListProductsRaw.map(mapStoreProduct);
+
+    const featuredBanner = await FeaturedBanner.findOne({
+      active: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
+      .lean();
 
     let sideBannerProduct = null;
 
     if (featuredBanner?.productCustomId) {
-      const rawBannerProduct =
-        await Product.findOne({
-          customId:
-            featuredBanner.productCustomId,
-          stock: {
-            $gt: 0,
-          },
-        }).lean();
+      const rawBannerProduct = await Product.findOne({
+        customId: featuredBanner.productCustomId,
+        stock: {
+          $gt: 0,
+        },
+      }).lean();
 
       if (rawBannerProduct) {
-        const mapped =
-          mapStoreProduct(rawBannerProduct);
+        const mapped = mapStoreProduct(rawBannerProduct);
 
         sideBannerProduct = {
           ...mapped,
-          badgeText:
-            featuredBanner.badgeText ||
-            'Special Offer',
-          offerText:
-            featuredBanner.offerText ||
-            'Featured Product',
+          badgeText: featuredBanner.badgeText || 'Special Offer',
+          offerText: featuredBanner.offerText || 'Featured Product',
         };
       }
     }
 
-    const homePromoOffersRaw =
-      await HomePromoOffer.find({
-        active: true,
+    const homePromoOffersRaw = await HomePromoOffer.find({
+      active: true,
+    })
+      .sort({
+        sortOrder: 1,
+        createdAt: 1,
       })
-        .sort({
-          sortOrder: 1,
-          createdAt: 1,
-        })
-        .lean();
+      .lean();
 
     let promoOfferLeft = null;
     let promoOfferRight = null;
@@ -908,22 +916,18 @@ router.get('/store', async (req, res) => {
         continue;
       }
 
-      const rawProduct =
-        await Product.findOne({
-          customId: offer.productCustomId,
-          stock: {
-            $gt: 0,
-          },
-        }).lean();
+      const rawProduct = await Product.findOne({
+        customId: offer.productCustomId,
+        stock: {
+          $gt: 0,
+        },
+      }).lean();
 
       if (!rawProduct) {
         continue;
       }
 
-      const mappedOffer = mapPromoOffer(
-        offer,
-        rawProduct,
-      );
+      const mappedOffer = mapPromoOffer(offer, rawProduct);
 
       if (offer.slot === 'left') {
         promoOfferLeft = mappedOffer;
@@ -934,15 +938,14 @@ router.get('/store', async (req, res) => {
       }
     }
 
-    const homeMidBannersRaw =
-      await HomeMidBanner.find({
-        active: true,
+    const homeMidBannersRaw = await HomeMidBanner.find({
+      active: true,
+    })
+      .sort({
+        sortOrder: 1,
+        createdAt: 1,
       })
-        .sort({
-          sortOrder: 1,
-          createdAt: 1,
-        })
-        .lean();
+      .lean();
 
     let midBannerLeft = null;
     let midBannerRight = null;
@@ -952,22 +955,18 @@ router.get('/store', async (req, res) => {
         continue;
       }
 
-      const rawProduct =
-        await Product.findOne({
-          customId: banner.productCustomId,
-          stock: {
-            $gt: 0,
-          },
-        }).lean();
+      const rawProduct = await Product.findOne({
+        customId: banner.productCustomId,
+        stock: {
+          $gt: 0,
+        },
+      }).lean();
 
       if (!rawProduct) {
         continue;
       }
 
-      const mappedBanner = mapMidBanner(
-        banner,
-        rawProduct,
-      );
+      const mappedBanner = mapMidBanner(banner, rawProduct);
 
       if (banner.slot === 'left') {
         midBannerLeft = mappedBanner;
@@ -1005,24 +1004,15 @@ router.get('/store', async (req, res) => {
       vatRate: VAT_RATE,
     });
   } catch (err) {
-    console.error(
-      '❌ store index error:',
-      err,
-    );
+    console.error('❌ store index error:', err);
 
     return res.render('store/index', {
       layout: 'layouts/store',
 
-      title:
-        storeDepartment === 'cj'
-          ? 'CJ Products | Kasyora'
-          : 'Kasyora Store',
+      title: storeDepartment === 'cj' ? 'CJ Products | Kasyora' : 'Kasyora Store',
 
       storeDepartment,
-      productSource:
-        storeDepartment === 'cj'
-          ? 'CJ'
-          : 'INTERNAL',
+      productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
 
       allProducts: [],
       newArrivals: [],
@@ -1037,13 +1027,9 @@ router.get('/store', async (req, res) => {
       midBannerLeft: null,
       midBannerRight: null,
 
-      selectedKeyword: String(
-        req.query.keyword || '',
-      ).trim(),
+      selectedKeyword: String(req.query.keyword || '').trim(),
 
-      selectedCategory: String(
-        req.query.category || '',
-      ).trim(),
+      selectedCategory: String(req.query.category || '').trim(),
 
       baseCurrency: BASE_CURRENCY,
       vatRate: VAT_RATE,
@@ -1052,15 +1038,120 @@ router.get('/store', async (req, res) => {
 });
 
 router.get('/store/shop', async (req, res) => {
+  const storeDepartment = getStoreDepartment(req);
+
   try {
     const keyword = String(req.query.keyword || '').trim();
+
     const category = String(req.query.category || '').trim();
-    const selectedSort = String(req.query.sort || 'default').trim();
+
+    const requestedSort = String(req.query.sort || 'default').trim();
+
+    const allowedSorts = new Set([
+      'default',
+      'popular',
+      'newest',
+      'rating',
+      'price_asc',
+      'price_desc',
+    ]);
+
+    const selectedSort = allowedSorts.has(requestedSort) ? requestedSort : 'default';
+
     const requestedPage = Number(req.query.page || 1);
+
     const perPage = 12;
 
+    /*
+     * ==================================================
+     * CJ DROPSHIPPING SHOP DEPARTMENT
+     * ==================================================
+     *
+     * This branch reads only CjProduct.
+     * It does not query internal Product records,
+     * internal ratings, or internal marketing banners.
+     */
+    if (storeDepartment === 'cj') {
+      const cjShopResult = await loadCjShopProducts({
+        keyword,
+        category,
+        selectedSort,
+        requestedPage,
+        perPage,
+      });
+
+      /*
+       * Internal marketing records reference internal
+       * Product custom IDs. They must not be displayed
+       * while the CJ department is active.
+       */
+      const shopHeaderImage = await ShopHeaderImage.findOne({
+        active: true,
+      })
+        .sort({
+          updatedAt: -1,
+        })
+        .lean();
+
+      return res.render('store/shop', {
+        layout: 'layouts/store',
+
+        title: 'CJ Shop | Kasyora',
+
+        storeDepartment: 'cj',
+        productSource: 'CJ',
+
+        shopProducts: cjShopResult.products,
+
+        /*
+         * The current sidebar and rating sections are
+         * connected to internal Product records.
+         * Keep them empty in the CJ department until
+         * dedicated CJ versions are introduced.
+         */
+        featuredSidebarProducts: [],
+        topRatedTagProducts: [],
+
+        promoOfferLeft: null,
+        promoOfferRight: null,
+        midBannerLeft: null,
+        midBannerRight: null,
+        shopSidebarBanner: null,
+        shopMainBanner: null,
+
+        shopHeaderImage,
+
+        selectedKeyword: keyword,
+        selectedCategory: category,
+        selectedSort,
+
+        currentPage: cjShopResult.currentPage,
+
+        totalPages: cjShopResult.totalPages,
+
+        totalProducts: cjShopResult.totalProducts,
+
+        hasPrevPage: cjShopResult.currentPage > 1,
+
+        hasNextPage: cjShopResult.currentPage < cjShopResult.totalPages,
+
+        baseCurrency: BASE_CURRENCY,
+        vatRate: VAT_RATE,
+      });
+    }
+
+    /*
+     * ==================================================
+     * EXISTING INTERNAL KASYORA SHOP DEPARTMENT
+     * ==================================================
+     *
+     * Preserve the existing internal seller/supplier
+     * queries, pagination, ratings and marketing records.
+     */
     const shopQuery = {
-      stock: { $gt: 0 },
+      stock: {
+        $gt: 0,
+      },
     };
 
     if (category) {
@@ -1069,36 +1160,75 @@ router.get('/store/shop', async (req, res) => {
 
     if (keyword) {
       const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
       const keywordRegex = new RegExp(escapedKeyword, 'i');
 
       shopQuery.$or = [
-        { name: keywordRegex },
-        { category: keywordRegex },
-        { type: keywordRegex },
-        { description: keywordRegex },
-        { color: keywordRegex },
-        { size: keywordRegex },
-        { keywords: keywordRegex },
+        {
+          name: keywordRegex,
+        },
+        {
+          category: keywordRegex,
+        },
+        {
+          type: keywordRegex,
+        },
+        {
+          description: keywordRegex,
+        },
+        {
+          color: keywordRegex,
+        },
+        {
+          size: keywordRegex,
+        },
+        {
+          keywords: keywordRegex,
+        },
       ];
     }
 
-    let shopSort = { createdAt: -1, _id: -1 };
+    let shopSort = {
+      createdAt: -1,
+      _id: -1,
+    };
 
     if (selectedSort === 'popular') {
-      shopSort = { soldCount: -1, createdAt: -1 };
+      shopSort = {
+        soldCount: -1,
+        createdAt: -1,
+      };
     } else if (selectedSort === 'newest') {
-      shopSort = { createdAt: -1, _id: -1 };
+      shopSort = {
+        createdAt: -1,
+        _id: -1,
+      };
     } else if (selectedSort === 'rating') {
-      shopSort = { avgRating: -1, ratingsCount: -1, createdAt: -1 };
+      shopSort = {
+        avgRating: -1,
+        ratingsCount: -1,
+        createdAt: -1,
+      };
     } else if (selectedSort === 'price_asc') {
-      shopSort = { price: 1, createdAt: -1 };
+      shopSort = {
+        price: 1,
+        createdAt: -1,
+      };
     } else if (selectedSort === 'price_desc') {
-      shopSort = { price: -1, createdAt: -1 };
+      shopSort = {
+        price: -1,
+        createdAt: -1,
+      };
     }
 
     const totalProducts = await Product.countDocuments(shopQuery);
+
     const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
-    const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
+
+    const safeRequestedPage = Number.isFinite(requestedPage) ? Math.floor(requestedPage) : 1;
+
+    const currentPage = Math.min(Math.max(safeRequestedPage, 1), totalPages);
+
     const skip = (currentPage - 1) * perPage;
 
     const shopProductsRaw = await Product.find(shopQuery)
@@ -1110,33 +1240,56 @@ router.get('/store/shop', async (req, res) => {
     const featuredSidebarRaw = await getFeaturedProducts(4);
 
     const topRatedTagProductsRaw = await Product.find({
-      stock: { $gt: 0 },
-      ratingsCount: { $gt: 0 },
+      stock: {
+        $gt: 0,
+      },
+
+      ratingsCount: {
+        $gt: 0,
+      },
     })
-      .sort({ ratingsCount: -1, avgRating: -1, createdAt: -1 })
+      .sort({
+        ratingsCount: -1,
+        avgRating: -1,
+        createdAt: -1,
+      })
       .limit(8)
       .lean();
 
     const shopProducts = shopProductsRaw.map(mapStoreProduct);
+
     const featuredSidebarProducts = featuredSidebarRaw.map(mapStoreProduct);
+
     const topRatedTagProducts = topRatedTagProductsRaw.map(mapStoreProduct);
 
-    const homePromoOffersRaw = await HomePromoOffer.find({ active: true })
-      .sort({ sortOrder: 1, createdAt: 1 })
+    const homePromoOffersRaw = await HomePromoOffer.find({
+      active: true,
+    })
+      .sort({
+        sortOrder: 1,
+        createdAt: 1,
+      })
       .lean();
 
     let promoOfferLeft = null;
     let promoOfferRight = null;
 
     for (const offer of homePromoOffersRaw) {
-      if (!offer || !offer.productCustomId) continue;
+      if (!offer || !offer.productCustomId) {
+        continue;
+      }
 
       const rawProduct = await Product.findOne({
         customId: offer.productCustomId,
-        stock: { $gt: 0 },
+
+        stock: {
+          $gt: 0,
+        },
       }).lean();
 
-      if (!rawProduct) continue;
+      if (!rawProduct) {
+        continue;
+      }
 
       const mappedOffer = mapPromoOffer(offer, rawProduct);
 
@@ -1149,22 +1302,34 @@ router.get('/store/shop', async (req, res) => {
       }
     }
 
-    const homeMidBannersRaw = await HomeMidBanner.find({ active: true })
-      .sort({ sortOrder: 1, createdAt: 1 })
+    const homeMidBannersRaw = await HomeMidBanner.find({
+      active: true,
+    })
+      .sort({
+        sortOrder: 1,
+        createdAt: 1,
+      })
       .lean();
 
     let midBannerLeft = null;
     let midBannerRight = null;
 
     for (const banner of homeMidBannersRaw) {
-      if (!banner || !banner.productCustomId) continue;
+      if (!banner || !banner.productCustomId) {
+        continue;
+      }
 
       const rawProduct = await Product.findOne({
         customId: banner.productCustomId,
-        stock: { $gt: 0 },
+
+        stock: {
+          $gt: 0,
+        },
       }).lean();
 
-      if (!rawProduct) continue;
+      if (!rawProduct) {
+        continue;
+      }
 
       const mappedBanner = mapMidBanner(banner, rawProduct);
 
@@ -1177,8 +1342,12 @@ router.get('/store/shop', async (req, res) => {
       }
     }
 
-    const shopSidebarBannerRaw = await ShopSidebarBanner.findOne({ active: true })
-      .sort({ updatedAt: -1 })
+    const shopSidebarBannerRaw = await ShopSidebarBanner.findOne({
+      active: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
       .lean();
 
     let shopSidebarBanner = null;
@@ -1186,7 +1355,10 @@ router.get('/store/shop', async (req, res) => {
     if (shopSidebarBannerRaw && shopSidebarBannerRaw.productCustomId) {
       const rawSidebarProduct = await Product.findOne({
         customId: shopSidebarBannerRaw.productCustomId,
-        stock: { $gt: 0 },
+
+        stock: {
+          $gt: 0,
+        },
       }).lean();
 
       if (rawSidebarProduct) {
@@ -1194,8 +1366,12 @@ router.get('/store/shop', async (req, res) => {
       }
     }
 
-    const shopMainBannerRaw = await ShopMainBanner.findOne({ active: true })
-      .sort({ updatedAt: -1 })
+    const shopMainBannerRaw = await ShopMainBanner.findOne({
+      active: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
       .lean();
 
     let shopMainBanner = null;
@@ -1203,7 +1379,10 @@ router.get('/store/shop', async (req, res) => {
     if (shopMainBannerRaw && shopMainBannerRaw.productCustomId) {
       const rawMainProduct = await Product.findOne({
         customId: shopMainBannerRaw.productCustomId,
-        stock: { $gt: 0 },
+
+        stock: {
+          $gt: 0,
+        },
       }).lean();
 
       if (rawMainProduct) {
@@ -1211,16 +1390,25 @@ router.get('/store/shop', async (req, res) => {
       }
     }
 
-    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
-      .sort({ updatedAt: -1 })
+    const shopHeaderImage = await ShopHeaderImage.findOne({
+      active: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
       .lean();
 
-    res.render('store/shop', {
+    return res.render('store/shop', {
       layout: 'layouts/store',
       title: 'Shop',
+
+      storeDepartment: 'internal',
+      productSource: 'INTERNAL',
+
       shopProducts,
       featuredSidebarProducts,
       topRatedTagProducts,
+
       promoOfferLeft,
       promoOfferRight,
       midBannerLeft,
@@ -1228,25 +1416,38 @@ router.get('/store/shop', async (req, res) => {
       shopSidebarBanner,
       shopMainBanner,
       shopHeaderImage,
+
       selectedKeyword: keyword,
       selectedCategory: category,
       selectedSort,
+
       currentPage,
       totalPages,
       totalProducts,
+
       hasPrevPage: currentPage > 1,
+
       hasNextPage: currentPage < totalPages,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
     });
   } catch (err) {
     console.error('❌ store shop error:', err);
-    res.render('store/shop', {
+
+    return res.render('store/shop', {
       layout: 'layouts/store',
-      title: 'Shop',
+
+      title: storeDepartment === 'cj' ? 'CJ Shop | Kasyora' : 'Shop',
+
+      storeDepartment,
+
+      productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
+
       shopProducts: [],
       featuredSidebarProducts: [],
       topRatedTagProducts: [],
+
       promoOfferLeft: null,
       promoOfferRight: null,
       midBannerLeft: null,
@@ -1254,16 +1455,21 @@ router.get('/store/shop', async (req, res) => {
       shopSidebarBanner: null,
       shopMainBanner: null,
       shopHeaderImage: null,
-      selectedKeyword: '',
-      selectedCategory: '',
-      selectedSort: 'default',
+
+      selectedKeyword: String(req.query.keyword || '').trim(),
+
+      selectedCategory: String(req.query.category || '').trim(),
+
+      selectedSort: String(req.query.sort || 'default').trim(),
+
       currentPage: 1,
       totalPages: 1,
       totalProducts: 0,
       hasPrevPage: false,
       hasNextPage: false,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+      vatRate: VAT_RATE,
     });
   }
 });
