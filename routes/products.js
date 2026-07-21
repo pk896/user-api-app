@@ -872,7 +872,7 @@ router.get('/sales', async (req, res) => {
           updatedAt: -1,
           _id: -1,
         })
-        .limit(10)
+        .limit(15)
         .lean();
 
       topRatedProducts = topRatedCjRows
@@ -1008,8 +1008,23 @@ router.get('/sales', async (req, res) => {
           $gt: 0,
         },
 
-        ratingsCount: {
-          $gt: 0,
+        /*
+         * Convert legacy ratingsCount values to a number before
+         * checking them. Missing, invalid and zero values become 0
+         * and are excluded from the Most Rated sidebar.
+         */
+        $expr: {
+          $gt: [
+            {
+              $convert: {
+                input: '$ratingsCount',
+                to: 'double',
+                onError: 0,
+                onNull: 0,
+              },
+            },
+            0,
+          ],
         },
       })
         .sort({
@@ -1019,10 +1034,12 @@ router.get('/sales', async (req, res) => {
           createdAt: -1,
           _id: -1,
         })
-        .limit(10)
+        .limit(15)
         .lean();
 
-      topRatedProducts = topRatedRows.map(mapInternalSalesProduct);
+      topRatedProducts = topRatedRows
+        .map(mapInternalSalesProduct)
+        .filter((product) => Number(product.ratingsCount || 0) > 0);
 
       if (q && productRows.length > 0) {
         const shownIds = productRows.map((product) => product._id);

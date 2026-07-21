@@ -759,17 +759,15 @@ router.get('/store', async (req, res) => {
       .lean();
 
     /*
-     * Every homepage hero call-to-action must open the real
-     * Shop page while preserving the currently active department.
-     *
-     * Stored slide URLs are intentionally not used here because
-     * they may point to an internal product or may omit the
-     * active store department.
-     */
+    * Every homepage hero call-to-action opens the Shop page
+    * at the top while preserving the active store department.
+    *
+    * Search and category links may still use #shopProductsSection,
+    * but the general hero Shop Now button must not use a hash.
+    */
     const activeHeroShopUrl = buildStoreDepartmentUrl(
       '/store/shop',
       storeDepartment,
-      '#shopProductsSection',
     );
 
     const heroSlides = heroSlidesRaw.map((slide) => ({

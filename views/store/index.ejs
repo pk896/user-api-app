@@ -485,8 +485,10 @@
             </p>
             <% } %>
 
-            <a class="btn btn-primary rounded-pill py-3 px-5 wow fadeInRight" data-wow-delay="0.7s" href="<%= slide.buttonUrl %>">
-              <%= slide.buttonText || 'Shop Now' %>
+            <a class="btn btn-primary rounded-pill py-3 px-5 wow fadeInRight js-hero-shop-button" data-wow-delay="0.7s" data-original-text="<%= slide.buttonText || 'Shop Now' %>" href="<%= slide.buttonUrl %>">
+              <span class="js-hero-shop-button-text">
+                <%= slide.buttonText || 'Shop Now' %>
+              </span>
             </a>
           </div>
         </div>
@@ -1957,6 +1959,48 @@
 
     window.addEventListener('pageshow', syncTopCartSticky);
   })();
+</script>
+
+<script nonce="<%= nonce %>">
+  document.addEventListener('click', function(event) {
+    const button = event.target.closest('.js-hero-shop-button');
+
+    if (!button) {
+      return;
+    }
+
+    const buttonText = button.querySelector(
+      '.js-hero-shop-button-text'
+    );
+
+    if (buttonText) {
+      buttonText.textContent = 'Loading...';
+    }
+
+    button.setAttribute('aria-busy', 'true');
+    button.classList.add('disabled');
+  });
+
+  window.addEventListener('pageshow', function() {
+    document
+      .querySelectorAll('.js-hero-shop-button')
+      .forEach(function(button) {
+        const buttonText = button.querySelector(
+          '.js-hero-shop-button-text'
+        );
+
+        const originalText = String(
+          button.getAttribute('data-original-text') || ''
+        ).trim();
+
+        if (buttonText && originalText) {
+          buttonText.textContent = originalText;
+        }
+
+        button.removeAttribute('aria-busy');
+        button.classList.remove('disabled');
+      });
+  });
 </script>
 
 <!-- Mobile Floating Cart Start -->
