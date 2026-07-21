@@ -357,6 +357,179 @@ function buildCjSalesQuery({ keyword, category }) {
   return query;
 }
 
+/*
+ * Load Fast Liner categories only from active CJ products
+ * that were imported into Kasyora and have at least one
+ * enabled variant with a valid selling price.
+ *
+ * This category list remains completely separate from the
+ * fixed Internal Kasyora Store category list.
+ */
+async function loadCjSalesCategories() {
+  const rows = await CjProduct.aggregate([
+    {
+      $match: {
+        status: 'active',
+
+        variants: {
+          $elemMatch: {
+            isEnabled: true,
+
+            'sellingPriceExVat.value': {
+              $gte: 0,
+            },
+          },
+        },
+      },
+    },
+
+    {
+      $project: {
+        categoryName: {
+          $trim: {
+            input: {
+              $switch: {
+                branches: [
+                  {
+                    case: {
+                      $gt: [
+                        {
+                          $strLenCP: {
+                            $trim: {
+                              input: {
+                                $ifNull: ['$category.name', ''],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+
+                    then: {
+                      $trim: {
+                        input: '$category.name',
+                      },
+                    },
+                  },
+
+                  {
+                    case: {
+                      $gt: [
+                        {
+                          $strLenCP: {
+                            $trim: {
+                              input: {
+                                $ifNull: ['$category.secondName', ''],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+
+                    then: {
+                      $trim: {
+                        input: '$category.secondName',
+                      },
+                    },
+                  },
+
+                  {
+                    case: {
+                      $gt: [
+                        {
+                          $strLenCP: {
+                            $trim: {
+                              input: {
+                                $ifNull: ['$category.firstName', ''],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+
+                    then: {
+                      $trim: {
+                        input: '$category.firstName',
+                      },
+                    },
+                  },
+
+                  {
+                    case: {
+                      $gt: [
+                        {
+                          $strLenCP: {
+                            $trim: {
+                              input: {
+                                $ifNull: ['$productType', ''],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+
+                    then: {
+                      $trim: {
+                        input: '$productType',
+                      },
+                    },
+                  },
+                ],
+
+                default: '',
+              },
+            },
+          },
+        },
+      },
+    },
+
+    {
+      $match: {
+        categoryName: {
+          $ne: '',
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: {
+          $toLower: '$categoryName',
+        },
+
+        label: {
+          $first: '$categoryName',
+        },
+      },
+    },
+
+    {
+      $sort: {
+        label: 1,
+      },
+    },
+  ]);
+
+  return rows
+    .map((row) => {
+      const categoryName = String(row?.label || '').trim();
+
+      return {
+        value: categoryName,
+        label: categoryName,
+      };
+    })
+    .filter((category) => category.value);
+}
+
 if (!BUCKET) {
   console.warn('⚠️ AWS_BUCKET_NAME missing — uploads will fail.');
 }
@@ -800,6 +973,13 @@ router.get('/sales', async (req, res) => {
     let relatedProducts = [];
     let topRatedProducts = [];
 
+    /*
+     * Internal responses keep the existing global category list.
+     * CJ responses replace it with categories loaded only from
+     * active imported CjProduct records.
+     */
+    let salesCategories = res.locals.CATEGORIES || [];
+
     let totalProducts = 0;
     let totalPages = 1;
     let currentPage = 1;
@@ -815,6 +995,12 @@ router.get('/sales', async (req, res) => {
         keyword: q,
         category: cat,
       });
+
+      /*
+       * Load only CJ-derived categories while the CJ Fast Liner
+       * department is active.
+       */
+      salesCategories = await loadCjSalesCategories();
 
       totalProducts = await CjProduct.countDocuments(cjSalesQuery);
 
@@ -1098,6 +1284,13 @@ router.get('/sales', async (req, res) => {
       products,
       relatedProducts,
       topRatedProducts,
+
+      /*
+       * CJ receives only active imported CJ categories.
+       * Internal Fast Liner retains the existing global
+       * Internal Store category list.
+       */
+      CATEGORIES: salesCategories,
 
       storeDepartment,
 

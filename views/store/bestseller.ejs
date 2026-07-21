@@ -96,6 +96,12 @@
   const IS_CJ_DEPARTMENT =
     ACTIVE_DEPARTMENT === 'cj';
 
+  const ACTIVE_SORT = String(
+    typeof selectedSort !== 'undefined'
+      ? selectedSort
+      : 'popular'
+  ).trim() || 'popular';
+
   const ACTIVE_HOME_URL =
     '/store?department=' +
     encodeURIComponent(
@@ -113,6 +119,10 @@
     '/store/bestseller?department=' +
     encodeURIComponent(
       ACTIVE_DEPARTMENT
+    ) +
+    '&sort=' +
+    encodeURIComponent(
+      ACTIVE_SORT
     ) +
     '#bestsellerProductsSection';
 
@@ -178,6 +188,15 @@
       params.push(
         'category=' +
         encodeURIComponent(category)
+      );
+    }
+
+    if (ACTIVE_SORT) {
+      params.push(
+        'sort=' +
+        encodeURIComponent(
+          ACTIVE_SORT
+        )
       );
     }
 
@@ -269,6 +288,29 @@
             ? product.colorImages
             : []
       })
+    );
+  }
+
+  function getDefaultCjVariant(product) {
+    if (!Array.isArray(product?.variants)) {
+      return null;
+    }
+
+    return (
+      product.variants.find(
+        function(variant) {
+          return (
+            String(
+              variant?.cjVariantId || ''
+            ) ===
+            String(
+              product?.defaultCjVariantId || ''
+            )
+          );
+        }
+      ) ||
+      product.variants[0] ||
+      null
     );
   }
 %>
@@ -701,12 +743,13 @@
 <!-- Bestseller Products Start -->
 <div id="bestsellerProductsSection" class="container-fluid products pt-5">
   <div class="container products-mini py-5">
-    <div class="mx-auto text-center mb-5" style="max-width: 700px;">
+    <div class="mx-auto text-center mb-4" style="max-width: 700px;">
       <h4 class="text-primary mb-4 border-bottom border-primary border-2 d-inline-block p-2 title-border-radius wow fadeInUp" data-wow-delay="0.1s">
         <%= IS_CJ_DEPARTMENT
           ? 'CJ Bestseller Products'
           : 'Kasyora Bestseller Products' %>
       </h4>
+
       <p class="mb-2 wow fadeInUp" data-wow-delay="0.2s">
         Discover our top-selling products, chosen for their quality,
         reliability, and customer satisfaction. Shop the most popular
@@ -720,6 +763,36 @@
         Cart and order values remain securely calculated in
         <strong><%= BASE_CURRENCY %></strong>.
       </p>
+    </div>
+
+    <div class="row justify-content-end mb-4">
+      <div class="col-12 col-md-6 col-lg-4">
+        <label for="bestsellerSortSelect" class="form-label fw-bold text-primary">
+          Sort bestseller products
+        </label>
+
+        <select id="bestsellerSortSelect" class="form-select border-primary">
+          <option value="popular" <%= ACTIVE_SORT === 'popular' ? 'selected' : '' %>>
+            Most Popular
+          </option>
+
+          <option value="newest" <%= ACTIVE_SORT === 'newest' ? 'selected' : '' %>>
+            Newest
+          </option>
+
+          <option value="rating" <%= ACTIVE_SORT === 'rating' ? 'selected' : '' %>>
+            Highest Rated
+          </option>
+
+          <option value="price_asc" <%= ACTIVE_SORT === 'price_asc' ? 'selected' : '' %>>
+            Price: Low To High
+          </option>
+
+          <option value="price_desc" <%= ACTIVE_SORT === 'price_desc' ? 'selected' : '' %>>
+            Price: High To Low
+          </option>
+        </select>
+      </div>
     </div>
     <div class="row g-4">
       <% (bestSellerProducts || []).forEach(function(product, index) { %>
@@ -915,9 +988,34 @@
                 </div>
 
                 <div class="products-mini-add border p-3">
-                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
-                    <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                  <%
+                    const allProductsIsCj =
+                      String(product?.source || '')
+                        .trim()
+                        .toUpperCase() === 'CJ';
+
+                    const allProductsCjVariant =
+                      getDefaultCjVariant(product);
+                  %>
+
+                  <% if (allProductsIsCj) { %>
+                  <% if (allProductsCjVariant?.cjVariantId) { %>
+                  <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= allProductsCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To CJ Cart
+                  </button>
+                  <% } else { %>
+                  <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4">
+                    <i class="fas fa-eye me-2"></i>
+                    Select Variant
                   </a>
+                  <% } %>
+                  <% } else { %>
+                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To Cart
+                  </a>
+                  <% } %>
 
                   <div class="d-flex">
                     <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
@@ -972,9 +1070,34 @@
                 </div>
 
                 <div class="products-mini-add border p-3">
-                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
-                    <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                  <%
+                    const newArrivalIsCj =
+                      String(product?.source || '')
+                        .trim()
+                        .toUpperCase() === 'CJ';
+
+                    const newArrivalCjVariant =
+                      getDefaultCjVariant(product);
+                  %>
+
+                  <% if (newArrivalIsCj) { %>
+                  <% if (newArrivalCjVariant?.cjVariantId) { %>
+                  <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= newArrivalCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To CJ Cart
+                  </button>
+                  <% } else { %>
+                  <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4">
+                    <i class="fas fa-eye me-2"></i>
+                    Select Variant
                   </a>
+                  <% } %>
+                  <% } else { %>
+                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To Cart
+                  </a>
+                  <% } %>
 
                   <div class="d-flex">
                     <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
@@ -1029,9 +1152,34 @@
                 </div>
 
                 <div class="products-mini-add border p-3">
-                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
-                    <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                  <%
+                    const featuredIsCj =
+                      String(product?.source || '')
+                        .trim()
+                        .toUpperCase() === 'CJ';
+
+                    const featuredCjVariant =
+                      getDefaultCjVariant(product);
+                  %>
+
+                  <% if (featuredIsCj) { %>
+                  <% if (featuredCjVariant?.cjVariantId) { %>
+                  <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= featuredCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To CJ Cart
+                  </button>
+                  <% } else { %>
+                  <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4">
+                    <i class="fas fa-eye me-2"></i>
+                    Select Variant
                   </a>
+                  <% } %>
+                  <% } else { %>
+                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To Cart
+                  </a>
+                  <% } %>
 
                   <div class="d-flex">
                     <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
@@ -1086,9 +1234,34 @@
                 </div>
 
                 <div class="products-mini-add border p-3">
-                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product='<%- storeProductPayload(product) %>'>
-                    <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                  <%
+                    const topSellingIsCj =
+                      String(product?.source || '')
+                        .trim()
+                        .toUpperCase() === 'CJ';
+
+                    const topSellingCjVariant =
+                      getDefaultCjVariant(product);
+                  %>
+
+                  <% if (topSellingIsCj) { %>
+                  <% if (topSellingCjVariant?.cjVariantId) { %>
+                  <button type="button" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cj-cart" data-cj-product-id="<%= product.cjProductId %>" data-cj-variant-id="<%= topSellingCjVariant.cjVariantId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To CJ Cart
+                  </button>
+                  <% } else { %>
+                  <a href="<%= product.url %>" class="btn btn-outline-primary rounded-pill py-2 px-4">
+                    <i class="fas fa-eye me-2"></i>
+                    Select Variant
                   </a>
+                  <% } %>
+                  <% } else { %>
+                  <a href="/api/cart/add?pid=<%= encodeURIComponent(product.customId) %>&qty=1&json=1" class="btn btn-primary border-secondary rounded-pill py-2 px-4 js-add-to-cart" data-pid="<%= product.customId %>" data-product="<%- storeProductPayload(product) %>">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Add To Cart
+                  </a>
+                  <% } %>
 
                   <div class="d-flex">
                     <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
@@ -1223,6 +1396,7 @@
     const keywordInputSecondary = document.getElementById('bestsellerKeywordInputSecondary');
     const keywordBtn = document.getElementById('bestsellerKeywordSearchBtn');
     const keywordBtnSecondary = document.getElementById('bestsellerKeywordSearchBtnSecondary');
+    const sortSelect = document.getElementById('bestsellerSortSelect');
     const links = Array.from(document.querySelectorAll('.bestseller-category-link'));
 
     if (!select) return;
@@ -1252,7 +1426,18 @@
       );
 
       const keyword = getKeyword();
-      const category = String(categoryValue != null ? categoryValue : select.value || '').trim();
+
+      const category = String(
+        categoryValue != null ?
+        categoryValue :
+        select.value || ''
+      ).trim();
+
+      const sort = String(
+        sortSelect ?
+        sortSelect.value || '' :
+        '<%= ACTIVE_SORT %>'
+      ).trim();
 
       syncKeywordInputs(keyword);
 
@@ -1262,6 +1447,10 @@
 
       if (category) {
         params.set('category', category);
+      }
+
+      if (sort) {
+        params.set('sort', sort);
       }
 
       const queryString = params.toString();
@@ -1279,6 +1468,12 @@
       goToBestseller(select.value);
     });
 
+    if (sortSelect) {
+      sortSelect.addEventListener('change', function() {
+        goToBestseller(select.value);
+      });
+    }
+
     if (keywordInput) {
       keywordInput.addEventListener('input', function() {
         const keyword = String(keywordInput.value || '').trim();
@@ -1291,7 +1486,11 @@
             goToBestseller(category);
           } else {
             window.location.href =
-              '/store/bestseller?department=<%= ACTIVE_DEPARTMENT %>#bestsellerProductsSection';
+              '/store/bestseller?department=' +
+              encodeURIComponent('<%= ACTIVE_DEPARTMENT %>') +
+              '&sort=' +
+              encodeURIComponent('<%= ACTIVE_SORT %>') +
+              '#bestsellerProductsSection';
           }
         }
       });
@@ -1316,7 +1515,11 @@
             goToBestseller(category);
           } else {
             window.location.href =
-              '/store/bestseller?department=<%= ACTIVE_DEPARTMENT %>#bestsellerProductsSection';
+              '/store/bestseller?department=' +
+              encodeURIComponent('<%= ACTIVE_DEPARTMENT %>') +
+              '&sort=' +
+              encodeURIComponent('<%= ACTIVE_SORT %>') +
+              '#bestsellerProductsSection';
           }
         }
       });

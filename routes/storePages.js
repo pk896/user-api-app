@@ -307,6 +307,100 @@ function buildCjHomepageQuery({ keyword, category }) {
   return query;
 }
 
+/*
+ * Load storefront categories only from active CJ products
+ * that were imported into Kasyora.
+ *
+ * This remains completely separate from the fixed internal
+ * Kasyora category list exposed globally by server.js.
+ */
+async function loadCjStoreCategories() {
+  const rows = await CjProduct.aggregate([
+    {
+      $match: {
+        status: 'active',
+
+        variants: {
+          $elemMatch: {
+            isEnabled: true,
+
+            'sellingPriceExVat.value': {
+              $gte: 0,
+            },
+          },
+        },
+      },
+    },
+
+    {
+      $project: {
+        categoryName: {
+          $trim: {
+            input: {
+              $ifNull: [
+                '$category.name',
+
+                {
+                  $ifNull: [
+                    '$category.secondName',
+
+                    {
+                      $ifNull: [
+                        '$category.firstName',
+
+                        {
+                          $ifNull: ['$productType', ''],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+
+    {
+      $match: {
+        categoryName: {
+          $ne: '',
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: {
+          $toLower: '$categoryName',
+        },
+
+        label: {
+          $first: '$categoryName',
+        },
+      },
+    },
+
+    {
+      $sort: {
+        label: 1,
+      },
+    },
+  ]);
+
+  return rows
+    .map((row) => {
+      const categoryName = String(row?.label || '').trim();
+
+      return {
+        value: categoryName,
+        label: categoryName,
+      };
+    })
+    .filter((category) => category.value);
+}
+
 async function loadCjHomepageProducts({ keyword, category }) {
   const query = buildCjHomepageQuery({
     keyword,
@@ -759,16 +853,13 @@ router.get('/store', async (req, res) => {
       .lean();
 
     /*
-    * Every homepage hero call-to-action opens the Shop page
-    * at the top while preserving the active store department.
-    *
-    * Search and category links may still use #shopProductsSection,
-    * but the general hero Shop Now button must not use a hash.
-    */
-    const activeHeroShopUrl = buildStoreDepartmentUrl(
-      '/store/shop',
-      storeDepartment,
-    );
+     * Every homepage hero call-to-action opens the Shop page
+     * at the top while preserving the active store department.
+     *
+     * Search and category links may still use #shopProductsSection,
+     * but the general hero Shop Now button must not use a hash.
+     */
+    const activeHeroShopUrl = buildStoreDepartmentUrl('/store/shop', storeDepartment);
 
     const heroSlides = heroSlidesRaw.map((slide) => ({
       title: slide.title || '',
@@ -780,10 +871,14 @@ router.get('/store', async (req, res) => {
     }));
 
     if (storeDepartment === 'cj') {
-      const cjProducts = await loadCjHomepageProducts({
-        keyword,
-        category,
-      });
+      const [cjProducts, cjCategories] = await Promise.all([
+        loadCjHomepageProducts({
+          keyword,
+          category,
+        }),
+
+        loadCjStoreCategories(),
+      ]);
 
       /*
        * CJ currently has no Kasyora sales history in this stage.
@@ -814,6 +909,12 @@ router.get('/store', async (req, res) => {
 
         storeDepartment: 'cj',
         productSource: 'CJ',
+
+        /*
+         * Override the global internal category list only while
+         * the CJ storefront is active.
+         */
+        CATEGORIES: cjCategories,
 
         allProducts,
         newArrivals,
@@ -1057,6 +1158,12 @@ router.get('/store', async (req, res) => {
       storeDepartment,
       productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
 
+      /*
+       * Never expose internal categories on a failed CJ response.
+       * Internal responses retain the existing global category list.
+       */
+      CATEGORIES: storeDepartment === 'cj' ? [] : res.locals.CATEGORIES || [],
+
       allProducts: [],
       newArrivals: [],
       featuredProducts: [],
@@ -1115,26 +1222,29 @@ router.get('/store/shop', async (req, res) => {
      * internal ratings, or internal marketing banners.
      */
     if (storeDepartment === 'cj') {
-      const cjShopResult = await loadCjShopProducts({
-        keyword,
-        category,
-        selectedSort,
-        requestedPage,
-        perPage,
-      });
+      const [cjShopResult, cjCategories, shopHeaderImage] = await Promise.all([
+        loadCjShopProducts({
+          keyword,
+          category,
+          selectedSort,
+          requestedPage,
+          perPage,
+        }),
 
-      /*
-       * Internal marketing records reference internal
-       * Product custom IDs. They must not be displayed
-       * while the CJ department is active.
-       */
-      const shopHeaderImage = await ShopHeaderImage.findOne({
-        active: true,
-      })
-        .sort({
-          updatedAt: -1,
+        loadCjStoreCategories(),
+
+        /*
+         * This is a shared decorative image only.
+         * It does not load an internal Product record.
+         */
+        ShopHeaderImage.findOne({
+          active: true,
         })
-        .lean();
+          .sort({
+            updatedAt: -1,
+          })
+          .lean(),
+      ]);
 
       return res.render('store/shop', {
         layout: 'layouts/store',
@@ -1143,6 +1253,12 @@ router.get('/store/shop', async (req, res) => {
 
         storeDepartment: 'cj',
         productSource: 'CJ',
+
+        /*
+         * Replace the global internal category list only for
+         * this CJ storefront response.
+         */
+        CATEGORIES: cjCategories,
 
         shopProducts: cjShopResult.products,
 
@@ -1487,6 +1603,12 @@ router.get('/store/shop', async (req, res) => {
 
       productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
 
+      /*
+       * Never expose internal categories on a failed CJ response.
+       * Internal responses retain the existing global category list.
+       */
+      CATEGORIES: storeDepartment === 'cj' ? [] : res.locals.CATEGORIES || [],
+
       shopProducts: [],
       featuredSidebarProducts: [],
       topRatedTagProducts: [],
@@ -1777,6 +1899,12 @@ router.get('/store/bestseller', async (req, res) => {
 
     const category = String(req.query.category || '').trim();
 
+    const requestedSort = String(req.query.sort || 'popular').trim();
+
+    const allowedSorts = new Set(['popular', 'newest', 'rating', 'price_asc', 'price_desc']);
+
+    const selectedSort = allowedSorts.has(requestedSort) ? requestedSort : 'popular';
+
     /*
      * ==================================================
      * CJ DROPSHIPPING BESTSELLER DEPARTMENT
@@ -1787,39 +1915,78 @@ router.get('/store/bestseller', async (req, res) => {
      * or BestsellerBottomBanner records.
      */
     if (storeDepartment === 'cj') {
-      const cjProducts = await loadCjHomepageProducts({
-        keyword,
-        category,
-      });
+      const [cjProducts, cjCategories] = await Promise.all([
+        loadCjHomepageProducts({
+          keyword,
+          category,
+        }),
 
-      const sortedCjProducts = [...cjProducts].sort((left, right) => {
-        const popularityDifference = Number(right.popular === true) - Number(left.popular === true);
+        loadCjStoreCategories(),
+      ]);
 
-        if (popularityDifference !== 0) {
-          return popularityDifference;
-        }
+      const sortedCjProducts = [...cjProducts];
 
-        const ratingDifference = Number(right.avgRating || 0) - Number(left.avgRating || 0);
+      if (selectedSort === 'newest') {
+        /*
+         * loadCjHomepageProducts already returns the newest
+         * imported or updated CJ products first.
+         */
+      } else if (selectedSort === 'rating') {
+        sortedCjProducts.sort((left, right) => {
+          const ratingDifference = Number(right.avgRating || 0) - Number(left.avgRating || 0);
 
-        if (ratingDifference !== 0) {
-          return ratingDifference;
-        }
+          if (ratingDifference !== 0) {
+            return ratingDifference;
+          }
 
-        const ratingsCountDifference =
-          Number(right.ratingsCount || 0) - Number(left.ratingsCount || 0);
+          const ratingsCountDifference =
+            Number(right.ratingsCount || 0) - Number(left.ratingsCount || 0);
 
-        if (ratingsCountDifference !== 0) {
-          return ratingsCountDifference;
-        }
+          if (ratingsCountDifference !== 0) {
+            return ratingsCountDifference;
+          }
 
-        return String(left.name || '').localeCompare(String(right.name || ''));
-      });
+          return String(left.name || '').localeCompare(String(right.name || ''));
+        });
+      } else if (selectedSort === 'price_asc') {
+        sortedCjProducts.sort((left, right) => Number(left.price || 0) - Number(right.price || 0));
+      } else if (selectedSort === 'price_desc') {
+        sortedCjProducts.sort((left, right) => Number(right.price || 0) - Number(left.price || 0));
+      } else {
+        /*
+         * Default Bestseller order: popularity first,
+         * then CJ rating, rating count and product name.
+         */
+        sortedCjProducts.sort((left, right) => {
+          const popularityDifference =
+            Number(right.popular === true) - Number(left.popular === true);
+
+          if (popularityDifference !== 0) {
+            return popularityDifference;
+          }
+
+          const ratingDifference = Number(right.avgRating || 0) - Number(left.avgRating || 0);
+
+          if (ratingDifference !== 0) {
+            return ratingDifference;
+          }
+
+          const ratingsCountDifference =
+            Number(right.ratingsCount || 0) - Number(left.ratingsCount || 0);
+
+          if (ratingsCountDifference !== 0) {
+            return ratingsCountDifference;
+          }
+
+          return String(left.name || '').localeCompare(String(right.name || ''));
+        });
+      }
 
       const bestSellerProducts = sortedCjProducts.slice(0, 6);
 
-      const allProducts = cjProducts.slice(0, 8);
+      const allProducts = sortedCjProducts.slice(0, 8);
 
-      const newArrivals = cjProducts.slice(0, 4);
+      const newArrivals = [...cjProducts].slice(0, 4);
 
       const featuredProducts = [...cjProducts]
         .sort((left, right) => {
@@ -1829,7 +1996,7 @@ router.get('/store/bestseller', async (req, res) => {
 
       const topSellingProducts = sortedCjProducts.slice(0, 4);
 
-      const productListProducts = cjProducts.slice(0, 12);
+      const productListProducts = sortedCjProducts.slice(0, 12);
 
       const shopHeaderImage = await ShopHeaderImage.findOne({
         active: true,
@@ -1845,6 +2012,14 @@ router.get('/store/bestseller', async (req, res) => {
 
         storeDepartment: 'cj',
         productSource: 'CJ',
+
+        /*
+         * Use only categories obtained from active imported
+         * CJ products while the CJ department is selected.
+         */
+        CATEGORIES: cjCategories,
+
+        selectedSort,
 
         bestSellerProducts,
         allProducts,
@@ -1906,15 +2081,40 @@ router.get('/store/bestseller', async (req, res) => {
       ];
     }
 
+    let bestsellerSort = {
+      soldCount: -1,
+      createdAt: -1,
+    };
+
+    if (selectedSort === 'newest') {
+      bestsellerSort = {
+        createdAt: -1,
+        _id: -1,
+      };
+    } else if (selectedSort === 'rating') {
+      bestsellerSort = {
+        avgRating: -1,
+        ratingsCount: -1,
+        createdAt: -1,
+      };
+    } else if (selectedSort === 'price_asc') {
+      bestsellerSort = {
+        price: 1,
+        createdAt: -1,
+      };
+    } else if (selectedSort === 'price_desc') {
+      bestsellerSort = {
+        price: -1,
+        createdAt: -1,
+      };
+    }
+
     const bestSellerProductsRaw = await Product.find(bestsellerQuery)
-      .sort({ soldCount: -1, createdAt: -1 })
+      .sort(bestsellerSort)
       .limit(6)
       .lean();
 
-    const allProductsRaw = await Product.find(bestsellerQuery)
-      .sort({ createdAt: -1 })
-      .limit(8)
-      .lean();
+    const allProductsRaw = await Product.find(bestsellerQuery).sort(bestsellerSort).limit(8).lean();
 
     const newArrivalsRaw = await Product.find(bestsellerQuery)
       .sort({ createdAt: -1, _id: -1 })
@@ -2001,6 +2201,8 @@ router.get('/store/bestseller', async (req, res) => {
       storeDepartment: 'internal',
       productSource: 'INTERNAL',
 
+      selectedSort,
+
       bestSellerProducts,
       allProducts,
       newArrivals,
@@ -2032,6 +2234,14 @@ router.get('/store/bestseller', async (req, res) => {
       storeDepartment,
 
       productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
+
+      /*
+       * Never expose Internal Store categories after
+       * a failed CJ Bestseller request.
+       */
+      CATEGORIES: storeDepartment === 'cj' ? [] : res.locals.CATEGORIES || [],
+
+      selectedSort: String(req.query.sort || 'popular').trim(),
 
       bestSellerProducts: [],
       allProducts: [],
