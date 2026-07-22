@@ -1,0 +1,484 @@
+<!--views/admin/cj-featured-banner/edit.ejs-->
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+            <div>
+              <h1 class="h3 mb-1 text-primary">
+                CJ Featured Right-side Banner
+              </h1>
+
+              <p class="text-body-secondary mb-0">
+                <%= banner
+                    ? 'Edit the saved CJ product banner displayed on the Kasyora CJ Store homepage.'
+                    : 'Create the CJ product banner displayed on the Kasyora CJ Store homepage.'
+                %>
+              </p>
+            </div>
+
+            <a href="/admin/home-banners" class="btn btn-outline-secondary">
+              Back
+            </a>
+          </div>
+
+          <% if (banner) { %>
+          <div id="bannerSaveStatus" class="alert <%= banner.active ? 'alert-success' : 'alert-secondary' %> border shadow-sm mb-4" role="status">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+              <div>
+                <div class="fw-bold mb-1">
+                  <i class="<%= banner.active ? 'fas fa-check-circle' : 'fas fa-pause-circle' %> me-2" aria-hidden="true"></i>
+
+                  Saved CJ banner
+                </div>
+
+                <div class="small">
+                  This configuration is already saved in Kasyora.
+                  You are editing the existing CJ Featured Right-side Banner.
+                </div>
+
+                <% if (banner.updatedAt) { %>
+                <div class="small mt-1">
+                  Last updated:
+                  <strong>
+                    <%= new Date(banner.updatedAt).toLocaleString() %>
+                  </strong>
+                </div>
+                <% } %>
+              </div>
+
+              <div class="text-md-end">
+                <% if (banner.active) { %>
+                <span class="badge bg-success px-3 py-2">
+                  Active on CJ Store
+                </span>
+                <% } else { %>
+                <span class="badge bg-secondary px-3 py-2">
+                  Saved but inactive
+                </span>
+                <% } %>
+
+                <div id="unsavedChangesBadge" class="badge bg-warning text-dark px-3 py-2 mt-2 d-none">
+                  Unsaved changes
+                </div>
+              </div>
+            </div>
+          </div>
+          <% } else { %>
+          <div id="bannerSaveStatus" class="alert alert-warning border shadow-sm mb-4" role="status">
+            <div class="fw-bold mb-1">
+              <i class="fas fa-exclamation-circle me-2" aria-hidden="true"></i>
+              Banner not saved yet
+            </div>
+
+            <div class="small">
+              Select an eligible CJ product and click
+              <strong>Create CJ Featured Banner</strong>
+              to save the first configuration.
+            </div>
+          </div>
+          <% } %>
+
+          <form action="/admin/cj-featured-banner" method="POST" class="row g-3">
+            <div class="col-12">
+              <label for="cjProductSearch" class="form-label fw-semibold text-primary">
+                Choose CJ Product
+              </label>
+
+              <input type="hidden" name="cjProductId" id="cjProductId" value="<%= banner?.cjProductId || '' %>" required>
+
+              <div class="position-relative">
+                <input type="text" id="cjProductSearch" class="form-control border-primary" placeholder="Search by CJ product ID, SKU or product name" autocomplete="off" value="<%= selectedProduct ? `${selectedProduct.name} — ${selectedProduct.cjProductId}` : '' %>" required>
+
+                <div id="cjProductSearchResults" class="list-group position-absolute top-100 start-0 end-0 shadow-sm d-none" style="z-index: 1050;"></div>
+              </div>
+
+              <div class="form-text text-primary mt-2">
+                Only active imported CJ products with an enabled, valid-price variant are available.
+              </div>
+
+              <div id="selectedCjProductBox" class="mt-3 <%= selectedProduct ? '' : 'd-none' %>">
+                <div class="card border-primary shadow-sm">
+                  <div class="card-body p-3">
+                    <div class="row g-3 align-items-center">
+                      <div class="col-12 col-md-3">
+                        <div id="selectedCjImagePlaceholder" class="border rounded bg-light d-flex align-items-center justify-content-center text-muted <%= selectedProduct?.imageUrl ? 'd-none' : '' %>" style="height: 150px;">
+                          No product image
+                        </div>
+
+                        <img id="selectedCjProductImage" src="<%= selectedProduct?.imageUrl || '' %>" alt="<%= selectedProduct?.name || '' %>" class="img-fluid rounded border <%= selectedProduct?.imageUrl ? '' : 'd-none' %>" style="width: 100%; height: 150px; object-fit: contain;">
+                      </div>
+
+                      <div class="col-12 col-md-9">
+                        <div id="selectedCjProductName" class="fw-bold text-primary mb-2">
+                          <%= selectedProduct?.name || '' %>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>CJ Product ID:</strong>
+                          <span id="selectedCjProductId">
+                            <%= selectedProduct?.cjProductId || '' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>SKU:</strong>
+                          <span id="selectedCjProductSku">
+                            <%= selectedProduct?.productSku || '-' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>Category:</strong>
+                          <span id="selectedCjProductCategory">
+                            <%= selectedProduct?.category || 'CJ Product' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>Lowest price:</strong>
+                          <span id="selectedCjProductPrice">
+                            <%= selectedProduct ? Number(selectedProduct.price || 0).toFixed(2) : '0.00' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-3">
+                          <strong>Enabled variants:</strong>
+                          <span id="selectedCjVariantCount">
+                            <%= selectedProduct?.enabledVariantCount || 0 %>
+                          </span>
+                        </div>
+
+                        <button type="button" id="clearSelectedCjProduct" class="btn btn-sm btn-outline-secondary">
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label for="badgeText" class="form-label">
+                Badge Text
+              </label>
+
+              <input type="text" name="badgeText" id="badgeText" class="form-control" maxlength="80" value="<%= banner?.badgeText || 'Special Offer' %>">
+            </div>
+
+            <div class="col-md-6">
+              <label for="offerText" class="form-label">
+                Offer Text
+              </label>
+
+              <input type="text" name="offerText" id="offerText" class="form-control" maxlength="120" value="<%= banner?.offerText || 'Featured CJ Product' %>">
+            </div>
+
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="active" id="active" <%= banner?.active !== false ? 'checked' : '' %>>
+
+                <label class="form-check-label" for="active">
+                  Active
+                </label>
+              </div>
+            </div>
+
+            <div class="col-12">
+              <div class="border-top pt-3">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                  <div class="small text-body-secondary">
+                    <% if (banner) { %>
+                    Changes are not saved automatically. Click
+                    <strong>Update CJ Featured Banner</strong>
+                    after editing.
+                    <% } else { %>
+                    Click
+                    <strong>Create CJ Featured Banner</strong>
+                    to save this configuration.
+                    <% } %>
+                  </div>
+
+                  <div class="d-flex flex-wrap gap-2">
+                    <button type="submit" id="saveCjFeaturedBannerButton" class="btn btn-primary">
+                      <i class="<%= banner ? 'fas fa-save' : 'fas fa-plus-circle' %> me-2" aria-hidden="true"></i>
+
+                      <span id="saveCjFeaturedBannerButtonText">
+                        <%= banner
+                            ? 'Update CJ Featured Banner'
+                            : 'Create CJ Featured Banner'
+                            %>
+                      </span>
+                    </button>
+
+                    <% if (banner) { %>
+                    <a href="/admin/cj-featured-banner/toggle" class="btn <%= banner.active ? 'btn-outline-danger' : 'btn-outline-success' %>" onclick="return confirm('<%= banner.active
+                            ? 'Deactivate this CJ Featured Right-side Banner?'
+                            : 'Activate this CJ Featured Right-side Banner?'
+                            %>');">
+                      <i class="<%= banner.active ? 'fas fa-pause' : 'fas fa-play' %> me-2" aria-hidden="true"></i>
+
+                      <%= banner.active
+                            ? 'Deactivate Banner'
+                            : 'Activate Banner'
+                            %>
+                    </a>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%
+  scripts = `
+  <script nonce="${nonce}">
+    document.addEventListener('DOMContentLoaded', function () {
+      const searchInput =
+        document.getElementById('cjProductSearch');
+
+      const hiddenInput =
+        document.getElementById('cjProductId');
+
+      const resultsBox =
+        document.getElementById('cjProductSearchResults');
+
+      const selectedBox =
+        document.getElementById('selectedCjProductBox');
+
+      const selectedName =
+        document.getElementById('selectedCjProductName');
+
+      const selectedId =
+        document.getElementById('selectedCjProductId');
+
+      const selectedSku =
+        document.getElementById('selectedCjProductSku');
+
+      const selectedCategory =
+        document.getElementById('selectedCjProductCategory');
+
+      const selectedPrice =
+        document.getElementById('selectedCjProductPrice');
+
+      const selectedVariantCount =
+        document.getElementById('selectedCjVariantCount');
+
+      const selectedImage =
+        document.getElementById('selectedCjProductImage');
+
+      const imagePlaceholder =
+        document.getElementById('selectedCjImagePlaceholder');
+
+      const clearButton =
+        document.getElementById('clearSelectedCjProduct');
+
+      const saveButton =
+        document.getElementById('saveCjFeaturedBannerButton');
+
+        const saveButtonText =
+      document.getElementById('saveCjFeaturedBannerButtonText');
+
+      const unsavedChangesBadge =
+        document.getElementById('unsavedChangesBadge');
+
+      const badgeTextInput =
+        document.getElementById('badgeText');
+
+      const offerTextInput =
+        document.getElementById('offerText');
+
+      const activeInput =
+        document.getElementById('active');
+
+      const isExistingBanner =
+        ${banner ? 'true' : 'false'};
+
+      let debounceTimer = null;
+      let formIsDirty = false;
+
+function escapeHtml(value) {
+return String(value || '')
+.replace(/&/g, '&amp;')
+.replace(/</g, '&lt;' ) .replace( />/g, '&gt;')
+.replace(/"/g, '&quot;')
+.replace(/'/g, '&#039;');
+}
+
+function hideResults() {
+resultsBox.classList.add('d-none');
+resultsBox.innerHTML = '';
+}
+
+function markFormAsChanged() {
+formIsDirty = true;
+
+if (unsavedChangesBadge) {
+unsavedChangesBadge.classList.remove('d-none');
+}
+}
+
+function updateSelectedProduct(product) {
+hiddenInput.value =
+product.cjProductId || '';
+
+searchInput.value =
+(product.name || 'CJ Product') +
+' — ' +
+(product.cjProductId || '');
+
+selectedName.textContent =
+product.name || 'CJ Product';
+
+selectedId.textContent =
+product.cjProductId || '';
+
+selectedSku.textContent =
+product.productSku || '-';
+
+selectedCategory.textContent =
+product.category || 'CJ Product';
+
+selectedPrice.textContent =
+Number(product.price || 0).toFixed(2);
+
+selectedVariantCount.textContent =
+Number(product.enabledVariantCount || 0);
+
+if (product.imageUrl) {
+selectedImage.src =
+product.imageUrl;
+
+selectedImage.alt =
+product.name || 'Selected CJ product';
+
+selectedImage.classList.remove('d-none');
+imagePlaceholder.classList.add('d-none');
+} else {
+selectedImage.src = '';
+selectedImage.alt = '';
+selectedImage.classList.add('d-none');
+imagePlaceholder.classList.remove('d-none');
+}
+
+selectedBox.classList.remove('d-none');
+hideResults();
+markFormAsChanged();
+}
+
+function clearSelectedProduct() {
+hiddenInput.value = '';
+searchInput.value = '';
+
+selectedName.textContent = '';
+selectedId.textContent = '';
+selectedSku.textContent = '-';
+selectedCategory.textContent = '';
+selectedPrice.textContent = '0.00';
+selectedVariantCount.textContent = '0';
+
+selectedImage.src = '';
+selectedImage.alt = '';
+selectedImage.classList.add('d-none');
+imagePlaceholder.classList.remove('d-none');
+
+selectedBox.classList.add('d-none');
+hideResults();
+markFormAsChanged();
+searchInput.focus();
+}
+
+async function searchCjProducts(query) {
+try {
+const response = await fetch(
+'/admin/cj-featured-banner/products/search?q=' +
+encodeURIComponent(query),
+{
+headers: {
+'X-Requested-With': 'XMLHttpRequest'
+}
+}
+);
+
+const data = await response.json();
+
+if (
+!response.ok ||
+!data.success ||
+!Array.isArray(data.products)
+) {
+hideResults();
+return;
+}
+
+if (data.products.length === 0) {
+resultsBox.innerHTML =
+'<button type="button" class="list-group-item list-group-item-action disabled">' +
+  'No matching eligible CJ products found' +
+  '</button>';
+
+resultsBox.classList.remove('d-none');
+return;
+}
+
+resultsBox.innerHTML = data.products
+.map(function (product) {
+return \`
+<button type="button" class="list-group-item list-group-item-action" data-cj-product-id="\${escapeHtml(product.cjProductId)}" data-name="\${escapeHtml(product.name)}" data-product-sku="\${escapeHtml(product.productSku || '')}" data-category="\${escapeHtml(product.category || '')}" data-price="\${escapeHtml(product.price)}" data-enabled-variant-count="\${escapeHtml(product.enabledVariantCount)}" data-image-url="\${escapeHtml(product.imageUrl || '')}">
+  <div class="d-flex justify-content-between align-items-start gap-3">
+    <div class="min-w-0">
+      <div class="fw-semibold text-primary">
+        \${escapeHtml(product.name)}
+      </div>
+
+      <div class="small text-body-secondary">
+        CJ Product ID:
+        \${escapeHtml(product.cjProductId)}
+      </div>
+
+      <div class="small text-body-secondary">
+        SKU:
+        \${escapeHtml(product.productSku || '-')}
+      </div>
+    </div>
+
+    <span class="badge bg-success">
+      \${escapeHtml(product.enabledVariantCount)}
+      variants
+    </span>
+  </div>
+</button>
+\`;
+})
+.join('');
+
+resultsBox.classList.remove('d-none');
+} catch (error) {
+console.error(
+'CJ featured banner product search failed:',
+error
+);
+
+hideResults();
+}
+}
+
+searchInput.addEventListener('input', function () {
+const query =
+String(searchInput.value || '').trim();
+
+hiddenInput.value = '';
+markFormAsChanged();
+
+if (query.length
+
+< 1) { hideResults(); return; } window.clearTimeout(debounceTimer); debounceTimer=window.setTimeout(function () { searchCjProducts(query); }, 250); }); resultsBox.addEventListener('click', function (event) { const button=event.target.closest( 'button[data-cj-product-id]' ); if (!button) { return; } updateSelectedProduct({ cjProductId: button.getAttribute( 'data-cj-product-id' ), name: button.getAttribute( 'data-name' ), productSku: button.getAttribute( 'data-product-sku' ), category: button.getAttribute( 'data-category' ), price: button.getAttribute( 'data-price' ), enabledVariantCount: button.getAttribute( 'data-enabled-variant-count' ), imageUrl: button.getAttribute( 'data-image-url' ) }); }); if (clearButton) { clearButton.addEventListener( 'click' , clearSelectedProduct ); } document.addEventListener('click', function (event) { const insideSearch=event.target.closest( '#cjProductSearch' ) || event.target.closest( '#cjProductSearchResults' ); if (!insideSearch) { hideResults(); } }); [ badgeTextInput, offerTextInput, activeInput ] .filter(Boolean) .forEach(function (input) { input.addEventListener( input.type==='checkbox' ? 'change' : 'input' , markFormAsChanged ); }); const form=searchInput.closest('form'); if (form) { form.addEventListener('submit', function (event) { if (!String(hiddenInput.value || '' ).trim()) { event.preventDefault(); searchInput.focus(); alert( 'Please search for and select an eligible CJ product first.' ); return; } if (saveButton) { saveButton.disabled=true; saveButton.innerHTML='<span class="spinner-border spinner-border-sm me-2" ' + 'role="status" aria-hidden="true"></span>' + ( isExistingBanner ? 'Updating CJ Banner...' : 'Creating CJ Banner...' ); } }); } }); </script>
+  `;
+  %>

@@ -686,6 +686,7 @@ const wholesaleCheckoutRoutes = require('./routes/wholesaleCheckout');
 const contactRoutes = require('./routes/contact');
 const adminRoutes = require('./routes/admin');
 const adminHomeBannersRoutes = require('./routes/adminHomeBanners');
+const adminCjFeaturedBannerRoutes = require('./routes/adminCjFeaturedBanner');
 const adminHomePromoOffersRoutes = require('./routes/adminHomePromoOffers');
 const adminHomeMidBannersRoutes = require('./routes/adminHomeMidBanners');
 const adminBestsellerCards = require('./routes/adminBestsellerCards');
@@ -827,6 +828,13 @@ app.use('/business/api', businessLogoApiRoutes);
 // Business/admin pages
 app.use('/admin', adminRoutes);
 app.use('/admin', adminHomeBannersRoutes);
+
+/*
+ * Completely separate Kasyora CJ Store homepage
+ * Featured Right-side Banner admin flow.
+ */
+app.use('/admin', adminCjFeaturedBannerRoutes);
+
 app.use('/admin', adminHomePromoOffersRoutes);
 app.use('/admin', adminHomeMidBannersRoutes);
 app.use('/admin', adminBestsellerCards);

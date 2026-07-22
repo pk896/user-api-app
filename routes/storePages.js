@@ -7,6 +7,13 @@ const CjProduct = require('../models/CjProduct');
 const Rating = require('../models/Rating');
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
+
+/*
+ * Separate Kasyora CJ Store homepage Featured Right-side Banner.
+ * This model never references the Internal Product model.
+ */
+const CjFeaturedBanner = require('../models/CjFeaturedBanner');
+
 const HomePromoOffer = require('../models/HomePromoOffer');
 const HomeMidBanner = require('../models/HomeMidBanner');
 const BestsellerCard = require('../models/BestsellerCard');
@@ -871,14 +878,74 @@ router.get('/store', async (req, res) => {
     }));
 
     if (storeDepartment === 'cj') {
-      const [cjProducts, cjCategories] = await Promise.all([
+      const [cjProducts, cjCategories, cjFeaturedBanner] = await Promise.all([
         loadCjHomepageProducts({
           keyword,
           category,
         }),
 
         loadCjStoreCategories(),
+
+        /*
+         * Load only the separate CJ Featured Right-side Banner.
+         *
+         * This never queries the Internal FeaturedBanner model.
+         */
+        CjFeaturedBanner.findOne({
+          slot: 'right',
+          active: true,
+        })
+          .sort({
+            updatedAt: -1,
+          })
+          .lean(),
       ]);
+
+      /*
+       * The CJ banner product is loaded independently from the
+       * visible search/category results.
+       *
+       * This means the configured banner remains visible even
+       * when the customer searches for another product category.
+       */
+      let sideBannerProduct = null;
+
+      if (cjFeaturedBanner?.cjProductId) {
+        const rawCjBannerProduct = await CjProduct.findOne({
+          status: 'active',
+
+          cjProductId: String(cjFeaturedBanner.cjProductId).trim(),
+
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
+
+              cjVariantId: {
+                $exists: true,
+                $ne: '',
+              },
+
+              'sellingPriceExVat.value': {
+                $gte: 0,
+              },
+            },
+          },
+        }).lean();
+
+        if (rawCjBannerProduct) {
+          const mappedCjBannerProduct = mapCjStoreProduct(rawCjBannerProduct);
+
+          if (mappedCjBannerProduct.cjProductId && mappedCjBannerProduct.enabledVariantCount > 0) {
+            sideBannerProduct = {
+              ...mappedCjBannerProduct,
+
+              badgeText: cjFeaturedBanner.badgeText || 'Special Offer',
+
+              offerText: cjFeaturedBanner.offerText || 'Featured CJ Product',
+            };
+          }
+        }
+      }
 
       /*
        * CJ currently has no Kasyora sales history in this stage.
@@ -925,10 +992,13 @@ router.get('/store', async (req, res) => {
         heroSlides,
 
         /*
-         * These records are linked to internal Product custom IDs.
-         * They must not appear while the CJ department is active.
+         * The Featured Right-side Banner uses only the separate
+         * CjFeaturedBanner configuration and CjProduct model.
+         *
+         * The remaining homepage marketing records still reference
+         * Internal Product custom IDs, so they remain hidden in CJ.
          */
-        sideBannerProduct: null,
+        sideBannerProduct,
         promoOfferLeft: null,
         promoOfferRight: null,
         midBannerLeft: null,
