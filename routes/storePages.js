@@ -14,6 +14,12 @@ const FeaturedBanner = require('../models/FeaturedBanner');
  */
 const CjFeaturedBanner = require('../models/CjFeaturedBanner');
 
+/*
+ * Separate Kasyora CJ Store homepage Promo Offers.
+ * This model stores only CjProduct.cjProductId values.
+ */
+const CjHomePromoOffer = require('../models/CjHomePromoOffer');
+
 const HomePromoOffer = require('../models/HomePromoOffer');
 const HomeMidBanner = require('../models/HomeMidBanner');
 const BestsellerCard = require('../models/BestsellerCard');
@@ -522,6 +528,9 @@ async function loadCjShopProducts({ keyword, category, selectedSort, requestedPa
   };
 }
 
+/*
+ * Map only Internal Kasyora Store promo offers.
+ */
 function mapPromoOffer(offer, product) {
   if (!offer || !product) return null;
 
@@ -538,6 +547,62 @@ function mapPromoOffer(offer, product) {
     productName: mappedProduct.name,
     active: !!offer.active,
     sortOrder: Number(offer.sortOrder || 0),
+  };
+}
+
+/*
+ * Map only Kasyora CJ Store promo offers.
+ *
+ * This function uses mapCjStoreProduct() and links only
+ * to the separate CJ product-detail route.
+ */
+function mapCjPromoOffer(offer, product) {
+  if (!offer || !product) return null;
+
+  const mappedProduct = mapCjStoreProduct(product);
+
+  if (
+    !mappedProduct.cjProductId ||
+    mappedProduct.enabledVariantCount < 1
+  ) {
+    return null;
+  }
+
+  return {
+    slot: String(offer.slot || '').trim(),
+
+    eyebrowText:
+      String(offer.eyebrowText || '').trim(),
+
+    title:
+      String(
+        offer.titleOverride ||
+        mappedProduct.name ||
+        'CJ Product',
+      ).trim(),
+
+    discountText:
+      String(offer.discountText || '').trim(),
+
+    url:
+      `/cj/product/${encodeURIComponent(
+        mappedProduct.cjProductId,
+      )}`,
+
+    image:
+      mappedProduct.image,
+
+    cjProductId:
+      mappedProduct.cjProductId,
+
+    productName:
+      mappedProduct.name,
+
+    active:
+      offer.active === true,
+
+    sortOrder:
+      Number(offer.sortOrder || 0),
   };
 }
 
@@ -878,7 +943,12 @@ router.get('/store', async (req, res) => {
     }));
 
     if (storeDepartment === 'cj') {
-      const [cjProducts, cjCategories, cjFeaturedBanner] = await Promise.all([
+      const [
+        cjProducts,
+        cjCategories,
+        cjFeaturedBanner,
+        cjHomePromoOffers,
+      ] = await Promise.all([
         loadCjHomepageProducts({
           keyword,
           category,
@@ -887,16 +957,31 @@ router.get('/store', async (req, res) => {
         loadCjStoreCategories(),
 
         /*
-         * Load only the separate CJ Featured Right-side Banner.
-         *
-         * This never queries the Internal FeaturedBanner model.
-         */
+        * Load only the separate CJ Featured Right-side Banner.
+        *
+        * This never queries the Internal FeaturedBanner model.
+        */
         CjFeaturedBanner.findOne({
           slot: 'right',
           active: true,
         })
           .sort({
             updatedAt: -1,
+          })
+          .lean(),
+
+        /*
+        * Load only active CJ homepage promo offers.
+        *
+        * These records contain CjProduct.cjProductId values
+        * and never reference Internal Product.customId.
+        */
+        CjHomePromoOffer.find({
+          active: true,
+        })
+          .sort({
+            sortOrder: 1,
+            createdAt: 1,
           })
           .lean(),
       ]);
@@ -948,10 +1033,78 @@ router.get('/store', async (req, res) => {
       }
 
       /*
-       * CJ currently has no Kasyora sales history in this stage.
-       * The arrays are therefore derived from the same isolated
-       * active CJ catalogue using safe deterministic ordering.
-       */
+      * Resolve the separate left and right CJ promo offers.
+      *
+      * Each saved configuration is validated again against
+      * an active imported CjProduct with an enabled,
+      * valid-price variant.
+      */
+      let promoOfferLeft = null;
+      let promoOfferRight = null;
+
+      for (const offer of cjHomePromoOffers) {
+        const cjProductId =
+          String(offer?.cjProductId || '').trim();
+
+        if (!cjProductId) {
+          continue;
+        }
+
+        const rawPromoProduct =
+          await CjProduct.findOne({
+            status: 'active',
+
+            cjProductId,
+
+            variants: {
+              $elemMatch: {
+                isEnabled: true,
+
+                cjVariantId: {
+                  $exists: true,
+                  $ne: '',
+                },
+
+                variantSku: {
+                  $exists: true,
+                  $ne: '',
+                },
+
+                'sellingPriceExVat.value': {
+                  $gte: 0,
+                },
+              },
+            },
+          }).lean();
+
+        if (!rawPromoProduct) {
+          continue;
+        }
+
+        const mappedOffer =
+          mapCjPromoOffer(
+            offer,
+            rawPromoProduct,
+          );
+
+        if (!mappedOffer) {
+          continue;
+        }
+
+        if (offer.slot === 'left') {
+          promoOfferLeft = mappedOffer;
+        }
+
+        if (offer.slot === 'right') {
+          promoOfferRight = mappedOffer;
+        }
+      }
+
+      /*
+      * CJ currently has no Kasyora sales history in this stage.
+      * The arrays are therefore derived from the same isolated
+      * active CJ catalogue using safe deterministic ordering.
+      */
       const allProducts = cjProducts.slice(0, 8);
 
       const newArrivals = [...cjProducts].slice(0, 8);
@@ -992,15 +1145,15 @@ router.get('/store', async (req, res) => {
         heroSlides,
 
         /*
-         * The Featured Right-side Banner uses only the separate
-         * CjFeaturedBanner configuration and CjProduct model.
-         *
-         * The remaining homepage marketing records still reference
-         * Internal Product custom IDs, so they remain hidden in CJ.
-         */
+        * The Featured Right-side Banner and Promo Offers use
+        * their own separate CJ configuration models and CjProduct.
+        *
+        * Internal mid banners still reference Product.customId,
+        * so they remain hidden inside the CJ department.
+        */
         sideBannerProduct,
-        promoOfferLeft: null,
-        promoOfferRight: null,
+        promoOfferLeft,
+        promoOfferRight,
         midBannerLeft: null,
         midBannerRight: null,
 

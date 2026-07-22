@@ -1,0 +1,817 @@
+<!-- views/admin/cj-home-promo-offers/edit.ejs -->
+
+<%
+  const SLOT_LABEL =
+    slot === 'left'
+      ? 'Left'
+      : 'Right';
+
+  const IS_EXISTING_OFFER =
+    Boolean(offer);
+
+  const DEFAULT_SORT_ORDER =
+    slot === 'left'
+      ? 1
+      : 2;
+%>
+
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+            <div>
+              <div class="small text-success text-uppercase fw-semibold mb-1">
+                Kasyora CJ Store
+              </div>
+
+              <h1 class="h3 mb-1 text-primary">
+                <%= IS_EXISTING_OFFER ? 'Edit' : 'Create' %>
+                <%= SLOT_LABEL %> CJ Promo Offer
+              </h1>
+
+              <p class="text-body-secondary mb-0">
+                <% if (IS_EXISTING_OFFER) { %>
+                  Edit the saved <%= SLOT_LABEL.toLowerCase() %> promo card shown on the CJ Store homepage.
+                <% } else { %>
+                  Create the <%= SLOT_LABEL.toLowerCase() %> promo card shown on the CJ Store homepage.
+                <% } %>
+              </p>
+            </div>
+
+            <a
+              href="/admin/cj-home-promo-offers"
+              class="btn btn-outline-secondary"
+            >
+              Back
+            </a>
+          </div>
+
+          <% if (IS_EXISTING_OFFER) { %>
+            <div
+              class="alert <%= offer.active ? 'alert-success' : 'alert-secondary' %> border shadow-sm mb-4"
+              role="status"
+            >
+              <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                  <div class="fw-bold mb-1">
+                    <i
+                      class="<%= offer.active ? 'fas fa-check-circle' : 'fas fa-pause-circle' %> me-2"
+                      aria-hidden="true"
+                    ></i>
+
+                    Saved <%= SLOT_LABEL %> CJ promo offer
+                  </div>
+
+                  <div class="small">
+                    This configuration is already saved.
+                    You are editing the existing <%= SLOT_LABEL.toLowerCase() %> CJ promo card.
+                  </div>
+
+                  <% if (offer.updatedAt) { %>
+                    <div class="small mt-1">
+                      Last updated:
+                      <strong>
+                        <%= new Date(offer.updatedAt).toLocaleString() %>
+                      </strong>
+                    </div>
+                  <% } %>
+                </div>
+
+                <div class="text-md-end">
+                  <% if (offer.active) { %>
+                    <span class="badge bg-success px-3 py-2">
+                      Active on CJ Store
+                    </span>
+                  <% } else { %>
+                    <span class="badge bg-secondary px-3 py-2">
+                      Saved but inactive
+                    </span>
+                  <% } %>
+
+                  <div
+                    id="unsavedChangesBadge"
+                    class="badge bg-warning text-dark px-3 py-2 mt-2 d-none"
+                  >
+                    Unsaved changes
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% } else { %>
+            <div
+              class="alert alert-warning border shadow-sm mb-4"
+              role="status"
+            >
+              <div class="fw-bold mb-1">
+                <i
+                  class="fas fa-exclamation-circle me-2"
+                  aria-hidden="true"
+                ></i>
+
+                <%= SLOT_LABEL %> CJ promo offer not saved yet
+              </div>
+
+              <div class="small">
+                Select an eligible CJ product and click
+                <strong>
+                  Create <%= SLOT_LABEL %> CJ Promo Offer
+                </strong>
+                to save the first configuration.
+              </div>
+            </div>
+          <% } %>
+
+          <form
+            action="/admin/cj-home-promo-offers/<%= slot %>"
+            method="POST"
+            class="row g-3"
+          >
+            <div class="col-12">
+              <label
+                for="cjProductSearch"
+                class="form-label fw-semibold text-primary"
+              >
+                Choose CJ Product
+              </label>
+
+              <input
+                type="hidden"
+                name="cjProductId"
+                id="cjProductId"
+                value="<%= offer?.cjProductId || '' %>"
+                required
+              >
+
+              <div class="position-relative">
+                <input
+                  type="text"
+                  id="cjProductSearch"
+                  class="form-control border-primary"
+                  placeholder="Search by CJ product ID, SKU or product name"
+                  autocomplete="off"
+                  value="<%= selectedProduct ? `${selectedProduct.name} — ${selectedProduct.cjProductId}` : '' %>"
+                  required
+                >
+
+                <div
+                  id="cjProductSearchResults"
+                  class="list-group position-absolute top-100 start-0 end-0 shadow-sm d-none"
+                  style="z-index: 1050;"
+                ></div>
+              </div>
+
+              <div class="form-text text-primary mt-2">
+                Only active imported CJ products with an enabled, valid-price variant are available.
+              </div>
+
+              <div
+                id="selectedCjProductBox"
+                class="mt-3 <%= selectedProduct ? '' : 'd-none' %>"
+              >
+                <div class="card border-primary shadow-sm">
+                  <div class="card-body p-3">
+                    <div class="row g-3 align-items-center">
+                      <div class="col-12 col-md-3">
+                        <div
+                          id="selectedCjImagePlaceholder"
+                          class="border rounded bg-light d-flex align-items-center justify-content-center text-muted <%= selectedProduct?.imageUrl ? 'd-none' : '' %>"
+                          style="height: 160px;"
+                        >
+                          No product image
+                        </div>
+
+                        <img
+                          id="selectedCjProductImage"
+                          src="<%= selectedProduct?.imageUrl || '' %>"
+                          alt="<%= selectedProduct?.name || '' %>"
+                          class="img-fluid rounded border w-100 <%= selectedProduct?.imageUrl ? '' : 'd-none' %>"
+                          style="height: 160px; object-fit: contain;"
+                        >
+                      </div>
+
+                      <div class="col-12 col-md-9">
+                        <div
+                          id="selectedCjProductName"
+                          class="fw-bold text-primary mb-2"
+                        >
+                          <%= selectedProduct?.name || '' %>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>CJ Product ID:</strong>
+
+                          <span id="selectedCjProductId">
+                            <%= selectedProduct?.cjProductId || '' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>SKU:</strong>
+
+                          <span id="selectedCjProductSku">
+                            <%= selectedProduct?.productSku || '-' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>Category:</strong>
+
+                          <span id="selectedCjProductCategory">
+                            <%= selectedProduct?.category || 'CJ Product' %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-1">
+                          <strong>Lowest price:</strong>
+
+                          <span id="selectedCjProductPrice">
+                            <%= selectedProduct
+                              ? Number(selectedProduct.price || 0).toFixed(2)
+                              : '0.00'
+                            %>
+                          </span>
+                        </div>
+
+                        <div class="small mb-3">
+                          <strong>Enabled variants:</strong>
+
+                          <span id="selectedCjVariantCount">
+                            <%= selectedProduct?.enabledVariantCount || 0 %>
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          id="clearSelectedCjProduct"
+                          class="btn btn-sm btn-outline-secondary"
+                        >
+                          Clear Selected Product
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="eyebrowText"
+                class="form-label"
+              >
+                Eyebrow Text
+              </label>
+
+              <input
+                type="text"
+                name="eyebrowText"
+                id="eyebrowText"
+                class="form-control"
+                maxlength="120"
+                value="<%= offer?.eyebrowText || '' %>"
+                placeholder="Find The Best Product for You!"
+              >
+
+              <div class="form-text">
+                Small text displayed above the product title.
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="titleOverride"
+                class="form-label"
+              >
+                Title Override
+              </label>
+
+              <input
+                type="text"
+                name="titleOverride"
+                id="titleOverride"
+                class="form-control"
+                maxlength="120"
+                value="<%= offer?.titleOverride || '' %>"
+                placeholder="Leave blank to use the CJ product name"
+              >
+
+              <div class="form-text">
+                Leave blank to display the selected CJ product name.
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="discountText"
+                class="form-label"
+              >
+                Discount Text
+              </label>
+
+              <input
+                type="text"
+                name="discountText"
+                id="discountText"
+                class="form-control"
+                maxlength="40"
+                value="<%= offer?.discountText || '' %>"
+                placeholder="40% Off"
+              >
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="sortOrder"
+                class="form-label"
+              >
+                Sort Order
+              </label>
+
+              <input
+                type="number"
+                name="sortOrder"
+                id="sortOrder"
+                class="form-control"
+                value="<%= offer?.sortOrder ?? DEFAULT_SORT_ORDER %>"
+              >
+
+              <div class="form-text">
+                The left card normally uses 1 and the right card normally uses 2.
+              </div>
+            </div>
+
+            <div class="col-12">
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="active"
+                  id="active"
+                  <%= offer?.active !== false ? 'checked' : '' %>
+                >
+
+                <label
+                  class="form-check-label"
+                  for="active"
+                >
+                  Active on the CJ Store homepage
+                </label>
+              </div>
+            </div>
+
+            <div class="col-12">
+              <div class="border-top pt-3">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                  <div class="small text-body-secondary">
+                    <% if (IS_EXISTING_OFFER) { %>
+                      Changes are not saved automatically. Click
+                      <strong>
+                        Update <%= SLOT_LABEL %> CJ Promo Offer
+                      </strong>
+                      after editing.
+                    <% } else { %>
+                      Click
+                      <strong>
+                        Create <%= SLOT_LABEL %> CJ Promo Offer
+                      </strong>
+                      to save this configuration.
+                    <% } %>
+                  </div>
+
+                  <div class="d-flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      id="saveCjPromoOfferButton"
+                      class="btn btn-primary"
+                    >
+                      <i
+                        class="<%= IS_EXISTING_OFFER ? 'fas fa-save' : 'fas fa-plus-circle' %> me-2"
+                        aria-hidden="true"
+                      ></i>
+
+                      <span>
+                        <%= IS_EXISTING_OFFER ? 'Update' : 'Create' %>
+                        <%= SLOT_LABEL %> CJ Promo Offer
+                      </span>
+                    </button>
+
+                    <% if (IS_EXISTING_OFFER) { %>
+                      <a
+                        href="/admin/cj-home-promo-offers/<%= slot %>/toggle"
+                        class="btn <%= offer.active ? 'btn-outline-danger' : 'btn-outline-success' %>"
+                        onclick="return confirm('<%= offer.active
+                          ? `Deactivate the ${SLOT_LABEL.toLowerCase()} CJ promo offer?`
+                          : `Activate the ${SLOT_LABEL.toLowerCase()} CJ promo offer?`
+                        %>');"
+                      >
+                        <i
+                          class="<%= offer.active ? 'fas fa-pause' : 'fas fa-play' %> me-2"
+                          aria-hidden="true"
+                        ></i>
+
+                        <%= offer.active ? 'Deactivate' : 'Activate' %>
+                      </a>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%
+  scripts = `
+  <script nonce="${nonce}">
+    document.addEventListener('DOMContentLoaded', function () {
+      const searchInput =
+        document.getElementById('cjProductSearch');
+
+      const hiddenInput =
+        document.getElementById('cjProductId');
+
+      const resultsBox =
+        document.getElementById('cjProductSearchResults');
+
+      const selectedBox =
+        document.getElementById('selectedCjProductBox');
+
+      const selectedName =
+        document.getElementById('selectedCjProductName');
+
+      const selectedId =
+        document.getElementById('selectedCjProductId');
+
+      const selectedSku =
+        document.getElementById('selectedCjProductSku');
+
+      const selectedCategory =
+        document.getElementById('selectedCjProductCategory');
+
+      const selectedPrice =
+        document.getElementById('selectedCjProductPrice');
+
+      const selectedVariantCount =
+        document.getElementById('selectedCjVariantCount');
+
+      const selectedImage =
+        document.getElementById('selectedCjProductImage');
+
+      const imagePlaceholder =
+        document.getElementById('selectedCjImagePlaceholder');
+
+      const clearButton =
+        document.getElementById('clearSelectedCjProduct');
+
+      const saveButton =
+        document.getElementById('saveCjPromoOfferButton');
+
+      const unsavedChangesBadge =
+        document.getElementById('unsavedChangesBadge');
+
+      const eyebrowTextInput =
+        document.getElementById('eyebrowText');
+
+      const titleOverrideInput =
+        document.getElementById('titleOverride');
+
+      const discountTextInput =
+        document.getElementById('discountText');
+
+      const sortOrderInput =
+        document.getElementById('sortOrder');
+
+      const activeInput =
+        document.getElementById('active');
+
+      const isExistingOffer =
+        ${IS_EXISTING_OFFER ? 'true' : 'false'};
+
+      const slotLabel =
+        '${SLOT_LABEL}';
+
+      let debounceTimer = null;
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function hideResults() {
+        resultsBox.classList.add('d-none');
+        resultsBox.innerHTML = '';
+      }
+
+      function markFormAsChanged() {
+        if (unsavedChangesBadge) {
+          unsavedChangesBadge.classList.remove('d-none');
+        }
+      }
+
+      function updateSelectedProduct(product) {
+        hiddenInput.value =
+          product.cjProductId || '';
+
+        searchInput.value =
+          (product.name || 'CJ Product') +
+          ' — ' +
+          (product.cjProductId || '');
+
+        selectedName.textContent =
+          product.name || 'CJ Product';
+
+        selectedId.textContent =
+          product.cjProductId || '';
+
+        selectedSku.textContent =
+          product.productSku || '-';
+
+        selectedCategory.textContent =
+          product.category || 'CJ Product';
+
+        selectedPrice.textContent =
+          Number(product.price || 0).toFixed(2);
+
+        selectedVariantCount.textContent =
+          Number(product.enabledVariantCount || 0);
+
+        if (product.imageUrl) {
+          selectedImage.src =
+            product.imageUrl;
+
+          selectedImage.alt =
+            product.name || 'Selected CJ product';
+
+          selectedImage.classList.remove('d-none');
+          imagePlaceholder.classList.add('d-none');
+        } else {
+          selectedImage.src = '';
+          selectedImage.alt = '';
+          selectedImage.classList.add('d-none');
+          imagePlaceholder.classList.remove('d-none');
+        }
+
+        selectedBox.classList.remove('d-none');
+
+        hideResults();
+        markFormAsChanged();
+      }
+
+      function clearSelectedProduct() {
+        hiddenInput.value = '';
+        searchInput.value = '';
+
+        selectedName.textContent = '';
+        selectedId.textContent = '';
+        selectedSku.textContent = '-';
+        selectedCategory.textContent = '';
+        selectedPrice.textContent = '0.00';
+        selectedVariantCount.textContent = '0';
+
+        selectedImage.src = '';
+        selectedImage.alt = '';
+        selectedImage.classList.add('d-none');
+        imagePlaceholder.classList.remove('d-none');
+
+        selectedBox.classList.add('d-none');
+
+        hideResults();
+        markFormAsChanged();
+        searchInput.focus();
+      }
+
+      async function searchCjProducts(query) {
+        try {
+          const response = await fetch(
+            '/admin/cj-home-promo-offers/products/search?q=' +
+            encodeURIComponent(query),
+            {
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+              }
+            }
+          );
+
+          const data = await response.json();
+
+          if (
+            !response.ok ||
+            !data.success ||
+            !Array.isArray(data.products)
+          ) {
+            hideResults();
+            return;
+          }
+
+          if (data.products.length === 0) {
+            resultsBox.innerHTML =
+              '<button type="button" class="list-group-item list-group-item-action disabled">' +
+              'No matching eligible CJ products found' +
+              '</button>';
+
+            resultsBox.classList.remove('d-none');
+            return;
+          }
+
+          resultsBox.innerHTML = data.products
+            .map(function (product) {
+              return \`
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-cj-product-id="\${escapeHtml(product.cjProductId)}"
+                  data-name="\${escapeHtml(product.name)}"
+                  data-product-sku="\${escapeHtml(product.productSku || '')}"
+                  data-category="\${escapeHtml(product.category || '')}"
+                  data-price="\${escapeHtml(product.price)}"
+                  data-enabled-variant-count="\${escapeHtml(product.enabledVariantCount)}"
+                  data-image-url="\${escapeHtml(product.imageUrl || '')}"
+                >
+                  <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div class="min-w-0">
+                      <div class="fw-semibold text-primary">
+                        \${escapeHtml(product.name)}
+                      </div>
+
+                      <div class="small text-body-secondary">
+                        CJ Product ID:
+                        \${escapeHtml(product.cjProductId)}
+                      </div>
+
+                      <div class="small text-body-secondary">
+                        SKU:
+                        \${escapeHtml(product.productSku || '-')}
+                      </div>
+                    </div>
+
+                    <span class="badge bg-success">
+                      \${escapeHtml(product.enabledVariantCount)}
+                      variants
+                    </span>
+                  </div>
+                </button>
+              \`;
+            })
+            .join('');
+
+          resultsBox.classList.remove('d-none');
+        } catch (error) {
+          console.error(
+            'CJ promo-offer product search failed:',
+            error
+          );
+
+          hideResults();
+        }
+      }
+
+      searchInput.addEventListener('input', function () {
+        const query =
+          String(searchInput.value || '').trim();
+
+        hiddenInput.value = '';
+        markFormAsChanged();
+
+        if (query.length < 1) {
+          hideResults();
+          return;
+        }
+
+        window.clearTimeout(debounceTimer);
+
+        debounceTimer =
+          window.setTimeout(function () {
+            searchCjProducts(query);
+          }, 250);
+      });
+
+      resultsBox.addEventListener('click', function (event) {
+        const button =
+          event.target.closest(
+            'button[data-cj-product-id]'
+          );
+
+        if (!button) {
+          return;
+        }
+
+        updateSelectedProduct({
+          cjProductId:
+            button.getAttribute(
+              'data-cj-product-id'
+            ),
+
+          name:
+            button.getAttribute(
+              'data-name'
+            ),
+
+          productSku:
+            button.getAttribute(
+              'data-product-sku'
+            ),
+
+          category:
+            button.getAttribute(
+              'data-category'
+            ),
+
+          price:
+            button.getAttribute(
+              'data-price'
+            ),
+
+          enabledVariantCount:
+            button.getAttribute(
+              'data-enabled-variant-count'
+            ),
+
+          imageUrl:
+            button.getAttribute(
+              'data-image-url'
+            )
+        });
+      });
+
+      if (clearButton) {
+        clearButton.addEventListener(
+          'click',
+          clearSelectedProduct
+        );
+      }
+
+      document.addEventListener('click', function (event) {
+        const insideSearch =
+          event.target.closest(
+            '#cjProductSearch'
+          ) ||
+          event.target.closest(
+            '#cjProductSearchResults'
+          );
+
+        if (!insideSearch) {
+          hideResults();
+        }
+      });
+
+      [
+        eyebrowTextInput,
+        titleOverrideInput,
+        discountTextInput,
+        sortOrderInput,
+        activeInput
+      ]
+        .filter(Boolean)
+        .forEach(function (input) {
+          input.addEventListener(
+            input.type === 'checkbox'
+              ? 'change'
+              : 'input',
+            markFormAsChanged
+          );
+        });
+
+      const form =
+        searchInput.closest('form');
+
+      if (form) {
+        form.addEventListener('submit', function (event) {
+          if (!String(hiddenInput.value || '').trim()) {
+            event.preventDefault();
+
+            searchInput.focus();
+
+            alert(
+              'Please search for and select an eligible CJ product first.'
+            );
+
+            return;
+          }
+
+          if (saveButton) {
+            saveButton.disabled = true;
+
+            saveButton.innerHTML =
+              '<span class="spinner-border spinner-border-sm me-2" ' +
+              'role="status" aria-hidden="true"></span>' +
+              (
+                isExistingOffer
+                  ? 'Updating ' + slotLabel + ' CJ Promo Offer...'
+                  : 'Creating ' + slotLabel + ' CJ Promo Offer...'
+              );
+          }
+        });
+      }
+    });
+  </script>
+  `;
+%>
