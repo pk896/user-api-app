@@ -95,8 +95,4 @@ cjHomePromoOfferSchema.index(
 );
 
 module.exports =
-  mongoose.models.CjHomePromoOffer ||
-  mongoose.model(
-    'CjHomePromoOffer',
-    cjHomePromoOfferSchema,
-  );
+  mongoose.models.CjHomePromoOffer || mongoose.model('CjHomePromoOffer', cjHomePromoOfferSchema);
