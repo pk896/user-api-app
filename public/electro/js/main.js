@@ -107,7 +107,7 @@
         ]
     });
 
-    /* 
+
     // ProductList carousel
     $(".related-carousel").owlCarousel({
         autoplay: true,
@@ -139,66 +139,6 @@
             }
         }
     });
-    */
-
-    // Related Products carousel
-    $(".related-carousel").owlCarousel({
-        autoplay: true,
-        smartSpeed: 1500,
-        dots: false,
-        loop: true,
-        margin: 25,
-        nav: true,
-        navText: [
-            '<i class="fas fa-chevron-left"></i>',
-            '<i class="fas fa-chevron-right"></i>'
-        ],
-        responsiveClass: true,
-        responsive: {
-            0: {
-                items: 1
-            },
-            576: {
-                items: 1
-            },
-            768: {
-                items: 2
-            },
-            992: {
-                items: 3
-            },
-            1200: {
-                items: 4
-            }
-        }
-    });
-
-
-    /*
-    * Initiate WOW only after Owl Carousel has prepared the page layout.
-    *
-    * Production images may load more slowly than local images. When all
-    * page assets finish loading, force WOW to calculate the element
-    * positions again so no section remains hidden in an empty space.
-    */
-    var wow = new WOW({
-        live: true
-    });
-
-    wow.init();
-
-    function refreshWowPositions() {
-        window.setTimeout(function () {
-            window.dispatchEvent(new Event('resize'));
-            window.dispatchEvent(new Event('scroll'));
-        }, 100);
-    }
-
-    if (document.readyState === 'complete') {
-        refreshWowPositions();
-    } else {
-        $(window).on('load', refreshWowPositions);
-    }
 
    // Back to top button
    $(window).scroll(function () {
@@ -217,4 +157,3 @@
    
 
 })(jQuery);
-
