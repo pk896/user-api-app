@@ -1,7 +1,5 @@
 /*
-* WOW wow.js - v1.3.0 - 2016-10-04
-* https://wowjs.uk
-* Copyright (c) 2016 Thomas Grainger; Licensed MIT
+* C:\Users\phaki\user-api-app\public\electro\lib\wow\wow.js
 */
 
 (function (global, factory) {
