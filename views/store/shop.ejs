@@ -44,6 +44,33 @@
     );
   }
 
+  /*
+   * Shop product cards have limited display space,
+   * especially in the mobile list layout.
+   *
+   * Keep complete product values unchanged and shorten
+   * only the visible category and product-name text.
+   */
+  function truncateShopText(
+    value,
+    maxCharacters = 15
+  ) {
+    const text = String(
+      value || ''
+    ).trim();
+
+    if (text.length <= maxCharacters) {
+      return text;
+    }
+
+    return (
+      text
+        .slice(0, maxCharacters)
+        .trimEnd() +
+      '...'
+    );
+  }
+
   function formatMoney(amount) {
   const convertedAmount =
     convertBaseToDisplay(amount);
@@ -354,8 +381,17 @@ const ACTIVE_CART = (
     </div>
     <div class="col-md-4 col-lg-3 text-center text-lg-end">
       <div class="d-inline-flex align-items-center">
-        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-random"></i></span></a>
-        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3"><span class="rounded-circle btn-md-square border"><i class="fas fa-heart"></i></span></a>
+        <a
+          href="#"
+          class="text-muted d-flex align-items-center justify-content-center me-3"
+          aria-label="Open wishlist"
+          title="Open wishlist"
+        >
+          <span class="rounded-circle btn-md-square border">
+            <i class="fas fa-heart"></i>
+          </span>
+        </a>
+
         <a href="<%= ACTIVE_CART_URL %>" id="shopTopCartAmount" class="text-muted d-flex align-items-center justify-content-center store-cart-link" data-store-department="<%= ACTIVE_DEPARTMENT %>">
           <span class="rounded-circle btn-md-square border">
             <i class="fas fa-shopping-cart"></i>
@@ -654,8 +690,25 @@ const ACTIVE_CART = (
       <div class="col-lg-6 wow fadeInLeft" data-wow-delay="0.2s">
         <a href="<%= promoOfferLeft.url %>" class="d-flex align-items-center justify-content-between border bg-white rounded p-4">
           <div>
-            <p class="text-muted mb-3"><%= promoOfferLeft.eyebrowText %></p>
-            <h3 class="text-primary"><%= promoOfferLeft.title %></h3>
+            <p
+              class="text-muted mb-3"
+              title="<%= promoOfferLeft.eyebrowText || '' %>"
+            >
+              <%= truncateShopText(
+                promoOfferLeft.eyebrowText || '',
+                15
+              ) %>
+            </p>
+
+            <h3
+              class="text-primary"
+              title="<%= promoOfferLeft.title || '' %>"
+            >
+              <%= truncateShopText(
+                promoOfferLeft.title || '',
+                25
+              ) %>
+            </h3>
 
             <% if (promoOfferLeft.discountText) { %>
             <% const leftDiscountParts = promoOfferLeft.discountText.trim().split(' '); %>
@@ -667,7 +720,12 @@ const ACTIVE_CART = (
             </h1>
             <% } %>
           </div>
-          <img src="<%= promoOfferLeft.image %>" class="img-fluid" alt="<%= promoOfferLeft.productName %>">
+
+          <img
+            src="<%= promoOfferLeft.image %>"
+            class="img-fluid"
+            alt="<%= promoOfferLeft.productName %>"
+          >
         </a>
       </div>
       <% } %>
@@ -676,8 +734,25 @@ const ACTIVE_CART = (
       <div class="col-lg-6 wow fadeInRight" data-wow-delay="0.3s">
         <a href="<%= promoOfferRight.url %>" class="d-flex align-items-center justify-content-between border bg-white rounded p-4">
           <div>
-            <p class="text-muted mb-3"><%= promoOfferRight.eyebrowText %></p>
-            <h3 class="text-primary"><%= promoOfferRight.title %></h3>
+            <p
+              class="text-muted mb-3"
+              title="<%= promoOfferRight.eyebrowText || '' %>"
+            >
+              <%= truncateShopText(
+                promoOfferRight.eyebrowText || '',
+                15
+              ) %>
+            </p>
+
+            <h3
+              class="text-primary"
+              title="<%= promoOfferRight.title || '' %>"
+            >
+              <%= truncateShopText(
+                promoOfferRight.title || '',
+                25
+              ) %>
+            </h3>
 
             <% if (promoOfferRight.discountText) { %>
             <% const rightDiscountParts = promoOfferRight.discountText.trim().split(' '); %>
@@ -689,7 +764,12 @@ const ACTIVE_CART = (
             </h1>
             <% } %>
           </div>
-          <img src="<%= promoOfferRight.image %>" class="img-fluid" alt="<%= promoOfferRight.productName %>">
+
+          <img
+            src="<%= promoOfferRight.image %>"
+            class="img-fluid"
+            alt="<%= promoOfferRight.productName %>"
+          >
         </a>
       </div>
       <% } %>
@@ -713,7 +793,15 @@ const ACTIVE_CART = (
               <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
             </div>
             <div>
-              <h6 class="mb-2"><%= product.category %></h6>
+              <h6
+                class="mb-2"
+                title="<%= product.category || 'Product' %>"
+              >
+                <%= truncateShopText(
+                  product.category || 'Product',
+                  25
+                ) %>
+              </h6>
               <div class="mb-2">
                 <%- include('../partials/rating-stars', {
                                         avg: Number(product.avgRating || 0),
@@ -763,9 +851,17 @@ const ACTIVE_CART = (
                   </div>
 
                   <div class="card-detail">
-                    <h3 class="card-title text-uppercase">
-                      <span><%= item.name || 'Untitled Product' %></span>
-                    </h3>
+                    <h3
+                    class="card-title text-uppercase"
+                    title="<%= item.name || 'Untitled Product' %>"
+                  >
+                    <span>
+                      <%= truncateShopText(
+                        item.name || 'Untitled Product',
+                        15
+                      ) %>
+                    </span>
+                  </h3>
                     <span class="item-price text-primary">
                       <%= formatMoney(Number(item.price || 0) * (1 + VAT)) %>
                     </span>
@@ -879,8 +975,28 @@ const ACTIVE_CART = (
                       </div>
                     </div>
                     <div class="text-center rounded-bottom p-4">
-                      <a href="<%= product.url %>" class="d-block mb-2"><%= product.category %></a>
-                      <a href="<%= product.url %>" class="d-block h4"><%= product.name %></a>
+                      <a
+                        href="<%= product.url %>"
+                        class="d-block mb-2"
+                        title="<%= product.category || 'Product' %>"
+                      >
+                        <%= truncateShopText(
+                          product.category || 'Product',
+                          25
+                        ) %>
+                      </a>
+
+                      <a
+                        href="<%= product.url %>"
+                        class="d-block h4"
+                        title="<%= product.name || 'Product' %>"
+                      >
+                        <%= truncateShopText(
+                          product.name || 'Product',
+                          15
+                        ) %>
+                      </a>
+
                       <% if (product.oldPrice) { %>
                       <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                       <% } %>
@@ -935,13 +1051,12 @@ const ACTIVE_CART = (
                       </div>
 
                       <div class="d-flex">
-                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                          <span class="rounded-circle btn-sm-square border">
-                            <i class="fas fa-random"></i>
-                          </span>
-                        </a>
-
-                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                        <a
+                          href="#"
+                          class="text-primary d-flex align-items-center justify-content-center me-0"
+                          aria-label="Add to wishlist"
+                          title="Add to wishlist"
+                        >
                           <span class="rounded-circle btn-sm-square border">
                             <i class="fas fa-heart"></i>
                           </span>
@@ -1000,9 +1115,27 @@ const ACTIVE_CART = (
                     </div>
 
                     <div class="col-7">
-                      <div class="products-mini-content p-3">
-                        <span class="d-block mb-2" style="color: #f28b00;"><%= product.category %></span>
-                        <span class="d-block h4"><%= product.name %></span>
+                      <div class="products-mini-content p-3 overflow-hidden">
+                        <span
+                          class="d-block mb-2 text-truncate"
+                          style="color: #f28b00;"
+                          title="<%= product.category || 'Product' %>"
+                        >
+                          <%= truncateShopText(
+                            product.category || 'Product',
+                            25
+                          ) %>
+                        </span>
+
+                        <span
+                          class="d-block h4 text-truncate"
+                          title="<%= product.name || 'Product' %>"
+                        >
+                          <%= truncateShopText(
+                            product.name || 'Product',
+                            15
+                          ) %>
+                        </span>
 
                         <% if (product.oldPrice) { %>
                         <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
@@ -1061,13 +1194,12 @@ const ACTIVE_CART = (
                       </div>
 
                       <div class="d-flex">
-                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-3">
-                          <span class="rounded-circle btn-sm-square border">
-                            <i class="fas fa-random"></i>
-                          </span>
-                        </a>
-
-                        <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
+                        <a
+                          href="#"
+                          class="text-primary d-flex align-items-center justify-content-center me-0"
+                          aria-label="Add to wishlist"
+                          title="Add to wishlist"
+                        >
                           <span class="rounded-circle btn-sm-square border">
                             <i class="fas fa-heart"></i>
                           </span>
