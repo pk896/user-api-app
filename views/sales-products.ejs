@@ -121,6 +121,15 @@
   const IS_CJ_DEPARTMENT =
     ACTIVE_DEPARTMENT === 'cj';
 
+  /*
+   * Search and category requests must land at the beginning
+   * of the Fast Liner product-results section.
+   *
+   * Pure Fast Liner page links remain unchanged.
+   */
+  const SALES_PRODUCTS_ANCHOR =
+    '#salesProductsSection';
+
   const ACTIVE_HOME_URL =
     '/store?department=' +
     encodeURIComponent(
@@ -294,9 +303,22 @@
       );
     }
 
+    const shouldLandOnProducts =
+      Boolean(keyword) ||
+      Boolean(category) ||
+      (
+        Number.isFinite(pageNumber) &&
+        pageNumber > 1
+      );
+
     return (
       '/products/sales?' +
-      params.join('&')
+      params.join('&') +
+      (
+        shouldLandOnProducts
+          ? SALES_PRODUCTS_ANCHOR
+          : ''
+      )
     );
   }
 
@@ -870,7 +892,10 @@
       </form>
     </div>
 
-    <div class="row g-3 sales-desktop-layout align-items-start">
+    <div
+      id="salesProductsSection"
+      class="row g-3 sales-desktop-layout align-items-start"
+    >
       <main class="col-12 col-xl-9 sales-main-column">
         <% if (!products || !products.length) { %>
         <div class="sales-empty mt-3">
@@ -1529,11 +1554,15 @@
           params.set('cat', category);
         }
 
-        const queryString = params.toString();
+        const queryString =
+          params.toString();
+
         showLoader();
+
         window.location.href =
           '/products/sales?' +
-          queryString;
+          queryString +
+          '<%= SALES_PRODUCTS_ANCHOR %>';
       }
 
       window.addEventListener('load', function() {
@@ -1577,7 +1606,7 @@
             goToSales(category);
           } else {
             window.location.href =
-              '/products/sales?department=<%= ACTIVE_DEPARTMENT %>';
+              '/products/sales?department=<%= ACTIVE_DEPARTMENT %><%= SALES_PRODUCTS_ANCHOR %>';
           }
         }
       });
