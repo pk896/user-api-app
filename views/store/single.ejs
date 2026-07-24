@@ -138,13 +138,17 @@
    * Return the customer to this exact product after changing
    * their display currency.
    */
+  const SINGLE_PRODUCT_ANCHOR =
+    '#singleProductDetails';
+
   const SINGLE_CURRENCY_RETURN_TO =
     SINGLE_PRODUCT_ID
       ? (
           '/store/product/' +
-          encodeURIComponent(SINGLE_PRODUCT_ID)
+          encodeURIComponent(SINGLE_PRODUCT_ID) +
+          SINGLE_PRODUCT_ANCHOR
         )
-      : '/store/shop';
+      : '/store/shop#shopProductsSection';
 
   const avgRating = Number(
     (product && product.avgRating) || 0
@@ -425,7 +429,10 @@
 <!-- Single Products Start -->
 <div class="container-fluid shop py-5">
   <div class="container py-5">
-    <div class="row g-4">
+    <div
+      id="singleProductDetails"
+      class="row g-4"
+    >
       <div class="col-lg-5 col-xl-3 order-2 order-xl-2 wow fadeInUp" data-wow-delay="0.1s">
         <div class="input-group w-100 mx-auto d-flex mb-4">
           <input id="singleKeywordInputSecondary" type="search" class="form-control p-3" placeholder="keywords" aria-describedby="single-search-icon-1">
@@ -675,18 +682,25 @@
             </div>
           </div>
 
-          <div class="products-mini-add border-top p-3">
-            <a href="<%= product.url %>" class="btn btn-primary border-secondary rounded-pill py-2 px-4">
-              <i class="fas fa-eye me-2"></i> View Product
+          <div class="products-mini-add border-top p-3 d-flex align-items-center justify-content-between gap-3">
+            <a
+              href="<%= product.url %>"
+              class="btn btn-primary border-secondary rounded-pill py-2 px-4 flex-shrink-0"
+            >
+              <i class="fas fa-eye me-2"></i>
+              View Product
             </a>
 
-            <div class="d-flex">
-              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0">
-                <span class="rounded-circle btn-sm-square border">
-                  <i class="fas fa-heart"></i>
-                </span>
-              </a>
-            </div>
+            <a
+              href="#"
+              class="text-primary d-flex align-items-center justify-content-center flex-shrink-0"
+              aria-label="Add to wishlist"
+              title="Add to wishlist"
+            >
+              <span class="rounded-circle btn-sm-square border">
+                <i class="fas fa-heart"></i>
+              </span>
+            </a>
           </div>
         </div>
       </div>
@@ -1264,4 +1278,85 @@
 <!-- Mobile Floating Cart End -->
 
 <!-- Back to Top -->
-<a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>
+<a href="#" class="btn btn-primary btn-lg-square back-to-top">
+  <i class="fa fa-arrow-up"></i>
+</a>
+
+<script nonce="<%= nonce %>">
+  (function() {
+    const SINGLE_PRODUCT_ANCHOR_ID =
+      'singleProductDetails';
+
+    function landOnSingleProduct() {
+      const productSection =
+        document.getElementById(
+          SINGLE_PRODUCT_ANCHOR_ID
+        );
+
+      if (!productSection) {
+        return;
+      }
+
+      const currentHash =
+        String(
+          window.location.hash || ''
+        ).trim();
+
+      /*
+       * Preserve deliberate anchors such as the ratings form
+       * or reviews section.
+       */
+      if (
+        currentHash &&
+        currentHash !==
+          '#' + SINGLE_PRODUCT_ANCHOR_ID
+      ) {
+        return;
+      }
+
+      /*
+       * Product links from older cards may not yet contain
+       * the anchor. Add it without reloading the page.
+       */
+      if (!currentHash) {
+        window.history.replaceState(
+          null,
+          '',
+          window.location.pathname +
+            window.location.search +
+            '#' +
+            SINGLE_PRODUCT_ANCHOR_ID
+        );
+      }
+
+      productSection.scrollIntoView({
+        behavior: 'auto',
+        block: 'start'
+      });
+    }
+
+    window.addEventListener(
+      'load',
+      function() {
+        /*
+         * Allow the product image and Owl Carousel to finish
+         * their final layout before positioning the page.
+         */
+        window.setTimeout(
+          landOnSingleProduct,
+          100
+        );
+      }
+    );
+
+    window.addEventListener(
+      'pageshow',
+      function() {
+        window.setTimeout(
+          landOnSingleProduct,
+          100
+        );
+      }
+    );
+  })();
+</script>

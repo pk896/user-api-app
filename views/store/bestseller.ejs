@@ -129,6 +129,19 @@
   const IS_CJ_DEPARTMENT =
     ACTIVE_DEPARTMENT === 'cj';
 
+  /*
+   * Pure Bestseller-page requests land at the active
+   * Kasyora In Store / Kasyora CJ Store Bestseller notice.
+   *
+   * Search, category, sorting and other filtered requests
+   * must land at the Bestseller products section.
+   */
+  const BESTSELLER_DEPARTMENT_ANCHOR =
+    '#bestsellerDepartmentSection';
+
+  const BESTSELLER_PRODUCTS_ANCHOR =
+    '#bestsellerProductsSection';
+
   const ACTIVE_SORT = String(
     typeof selectedSort !== 'undefined'
       ? selectedSort
@@ -146,18 +159,14 @@
     encodeURIComponent(
       ACTIVE_DEPARTMENT
     ) +
-    '#shopProductsSection';
+    '#shopDepartmentSection';
 
   const ACTIVE_BESTSELLER_URL =
     '/store/bestseller?department=' +
     encodeURIComponent(
       ACTIVE_DEPARTMENT
     ) +
-    '&sort=' +
-    encodeURIComponent(
-      ACTIVE_SORT
-    ) +
-    '#bestsellerProductsSection';
+    BESTSELLER_DEPARTMENT_ANCHOR;
 
   const ACTIVE_CART_URL =
     IS_CJ_DEPARTMENT
@@ -236,7 +245,7 @@
     return (
       '/store/bestseller?' +
       params.join('&') +
-      '#bestsellerProductsSection'
+      BESTSELLER_PRODUCTS_ANCHOR
     );
   }
 
@@ -250,14 +259,12 @@
     bestsellerPageUrl();
 
   const INTERNAL_BESTSELLER_RETURN_TO =
-    bestsellerPageUrlForDepartment(
-      'internal'
-    );
+    '/store/bestseller?department=internal' +
+    BESTSELLER_DEPARTMENT_ANCHOR;
 
   const CJ_BESTSELLER_RETURN_TO =
-    bestsellerPageUrlForDepartment(
-      'cj'
-    );
+    '/store/bestseller?department=cj' +
+    BESTSELLER_DEPARTMENT_ANCHOR;
 
   function storeProductPayload(product) {
     const source = String(
@@ -641,7 +648,10 @@
 </div>
 <!-- Single Page Header End -->
 
-<div class="container-fluid px-0">
+<div
+  id="bestsellerDepartmentSection"
+  class="container-fluid px-0"
+>
   <div class="alert rounded-0 mb-0 border-0 <%= IS_CJ_DEPARTMENT ? 'alert-success' : 'alert-primary' %>">
     <div class="container d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 py-2">
       <div>
@@ -847,9 +857,6 @@
 
       <p class="mb-2 wow fadeInUp" data-wow-delay="0.2s">
         Discover our top-selling products, chosen for their quality,
-        reliability, and customer satisfaction. Shop the most popular
-        items trusted by our customers for everyday performance and
-        exceptional value.
       </p>
 
       <p class="small text-muted mb-0 wow fadeInUp" data-wow-delay="0.25s">
@@ -1695,8 +1702,20 @@
         params.set('sort', sort);
       }
 
-      const queryString = params.toString();
-      window.location.href = queryString ? '/store/bestseller?' + queryString + '#bestsellerProductsSection' : '/store/bestseller#bestsellerProductsSection';
+      const queryString =
+        params.toString();
+
+      window.location.href =
+        queryString
+          ? (
+              '/store/bestseller?' +
+              queryString +
+              '<%= BESTSELLER_PRODUCTS_ANCHOR %>'
+            )
+          : (
+              '/store/bestseller' +
+              '<%= BESTSELLER_PRODUCTS_ANCHOR %>'
+            );
     }
 
     links.forEach(function(link) {
@@ -1732,7 +1751,7 @@
               encodeURIComponent('<%= ACTIVE_DEPARTMENT %>') +
               '&sort=' +
               encodeURIComponent('<%= ACTIVE_SORT %>') +
-              '#bestsellerProductsSection';
+              '<%= BESTSELLER_PRODUCTS_ANCHOR %>';
           }
         }
       });
@@ -1761,7 +1780,7 @@
               encodeURIComponent('<%= ACTIVE_DEPARTMENT %>') +
               '&sort=' +
               encodeURIComponent('<%= ACTIVE_SORT %>') +
-              '#bestsellerProductsSection';
+              '<%= BESTSELLER_PRODUCTS_ANCHOR %>';
           }
         }
       });
@@ -2196,4 +2215,168 @@
 <!-- Mobile Floating Cart End -->
 
 <!-- Back to Top -->
-<a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>
+<a href="#" class="btn btn-primary btn-lg-square back-to-top">
+  <i class="fa fa-arrow-up"></i>
+</a>
+
+<script nonce="<%= nonce %>">
+  (function() {
+    const BESTSELLER_DEPARTMENT_ANCHOR_ID =
+      'bestsellerDepartmentSection';
+
+    const BESTSELLER_PRODUCTS_ANCHOR_ID =
+      'bestsellerProductsSection';
+
+    function isPureBestsellerRequest() {
+      const params =
+        new URLSearchParams(
+          window.location.search
+        );
+
+      const parameterNames =
+        Array.from(
+          params.keys()
+        );
+
+      /*
+       * A pure Bestseller request contains:
+       *
+       * - no query parameters, or
+       * - only the department parameter.
+       *
+       * Keyword, category, sort or any other browsing
+       * parameter means the user is viewing product results.
+       */
+      return (
+        parameterNames.length === 0 ||
+        (
+          parameterNames.length === 1 &&
+          parameterNames[0] ===
+            'department'
+        )
+      );
+    }
+
+    function updateUrlHash(hashValue) {
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname +
+          window.location.search +
+          hashValue
+      );
+    }
+
+    function landOnCorrectBestsellerSection() {
+      const departmentSection =
+        document.getElementById(
+          BESTSELLER_DEPARTMENT_ANCHOR_ID
+        );
+
+      const productsSection =
+        document.getElementById(
+          BESTSELLER_PRODUCTS_ANCHOR_ID
+        );
+
+      const currentHash =
+        String(
+          window.location.hash || ''
+        ).trim();
+
+      /*
+       * Respect an explicit valid destination supplied by
+       * the link.
+       */
+      if (
+        currentHash ===
+          '#' + BESTSELLER_DEPARTMENT_ANCHOR_ID
+      ) {
+        if (departmentSection) {
+          departmentSection.scrollIntoView({
+            behavior: 'auto',
+            block: 'start'
+          });
+        }
+
+        return;
+      }
+
+      if (
+        currentHash ===
+          '#' + BESTSELLER_PRODUCTS_ANCHOR_ID
+      ) {
+        if (productsSection) {
+          productsSection.scrollIntoView({
+            behavior: 'auto',
+            block: 'start'
+          });
+        }
+
+        return;
+      }
+
+      /*
+       * Preserve unrelated intentional anchors.
+       */
+      if (currentHash) {
+        return;
+      }
+
+      if (isPureBestsellerRequest()) {
+        if (!departmentSection) {
+          return;
+        }
+
+        updateUrlHash(
+          '#' +
+            BESTSELLER_DEPARTMENT_ANCHOR_ID
+        );
+
+        departmentSection.scrollIntoView({
+          behavior: 'auto',
+          block: 'start'
+        });
+
+        return;
+      }
+
+      /*
+       * Requests containing search, category, sort or any
+       * other browsing parameter belong at the products.
+       */
+      if (!productsSection) {
+        return;
+      }
+
+      updateUrlHash(
+        '#' +
+          BESTSELLER_PRODUCTS_ANCHOR_ID
+      );
+
+      productsSection.scrollIntoView({
+        behavior: 'auto',
+        block: 'start'
+      });
+    }
+
+    window.addEventListener(
+      'load',
+      function() {
+        window.setTimeout(
+          landOnCorrectBestsellerSection,
+          100
+        );
+      }
+    );
+
+    window.addEventListener(
+      'pageshow',
+      function() {
+        window.setTimeout(
+          landOnCorrectBestsellerSection,
+          100
+        );
+      }
+    );
+  })();
+</script>

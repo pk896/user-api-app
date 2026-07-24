@@ -112,6 +112,18 @@ const IS_CJ_DEPARTMENT =
   ACTIVE_DEPARTMENT === 'cj';
 
 /*
+ * Pure Shop-page links land at the active department notice.
+ *
+ * Search, category, sort, pagination and filtered requests
+ * must continue landing at the actual products section.
+ */
+const SHOP_DEPARTMENT_ANCHOR =
+  '#shopDepartmentSection';
+
+const SHOP_PRODUCTS_ANCHOR =
+  '#shopProductsSection';
+
+/*
  * Every shared store-page link must explicitly preserve
  * the active storefront department.
  */
@@ -126,7 +138,7 @@ const ACTIVE_SHOP_URL =
   encodeURIComponent(
     ACTIVE_DEPARTMENT
   ) +
-  '#shopProductsSection';
+  SHOP_DEPARTMENT_ANCHOR;
 
 const ACTIVE_BESTSELLER_URL =
   '/store/bestseller?department=' +
@@ -264,7 +276,7 @@ const ACTIVE_CART = (
     return (
       '/store/shop?' +
       params.join('&') +
-      '#shopProductsSection'
+      SHOP_PRODUCTS_ANCHOR
     );
   }
 
@@ -288,16 +300,12 @@ const ACTIVE_CART = (
     );
 
   const INTERNAL_SHOP_RETURN_TO =
-    shopPageUrlForDepartment(
-      1,
-      'internal'
-    );
+    '/store/shop?department=internal' +
+    SHOP_DEPARTMENT_ANCHOR;
 
   const CJ_SHOP_RETURN_TO =
-    shopPageUrlForDepartment(
-      1,
-      'cj'
-    );
+    '/store/shop?department=cj' +
+    SHOP_DEPARTMENT_ANCHOR;
 %>
 
 <!-- Spinner Start -->
@@ -619,7 +627,10 @@ const ACTIVE_CART = (
 </div>
 <!-- Single Page Header End -->
 
-<div class="container-fluid px-0">
+<div
+  id="shopDepartmentSection"
+  class="container-fluid px-0"
+>
   <div class="alert rounded-0 mb-0 border-0 <%= IS_CJ_DEPARTMENT ? 'alert-success' : 'alert-primary' %>">
     <div class="container d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 py-2">
       <div>
@@ -1042,7 +1053,7 @@ const ACTIVE_CART = (
               products matched the selected search or category.
             </p>
 
-            <a href="/store/shop?department=<%= encodeURIComponent(ACTIVE_DEPARTMENT) %>#shopProductsSection" class="btn btn-primary rounded-pill px-4">
+            <a href="/store/shop?department=<%= encodeURIComponent(ACTIVE_DEPARTMENT) %><%= SHOP_PRODUCTS_ANCHOR %>" class="btn btn-primary rounded-pill px-4">
               View All Products
             </a>
           </div>
@@ -1647,8 +1658,20 @@ const ACTIVE_CART = (
 
       params.set('page', '1');
 
-      const queryString = params.toString();
-      window.location.href = queryString ? '/store/shop?' + queryString + '#shopProductsSection' : '/store/shop#shopProductsSection';
+      const queryString =
+        params.toString();
+
+      window.location.href =
+        queryString
+          ? (
+              '/store/shop?' +
+              queryString +
+              '<%= SHOP_PRODUCTS_ANCHOR %>'
+            )
+          : (
+              '/store/shop' +
+              '<%= SHOP_PRODUCTS_ANCHOR %>'
+            );
     }
 
     links.forEach(function(link) {
@@ -1681,7 +1704,7 @@ const ACTIVE_CART = (
             goToShop(category);
           } else {
             window.location.href =
-              '/store/shop?department=<%= ACTIVE_DEPARTMENT %>#shopProductsSection';
+              '/store/shop?department=<%= ACTIVE_DEPARTMENT %><%= SHOP_PRODUCTS_ANCHOR %>';
           }
         }
       });
@@ -1707,7 +1730,7 @@ const ACTIVE_CART = (
             goToShop(category);
           } else {
             window.location.href =
-              '/store/shop?department=<%= ACTIVE_DEPARTMENT %>#shopProductsSection';
+              '/store/shop?department=<%= ACTIVE_DEPARTMENT %><%= SHOP_PRODUCTS_ANCHOR %>';
           }
         }
       });
@@ -2128,4 +2151,166 @@ const ACTIVE_CART = (
 <!-- Mobile Floating Cart End -->
 
 <!-- Back to Top -->
-<a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>
+<a href="#" class="btn btn-primary btn-lg-square back-to-top">
+  <i class="fa fa-arrow-up"></i>
+</a>
+
+<script nonce="<%= nonce %>">
+  (function() {
+    const SHOP_DEPARTMENT_ANCHOR_ID =
+      'shopDepartmentSection';
+
+    const SHOP_PRODUCTS_ANCHOR_ID =
+      'shopProductsSection';
+
+    function isPureShopRequest() {
+      const params =
+        new URLSearchParams(
+          window.location.search
+        );
+
+      const parameterNames =
+        Array.from(
+          params.keys()
+        );
+
+      /*
+       * A pure Shop request has:
+       *
+       * - no query parameters, or
+       * - only the department parameter.
+       *
+       * Search, category, sort and page parameters mean the
+       * customer is browsing product results.
+       */
+      return (
+        parameterNames.length === 0 ||
+        (
+          parameterNames.length === 1 &&
+          parameterNames[0] ===
+            'department'
+        )
+      );
+    }
+
+    function updateUrlHash(hashValue) {
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname +
+          window.location.search +
+          hashValue
+      );
+    }
+
+    function landOnCorrectShopSection() {
+      const departmentSection =
+        document.getElementById(
+          SHOP_DEPARTMENT_ANCHOR_ID
+        );
+
+      const productsSection =
+        document.getElementById(
+          SHOP_PRODUCTS_ANCHOR_ID
+        );
+
+      const currentHash =
+        String(
+          window.location.hash || ''
+        ).trim();
+
+      /*
+       * Respect an explicit valid anchor already supplied by
+       * the link.
+       */
+      if (
+        currentHash ===
+          '#' + SHOP_DEPARTMENT_ANCHOR_ID
+      ) {
+        if (departmentSection) {
+          departmentSection.scrollIntoView({
+            behavior: 'auto',
+            block: 'start'
+          });
+        }
+
+        return;
+      }
+
+      if (
+        currentHash ===
+          '#' + SHOP_PRODUCTS_ANCHOR_ID
+      ) {
+        if (productsSection) {
+          productsSection.scrollIntoView({
+            behavior: 'auto',
+            block: 'start'
+          });
+        }
+
+        return;
+      }
+
+      /*
+       * Do not override unrelated intentional anchors.
+       */
+      if (currentHash) {
+        return;
+      }
+
+      if (isPureShopRequest()) {
+        if (!departmentSection) {
+          return;
+        }
+
+        updateUrlHash(
+          '#' + SHOP_DEPARTMENT_ANCHOR_ID
+        );
+
+        departmentSection.scrollIntoView({
+          behavior: 'auto',
+          block: 'start'
+        });
+
+        return;
+      }
+
+      /*
+       * Any request containing keyword, category, sort, page,
+       * or another filtering parameter belongs at products.
+       */
+      if (!productsSection) {
+        return;
+      }
+
+      updateUrlHash(
+        '#' + SHOP_PRODUCTS_ANCHOR_ID
+      );
+
+      productsSection.scrollIntoView({
+        behavior: 'auto',
+        block: 'start'
+      });
+    }
+
+    window.addEventListener(
+      'load',
+      function() {
+        window.setTimeout(
+          landOnCorrectShopSection,
+          100
+        );
+      }
+    );
+
+    window.addEventListener(
+      'pageshow',
+      function() {
+        window.setTimeout(
+          landOnCorrectShopSection,
+          100
+        );
+      }
+    );
+  })();
+</script>

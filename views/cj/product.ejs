@@ -212,6 +212,33 @@
     }
   }
 
+  /*
+   * Related CJ Product cards have limited display space,
+   * especially on mobile.
+   *
+   * Keep the complete CJ product data unchanged and shorten
+   * only the visible related-card name and category.
+   */
+  function truncateRelatedCjText(
+    value,
+    maxCharacters = 15
+  ) {
+    const text = String(
+      value || ''
+    ).trim();
+
+    if (text.length <= maxCharacters) {
+      return text;
+    }
+
+    return (
+      text
+        .slice(0, maxCharacters)
+        .trimEnd() +
+      '...'
+    );
+  }
+
   const CJ_PRODUCT_CURRENCY_RETURN_TO =
     '/cj/product/' +
     encodeURIComponent(
@@ -813,12 +840,24 @@
             </a>
 
             <div class="card-body d-flex flex-column">
-              <h4 class="h6 text-primary">
-                <%= related.name %>
+              <h4
+                class="h6 text-primary"
+                title="<%= related.name || 'CJ Product' %>"
+              >
+                <%= truncateRelatedCjText(
+                  related.name || 'CJ Product',
+                  80
+                ) %>
               </h4>
 
-              <div class="small text-muted mb-2">
-                <%= related.category?.name || 'CJ Product' %>
+              <div
+                class="small text-muted mb-2"
+                title="<%= related.category?.name || 'CJ Product' %>"
+              >
+                <%= truncateRelatedCjText(
+                  related.category?.name || 'CJ Product',
+                  60
+                ) %>
               </div>
 
               <div class="mb-3">
