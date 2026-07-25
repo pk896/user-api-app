@@ -112,14 +112,12 @@ const IS_CJ_DEPARTMENT =
   ACTIVE_DEPARTMENT === 'cj';
 
 /*
- * Pure Shop-page links land at the active department notice.
+ * Only search, category, sort, pagination and filtered
+ * Shop requests land at the products section.
  *
- * Search, category, sort, pagination and filtered requests
- * must continue landing at the actual products section.
+ * Normal Shop-page links and department changes open
+ * the Shop page normally from the top.
  */
-const SHOP_DEPARTMENT_ANCHOR =
-  '#shopDepartmentSection';
-
 const SHOP_PRODUCTS_ANCHOR =
   '#shopProductsSection';
 
@@ -137,8 +135,7 @@ const ACTIVE_SHOP_URL =
   '/store/shop?department=' +
   encodeURIComponent(
     ACTIVE_DEPARTMENT
-  ) +
-  SHOP_DEPARTMENT_ANCHOR;
+  );
 
 const ACTIVE_BESTSELLER_URL =
   '/store/bestseller?department=' +
@@ -300,12 +297,10 @@ const ACTIVE_CART = (
     );
 
   const INTERNAL_SHOP_RETURN_TO =
-    '/store/shop?department=internal' +
-    SHOP_DEPARTMENT_ANCHOR;
+    '/store/shop?department=internal';
 
   const CJ_SHOP_RETURN_TO =
-    '/store/shop?department=cj' +
-    SHOP_DEPARTMENT_ANCHOR;
+    '/store/shop?department=cj';
 %>
 
 <!-- Spinner Start -->
@@ -2155,162 +2150,3 @@ const ACTIVE_CART = (
   <i class="fa fa-arrow-up"></i>
 </a>
 
-<script nonce="<%= nonce %>">
-  (function() {
-    const SHOP_DEPARTMENT_ANCHOR_ID =
-      'shopDepartmentSection';
-
-    const SHOP_PRODUCTS_ANCHOR_ID =
-      'shopProductsSection';
-
-    function isPureShopRequest() {
-      const params =
-        new URLSearchParams(
-          window.location.search
-        );
-
-      const parameterNames =
-        Array.from(
-          params.keys()
-        );
-
-      /*
-       * A pure Shop request has:
-       *
-       * - no query parameters, or
-       * - only the department parameter.
-       *
-       * Search, category, sort and page parameters mean the
-       * customer is browsing product results.
-       */
-      return (
-        parameterNames.length === 0 ||
-        (
-          parameterNames.length === 1 &&
-          parameterNames[0] ===
-            'department'
-        )
-      );
-    }
-
-    function updateUrlHash(hashValue) {
-      window.history.replaceState(
-        null,
-        '',
-        window.location.pathname +
-          window.location.search +
-          hashValue
-      );
-    }
-
-    function landOnCorrectShopSection() {
-      const departmentSection =
-        document.getElementById(
-          SHOP_DEPARTMENT_ANCHOR_ID
-        );
-
-      const productsSection =
-        document.getElementById(
-          SHOP_PRODUCTS_ANCHOR_ID
-        );
-
-      const currentHash =
-        String(
-          window.location.hash || ''
-        ).trim();
-
-      /*
-       * Respect an explicit valid anchor already supplied by
-       * the link.
-       */
-      if (
-        currentHash ===
-          '#' + SHOP_DEPARTMENT_ANCHOR_ID
-      ) {
-        if (departmentSection) {
-          departmentSection.scrollIntoView({
-            behavior: 'auto',
-            block: 'start'
-          });
-        }
-
-        return;
-      }
-
-      if (
-        currentHash ===
-          '#' + SHOP_PRODUCTS_ANCHOR_ID
-      ) {
-        if (productsSection) {
-          productsSection.scrollIntoView({
-            behavior: 'auto',
-            block: 'start'
-          });
-        }
-
-        return;
-      }
-
-      /*
-       * Do not override unrelated intentional anchors.
-       */
-      if (currentHash) {
-        return;
-      }
-
-      if (isPureShopRequest()) {
-        if (!departmentSection) {
-          return;
-        }
-
-        updateUrlHash(
-          '#' + SHOP_DEPARTMENT_ANCHOR_ID
-        );
-
-        departmentSection.scrollIntoView({
-          behavior: 'auto',
-          block: 'start'
-        });
-
-        return;
-      }
-
-      /*
-       * Any request containing keyword, category, sort, page,
-       * or another filtering parameter belongs at products.
-       */
-      if (!productsSection) {
-        return;
-      }
-
-      updateUrlHash(
-        '#' + SHOP_PRODUCTS_ANCHOR_ID
-      );
-
-      productsSection.scrollIntoView({
-        behavior: 'auto',
-        block: 'start'
-      });
-    }
-
-    window.addEventListener(
-      'load',
-      function() {
-        window.setTimeout(
-          landOnCorrectShopSection,
-          100
-        );
-      }
-    );
-
-    window.addEventListener(
-      'pageshow',
-      function() {
-        window.setTimeout(
-          landOnCorrectShopSection,
-          100
-        );
-      }
-    );
-  })();
-</script>
