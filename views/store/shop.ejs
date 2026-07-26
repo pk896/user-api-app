@@ -820,49 +820,102 @@ const ACTIVE_CART = (
 <div class="container-fluid shop py-5">
   <div class="container py-5">
     <div class="row g-4">
-      <% if (!IS_CJ_DEPARTMENT) { %>
       <div class="col-lg-3 wow fadeInUp" data-wow-delay="0.1s">
-        <div class="featured-product mb-4">
-          <h4 class="mb-3">Featured products</h4>
+        <!--
+          Featured Products are shared visually by both storefronts.
 
-          <% (featuredSidebarProducts || []).forEach(function(product) { %>
-          <a href="<%= product.url %>" class="featured-product-item mb-3 d-flex text-decoration-none text-dark">
-            <div class="rounded me-4" style="width: 100px; height: 100px;">
-              <img src="<%= product.image %>" class="img-fluid rounded" alt="<%= product.name %>">
-            </div>
-            <div>
-              <h6
-                class="mb-2"
-                title="<%= product.category || 'Product' %>"
+          The route supplies:
+          - Internal Product records for Kasyora In Store
+          - CjProduct records for Kasyora CJ Store
+
+          Product URLs, ratings and visible prices already come from
+          the correct isolated department mapping.
+        -->
+        <div class="featured-product mb-4">
+          <h4 class="mb-3 text-primary">
+            Featured products
+          </h4>
+
+          <% if ((featuredSidebarProducts || []).length > 0) { %>
+            <% featuredSidebarProducts.forEach(function(product) { %>
+            <a
+              href="<%= product.url %>"
+              class="featured-product-item mb-3 d-flex text-decoration-none text-dark"
+            >
+              <div
+                class="rounded me-4 flex-shrink-0 overflow-hidden"
+                style="width: 100px; height: 100px;"
               >
-                <%= truncateShopText(
-                  product.category || 'Product',
-                  25
-                ) %>
-              </h6>
-              <div class="mb-2">
-                <%- include('../partials/rating-stars', {
-                                        avg: Number(product.avgRating || 0),
-                                        count: Number(product.ratingsCount || 0),
-                                        nonce
-                                    }) %>
+                <img
+                  src="<%= product.image || product.imageUrl || '' %>"
+                  class="img-fluid rounded w-100 h-100"
+                  style="object-fit: contain;"
+                  alt="<%= product.name || 'Featured product' %>"
+                  loading="lazy"
+                >
               </div>
-              <div class="d-flex mb-2 align-items-center flex-wrap">
-                <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></h5>
-                <small class="text-muted me-2">incl. VAT</small>
-                <% if (product.oldPrice) { %>
-                <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(product.oldPrice) %></h5>
-                <% } %>
+
+              <div class="flex-grow-1 overflow-hidden">
+                <h6
+                  class="mb-2 text-primary"
+                  title="<%= product.category || 'Product' %>"
+                >
+                  <%= truncateShopText(
+                    product.category || 'Product',
+                    25
+                  ) %>
+                </h6>
+
+                <div class="mb-2">
+                  <%- include('../partials/rating-stars', {
+                    avg: Number(product.avgRating || 0),
+                    count: Number(product.ratingsCount || 0),
+                    nonce
+                  }) %>
+                </div>
+
+                <div class="d-flex mb-2 align-items-center flex-wrap">
+                  <h5 class="fw-bold text-primary me-2 mb-0">
+                    <%= formatMoney(
+                      Number(product.price || 0) *
+                      (1 + VAT)
+                    ) %>
+                  </h5>
+
+                  <small class="text-muted me-2">
+                    incl. VAT
+                  </small>
+
+                  <% if (product.oldPrice) { %>
+                  <h5 class="text-danger text-decoration-line-through mb-0">
+                    <%= formatMoney(product.oldPrice) %>
+                  </h5>
+                  <% } %>
+                </div>
               </div>
+            </a>
+            <% }) %>
+          <% } else { %>
+            <div class="alert alert-light border small text-muted">
+              No featured products are available right now.
             </div>
-          </a>
-          <% }) %>
+          <% } %>
 
           <div class="d-flex justify-content-center my-4">
-            <a href="/products/sales" class="btn btn-primary px-4 py-3 rounded-pill w-100">View More</a>
+            <a
+              href="<%= ACTIVE_SHOP_URL + SHOP_PRODUCTS_ANCHOR %>"
+              class="btn btn-primary px-4 py-3 rounded-pill w-100"
+            >
+              View More
+            </a>
           </div>
         </div>
-        <% if (shopSidebarBanner) { %>
+
+        <!--
+          The following sidebar banner remains Internal-only because
+          shopSidebarBanner references the Internal Product model.
+        -->
+        <% if (!IS_CJ_DEPARTMENT && shopSidebarBanner) { %>
         <a href="<%= shopSidebarBanner.url %>">
           <div class="position-relative">
             <img
@@ -871,7 +924,10 @@ const ACTIVE_CART = (
               alt="<%= shopSidebarBanner.productName || shopSidebarBanner.title %>"
             >
 
-            <div class="text-center position-absolute d-flex flex-column align-items-center justify-content-center rounded p-4" style="width: 100%; height: 100%; top: 0; right: 0; background: rgba(242, 139, 0, 0.3);">
+            <div
+              class="text-center position-absolute d-flex flex-column align-items-center justify-content-center rounded p-4"
+              style="width: 100%; height: 100%; top: 0; right: 0; background: rgba(242, 139, 0, 0.3);"
+            >
               <h5
                 class="display-6 text-primary"
                 title="<%= shopSidebarBanner.title || '' %>"
@@ -906,33 +962,53 @@ const ACTIVE_CART = (
         </a>
         <% } %>
 
+        <!--
+          Top Rated Products remain Internal-only during this focused
+          CJ Featured Products patch.
+        -->
+        <% if (!IS_CJ_DEPARTMENT) { %>
         <div class="product-tags py-4 top-rated-sales-wrap">
-          <h4 class="mb-3 text-primary">TOP RATED PRODUCTS</h4>
+          <h4 class="mb-3 text-primary">
+            TOP RATED PRODUCTS
+          </h4>
 
           <% if ((topRatedTagProducts || []).length > 0) { %>
           <div class="row g-2 g-md-3 top-rated-sales-grid">
             <% topRatedTagProducts.forEach(function(item) { %>
             <div class="col-6 col-md-4 col-lg-12">
-              <a href="<%= item.url %>" class="text-decoration-none text-reset d-block h-100" title="<%= item.name %>">
+              <a
+                href="<%= item.url %>"
+                class="text-decoration-none text-reset d-block h-100"
+                title="<%= item.name %>"
+              >
                 <div class="product-card position-relative h-100">
                   <div class="image-holder">
-                    <img src="<%= item.image %>" alt="<%= item.name %>" class="img-fluid" loading="lazy">
+                    <img
+                      src="<%= item.image %>"
+                      alt="<%= item.name %>"
+                      class="img-fluid"
+                      loading="lazy"
+                    >
                   </div>
 
                   <div class="card-detail">
                     <h3
-                    class="card-title text-uppercase"
-                    title="<%= item.name || 'Untitled Product' %>"
-                  >
-                    <span>
-                      <%= truncateShopText(
-                        item.name || 'Untitled Product',
-                        15
-                      ) %>
-                    </span>
-                  </h3>
+                      class="card-title text-uppercase"
+                      title="<%= item.name || 'Untitled Product' %>"
+                    >
+                      <span>
+                        <%= truncateShopText(
+                          item.name || 'Untitled Product',
+                          15
+                        ) %>
+                      </span>
+                    </h3>
+
                     <span class="item-price text-primary">
-                      <%= formatMoney(Number(item.price || 0) * (1 + VAT)) %>
+                      <%= formatMoney(
+                        Number(item.price || 0) *
+                        (1 + VAT)
+                      ) %>
                     </span>
                   </div>
                 </div>
@@ -941,13 +1017,15 @@ const ACTIVE_CART = (
             <% }) %>
           </div>
           <% } else { %>
-          <div class="small text-muted">No top rated products available right now.</div>
+          <div class="small text-muted">
+            No top rated products available right now.
+          </div>
           <% } %>
         </div>
+        <% } %>
       </div>
-      <% } %>
 
-      <div class="<%= IS_CJ_DEPARTMENT ? 'col-12' : 'col-lg-9' %> wow fadeInUp" data-wow-delay="0.1s">
+      <div class="col-lg-9 wow fadeInUp" data-wow-delay="0.1s">
         <% if (shopMainBanner) { %>
         <div class="rounded mb-4 position-relative">
           <img

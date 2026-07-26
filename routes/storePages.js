@@ -779,6 +779,269 @@ async function getFeaturedProducts(limit, excludeCustomId = null) {
   return results;
 }
 
+/*
+ * Load Featured Products for the separate Kasyora CJ Store.
+ *
+ * This mirrors the Internal getFeaturedProducts() fallback flow,
+ * but it reads only CjProduct and uses CJ-specific popularity,
+ * rating and catalogue fields.
+ *
+ * It never queries:
+ *
+ * - Product
+ * - Product.customId
+ * - Internal ratings
+ * - Internal cart, checkout or orders
+ */
+async function getCjFeaturedProducts(
+  limit,
+  excludeCjProductId = null,
+) {
+  const requestedLimit =
+    Number(limit);
+
+  const safeLimit =
+    Number.isFinite(requestedLimit) &&
+    requestedLimit > 0
+      ? Math.floor(requestedLimit)
+      : 4;
+
+  const safeExcludedId =
+    String(
+      excludeCjProductId || '',
+    ).trim();
+
+  const excludeFilter =
+    safeExcludedId
+      ? {
+          cjProductId: {
+            $ne: safeExcludedId,
+          },
+        }
+      : {};
+
+  const pickedIds =
+    new Set();
+
+  const results = [];
+
+  /*
+   * Every selected CJ product must be active and must
+   * contain at least one enabled checkout-ready variant.
+   */
+  const eligibleProductQuery = {
+    status:
+      'active',
+
+    variants: {
+      $elemMatch: {
+        isEnabled:
+          true,
+
+        cjVariantId: {
+          $exists:
+            true,
+
+          $ne:
+            '',
+        },
+
+        variantSku: {
+          $exists:
+            true,
+
+          $ne:
+            '',
+        },
+
+        'sellingPriceExVat.value': {
+          $gte:
+            0,
+        },
+      },
+    },
+  };
+
+  async function addBatch(
+    extraQuery = {},
+    sort = {
+      createdAt:
+        -1,
+
+      _id:
+        -1,
+    },
+  ) {
+    if (
+      results.length >= safeLimit
+    ) {
+      return;
+    }
+
+    const remaining =
+      safeLimit -
+      results.length;
+
+    const rows =
+      await CjProduct.find({
+        ...eligibleProductQuery,
+
+        ...excludeFilter,
+
+        ...extraQuery,
+      })
+        .sort(sort)
+        .limit(
+          remaining + 8,
+        )
+        .lean();
+
+    for (const row of rows) {
+      const cjProductId =
+        String(
+          row?.cjProductId ||
+          '',
+        ).trim();
+
+      if (
+        !cjProductId ||
+        pickedIds.has(
+          cjProductId,
+        )
+      ) {
+        continue;
+      }
+
+      /*
+       * mapCjStoreProduct() performs the final variant
+       * validation and gives the existing Shop EJS card
+       * the same public product structure.
+       */
+      const mappedProduct =
+        mapCjStoreProduct(row);
+
+      if (
+        !mappedProduct
+          ?.cjProductId ||
+        mappedProduct
+          .enabledVariantCount < 1
+      ) {
+        continue;
+      }
+
+      pickedIds.add(
+        cjProductId,
+      );
+
+      results.push(
+        mappedProduct,
+      );
+
+      if (
+        results.length >= safeLimit
+      ) {
+        break;
+      }
+    }
+  }
+
+  /*
+   * First preference:
+   * CJ products with marketplace interest and real ratings.
+   */
+  await addBatch(
+    {
+      cjListedNumber: {
+        $gt:
+          0,
+      },
+
+      ratingsCount: {
+        $gt:
+          0,
+      },
+    },
+    {
+      cjListedNumber:
+        -1,
+
+      avgRating:
+        -1,
+
+      ratingsCount:
+        -1,
+
+      createdAt:
+        -1,
+    },
+  );
+
+  /*
+   * Second preference:
+   * Popular/listed CJ products even when they have no
+   * Kasyora rating yet.
+   */
+  await addBatch(
+    {
+      cjListedNumber: {
+        $gt:
+          0,
+      },
+    },
+    {
+      cjListedNumber:
+        -1,
+
+      createdAt:
+        -1,
+
+      _id:
+        -1,
+    },
+  );
+
+  /*
+   * Third preference:
+   * CJ products that have received ratings.
+   */
+  await addBatch(
+    {
+      ratingsCount: {
+        $gt:
+          0,
+      },
+    },
+    {
+      avgRating:
+        -1,
+
+      ratingsCount:
+        -1,
+
+      createdAt:
+        -1,
+    },
+  );
+
+  /*
+   * Final fallback:
+   * Fill the remaining spaces with the newest eligible
+   * active CJ products.
+   */
+  await addBatch(
+    {},
+    {
+      createdAt:
+        -1,
+
+      _id:
+        -1,
+    },
+  );
+
+  return results;
+}
+
 function getGuestKeyFromReq(req) {
   try {
     const fromCookies = req.cookies && req.cookies.guestKey ? String(req.cookies.guestKey) : null;
@@ -1461,59 +1724,73 @@ router.get('/store/shop', async (req, res) => {
      * internal ratings, or internal marketing banners.
      */
     if (storeDepartment === 'cj') {
-      const [cjShopResult, cjCategories, shopHeaderImage, cjHomePromoOffers, cjShopMainBannerRaw] =
-        await Promise.all([
-          loadCjShopProducts({
+      const [
+        cjShopResult,
+        cjCategories,
+        shopHeaderImage,
+        cjHomePromoOffers,
+        cjShopMainBannerRaw,
+        featuredSidebarProducts,
+        ] = await Promise.all([
+        loadCjShopProducts({
             keyword,
             category,
             selectedSort,
             requestedPage,
             perPage,
-          }),
+        }),
 
-          loadCjStoreCategories(),
+        loadCjStoreCategories(),
 
-          /*
-           * This is a shared decorative image only.
-           * It does not load an Internal Product record.
-           */
-          ShopHeaderImage.findOne({
+        /*
+        * This is a shared decorative image only.
+        * It does not load an Internal Product record.
+        */
+        ShopHeaderImage.findOne({
             active: true,
-          })
+        })
             .sort({
-              updatedAt: -1,
+            updatedAt: -1,
             })
             .lean(),
 
-          /*
-           * The CJ Shop page uses the same two separate
-           * CjHomePromoOffer records as the CJ homepage.
-           *
-           * Do not create a separate CJ Shop promo-offer model.
-           */
-          CjHomePromoOffer.find({
+        /*
+        * The CJ Shop page uses the same two separate
+        * CjHomePromoOffer records as the CJ homepage.
+        *
+        * Do not create a separate CJ Shop promo-offer model.
+        */
+        CjHomePromoOffer.find({
             active: true,
-          })
+        })
             .sort({
-              sortOrder: 1,
-              createdAt: 1,
+            sortOrder: 1,
+            createdAt: 1,
             })
             .lean(),
 
-          /*
-           * Load only the separate CJ Shop Main Banner.
-           *
-           * This never queries the Internal ShopMainBanner model.
-           */
-          CjShopMainBanner.findOne({
+        /*
+        * Load only the separate CJ Shop Main Banner.
+        *
+        * This never queries the Internal ShopMainBanner model.
+        */
+        CjShopMainBanner.findOne({
             singletonKey: 'main',
 
             active: true,
-          })
+        })
             .sort({
-              updatedAt: -1,
+            updatedAt: -1,
             })
             .lean(),
+
+        /*
+        * Load four Featured Products only from CjProduct.
+        *
+        * getCjFeaturedProducts() already maps the products
+        * through mapCjStoreProduct().
+        */
+        getCjFeaturedProducts(4),
         ]);
 
       /*
@@ -1645,12 +1922,12 @@ router.get('/store/shop', async (req, res) => {
         shopProducts: cjShopResult.products,
 
         /*
-         * The current sidebar and rating sections are
-         * connected to internal Product records.
-         * Keep them empty in the CJ department until
-         * dedicated CJ versions are introduced.
-         */
-        featuredSidebarProducts: [],
+        * Separate CJ Featured Products loaded only from CjProduct.
+        *
+        * The CJ Top Rated section remains empty because it is
+        * not part of the current Featured Products task.
+        */
+        featuredSidebarProducts,
         topRatedTagProducts: [],
 
         /*
