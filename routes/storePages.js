@@ -25,7 +25,16 @@ const HomeMidBanner = require('../models/HomeMidBanner');
 const BestsellerCard = require('../models/BestsellerCard');
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 const ShopSidebarBanner = require('../models/ShopSidebarBanner');
+
 const ShopMainBanner = require('../models/ShopMainBanner');
+
+/*
+ * Completely separate CJ Shop Main Banner.
+ *
+ * This model stores only CjProduct.cjProductId.
+ */
+const CjShopMainBanner = require('../models/CjShopMainBanner');
+
 const ShopHeaderImage = require('../models/ShopHeaderImage');
 const sharp = require('sharp');
 const http = require('http');
@@ -561,48 +570,30 @@ function mapCjPromoOffer(offer, product) {
 
   const mappedProduct = mapCjStoreProduct(product);
 
-  if (
-    !mappedProduct.cjProductId ||
-    mappedProduct.enabledVariantCount < 1
-  ) {
+  if (!mappedProduct.cjProductId || mappedProduct.enabledVariantCount < 1) {
     return null;
   }
 
   return {
     slot: String(offer.slot || '').trim(),
 
-    eyebrowText:
-      String(offer.eyebrowText || '').trim(),
+    eyebrowText: String(offer.eyebrowText || '').trim(),
 
-    title:
-      String(
-        offer.titleOverride ||
-        mappedProduct.name ||
-        'CJ Product',
-      ).trim(),
+    title: String(offer.titleOverride || mappedProduct.name || 'CJ Product').trim(),
 
-    discountText:
-      String(offer.discountText || '').trim(),
+    discountText: String(offer.discountText || '').trim(),
 
-    url:
-      `/cj/product/${encodeURIComponent(
-        mappedProduct.cjProductId,
-      )}`,
+    url: `/cj/product/${encodeURIComponent(mappedProduct.cjProductId)}`,
 
-    image:
-      mappedProduct.image,
+    image: mappedProduct.image,
 
-    cjProductId:
-      mappedProduct.cjProductId,
+    cjProductId: mappedProduct.cjProductId,
 
-    productName:
-      mappedProduct.name,
+    productName: mappedProduct.name,
 
-    active:
-      offer.active === true,
+    active: offer.active === true,
 
-    sortOrder:
-      Number(offer.sortOrder || 0),
+    sortOrder: Number(offer.sortOrder || 0),
   };
 }
 
@@ -697,6 +688,42 @@ function mapShopMainBanner(banner, product) {
     productCustomId: mappedProduct.customId,
     productName: mappedProduct.name,
     active: !!banner.active,
+  };
+}
+
+/*
+ * Map only the separate Kasyora CJ Store
+ * Shop Main Banner.
+ *
+ * Never pass an Internal Product into this function.
+ */
+function mapCjShopMainBanner(banner, product) {
+  if (!banner || !product) {
+    return null;
+  }
+
+  const mappedProduct = mapCjStoreProduct(product);
+
+  if (!mappedProduct.cjProductId || mappedProduct.enabledVariantCount < 1) {
+    return null;
+  }
+
+  return {
+    title: String(banner.title || '').trim(),
+
+    subtitle: String(banner.subtitle || '').trim(),
+
+    buttonText: String(banner.buttonText || 'Shop Now').trim(),
+
+    image: String(banner.image || '').trim(),
+
+    url: '/cj/product/' + encodeURIComponent(mappedProduct.cjProductId),
+
+    cjProductId: mappedProduct.cjProductId,
+
+    productName: mappedProduct.name,
+
+    active: banner.active === true,
   };
 }
 
@@ -943,12 +970,7 @@ router.get('/store', async (req, res) => {
     }));
 
     if (storeDepartment === 'cj') {
-      const [
-        cjProducts,
-        cjCategories,
-        cjFeaturedBanner,
-        cjHomePromoOffers,
-      ] = await Promise.all([
+      const [cjProducts, cjCategories, cjFeaturedBanner, cjHomePromoOffers] = await Promise.all([
         loadCjHomepageProducts({
           keyword,
           category,
@@ -957,10 +979,10 @@ router.get('/store', async (req, res) => {
         loadCjStoreCategories(),
 
         /*
-        * Load only the separate CJ Featured Right-side Banner.
-        *
-        * This never queries the Internal FeaturedBanner model.
-        */
+         * Load only the separate CJ Featured Right-side Banner.
+         *
+         * This never queries the Internal FeaturedBanner model.
+         */
         CjFeaturedBanner.findOne({
           slot: 'right',
           active: true,
@@ -971,11 +993,11 @@ router.get('/store', async (req, res) => {
           .lean(),
 
         /*
-        * Load only active CJ homepage promo offers.
-        *
-        * These records contain CjProduct.cjProductId values
-        * and never reference Internal Product.customId.
-        */
+         * Load only active CJ homepage promo offers.
+         *
+         * These records contain CjProduct.cjProductId values
+         * and never reference Internal Product.customId.
+         */
         CjHomePromoOffer.find({
           active: true,
         })
@@ -1033,59 +1055,53 @@ router.get('/store', async (req, res) => {
       }
 
       /*
-      * Resolve the separate left and right CJ promo offers.
-      *
-      * Each saved configuration is validated again against
-      * an active imported CjProduct with an enabled,
-      * valid-price variant.
-      */
+       * Resolve the separate left and right CJ promo offers.
+       *
+       * Each saved configuration is validated again against
+       * an active imported CjProduct with an enabled,
+       * valid-price variant.
+       */
       let promoOfferLeft = null;
       let promoOfferRight = null;
 
       for (const offer of cjHomePromoOffers) {
-        const cjProductId =
-          String(offer?.cjProductId || '').trim();
+        const cjProductId = String(offer?.cjProductId || '').trim();
 
         if (!cjProductId) {
           continue;
         }
 
-        const rawPromoProduct =
-          await CjProduct.findOne({
-            status: 'active',
+        const rawPromoProduct = await CjProduct.findOne({
+          status: 'active',
 
-            cjProductId,
+          cjProductId,
 
-            variants: {
-              $elemMatch: {
-                isEnabled: true,
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
 
-                cjVariantId: {
-                  $exists: true,
-                  $ne: '',
-                },
+              cjVariantId: {
+                $exists: true,
+                $ne: '',
+              },
 
-                variantSku: {
-                  $exists: true,
-                  $ne: '',
-                },
+              variantSku: {
+                $exists: true,
+                $ne: '',
+              },
 
-                'sellingPriceExVat.value': {
-                  $gte: 0,
-                },
+              'sellingPriceExVat.value': {
+                $gte: 0,
               },
             },
-          }).lean();
+          },
+        }).lean();
 
         if (!rawPromoProduct) {
           continue;
         }
 
-        const mappedOffer =
-          mapCjPromoOffer(
-            offer,
-            rawPromoProduct,
-          );
+        const mappedOffer = mapCjPromoOffer(offer, rawPromoProduct);
 
         if (!mappedOffer) {
           continue;
@@ -1101,10 +1117,10 @@ router.get('/store', async (req, res) => {
       }
 
       /*
-      * CJ currently has no Kasyora sales history in this stage.
-      * The arrays are therefore derived from the same isolated
-      * active CJ catalogue using safe deterministic ordering.
-      */
+       * CJ currently has no Kasyora sales history in this stage.
+       * The arrays are therefore derived from the same isolated
+       * active CJ catalogue using safe deterministic ordering.
+       */
       const allProducts = cjProducts.slice(0, 8);
 
       const newArrivals = [...cjProducts].slice(0, 8);
@@ -1145,12 +1161,12 @@ router.get('/store', async (req, res) => {
         heroSlides,
 
         /*
-        * The Featured Right-side Banner and Promo Offers use
-        * their own separate CJ configuration models and CjProduct.
-        *
-        * Internal mid banners still reference Product.customId,
-        * so they remain hidden inside the CJ department.
-        */
+         * The Featured Right-side Banner and Promo Offers use
+         * their own separate CJ configuration models and CjProduct.
+         *
+         * Internal mid banners still reference Product.customId,
+         * so they remain hidden inside the CJ department.
+         */
         sideBannerProduct,
         promoOfferLeft,
         promoOfferRight,
@@ -1445,29 +1461,172 @@ router.get('/store/shop', async (req, res) => {
      * internal ratings, or internal marketing banners.
      */
     if (storeDepartment === 'cj') {
-      const [cjShopResult, cjCategories, shopHeaderImage] = await Promise.all([
-        loadCjShopProducts({
-          keyword,
-          category,
-          selectedSort,
-          requestedPage,
-          perPage,
-        }),
+      const [cjShopResult, cjCategories, shopHeaderImage, cjHomePromoOffers, cjShopMainBannerRaw] =
+        await Promise.all([
+          loadCjShopProducts({
+            keyword,
+            category,
+            selectedSort,
+            requestedPage,
+            perPage,
+          }),
 
-        loadCjStoreCategories(),
+          loadCjStoreCategories(),
 
-        /*
-         * This is a shared decorative image only.
-         * It does not load an internal Product record.
-         */
-        ShopHeaderImage.findOne({
-          active: true,
-        })
-          .sort({
-            updatedAt: -1,
+          /*
+           * This is a shared decorative image only.
+           * It does not load an Internal Product record.
+           */
+          ShopHeaderImage.findOne({
+            active: true,
           })
-          .lean(),
-      ]);
+            .sort({
+              updatedAt: -1,
+            })
+            .lean(),
+
+          /*
+           * The CJ Shop page uses the same two separate
+           * CjHomePromoOffer records as the CJ homepage.
+           *
+           * Do not create a separate CJ Shop promo-offer model.
+           */
+          CjHomePromoOffer.find({
+            active: true,
+          })
+            .sort({
+              sortOrder: 1,
+              createdAt: 1,
+            })
+            .lean(),
+
+          /*
+           * Load only the separate CJ Shop Main Banner.
+           *
+           * This never queries the Internal ShopMainBanner model.
+           */
+          CjShopMainBanner.findOne({
+            singletonKey: 'main',
+
+            active: true,
+          })
+            .sort({
+              updatedAt: -1,
+            })
+            .lean(),
+        ]);
+
+      /*
+       * Resolve the same separate CJ left and right promo offers
+       * already used by the CJ Store homepage.
+       *
+       * Every saved offer is validated against an active imported
+       * CjProduct with at least one enabled variant containing:
+       *
+       * - a CJ variant ID
+       * - a CJ variant SKU
+       * - a valid selling price excluding VAT
+       *
+       * No Internal Product or HomePromoOffer record is queried here.
+       */
+      let promoOfferLeft = null;
+      let promoOfferRight = null;
+
+      for (const offer of cjHomePromoOffers) {
+        const cjProductId = String(offer?.cjProductId || '').trim();
+
+        if (!cjProductId) {
+          continue;
+        }
+
+        const rawPromoProduct = await CjProduct.findOne({
+          status: 'active',
+
+          cjProductId,
+
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
+
+              cjVariantId: {
+                $exists: true,
+                $ne: '',
+              },
+
+              variantSku: {
+                $exists: true,
+                $ne: '',
+              },
+
+              'sellingPriceExVat.value': {
+                $gte: 0,
+              },
+            },
+          },
+        }).lean();
+
+        if (!rawPromoProduct) {
+          continue;
+        }
+
+        const mappedOffer = mapCjPromoOffer(offer, rawPromoProduct);
+
+        if (!mappedOffer) {
+          continue;
+        }
+
+        if (offer.slot === 'left') {
+          promoOfferLeft = mappedOffer;
+        }
+
+        if (offer.slot === 'right') {
+          promoOfferRight = mappedOffer;
+        }
+      }
+
+      /*
+       * Resolve the product linked to the separate
+       * CJ Shop Main Banner.
+       *
+       * This query uses only CjProduct.
+       */
+      let shopMainBanner = null;
+
+      if (cjShopMainBannerRaw?.cjProductId) {
+        const cjProductId = String(cjShopMainBannerRaw.cjProductId || '').trim();
+
+        const rawMainBannerProduct = await CjProduct.findOne({
+          status: 'active',
+
+          cjProductId,
+
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
+
+              cjVariantId: {
+                $exists: true,
+
+                $ne: '',
+              },
+
+              variantSku: {
+                $exists: true,
+
+                $ne: '',
+              },
+
+              'sellingPriceExVat.value': {
+                $gte: 0,
+              },
+            },
+          },
+        }).lean();
+
+        if (rawMainBannerProduct) {
+          shopMainBanner = mapCjShopMainBanner(cjShopMainBannerRaw, rawMainBannerProduct);
+        }
+      }
 
       return res.render('store/shop', {
         layout: 'layouts/store',
@@ -1494,12 +1653,26 @@ router.get('/store/shop', async (req, res) => {
         featuredSidebarProducts: [],
         topRatedTagProducts: [],
 
-        promoOfferLeft: null,
-        promoOfferRight: null,
+        /*
+         * These are the same CjHomePromoOffer records used
+         * by the CJ homepage.
+         */
+        promoOfferLeft,
+        promoOfferRight,
+
+        /*
+         * Internal product-linked banners remain hidden
+         * in the CJ Shop department.
+         */
         midBannerLeft: null,
         midBannerRight: null,
         shopSidebarBanner: null,
-        shopMainBanner: null,
+
+        /*
+         * Separate CJ Shop Main Banner resolved above
+         * from CjShopMainBanner and CjProduct.
+         */
+        shopMainBanner,
 
         shopHeaderImage,
 

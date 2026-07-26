@@ -694,6 +694,14 @@ const adminBestsellerCards = require('./routes/adminBestsellerCards');
 const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBanners');
 const adminShopSidebarBanner = require('./routes/adminShopSidebarBanner');
 const adminShopMainBanner = require('./routes/adminShopMainBanner');
+/*
+ * Completely separate Kasyora CJ Store
+ * Shop Main Banner admin flow.
+ *
+ * This router uses only CjShopMainBanner
+ * and CjProduct.
+ */
+const adminCjShopMainBanner = require('./routes/adminCjShopMainBanner');
 const adminShopHeaderImage = require('./routes/adminShopHeaderImage');
 const adminWarehousingDispenseRoutes = require('./routes/adminWarehousingDispense');
 const adminCeoAuditRoutes = require('./routes/adminCeoAudit');
@@ -854,7 +862,14 @@ app.use('/admin', adminHomeMidBannersRoutes);
 app.use('/admin', adminBestsellerCards);
 app.use('/admin', adminBestsellerBottomBanners);
 app.use('/admin', adminShopSidebarBanner);
+
 app.use('/admin', adminShopMainBanner);
+
+/*
+ * Separate CJ Shop Main Banner administration.
+ */
+app.use('/admin', adminCjShopMainBanner);
+
 app.use('/admin', adminShopHeaderImage);
 app.use('/admin', adminWarehousingDispenseRoutes);
 app.use('/admin', adminCeoAuditRoutes);

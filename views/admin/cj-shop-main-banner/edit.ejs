@@ -1,0 +1,584 @@
+<!--views/admin/cj-shop-main-banner/edit.ejs-->
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+              <div class="small text-success text-uppercase fw-semibold mb-1">
+                Kasyora CJ Store
+              </div>
+
+              <h1 class="h3 mb-1 text-primary">
+                <%= banner ? 'Edit' : 'Create' %>
+                CJ Shop Main Banner
+              </h1>
+
+              <p class="text-body-secondary mb-0">
+                Choose an eligible imported CJ product and upload separate CJ banner artwork.
+              </p>
+            </div>
+
+            <a
+              href="/admin/cj-shop-main-banner"
+              class="btn btn-outline-secondary"
+            >
+              Back
+            </a>
+          </div>
+
+          <form
+            action="/admin/cj-shop-main-banner"
+            method="POST"
+            enctype="multipart/form-data"
+            class="row g-3"
+          >
+            <div class="col-12">
+              <label
+                for="cjProductSearch"
+                class="form-label fw-semibold text-primary"
+              >
+                Choose CJ Product
+              </label>
+
+              <input
+                type="hidden"
+                name="cjProductId"
+                id="cjProductId"
+                value="<%= banner?.cjProductId || '' %>"
+                required
+              >
+
+              <div class="position-relative">
+                <input
+                  type="text"
+                  id="cjProductSearch"
+                  class="form-control border-primary"
+                  placeholder="Search by CJ product ID, SKU or product name"
+                  autocomplete="off"
+                  value="<%= selectedProduct
+                    ? `${selectedProduct.name} — ${selectedProduct.cjProductId}`
+                    : ''
+                  %>"
+                  required
+                >
+
+                <div
+                  id="cjProductSearchResults"
+                  class="list-group position-absolute top-100 start-0 end-0 shadow-sm d-none"
+                  style="z-index: 1050;"
+                ></div>
+              </div>
+
+              <div class="form-text text-primary mt-2">
+                Only active imported CJ products with an enabled valid-price variant are available.
+              </div>
+            </div>
+
+            <div
+              id="selectedCjProductBox"
+              class="col-12 <%= selectedProduct ? '' : 'd-none' %>"
+            >
+              <div class="card border-primary shadow-sm">
+                <div class="card-body p-3">
+                  <div class="row g-3 align-items-center">
+                    <div class="col-12 col-md-3">
+                      <img
+                        id="selectedCjProductImage"
+                        src="<%= selectedProduct?.imageUrl || '' %>"
+                        alt="<%= selectedProduct?.name || '' %>"
+                        class="img-fluid rounded border w-100 <%= selectedProduct?.imageUrl ? '' : 'd-none' %>"
+                        style="height: 150px; object-fit: contain;"
+                      >
+
+                      <div
+                        id="selectedCjImagePlaceholder"
+                        class="border rounded bg-light d-flex align-items-center justify-content-center text-muted <%= selectedProduct?.imageUrl ? 'd-none' : '' %>"
+                        style="height: 150px;"
+                      >
+                        No product image
+                      </div>
+                    </div>
+
+                    <div class="col-12 col-md-9">
+                      <div
+                        id="selectedCjProductName"
+                        class="fw-bold text-primary mb-2"
+                      >
+                        <%= selectedProduct?.name || '' %>
+                      </div>
+
+                      <div class="small mb-1">
+                        <strong>CJ Product ID:</strong>
+                        <span id="selectedCjProductId">
+                          <%= selectedProduct?.cjProductId || '' %>
+                        </span>
+                      </div>
+
+                      <div class="small mb-1">
+                        <strong>SKU:</strong>
+                        <span id="selectedCjProductSku">
+                          <%= selectedProduct?.productSku || '—' %>
+                        </span>
+                      </div>
+
+                      <div class="small mb-1">
+                        <strong>Category:</strong>
+                        <span id="selectedCjProductCategory">
+                          <%= selectedProduct?.category || 'CJ Product' %>
+                        </span>
+                      </div>
+
+                      <div class="small mb-3">
+                        <strong>Enabled variants:</strong>
+                        <span id="selectedCjVariantCount">
+                          <%= selectedProduct?.enabledVariantCount || 0 %>
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        id="clearSelectedCjProduct"
+                        class="btn btn-sm btn-outline-secondary"
+                      >
+                        Clear Selected Product
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="title"
+                class="form-label"
+              >
+                Title
+              </label>
+
+              <input
+                type="text"
+                name="title"
+                id="title"
+                maxlength="80"
+                class="form-control"
+                value="<%= banner?.title || 'SALE' %>"
+                placeholder="SALE"
+              >
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="subtitle"
+                class="form-label"
+              >
+                Subtitle
+              </label>
+
+              <input
+                type="text"
+                name="subtitle"
+                id="subtitle"
+                maxlength="160"
+                class="form-control"
+                value="<%= banner?.subtitle || 'Get Up To 50% Off' %>"
+                placeholder="Get Up To 50% Off"
+              >
+            </div>
+
+            <div class="col-md-6">
+              <label
+                for="buttonText"
+                class="form-label"
+              >
+                Button Text
+              </label>
+
+              <input
+                type="text"
+                name="buttonText"
+                id="buttonText"
+                maxlength="40"
+                class="form-control"
+                value="<%= banner?.buttonText || 'Shop Now' %>"
+                placeholder="Shop Now"
+              >
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-check mt-md-4 pt-md-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="active"
+                  id="active"
+                  <%= !banner || banner.active !== false ? 'checked' : '' %>
+                >
+
+                <label
+                  class="form-check-label"
+                  for="active"
+                >
+                  Active
+                </label>
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label
+                for="imageFile"
+                class="form-label"
+              >
+                CJ Banner Image
+              </label>
+
+              <input
+                type="file"
+                name="imageFile"
+                id="imageFile"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+                class="form-control"
+                <%= !banner?.image ? 'required' : '' %>
+              >
+
+              <div class="form-text">
+                Upload the separate CJ banner artwork. Maximum file size: 8 MB.
+              </div>
+            </div>
+
+            <% if (banner?.image) { %>
+              <div class="col-12">
+                <div class="border rounded p-3 bg-light">
+                  <div class="small text-muted mb-2">
+                    Current CJ Banner Image
+                  </div>
+
+                  <img
+                    src="<%= banner.image %>"
+                    alt="Current CJ Shop Main Banner"
+                    class="img-fluid rounded border"
+                    style="max-height: 220px; object-fit: cover;"
+                  >
+                </div>
+              </div>
+            <% } %>
+
+            <div class="col-12">
+              <button
+                type="submit"
+                class="btn btn-primary"
+              >
+                <%= banner ? 'Save Changes' : 'Create' %>
+                CJ Shop Main Banner
+              </button>
+
+              <% if (banner) { %>
+                <a
+                  href="/admin/cj-shop-main-banner/toggle"
+                  class="btn btn-outline-secondary ms-2"
+                >
+                  <%= banner.active ? 'Deactivate' : 'Activate' %>
+                </a>
+              <% } %>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%
+  scripts = `
+  <script nonce="${nonce}">
+    document.addEventListener('DOMContentLoaded', function () {
+      const searchInput =
+        document.getElementById('cjProductSearch');
+
+      const hiddenInput =
+        document.getElementById('cjProductId');
+
+      const resultsBox =
+        document.getElementById('cjProductSearchResults');
+
+      const selectedBox =
+        document.getElementById('selectedCjProductBox');
+
+      const productName =
+        document.getElementById('selectedCjProductName');
+
+      const productId =
+        document.getElementById('selectedCjProductId');
+
+      const productSku =
+        document.getElementById('selectedCjProductSku');
+
+      const productCategory =
+        document.getElementById('selectedCjProductCategory');
+
+      const variantCount =
+        document.getElementById('selectedCjVariantCount');
+
+      const productImage =
+        document.getElementById('selectedCjProductImage');
+
+      const imagePlaceholder =
+        document.getElementById('selectedCjImagePlaceholder');
+
+      const clearButton =
+        document.getElementById('clearSelectedCjProduct');
+
+      let debounceTimer = null;
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function hideResults() {
+        resultsBox.classList.add('d-none');
+        resultsBox.innerHTML = '';
+      }
+
+      function showSelectedProduct(product) {
+        hiddenInput.value =
+          product.cjProductId || '';
+
+        searchInput.value =
+          (product.name || '') +
+          ' — ' +
+          (product.cjProductId || '');
+
+        productName.textContent =
+          product.name || '';
+
+        productId.textContent =
+          product.cjProductId || '';
+
+        productSku.textContent =
+          product.productSku || '—';
+
+        productCategory.textContent =
+          product.category || 'CJ Product';
+
+        variantCount.textContent =
+          String(product.enabledVariantCount || 0);
+
+        if (product.imageUrl) {
+          productImage.src =
+            product.imageUrl;
+
+          productImage.alt =
+            product.name || 'Selected CJ product';
+
+          productImage.classList.remove('d-none');
+          imagePlaceholder.classList.add('d-none');
+        } else {
+          productImage.src = '';
+          productImage.alt = '';
+          productImage.classList.add('d-none');
+          imagePlaceholder.classList.remove('d-none');
+        }
+
+        selectedBox.classList.remove('d-none');
+        hideResults();
+      }
+
+      function clearSelectedProduct() {
+        hiddenInput.value = '';
+        searchInput.value = '';
+
+        productName.textContent = '';
+        productId.textContent = '';
+        productSku.textContent = '—';
+        productCategory.textContent = '';
+        variantCount.textContent = '0';
+
+        productImage.src = '';
+        productImage.alt = '';
+        productImage.classList.add('d-none');
+
+        imagePlaceholder.classList.remove('d-none');
+        selectedBox.classList.add('d-none');
+
+        hideResults();
+        searchInput.focus();
+      }
+
+      async function searchProducts(query) {
+        try {
+          const response =
+            await fetch(
+              '/admin/cj-shop-main-banner/products/search?q=' +
+              encodeURIComponent(query),
+              {
+                headers: {
+                  'X-Requested-With': 'XMLHttpRequest'
+                }
+              }
+            );
+
+          const data =
+            await response.json();
+
+          if (
+            !data.success ||
+            !Array.isArray(data.products)
+          ) {
+            hideResults();
+            return;
+          }
+
+          if (data.products.length === 0) {
+            resultsBox.innerHTML =
+              '<button type="button" class="list-group-item list-group-item-action disabled">' +
+              'No eligible imported CJ products found' +
+              '</button>';
+
+            resultsBox.classList.remove('d-none');
+            return;
+          }
+
+          resultsBox.innerHTML =
+            data.products.map(function (product) {
+              return \`
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-cj-product-id="\${escapeHtml(product.cjProductId)}"
+                  data-product-sku="\${escapeHtml(product.productSku || '')}"
+                  data-name="\${escapeHtml(product.name || '')}"
+                  data-category="\${escapeHtml(product.category || '')}"
+                  data-image-url="\${escapeHtml(product.imageUrl || '')}"
+                  data-enabled-variant-count="\${escapeHtml(product.enabledVariantCount || 0)}"
+                >
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="fw-semibold text-primary">
+                        \${escapeHtml(product.name)}
+                      </div>
+
+                      <div class="small text-body-secondary">
+                        CJ Product ID:
+                        \${escapeHtml(product.cjProductId)}
+                      </div>
+
+                      <div class="small text-body-secondary">
+                        SKU:
+                        \${escapeHtml(product.productSku || '—')}
+                      </div>
+                    </div>
+
+                    <span class="badge bg-success">
+                      \${escapeHtml(product.enabledVariantCount || 0)}
+                      variants
+                    </span>
+                  </div>
+                </button>
+              \`;
+            }).join('');
+
+          resultsBox.classList.remove('d-none');
+        } catch (error) {
+          console.error(
+            'CJ Shop Main Banner product search failed:',
+            error
+          );
+
+          hideResults();
+        }
+      }
+
+      searchInput.addEventListener('input', function () {
+        const query =
+          searchInput.value.trim();
+
+        hiddenInput.value = '';
+
+        if (query.length < 1) {
+          hideResults();
+          return;
+        }
+
+        clearTimeout(debounceTimer);
+
+        debounceTimer =
+          setTimeout(function () {
+            searchProducts(query);
+          }, 250);
+      });
+
+      resultsBox.addEventListener('click', function (event) {
+        const button =
+          event.target.closest(
+            'button[data-cj-product-id]'
+          );
+
+        if (!button) {
+          return;
+        }
+
+        showSelectedProduct({
+          cjProductId:
+            button.getAttribute('data-cj-product-id'),
+
+          productSku:
+            button.getAttribute('data-product-sku'),
+
+          name:
+            button.getAttribute('data-name'),
+
+          category:
+            button.getAttribute('data-category'),
+
+          imageUrl:
+            button.getAttribute('data-image-url'),
+
+          enabledVariantCount:
+            button.getAttribute('data-enabled-variant-count')
+        });
+      });
+
+      if (clearButton) {
+        clearButton.addEventListener(
+          'click',
+          clearSelectedProduct
+        );
+      }
+
+      document.addEventListener('click', function (event) {
+        const insideSearch =
+          event.target.closest('#cjProductSearch') ||
+          event.target.closest('#cjProductSearchResults');
+
+        if (!insideSearch) {
+          hideResults();
+        }
+      });
+
+      const form =
+        searchInput.closest('form');
+
+      if (form) {
+        form.addEventListener('submit', function (event) {
+          if (!hiddenInput.value.trim()) {
+            event.preventDefault();
+
+            searchInput.focus();
+
+            alert(
+              'Please search for and select an eligible CJ product first.'
+            );
+          }
+        });
+      }
+    });
+  </script>
+  `;
+%>
