@@ -1026,6 +1026,97 @@ async function getCjFeaturedProducts(limit, excludeCjProductId = null) {
   return results;
 }
 
+/*
+ * Load TOP RATED PRODUCTS for the separate
+ * Kasyora CJ Store Shop sidebar.
+ *
+ * This reads only the rating aggregates stored on CjProduct.
+ * Those aggregates are maintained by the separate CjRating flow.
+ *
+ * It never queries:
+ *
+ * - Rating
+ * - Product
+ * - Product.customId
+ * - Internal reviews
+ */
+async function getCjTopRatedProducts(limit) {
+  const requestedLimit = Number(limit);
+
+  const safeLimit =
+    Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.floor(requestedLimit) : 8;
+
+  const rows = await CjProduct.find({
+    status: 'active',
+
+    /*
+     * Only products with published CJ ratings qualify.
+     */
+    ratingsCount: {
+      $gt: 0,
+    },
+
+    avgRating: {
+      $gt: 0,
+      $lte: 5,
+    },
+
+    /*
+     * The CJ product must still have at least one
+     * enabled checkout-ready variant.
+     */
+    variants: {
+      $elemMatch: {
+        isEnabled: true,
+
+        cjVariantId: {
+          $exists: true,
+          $ne: '',
+        },
+
+        variantSku: {
+          $exists: true,
+          $ne: '',
+        },
+
+        'sellingPriceExVat.value': {
+          $gte: 0,
+        },
+      },
+    },
+  })
+    .sort({
+      /*
+       * Highest average rating first.
+       */
+      avgRating: -1,
+
+      /*
+       * When averages match, the product with more
+       * published CJ ratings appears first.
+       */
+      ratingsCount: -1,
+
+      updatedAt: -1,
+      _id: -1,
+    })
+    .limit(safeLimit + 8)
+    .lean();
+
+  return rows
+    .map(mapCjStoreProduct)
+    .filter((product) => {
+      return (
+        product &&
+        product.cjProductId &&
+        product.enabledVariantCount > 0 &&
+        Number(product.avgRating || 0) > 0 &&
+        Number(product.ratingsCount || 0) > 0
+      );
+    })
+    .slice(0, safeLimit);
+}
+
 function getGuestKeyFromReq(req) {
   try {
     const fromCookies = req.cookies && req.cookies.guestKey ? String(req.cookies.guestKey) : null;
@@ -1716,6 +1807,7 @@ router.get('/store/shop', async (req, res) => {
         cjShopMainBannerRaw,
         cjShopSidebarBannerRaw,
         featuredSidebarProducts,
+        topRatedTagProducts,
       ] = await Promise.all([
         loadCjShopProducts({
           keyword,
@@ -1788,6 +1880,14 @@ router.get('/store/shop', async (req, res) => {
          * through mapCjStoreProduct().
          */
         getCjFeaturedProducts(4),
+
+        /*
+         * Load CJ TOP RATED PRODUCTS only from CjProduct.
+         *
+         * avgRating and ratingsCount are maintained by
+         * the separate CjRating flow.
+         */
+        getCjTopRatedProducts(8),
       ]);
 
       /*
@@ -1967,12 +2067,14 @@ router.get('/store/shop', async (req, res) => {
 
         /*
          * Separate CJ Featured Products loaded only from CjProduct.
-         *
-         * The CJ Top Rated section remains empty because it is
-         * not part of the current Featured Products task.
          */
         featuredSidebarProducts,
-        topRatedTagProducts: [],
+
+        /*
+         * Separate CJ TOP RATED PRODUCTS loaded only from
+         * CjProduct rating aggregates maintained by CjRating.
+         */
+        topRatedTagProducts,
 
         /*
          * These are the same CjHomePromoOffer records used
