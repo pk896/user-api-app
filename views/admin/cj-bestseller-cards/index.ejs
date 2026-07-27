@@ -1,0 +1,280 @@
+<!-- views/admin/cj-bestseller-cards/index.ejs -->
+
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1 text-primary">
+        Manage CJ Bestseller Cards
+      </h1>
+
+      <p class="text-muted mb-0">
+        Manage the two separate promotional cards shown only on the Kasyora CJ Store Bestseller page.
+      </p>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2">
+      <a
+        href="/admin/bestseller-cards"
+        class="btn btn-outline-primary"
+      >
+        <i class="fas fa-warehouse me-2"></i>
+        Internal Bestseller Cards
+      </a>
+
+      <a
+        href="/admin/dashboard"
+        class="btn btn-outline-secondary"
+      >
+        Back
+      </a>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success">
+      <%= success[0] %>
+    </div>
+  <% } %>
+
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger">
+      <%= error[0] %>
+    </div>
+  <% } %>
+
+  <% if (info && info.length) { %>
+    <div class="alert alert-info">
+      <%= info[0] %>
+    </div>
+  <% } %>
+
+  <% if (warning && warning.length) { %>
+    <div class="alert alert-warning">
+      <%= warning[0] %>
+    </div>
+  <% } %>
+
+  <div class="alert alert-light border shadow-sm mb-4">
+    <div class="d-flex align-items-start gap-3">
+      <div class="text-success fs-4">
+        <i class="fas fa-shield-alt"></i>
+      </div>
+
+      <div>
+        <div class="fw-bold text-primary mb-1">
+          Separate CJ Store configuration
+        </div>
+
+        <div class="small text-muted">
+          These cards use only imported CJ products and CJ product IDs.
+          They do not use Internal Kasyora products, product custom IDs,
+          carts, checkout, orders or payments.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <%
+      ['left', 'right'].forEach(function(slot) {
+        const card = (cards || []).find(function(item) {
+          return item.slot === slot;
+        });
+
+        const product =
+          card && card.product
+            ? card.product
+            : null;
+
+        const isLeft =
+          slot === 'left';
+    %>
+
+      <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm h-100 overflow-hidden">
+          <div
+            class="card-header border-0 py-3 px-4 <%= isLeft ? 'bg-primary text-white' : 'bg-success text-white' %>"
+          >
+            <div class="d-flex justify-content-between align-items-center gap-3">
+              <div>
+                <div class="small text-uppercase opacity-75 mb-1">
+                  CJ Store Bestseller
+                </div>
+
+                <h2 class="h5 mb-0">
+                  <%= isLeft ? 'Left Premium Card' : 'Right Premium Card' %>
+                </h2>
+              </div>
+
+              <% if (card) { %>
+                <span class="badge rounded-pill <%= card.active ? 'bg-light text-success' : 'bg-dark text-white' %>">
+                  <%= card.active ? 'Active' : 'Inactive' %>
+                </span>
+              <% } else { %>
+                <span class="badge rounded-pill bg-warning text-dark">
+                  Not Configured
+                </span>
+              <% } %>
+            </div>
+          </div>
+
+          <div class="card-body p-4">
+            <% if (card) { %>
+              <div class="border rounded-4 bg-light p-3 mb-4">
+                <div class="row g-3 align-items-center">
+                  <div class="col-12 col-md-4">
+                    <% if (product && product.imageUrl) { %>
+                      <div class="bg-white border rounded-4 p-3 text-center">
+                        <img
+                          src="<%= product.imageUrl %>"
+                          alt="<%= product.name || 'CJ product' %>"
+                          class="img-fluid"
+                          style="height: 150px; width: 100%; object-fit: contain;"
+                        >
+                      </div>
+                    <% } else { %>
+                      <div
+                        class="bg-white border rounded-4 d-flex flex-column align-items-center justify-content-center text-muted text-center p-3"
+                        style="height: 180px;"
+                      >
+                        <i class="fas fa-image fa-2x mb-2"></i>
+
+                        <span class="small">
+                          No eligible CJ product image
+                        </span>
+                      </div>
+                    <% } %>
+                  </div>
+
+                  <div class="col-12 col-md-8">
+                    <div class="mb-3">
+                      <div class="small text-muted text-uppercase">
+                        Linked CJ Product
+                      </div>
+
+                      <div class="fw-bold text-primary">
+                        <%= product && product.name ? product.name : 'Product unavailable' %>
+                      </div>
+                    </div>
+
+                    <div class="row g-2 small">
+                      <div class="col-12">
+                        <strong>CJ Product ID:</strong>
+
+                        <span class="text-break">
+                          <%= card.cjProductId || '—' %>
+                        </span>
+                      </div>
+
+                      <div class="col-12">
+                        <strong>SKU:</strong>
+                        <%= product && product.productSku ? product.productSku : '—' %>
+                      </div>
+
+                      <div class="col-12">
+                        <strong>Category:</strong>
+                        <%= product && product.category ? product.category : '—' %>
+                      </div>
+
+                      <div class="col-12">
+                        <strong>Enabled Variants:</strong>
+                        <%= product ? Number(product.enabledVariantCount || 0) : 0 %>
+                      </div>
+
+                      <div class="col-12">
+                        <strong>Lowest Price Excluding VAT:</strong>
+                        $<%= product ? Number(product.price || 0).toFixed(2) : '0.00' %>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-4">
+                <div class="small text-muted text-uppercase mb-2">
+                  Storefront Content
+                </div>
+
+                <div class="border rounded-4 p-3">
+                  <div class="mb-2">
+                    <strong>Eyebrow:</strong>
+                    <%= card.eyebrowText || '—' %>
+                  </div>
+
+                  <div class="mb-2">
+                    <strong>Title:</strong>
+
+                    <%= card.titleOverride ||
+                      (product && product.name ? product.name : '—') %>
+                  </div>
+
+                  <div class="mb-2">
+                    <strong>Supporting Text:</strong>
+                    <%= card.supportingText || '—' %>
+                  </div>
+
+                  <div class="mb-2">
+                    <strong>Promotion:</strong>
+                    <%= card.discountText || '—' %>
+                  </div>
+
+                  <div class="mb-2">
+                    <strong>Button:</strong>
+                    <%= card.buttonText || 'Explore Product' %>
+                  </div>
+
+                  <div class="mb-0">
+                    <strong>Sort Order:</strong>
+                    <%= Number(card.sortOrder || 0) %>
+                  </div>
+                </div>
+              </div>
+            <% } else { %>
+              <div class="alert alert-light border mb-4">
+                <div class="d-flex align-items-start gap-3">
+                  <i class="fas fa-plus-circle text-primary mt-1"></i>
+
+                  <div>
+                    <div class="fw-bold mb-1">
+                      No CJ card configured for this slot
+                    </div>
+
+                    <div class="small text-muted">
+                      Select an active imported CJ product and create the
+                      <%= isLeft ? 'left' : 'right' %> promotional card.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% } %>
+
+            <div class="d-flex flex-wrap gap-2">
+              <a
+                href="/admin/cj-bestseller-cards/<%= slot %>/edit"
+                class="btn <%= isLeft ? 'btn-primary' : 'btn-success' %>"
+              >
+                <i class="fas fa-edit me-2"></i>
+
+                <%= card ? 'Edit' : 'Set Up' %>
+                <%= isLeft ? 'Left' : 'Right' %>
+                CJ Card
+              </a>
+
+              <% if (card) { %>
+                <a
+                  href="/admin/cj-bestseller-cards/<%= slot %>/toggle"
+                  class="btn btn-outline-secondary"
+                >
+                  <i class="fas <%= card.active ? 'fa-eye-slash' : 'fa-eye' %> me-2"></i>
+
+                  <%= card.active ? 'Deactivate' : 'Activate' %>
+                </a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <% }) %>
+  </div>
+</div>

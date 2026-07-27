@@ -700,6 +700,23 @@ const adminHomeMidBannersRoutes = require('./routes/adminHomeMidBanners');
 const adminCjHomeMidBannersRoutes = require('./routes/adminCjHomeMidBanners');
 
 const adminBestsellerCards = require('./routes/adminBestsellerCards');
+
+/*
+ * Completely separate Kasyora CJ Store
+ * Bestseller Cards administration.
+ *
+ * This router uses only:
+ *
+ * - CjBestsellerCard
+ * - CjProduct
+ * - cjProductId
+ *
+ * It never uses the Internal BestsellerCard
+ * or Product models.
+ */
+const adminCjBestsellerCards =
+  require('./routes/adminCjBestsellerCards');
+
 const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBanners');
 
 /*
@@ -919,7 +936,17 @@ app.use('/admin', adminHomeMidBannersRoutes);
  */
 app.use('/admin', adminCjHomeMidBannersRoutes);
 
+/*
+ * Existing Internal Kasyora Store
+ * Bestseller Cards administration.
+ */
 app.use('/admin', adminBestsellerCards);
+
+/*
+ * Completely separate Kasyora CJ Store
+ * Bestseller Cards administration.
+ */
+app.use('/admin', adminCjBestsellerCards);
 
 /*
  * Existing Internal Kasyora Store

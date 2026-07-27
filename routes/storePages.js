@@ -33,6 +33,15 @@ const HomeMidBanner = require('../models/HomeMidBanner');
 const CjHomeMidBanner = require('../models/CjHomeMidBanner');
 
 const BestsellerCard = require('../models/BestsellerCard');
+
+/*
+ * Completely separate Kasyora CJ Store
+ * Bestseller Cards.
+ *
+ * This model stores only CjProduct.cjProductId.
+ */
+const CjBestsellerCard = require('../models/CjBestsellerCard');
+
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 
 /*
@@ -705,6 +714,58 @@ function mapBestsellerCard(card, product) {
     productCustomId: mappedProduct.customId,
     productName: mappedProduct.name,
     active: !!card.active,
+    sortOrder: Number(card.sortOrder || 0),
+  };
+}
+
+/*
+ * Map only the separate Kasyora CJ Store
+ * Bestseller Card.
+ *
+ * Never pass an Internal Product record into this function.
+ */
+function mapCjBestsellerCard(card, product) {
+  if (!card || !product) {
+    return null;
+  }
+
+  const mappedProduct = mapCjStoreProduct(product);
+
+  if (!mappedProduct.cjProductId || mappedProduct.enabledVariantCount < 1) {
+    return null;
+  }
+
+  return {
+    slot: String(card.slot || '').trim(),
+
+    eyebrowText: String(card.eyebrowText || '').trim(),
+
+    title: String(card.titleOverride || mappedProduct.name || 'CJ Product').trim(),
+
+    supportingText: String(card.supportingText || '').trim(),
+
+    discountText: String(card.discountText || '').trim(),
+
+    buttonText: String(card.buttonText || 'Explore Product').trim(),
+
+    image: String(mappedProduct.image || '').trim(),
+
+    url: '/cj/product/' + encodeURIComponent(mappedProduct.cjProductId),
+
+    cjProductId: mappedProduct.cjProductId,
+
+    productSku: mappedProduct.productSku,
+
+    productName: mappedProduct.name,
+
+    category: mappedProduct.category,
+
+    price: Number(mappedProduct.price || 0),
+
+    enabledVariantCount: Number(mappedProduct.enabledVariantCount || 0),
+
+    active: card.active === true,
+
     sortOrder: Number(card.sortOrder || 0),
   };
 }
@@ -2947,41 +3008,57 @@ router.get('/store/bestseller', async (req, res) => {
      * or BestsellerBottomBanner records.
      */
     if (storeDepartment === 'cj') {
-      const [cjProducts, cjCategories, cjBottomBannersRaw, shopHeaderImage] = await Promise.all([
-        loadCjHomepageProducts({
-          keyword,
-          category,
-        }),
+      const [cjProducts, cjCategories, cjBestsellerCardsRaw, cjBottomBannersRaw, shopHeaderImage] =
+        await Promise.all([
+          loadCjHomepageProducts({
+            keyword,
+            category,
+          }),
 
-        loadCjStoreCategories(),
+          loadCjStoreCategories(),
 
-        /*
-         * Load only the separate CJ Bestseller Bottom
-         * Banner records.
-         *
-         * This never queries BestsellerBottomBanner.
-         */
-        CjBestsellerBottomBanner.find({
-          active: true,
-        })
-          .sort({
-            sortOrder: 1,
-            createdAt: 1,
+          /*
+           * Load only the separate CJ Bestseller Cards.
+           *
+           * These records contain CjProduct.cjProductId and
+           * never reference Internal Product.customId.
+           */
+          CjBestsellerCard.find({
+            active: true,
           })
-          .lean(),
+            .sort({
+              sortOrder: 1,
+              createdAt: 1,
+            })
+            .lean(),
 
-        /*
-         * Shared decorative Bestseller header image.
-         * This does not reference an Internal Product.
-         */
-        ShopHeaderImage.findOne({
-          active: true,
-        })
-          .sort({
-            updatedAt: -1,
+          /*
+           * Load only the separate CJ Bestseller Bottom
+           * Banner records.
+           *
+           * This never queries BestsellerBottomBanner.
+           */
+          CjBestsellerBottomBanner.find({
+            active: true,
           })
-          .lean(),
-      ]);
+            .sort({
+              sortOrder: 1,
+              createdAt: 1,
+            })
+            .lean(),
+
+          /*
+           * Shared decorative Bestseller header image.
+           * This does not reference an Internal Product.
+           */
+          ShopHeaderImage.findOne({
+            active: true,
+          })
+            .sort({
+              updatedAt: -1,
+            })
+            .lean(),
+        ]);
 
       const sortedCjProducts = [...cjProducts];
 
@@ -3061,6 +3138,71 @@ router.get('/store/bestseller', async (req, res) => {
       const topSellingProducts = sortedCjProducts.slice(0, 4);
 
       const productListProducts = sortedCjProducts.slice(0, 12);
+
+      /*
+       * Resolve the completely separate CJ Bestseller Cards
+       * against active imported CjProduct records.
+       *
+       * This block never queries:
+       *
+       * - BestsellerCard
+       * - Product
+       * - Product.customId
+       */
+      let bestsellerLeft = null;
+      let bestsellerRight = null;
+
+      for (const card of cjBestsellerCardsRaw) {
+        const cjProductId = String(card?.cjProductId || '').trim();
+
+        if (!cjProductId) {
+          continue;
+        }
+
+        const rawProduct = await CjProduct.findOne({
+          status: 'active',
+
+          cjProductId,
+
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
+
+              cjVariantId: {
+                $exists: true,
+                $ne: '',
+              },
+
+              variantSku: {
+                $exists: true,
+                $ne: '',
+              },
+
+              'sellingPriceExVat.value': {
+                $gte: 0,
+              },
+            },
+          },
+        }).lean();
+
+        if (!rawProduct) {
+          continue;
+        }
+
+        const mappedCard = mapCjBestsellerCard(card, rawProduct);
+
+        if (!mappedCard) {
+          continue;
+        }
+
+        if (card.slot === 'left') {
+          bestsellerLeft = mappedCard;
+        }
+
+        if (card.slot === 'right') {
+          bestsellerRight = mappedCard;
+        }
+      }
 
       /*
        * Resolve the separate CJ Bestseller Bottom
@@ -3146,12 +3288,14 @@ router.get('/store/bestseller', async (req, res) => {
         productListProducts,
 
         /*
-         * BestsellerCard still belongs only to the
-         * Internal Store and remains hidden here.
+         * Separate CJ Bestseller Cards resolved only from:
+         *
+         * - CjBestsellerCard
+         * - CjProduct
          */
-        bestsellerLeft: null,
+        bestsellerLeft,
 
-        bestsellerRight: null,
+        bestsellerRight,
 
         /*
          * Separate CJ Bestseller Bottom Banners.
