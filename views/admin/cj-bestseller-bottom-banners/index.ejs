@@ -1,0 +1,210 @@
+<!-- views/admin/cj-bestseller-bottom-banners/index.ejs -->
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">
+        Manage CJ Bestseller Bottom Banners
+      </h1>
+
+      <p class="text-muted mb-0">
+        Manage the two separate CJ banners shown near the bottom of the CJ Bestseller page.
+      </p>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2">
+      <a
+        href="/admin/bestseller-bottom-banners"
+        class="btn btn-outline-primary"
+      >
+        <i class="fas fa-warehouse me-2"></i>
+        Internal Bottom Banners
+      </a>
+
+      <a
+        href="/admin/dashboard"
+        class="btn btn-outline-secondary"
+      >
+        Back
+      </a>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+  <div class="alert alert-success">
+    <%= success[0] %>
+  </div>
+  <% } %>
+
+  <% if (error && error.length) { %>
+  <div class="alert alert-danger">
+    <%= error[0] %>
+  </div>
+  <% } %>
+
+  <% if (info && info.length) { %>
+  <div class="alert alert-info">
+    <%= info[0] %>
+  </div>
+  <% } %>
+
+  <% if (warning && warning.length) { %>
+  <div class="alert alert-warning">
+    <%= warning[0] %>
+  </div>
+  <% } %>
+
+  <div class="row g-4">
+    <%
+      ['left', 'right'].forEach(function(slot) {
+        const banner =
+          (banners || []).find(function(item) {
+            return item.slot === slot;
+          });
+
+        const slotLabel =
+          slot === 'left'
+            ? 'Left'
+            : 'Right';
+    %>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h2 class="h5 mb-1">
+                <%= slotLabel %> CJ Bottom Banner
+              </h2>
+
+              <p class="text-muted mb-0">
+                <%= slot === 'left'
+                  ? 'Left lower banner area on the CJ Bestseller page.'
+                  : 'Right lower banner area on the CJ Bestseller page.' %>
+              </p>
+            </div>
+
+            <% if (banner) { %>
+            <span class="badge <%= banner.active ? 'bg-success' : 'bg-secondary' %>">
+              <%= banner.active ? 'Active' : 'Inactive' %>
+            </span>
+            <% } else { %>
+            <span class="badge bg-warning text-dark">
+              Not Configured
+            </span>
+            <% } %>
+          </div>
+
+          <% if (banner) { %>
+          <div class="border rounded p-3 bg-light mb-3">
+            <div class="row g-3 align-items-center">
+              <div class="col-12 col-md-4">
+                <% if (banner.image) { %>
+                <img
+                  src="<%= banner.image %>"
+                  alt="<%= banner.product && banner.product.name
+                    ? banner.product.name
+                    : slotLabel + ' CJ bottom banner' %>"
+                  class="img-fluid w-100 rounded border bg-white"
+                  style="height: 140px; object-fit: contain;"
+                >
+                <% } else if (banner.product && banner.product.imageUrl) { %>
+                <img
+                  src="<%= banner.product.imageUrl %>"
+                  alt="<%= banner.product.name || 'CJ product' %>"
+                  class="img-fluid w-100 rounded border bg-white"
+                  style="height: 140px; object-fit: contain;"
+                >
+                <% } else { %>
+                <div
+                  class="border rounded bg-white d-flex align-items-center justify-content-center text-muted"
+                  style="height: 140px;"
+                >
+                  No banner image
+                </div>
+                <% } %>
+              </div>
+
+              <div class="col-12 col-md-8">
+                <div class="mb-2">
+                  <strong>Product:</strong>
+
+                  <%= banner.product && banner.product.name
+                    ? banner.product.name
+                    : 'No eligible linked CJ product' %>
+                </div>
+
+                <div class="mb-2">
+                  <strong>CJ Product ID:</strong>
+
+                  <span class="text-break">
+                    <%= banner.cjProductId || '—' %>
+                  </span>
+                </div>
+
+                <div class="mb-2">
+                  <strong>SKU:</strong>
+
+                  <%= banner.product && banner.product.productSku
+                    ? banner.product.productSku
+                    : '—' %>
+                </div>
+
+                <div class="mb-2">
+                  <strong>Title:</strong>
+
+                  <%= banner.title || '—' %>
+                </div>
+
+                <div class="mb-2">
+                  <strong>Subtitle:</strong>
+
+                  <%= banner.subtitle || '—' %>
+                </div>
+
+                <div class="mb-2">
+                  <strong>Price Text:</strong>
+
+                  <%= banner.priceText || '—' %>
+                </div>
+
+                <div class="mb-0">
+                  <strong>Button:</strong>
+
+                  <%= banner.buttonText || 'Shop Now' %>
+                </div>
+              </div>
+            </div>
+          </div>
+          <% } else { %>
+          <div class="alert alert-light border mb-3">
+            No CJ bottom banner is configured for this slot yet.
+          </div>
+          <% } %>
+
+          <div class="d-flex flex-wrap gap-2">
+            <a
+              href="/admin/cj-bestseller-bottom-banners/<%= slot %>/edit"
+              class="btn btn-primary"
+            >
+              <%= banner ? 'Edit' : 'Set Up' %>
+              <%= slotLabel %> CJ Banner
+            </a>
+
+            <% if (banner) { %>
+            <a
+              href="/admin/cj-bestseller-bottom-banners/<%= slot %>/toggle"
+              class="btn btn-outline-secondary"
+            >
+              <%= banner.active
+                ? 'Deactivate'
+                : 'Activate' %>
+            </a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% }) %>
+  </div>
+</div>

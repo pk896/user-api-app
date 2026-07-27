@@ -36,6 +36,14 @@ const BestsellerCard = require('../models/BestsellerCard');
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 
 /*
+ * Completely separate Kasyora CJ Store
+ * Bestseller Bottom Banners.
+ *
+ * This model stores only CjProduct.cjProductId.
+ */
+const CjBestsellerBottomBanner = require('../models/CjBestsellerBottomBanner');
+
+/*
  * Existing Internal Kasyora Store
  * Shop Sidebar Banner.
  */
@@ -718,6 +726,50 @@ function mapBestsellerBottomBanner(banner, product) {
     productCustomId: mappedProduct.customId,
     productName: mappedProduct.name,
     active: !!banner.active,
+    sortOrder: Number(banner.sortOrder || 0),
+  };
+}
+
+/*
+ * Map only the separate Kasyora CJ Store
+ * Bestseller Bottom Banner.
+ *
+ * Never pass an Internal Product record into this function.
+ */
+function mapCjBestsellerBottomBanner(banner, product) {
+  if (!banner || !product) {
+    return null;
+  }
+
+  const mappedProduct = mapCjStoreProduct(product);
+
+  if (!mappedProduct.cjProductId || mappedProduct.enabledVariantCount < 1) {
+    return null;
+  }
+
+  return {
+    slot: String(banner.slot || '').trim(),
+
+    title: String(banner.title || '').trim(),
+
+    subtitle: String(banner.subtitle || '').trim(),
+
+    priceText: String(banner.priceText || '').trim(),
+
+    buttonText: String(banner.buttonText || 'Shop Now').trim(),
+
+    image: String(banner.image || '').trim(),
+
+    overlayStyle: String(banner.overlayStyle || '').trim(),
+
+    url: '/cj/product/' + encodeURIComponent(mappedProduct.cjProductId),
+
+    cjProductId: mappedProduct.cjProductId,
+
+    productName: mappedProduct.name,
+
+    active: banner.active === true,
+
     sortOrder: Number(banner.sortOrder || 0),
   };
 }
@@ -2895,21 +2947,48 @@ router.get('/store/bestseller', async (req, res) => {
      * or BestsellerBottomBanner records.
      */
     if (storeDepartment === 'cj') {
-      const [cjProducts, cjCategories] = await Promise.all([
+      const [cjProducts, cjCategories, cjBottomBannersRaw, shopHeaderImage] = await Promise.all([
         loadCjHomepageProducts({
           keyword,
           category,
         }),
 
         loadCjStoreCategories(),
+
+        /*
+         * Load only the separate CJ Bestseller Bottom
+         * Banner records.
+         *
+         * This never queries BestsellerBottomBanner.
+         */
+        CjBestsellerBottomBanner.find({
+          active: true,
+        })
+          .sort({
+            sortOrder: 1,
+            createdAt: 1,
+          })
+          .lean(),
+
+        /*
+         * Shared decorative Bestseller header image.
+         * This does not reference an Internal Product.
+         */
+        ShopHeaderImage.findOne({
+          active: true,
+        })
+          .sort({
+            updatedAt: -1,
+          })
+          .lean(),
       ]);
 
       const sortedCjProducts = [...cjProducts];
 
       if (selectedSort === 'newest') {
         /*
-         * loadCjHomepageProducts already returns the newest
-         * imported or updated CJ products first.
+         * loadCjHomepageProducts() already returns the
+         * newest imported or updated CJ products first.
          */
       } else if (selectedSort === 'rating') {
         sortedCjProducts.sort((left, right) => {
@@ -2934,8 +3013,12 @@ router.get('/store/bestseller', async (req, res) => {
         sortedCjProducts.sort((left, right) => Number(right.price || 0) - Number(left.price || 0));
       } else {
         /*
-         * Default Bestseller order: popularity first,
-         * then CJ rating, rating count and product name.
+         * Default CJ Bestseller ordering:
+         *
+         * - marketplace popularity
+         * - CJ average rating
+         * - CJ rating count
+         * - product name
          */
         sortedCjProducts.sort((left, right) => {
           const popularityDifference =
@@ -2969,33 +3052,87 @@ router.get('/store/bestseller', async (req, res) => {
       const newArrivals = [...cjProducts].slice(0, 4);
 
       const featuredProducts = [...cjProducts]
-        .sort((left, right) => {
-          return Number(right.enabledVariantCount || 0) - Number(left.enabledVariantCount || 0);
-        })
+        .sort(
+          (left, right) =>
+            Number(right.enabledVariantCount || 0) - Number(left.enabledVariantCount || 0),
+        )
         .slice(0, 4);
 
       const topSellingProducts = sortedCjProducts.slice(0, 4);
 
       const productListProducts = sortedCjProducts.slice(0, 12);
 
-      const shopHeaderImage = await ShopHeaderImage.findOne({
-        active: true,
-      })
-        .sort({
-          updatedAt: -1,
-        })
-        .lean();
+      /*
+       * Resolve the separate CJ Bestseller Bottom
+       * Banners against active imported CjProduct records.
+       */
+      let bottomBannerLeft = null;
+      let bottomBannerRight = null;
+
+      for (const banner of cjBottomBannersRaw) {
+        const cjProductId = String(banner?.cjProductId || '').trim();
+
+        if (!cjProductId) {
+          continue;
+        }
+
+        const rawProduct = await CjProduct.findOne({
+          status: 'active',
+
+          cjProductId,
+
+          variants: {
+            $elemMatch: {
+              isEnabled: true,
+
+              cjVariantId: {
+                $exists: true,
+                $ne: '',
+              },
+
+              variantSku: {
+                $exists: true,
+                $ne: '',
+              },
+
+              'sellingPriceExVat.value': {
+                $gte: 0,
+              },
+            },
+          },
+        }).lean();
+
+        if (!rawProduct) {
+          continue;
+        }
+
+        const mappedBanner = mapCjBestsellerBottomBanner(banner, rawProduct);
+
+        if (!mappedBanner) {
+          continue;
+        }
+
+        if (banner.slot === 'left') {
+          bottomBannerLeft = mappedBanner;
+        }
+
+        if (banner.slot === 'right') {
+          bottomBannerRight = mappedBanner;
+        }
+      }
 
       return res.render('store/bestseller', {
         layout: 'layouts/store',
+
         title: 'CJ Bestsellers | Kasyora',
 
         storeDepartment: 'cj',
+
         productSource: 'CJ',
 
         /*
-         * Use only categories obtained from active imported
-         * CJ products while the CJ department is selected.
+         * Use only categories obtained from active
+         * imported CJ products.
          */
         CATEGORIES: cjCategories,
 
@@ -3009,21 +3146,28 @@ router.get('/store/bestseller', async (req, res) => {
         productListProducts,
 
         /*
-         * These marketing records reference internal
-         * Product custom IDs and must never appear
-         * inside the CJ department.
+         * BestsellerCard still belongs only to the
+         * Internal Store and remains hidden here.
          */
         bestsellerLeft: null,
+
         bestsellerRight: null,
-        bottomBannerLeft: null,
-        bottomBannerRight: null,
+
+        /*
+         * Separate CJ Bestseller Bottom Banners.
+         */
+        bottomBannerLeft,
+
+        bottomBannerRight,
 
         shopHeaderImage,
 
         selectedKeyword: keyword,
+
         selectedCategory: category,
 
         baseCurrency: BASE_CURRENCY,
+
         vatRate: VAT_RATE,
       });
     }
