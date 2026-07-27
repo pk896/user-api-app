@@ -1,0 +1,607 @@
+<!-- views/admin/cj-home-mid-banners/edit.ejs -->
+<%
+  const SLOT_LABEL =
+    slot === 'left'
+      ? 'Left'
+      : 'Right';
+
+  const CURRENT_CJ_PRODUCT_ID =
+    banner && banner.cjProductId
+      ? String(banner.cjProductId)
+      : '';
+
+  const CURRENT_PRODUCT_NAME =
+    selectedProduct && selectedProduct.name
+      ? String(selectedProduct.name)
+      : '';
+
+  const CURRENT_PRODUCT_IMAGE =
+    selectedProduct && selectedProduct.mainImageUrl
+      ? String(selectedProduct.mainImageUrl)
+      : '';
+
+  const CURRENT_PRODUCT_SKU =
+    selectedProduct && selectedProduct.productSku
+      ? String(selectedProduct.productSku)
+      : '';
+%>
+
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">
+        Edit <%= SLOT_LABEL %> CJ Mid Banner
+      </h1>
+
+      <p class="text-muted mb-0">
+        Configure the shared <%= slot %> CJ banner for the CJ homepage and CJ Shop page.
+      </p>
+    </div>
+
+    <a
+      href="/admin/cj-home-mid-banners"
+      class="btn btn-outline-secondary"
+    >
+      Back
+    </a>
+  </div>
+
+  <% if (success && success.length) { %>
+  <div class="alert alert-success">
+    <%= success[0] %>
+  </div>
+  <% } %>
+
+  <% if (error && error.length) { %>
+  <div class="alert alert-danger">
+    <%= error[0] %>
+  </div>
+  <% } %>
+
+  <% if (info && info.length) { %>
+  <div class="alert alert-info">
+    <%= info[0] %>
+  </div>
+  <% } %>
+
+  <% if (warning && warning.length) { %>
+  <div class="alert alert-warning">
+    <%= warning[0] %>
+  </div>
+  <% } %>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+      <form
+        action="/admin/cj-home-mid-banners/<%= slot %>"
+        method="POST"
+        enctype="multipart/form-data"
+      >
+        <div class="mb-4">
+          <label for="cjProductSearchInput" class="form-label fw-bold">
+            Select CJ Product
+          </label>
+
+          <div class="input-group">
+            <input
+              type="search"
+              id="cjProductSearchInput"
+              class="form-control"
+              placeholder="Search by CJ product ID, SKU or product name"
+              autocomplete="off"
+            >
+
+            <button
+              type="button"
+              id="cjProductSearchButton"
+              class="btn btn-primary"
+            >
+              <i class="fas fa-search me-2"></i>
+              Search
+            </button>
+          </div>
+
+          <div class="form-text">
+            Only active imported CJ products with an enabled usable variant can be selected.
+          </div>
+        </div>
+
+        <input
+          type="hidden"
+          id="cjProductId"
+          name="cjProductId"
+          value="<%= CURRENT_CJ_PRODUCT_ID %>"
+          required
+        >
+
+        <div
+          id="cjProductSearchStatus"
+          class="small text-muted mb-3"
+        ></div>
+
+        <div
+          id="cjProductSearchResults"
+          class="row g-3 mb-4"
+        ></div>
+
+        <div
+          id="selectedCjProductCard"
+          class="border rounded bg-light p-3 mb-4 <%= CURRENT_CJ_PRODUCT_ID ? '' : 'd-none' %>"
+        >
+          <div class="row g-3 align-items-center">
+            <div class="col-12 col-md-3">
+              <img
+                id="selectedCjProductImage"
+                src="<%= CURRENT_PRODUCT_IMAGE %>"
+                alt="<%= CURRENT_PRODUCT_NAME || 'Selected CJ product' %>"
+                class="img-fluid w-100 rounded border bg-white"
+                style="height: 160px; object-fit: contain;"
+              >
+            </div>
+
+            <div class="col-12 col-md-9">
+              <div class="fw-bold text-primary mb-2">
+                Selected CJ Product
+              </div>
+
+              <div class="mb-2">
+                <strong>Name:</strong>
+
+                <span id="selectedCjProductName">
+                  <%= CURRENT_PRODUCT_NAME || '—' %>
+                </span>
+              </div>
+
+              <div class="mb-2">
+                <strong>CJ Product ID:</strong>
+
+                <span
+                  id="selectedCjProductIdText"
+                  class="text-break"
+                >
+                  <%= CURRENT_CJ_PRODUCT_ID || '—' %>
+                </span>
+              </div>
+
+              <div class="mb-0">
+                <strong>SKU:</strong>
+
+                <span id="selectedCjProductSku">
+                  <%= CURRENT_PRODUCT_SKU || '—' %>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-12 col-md-6">
+            <label for="title" class="form-label fw-bold">
+              Title
+            </label>
+
+            <input
+              type="text"
+              id="title"
+              name="title"
+              class="form-control"
+              maxlength="120"
+              value="<%= banner && banner.title ? banner.title : '' %>"
+            >
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label for="subtitle" class="form-label fw-bold">
+              Subtitle
+            </label>
+
+            <input
+              type="text"
+              id="subtitle"
+              name="subtitle"
+              class="form-control"
+              maxlength="160"
+              value="<%= banner && banner.subtitle ? banner.subtitle : '' %>"
+            >
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label for="priceText" class="form-label fw-bold">
+              Price Text
+            </label>
+
+            <input
+              type="text"
+              id="priceText"
+              name="priceText"
+              class="form-control"
+              maxlength="80"
+              value="<%= banner && banner.priceText ? banner.priceText : '' %>"
+              placeholder="Example: From $19.99"
+            >
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label for="buttonText" class="form-label fw-bold">
+              Button Text
+            </label>
+
+            <input
+              type="text"
+              id="buttonText"
+              name="buttonText"
+              class="form-control"
+              maxlength="40"
+              value="<%= banner && banner.buttonText ? banner.buttonText : 'Shop Now' %>"
+            >
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label for="sortOrder" class="form-label fw-bold">
+              Sort Order
+            </label>
+
+            <input
+              type="number"
+              id="sortOrder"
+              name="sortOrder"
+              class="form-control"
+              value="<%= banner && Number.isFinite(Number(banner.sortOrder)) ? Number(banner.sortOrder) : (slot === 'left' ? 1 : 2) %>"
+            >
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label for="imageFile" class="form-label fw-bold">
+              Banner Image
+            </label>
+
+            <input
+              type="file"
+              id="imageFile"
+              name="imageFile"
+              class="form-control"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+              <%= banner && banner.image ? '' : 'required' %>
+            >
+
+            <div class="form-text">
+              Maximum file size: 8 MB.
+            </div>
+          </div>
+
+          <% if (banner && banner.image) { %>
+          <div class="col-12">
+            <div class="fw-bold mb-2">
+              Current Banner Image
+            </div>
+
+            <img
+              src="<%= banner.image %>"
+              alt="<%= SLOT_LABEL %> CJ mid banner"
+              class="img-fluid rounded border bg-white"
+              style="max-height: 260px; object-fit: contain;"
+            >
+          </div>
+          <% } %>
+
+          <div class="col-12">
+            <div class="form-check form-switch">
+              <input
+                type="checkbox"
+                id="active"
+                name="active"
+                class="form-check-input"
+                <%= !banner || banner.active ? 'checked' : '' %>
+              >
+
+              <label for="active" class="form-check-label fw-bold">
+                Active
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <button
+            type="submit"
+            class="btn btn-primary"
+          >
+            <i class="fas fa-save me-2"></i>
+            Save <%= SLOT_LABEL %> CJ Banner
+          </button>
+
+          <a
+            href="/admin/cj-home-mid-banners"
+            class="btn btn-outline-secondary"
+          >
+            Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script nonce="<%= nonce %>">
+  (function() {
+    const searchInput =
+      document.getElementById(
+        'cjProductSearchInput'
+      );
+
+    const searchButton =
+      document.getElementById(
+        'cjProductSearchButton'
+      );
+
+    const searchStatus =
+      document.getElementById(
+        'cjProductSearchStatus'
+      );
+
+    const searchResults =
+      document.getElementById(
+        'cjProductSearchResults'
+      );
+
+    const hiddenProductId =
+      document.getElementById(
+        'cjProductId'
+      );
+
+    const selectedCard =
+      document.getElementById(
+        'selectedCjProductCard'
+      );
+
+    const selectedImage =
+      document.getElementById(
+        'selectedCjProductImage'
+      );
+
+    const selectedName =
+      document.getElementById(
+        'selectedCjProductName'
+      );
+
+    const selectedIdText =
+      document.getElementById(
+        'selectedCjProductIdText'
+      );
+
+    const selectedSku =
+      document.getElementById(
+        'selectedCjProductSku'
+      );
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function selectProduct(product) {
+      hiddenProductId.value =
+        String(
+          product.cjProductId || ''
+        );
+
+      selectedName.textContent =
+        product.name ||
+        'CJ Product';
+
+      selectedIdText.textContent =
+        product.cjProductId ||
+        '—';
+
+      selectedSku.textContent =
+        product.productSku ||
+        '—';
+
+      selectedImage.src =
+        product.imageUrl ||
+        '';
+
+      selectedImage.alt =
+        product.name ||
+        'Selected CJ product';
+
+      selectedCard.classList.remove(
+        'd-none'
+      );
+
+      searchStatus.textContent =
+        'CJ product selected successfully.';
+
+      searchResults.innerHTML =
+        '';
+    }
+
+    function renderProducts(products) {
+      searchResults.innerHTML =
+        '';
+
+      if (!products.length) {
+        searchStatus.textContent =
+          'No eligible CJ products matched your search.';
+
+        return;
+      }
+
+      searchStatus.textContent =
+        products.length +
+        ' eligible CJ product(s) found.';
+
+      products.forEach(function(product) {
+        const column =
+          document.createElement('div');
+
+        column.className =
+          'col-12 col-md-6';
+
+        column.innerHTML =
+          '<div class="card h-100 border shadow-sm">' +
+            '<div class="card-body">' +
+              '<div class="d-flex gap-3">' +
+                '<img ' +
+                  'src="' +
+                  escapeHtml(product.imageUrl || '') +
+                  '" ' +
+                  'alt="' +
+                  escapeHtml(product.name || 'CJ Product') +
+                  '" ' +
+                  'class="rounded border bg-white flex-shrink-0" ' +
+                  'style="width: 90px; height: 90px; object-fit: contain;"' +
+                '>' +
+                '<div class="flex-grow-1 overflow-hidden">' +
+                  '<div class="fw-bold text-primary text-truncate" title="' +
+                    escapeHtml(product.name || '') +
+                  '">' +
+                    escapeHtml(product.name || 'CJ Product') +
+                  '</div>' +
+                  '<div class="small text-muted text-break mt-1">' +
+                    escapeHtml(product.cjProductId || '') +
+                  '</div>' +
+                  '<div class="small text-muted mt-1">' +
+                    'SKU: ' +
+                    escapeHtml(product.productSku || '—') +
+                  '</div>' +
+                  '<div class="small text-muted mt-1">' +
+                    'Category: ' +
+                    escapeHtml(product.category || 'CJ Product') +
+                  '</div>' +
+                  '<div class="small text-muted mt-1">' +
+                    'Variants: ' +
+                    escapeHtml(product.enabledVariantCount || 0) +
+                  '</div>' +
+                '</div>' +
+              '</div>' +
+              '<button type="button" class="btn btn-primary btn-sm w-100 mt-3 js-select-cj-product">' +
+                'Select Product' +
+              '</button>' +
+            '</div>' +
+          '</div>';
+
+        const selectButton =
+          column.querySelector(
+            '.js-select-cj-product'
+          );
+
+        selectButton.addEventListener(
+          'click',
+          function() {
+            selectProduct(
+              product
+            );
+          }
+        );
+
+        searchResults.appendChild(
+          column
+        );
+      });
+    }
+
+    async function searchProducts() {
+      const query =
+        String(
+          searchInput.value || ''
+        ).trim();
+
+      if (!query) {
+        searchStatus.textContent =
+          'Enter a CJ product ID, SKU or product name.';
+
+        searchResults.innerHTML =
+          '';
+
+        return;
+      }
+
+      searchButton.disabled =
+        true;
+
+      searchButton.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>' +
+        'Searching...';
+
+      searchStatus.textContent =
+        'Searching eligible CJ products...';
+
+      searchResults.innerHTML =
+        '';
+
+      try {
+        const response =
+          await fetch(
+            '/admin/cj-home-mid-banners/products/search?q=' +
+            encodeURIComponent(
+              query
+            ),
+            {
+              headers: {
+                Accept:
+                  'application/json'
+              },
+              credentials:
+                'same-origin'
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(function() {
+              return {};
+            });
+
+        if (
+          !response.ok ||
+          data.success === false
+        ) {
+          throw new Error(
+            data.message ||
+            'CJ product search failed.'
+          );
+        }
+
+        renderProducts(
+          Array.isArray(data.products)
+            ? data.products
+            : []
+        );
+      } catch (error) {
+        searchStatus.textContent =
+          error.message ||
+          'CJ product search failed.';
+      } finally {
+        searchButton.disabled =
+          false;
+
+        searchButton.innerHTML =
+          '<i class="fas fa-search me-2"></i>Search';
+      }
+    }
+
+    searchButton.addEventListener(
+      'click',
+      searchProducts
+    );
+
+    searchInput.addEventListener(
+      'keydown',
+      function(event) {
+        if (
+          event.key === 'Enter'
+        ) {
+          event.preventDefault();
+
+          searchProducts();
+        }
+      }
+    );
+  })();
+</script>

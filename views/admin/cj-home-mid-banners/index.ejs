@@ -1,0 +1,224 @@
+<!-- views/admin/cj-home-mid-banners/index.ejs -->
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">
+        Manage CJ Homepage Mid Banners
+      </h1>
+
+      <p class="text-muted mb-0">
+        Manage the left and right CJ mid banners shared by the CJ homepage and CJ Shop page.
+      </p>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2">
+      <a
+        href="/admin/home-mid-banners"
+        class="btn btn-outline-primary"
+      >
+        <i class="fas fa-warehouse me-2"></i>
+        Internal Mid Banners
+      </a>
+
+      <a
+        href="/admin/dashboard"
+        class="btn btn-outline-secondary"
+      >
+        Back
+      </a>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+  <div class="alert alert-success">
+    <%= success[0] %>
+  </div>
+  <% } %>
+
+  <% if (error && error.length) { %>
+  <div class="alert alert-danger">
+    <%= error[0] %>
+  </div>
+  <% } %>
+
+  <% if (info && info.length) { %>
+  <div class="alert alert-info">
+    <%= info[0] %>
+  </div>
+  <% } %>
+
+  <% if (warning && warning.length) { %>
+  <div class="alert alert-warning">
+    <%= warning[0] %>
+  </div>
+  <% } %>
+
+  <div class="alert alert-light border shadow-sm">
+    <div class="d-flex align-items-start gap-3">
+      <i class="fas fa-info-circle text-primary mt-1"></i>
+
+      <div>
+        <div class="fw-bold text-primary mb-1">
+          Shared CJ banner configuration
+        </div>
+
+        <div class="small text-muted">
+          The same left and right CJ banners configured here will appear on both
+          <strong>/store?department=cj</strong> and
+          <strong>/store/shop?department=cj</strong>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <% ['left', 'right'].forEach(function(slot) { %>
+    <%
+      const banner = (banners || []).find(function(item) {
+        return String(item.slot || '').trim().toLowerCase() === slot;
+      }) || null;
+
+      const product =
+        banner && banner.product
+          ? banner.product
+          : null;
+
+      const slotLabel =
+        slot === 'left'
+          ? 'Left'
+          : 'Right';
+    %>
+
+    <div class="col-12 col-xl-6">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h2 class="h5 mb-1">
+                <%= slotLabel %> CJ Mid Banner
+              </h2>
+
+              <p class="text-muted mb-0">
+                Shared CJ <%= slot %>-side mid banner.
+              </p>
+            </div>
+
+            <% if (banner) { %>
+            <span class="badge <%= banner.active ? 'bg-success' : 'bg-secondary' %>">
+              <%= banner.active ? 'Active' : 'Inactive' %>
+            </span>
+            <% } else { %>
+            <span class="badge bg-warning text-dark">
+              Not Configured
+            </span>
+            <% } %>
+          </div>
+
+          <% if (banner) { %>
+          <div class="border rounded bg-light p-3 mb-3">
+            <div class="row g-3 align-items-center">
+              <div class="col-12 col-md-5">
+                <% if (banner.image) { %>
+                <img
+                  src="<%= banner.image %>"
+                  alt="<%= product && product.name ? product.name : slotLabel + ' CJ mid banner' %>"
+                  class="img-fluid w-100 rounded border bg-white"
+                  style="height: 180px; object-fit: contain;"
+                >
+                <% } else { %>
+                <div
+                  class="border rounded bg-white d-flex align-items-center justify-content-center text-muted"
+                  style="height: 180px;"
+                >
+                  No banner image
+                </div>
+                <% } %>
+              </div>
+
+              <div class="col-12 col-md-7">
+                <div class="mb-2">
+                  <strong>CJ Product:</strong>
+
+                  <div class="text-muted">
+                    <%= product && product.name
+                        ? product.name
+                        : 'Linked CJ product unavailable' %>
+                  </div>
+                </div>
+
+                <div class="mb-2">
+                  <strong>CJ Product ID:</strong>
+
+                  <div class="small text-break text-muted">
+                    <%= banner.cjProductId || '—' %>
+                  </div>
+                </div>
+
+                <div class="mb-2">
+                  <strong>Title:</strong>
+
+                  <div class="text-muted">
+                    <%= banner.title || '—' %>
+                  </div>
+                </div>
+
+                <div class="mb-2">
+                  <strong>Subtitle:</strong>
+
+                  <div class="text-muted">
+                    <%= banner.subtitle || '—' %>
+                  </div>
+                </div>
+
+                <div class="mb-2">
+                  <strong>Price Text:</strong>
+
+                  <div class="text-muted">
+                    <%= banner.priceText || '—' %>
+                  </div>
+                </div>
+
+                <div class="mb-0">
+                  <strong>Button:</strong>
+
+                  <div class="text-muted">
+                    <%= banner.buttonText || 'Shop Now' %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <% } else { %>
+          <div class="alert alert-light border mb-3">
+            The <%= slot %> CJ mid banner has not been configured yet.
+          </div>
+          <% } %>
+
+          <div class="d-flex flex-wrap gap-2">
+            <a
+              href="/admin/cj-home-mid-banners/<%= slot %>/edit"
+              class="btn btn-primary"
+            >
+              <i class="fas fa-edit me-2"></i>
+
+              <%= banner ? 'Edit' : 'Set Up' %>
+              <%= slotLabel %> Banner
+            </a>
+
+            <% if (banner) { %>
+            <a
+              href="/admin/cj-home-mid-banners/<%= slot %>/toggle"
+              class="btn btn-outline-secondary"
+            >
+              <i class="fas <%= banner.active ? 'fa-eye-slash' : 'fa-eye' %> me-2"></i>
+
+              <%= banner.active ? 'Deactivate' : 'Activate' %>
+            </a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+  </div>
+</div>

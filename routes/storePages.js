@@ -22,6 +22,16 @@ const CjHomePromoOffer = require('../models/CjHomePromoOffer');
 
 const HomePromoOffer = require('../models/HomePromoOffer');
 const HomeMidBanner = require('../models/HomeMidBanner');
+
+/*
+ * Completely separate Kasyora CJ Store
+ * Home Mid Banners.
+ *
+ * The same left and right CJ records are shared by
+ * the CJ homepage and CJ Shop page.
+ */
+const CjHomeMidBanner = require('../models/CjHomeMidBanner');
+
 const BestsellerCard = require('../models/BestsellerCard');
 const BestsellerBottomBanner = require('../models/BestsellerBottomBanner');
 
@@ -630,6 +640,48 @@ function mapMidBanner(banner, product) {
   };
 }
 
+/*
+ * Map only the separate Kasyora CJ Store
+ * Home Mid Banner.
+ *
+ * Never pass an Internal Product record into this function.
+ */
+function mapCjMidBanner(banner, product) {
+  if (!banner || !product) {
+    return null;
+  }
+
+  const mappedProduct = mapCjStoreProduct(product);
+
+  if (!mappedProduct.cjProductId || mappedProduct.enabledVariantCount < 1) {
+    return null;
+  }
+
+  return {
+    slot: String(banner.slot || '').trim(),
+
+    title: String(banner.title || '').trim(),
+
+    subtitle: String(banner.subtitle || '').trim(),
+
+    priceText: String(banner.priceText || '').trim(),
+
+    buttonText: String(banner.buttonText || 'Shop Now').trim(),
+
+    image: String(banner.image || '').trim(),
+
+    url: '/cj/product/' + encodeURIComponent(mappedProduct.cjProductId),
+
+    cjProductId: mappedProduct.cjProductId,
+
+    productName: mappedProduct.name,
+
+    active: banner.active === true,
+
+    sortOrder: Number(banner.sortOrder || 0),
+  };
+}
+
 function mapBestsellerCard(card, product) {
   if (!card || !product) return null;
 
@@ -773,6 +825,90 @@ function mapCjShopMainBanner(banner, product) {
     productName: mappedProduct.name,
 
     active: banner.active === true,
+  };
+}
+
+/*
+ * Load the same two CJ Home Mid Banners for:
+ *
+ * - /store?department=cj
+ * - /store/shop?department=cj
+ *
+ * This helper reads only:
+ *
+ * - CjHomeMidBanner
+ * - CjProduct
+ *
+ * It never reads Internal HomeMidBanner or Product.
+ */
+async function loadCjHomeMidBanners() {
+  const banners = await CjHomeMidBanner.find({
+    active: true,
+  })
+    .sort({
+      sortOrder: 1,
+      createdAt: 1,
+    })
+    .lean();
+
+  let midBannerLeft = null;
+  let midBannerRight = null;
+
+  for (const banner of banners) {
+    const cjProductId = String(banner?.cjProductId || '').trim();
+
+    if (!cjProductId) {
+      continue;
+    }
+
+    const rawProduct = await CjProduct.findOne({
+      status: 'active',
+
+      cjProductId,
+
+      variants: {
+        $elemMatch: {
+          isEnabled: true,
+
+          cjVariantId: {
+            $exists: true,
+            $ne: '',
+          },
+
+          variantSku: {
+            $exists: true,
+            $ne: '',
+          },
+
+          'sellingPriceExVat.value': {
+            $gte: 0,
+          },
+        },
+      },
+    }).lean();
+
+    if (!rawProduct) {
+      continue;
+    }
+
+    const mappedBanner = mapCjMidBanner(banner, rawProduct);
+
+    if (!mappedBanner) {
+      continue;
+    }
+
+    if (banner.slot === 'left') {
+      midBannerLeft = mappedBanner;
+    }
+
+    if (banner.slot === 'right') {
+      midBannerRight = mappedBanner;
+    }
+  }
+
+  return {
+    midBannerLeft,
+    midBannerRight,
   };
 }
 
@@ -1308,43 +1444,49 @@ router.get('/store', async (req, res) => {
     }));
 
     if (storeDepartment === 'cj') {
-      const [cjProducts, cjCategories, cjFeaturedBanner, cjHomePromoOffers] = await Promise.all([
-        loadCjHomepageProducts({
-          keyword,
-          category,
-        }),
+      const [cjProducts, cjCategories, cjFeaturedBanner, cjHomePromoOffers, cjHomeMidBanners] =
+        await Promise.all([
+          loadCjHomepageProducts({
+            keyword,
+            category,
+          }),
 
-        loadCjStoreCategories(),
+          loadCjStoreCategories(),
 
-        /*
-         * Load only the separate CJ Featured Right-side Banner.
-         *
-         * This never queries the Internal FeaturedBanner model.
-         */
-        CjFeaturedBanner.findOne({
-          slot: 'right',
-          active: true,
-        })
-          .sort({
-            updatedAt: -1,
+          /*
+           * Load only the separate CJ Featured Right-side Banner.
+           *
+           * This never queries the Internal FeaturedBanner model.
+           */
+          CjFeaturedBanner.findOne({
+            slot: 'right',
+            active: true,
           })
-          .lean(),
+            .sort({
+              updatedAt: -1,
+            })
+            .lean(),
 
-        /*
-         * Load only active CJ homepage promo offers.
-         *
-         * These records contain CjProduct.cjProductId values
-         * and never reference Internal Product.customId.
-         */
-        CjHomePromoOffer.find({
-          active: true,
-        })
-          .sort({
-            sortOrder: 1,
-            createdAt: 1,
+          /*
+           * Load only active CJ homepage promo offers.
+           *
+           * These records contain CjProduct.cjProductId values
+           * and never reference Internal Product.customId.
+           */
+          CjHomePromoOffer.find({
+            active: true,
           })
-          .lean(),
-      ]);
+            .sort({
+              sortOrder: 1,
+              createdAt: 1,
+            })
+            .lean(),
+
+          /*
+           * Load the shared left and right CJ Home Mid Banners.
+           */
+          loadCjHomeMidBanners(),
+        ]);
 
       /*
        * The CJ banner product is loaded independently from the
@@ -1508,8 +1650,14 @@ router.get('/store', async (req, res) => {
         sideBannerProduct,
         promoOfferLeft,
         promoOfferRight,
-        midBannerLeft: null,
-        midBannerRight: null,
+
+        /*
+         * Separate CJ Home Mid Banners shared with
+         * the CJ Shop page.
+         */
+        midBannerLeft: cjHomeMidBanners.midBannerLeft,
+
+        midBannerRight: cjHomeMidBanners.midBannerRight,
 
         selectedKeyword: keyword,
         selectedCategory: category,
@@ -1808,6 +1956,7 @@ router.get('/store/shop', async (req, res) => {
         cjShopSidebarBannerRaw,
         featuredSidebarProducts,
         topRatedTagProducts,
+        cjHomeMidBanners,
       ] = await Promise.all([
         loadCjShopProducts({
           keyword,
@@ -1888,6 +2037,12 @@ router.get('/store/shop', async (req, res) => {
          * the separate CjRating flow.
          */
         getCjTopRatedProducts(8),
+
+        /*
+         * Load the same CJ Home Mid Banners already used
+         * by the CJ homepage.
+         */
+        loadCjHomeMidBanners(),
       ]);
 
       /*
@@ -2084,11 +2239,12 @@ router.get('/store/shop', async (req, res) => {
         promoOfferRight,
 
         /*
-         * Internal mid banners remain hidden because they still
-         * reference Internal Product.customId.
+         * Separate CJ Home Mid Banners shared with
+         * the CJ homepage.
          */
-        midBannerLeft: null,
-        midBannerRight: null,
+        midBannerLeft: cjHomeMidBanners.midBannerLeft,
+
+        midBannerRight: cjHomeMidBanners.midBannerRight,
 
         /*
          * Separate CJ Shop Sidebar Banner resolved only from

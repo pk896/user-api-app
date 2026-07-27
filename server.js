@@ -690,6 +690,15 @@ const adminCjFeaturedBannerRoutes = require('./routes/adminCjFeaturedBanner');
 const adminCjHomePromoOffersRoutes = require('./routes/adminCjHomePromoOffers');
 const adminHomePromoOffersRoutes = require('./routes/adminHomePromoOffers');
 const adminHomeMidBannersRoutes = require('./routes/adminHomeMidBanners');
+
+/*
+ * Completely separate Kasyora CJ Store homepage
+ * Mid Banners admin flow.
+ *
+ * This router uses only CjHomeMidBanner and CjProduct.
+ */
+const adminCjHomeMidBannersRoutes = require('./routes/adminCjHomeMidBanners');
+
 const adminBestsellerCards = require('./routes/adminBestsellerCards');
 const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBanners');
 
@@ -877,7 +886,23 @@ app.use('/admin', adminCjHomePromoOffersRoutes);
  */
 app.use('/admin', adminHomePromoOffersRoutes);
 
+/*
+ * Existing Internal Kasyora Store homepage
+ * Mid Banners admin flow.
+ */
 app.use('/admin', adminHomeMidBannersRoutes);
+
+/*
+ * Completely separate Kasyora CJ Store homepage
+ * Mid Banners admin flow.
+ *
+ * These same two CJ banners will later be shared by:
+ *
+ * - /store?department=cj
+ * - /store/shop?department=cj
+ */
+app.use('/admin', adminCjHomeMidBannersRoutes);
+
 app.use('/admin', adminBestsellerCards);
 app.use('/admin', adminBestsellerBottomBanners);
 
