@@ -1401,10 +1401,7 @@ async function getInternalSoldRatedOldProducts(limit = 20) {
   const requestedLimit = Number(limit);
 
   const safeLimit =
-    Number.isFinite(requestedLimit) &&
-    requestedLimit > 0
-      ? Math.floor(requestedLimit)
-      : 20;
+    Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.floor(requestedLimit) : 20;
 
   /*
    * ==================================================
@@ -1423,25 +1420,13 @@ async function getInternalSoldRatedOldProducts(limit = 20) {
         $or: [
           {
             status: {
-              $in: [
-                'COMPLETED',
-                'PAID',
-                'SHIPPED',
-                'DELIVERED',
-                'CAPTURED',
-              ],
+              $in: ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'],
             },
           },
 
           {
             paymentStatus: {
-              $in: [
-                'COMPLETED',
-                'PAID',
-                'SHIPPED',
-                'DELIVERED',
-                'CAPTURED',
-              ],
+              $in: ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED', 'CAPTURED'],
             },
           },
         ],
@@ -1494,9 +1479,7 @@ async function getInternalSoldRatedOldProducts(limit = 20) {
 
   const soldCustomIds = soldProductRows
     .map((row) => {
-      return String(
-        row?.customId || '',
-      ).trim();
+      return String(row?.customId || '').trim();
     })
     .filter(Boolean);
 
@@ -1531,8 +1514,7 @@ async function getInternalSoldRatedOldProducts(limit = 20) {
     return [];
   }
 
-  const soldProductObjectIds =
-    soldProducts.map((product) => product._id);
+  const soldProductObjectIds = soldProducts.map((product) => product._id);
 
   /*
    * ==================================================
@@ -1598,23 +1580,15 @@ async function getInternalSoldRatedOldProducts(limit = 20) {
         String(row._id),
 
         {
-          avgRating: Number(
-            Number(row.avgRating || 0).toFixed(2),
-          ),
+          avgRating: Number(Number(row.avgRating || 0).toFixed(2)),
 
-          ratingsCount: Math.max(
-            0,
-            Math.floor(
-              Number(row.ratingsCount || 0),
-            ),
-          ),
+          ratingsCount: Math.max(0, Math.floor(Number(row.ratingsCount || 0))),
         },
       ];
     }),
   );
 
-  const ratedProductObjectIds =
-    ratingRows.map((row) => row._id);
+  const ratedProductObjectIds = ratingRows.map((row) => row._id);
 
   /*
    * ==================================================
@@ -1650,27 +1624,18 @@ async function getInternalSoldRatedOldProducts(limit = 20) {
    */
   return rows
     .map((product) => {
-      const liveRating =
-        ratingByProductId.get(
-          String(product._id),
-        );
+      const liveRating = ratingByProductId.get(String(product._id));
 
-      if (
-        !liveRating ||
-        liveRating.ratingsCount < 1 ||
-        liveRating.avgRating <= 0
-      ) {
+      if (!liveRating || liveRating.ratingsCount < 1 || liveRating.avgRating <= 0) {
         return null;
       }
 
       return mapStoreProduct({
         ...product,
 
-        avgRating:
-          liveRating.avgRating,
+        avgRating: liveRating.avgRating,
 
-        ratingsCount:
-          liveRating.ratingsCount,
+        ratingsCount: liveRating.ratingsCount,
       });
     })
     .filter(Boolean);
@@ -1831,6 +1796,485 @@ async function getCjSoldRatedOldProducts(limit = 20) {
       );
     })
     .slice(0, safeLimit);
+}
+
+/*
+ * Build the five bestselling Internal Kasyora categories.
+ *
+ * Each returned category contains no more than four
+ * bestselling in-stock Internal products.
+ *
+ * This function reads only:
+ *
+ * - Order
+ * - Product
+ *
+ * It never reads CjOrder or CjProduct.
+ */
+async function getInternalBestsellingCategories(categoryLimit = 5, productsPerCategory = 4) {
+  const safeCategoryLimit =
+    Number.isFinite(Number(categoryLimit)) && Number(categoryLimit) > 0
+      ? Math.floor(Number(categoryLimit))
+      : 5;
+
+  const safeProductsPerCategory =
+    Number.isFinite(Number(productsPerCategory)) && Number(productsPerCategory) > 0
+      ? Math.floor(Number(productsPerCategory))
+      : 4;
+
+  const salesRows = await Order.aggregate([
+    {
+      $match: {
+        $or: [
+          {
+            status: {
+              $in: ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'],
+            },
+          },
+          {
+            paymentStatus: {
+              $in: ['COMPLETED', 'PAID', 'SHIPPED', 'DELIVERED'],
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $unwind: '$items',
+    },
+
+    {
+      $match: {
+        'items.productId': {
+          $type: 'string',
+          $ne: '',
+        },
+
+        'items.quantity': {
+          $gt: 0,
+        },
+
+        'items.refundStatus': {
+          $ne: 'REFUNDED',
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: '$items.productId',
+
+        soldQuantity: {
+          $sum: {
+            $subtract: [
+              {
+                $ifNull: ['$items.quantity', 1],
+              },
+
+              {
+                $ifNull: ['$items.refundedQuantity', 0],
+              },
+            ],
+          },
+        },
+
+        successfulOrders: {
+          $addToSet: '$_id',
+        },
+      },
+    },
+
+    {
+      $match: {
+        soldQuantity: {
+          $gt: 0,
+        },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+
+        productCustomId: '$_id',
+
+        soldQuantity: 1,
+
+        successfulOrderCount: {
+          $size: '$successfulOrders',
+        },
+      },
+    },
+
+    {
+      $sort: {
+        soldQuantity: -1,
+        successfulOrderCount: -1,
+        productCustomId: 1,
+      },
+    },
+  ]).allowDiskUse(true);
+
+  if (salesRows.length === 0) {
+    return [];
+  }
+
+  const salesByProductId = new Map(
+    salesRows.map((row) => {
+      return [
+        String(row?.productCustomId || '').trim(),
+
+        {
+          soldQuantity: Math.max(0, Number(row?.soldQuantity || 0)),
+
+          successfulOrderCount: Math.max(0, Number(row?.successfulOrderCount || 0)),
+        },
+      ];
+    }),
+  );
+
+  const productCustomIds = Array.from(salesByProductId.keys()).filter(Boolean);
+
+  const rawProducts = await Product.find({
+    customId: {
+      $in: productCustomIds,
+    },
+
+    stock: {
+      $gt: 0,
+    },
+  }).lean();
+
+  const categoryMap = new Map();
+
+  for (const rawProduct of rawProducts) {
+    const mappedProduct = mapStoreProduct(rawProduct);
+
+    const categoryName = String(mappedProduct.category || 'Product').trim() || 'Product';
+
+    const categoryKey = categoryName.toLowerCase();
+
+    const sales = salesByProductId.get(String(mappedProduct.customId || '').trim());
+
+    if (!sales || sales.soldQuantity < 1) {
+      continue;
+    }
+
+    if (!categoryMap.has(categoryKey)) {
+      categoryMap.set(categoryKey, {
+        category: categoryName,
+
+        soldQuantity: 0,
+
+        successfulOrderCount: 0,
+
+        products: [],
+      });
+    }
+
+    const categoryEntry = categoryMap.get(categoryKey);
+
+    categoryEntry.soldQuantity += sales.soldQuantity;
+
+    categoryEntry.successfulOrderCount += sales.successfulOrderCount;
+
+    categoryEntry.products.push({
+      ...mappedProduct,
+
+      soldQuantity: sales.soldQuantity,
+
+      successfulOrderCount: sales.successfulOrderCount,
+    });
+  }
+
+  return Array.from(categoryMap.values())
+    .map((categoryEntry) => {
+      categoryEntry.products.sort((left, right) => {
+        const quantityDifference = Number(right.soldQuantity || 0) - Number(left.soldQuantity || 0);
+
+        if (quantityDifference !== 0) {
+          return quantityDifference;
+        }
+
+        const orderDifference =
+          Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0);
+
+        if (orderDifference !== 0) {
+          return orderDifference;
+        }
+
+        return String(left.name || '').localeCompare(String(right.name || ''));
+      });
+
+      return {
+        ...categoryEntry,
+
+        products: categoryEntry.products.slice(0, safeProductsPerCategory),
+      };
+    })
+    .filter((categoryEntry) => {
+      return categoryEntry.category && categoryEntry.products.length > 0;
+    })
+    .sort((left, right) => {
+      const quantityDifference = Number(right.soldQuantity || 0) - Number(left.soldQuantity || 0);
+
+      if (quantityDifference !== 0) {
+        return quantityDifference;
+      }
+
+      const orderDifference =
+        Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0);
+
+      if (orderDifference !== 0) {
+        return orderDifference;
+      }
+
+      return String(left.category || '').localeCompare(String(right.category || ''));
+    })
+    .slice(0, safeCategoryLimit);
+}
+
+/*
+ * Build the five bestselling CJ categories.
+ *
+ * Each returned category contains no more than four
+ * bestselling active CJ products.
+ *
+ * This function reads only:
+ *
+ * - CjOrder
+ * - CjProduct
+ *
+ * It never reads Order or Product.
+ */
+async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory = 4) {
+  const safeCategoryLimit =
+    Number.isFinite(Number(categoryLimit)) && Number(categoryLimit) > 0
+      ? Math.floor(Number(categoryLimit))
+      : 5;
+
+  const safeProductsPerCategory =
+    Number.isFinite(Number(productsPerCategory)) && Number(productsPerCategory) > 0
+      ? Math.floor(Number(productsPerCategory))
+      : 4;
+
+  const salesRows = await CjOrder.aggregate([
+    {
+      $match: {
+        paymentStatus: {
+          $in: ['COMPLETED', 'PARTIALLY_REFUNDED'],
+        },
+
+        status: {
+          $nin: ['PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'],
+        },
+      },
+    },
+
+    {
+      $unwind: '$items',
+    },
+
+    {
+      $match: {
+        'items.cjProductId': {
+          $type: 'string',
+          $ne: '',
+        },
+
+        'items.quantity': {
+          $gt: 0,
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: '$items.cjProductId',
+
+        soldQuantity: {
+          $sum: {
+            $ifNull: ['$items.quantity', 1],
+          },
+        },
+
+        successfulOrders: {
+          $addToSet: '$_id',
+        },
+      },
+    },
+
+    {
+      $match: {
+        soldQuantity: {
+          $gt: 0,
+        },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+
+        cjProductId: '$_id',
+
+        soldQuantity: 1,
+
+        successfulOrderCount: {
+          $size: '$successfulOrders',
+        },
+      },
+    },
+
+    {
+      $sort: {
+        soldQuantity: -1,
+        successfulOrderCount: -1,
+        cjProductId: 1,
+      },
+    },
+  ]).allowDiskUse(true);
+
+  if (salesRows.length === 0) {
+    return [];
+  }
+
+  const salesByCjProductId = new Map(
+    salesRows.map((row) => {
+      return [
+        String(row?.cjProductId || '').trim(),
+
+        {
+          soldQuantity: Math.max(0, Number(row?.soldQuantity || 0)),
+
+          successfulOrderCount: Math.max(0, Number(row?.successfulOrderCount || 0)),
+        },
+      ];
+    }),
+  );
+
+  const cjProductIds = Array.from(salesByCjProductId.keys()).filter(Boolean);
+
+  const rawProducts = await CjProduct.find({
+    status: 'active',
+
+    cjProductId: {
+      $in: cjProductIds,
+    },
+
+    variants: {
+      $elemMatch: {
+        isEnabled: true,
+
+        cjVariantId: {
+          $exists: true,
+          $ne: '',
+        },
+
+        variantSku: {
+          $exists: true,
+          $ne: '',
+        },
+
+        'sellingPriceExVat.value': {
+          $gte: 0,
+        },
+      },
+    },
+  }).lean();
+
+  const categoryMap = new Map();
+
+  for (const rawProduct of rawProducts) {
+    const mappedProduct = mapCjStoreProduct(rawProduct);
+
+    if (!mappedProduct.cjProductId || mappedProduct.enabledVariantCount < 1) {
+      continue;
+    }
+
+    const sales = salesByCjProductId.get(String(mappedProduct.cjProductId || '').trim());
+
+    if (!sales || sales.soldQuantity < 1) {
+      continue;
+    }
+
+    const categoryName = String(mappedProduct.category || 'CJ Product').trim() || 'CJ Product';
+
+    const categoryKey = categoryName.toLowerCase();
+
+    if (!categoryMap.has(categoryKey)) {
+      categoryMap.set(categoryKey, {
+        category: categoryName,
+
+        soldQuantity: 0,
+
+        successfulOrderCount: 0,
+
+        products: [],
+      });
+    }
+
+    const categoryEntry = categoryMap.get(categoryKey);
+
+    categoryEntry.soldQuantity += sales.soldQuantity;
+
+    categoryEntry.successfulOrderCount += sales.successfulOrderCount;
+
+    categoryEntry.products.push({
+      ...mappedProduct,
+
+      soldQuantity: sales.soldQuantity,
+
+      successfulOrderCount: sales.successfulOrderCount,
+    });
+  }
+
+  return Array.from(categoryMap.values())
+    .map((categoryEntry) => {
+      categoryEntry.products.sort((left, right) => {
+        const quantityDifference = Number(right.soldQuantity || 0) - Number(left.soldQuantity || 0);
+
+        if (quantityDifference !== 0) {
+          return quantityDifference;
+        }
+
+        const orderDifference =
+          Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0);
+
+        if (orderDifference !== 0) {
+          return orderDifference;
+        }
+
+        return String(left.name || '').localeCompare(String(right.name || ''));
+      });
+
+      return {
+        ...categoryEntry,
+
+        products: categoryEntry.products.slice(0, safeProductsPerCategory),
+      };
+    })
+    .filter((categoryEntry) => {
+      return categoryEntry.category && categoryEntry.products.length > 0;
+    })
+    .sort((left, right) => {
+      const quantityDifference = Number(right.soldQuantity || 0) - Number(left.soldQuantity || 0);
+
+      if (quantityDifference !== 0) {
+        return quantityDifference;
+      }
+
+      const orderDifference =
+        Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0);
+
+      if (orderDifference !== 0) {
+        return orderDifference;
+      }
+
+      return String(left.category || '').localeCompare(String(right.category || ''));
+    })
+    .slice(0, safeCategoryLimit);
 }
 
 function getGuestKeyFromReq(req) {
@@ -2537,6 +2981,7 @@ router.get('/store/shop', async (req, res) => {
         featuredSidebarProducts,
         topRatedTagProducts,
         soldRatedOldProducts,
+        bestsellingCategoryGroups,
         cjHomeMidBanners,
       ] = await Promise.all([
         loadCjShopProducts({
@@ -2625,6 +3070,13 @@ router.get('/store/shop', async (req, res) => {
          * CJ order and have at least one CJ rating.
          */
         getCjSoldRatedOldProducts(20),
+
+        /*
+         * Load the top five CJ sales categories and
+         * no more than four bestselling CJ products
+         * inside each category.
+         */
+        getCjBestsellingCategories(5, 4),
 
         /*
          * Load the same CJ Home Mid Banners already used
@@ -2831,6 +3283,14 @@ router.get('/store/shop', async (req, res) => {
         soldRatedOldProducts,
 
         /*
+         * Separate CJ bestselling-category results.
+         *
+         * Every category contains only CJ products
+         * derived from successful CjOrder records.
+         */
+        bestsellingCategoryGroups,
+
+        /*
          * These are the same CjHomePromoOffer records used
          * by the CJ homepage.
          */
@@ -3007,6 +3467,13 @@ router.get('/store/shop', async (req, res) => {
      */
     const soldRatedOldProducts = await getInternalSoldRatedOldProducts(20);
 
+    /*
+     * Load the top five Internal sales categories
+     * and no more than four bestselling Internal
+     * products inside each category.
+     */
+    const bestsellingCategoryGroups = await getInternalBestsellingCategories(5, 4);
+
     const homePromoOffersRaw = await HomePromoOffer.find({
       active: true,
     })
@@ -3165,6 +3632,14 @@ router.get('/store/shop', async (req, res) => {
        */
       soldRatedOldProducts,
 
+      /*
+       * Internal bestselling-category results.
+       *
+       * Every category contains only Internal products
+       * derived from successful Order records.
+       */
+      bestsellingCategoryGroups,
+
       promoOfferLeft,
       promoOfferRight,
       midBannerLeft,
@@ -3210,6 +3685,7 @@ router.get('/store/shop', async (req, res) => {
       featuredSidebarProducts: [],
       topRatedTagProducts: [],
       soldRatedOldProducts: [],
+      bestsellingCategoryGroups: [],
 
       promoOfferLeft: null,
       promoOfferRight: null,
