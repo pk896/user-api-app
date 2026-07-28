@@ -4,6 +4,23 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const CjProduct = require('../models/CjProduct');
+
+/*
+ * Internal Kasyora orders.
+ *
+ * This model is used only when finding qualifying
+ * Internal Kasyora products.
+ */
+const Order = require('../models/Order');
+
+/*
+ * Separate CJ Dropshipping orders.
+ *
+ * This model is used only when finding qualifying
+ * CJ products.
+ */
+const CjOrder = require('../models/CjOrder');
+
 const Rating = require('../models/Rating');
 const HeroSlide = require('../models/HeroSlide');
 const FeaturedBanner = require('../models/FeaturedBanner');
@@ -1366,6 +1383,456 @@ async function getCjTopRatedProducts(limit) {
     .slice(0, safeLimit);
 }
 
+/*
+ * Load the oldest Internal Kasyora products that have:
+ *
+ * 1. appeared in more than one distinct successful order;
+ * 2. received at least one published rating;
+ * 3. remained available for sale.
+ *
+ * This function reads only:
+ *
+ * - Order
+ * - Product
+ *
+ * It never reads CjOrder or CjProduct.
+ */
+async function getInternalSoldRatedOldProducts(limit = 20) {
+  const requestedLimit = Number(limit);
+
+  const safeLimit =
+    Number.isFinite(requestedLimit) &&
+    requestedLimit > 0
+      ? Math.floor(requestedLimit)
+      : 20;
+
+  /*
+   * ==================================================
+   * STEP 1: FIND PRODUCTS SOLD IN MORE THAN ONE ORDER
+   * ==================================================
+   *
+   * This reads only the existing Internal Order model.
+   *
+   * A product qualifies for the sales requirement only
+   * when it appears in at least two different paid-like
+   * Internal Kasyora orders.
+   */
+  const soldProductRows = await Order.aggregate([
+    {
+      $match: {
+        $or: [
+          {
+            status: {
+              $in: [
+                'COMPLETED',
+                'PAID',
+                'SHIPPED',
+                'DELIVERED',
+                'CAPTURED',
+              ],
+            },
+          },
+
+          {
+            paymentStatus: {
+              $in: [
+                'COMPLETED',
+                'PAID',
+                'SHIPPED',
+                'DELIVERED',
+                'CAPTURED',
+              ],
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $unwind: '$items',
+    },
+
+    {
+      $match: {
+        'items.productId': {
+          $type: 'string',
+          $ne: '',
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: '$items.productId',
+
+        successfulOrderIds: {
+          $addToSet: '$_id',
+        },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+
+        customId: '$_id',
+
+        successfulOrderCount: {
+          $size: '$successfulOrderIds',
+        },
+      },
+    },
+
+    {
+      $match: {
+        successfulOrderCount: {
+          $gt: 1,
+        },
+      },
+    },
+  ]).allowDiskUse(true);
+
+  const soldCustomIds = soldProductRows
+    .map((row) => {
+      return String(
+        row?.customId || '',
+      ).trim();
+    })
+    .filter(Boolean);
+
+  if (soldCustomIds.length === 0) {
+    return [];
+  }
+
+  /*
+   * ==================================================
+   * STEP 2: RESOLVE THE INTERNAL PRODUCT OBJECT IDS
+   * ==================================================
+   *
+   * Internal Rating.productId points to Product._id,
+   * not Product.customId.
+   */
+  const soldProducts = await Product.find({
+    customId: {
+      $in: soldCustomIds,
+    },
+
+    stock: {
+      $gt: 0,
+    },
+  })
+    .select({
+      _id: 1,
+      customId: 1,
+    })
+    .lean();
+
+  if (soldProducts.length === 0) {
+    return [];
+  }
+
+  const soldProductObjectIds =
+    soldProducts.map((product) => product._id);
+
+  /*
+   * ==================================================
+   * STEP 3: VERIFY REAL PUBLISHED RATINGS
+   * ==================================================
+   *
+   * Rating is authoritative for Internal Kasyora reviews.
+   *
+   * Do not trust possibly stale Product.avgRating or
+   * Product.ratingsCount values for qualification.
+   */
+  const ratingRows = await Rating.aggregate([
+    {
+      $match: {
+        productId: {
+          $in: soldProductObjectIds,
+        },
+
+        status: 'published',
+
+        stars: {
+          $gte: 1,
+          $lte: 5,
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: '$productId',
+
+        avgRating: {
+          $avg: '$stars',
+        },
+
+        ratingsCount: {
+          $sum: 1,
+        },
+      },
+    },
+
+    {
+      $match: {
+        ratingsCount: {
+          $gt: 0,
+        },
+
+        avgRating: {
+          $gt: 0,
+          $lte: 5,
+        },
+      },
+    },
+  ]).allowDiskUse(true);
+
+  if (ratingRows.length === 0) {
+    return [];
+  }
+
+  const ratingByProductId = new Map(
+    ratingRows.map((row) => {
+      return [
+        String(row._id),
+
+        {
+          avgRating: Number(
+            Number(row.avgRating || 0).toFixed(2),
+          ),
+
+          ratingsCount: Math.max(
+            0,
+            Math.floor(
+              Number(row.ratingsCount || 0),
+            ),
+          ),
+        },
+      ];
+    }),
+  );
+
+  const ratedProductObjectIds =
+    ratingRows.map((row) => row._id);
+
+  /*
+   * ==================================================
+   * STEP 4: LOAD THE 20 OLDEST QUALIFYING PRODUCTS
+   * ==================================================
+   *
+   * createdAt: 1 means the oldest qualifying Internal
+   * Product records appear first.
+   */
+  const rows = await Product.find({
+    _id: {
+      $in: ratedProductObjectIds,
+    },
+
+    customId: {
+      $in: soldCustomIds,
+    },
+
+    stock: {
+      $gt: 0,
+    },
+  })
+    .sort({
+      createdAt: 1,
+      _id: 1,
+    })
+    .limit(safeLimit)
+    .lean();
+
+  /*
+   * Attach the live authoritative rating aggregates
+   * from Rating before mapping the products for EJS.
+   */
+  return rows
+    .map((product) => {
+      const liveRating =
+        ratingByProductId.get(
+          String(product._id),
+        );
+
+      if (
+        !liveRating ||
+        liveRating.ratingsCount < 1 ||
+        liveRating.avgRating <= 0
+      ) {
+        return null;
+      }
+
+      return mapStoreProduct({
+        ...product,
+
+        avgRating:
+          liveRating.avgRating,
+
+        ratingsCount:
+          liveRating.ratingsCount,
+      });
+    })
+    .filter(Boolean);
+}
+
+/*
+ * Load the oldest CJ products that have:
+ *
+ * 1. appeared in more than one distinct successful CJ order;
+ * 2. received at least one published CJ rating;
+ * 3. remained active with a checkout-ready CJ variant.
+ *
+ * This function reads only:
+ *
+ * - CjOrder
+ * - CjProduct
+ *
+ * It never reads Order, Product or Internal ratings.
+ */
+async function getCjSoldRatedOldProducts(limit = 20) {
+  const requestedLimit = Number(limit);
+
+  const safeLimit =
+    Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.floor(requestedLimit) : 20;
+
+  /*
+   * A CJ product qualifies only when it appeared in
+   * at least two different successfully paid CJ orders.
+   *
+   * Fully refunded, cancelled and failed orders are excluded.
+   * Partially refunded orders remain valid sales because at
+   * least part of the order was retained.
+   */
+  const soldProductRows = await CjOrder.aggregate([
+    {
+      $match: {
+        paymentStatus: {
+          $in: ['COMPLETED', 'PARTIALLY_REFUNDED'],
+        },
+
+        status: {
+          $nin: ['PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'],
+        },
+      },
+    },
+
+    {
+      $unwind: '$items',
+    },
+
+    {
+      $match: {
+        'items.cjProductId': {
+          $type: 'string',
+          $ne: '',
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: '$items.cjProductId',
+
+        successfulOrderIds: {
+          $addToSet: '$_id',
+        },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+
+        cjProductId: '$_id',
+
+        successfulOrderCount: {
+          $size: '$successfulOrderIds',
+        },
+      },
+    },
+
+    {
+      $match: {
+        successfulOrderCount: {
+          $gt: 1,
+        },
+      },
+    },
+  ]).allowDiskUse(true);
+
+  const qualifyingCjProductIds = soldProductRows
+    .map((row) => {
+      return String(row?.cjProductId || '').trim();
+    })
+    .filter(Boolean);
+
+  if (qualifyingCjProductIds.length === 0) {
+    return [];
+  }
+
+  /*
+   * This final query remains completely inside CjProduct.
+   *
+   * createdAt: 1 means oldest imported database records first.
+   */
+  const rows = await CjProduct.find({
+    status: 'active',
+
+    cjProductId: {
+      $in: qualifyingCjProductIds,
+    },
+
+    ratingsCount: {
+      $gt: 0,
+    },
+
+    avgRating: {
+      $gt: 0,
+      $lte: 5,
+    },
+
+    variants: {
+      $elemMatch: {
+        isEnabled: true,
+
+        cjVariantId: {
+          $exists: true,
+          $ne: '',
+        },
+
+        variantSku: {
+          $exists: true,
+          $ne: '',
+        },
+
+        'sellingPriceExVat.value': {
+          $gte: 0,
+        },
+      },
+    },
+  })
+    .sort({
+      createdAt: 1,
+      _id: 1,
+    })
+    .limit(safeLimit + 8)
+    .lean();
+
+  return rows
+    .map(mapCjStoreProduct)
+    .filter((product) => {
+      return (
+        product &&
+        product.cjProductId &&
+        product.enabledVariantCount > 0 &&
+        Number(product.avgRating || 0) > 0 &&
+        Number(product.ratingsCount || 0) > 0
+      );
+    })
+    .slice(0, safeLimit);
+}
+
 function getGuestKeyFromReq(req) {
   try {
     const fromCookies = req.cookies && req.cookies.guestKey ? String(req.cookies.guestKey) : null;
@@ -2069,6 +2536,7 @@ router.get('/store/shop', async (req, res) => {
         cjShopSidebarBannerRaw,
         featuredSidebarProducts,
         topRatedTagProducts,
+        soldRatedOldProducts,
         cjHomeMidBanners,
       ] = await Promise.all([
         loadCjShopProducts({
@@ -2150,6 +2618,13 @@ router.get('/store/shop', async (req, res) => {
          * the separate CjRating flow.
          */
         getCjTopRatedProducts(8),
+
+        /*
+         * Load no more than 20 oldest CJ products that
+         * have sold in more than one distinct successful
+         * CJ order and have at least one CJ rating.
+         */
+        getCjSoldRatedOldProducts(20),
 
         /*
          * Load the same CJ Home Mid Banners already used
@@ -2345,6 +2820,17 @@ router.get('/store/shop', async (req, res) => {
         topRatedTagProducts,
 
         /*
+         * Oldest qualifying CJ products.
+         *
+         * Every product has:
+         *
+         * - more than one successful CJ order;
+         * - one or more CJ ratings;
+         * - an active checkout-ready CJ variant.
+         */
+        soldRatedOldProducts,
+
+        /*
          * These are the same CjHomePromoOffer records used
          * by the CJ homepage.
          */
@@ -2514,6 +3000,13 @@ router.get('/store/shop', async (req, res) => {
 
     const topRatedTagProducts = topRatedTagProductsRaw.map(mapStoreProduct);
 
+    /*
+     * Load no more than 20 oldest Internal Kasyora products
+     * that have sold in more than one distinct successful
+     * Internal order and received at least one rating.
+     */
+    const soldRatedOldProducts = await getInternalSoldRatedOldProducts(20);
+
     const homePromoOffersRaw = await HomePromoOffer.find({
       active: true,
     })
@@ -2661,6 +3154,17 @@ router.get('/store/shop', async (req, res) => {
       featuredSidebarProducts,
       topRatedTagProducts,
 
+      /*
+       * Oldest qualifying Internal Kasyora products.
+       *
+       * Every product has:
+       *
+       * - more than one successful Internal order;
+       * - one or more Internal ratings;
+       * - available stock.
+       */
+      soldRatedOldProducts,
+
       promoOfferLeft,
       promoOfferRight,
       midBannerLeft,
@@ -2705,6 +3209,7 @@ router.get('/store/shop', async (req, res) => {
       shopProducts: [],
       featuredSidebarProducts: [],
       topRatedTagProducts: [],
+      soldRatedOldProducts: [],
 
       promoOfferLeft: null,
       promoOfferRight: null,
