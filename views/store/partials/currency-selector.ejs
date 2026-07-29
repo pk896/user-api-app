@@ -1,4 +1,4 @@
-<!--views/store/partials/currency-selector.ejs-->
+<!-- views/store/partials/currency-selector.ejs -->
 <%
   const CURRENCY_SELECTOR_ACTIVE = String(
     typeof userCurrency !== 'undefined'
@@ -24,24 +24,69 @@
     currencyReturnTo
       ? String(currencyReturnTo)
       : '/store';
+
+  /*
+   * The same currency selector is shared by:
+   *
+   * - the compact desktop topbar;
+   * - the full-width mobile collapsed navbar.
+   *
+   * Only the mobile navbar passes:
+   *
+   * currencySelectorMobile: true
+   */
+  const CURRENCY_SELECTOR_IS_MOBILE =
+    typeof currencySelectorMobile !== 'undefined' &&
+    currencySelectorMobile === true;
+
+  const CURRENCY_SELECTOR_WRAPPER_CLASS =
+    CURRENCY_SELECTOR_IS_MOBILE
+      ? 'dropdown w-100'
+      : 'dropdown';
+
+  const CURRENCY_SELECTOR_BUTTON_CLASS =
+    CURRENCY_SELECTOR_IS_MOBILE
+      ? 'btn btn-sm border-0 dropdown-toggle text-muted d-flex align-items-center justify-content-between gap-2 px-2 py-2 w-100'
+      : 'btn btn-sm border-0 dropdown-toggle text-muted d-inline-flex align-items-center gap-1 px-1';
+
+  const CURRENCY_SELECTOR_MENU_CLASS =
+    CURRENCY_SELECTOR_IS_MOBILE
+      ? 'dropdown-menu rounded shadow-sm border-0 p-2 w-100'
+      : 'dropdown-menu dropdown-menu-end rounded shadow-sm border-0 p-2';
 %>
 
-<div class="dropdown">
+<div class="<%= CURRENCY_SELECTOR_WRAPPER_CLASS %>">
   <button
     type="button"
-    class="btn btn-sm border-0 dropdown-toggle text-muted d-inline-flex align-items-center gap-1 px-1"
+    class="<%= CURRENCY_SELECTOR_BUTTON_CLASS %>"
     data-bs-toggle="dropdown"
     aria-expanded="false"
     aria-label="Choose display currency"
   >
-    <i class="fas fa-coins text-primary" aria-hidden="true"></i>
+    <% if (CURRENCY_SELECTOR_IS_MOBILE) { %>
+    <span class="d-inline-flex align-items-center gap-2">
+      <i
+        class="fas fa-coins text-primary"
+        aria-hidden="true"
+      ></i>
+
+      <span class="fw-semibold">
+        <%= CURRENCY_SELECTOR_ACTIVE %>
+      </span>
+    </span>
+    <% } else { %>
+    <i
+      class="fas fa-coins text-primary"
+      aria-hidden="true"
+    ></i>
 
     <span class="fw-semibold">
       <%= CURRENCY_SELECTOR_ACTIVE %>
     </span>
+    <% } %>
   </button>
 
-  <div class="dropdown-menu dropdown-menu-end rounded shadow-sm border-0 p-2">
+  <div class="<%= CURRENCY_SELECTOR_MENU_CLASS %>">
     <div class="px-2 pt-1 pb-2">
       <div class="small fw-bold text-primary">
         Display currency
@@ -53,42 +98,42 @@
     </div>
 
     <% CURRENCY_SELECTOR_OPTIONS.forEach(function(currencyOption) { %>
-      <form
-        method="post"
-        action="/currency/select"
-        class="m-0"
+    <form
+      method="post"
+      action="/currency/select"
+      class="m-0"
+    >
+      <input
+        type="hidden"
+        name="currency"
+        value="<%= currencyOption.code %>"
       >
-        <input
-          type="hidden"
-          name="currency"
-          value="<%= currencyOption.code %>"
-        >
 
-        <input
-          type="hidden"
-          name="returnTo"
-          value="<%= CURRENCY_SELECTOR_RETURN_TO %>"
-        >
+      <input
+        type="hidden"
+        name="returnTo"
+        value="<%= CURRENCY_SELECTOR_RETURN_TO %>"
+      >
 
-        <button
-          type="submit"
-          class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 <%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'active bg-primary text-white' : '' %>"
-        >
-          <span>
-            <span class="fw-semibold">
-              <%= currencyOption.symbol %>
-            </span>
-
-            <span class="ms-2">
-              <%= currencyOption.name %>
-            </span>
+      <button
+        type="submit"
+        class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 <%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'active bg-primary text-white' : '' %>"
+      >
+        <span class="d-inline-flex align-items-center">
+          <span class="fw-semibold flex-shrink-0">
+            <%= currencyOption.symbol %>
           </span>
 
-          <small class="<%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'text-white' : 'text-muted' %>">
-            <%= currencyOption.code %>
-          </small>
-        </button>
-      </form>
+          <span class="ms-2">
+            <%= currencyOption.name %>
+          </span>
+        </span>
+
+        <small class="flex-shrink-0 <%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'text-white' : 'text-muted' %>">
+          <%= currencyOption.code %>
+        </small>
+      </button>
+    </form>
     <% }) %>
   </div>
 </div>
