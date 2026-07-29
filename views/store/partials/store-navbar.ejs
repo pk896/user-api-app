@@ -1,0 +1,506 @@
+<!-- views/store/partials/store-navbar.ejs -->
+<%
+  /*
+   * Shared Kasyora store navbar.
+   *
+   * This partial renders only the purple navbar section.
+   * It does not render:
+   *
+   * - the desktop topbar;
+   * - product search controls;
+   * - the page header;
+   * - currency warnings;
+   * - product sections;
+   * - cart or checkout logic.
+   */
+
+  const STORE_NAVBAR_PREFIX = String(
+    typeof navbarIdPrefix !== 'undefined'
+      ? navbarIdPrefix
+      : 'store'
+  )
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '') || 'store';
+
+  const STORE_NAVBAR_ACTIVE_PAGE = String(
+    typeof navbarActivePage !== 'undefined'
+      ? navbarActivePage
+      : ''
+  )
+    .trim()
+    .toLowerCase();
+
+  const STORE_NAVBAR_DEPARTMENT = String(
+    typeof navbarDepartment !== 'undefined'
+      ? navbarDepartment
+      : (
+          typeof ACTIVE_DEPARTMENT !== 'undefined'
+            ? ACTIVE_DEPARTMENT
+            : 'internal'
+        )
+  )
+    .trim()
+    .toLowerCase() === 'cj'
+      ? 'cj'
+      : 'internal';
+
+  const STORE_NAVBAR_IS_CJ =
+    typeof navbarIsCjDepartment !== 'undefined'
+      ? navbarIsCjDepartment === true
+      : STORE_NAVBAR_DEPARTMENT === 'cj';
+
+  const STORE_NAVBAR_HOME_URL = String(
+    typeof navbarHomeUrl !== 'undefined'
+      ? navbarHomeUrl
+      : (
+          typeof ACTIVE_HOME_URL !== 'undefined'
+            ? ACTIVE_HOME_URL
+            : '/store'
+        )
+  );
+
+  const STORE_NAVBAR_SHOP_URL = String(
+    typeof navbarShopUrl !== 'undefined'
+      ? navbarShopUrl
+      : (
+          typeof ACTIVE_SHOP_URL !== 'undefined'
+            ? ACTIVE_SHOP_URL
+            : '/store/shop'
+        )
+  );
+
+  const STORE_NAVBAR_BESTSELLER_URL = String(
+    typeof navbarBestsellerUrl !== 'undefined'
+      ? navbarBestsellerUrl
+      : (
+          typeof ACTIVE_BESTSELLER_URL !== 'undefined'
+            ? ACTIVE_BESTSELLER_URL
+            : '/store/bestseller'
+        )
+  );
+
+  const STORE_NAVBAR_CART_URL = String(
+    typeof navbarCartUrl !== 'undefined'
+      ? navbarCartUrl
+      : (
+          typeof ACTIVE_CART_URL !== 'undefined'
+            ? ACTIVE_CART_URL
+            : '/store/cart'
+        )
+  );
+
+  const STORE_NAVBAR_CHECKOUT_URL = String(
+    typeof navbarCheckoutUrl !== 'undefined'
+      ? navbarCheckoutUrl
+      : (
+          typeof ACTIVE_CHECKOUT_URL !== 'undefined'
+            ? ACTIVE_CHECKOUT_URL
+            : '/payment/checkout'
+        )
+  );
+
+  const STORE_NAVBAR_CURRENCY_RETURN_TO = String(
+    typeof navbarCurrencyReturnTo !== 'undefined'
+      ? navbarCurrencyReturnTo
+      : STORE_NAVBAR_HOME_URL
+  );
+
+  const STORE_NAVBAR_INTERNAL_RETURN_TO = String(
+    typeof navbarInternalReturnTo !== 'undefined'
+      ? navbarInternalReturnTo
+      : '/store?department=internal'
+  );
+
+  const STORE_NAVBAR_CJ_RETURN_TO = String(
+    typeof navbarCjReturnTo !== 'undefined'
+      ? navbarCjReturnTo
+      : '/store?department=cj'
+  );
+
+  const STORE_NAVBAR_CATEGORY_LINK_CLASS = String(
+    typeof navbarCategoryLinkClass !== 'undefined'
+      ? navbarCategoryLinkClass
+      : 'store-category-link'
+  )
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '') || 'store-category-link';
+
+  const STORE_NAVBAR_CATEGORY_HREF = String(
+    typeof navbarCategoryHref !== 'undefined'
+        ? navbarCategoryHref
+        : '#'
+    );
+
+    const STORE_NAVBAR_CURRENT_PAGE_LABEL = String(
+    typeof navbarCurrentPageLabel !== 'undefined'
+        ? navbarCurrentPageLabel
+        : ''
+    ).trim();
+
+    const STORE_NAVBAR_CURRENT_PAGE_URL = String(
+    typeof navbarCurrentPageUrl !== 'undefined'
+        ? navbarCurrentPageUrl
+        : '#'
+    ).trim() || '#';
+
+    const STORE_NAVBAR_SHOW_CURRENT_PAGE =
+    STORE_NAVBAR_CURRENT_PAGE_LABEL.length > 0;
+
+    const STORE_NAVBAR_SHOW_CATEGORIES =
+    typeof navbarShowCategories !== 'undefined'
+        ? navbarShowCategories !== false
+        : true;
+
+  const STORE_NAVBAR_SHOW_DEPARTMENT =
+    typeof navbarShowDepartmentSwitch !== 'undefined'
+      ? navbarShowDepartmentSwitch !== false
+      : true;
+
+  const STORE_NAVBAR_CATEGORIES = Array.isArray(
+    typeof CATEGORIES !== 'undefined'
+      ? CATEGORIES
+      : null
+  )
+    ? CATEGORIES
+    : [];
+
+  const STORE_NAVBAR_CALL_HREF = String(
+    typeof navbarCallHref !== 'undefined'
+      ? navbarCallHref
+      : 'tel:+2634567890'
+  );
+
+  const STORE_NAVBAR_CALL_TEXT = String(
+    typeof navbarCallText !== 'undefined'
+      ? navbarCallText
+      : '+263 456 7890'
+  );
+
+  const STORE_NAVBAR_COLLAPSE_ID =
+    STORE_NAVBAR_PREFIX + 'NavbarCollapse';
+
+  const STORE_NAVBAR_DESKTOP_CATEGORIES_ID =
+    STORE_NAVBAR_PREFIX + 'AllCategories';
+
+  const STORE_NAVBAR_DEPARTMENT_ID =
+    STORE_NAVBAR_PREFIX + 'DepartmentDropdown';
+
+  const STORE_NAVBAR_PAGES_ID =
+    STORE_NAVBAR_PREFIX + 'PagesDropdown';
+
+  const STORE_NAVBAR_MOBILE_CATEGORIES_ID =
+    STORE_NAVBAR_PREFIX + 'MobileCategoriesDropdown';
+
+  function storeNavbarActiveClass(pageName) {
+    return STORE_NAVBAR_ACTIVE_PAGE === pageName
+      ? 'active'
+      : '';
+  }
+
+  function storeNavbarCategoryHref(categoryValue) {
+    if (STORE_NAVBAR_CATEGORY_HREF === '#') {
+        return '#';
+    }
+
+    const category = String(
+        categoryValue || ''
+    ).trim();
+
+    if (!category) {
+        return STORE_NAVBAR_CATEGORY_HREF;
+    }
+
+    /*
+    * Keep the anchor after the query string.
+    *
+    * Correct:
+    * /store/shop?department=internal&category=Phones#shopProductsSection
+    *
+    * Incorrect:
+    * /store/shop?department=internal#shopProductsSection&category=Phones
+    */
+    const hashPosition =
+        STORE_NAVBAR_CATEGORY_HREF.indexOf('#');
+
+    const baseUrl =
+        hashPosition >= 0
+        ? STORE_NAVBAR_CATEGORY_HREF.slice(
+            0,
+            hashPosition
+            )
+        : STORE_NAVBAR_CATEGORY_HREF;
+
+    const hash =
+        hashPosition >= 0
+        ? STORE_NAVBAR_CATEGORY_HREF.slice(
+            hashPosition
+            )
+        : '';
+
+    const separator =
+        baseUrl.includes('?')
+        ? '&'
+        : '?';
+
+    return (
+        baseUrl +
+        separator +
+        'category=' +
+        encodeURIComponent(category) +
+        hash
+    );
+  } 
+%>
+
+<!-- Shared Store Navbar Start -->
+<div class="container-fluid nav-bar p-0">
+  <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
+    <% if (STORE_NAVBAR_SHOW_CATEGORIES) { %>
+    <!-- Desktop categories -->
+    <div class="col-lg-3 d-none d-lg-block">
+      <nav class="navbar navbar-light position-relative" style="width: 250px;">
+        <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#<%= STORE_NAVBAR_DESKTOP_CATEGORIES_ID %>" aria-controls="<%= STORE_NAVBAR_DESKTOP_CATEGORIES_ID %>" aria-expanded="false" aria-label="Toggle product categories">
+          <h4 class="m-0">
+            <i class="fa fa-bars me-2"></i>
+            All Categories
+          </h4>
+        </button>
+
+        <div class="collapse navbar-collapse rounded-bottom" id="<%= STORE_NAVBAR_DESKTOP_CATEGORIES_ID %>">
+          <div class="navbar-nav ms-auto py-0">
+            <ul class="list-unstyled categories-bars mb-0">
+              <li>
+                <div class="categories-bars-item">
+                  <a href="<%= storeNavbarCategoryHref('') %>" class="<%= STORE_NAVBAR_CATEGORY_LINK_CLASS %>" data-category="">
+                    All Categories
+                  </a>
+
+                  <span></span>
+                </div>
+              </li>
+
+              <% STORE_NAVBAR_CATEGORIES.forEach(function(category) { %>
+              <li>
+                <div class="categories-bars-item">
+                  <a href="<%= storeNavbarCategoryHref(category.value) %>" class="<%= STORE_NAVBAR_CATEGORY_LINK_CLASS %>" data-category="<%= category.value %>">
+                    <%= category.label %>
+                  </a>
+
+                  <span></span>
+                </div>
+              </li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+      </nav>
+    </div>
+    <% } %>
+
+    <div class="<%= STORE_NAVBAR_SHOW_CATEGORIES ? 'col-12 col-lg-9' : 'col-12' %>">
+      <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-0 flex-wrap" aria-label="Store navigation">
+        <!-- Mobile logo -->
+        <a href="<%= STORE_NAVBAR_HOME_URL %>" class="navbar-brand d-flex d-lg-none align-items-center m-0 py-2 flex-grow-1 overflow-hidden">
+          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
+
+          <span class="h5 text-white m-0 text-truncate fw-bold">
+            Kasyora.com
+          </span>
+        </a>
+
+        <!-- Mobile toggle -->
+        <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#<%= STORE_NAVBAR_COLLAPSE_ID %>" aria-controls="<%= STORE_NAVBAR_COLLAPSE_ID %>" aria-expanded="false" aria-label="Toggle store navigation">
+          <span class="fas fa-bars text-white" aria-hidden="true"></span>
+        </button>
+
+        <div class="collapse navbar-collapse w-100" id="<%= STORE_NAVBAR_COLLAPSE_ID %>">
+          <div class="navbar-nav ms-lg-auto py-3 py-lg-0">
+            <a href="<%= STORE_NAVBAR_HOME_URL %>" class="nav-item nav-link px-3 <%= storeNavbarActiveClass('home') %>">
+              <i class="fas fa-home d-lg-none me-2" aria-hidden="true"></i>
+
+              Shopping home
+            </a>
+
+            <a href="<%= STORE_NAVBAR_SHOP_URL %>" class="nav-item nav-link px-3 <%= storeNavbarActiveClass('shop') %>">
+              <i class="fas fa-shopping-bag d-lg-none me-2" aria-hidden="true"></i>
+
+              Shop
+            </a>
+
+            <% if (STORE_NAVBAR_SHOW_CURRENT_PAGE) { %>
+            <a href="<%= STORE_NAVBAR_CURRENT_PAGE_URL %>" class="nav-item nav-link px-3 <%= storeNavbarActiveClass('current') %>">
+              <i class="fas fa-box-open d-lg-none me-2" aria-hidden="true"></i>
+
+              <%= STORE_NAVBAR_CURRENT_PAGE_LABEL %>
+            </a>
+            <% } %>
+
+            <% if (STORE_NAVBAR_SHOW_DEPARTMENT) { %>
+            <!-- Store department -->
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle px-3" id="<%= STORE_NAVBAR_DEPARTMENT_ID %>" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-store me-2 me-lg-1" aria-hidden="true"></i>
+
+                <%= STORE_NAVBAR_IS_CJ
+                    ? 'CJ Store'
+                    : 'Kasyora Store' %>
+              </a>
+
+              <div class="dropdown-menu border-0 rounded shadow-sm m-0 p-2" aria-labelledby="<%= STORE_NAVBAR_DEPARTMENT_ID %>">
+                <div class="small fw-bold text-primary px-2 pt-1 pb-2">
+                  Choose store department
+                </div>
+
+                <form action="/store/department/internal" method="POST" class="m-0 mb-2">
+                  <input type="hidden" name="returnTo" value="<%= STORE_NAVBAR_INTERNAL_RETURN_TO %>">
+
+                  <button type="submit" class="dropdown-item rounded py-2 <%= !STORE_NAVBAR_IS_CJ ? 'active bg-primary text-white' : '' %>">
+                    <i class="fas fa-warehouse me-2" aria-hidden="true"></i>
+
+                    Kasyora In Store
+                  </button>
+                </form>
+
+                <form action="/store/department/cj" method="POST" class="m-0">
+                  <input type="hidden" name="returnTo" value="<%= STORE_NAVBAR_CJ_RETURN_TO %>">
+
+                  <button type="submit" class="dropdown-item rounded py-2 <%= STORE_NAVBAR_IS_CJ ? 'active bg-primary text-white' : '' %>">
+                    <i class="fas fa-globe me-2" aria-hidden="true"></i>
+
+                    Kasyora CJ Store
+                  </button>
+                </form>
+              </div>
+            </div>
+            <% } %>
+
+            <a href="/products/sales" class="nav-item nav-link px-3 <%= storeNavbarActiveClass('sales') %>">
+              <i class="fas fa-bolt d-lg-none me-2" aria-hidden="true"></i>
+
+              Fast liner
+            </a>
+
+            <!-- Pages -->
+            <div class="nav-item dropdown">
+              <a href="#" class="nav-link dropdown-toggle px-3 <%= ['bestseller', 'cart', 'checkout', 'account', 'tracking'].includes(STORE_NAVBAR_ACTIVE_PAGE) ? 'active' : '' %>" id="<%= STORE_NAVBAR_PAGES_ID %>" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-layer-group d-lg-none me-2" aria-hidden="true"></i>
+
+                Pages
+              </a>
+
+              <div class="dropdown-menu border-0 rounded shadow-sm m-0 p-2" aria-labelledby="<%= STORE_NAVBAR_PAGES_ID %>">
+                <a href="<%= STORE_NAVBAR_BESTSELLER_URL %>" class="dropdown-item rounded py-2 <%= storeNavbarActiveClass('bestseller') %>">
+                  <i class="fas fa-star me-2" aria-hidden="true"></i>
+
+                  Bestseller
+                </a>
+
+                <a href="<%= STORE_NAVBAR_CART_URL %>" class="dropdown-item rounded py-2 <%= storeNavbarActiveClass('cart') %>">
+                  <i class="fas fa-shopping-cart me-2" aria-hidden="true"></i>
+
+                  <%= STORE_NAVBAR_IS_CJ
+                      ? 'CJ Cart'
+                      : 'Cart' %>
+                </a>
+
+                <a href="<%= STORE_NAVBAR_CHECKOUT_URL %>" class="dropdown-item rounded py-2 <%= storeNavbarActiveClass('checkout') %>">
+                  <i class="fas fa-credit-card me-2" aria-hidden="true"></i>
+
+                  <%= STORE_NAVBAR_IS_CJ
+                      ? 'CJ Checkout'
+                      : 'Checkout' %>
+                </a>
+
+                <a href="/business/login" class="dropdown-item rounded py-2 <%= storeNavbarActiveClass('account') %>">
+                  <i class="fas fa-user me-2" aria-hidden="true"></i>
+
+                  Accounts
+                </a>
+
+                <a href="/store/order-tracking" class="dropdown-item rounded py-2 <%= storeNavbarActiveClass('tracking') %>">
+                  <i class="fas fa-truck me-2" aria-hidden="true"></i>
+
+                  Order status
+                </a>
+              </div>
+            </div>
+
+            <a href="/store/contact" class="nav-item nav-link px-3 me-lg-2 <%= storeNavbarActiveClass('contact') %>">
+              <i class="fas fa-envelope d-lg-none me-2" aria-hidden="true"></i>
+
+              Contact
+            </a>
+
+            <!-- Mobile currency -->
+            <div class="d-block d-lg-none px-3 py-3 border-top border-white border-opacity-25">
+              <div class="small fw-bold text-white mb-2">
+                <i class="fas fa-coins me-2" aria-hidden="true"></i>
+
+                Display currency
+              </div>
+
+              <%- include('currency-selector', {
+                currencyReturnTo: STORE_NAVBAR_CURRENCY_RETURN_TO,
+                currencySelectorMobile: true
+              }) %>
+            </div>
+
+            <% if (STORE_NAVBAR_SHOW_CATEGORIES) { %>
+            <!-- Mobile categories -->
+            <div class="nav-item dropdown d-block d-lg-none border-top border-white border-opacity-25">
+              <a href="#" class="nav-link dropdown-toggle px-3 py-3" id="<%= STORE_NAVBAR_MOBILE_CATEGORIES_ID %>" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-list me-2" aria-hidden="true"></i>
+
+                Product categories
+              </a>
+
+              <div class="dropdown-menu border-0 rounded shadow-sm m-0 p-2" aria-labelledby="<%= STORE_NAVBAR_MOBILE_CATEGORIES_ID %>">
+                <ul class="list-unstyled categories-bars mb-0">
+                  <li>
+                    <div class="categories-bars-item rounded">
+                      <a href="<%= storeNavbarCategoryHref('') %>" class="<%= STORE_NAVBAR_CATEGORY_LINK_CLASS %> py-2" data-category="">
+                        All Categories
+                      </a>
+
+                      <span></span>
+                    </div>
+                  </li>
+
+                  <% STORE_NAVBAR_CATEGORIES.forEach(function(category) { %>
+                  <li>
+                    <div class="categories-bars-item rounded">
+                      <a href="<%= storeNavbarCategoryHref(category.value) %>" class="<%= STORE_NAVBAR_CATEGORY_LINK_CLASS %> py-2" data-category="<%= category.value %>">
+                        <%= category.label %>
+                      </a>
+
+                      <span></span>
+                    </div>
+                  </li>
+                  <% }) %>
+                </ul>
+              </div>
+            </div>
+            <% } %>
+
+            <!-- Mobile call -->
+            <div class="d-block d-lg-none px-3 pt-3 border-top border-white border-opacity-25">
+              <a href="<%= STORE_NAVBAR_CALL_HREF %>" class="btn btn-secondary rounded-pill py-2 px-4 w-100">
+                <i class="fas fa-mobile-alt me-2" aria-hidden="true"></i>
+
+                <%= STORE_NAVBAR_CALL_TEXT %>
+              </a>
+            </div>
+          </div>
+
+          <!-- Desktop call -->
+          <a href="<%= STORE_NAVBAR_CALL_HREF %>" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-lg-0 d-none d-lg-inline-flex align-items-center flex-shrink-0">
+            <i class="fas fa-mobile-alt me-2" aria-hidden="true"></i>
+
+            <%= STORE_NAVBAR_CALL_TEXT %>
+          </a>
+        </div>
+      </nav>
+    </div>
+  </div>
+</div>
+<!-- Shared Store Navbar End -->

@@ -111,10 +111,20 @@
     : '/payment/checkout';
 
   /*
-   * Currency selection must return to the same department.
-   */
+  * Currency selection must return to the same department.
+  */
   const INDEX_CURRENCY_RETURN_TO =
     ACTIVE_HOME_URL;
+
+  /*
+  * Department switching from the homepage must return
+  * to the homepage of the selected storefront.
+  */
+  const INTERNAL_INDEX_RETURN_TO =
+    '/store?department=internal';
+
+  const CJ_INDEX_RETURN_TO =
+    '/store?department=cj';
 
   const ACTIVE_CART = (
     typeof activeStoreCart !== 'undefined' &&
@@ -269,12 +279,7 @@
     </div>
     <div class="col-md-4 col-lg-3 text-center text-lg-end">
       <div class="d-inline-flex align-items-center header-action-icons">
-        <a
-          href="#"
-          class="text-muted d-flex align-items-center justify-content-center me-3"
-          aria-label="Open wishlist"
-          title="Open wishlist"
-        >
+        <a href="#" class="text-muted d-flex align-items-center justify-content-center me-3" aria-label="Open wishlist" title="Open wishlist">
           <span class="rounded-circle btn-md-square border">
             <i class="fas fa-heart"></i>
           </span>
@@ -327,153 +332,33 @@
 <% } %>
 
 <!-- Navbar & Hero Start -->
-<div class="container-fluid nav-bar p-0">
-  <div class="row gx-0 bg-primary px-3 px-lg-5 align-items-center">
-    <div class="col-lg-3 d-none d-lg-block">
-      <nav class="navbar navbar-light position-relative" style="width: 250px;">
-        <button class="navbar-toggler border-0 fs-4 w-100 px-0 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#allCat">
-          <h4 class="m-0"><i class="fa fa-bars me-2"></i>All Categories</h4>
-        </button>
-        <div class="collapse navbar-collapse rounded-bottom" id="allCat">
-          <div class="navbar-nav ms-auto py-0">
-            <ul class="list-unstyled categories-bars">
-              <li>
-                <div class="categories-bars-item">
-                  <a href="#" class="store-category-link" data-category="">All Categories</a>
-                  <span></span>
-                </div>
-              </li>
-              <% (CATEGORIES || []).forEach(function(category) { %>
-              <li>
-                <div class="categories-bars-item">
-                  <a href="#" class="store-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                  <span></span>
-                </div>
-              </li>
-              <% }) %>
-            </ul>
-          </div>
-        </div>
-      </nav>
-    </div>
-    <div class="col-12 col-lg-9">
-      <nav class="navbar navbar-expand-lg navbar-light bg-primary w-100 px-3 px-lg-0 justify-content-between flex-nowrap">
-        <a href="<%= ACTIVE_HOME_URL %>" class="navbar-brand d-flex d-lg-none align-items-center m-0 me-2 flex-grow-1 overflow-hidden">
-          <img src="/images/branding/logo-unincorporate.png" alt="Kasyora.com" class="img-fluid me-2 flex-shrink-0" style="max-height: 38px; width: auto;">
-          <span class="h5 text-white m-0 text-truncate fw-bold">
-            Kasyora.com
-          </span>
-        </a>
-        <button class="navbar-toggler ms-2 flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarCollapse">
-          <div class="navbar-nav ms-auto py-0">
-            <a href="<%= ACTIVE_HOME_URL %>" class="nav-item nav-link active">
-              Shopping home
-            </a>
+<%- include('partials/store-navbar', {
+  navbarIdPrefix: 'home',
+  navbarActivePage: 'home',
 
-            <a href="<%= ACTIVE_SHOP_URL %>" class="nav-item nav-link">
-              Shop
-            </a>
+  navbarDepartment: ACTIVE_DEPARTMENT,
+  navbarIsCjDepartment: IS_CJ_DEPARTMENT,
 
-            <div class="nav-item dropdown">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="fas fa-store me-1"></i>
+  navbarHomeUrl: ACTIVE_HOME_URL,
+  navbarShopUrl: ACTIVE_SHOP_URL,
+  navbarBestsellerUrl: ACTIVE_BESTSELLER_URL,
+  navbarCartUrl: ACTIVE_CART_URL,
+  navbarCheckoutUrl: ACTIVE_CHECKOUT_URL,
 
-                <%= IS_CJ_DEPARTMENT
-                                    ? 'CJ Store'
-                                    : 'Kasyora Store' %>
-              </a>
+  navbarCurrencyReturnTo: INDEX_CURRENCY_RETURN_TO,
 
-              <div class="dropdown-menu m-0 p-2">
-                <form action="/store/department/internal" method="POST" class="m-0 mb-2">
-                  <input type="hidden" name="returnTo" value="/store?department=internal">
+  navbarInternalReturnTo: INTERNAL_INDEX_RETURN_TO,
+  navbarCjReturnTo: CJ_INDEX_RETURN_TO,
 
-                  <button type="submit" class="dropdown-item rounded <%= !IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
-                    <i class="fas fa-warehouse me-2"></i>
-                    Kasyora In Store
-                  </button>
-                </form>
+  navbarCategoryLinkClass: 'store-category-link',
+  navbarCategoryHref: '#',
 
-                <form action="/store/department/cj" method="POST" class="m-0">
-                  <input type="hidden" name="returnTo" value="/store?department=cj">
+  navbarShowCategories: true,
+  navbarShowDepartmentSwitch: true,
 
-                  <button type="submit" class="dropdown-item rounded <%= IS_CJ_DEPARTMENT ? 'active bg-primary text-white' : '' %>">
-                    <i class="fas fa-globe me-2"></i>
-                    Kasyora CJ Store
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <a href="/products/sales" class="nav-item nav-link">Fast liner</a>
-            <div class="nav-item dropdown">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
-              <div class="dropdown-menu m-0">
-                <a href="<%= ACTIVE_BESTSELLER_URL %>" class="dropdown-item">
-                  Bestseller
-                </a>
-
-                <a href="<%= ACTIVE_CART_URL %>" class="dropdown-item">
-                  <%= IS_CJ_DEPARTMENT ? 'CJ Cart' : 'Cart' %>
-                </a>
-
-                <a href="<%= ACTIVE_CHECKOUT_URL %>" class="dropdown-item">
-                  <%= IS_CJ_DEPARTMENT ? 'CJ Checkout' : 'Checkout' %>
-                </a>
-
-                <a href="/business/login" class="dropdown-item">
-                  Accounts
-                </a>
-
-                <a href="/store/order-tracking" class="dropdown-item">
-                  Order status
-                </a>
-              </div>
-            </div>
-            <a href="/store/contact" class="nav-item nav-link me-2">Contact</a>
-
-            <div class="nav-item d-block d-lg-none px-3 py-2 mb-2">
-              <div class="small fw-bold text-white mb-1">
-                Display currency
-              </div>
-
-              <div class="bg-white rounded px-2 py-1 d-inline-flex">
-                <%- include('partials/currency-selector', {
-                  currencyReturnTo: INDEX_CURRENCY_RETURN_TO
-                }) %>
-              </div>
-            </div>
-
-            <div class="nav-item dropdown d-block d-lg-none mb-3">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">All Category</a>
-              <div class="dropdown-menu m-0">
-                <ul class="list-unstyled categories-bars">
-                  <li>
-                    <div class="categories-bars-item">
-                      <a href="#" class="store-category-link" data-category="">All Categories</a>
-                      <span></span>
-                    </div>
-                  </li>
-                  <% (CATEGORIES || []).forEach(function(category) { %>
-                  <li>
-                    <div class="categories-bars-item">
-                      <a href="#" class="store-category-link" data-category="<%= category.value %>"><%= category.label %></a>
-                      <span></span>
-                    </div>
-                  </li>
-                  <% }) %>
-                </ul>
-              </div>
-            </div>
-          </div>
-          <a href="" class="btn btn-secondary rounded-pill py-2 px-4 px-lg-3 mb-3 mb-md-3 mb-lg-0"><i class="fa fa-mobile-alt me-2"></i> +27 632 204 400</a>
-        </div>
-      </nav>
-    </div>
-  </div>
-</div>
+  navbarCallHref: 'tel:+27632204400',
+  navbarCallText: '+27 632 204 400'
+}) %>
 <!-- Navbar & Hero End -->
 
 <!-- Carousel Start -->
@@ -489,12 +374,7 @@
           </div>
           <div class="col-xl-6 carousel-content p-4">
             <% if (slide.subtitle) { %>
-            <h4
-              class="text-uppercase fw-bold mb-4 wow fadeInRight"
-              data-wow-delay="0.1s"
-              style="letter-spacing: 3px;"
-              title="<%= slide.subtitle || '' %>"
-            >
+            <h4 class="text-uppercase fw-bold mb-4 wow fadeInRight" data-wow-delay="0.1s" style="letter-spacing: 3px;" title="<%= slide.subtitle || '' %>">
               <%= truncateHomepageText(
                 slide.subtitle,
                 30
@@ -502,11 +382,7 @@
             </h4>
             <% } %>
 
-            <h1
-              class="display-3 text-capitalize mb-4 wow fadeInRight"
-              data-wow-delay="0.3s"
-              title="<%= slide.title || '' %>"
-            >
+            <h1 class="display-3 text-capitalize mb-4 wow fadeInRight" data-wow-delay="0.3s" title="<%= slide.title || '' %>">
               <%= truncateHomepageText(
                 slide.title,
                 45
@@ -514,11 +390,7 @@
             </h1>
 
             <% if (slide.description) { %>
-            <p
-              class="text-dark wow fadeInRight"
-              data-wow-delay="0.5s"
-              title="<%= slide.description || '' %>"
-            >
+            <p class="text-dark wow fadeInRight" data-wow-delay="0.5s" title="<%= slide.description || '' %>">
               <%= truncateHomepageText(
                 slide.description,
                 120
@@ -526,13 +398,7 @@
             </p>
             <% } %>
 
-            <a
-              class="btn btn-primary rounded-pill py-3 px-5 wow fadeInRight js-hero-shop-button"
-              data-wow-delay="0.7s"
-              data-original-text="<%= slide.buttonText || 'Shop Now' %>"
-              href="<%= slide.buttonUrl %>"
-              title="<%= slide.buttonText || 'Shop Now' %>"
-            >
+            <a class="btn btn-primary rounded-pill py-3 px-5 wow fadeInRight js-hero-shop-button" data-wow-delay="0.7s" data-original-text="<%= slide.buttonText || 'Shop Now' %>" href="<%= slide.buttonUrl %>" title="<%= slide.buttonText || 'Shop Now' %>">
               <span class="js-hero-shop-button-text">
                 <%= truncateHomepageText(
                   slide.buttonText || 'Shop Now',
@@ -573,20 +439,14 @@
         <img src="<%= sideBannerProduct.image %>" class="img-fluid w-100 h-100" style="object-fit: contain;" alt="<%= sideBannerProduct.name %>">
 
         <div class="carousel-banner-offer">
-          <p
-            class="bg-primary text-white rounded fs-5 py-2 px-4 mb-0 me-3"
-            title="<%= sideBannerProduct.badgeText || 'Special Offer' %>"
-          >
+          <p class="bg-primary text-white rounded fs-5 py-2 px-4 mb-0 me-3" title="<%= sideBannerProduct.badgeText || 'Special Offer' %>">
             <%= truncateHomepageText(
               sideBannerProduct.badgeText || 'Special Offer',
               20
             ) %>
           </p>
 
-          <p
-            class="store-featured-offer-text fs-5 fw-bold mb-0"
-            title="<%= sideBannerProduct.offerText || 'Featured Product' %>"
-          >
+          <p class="store-featured-offer-text fs-5 fw-bold mb-0" title="<%= sideBannerProduct.offerText || 'Featured Product' %>">
             <%= truncateHomepageText(
               sideBannerProduct.offerText || 'Featured Product',
               25
@@ -596,22 +456,14 @@
 
         <div class="carousel-banner">
           <div class="carousel-banner-content text-center p-4">
-            <a
-              href="<%= sideBannerProduct.url %>"
-              class="d-block mb-2"
-              title="<%= sideBannerProduct.category || 'Product' %>"
-            >
+            <a href="<%= sideBannerProduct.url %>" class="d-block mb-2" title="<%= sideBannerProduct.category || 'Product' %>">
               <%= truncateHomepageText(
                 sideBannerProduct.category || 'Product',
                 20
               ) %>
             </a>
 
-            <a
-              href="<%= sideBannerProduct.url %>"
-              class="d-block text-white fs-3"
-              title="<%= sideBannerProduct.name || 'Product' %>"
-            >
+            <a href="<%= sideBannerProduct.url %>" class="d-block text-white fs-3" title="<%= sideBannerProduct.name || 'Product' %>">
               <%= truncateHomepageText(
                 sideBannerProduct.name || 'Product',
                 15
@@ -733,10 +585,7 @@
               ) %>
             </p>
 
-            <h3
-              class="text-primary"
-              title="<%= promoOfferLeft.title || 'Product' %>"
-            >
+            <h3 class="text-primary" title="<%= promoOfferLeft.title || 'Product' %>">
               <%= truncateHomepageText(
                 promoOfferLeft.title || 'Product',
                 20
@@ -757,10 +606,7 @@
                   .split(' ');
             %>
 
-            <h1
-              class="display-3 text-secondary mb-0"
-              title="<%= promoOfferLeft.discountText || '' %>"
-            >
+            <h1 class="display-3 text-secondary mb-0" title="<%= promoOfferLeft.discountText || '' %>">
               <%= leftDiscountParts[0] || '' %>
 
               <span class="text-primary fw-normal">
@@ -785,10 +631,7 @@
               ) %>
             </p>
 
-            <h3
-              class="text-primary"
-              title="<%= promoOfferRight.title || 'Product' %>"
-            >
+            <h3 class="text-primary" title="<%= promoOfferRight.title || 'Product' %>">
               <%= truncateHomepageText(
                 promoOfferRight.title || 'Product',
                 20
@@ -809,10 +652,7 @@
                   .split(' ');
             %>
 
-            <h1
-              class="display-3 text-secondary mb-0"
-              title="<%= promoOfferRight.discountText || '' %>"
-            >
+            <h1 class="display-3 text-secondary mb-0" title="<%= promoOfferRight.discountText || '' %>">
               <%= rightDiscountParts[0] || '' %>
 
               <span class="text-primary fw-normal">
@@ -904,21 +744,14 @@
 
                   <div class="col-7">
                     <div class="products-mini-content p-3">
-                      <span
-                        class="d-block mb-2"
-                        style="color: #f28b00;"
-                        title="<%= product.category || 'Product' %>"
-                      >
+                      <span class="d-block mb-2" style="color: #f28b00;" title="<%= product.category || 'Product' %>">
                         <%= truncateHomepageText(
                           product.category || 'Product',
                           25
                         ) %>
                       </span>
 
-                      <span
-                        class="d-block h4"
-                        title="<%= product.name || 'Product' %>"
-                      >
+                      <span class="d-block h4" title="<%= product.name || 'Product' %>">
                         <%= truncateHomepageText(
                           product.name || 'Product',
                           15
@@ -984,12 +817,7 @@
                   <% } %>
 
                   <div class="d-flex">
-                    <a
-                      href="#"
-                      class="text-primary d-flex align-items-center justify-content-center me-0"
-                      aria-label="Add to wishlist"
-                      title="Add to wishlist"
-                    >
+                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0" aria-label="Add to wishlist" title="Add to wishlist">
                       <span class="rounded-circle btn-sm-square border">
                         <i class="fas fa-heart"></i>
                       </span>
@@ -1028,21 +856,14 @@
 
                   <div class="col-7">
                     <div class="products-mini-content p-3">
-                      <span
-                        class="d-block mb-2"
-                        style="color: #f28b00;"
-                        title="<%= product.category || 'Product' %>"
-                      >
+                      <span class="d-block mb-2" style="color: #f28b00;" title="<%= product.category || 'Product' %>">
                         <%= truncateHomepageText(
                           product.category || 'Product',
                           25
                         ) %>
                       </span>
 
-                      <span
-                        class="d-block h4"
-                        title="<%= product.name || 'Product' %>"
-                      >
+                      <span class="d-block h4" title="<%= product.name || 'Product' %>">
                         <%= truncateHomepageText(
                           product.name || 'Product',
                           15
@@ -1108,12 +929,7 @@
                   <% } %>
 
                   <div class="d-flex">
-                    <a
-                      href="#"
-                      class="text-primary d-flex align-items-center justify-content-center me-0"
-                      aria-label="Add to wishlist"
-                      title="Add to wishlist"
-                    >
+                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0" aria-label="Add to wishlist" title="Add to wishlist">
                       <span class="rounded-circle btn-sm-square border">
                         <i class="fas fa-heart"></i>
                       </span>
@@ -1152,21 +968,14 @@
 
                   <div class="col-7">
                     <div class="products-mini-content p-3">
-                      <span
-                        class="d-block mb-2"
-                        style="color: #f28b00;"
-                        title="<%= product.category || 'Product' %>"
-                      >
+                      <span class="d-block mb-2" style="color: #f28b00;" title="<%= product.category || 'Product' %>">
                         <%= truncateHomepageText(
                           product.category || 'Product',
                           25
                         ) %>
                       </span>
 
-                      <span
-                        class="d-block h4"
-                        title="<%= product.name || 'Product' %>"
-                      >
+                      <span class="d-block h4" title="<%= product.name || 'Product' %>">
                         <%= truncateHomepageText(
                           product.name || 'Product',
                           15
@@ -1232,12 +1041,7 @@
                   <% } %>
 
                   <div class="d-flex">
-                    <a
-                      href="#"
-                      class="text-primary d-flex align-items-center justify-content-center me-0"
-                      aria-label="Add to wishlist"
-                      title="Add to wishlist"
-                    >
+                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0" aria-label="Add to wishlist" title="Add to wishlist">
                       <span class="rounded-circle btn-sm-square border">
                         <i class="fas fa-heart"></i>
                       </span>
@@ -1276,21 +1080,14 @@
 
                   <div class="col-7">
                     <div class="products-mini-content p-3">
-                      <span
-                        class="d-block mb-2"
-                        style="color: #f28b00;"
-                        title="<%= product.category || 'Product' %>"
-                      >
+                      <span class="d-block mb-2" style="color: #f28b00;" title="<%= product.category || 'Product' %>">
                         <%= truncateHomepageText(
                           product.category || 'Product',
                           25
                         ) %>
                       </span>
 
-                      <span
-                        class="d-block h4"
-                        title="<%= product.name || 'Product' %>"
-                      >
+                      <span class="d-block h4" title="<%= product.name || 'Product' %>">
                         <%= truncateHomepageText(
                           product.name || 'Product',
                           15
@@ -1358,12 +1155,7 @@
                   <% } %>
 
                   <div class="d-flex">
-                    <a
-                      href="#"
-                      class="text-primary d-flex align-items-center justify-content-center me-0"
-                      aria-label="Add to wishlist"
-                      title="Add to wishlist"
-                    >
+                    <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0" aria-label="Add to wishlist" title="Add to wishlist">
                       <span class="rounded-circle btn-sm-square border">
                         <i class="fas fa-heart"></i>
                       </span>
@@ -1389,20 +1181,13 @@
       <div class="col-lg-6 wow fadeInLeft" data-wow-delay="0.1s">
         <a href="<%= midBannerLeft.url %>">
           <div class="bg-primary rounded position-relative">
-            <img
-              src="<%= midBannerLeft.image %>"
-              class="img-fluid w-100 rounded"
-              alt="<%= midBannerLeft.productName %>"
-            >
+            <img src="<%= midBannerLeft.image %>" class="img-fluid w-100 rounded" alt="<%= midBannerLeft.productName %>">
 
             <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center rounded p-4" style="background: rgba(255, 255, 255, 0.5);">
-              <h3
-                class="store-featured-offer-title-text display-5"
-                title="<%= [
+              <h3 class="store-featured-offer-title-text display-5" title="<%= [
                   midBannerLeft.title,
                   midBannerLeft.subtitle
-                ].filter(Boolean).join(' — ') %>"
-              >
+                ].filter(Boolean).join(' — ') %>">
                 <%= truncateHomepageText(
                   midBannerLeft.title,
                   20
@@ -1421,10 +1206,7 @@
               </h3>
 
               <% if (midBannerLeft.priceText) { %>
-              <p
-                class="fs-4 text-muted"
-                title="<%= midBannerLeft.priceText || '' %>"
-              >
+              <p class="fs-4 text-muted" title="<%= midBannerLeft.priceText || '' %>">
                 <%= truncateHomepageText(
                   midBannerLeft.priceText,
                   18
@@ -1432,11 +1214,7 @@
               </p>
               <% } %>
 
-              <a
-                href="<%= midBannerLeft.url %>"
-                class="btn btn-primary rounded-pill align-self-start py-2 px-4"
-                title="<%= midBannerLeft.buttonText || 'Shop Now' %>"
-              >
+              <a href="<%= midBannerLeft.url %>" class="btn btn-primary rounded-pill align-self-start py-2 px-4" title="<%= midBannerLeft.buttonText || 'Shop Now' %>">
                 <%= truncateHomepageText(
                   midBannerLeft.buttonText || 'Shop Now',
                   17
@@ -1452,38 +1230,24 @@
       <div class="col-lg-6 wow fadeInRight" data-wow-delay="0.2s">
         <a href="<%= midBannerRight.url %>">
           <div class="text-center bg-primary rounded position-relative">
-            <img
-              src="<%= midBannerRight.image %>"
-              class="img-fluid w-100"
-              alt="<%= midBannerRight.productName %>"
-            >
+            <img src="<%= midBannerRight.image %>" class="img-fluid w-100" alt="<%= midBannerRight.productName %>">
 
             <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center rounded p-4" style="background: rgba(242, 139, 0, 0.5);">
-              <h2
-                class="display-2 text-secondary"
-                title="<%= midBannerRight.title || '' %>"
-              >
+              <h2 class="display-2 text-secondary" title="<%= midBannerRight.title || '' %>">
                 <%= truncateHomepageText(
                   midBannerRight.title,
                   20
                 ) %>
               </h2>
 
-              <h4
-                class="display-5 text-white mb-4"
-                title="<%= midBannerRight.subtitle || '' %>"
-              >
+              <h4 class="display-5 text-white mb-4" title="<%= midBannerRight.subtitle || '' %>">
                 <%= truncateHomepageText(
                   midBannerRight.subtitle,
                   25
                 ) %>
               </h4>
 
-              <a
-                href="<%= midBannerRight.url %>"
-                class="btn btn-secondary rounded-pill align-self-center py-2 px-4"
-                title="<%= midBannerRight.buttonText || 'Shop Now' %>"
-              >
+              <a href="<%= midBannerRight.url %>" class="btn btn-secondary rounded-pill align-self-center py-2 px-4" title="<%= midBannerRight.buttonText || 'Shop Now' %>">
                 <%= truncateHomepageText(
                   midBannerRight.buttonText || 'Shop Now',
                   17
@@ -1518,22 +1282,14 @@
             </div>
             <div class="col-8">
               <div class="p-3">
-                <a
-                  href="<%= product.url %>"
-                  class="d-block mb-2"
-                  title="<%= product.category || 'Product' %>"
-                >
+                <a href="<%= product.url %>" class="d-block mb-2" title="<%= product.category || 'Product' %>">
                   <%= truncateHomepageText(
                     product.category || 'Product',
                     25
                   ) %>
                 </a>
 
-                <a
-                  href="<%= product.url %>"
-                  class="d-block h4 mb-2"
-                  title="<%= product.name || 'Product' %>"
-                >
+                <a href="<%= product.url %>" class="d-block h4 mb-2" title="<%= product.name || 'Product' %>">
                   <%= truncateHomepageText(
                     product.name || 'Product',
                     15
@@ -1556,20 +1312,12 @@
             </div>
           </div>
           <div class="products-mini-add border-top p-3 d-flex align-items-center justify-content-between gap-3">
-            <a
-              href="<%= product.url %>"
-              class="btn btn-primary border-secondary rounded-pill py-2 px-4 flex-shrink-0"
-            >
+            <a href="<%= product.url %>" class="btn btn-primary border-secondary rounded-pill py-2 px-4 flex-shrink-0">
               <i class="fas fa-eye me-2"></i>
               View Product
             </a>
 
-            <a
-              href="#"
-              class="text-primary d-flex align-items-center justify-content-center flex-shrink-0"
-              aria-label="Add to wishlist"
-              title="Add to wishlist"
-            >
+            <a href="#" class="text-primary d-flex align-items-center justify-content-center flex-shrink-0" aria-label="Add to wishlist" title="Add to wishlist">
               <span class="rounded-circle btn-sm-square border">
                 <i class="fas fa-heart"></i>
               </span>
@@ -1616,21 +1364,14 @@
 
             <div class="col-7">
               <div class="products-mini-content p-3">
-                <span
-                  class="d-block mb-2"
-                  style="color: #f28b00;"
-                  title="<%= product.category || 'Product' %>"
-                >
+                <span class="d-block mb-2" style="color: #f28b00;" title="<%= product.category || 'Product' %>">
                   <%= truncateHomepageText(
                     product.category || 'Product',
                     25
                   ) %>
                 </span>
 
-                <span
-                  class="d-block h4"
-                  title="<%= product.name || 'Product' %>"
-                >
+                <span class="d-block h4" title="<%= product.name || 'Product' %>">
                   <%= truncateHomepageText(
                     product.name || 'Product',
                     15
@@ -1693,12 +1434,7 @@
             </div>
 
             <div class="d-flex">
-              <a
-                href="#"
-                class="text-primary d-flex align-items-center justify-content-center me-0"
-                aria-label="Add to wishlist"
-                title="Add to wishlist"
-              >
+              <a href="#" class="text-primary d-flex align-items-center justify-content-center me-0" aria-label="Add to wishlist" title="Add to wishlist">
                 <span class="rounded-circle btn-sm-square border">
                   <i class="fas fa-heart"></i>
                 </span>
