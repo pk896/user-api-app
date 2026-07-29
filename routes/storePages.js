@@ -1801,7 +1801,7 @@ async function getCjSoldRatedOldProducts(limit = 20) {
 /*
  * Build the five bestselling Internal Kasyora categories.
  *
- * Each returned category contains no more than four
+ * Each returned category contains no more than twenty
  * bestselling in-stock Internal products.
  *
  * This function reads only:
@@ -1811,7 +1811,7 @@ async function getCjSoldRatedOldProducts(limit = 20) {
  *
  * It never reads CjOrder or CjProduct.
  */
-async function getInternalBestsellingCategories(categoryLimit = 5, productsPerCategory = 4) {
+async function getInternalBestsellingCategories(categoryLimit = 5, productsPerCategory = 20) {
   const safeCategoryLimit =
     Number.isFinite(Number(categoryLimit)) && Number(categoryLimit) > 0
       ? Math.floor(Number(categoryLimit))
@@ -1820,7 +1820,7 @@ async function getInternalBestsellingCategories(categoryLimit = 5, productsPerCa
   const safeProductsPerCategory =
     Number.isFinite(Number(productsPerCategory)) && Number(productsPerCategory) > 0
       ? Math.floor(Number(productsPerCategory))
-      : 4;
+      : 20;
 
   const salesRows = await Order.aggregate([
     {
@@ -2038,7 +2038,7 @@ async function getInternalBestsellingCategories(categoryLimit = 5, productsPerCa
 /*
  * Build the five bestselling CJ categories.
  *
- * Each returned category contains no more than four
+ * Each returned category contains no more than twenty
  * bestselling active CJ products.
  *
  * This function reads only:
@@ -2057,7 +2057,7 @@ async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory
   const safeProductsPerCategory =
     Number.isFinite(Number(productsPerCategory)) && Number(productsPerCategory) > 0
       ? Math.floor(Number(productsPerCategory))
-      : 4;
+      : 20;
 
   const salesRows = await CjOrder.aggregate([
     {
@@ -3073,7 +3073,7 @@ router.get('/store/shop', async (req, res) => {
 
         /*
          * Load the top five CJ sales categories and
-         * no more than four bestselling CJ products
+         * no more than twenty bestselling CJ products
          * inside each category.
          */
         getCjBestsellingCategories(5, 20),
@@ -3469,7 +3469,7 @@ router.get('/store/shop', async (req, res) => {
 
     /*
      * Load the top five Internal sales categories
-     * and no more than four bestselling Internal
+     * and no more than twenty bestselling Internal
      * products inside each category.
      */
     const bestsellingCategoryGroups = await getInternalBestsellingCategories(5, 20);
