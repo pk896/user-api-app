@@ -2048,7 +2048,7 @@ async function getInternalBestsellingCategories(categoryLimit = 5, productsPerCa
  *
  * It never reads Order or Product.
  */
-async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory = 4) {
+async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory = 20) {
   const safeCategoryLimit =
     Number.isFinite(Number(categoryLimit)) && Number(categoryLimit) > 0
       ? Math.floor(Number(categoryLimit))
@@ -3076,7 +3076,7 @@ router.get('/store/shop', async (req, res) => {
          * no more than four bestselling CJ products
          * inside each category.
          */
-        getCjBestsellingCategories(5, 4),
+        getCjBestsellingCategories(5, 20),
 
         /*
          * Load the same CJ Home Mid Banners already used
@@ -3472,7 +3472,7 @@ router.get('/store/shop', async (req, res) => {
      * and no more than four bestselling Internal
      * products inside each category.
      */
-    const bestsellingCategoryGroups = await getInternalBestsellingCategories(5, 4);
+    const bestsellingCategoryGroups = await getInternalBestsellingCategories(5, 20);
 
     const homePromoOffersRaw = await HomePromoOffer.find({
       active: true,
