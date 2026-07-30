@@ -516,12 +516,27 @@ const ACTIVE_CART = (
         </div>
       </div>
 
-      <a href="<%= ACTIVE_CART_URL %>" class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-primary' %> rounded-pill px-4">
-        <i class="fas fa-shopping-cart me-2"></i>
+      <%
+        const SHOP_ORDER_CART_COUNT = Math.max(
+          0,
+          Math.floor(
+            Number(
+              ACTIVE_CART.count ??
+              ACTIVE_CART.itemCount ??
+              0
+            )
+          )
+        );
+      %>
 
-        <%= IS_CJ_DEPARTMENT
-            ? 'View CJ Cart'
-            : 'View Cart' %>
+      <a id="shopCreateOrderButton" href="<%= ACTIVE_CHECKOUT_URL %>" class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-primary' %> rounded-pill px-4 <%= SHOP_ORDER_CART_COUNT > 0 ? '' : 'd-none' %>" data-store-department="<%= ACTIVE_DEPARTMENT %>">
+        <i class="fas fa-shopping-cart me-2" aria-hidden="true"></i>
+
+        <span>Create Order Now</span>
+
+        <span id="shopCreateOrderQuantity" class="badge bg-white text-primary rounded-pill ms-2">
+          <%= SHOP_ORDER_CART_COUNT %>
+        </span>
       </a>
     </div>
   </div>
@@ -2248,11 +2263,6 @@ const ACTIVE_CART = (
 <% if (IS_CJ_DEPARTMENT) { %>
 <script nonce="<%= nonce %>">
   (function() {
-    const mobileFloatingCart =
-      document.getElementById(
-        'mobileFloatingCart'
-      );
-
     function formatCjCartMoney(amount) {
       if (
         window.KasyoraCurrency &&
@@ -2348,10 +2358,15 @@ const ACTIVE_CART = (
     }
 
     function updateCjCartDisplay(data) {
-      const itemCount = Number(
-        data?.itemCount ??
-        data?.count ??
-        0
+      const itemCount = Math.max(
+        0,
+        Math.floor(
+          Number(
+            data?.itemCount ??
+            data?.count ??
+            0
+          )
+        )
       );
 
       const total = Number(
@@ -2359,6 +2374,16 @@ const ACTIVE_CART = (
         data?.total ??
         0
       );
+
+      const shopCreateOrderButton =
+        document.getElementById(
+          'shopCreateOrderButton'
+        );
+
+      const shopCreateOrderQuantity =
+        document.getElementById(
+          'shopCreateOrderQuantity'
+        );
 
       document
         .querySelectorAll(
@@ -2387,6 +2412,21 @@ const ACTIVE_CART = (
           }
         });
 
+      const mobileFloatingCart =
+        document.getElementById(
+          'mobileFloatingCart'
+        );
+
+      const mobileFloatingCheckoutLink =
+        document.getElementById(
+          'mobileFloatingCheckoutLink'
+        );
+
+      if (mobileFloatingCheckoutLink) {
+        mobileFloatingCheckoutLink.href =
+          '/cj/checkout';
+      }
+
       if (mobileFloatingCart) {
         if (itemCount > 0) {
           mobileFloatingCart.classList.remove(
@@ -2394,6 +2434,35 @@ const ACTIVE_CART = (
           );
         } else {
           mobileFloatingCart.classList.add(
+            'd-none'
+          );
+        }
+      }
+
+      /*
+       * Update only the CJ version of the Shop order CTA.
+       * Never read or modify the Internal Kasyora cart here.
+       */
+      if (
+        shopCreateOrderButton &&
+        shopCreateOrderButton.getAttribute(
+          'data-store-department'
+        ) === 'cj'
+      ) {
+        shopCreateOrderButton.href =
+          '/cj/checkout';
+
+        if (shopCreateOrderQuantity) {
+          shopCreateOrderQuantity.textContent =
+            String(itemCount);
+        }
+
+        if (itemCount > 0) {
+          shopCreateOrderButton.classList.remove(
+            'd-none'
+          );
+        } else {
+          shopCreateOrderButton.classList.add(
             'd-none'
           );
         }
@@ -2536,7 +2605,16 @@ const ACTIVE_CART = (
       }
     }
 
-    loadCjCart();
+    if (document.readyState === 'loading') {
+      document.addEventListener(
+        'DOMContentLoaded',
+        loadCjCart, {
+          once: true
+        }
+      );
+    } else {
+      loadCjCart();
+    }
   })();
 </script>
 <% } %>
@@ -2578,11 +2656,11 @@ const ACTIVE_CART = (
   })();
 </script>
 
-<!-- Mobile Floating Cart Start -->
+<!-- Mobile Floating Checkout Start -->
 <div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
-  <a href="<%= ACTIVE_CART_URL %>" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1 store-cart-link" data-store-department="<%= ACTIVE_DEPARTMENT %>" style="font-size: 0.85rem;">
+  <a id="mobileFloatingCheckoutLink" href="<%= ACTIVE_CHECKOUT_URL %>" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1" data-store-department="<%= ACTIVE_DEPARTMENT %>" style="font-size: 0.85rem;" aria-label="Proceed to checkout" title="Proceed to checkout">
     <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
-      <i class="fas fa-shopping-cart" style="font-size: 0.75rem;"></i>
+      <i class="fas fa-shopping-cart" style="font-size: 0.75rem;" aria-hidden="true"></i>
     </span>
 
     <span class="store-cart-total text-white fw-semibold">
@@ -2592,7 +2670,7 @@ const ACTIVE_CART = (
     </span>
   </a>
 </div>
-<!-- Mobile Floating Cart End -->
+<!-- Mobile Floating Checkout End -->
 
 <!-- Back to Top -->
 <a href="#" class="btn btn-primary btn-lg-square back-to-top">
