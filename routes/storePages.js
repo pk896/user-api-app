@@ -4144,6 +4144,23 @@ router.get('/store/contact', async (req, res) => {
 router.get('/store/bestseller', async (req, res) => {
   const storeDepartment = getStoreDepartment(req);
 
+  /*
+   * Resolve the provisional storefront tax treatment once for this
+   * complete Bestseller request.
+   *
+   * Internal:
+   * - South Africa receives the configured Internal VAT rate.
+   * - destinations outside South Africa receive provisional 0% SA VAT.
+   *
+   * CJ:
+   * - always receives zero Kasyora-added VAT;
+   * - never calls the Internal tax resolver.
+   *
+   * Checkout will later use the validated shipping address as the
+   * authoritative Internal VAT decision.
+   */
+  const storefrontTaxContext = resolveStorefrontTaxContext(req, storeDepartment);
+
   try {
     const keyword = String(req.query.keyword || '').trim();
 
@@ -4469,7 +4486,20 @@ router.get('/store/bestseller', async (req, res) => {
 
         baseCurrency: BASE_CURRENCY,
 
-        vatRate: VAT_RATE,
+        /*
+         * CJ always receives zero Kasyora-added VAT.
+         */
+        vatRate: storefrontTaxContext.vatRate,
+
+        taxTreatment: storefrontTaxContext,
+
+        taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+        taxCountrySource: storefrontTaxContext.countrySource,
+
+        taxProvisional: storefrontTaxContext.provisional === true,
+
+        taxAuthoritative: false,
       });
     }
 
@@ -4646,7 +4676,22 @@ router.get('/store/bestseller', async (req, res) => {
       selectedCategory: category,
 
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      /*
+       * The selected provisional delivery country controls the
+       * storefront VAT rate until checkout.
+       */
+      vatRate: storefrontTaxContext.vatRate,
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: storefrontTaxContext.provisional === true,
+
+      taxAuthoritative: false,
     });
   } catch (err) {
     console.error('❌ store bestseller error:', err);
@@ -4687,7 +4732,22 @@ router.get('/store/bestseller', async (req, res) => {
       selectedCategory: String(req.query.category || '').trim(),
 
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      /*
+       * Preserve the correct department-specific tax context even when
+       * the Bestseller product query fails.
+       */
+      vatRate:
+        storeDepartment === 'cj' ? CJ_KASYORA_VAT_RATE : Number(storefrontTaxContext.vatRate),
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: true,
+      taxAuthoritative: false,
     });
   }
 });

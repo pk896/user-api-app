@@ -130,6 +130,21 @@
     ACTIVE_DEPARTMENT === 'cj';
 
   /*
+   * Show the existing short VAT wording only when:
+   *
+   * - the active department is Kasyora In Store; and
+   * - the provisional destination VAT rate is greater than zero.
+   *
+   * CJ products never receive Kasyora-added VAT.
+   * Internal destinations outside South Africa receive
+   * provisional 0% South African VAT.
+   */
+  const SHOW_INTERNAL_VAT_TEXT =
+    !IS_CJ_DEPARTMENT &&
+    Number.isFinite(VAT) &&
+    VAT > 0;
+
+  /*
    * Pure Bestseller-page requests land at the active
    * Kasyora In Store / Kasyora CJ Store Bestseller notice.
    *
@@ -381,10 +396,18 @@
     <div class="col-lg-4 text-center text-lg-end">
       <div class="d-inline-flex align-items-center" style="height: 45px;">
         <div class="me-2">
-          <%- include('partials/currency-selector', {
-                        currencyReturnTo: BESTSELLER_CURRENCY_RETURN_TO
-                    }) %>
+          <%- include('partials/tax-country-selector', {
+            taxCountryReturnTo: BESTSELLER_CURRENCY_RETURN_TO,
+            taxCountrySelectorMobile: false
+          }) %>
         </div>
+
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+            currencyReturnTo: BESTSELLER_CURRENCY_RETURN_TO
+          }) %>
+        </div>
+
         <div class="dropdown">
           <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>
               English</small></a>
@@ -550,23 +573,12 @@
         );
       %>
 
-      <a
-        id="shopCreateOrderButton"
-        href="<%= ACTIVE_CHECKOUT_URL %>"
-        class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-primary' %> rounded-pill px-4 <%= BESTSELLER_ORDER_CART_COUNT > 0 ? '' : 'd-none' %>"
-        data-store-department="<%= ACTIVE_DEPARTMENT %>"
-      >
-        <i
-          class="fas fa-shopping-cart me-2"
-          aria-hidden="true"
-        ></i>
+      <a id="shopCreateOrderButton" href="<%= ACTIVE_CHECKOUT_URL %>" class="btn <%= IS_CJ_DEPARTMENT ? 'btn-success' : 'btn-primary' %> rounded-pill px-4 <%= BESTSELLER_ORDER_CART_COUNT > 0 ? '' : 'd-none' %>" data-store-department="<%= ACTIVE_DEPARTMENT %>">
+        <i class="fas fa-shopping-cart me-2" aria-hidden="true"></i>
 
         <span>Create Order Now</span>
 
-        <span
-          id="shopCreateOrderQuantity"
-          class="badge bg-white text-primary rounded-pill ms-2"
-        >
+        <span id="shopCreateOrderQuantity" class="badge bg-white text-primary rounded-pill ms-2">
           <%= BESTSELLER_ORDER_CART_COUNT %>
         </span>
       </a>
@@ -817,14 +829,10 @@
 
                   <strong class="d-block">
                     <%= formatMoney(
-                        Number(bestsellerLeft.price || 0) *
-                        (1 + VAT)
-                      ) %>
+                      Number(bestsellerLeft.price || 0) *
+                      (1 + VAT)
+                    ) %>
                   </strong>
-
-                  <span class="small text-white-50">
-                    incl. VAT
-                  </span>
                 </div>
                 <% } %>
 
@@ -918,14 +926,10 @@
 
                   <strong class="d-block">
                     <%= formatMoney(
-                        Number(bestsellerRight.price || 0) *
-                        (1 + VAT)
-                      ) %>
+                      Number(bestsellerRight.price || 0) *
+                      (1 + VAT)
+                    ) %>
                   </strong>
-
-                  <span class="small text-white-50">
-                    incl. VAT
-                  </span>
                 </div>
                 <% } %>
 
@@ -1133,8 +1137,19 @@
                 <% if (product.oldPrice) { %>
                 <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                 <% } %>
-                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                <small class="text-muted ms-2">incl. VAT</small>
+
+                <span class="text-primary fs-5">
+                  <%= formatMoney(
+                    Number(product.price || 0) *
+                    (1 + VAT)
+                  ) %>
+                </span>
+
+                <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                <small class="text-muted ms-2">
+                  incl. VAT
+                </small>
+                <% } %>
               </div>
             </div>
           </div>
@@ -1298,8 +1313,18 @@
                       <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                       <% } %>
 
-                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                      <small class="text-muted ms-2">incl. VAT</small>
+                      <span class="text-primary fs-5">
+                        <%= formatMoney(
+                          Number(product.price || 0) *
+                          (1 + VAT)
+                        ) %>
+                      </span>
+
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                      <small class="text-muted ms-2">
+                        incl. VAT
+                      </small>
+                      <% } %>
                     </div>
                   </div>
                 </div>
@@ -1390,8 +1415,18 @@
                       <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                       <% } %>
 
-                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                      <small class="text-muted ms-2">incl. VAT</small>
+                      <span class="text-primary fs-5">
+                        <%= formatMoney(
+                          Number(product.price || 0) *
+                          (1 + VAT)
+                        ) %>
+                      </span>
+
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                      <small class="text-muted ms-2">
+                        incl. VAT
+                      </small>
+                      <% } %>
                     </div>
                   </div>
                 </div>
@@ -1482,8 +1517,18 @@
                       <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                       <% } %>
 
-                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                      <small class="text-muted ms-2">incl. VAT</small>
+                      <span class="text-primary fs-5">
+                        <%= formatMoney(
+                          Number(product.price || 0) *
+                          (1 + VAT)
+                        ) %>
+                      </span>
+
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                      <small class="text-muted ms-2">
+                        incl. VAT
+                      </small>
+                      <% } %>
                     </div>
                   </div>
                 </div>
@@ -1574,8 +1619,18 @@
                       <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                       <% } %>
 
-                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                      <small class="text-muted ms-2">incl. VAT</small>
+                      <span class="text-primary fs-5">
+                        <%= formatMoney(
+                          Number(product.price || 0) *
+                          (1 + VAT)
+                        ) %>
+                      </span>
+
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                      <small class="text-muted ms-2">
+                        incl. VAT
+                      </small>
+                      <% } %>
                     </div>
                   </div>
                 </div>
@@ -1691,9 +1746,11 @@
                   ) %>
                 </span>
 
+                <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                 <small class="text-muted ms-2">
                   incl. VAT
                 </small>
+                <% } %>
               </div>
             </div>
           </div>
@@ -2170,9 +2227,9 @@
         });
 
       /*
-      * Normal CJ cart icons continue opening
-      * the separate CJ cart.
-      */
+       * Normal CJ cart icons continue opening
+       * the separate CJ cart.
+       */
       document
         .querySelectorAll(
           '.store-cart-link'
@@ -2193,8 +2250,8 @@
         });
 
       /*
-      * Bestseller Create Order Now button.
-      */
+       * Bestseller Create Order Now button.
+       */
       if (
         shopCreateOrderButton &&
         shopCreateOrderButton.getAttribute(
@@ -2221,8 +2278,8 @@
       }
 
       /*
-      * Mobile floating CJ checkout amount.
-      */
+       * Mobile floating CJ checkout amount.
+       */
       if (mobileFloatingCheckoutLink) {
         mobileFloatingCheckoutLink.href =
           '/cj/checkout';
@@ -2391,8 +2448,7 @@
     if (document.readyState === 'loading') {
       document.addEventListener(
         'DOMContentLoaded',
-        loadCjCart,
-        {
+        loadCjCart, {
           once: true
         }
       );
@@ -2441,29 +2497,10 @@
 </script>
 
 <!-- Mobile Floating Checkout Start -->
-<div
-  id="mobileFloatingCart"
-  class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3"
-  style="z-index: 1080;"
->
-  <a
-    id="mobileFloatingCheckoutLink"
-    href="<%= ACTIVE_CHECKOUT_URL %>"
-    class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1"
-    data-store-department="<%= ACTIVE_DEPARTMENT %>"
-    style="font-size: 0.85rem;"
-    aria-label="Proceed to checkout"
-    title="Proceed to checkout"
-  >
-    <span
-      class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1"
-      style="width: 24px; height: 24px;"
-    >
-      <i
-        class="fas fa-shopping-cart"
-        style="font-size: 0.75rem;"
-        aria-hidden="true"
-      ></i>
+<div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
+  <a id="mobileFloatingCheckoutLink" href="<%= ACTIVE_CHECKOUT_URL %>" class="btn btn-primary rounded-pill shadow-sm d-inline-flex align-items-center px-2 py-1" data-store-department="<%= ACTIVE_DEPARTMENT %>" style="font-size: 0.85rem;" aria-label="Proceed to checkout" title="Proceed to checkout">
+    <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center me-1" style="width: 24px; height: 24px;">
+      <i class="fas fa-shopping-cart" style="font-size: 0.75rem;" aria-hidden="true"></i>
     </span>
 
     <span class="store-cart-total text-white fw-semibold">
