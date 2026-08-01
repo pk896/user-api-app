@@ -2844,30 +2844,15 @@ router.get('/store', async (req, res) => {
       .limit(12)
       .lean();
 
-    const allProducts =
-      allProductsRaw.map(
-        mapStoreProduct,
-      );
+    const allProducts = allProductsRaw.map(mapStoreProduct);
 
-    const newArrivals =
-      newArrivalsRaw.map(
-        mapStoreProduct,
-      );
+    const newArrivals = newArrivalsRaw.map(mapStoreProduct);
 
-    const featuredProducts =
-      featuredProductsRaw.map(
-        mapStoreProduct,
-      );
+    const featuredProducts = featuredProductsRaw.map(mapStoreProduct);
 
-    const bestSellerProducts =
-      bestSellerProductsRaw.map(
-        mapStoreProduct,
-      );
+    const bestSellerProducts = bestSellerProductsRaw.map(mapStoreProduct);
 
-    const productListProducts =
-      productListProductsRaw.map(
-        mapStoreProduct,
-      );
+    const productListProducts = productListProductsRaw.map(mapStoreProduct);
 
     const featuredBanner = await FeaturedBanner.findOne({
       active: true,
@@ -2888,21 +2873,14 @@ router.get('/store', async (req, res) => {
       }).lean();
 
       if (rawBannerProduct) {
-        const mapped =
-          mapStoreProduct(
-            rawBannerProduct,
-          );
+        const mapped = mapStoreProduct(rawBannerProduct);
 
         sideBannerProduct = {
           ...mapped,
 
-          badgeText:
-            featuredBanner.badgeText ||
-            'Special Offer',
+          badgeText: featuredBanner.badgeText || 'Special Offer',
 
-          offerText:
-            featuredBanner.offerText ||
-            'Featured Product',
+          offerText: featuredBanner.offerText || 'Featured Product',
         };
       }
     }
@@ -3075,6 +3053,23 @@ router.get('/store', async (req, res) => {
 
 router.get('/store/shop', async (req, res) => {
   const storeDepartment = getStoreDepartment(req);
+
+  /*
+   * Resolve the provisional storefront tax treatment once for this
+   * entire Shop request.
+   *
+   * Internal:
+   * - South Africa receives the configured Internal VAT rate.
+   * - destinations outside South Africa receive provisional 0% SA VAT.
+   *
+   * CJ:
+   * - always receives zero Kasyora-added VAT;
+   * - never calls the Internal tax resolver.
+   *
+   * The validated Internal checkout shipping address will later make
+   * the authoritative final VAT decision.
+   */
+  const storefrontTaxContext = resolveStorefrontTaxContext(req, storeDepartment);
 
   try {
     const keyword = String(req.query.keyword || '').trim();
@@ -3471,7 +3466,21 @@ router.get('/store/shop', async (req, res) => {
         hasNextPage: cjShopResult.currentPage < cjShopResult.totalPages,
 
         baseCurrency: BASE_CURRENCY,
-        vatRate: VAT_RATE,
+
+        /*
+         * CJ always receives zero Kasyora-added VAT.
+         */
+        vatRate: storefrontTaxContext.vatRate,
+
+        taxTreatment: storefrontTaxContext,
+
+        taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+        taxCountrySource: storefrontTaxContext.countrySource,
+
+        taxProvisional: storefrontTaxContext.provisional === true,
+
+        taxAuthoritative: false,
       });
     }
 
@@ -3798,7 +3807,22 @@ router.get('/store/shop', async (req, res) => {
       hasNextPage: currentPage < totalPages,
 
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      /*
+       * The selected provisional delivery country controls the
+       * storefront VAT rate until checkout.
+       */
+      vatRate: storefrontTaxContext.vatRate,
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: storefrontTaxContext.provisional === true,
+
+      taxAuthoritative: false,
     });
   } catch (err) {
     console.error('❌ store shop error:', err);
@@ -3845,7 +3869,22 @@ router.get('/store/shop', async (req, res) => {
       hasNextPage: false,
 
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      /*
+       * Preserve the correct department-specific tax context even when
+       * the Shop product query fails.
+       */
+      vatRate:
+        storeDepartment === 'cj' ? CJ_KASYORA_VAT_RATE : Number(storefrontTaxContext.vatRate),
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: true,
+      taxAuthoritative: false,
     });
   }
 });

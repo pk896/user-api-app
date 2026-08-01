@@ -114,6 +114,22 @@ const IS_CJ_DEPARTMENT =
   ACTIVE_DEPARTMENT === 'cj';
 
 /*
+ * Display the existing short VAT wording only when:
+ *
+ * - the active department is Kasyora In Store; and
+ * - the resolved provisional VAT rate is greater than zero.
+ *
+ * CJ displays the price only.
+ *
+ * Internal destinations outside South Africa also display the
+ * price only because South African VAT is provisionally zero.
+ */
+const SHOW_INTERNAL_VAT_TEXT =
+  !IS_CJ_DEPARTMENT &&
+  Number.isFinite(VAT) &&
+  VAT > 0;
+
+/*
  * Only search, category, sort, pagination and filtered
  * Shop requests land at the products section.
  *
@@ -330,10 +346,18 @@ const ACTIVE_CART = (
     <div class="col-lg-4 text-center text-lg-end">
       <div class="d-inline-flex align-items-center" style="height: 45px;">
         <div class="me-2">
-          <%- include('partials/currency-selector', {
-                      currencyReturnTo: SHOP_CURRENCY_RETURN_TO
-                    }) %>
+          <%- include('partials/tax-country-selector', {
+            taxCountryReturnTo: SHOP_CURRENCY_RETURN_TO,
+            taxCountrySelectorMobile: false
+          }) %>
         </div>
+
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+            currencyReturnTo: SHOP_CURRENCY_RETURN_TO
+          }) %>
+        </div>
+
         <div class="dropdown">
           <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small> English</small></a>
           <div class="dropdown-menu rounded">
@@ -719,14 +743,16 @@ const ACTIVE_CART = (
               <div class="d-flex mb-2 align-items-center flex-wrap">
                 <h5 class="fw-bold text-primary me-2 mb-0">
                   <%= formatMoney(
-                      Number(product.price || 0) *
-                      (1 + VAT)
-                    ) %>
+                    Number(product.price || 0) *
+                    (1 + VAT)
+                  ) %>
                 </h5>
 
+                <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                 <small class="text-muted me-2">
                   incl. VAT
                 </small>
+                <% } %>
 
                 <% if (product.oldPrice) { %>
                 <h5 class="text-danger text-decoration-line-through mb-0">
@@ -990,8 +1016,19 @@ const ACTIVE_CART = (
                       <% if (product.oldPrice) { %>
                       <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                       <% } %>
-                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                      <small class="text-muted ms-2">incl. VAT</small>
+
+                      <span class="text-primary fs-5">
+                        <%= formatMoney(
+                          Number(product.price || 0) *
+                          (1 + VAT)
+                        ) %>
+                      </span>
+
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                      <small class="text-muted ms-2">
+                        incl. VAT
+                      </small>
+                      <% } %>
                     </div>
                   </div>
                   <div class="product-item-add border border-top-0 rounded-bottom text-center p-4 pt-0">
@@ -1119,8 +1156,18 @@ const ACTIVE_CART = (
                         <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                         <% } %>
 
-                        <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                        <small class="text-muted ms-2">incl. VAT</small>
+                        <span class="text-primary fs-5">
+                          <%= formatMoney(
+                            Number(product.price || 0) *
+                            (1 + VAT)
+                          ) %>
+                        </span>
+
+                        <% if (SHOW_INTERNAL_VAT_TEXT) { %>
+                        <small class="text-muted ms-2">
+                          incl. VAT
+                        </small>
+                        <% } %>
                       </div>
                     </div>
                   </div>
@@ -1297,9 +1344,11 @@ const ACTIVE_CART = (
                       ) %>
                     </span>
 
+                    <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                     <small class="customer-proven-vat text-muted d-block mb-1">
                       incl. VAT
                     </small>
+                    <% } %>
 
                     <div class="customer-proven-rating overflow-hidden">
                       <%- include('../partials/rating-stars', {
@@ -1510,9 +1559,11 @@ const ACTIVE_CART = (
                     ) %>
                   </div>
 
+                  <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                   <small class="text-muted d-block">
                     incl. VAT
                   </small>
+                  <% } %>
                 </div>
               </a>
               <% }) %>
