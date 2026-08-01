@@ -445,6 +445,42 @@ app.use(
 app.use(flash());
 
 /*
+ * Customer provisional delivery country
+ * =====================================
+ *
+ * This middleware runs after express-session because an explicit
+ * customer country selection is stored in:
+ *
+ * req.session.taxCountrySelection
+ *
+ * It runs before all store, cart, checkout and department middleware
+ * so every later route receives the same provisional country context.
+ *
+ * This middleware does not calculate VAT.
+ *
+ * The validated Internal checkout shipping address will later become
+ * the only authoritative country for the final VAT calculation.
+ *
+ * CJ remains completely separate and receives no Kasyora-added VAT.
+ */
+const taxCountryMiddleware = require('./middleware/taxCountry');
+
+app.use(taxCountryMiddleware);
+
+/*
+ * Customer delivery-country selection endpoints:
+ *
+ * POST /tax-country/select
+ * POST /tax-country/reset
+ *
+ * These routes only update the provisional country stored in the
+ * customer session. They do not calculate VAT or change either cart.
+ */
+const taxCountryRoutes = require('./routes/taxCountry');
+
+app.use('/tax-country', taxCountryRoutes);
+
+/*
  * Customer display currency.
  *
  * This runs after express-session because the selected currency is
@@ -452,6 +488,11 @@ app.use(flash());
  *
  * It runs before store, cart, checkout and department middleware so
  * every later route receives the same currency context.
+ *
+ * Delivery country and display currency remain separate:
+ *
+ * - tax country controls provisional Internal VAT presentation;
+ * - display currency controls visible currency conversion only.
  */
 const userCurrencyMiddleware = require('./middleware/userCurrency');
 
@@ -570,7 +611,38 @@ app.get(
       // Controls which catalogue and cart are visible.
       storeDepartment: req.session?.storeDepartment || 'internal',
 
+      /*
+       * Preserve the customer's explicit provisional delivery-country
+       * selection across secure session regeneration.
+       *
+       * This remains provisional. The validated checkout shipping
+       * address will still override it for final Internal VAT.
+       */
+      taxCountrySelection:
+        req.session?.taxCountrySelection && typeof req.session.taxCountrySelection === 'object'
+          ? {
+              countryCode: String(req.session.taxCountrySelection.countryCode || '')
+                .trim()
+                .toUpperCase()
+                .slice(0, 2),
+
+              countryName: String(req.session.taxCountrySelection.countryName || '')
+                .trim()
+                .slice(0, 200),
+
+              source: String(req.session.taxCountrySelection.source || '')
+                .trim()
+                .toUpperCase()
+                .slice(0, 50),
+
+              selectedAt: String(req.session.taxCountrySelection.selectedAt || '')
+                .trim()
+                .slice(0, 100),
+            }
+          : null,
+
       theme: req.session?.theme || null,
+
       returnTo: req.session?.returnTo || null,
     };
 
@@ -595,6 +667,25 @@ app.get(
       }
 
       req.session.storeDepartment = keep.storeDepartment === 'cj' ? 'cj' : 'internal';
+
+      /*
+       * Restore only a structurally valid customer delivery-country
+       * selection.
+       *
+       * This does not restore or create an Internal checkout tax quote.
+       * Checkout must calculate tax again from its shipping address.
+       */
+      if (keep.taxCountrySelection && /^[A-Z]{2}$/.test(keep.taxCountrySelection.countryCode)) {
+        req.session.taxCountrySelection = {
+          countryCode: keep.taxCountrySelection.countryCode,
+
+          countryName: keep.taxCountrySelection.countryName,
+
+          source: 'CUSTOMER_SELECTION',
+
+          selectedAt: keep.taxCountrySelection.selectedAt || new Date().toISOString(),
+        };
+      }
 
       if (keep.theme) {
         req.session.theme = keep.theme;
@@ -714,8 +805,7 @@ const adminBestsellerCards = require('./routes/adminBestsellerCards');
  * It never uses the Internal BestsellerCard
  * or Product models.
  */
-const adminCjBestsellerCards =
-  require('./routes/adminCjBestsellerCards');
+const adminCjBestsellerCards = require('./routes/adminCjBestsellerCards');
 
 const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBanners');
 
@@ -732,8 +822,7 @@ const adminBestsellerBottomBanners = require('./routes/adminBestsellerBottomBann
  * It does not use the Internal BestsellerBottomBanner
  * or Product models.
  */
-const adminCjBestsellerBottomBanners =
-  require('./routes/adminCjBestsellerBottomBanners');
+const adminCjBestsellerBottomBanners = require('./routes/adminCjBestsellerBottomBanners');
 
 /*
  * Existing Internal Kasyora Store

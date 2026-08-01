@@ -97,6 +97,10 @@ const sharp = require('sharp');
 const http = require('http');
 const https = require('https');
 
+const { CJ_KASYORA_VAT_RATE, TAX_COUNTRY_SOURCES } = require('../utils/tax/taxConfig');
+
+const { resolveInternalTaxTreatment } = require('../utils/tax/resolveInternalTaxTreatment');
+
 const BASE_CURRENCY =
   String(process.env.BASE_CURRENCY || '')
     .trim()
@@ -105,6 +109,78 @@ const APP_URL = String(process.env.APP_URL || 'http://localhost:3000')
   .trim()
   .replace(/\/+$/, '');
 const VAT_RATE = Number(process.env.VAT_RATE || 0.15);
+
+/*
+ * Resolve the provisional storefront tax treatment.
+ *
+ * INTERNAL:
+ * Uses the country selected by the customer, trusted GeoIP fallback,
+ * or configured default country supplied by taxCountry middleware.
+ *
+ * CJ:
+ * Kasyora-added VAT is always zero and the Internal tax resolver
+ * is never called.
+ *
+ * This storefront result is provisional only. The validated Internal
+ * checkout shipping address will later make the authoritative decision.
+ */
+function resolveStorefrontTaxContext(req, storeDepartment) {
+  const department = normalizeStoreDepartment(storeDepartment);
+
+  if (department === 'cj') {
+    return {
+      department: 'cj',
+
+      success: true,
+
+      jurisdiction: '',
+
+      destinationCountryCode: String(req?.taxCountryContext?.countryCode || '')
+        .trim()
+        .toUpperCase()
+        .slice(0, 2),
+
+      countrySource: String(req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT)
+        .trim()
+        .toUpperCase(),
+
+      authoritative: false,
+      provisional: true,
+
+      treatmentCode: 'CJ_NO_KASYORA_VAT',
+
+      vatRate: CJ_KASYORA_VAT_RATE,
+
+      vatPercentage: 0,
+
+      label: 'No Kasyora-added VAT',
+
+      reason: 'Kasyora does not add South African VAT to CJ department products.',
+    };
+  }
+
+  const provisionalCountryCode = String(req?.taxCountryContext?.countryCode || '')
+    .trim()
+    .toUpperCase()
+    .slice(0, 2);
+
+  const provisionalCountrySource = String(
+    req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT,
+  )
+    .trim()
+    .toUpperCase();
+
+  const treatment = resolveInternalTaxTreatment({
+    destinationCountryCode: provisionalCountryCode,
+
+    countrySource: provisionalCountrySource,
+  });
+
+  return {
+    department: 'internal',
+    ...treatment,
+  };
+}
 
 function mapStoreProduct(p) {
   const vatRate = Number(process.env.VAT_RATE || 0.15);
@@ -2428,6 +2504,8 @@ function downloadImageBuffer(url) {
 router.get('/store', async (req, res) => {
   const storeDepartment = getStoreDepartment(req);
 
+  const storefrontTaxContext = resolveStorefrontTaxContext(req, storeDepartment);
+
   try {
     const keyword = String(req.query.keyword || '').trim();
 
@@ -2687,7 +2765,20 @@ router.get('/store', async (req, res) => {
         selectedCategory: category,
 
         baseCurrency: BASE_CURRENCY,
-        vatRate: VAT_RATE,
+
+        /*
+         * CJ receives no Kasyora-added VAT.
+         */
+        vatRate: storefrontTaxContext.vatRate,
+
+        taxTreatment: storefrontTaxContext,
+
+        taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+        taxCountrySource: storefrontTaxContext.countrySource,
+
+        taxProvisional: true,
+        taxAuthoritative: false,
       });
     }
 
@@ -2753,15 +2844,30 @@ router.get('/store', async (req, res) => {
       .limit(12)
       .lean();
 
-    const allProducts = allProductsRaw.map(mapStoreProduct);
+    const allProducts =
+      allProductsRaw.map(
+        mapStoreProduct,
+      );
 
-    const newArrivals = newArrivalsRaw.map(mapStoreProduct);
+    const newArrivals =
+      newArrivalsRaw.map(
+        mapStoreProduct,
+      );
 
-    const featuredProducts = featuredProductsRaw.map(mapStoreProduct);
+    const featuredProducts =
+      featuredProductsRaw.map(
+        mapStoreProduct,
+      );
 
-    const bestSellerProducts = bestSellerProductsRaw.map(mapStoreProduct);
+    const bestSellerProducts =
+      bestSellerProductsRaw.map(
+        mapStoreProduct,
+      );
 
-    const productListProducts = productListProductsRaw.map(mapStoreProduct);
+    const productListProducts =
+      productListProductsRaw.map(
+        mapStoreProduct,
+      );
 
     const featuredBanner = await FeaturedBanner.findOne({
       active: true,
@@ -2782,12 +2888,21 @@ router.get('/store', async (req, res) => {
       }).lean();
 
       if (rawBannerProduct) {
-        const mapped = mapStoreProduct(rawBannerProduct);
+        const mapped =
+          mapStoreProduct(
+            rawBannerProduct,
+          );
 
         sideBannerProduct = {
           ...mapped,
-          badgeText: featuredBanner.badgeText || 'Special Offer',
-          offerText: featuredBanner.offerText || 'Featured Product',
+
+          badgeText:
+            featuredBanner.badgeText ||
+            'Special Offer',
+
+          offerText:
+            featuredBanner.offerText ||
+            'Featured Product',
         };
       }
     }
@@ -2894,7 +3009,18 @@ router.get('/store', async (req, res) => {
       selectedCategory: category,
 
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      vatRate: storefrontTaxContext.vatRate,
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: storefrontTaxContext.provisional === true,
+
+      taxAuthoritative: false,
     });
   } catch (err) {
     console.error('❌ store index error:', err);
@@ -2931,7 +3057,18 @@ router.get('/store', async (req, res) => {
       selectedCategory: String(req.query.category || '').trim(),
 
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      vatRate:
+        storeDepartment === 'cj' ? CJ_KASYORA_VAT_RATE : Number(storefrontTaxContext.vatRate),
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: true,
+      taxAuthoritative: false,
     });
   }
 });

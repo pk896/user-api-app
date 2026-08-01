@@ -1,0 +1,634 @@
+<!-- views/store/partials/tax-country-selector.ejs -->
+<%
+  /*
+   * Provisional delivery-country selector
+   * =====================================
+   *
+   * The customer selection overrides trusted GeoIP and the configured
+   * default for provisional storefront presentation.
+   *
+   * It does not make the storefront selection authoritative.
+   * The validated Internal checkout shipping address will still make
+   * the final VAT decision.
+   *
+   * CJ may use the same delivery-country preference, but Kasyora VAT
+   * remains zero for the CJ department.
+   */
+
+    const TAX_COUNTRY_SELECTOR_MOBILE =
+    typeof taxCountrySelectorMobile !== 'undefined' &&
+    taxCountrySelectorMobile === true;
+
+  /*
+   * The partial may appear once on desktop and once inside the mobile
+   * navbar. Unique IDs prevent the two selectors from interfering
+   * with each other.
+   */
+  const TAX_COUNTRY_SELECTOR_ID_SUFFIX =
+    TAX_COUNTRY_SELECTOR_MOBILE
+      ? 'Mobile'
+      : 'Desktop';
+
+  const TAX_COUNTRY_SELECTOR_RETURN_TO =
+    typeof taxCountryReturnTo !== 'undefined' &&
+    taxCountryReturnTo
+      ? String(taxCountryReturnTo)
+      : '/store';
+
+  const TAX_COUNTRY_SELECTOR_CODE =
+    String(
+      typeof taxCountryCode !== 'undefined'
+        ? taxCountryCode
+        : 'ZA'
+    )
+      .trim()
+      .toUpperCase()
+      .slice(0, 2) || 'ZA';
+
+  const TAX_COUNTRY_SELECTOR_SOURCE =
+    String(
+      typeof taxCountrySource !== 'undefined'
+        ? taxCountrySource
+        : 'DEFAULT'
+    )
+      .trim()
+      .toUpperCase();
+
+  const TAX_COUNTRY_SELECTOR_COUNTRIES =
+    Array.isArray(
+      typeof COUNTRIES !== 'undefined'
+        ? COUNTRIES
+        : null
+    )
+      ? COUNTRIES
+      : [];
+
+  const TAX_COUNTRY_SELECTOR_ACTIVE_COUNTRY =
+    TAX_COUNTRY_SELECTOR_COUNTRIES.find(
+      function(country) {
+        return (
+          String(country?.code || '')
+            .trim()
+            .toUpperCase() ===
+          TAX_COUNTRY_SELECTOR_CODE
+        );
+      }
+    ) || null;
+
+    const TAX_COUNTRY_SELECTOR_NAME =
+    String(
+      TAX_COUNTRY_SELECTOR_ACTIVE_COUNTRY?.name ||
+      TAX_COUNTRY_SELECTOR_CODE
+    ).trim();
+
+  const TAX_COUNTRY_SELECTOR_FLAG_URL =
+    TAX_COUNTRY_SELECTOR_CODE
+      ? 'https://flagcdn.com/20x15/' +
+        TAX_COUNTRY_SELECTOR_CODE.toLowerCase() +
+        '.png'
+      : '';
+
+  const TAX_COUNTRY_SELECTOR_IS_CUSTOMER_SELECTED =
+    TAX_COUNTRY_SELECTOR_SOURCE ===
+      'CUSTOMER_SELECTION';
+%>
+
+<div class="dropdown <%= TAX_COUNTRY_SELECTOR_MOBILE ? 'w-100' : '' %>">
+  <button type="button" class="btn btn-sm border-0 dropdown-toggle text-muted <%= TAX_COUNTRY_SELECTOR_MOBILE
+      ? 'd-flex align-items-center justify-content-between gap-2 px-2 py-2 w-100'
+      : 'd-inline-flex align-items-center gap-1 px-1' %>" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Choose provisional delivery country">
+    <% if (TAX_COUNTRY_SELECTOR_MOBILE) { %>
+    <span class="d-inline-flex align-items-center gap-2 overflow-hidden">
+      <img id="taxCountrySelectedFlag<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>" src="<%= TAX_COUNTRY_SELECTOR_FLAG_URL %>" alt="" class="border rounded flex-shrink-0" width="20" height="15">
+
+      <span class="text-truncate">
+        <span class="small">Deliver to:</span>
+
+        <span id="taxCountrySelectedName<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>" class="fw-semibold">
+          <%= TAX_COUNTRY_SELECTOR_NAME %>
+        </span>
+      </span>
+    </span>
+    <% } else { %>
+    <img id="taxCountrySelectedFlag<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>" src="<%= TAX_COUNTRY_SELECTOR_FLAG_URL %>" alt="" class="border rounded flex-shrink-0" width="20" height="15">
+
+    <span class="small">
+      Deliver to:
+    </span>
+
+    <span id="taxCountrySelectedName<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>" class="fw-semibold">
+      <%= TAX_COUNTRY_SELECTOR_NAME %>
+    </span>
+    <% } %>
+  </button>
+
+  <div class="dropdown-menu dropdown-menu-end rounded shadow-sm border-0 p-3 <%= TAX_COUNTRY_SELECTOR_MOBILE ? 'w-100' : '' %>" style="<%= TAX_COUNTRY_SELECTOR_MOBILE
+      ? ''
+      : 'min-width: 20rem; max-width: calc(100vw - 2rem);' %>">
+    <div class="mb-3">
+      <div class="small fw-bold text-primary">
+        Choose delivery country
+      </div>
+
+      <div class="small text-muted">
+        Select where you expect this order to be delivered. Prices and estimated tax will be shown for this destination before checkout.
+      </div>
+    </div>
+
+    <form
+      id="taxCountryForm<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+      method="post"
+      action="/tax-country/select"
+      class="m-0"
+    >
+      <input
+        type="hidden"
+        name="returnTo"
+        value="<%= TAX_COUNTRY_SELECTOR_RETURN_TO %>"
+      >
+
+      <input
+        id="taxCountryCode<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+        type="hidden"
+        name="countryCode"
+        value="<%= TAX_COUNTRY_SELECTOR_CODE %>"
+      >
+
+      <label
+        class="form-label small fw-semibold"
+      >
+        Where should we deliver your order?
+      </label>
+
+      <div
+        id="taxCountryPicker<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+        class="position-relative"
+      >
+        <button
+          id="taxCountryPickerButton<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+          type="button"
+          class="btn border rounded w-100 d-flex align-items-center justify-content-between gap-2 px-3 py-2 bg-white text-start"
+          aria-expanded="false"
+          aria-controls="taxCountryPickerMenu<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+        >
+          <span class="d-inline-flex align-items-center gap-2 overflow-hidden">
+            <img
+              id="taxCountryPickerFlag<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+              src="<%= TAX_COUNTRY_SELECTOR_FLAG_URL %>"
+              alt=""
+              class="border rounded flex-shrink-0"
+              width="20"
+              height="15"
+            >
+
+            <span
+              id="taxCountryPickerName<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+              class="fw-semibold text-truncate"
+            >
+              <%= TAX_COUNTRY_SELECTOR_NAME %>
+            </span>
+          </span>
+
+          <i
+            class="fas fa-chevron-down small text-muted flex-shrink-0"
+            aria-hidden="true"
+          ></i>
+        </button>
+
+        <div
+          id="taxCountryPickerMenu<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+          class="position-absolute top-100 start-0 end-0 bg-white border rounded shadow-sm mt-1 d-none"
+          style="z-index: 1080;"
+        >
+          <div class="input-group border-bottom">
+            <span class="input-group-text border-0 bg-white">
+              <i
+                class="fas fa-search text-primary"
+                aria-hidden="true"
+              ></i>
+            </span>
+
+            <input
+              id="taxCountrySearch<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+              type="search"
+              class="form-control border-0 shadow-none"
+              placeholder="Search country by name or code..."
+              autocomplete="off"
+              aria-label="Search delivery countries"
+            >
+          </div>
+
+          <div
+            id="taxCountryOptions<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+            style="max-height: 260px; overflow-y: auto;"
+          >
+            <% TAX_COUNTRY_SELECTOR_COUNTRIES.forEach(function(country) { %>
+            <%
+              const optionCode =
+                String(country?.code || '')
+                  .trim()
+                  .toUpperCase();
+
+              const optionName =
+                String(country?.name || '')
+                  .trim();
+
+              const optionIsSelected =
+                optionCode ===
+                TAX_COUNTRY_SELECTOR_CODE;
+            %>
+
+            <% if (optionCode && optionName) { %>
+            <button
+              type="button"
+              class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 tax-country-option<%= optionIsSelected ? ' active' : '' %>"
+              data-country-code="<%= optionCode %>"
+              data-country-name="<%= optionName %>"
+            >
+              <img
+                src="https://flagcdn.com/20x15/<%= optionCode.toLowerCase() %>.png"
+                alt=""
+                class="border rounded flex-shrink-0"
+                width="20"
+                height="15"
+                loading="lazy"
+              >
+
+              <span class="flex-grow-1 text-start">
+                <%= optionName %>
+              </span>
+
+              <small class="text-muted">
+                <%= optionCode %>
+              </small>
+            </button>
+            <% } %>
+            <% }) %>
+          </div>
+
+          <div
+            id="taxCountryNoResults<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>"
+            class="small text-muted text-center py-3 d-none"
+            aria-live="polite"
+          >
+            No matching delivery country found.
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <div class="small text-muted mt-3">
+      <% if (TAX_COUNTRY_SELECTOR_IS_CUSTOMER_SELECTED) { %>
+      Current delivery country:
+      <strong>
+        <%= TAX_COUNTRY_SELECTOR_NAME %>
+      </strong>.
+      <% } else { %>
+      Automatically detected delivery country:
+      <strong>
+        <%= TAX_COUNTRY_SELECTOR_NAME %>
+      </strong>.
+      <% } %>
+
+      You can confirm or change the final delivery address at checkout. Internal tax will be finalized from that checkout address.
+    </div>
+
+    <% if (TAX_COUNTRY_SELECTOR_IS_CUSTOMER_SELECTED) { %>
+    <form method="post" action="/tax-country/reset" class="m-0 mt-3">
+      <input type="hidden" name="returnTo" value="<%= TAX_COUNTRY_SELECTOR_RETURN_TO %>">
+
+      <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill w-100">
+        Reset automatic country
+      </button>
+    </form>
+    <% } %>
+  </div>
+</div>
+
+<script nonce="<%= nonce %>">
+  (function() {
+    const form =
+      document.getElementById(
+        'taxCountryForm<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const picker =
+      document.getElementById(
+        'taxCountryPicker<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const pickerButton =
+      document.getElementById(
+        'taxCountryPickerButton<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const pickerMenu =
+      document.getElementById(
+        'taxCountryPickerMenu<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const searchInput =
+      document.getElementById(
+        'taxCountrySearch<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const optionsContainer =
+      document.getElementById(
+        'taxCountryOptions<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const countryCodeInput =
+      document.getElementById(
+        'taxCountryCode<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const pickerName =
+      document.getElementById(
+        'taxCountryPickerName<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const pickerFlag =
+      document.getElementById(
+        'taxCountryPickerFlag<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const topbarName =
+      document.getElementById(
+        'taxCountrySelectedName<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const topbarFlag =
+      document.getElementById(
+        'taxCountrySelectedFlag<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    const noResults =
+      document.getElementById(
+        'taxCountryNoResults<%= TAX_COUNTRY_SELECTOR_ID_SUFFIX %>'
+      );
+
+    if (
+      !form ||
+      !picker ||
+      !pickerButton ||
+      !pickerMenu ||
+      !searchInput ||
+      !optionsContainer ||
+      !countryCodeInput
+    ) {
+      return;
+    }
+
+    const countryOptions =
+      Array.from(
+        optionsContainer.querySelectorAll(
+          '.tax-country-option'
+        )
+      );
+
+    function normalizeValue(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase();
+    }
+
+    function flagUrl(countryCode) {
+      const code =
+        normalizeValue(countryCode);
+
+      return code
+        ? 'https://flagcdn.com/20x15/' +
+          code +
+          '.png'
+        : '';
+    }
+
+    function showAllCountries() {
+      countryOptions.forEach(function(option) {
+        option.classList.remove('d-none');
+      });
+
+      noResults?.classList.add('d-none');
+    }
+
+    function openPicker() {
+      pickerMenu.classList.remove('d-none');
+
+      pickerButton.setAttribute(
+        'aria-expanded',
+        'true'
+      );
+
+      searchInput.value = '';
+
+      showAllCountries();
+
+      searchInput.focus();
+
+      const activeOption =
+        optionsContainer.querySelector(
+          '.tax-country-option.active'
+        );
+
+      activeOption?.scrollIntoView({
+        block: 'nearest'
+      });
+    }
+
+    function closePicker() {
+      pickerMenu.classList.add('d-none');
+
+      pickerButton.setAttribute(
+        'aria-expanded',
+        'false'
+      );
+
+      searchInput.value = '';
+
+      showAllCountries();
+    }
+
+    function filterCountries() {
+      const searchTerm =
+        normalizeValue(
+          searchInput.value
+        );
+
+      let visibleCount = 0;
+
+      countryOptions.forEach(function(option) {
+        const countryCode =
+          normalizeValue(
+            option.dataset.countryCode
+          );
+
+        const countryName =
+          normalizeValue(
+            option.dataset.countryName
+          );
+
+        const matches =
+          !searchTerm ||
+          countryName.includes(searchTerm) ||
+          countryCode.includes(searchTerm);
+
+        option.classList.toggle(
+          'd-none',
+          !matches
+        );
+
+        if (matches) {
+          visibleCount += 1;
+        }
+      });
+
+      noResults?.classList.toggle(
+        'd-none',
+        visibleCount > 0
+      );
+    }
+
+    function selectCountry(option) {
+      const countryCode =
+        String(
+          option.dataset.countryCode || ''
+        )
+          .trim()
+          .toUpperCase();
+
+      const countryName =
+        String(
+          option.dataset.countryName || ''
+        ).trim();
+
+      if (
+        !countryCode ||
+        !countryName
+      ) {
+        return;
+      }
+
+      countryCodeInput.value =
+        countryCode;
+
+      const selectedFlagUrl =
+        flagUrl(countryCode);
+
+      if (pickerName) {
+        pickerName.textContent =
+          countryName;
+      }
+
+      if (pickerFlag) {
+        pickerFlag.src =
+          selectedFlagUrl;
+      }
+
+      if (topbarName) {
+        topbarName.textContent =
+          countryName;
+      }
+
+      if (topbarFlag) {
+        topbarFlag.src =
+          selectedFlagUrl;
+      }
+
+      countryOptions.forEach(function(countryOption) {
+        countryOption.classList.toggle(
+          'active',
+          countryOption === option
+        );
+      });
+
+      closePicker();
+
+      /*
+       * Selecting a country is the confirmation.
+       * Save it immediately without requiring another button click.
+       */
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+        return;
+      }
+
+      form.submit();
+    }
+
+    pickerButton.addEventListener(
+      'click',
+      function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const isOpen =
+          !pickerMenu.classList.contains(
+            'd-none'
+          );
+
+        if (isOpen) {
+          closePicker();
+          return;
+        }
+
+        openPicker();
+      }
+    );
+
+    searchInput.addEventListener(
+      'click',
+      function(event) {
+        event.stopPropagation();
+      }
+    );
+
+    searchInput.addEventListener(
+      'keydown',
+      function(event) {
+        event.stopPropagation();
+
+        if (event.key === 'Escape') {
+          closePicker();
+
+          pickerButton.focus();
+        }
+      }
+    );
+
+    searchInput.addEventListener(
+      'input',
+      filterCountries
+    );
+
+    countryOptions.forEach(function(option) {
+      option.addEventListener(
+        'click',
+        function(event) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          selectCountry(option);
+        }
+      );
+    });
+
+    document.addEventListener(
+      'click',
+      function(event) {
+        if (!picker.contains(event.target)) {
+          closePicker();
+        }
+      }
+    );
+
+    const outerDropdown =
+      picker.closest('.dropdown');
+
+    if (outerDropdown) {
+      outerDropdown.addEventListener(
+        'hidden.bs.dropdown',
+        closePicker
+      );
+    }
+  })();
+</script>

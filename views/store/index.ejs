@@ -1,8 +1,31 @@
 <!-- views/store/index.ejs -->
 <%
-  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
+  const VAT = (
+    typeof vatRate !== 'undefined' &&
+    vatRate !== null
+  )
     ? Number(vatRate)
     : 0.15;
+
+  /*
+   * Show the existing short VAT wording only when:
+   *
+   * - the active department is Internal; and
+   * - the resolved provisional VAT rate is greater than zero.
+   *
+   * CJ shows no Kasyora VAT wording.
+   *
+   * Internal destinations outside South Africa also show no VAT
+   * wording because South African VAT is provisionally zero.
+   */
+  const SHOW_INTERNAL_VAT_TEXT =
+    String(
+      typeof storeDepartment !== 'undefined'
+        ? storeDepartment
+        : 'internal'
+    ).trim().toLowerCase() !== 'cj' &&
+    Number.isFinite(VAT) &&
+    VAT > 0;
 
   /*
    * BASE_CURRENCY is Kasyora's authoritative internal currency.
@@ -220,6 +243,13 @@
 
     <div class="col-lg-4 text-center text-lg-end">
       <div class="d-inline-flex align-items-center" style="height: 45px;">
+        <div class="me-2">
+          <%- include('partials/tax-country-selector', {
+            taxCountryReturnTo: INDEX_CURRENCY_RETURN_TO,
+            taxCountrySelectorMobile: false
+          }) %>
+        </div>
+
         <div class="me-2">
           <%- include('partials/currency-selector', {
             currencyReturnTo: INDEX_CURRENCY_RETURN_TO
@@ -479,7 +509,9 @@
             <span class="text-primary fs-5">
               <%= formatMoney(Number(sideBannerProduct.price || 0) * (1 + VAT)) %>
             </span>
+            <% if (SHOW_INTERNAL_VAT_TEXT) { %>
             <small class="text-white-50 ms-2">incl. VAT</small>
+            <% } %>
           </div>
 
           <a href="<%= sideBannerProduct.url %>" class="btn btn-primary rounded-pill py-2 px-4">
@@ -783,9 +815,11 @@
                         <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
                       </span>
 
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                       <small class="text-muted ms-2">
                         incl. VAT
                       </small>
+                      <% } %>
 
                       <div class="mt-2">
                         <%- include('../partials/rating-stars', {
@@ -895,9 +929,11 @@
                         <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
                       </span>
 
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                       <small class="text-muted ms-2">
                         incl. VAT
                       </small>
+                      <% } %>
 
                       <div class="mt-2">
                         <%- include('../partials/rating-stars', {
@@ -1007,9 +1043,11 @@
                         <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
                       </span>
 
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                       <small class="text-muted ms-2">
                         incl. VAT
                       </small>
+                      <% } %>
 
                       <div class="mt-2">
                         <%- include('../partials/rating-stars', {
@@ -1121,9 +1159,11 @@
                         <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
                       </span>
 
+                      <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                       <small class="text-muted ms-2">
                         incl. VAT
                       </small>
+                      <% } %>
 
                       <div class="mt-2">
                         <%- include('../partials/rating-stars', {
@@ -1317,7 +1357,9 @@
                 <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
                 <% } %>
                 <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                 <small class="text-muted ms-2">incl. VAT</small>
+                <% } %>
                 <div class="mt-2">
                   <%- include('../partials/rating-stars', {
                     avg: Number(product.avgRating || 0),
@@ -1400,7 +1442,9 @@
                 <% } %>
 
                 <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                <% if (SHOW_INTERNAL_VAT_TEXT) { %>
                 <small class="text-muted ms-2">incl. VAT</small>
+                <% } %>
               </div>
             </div>
           </div>
