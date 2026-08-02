@@ -18,22 +18,19 @@ const router = express.Router();
  * ✅ If cart is NORMAL (no second-hand items):
  *    - you CANNOT add second-hand items (must clear cart first)
  * ------------------------------------------------------------------ */
-const SECONDHAND_CATS = new Set([
-  'second-hand-clothes',
-  'uncategorized-second-hand-things',
-]);
+const SECONDHAND_CATS = new Set(['second-hand-clothes', 'uncategorized-second-hand-things']);
 
 function isSecondhandCategory(cat) {
-  return SECONDHAND_CATS.has(String(cat || '').trim().toLowerCase());
+  return SECONDHAND_CATS.has(
+    String(cat || '')
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function normalizeVariantArray(value) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(
-    value
-      .map((item) => String(item || '').trim())
-      .filter(Boolean)
-  )];
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))];
 }
 
 function getVariantRequirements(product) {
@@ -98,7 +95,9 @@ function businessKeyFromCartItem(it) {
 }
 
 function categoryFromCartItem(it) {
-  return String(it?.category || it?.product?.category || '').trim().toLowerCase();
+  return String(it?.category || it?.product?.category || '')
+    .trim()
+    .toLowerCase();
 }
 
 // If cart contains any second-hand items, we lock cart to that business
@@ -199,48 +198,80 @@ function secondhandRejectPayloadWhenNormalCartHasItems() {
  * Helpers
  * ------------------------------------------------------------------ */
 function ensureCart(req) {
-  if (!req.session.cart) req.session.cart = { items: [] };
-  if (!Array.isArray(req.session.cart.items)) req.session.cart.items = [];
-
-  const r = vatRate(req);
-
-  // ✅ One-time upgrade for old cart items (NET -> GROSS)
-  if (!req.session.cart._vatUpgradedOnce) {
-    req.session.cart.items = (req.session.cart.items || []).map((it) => {
-      if (!it) return it;
-      if (it.vatIncluded === true) return it;
-
-      const net = Number(it.priceExVat ?? it.price ?? 0);
-      const gross = round2(net * (1 + r));
-
-      return {
-        ...it,
-        price: gross,
-        priceExVat: net,
-        vatRate: r,
-        vatIncluded: true,
-      };
-    });
-
-    req.session.cart._vatUpgradedOnce = true;
-  } else {
-    // ✅ Keep VAT fields consistent for newer items too
-    req.session.cart.items = (req.session.cart.items || []).map((it) => {
-      if (!it) return it;
-      if (it.vatIncluded === true) return it;
-
-      const net = Number(it.priceExVat ?? it.price ?? 0);
-      const gross = round2(net * (1 + r));
-
-      return {
-        ...it,
-        price: gross,
-        priceExVat: net,
-        vatRate: r,
-        vatIncluded: true,
-      };
-    });
+  if (!req.session.cart) {
+    req.session.cart = {
+      items: [],
+    };
   }
+
+  if (!Array.isArray(req.session.cart.items)) {
+    req.session.cart.items = [];
+  }
+
+  /*
+   * Normalize legacy Internal cart items
+   * ====================================
+   *
+   * Product.price and cart item.price are authoritative
+   * VAT-exclusive BASE_CURRENCY amounts.
+   *
+   * Older sessions may contain:
+   *
+   * price: VAT-inclusive amount
+   * priceExVat: VAT-exclusive amount
+   * vatIncluded: true
+   *
+   * When priceExVat is available, use it as the authoritative
+   * cart price.
+   *
+   * Do not calculate or permanently store provisional VAT here.
+   * Storefront presentation applies provisional VAT separately.
+   * Checkout will later calculate authoritative VAT from the
+   * validated shipping address.
+   */
+  req.session.cart.items = req.session.cart.items.filter(Boolean).map((item) => {
+    const storedPriceExVat = Number(item.priceExVat);
+
+    const storedPrice = Number(item.price);
+
+    let authoritativePrice = 0;
+
+    if (Number.isFinite(storedPriceExVat) && storedPriceExVat >= 0) {
+      authoritativePrice = round2(storedPriceExVat);
+    } else if (Number.isFinite(storedPrice) && storedPrice >= 0) {
+      authoritativePrice = round2(storedPrice);
+    }
+
+    const normalizedItem = {
+      ...item,
+
+      /*
+       * Both fields now contain the VAT-exclusive source price.
+       *
+       * price remains for compatibility with existing cart,
+       * checkout and UI code.
+       */
+      price: authoritativePrice,
+
+      priceExVat: authoritativePrice,
+
+      vatIncluded: false,
+    };
+
+    /*
+     * Remove legacy provisional VAT metadata.
+     *
+     * A fixed cart vatRate must not survive a country change.
+     */
+    delete normalizedItem.vatRate;
+
+    return normalizedItem;
+  });
+
+  /*
+   * Remove the old NET-to-GROSS migration marker.
+   */
+  delete req.session.cart._vatUpgradedOnce;
 
   return req.session.cart;
 }
@@ -266,35 +297,52 @@ function productUnitPriceNumber(p) {
   return Number(p.price || 0);
 }
 
-function normalizeCartItem(p, qty, variants = {}, req) {
-  const { net, gross, vatIncluded, vatRate: r } = priceGrossFromProduct(p, req);
+function normalizeCartItem(p, qty, variants = {}) {
+  const unitPriceExVat = round2(productUnitPriceNumber(p));
 
   const cleanVariants = normVariants(variants);
+
   const selectedColor = String(cleanVariants.color || '').trim();
 
   return {
     productId: String(p._id),
+
     customId: p.customId,
+
     name: p.name,
 
-    // ✅ store category + businessId in cart (needed for enforcement + UI filtering)
+    /*
+     * Store category and businessId for the existing
+     * second-hand enforcement and cart UI.
+     */
     category: String(p.category || '').trim(),
+
     businessId: businessKeyFromProduct(p),
 
-    // ✅ Cart stores VAT-inclusive price (gross)
-    price: gross,
+    /*
+     * Internal cart pricing authority
+     * ===============================
+     *
+     * Product.price is VAT-exclusive.
+     *
+     * Cart item.price must remain the same VAT-exclusive
+     * BASE_CURRENCY value.
+     *
+     * VAT is never permanently added to the cart price.
+     */
+    price: unitPriceExVat,
 
-    // Useful for invoices/admin breakdowns later
-    priceExVat: net,
-    vatRate: r,
-    vatIncluded,
+    priceExVat: unitPriceExVat,
+
+    vatIncluded: false,
 
     imageUrl:
       selectedColor && typeof p.getColorImage === 'function'
-        ? (p.getColorImage(selectedColor) || p.imageUrl || p.image || '')
-        : (p.imageUrl || p.image || ''),
+        ? p.getColorImage(selectedColor) || p.imageUrl || p.image || ''
+        : p.imageUrl || p.image || '',
 
     quantity: Math.max(1, Math.floor(Number(qty || 1))),
+
     variants: cleanVariants,
   };
 }
@@ -336,22 +384,19 @@ function cartCount(items) {
 }
 
 /* ------------------------------------------------------------------
- * VAT helpers (NET in DB, GROSS in cart)
+ * Internal cart money helper
+ *
+ * Product and cart source prices remain VAT-exclusive and stay in
+ * Kasyora's authoritative BASE_CURRENCY.
  * ------------------------------------------------------------------ */
-function vatRate(_req) {
-  const r = Number(process.env.VAT_RATE || 0.15);
-  return Number.isFinite(r) ? r : 0.15;
-}
-
 function round2(n) {
-  return Math.round(Number(n || 0) * 100) / 100;
-}
+  const amount = Number(n);
 
-function priceGrossFromProduct(p, req) {
-  const net = productUnitPriceNumber(p); // product price in DB (excluding VAT)
-  const r = vatRate(req);
-  const gross = round2(net * (1 + r));
-  return { net, gross, vatIncluded: true, vatRate: r };
+  if (!Number.isFinite(amount)) {
+    return 0;
+  }
+
+  return Math.round(amount * 100) / 100;
 }
 
 /* ------------------------------------------------------------------
@@ -391,13 +436,12 @@ router.get('/add', async (req, res) => {
   try {
     const pid = String(req.query.pid || '').trim();
     const rawQty = Number(req.query.qty);
-    const qty = Number.isFinite(rawQty) && rawQty > 0
-      ? Math.floor(rawQty)
-      : 1;
+    const qty = Number.isFinite(rawQty) && rawQty > 0 ? Math.floor(rawQty) : 1;
     const product = await findProductByPid(pid);
 
     if (!product) {
-      if (wantsJson(req)) return res.status(404).json({ success: false, message: 'Product not found.' });
+      if (wantsJson(req))
+        return res.status(404).json({ success: false, message: 'Product not found.' });
       if (typeof req.flash === 'function') req.flash('error', 'Product not found.');
       const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
@@ -430,7 +474,7 @@ router.get('/add', async (req, res) => {
       if (typeof req.flash === 'function') req.flash('error', variantError);
       const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
-    }   
+    }
 
     const cart = ensureCart(req);
 
@@ -447,7 +491,9 @@ router.get('/add', async (req, res) => {
       return res.redirect(back);
     }
 
-    const prodCat = String(product.category || '').trim().toLowerCase();
+    const prodCat = String(product.category || '')
+      .trim()
+      .toLowerCase();
     const prodIsSH = isSecondhandCategory(prodCat);
     const prodBiz = businessKeyFromProduct(product);
 
@@ -456,8 +502,10 @@ router.get('/add', async (req, res) => {
 
     if (lockBiz) {
       if (!prodIsSH) {
-        if (wantsJson(req)) return res.status(409).json(nonSecondhandRejectPayloadWhenSecondhandLocked());
-        if (typeof req.flash === 'function') req.flash('error', nonSecondhandRejectPayloadWhenSecondhandLocked().message);
+        if (wantsJson(req))
+          return res.status(409).json(nonSecondhandRejectPayloadWhenSecondhandLocked());
+        if (typeof req.flash === 'function')
+          req.flash('error', nonSecondhandRejectPayloadWhenSecondhandLocked().message);
         const back = req.query.back || req.get('referer') || '/products/sales';
         return res.redirect(back);
       }
@@ -471,8 +519,10 @@ router.get('/add', async (req, res) => {
 
     // If cart is normal mode (has items but no second-hand) → block adding second-hand
     if (!lockBiz && cart.items.length > 0 && prodIsSH) {
-      if (wantsJson(req)) return res.status(409).json(secondhandRejectPayloadWhenNormalCartHasItems());
-      if (typeof req.flash === 'function') req.flash('error', secondhandRejectPayloadWhenNormalCartHasItems().message);
+      if (wantsJson(req))
+        return res.status(409).json(secondhandRejectPayloadWhenNormalCartHasItems());
+      if (typeof req.flash === 'function')
+        req.flash('error', secondhandRejectPayloadWhenNormalCartHasItems().message);
       const back = req.query.back || req.get('referer') || '/products/sales';
       return res.redirect(back);
     }
@@ -536,7 +586,8 @@ router.get('/add', async (req, res) => {
     return res.redirect(back);
   } catch (err) {
     console.error('❌ /api/cart/add error:', err);
-    if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Failed to add to cart.' });
+    if (wantsJson(req))
+      return res.status(500).json({ success: false, message: 'Failed to add to cart.' });
     if (typeof req.flash === 'function') req.flash('error', 'Failed to add to cart.');
     const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
@@ -556,7 +607,9 @@ router.get('/dec', async (req, res) => {
     // ✅ Optional variants support for legacy dec endpoint
     let variantData = {};
     if (req.query.variants) {
-      try { variantData = JSON.parse(req.query.variants); } catch {
+      try {
+        variantData = JSON.parse(req.query.variants);
+      } catch {
         // placeholding
       }
     }
@@ -578,7 +631,8 @@ router.get('/dec', async (req, res) => {
     return res.redirect(back);
   } catch (err) {
     console.error('❌ /api/cart/dec error:', err);
-    if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Failed to decrease.' });
+    if (wantsJson(req))
+      return res.status(500).json({ success: false, message: 'Failed to decrease.' });
     const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   }
@@ -597,7 +651,9 @@ router.get('/remove', async (req, res) => {
     // ✅ Optional variants support for legacy remove endpoint
     let variantData = {};
     if (req.query.variants) {
-      try { variantData = JSON.parse(req.query.variants); } catch {
+      try {
+        variantData = JSON.parse(req.query.variants);
+      } catch {
         // placeholding
       }
     }
@@ -616,7 +672,7 @@ router.get('/remove', async (req, res) => {
       // keep old behavior for non-variant items
       cart.items = (cart.items || []).filter((i) => String(i.productId) !== String(idForCart));
     }
-        
+
     req.session.cart = cart;
 
     if (wantsJson(req)) return res.json({ success: true, cart: { items: cart.items } });
@@ -624,7 +680,8 @@ router.get('/remove', async (req, res) => {
     return res.redirect(back);
   } catch (err) {
     console.error('❌ /api/cart/remove error:', err);
-    if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Failed to remove.' });
+    if (wantsJson(req))
+      return res.status(500).json({ success: false, message: 'Failed to remove.' });
     const back = req.query.back || req.get('referer') || '/products/sales';
     return res.redirect(back);
   }
@@ -674,19 +731,27 @@ router.post('/increase', express.json(), async (req, res) => {
       return res.status(409).json({ ...mixingRejectPayload(), items: cart.items });
     }
 
-    const prodCat = String(product.category || '').trim().toLowerCase();
+    const prodCat = String(product.category || '')
+      .trim()
+      .toLowerCase();
     const prodIsSH = isSecondhandCategory(prodCat);
     const prodBiz = businessKeyFromProduct(product);
 
     const lockBiz = getSecondhandLockBusiness(cart.items);
 
     if (lockBiz) {
-      if (!prodIsSH) return res.status(409).json({ ...nonSecondhandRejectPayloadWhenSecondhandLocked(), items: cart.items });
-      if (prodBiz && prodBiz !== lockBiz) return res.status(409).json({ ...secondhandRejectPayload(), items: cart.items });
+      if (!prodIsSH)
+        return res
+          .status(409)
+          .json({ ...nonSecondhandRejectPayloadWhenSecondhandLocked(), items: cart.items });
+      if (prodBiz && prodBiz !== lockBiz)
+        return res.status(409).json({ ...secondhandRejectPayload(), items: cart.items });
     }
 
     if (!lockBiz && cart.items.length > 0 && prodIsSH) {
-      return res.status(409).json({ ...secondhandRejectPayloadWhenNormalCartHasItems(), items: cart.items });
+      return res
+        .status(409)
+        .json({ ...secondhandRejectPayloadWhenNormalCartHasItems(), items: cart.items });
     }
 
     if (prodIsSH && !prodBiz) {
@@ -717,14 +782,15 @@ router.post('/increase', express.json(), async (req, res) => {
       // ✅ If caller forgot variants but cart already has multiple variants of same product,
       // do NOT create a duplicate ambiguous line.
       const sameProductCount = (cart.items || []).filter(
-        (it) => String(it.productId) === id
+        (it) => String(it.productId) === id,
       ).length;
 
       const noVariantsSent = Object.keys(normVariants(variants)).length === 0;
 
       if (noVariantsSent && sameProductCount > 0) {
         return res.status(409).json({
-          message: 'This item has size/color variants. Please send the selected variant when changing quantity.',
+          message:
+            'This item has size/color variants. Please send the selected variant when changing quantity.',
           code: 'VARIANT_REQUIRED_FOR_QTY',
           items: cart.items,
         });
@@ -813,7 +879,9 @@ router.post('/remove', express.json(), async (req, res) => {
     return res.json({ items: cart.items });
   } catch (err) {
     console.error('❌ POST /api/cart/remove error:', err);
-    return res.status(500).json({ message: 'Failed to remove item.', items: ensureCart(req).items });
+    return res
+      .status(500)
+      .json({ message: 'Failed to remove item.', items: ensureCart(req).items });
   }
 });
 
@@ -830,14 +898,18 @@ router.patch('/item/:id', express.json(), async (req, res) => {
     quantity = Number(quantity);
 
     if (!Number.isFinite(quantity)) {
-      return res.status(400).json({ message: 'Quantity must be a number.', items: ensureCart(req).items });
+      return res
+        .status(400)
+        .json({ message: 'Quantity must be a number.', items: ensureCart(req).items });
     }
 
     const cart = ensureCart(req);
 
-    let variants = req.body?.variants || {
-      // placeholding
-    };
+    let variants =
+      req.body?.variants ||
+      {
+        // placeholding
+      };
     variants = normVariants(variants);
 
     if (quantity <= 0) {
@@ -862,12 +934,15 @@ router.patch('/item/:id', express.json(), async (req, res) => {
     if (idx < 0) {
       // ✅ If same product exists in multiple variant lines and caller did not send variants,
       // reject instead of creating ambiguous/ghost behavior
-      const sameProductCount = (cart.items || []).filter((it) => String(it.productId) === String(id)).length;
+      const sameProductCount = (cart.items || []).filter(
+        (it) => String(it.productId) === String(id),
+      ).length;
       const noVariantsSent = Object.keys(variants).length === 0;
 
       if (sameProductCount > 0 && noVariantsSent) {
         return res.status(409).json({
-          message: 'This item has size/color variants. Please send the selected variant when changing quantity.',
+          message:
+            'This item has size/color variants. Please send the selected variant when changing quantity.',
           code: 'VARIANT_REQUIRED_FOR_QTY',
           items: cart.items,
         });
@@ -890,20 +965,29 @@ router.patch('/item/:id', express.json(), async (req, res) => {
       // Strict no-mixing
       const hasSH = cartHasSecondhand(cart.items);
       const hasNSH = cartHasNonSecondhand(cart.items);
-      if (hasSH && hasNSH) return res.status(409).json({ ...mixingRejectPayload(), items: cart.items });
+      if (hasSH && hasNSH)
+        return res.status(409).json({ ...mixingRejectPayload(), items: cart.items });
 
-      const prodCat = String(product.category || '').trim().toLowerCase();
+      const prodCat = String(product.category || '')
+        .trim()
+        .toLowerCase();
       const prodIsSH = isSecondhandCategory(prodCat);
       const prodBiz = businessKeyFromProduct(product);
       const lockBiz = getSecondhandLockBusiness(cart.items);
 
       if (lockBiz) {
-        if (!prodIsSH) return res.status(409).json({ ...nonSecondhandRejectPayloadWhenSecondhandLocked(), items: cart.items });
-        if (prodBiz && prodBiz !== lockBiz) return res.status(409).json({ ...secondhandRejectPayload(), items: cart.items });
+        if (!prodIsSH)
+          return res
+            .status(409)
+            .json({ ...nonSecondhandRejectPayloadWhenSecondhandLocked(), items: cart.items });
+        if (prodBiz && prodBiz !== lockBiz)
+          return res.status(409).json({ ...secondhandRejectPayload(), items: cart.items });
       }
 
       if (!lockBiz && cart.items.length > 0 && prodIsSH) {
-        return res.status(409).json({ ...secondhandRejectPayloadWhenNormalCartHasItems(), items: cart.items });
+        return res
+          .status(409)
+          .json({ ...secondhandRejectPayloadWhenNormalCartHasItems(), items: cart.items });
       }
 
       if (prodIsSH && !prodBiz) {
@@ -947,7 +1031,9 @@ router.patch('/item/:id', express.json(), async (req, res) => {
     return res.json({ items: cart.items });
   } catch (err) {
     console.error('❌ PATCH /api/cart/item/:id error:', err);
-    return res.status(500).json({ message: 'Failed to update quantity.', items: ensureCart(req).items });
+    return res
+      .status(500)
+      .json({ message: 'Failed to update quantity.', items: ensureCart(req).items });
   }
 });
 
@@ -976,7 +1062,9 @@ router.delete('/item/:id', express.json(), async (req, res) => {
     return res.json({ items: cart.items });
   } catch (err) {
     console.error('❌ DELETE /api/cart/item/:id error:', err);
-    return res.status(500).json({ message: 'Failed to remove item.', items: ensureCart(req).items });
+    return res
+      .status(500)
+      .json({ message: 'Failed to remove item.', items: ensureCart(req).items });
   }
 });
 
@@ -984,15 +1072,24 @@ router.delete('/item/:id', express.json(), async (req, res) => {
  * POST /api/cart/clear
  * ------------------------------------------------------------------ */
 router.post('/clear', (req, res) => {
-  req.session.cart = { items: [], _vatUpgradedOnce: true };
-  return res.json({ items: [] });
+  req.session.cart = {
+    items: [],
+  };
+
+  return res.json({
+    items: [],
+  });
 });
 
 // ✅ GET alias
 router.get('/clear', (req, res) => {
-  req.session.cart = { items: [], _vatUpgradedOnce: true };
-  return res.json({ items: [] });
+  req.session.cart = {
+    items: [],
+  };
+
+  return res.json({
+    items: [],
+  });
 });
 
 module.exports = router;
-

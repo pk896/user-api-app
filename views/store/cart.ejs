@@ -75,9 +75,94 @@
     }
   }  
 
-  const cartGrossTotal = Number(cartSubtotal || 0);
-  const cartNetSubtotal = VAT > 0 ? (cartGrossTotal / (1 + VAT)) : cartGrossTotal;
-  const cartVatAmount = cartGrossTotal - cartNetSubtotal;
+  function roundMoney(amount) {
+    const numericAmount =
+      Number(amount || 0);
+
+    if (!Number.isFinite(numericAmount)) {
+      return 0;
+    }
+
+    return Number(
+      numericAmount.toFixed(2)
+    );
+  }
+
+  /*
+   * Internal cart pricing
+   * =====================
+   *
+   * cartSubtotal and cart item.price are authoritative
+   * VAT-exclusive BASE_CURRENCY amounts.
+   *
+   * VAT is added only for provisional storefront presentation.
+   *
+   * The validated checkout shipping country will later make the
+   * authoritative final VAT decision.
+   */
+  const cartNetSubtotal =
+    roundMoney(
+      cartSubtotal
+    );
+
+  const cartVatAmount =
+    roundMoney(
+      cartNetSubtotal *
+      VAT
+    );
+
+  const cartGrossTotal =
+    roundMoney(
+      cartNetSubtotal +
+      cartVatAmount
+    );
+
+  function getCartItemPriceExVat(item) {
+    const priceExVat =
+      Number(
+        item &&
+        item.priceExVat
+      );
+
+    if (
+      Number.isFinite(priceExVat) &&
+      priceExVat >= 0
+    ) {
+      return roundMoney(
+        priceExVat
+      );
+    }
+
+    const storedPrice =
+      Number(
+        item &&
+        item.price
+      );
+
+    return (
+      Number.isFinite(storedPrice) &&
+      storedPrice >= 0
+    )
+      ? roundMoney(storedPrice)
+      : 0;
+  }
+
+  function getCartItemVatAmount(item) {
+    return roundMoney(
+      getCartItemPriceExVat(item) *
+      VAT
+    );
+  }
+
+  function getCartItemDisplayPrice(item) {
+    return roundMoney(
+      getCartItemPriceExVat(item) +
+      getCartItemVatAmount(item)
+    );
+  }
+
+  const CART_IS_SOUTH_AFRICAN_VAT =
+    VAT > 0;
 %>
 
 <!-- Spinner Start -->
@@ -293,7 +378,9 @@
               </div>
             </td>
             <td>
-              <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0)) %></p>
+              <p class="mb-0 py-4">
+                <%= formatMoney(getCartItemDisplayPrice(item)) %>
+              </p>
             </td>
             <td>
               <div class="input-group quantity py-4" style="width: 100px;">
@@ -311,7 +398,14 @@
               </div>
             </td>
             <td>
-              <p class="mb-0 py-4"><%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %></p>
+              <p class="mb-0 py-4">
+                <%= formatMoney(
+                  roundMoney(
+                    getCartItemDisplayPrice(item) *
+                    Number(item.quantity || 0)
+                  )
+                ) %>
+              </p>
             </td>
             <td class="py-4">
               <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">
@@ -337,23 +431,52 @@
             <h1 class="display-6 mb-4">Cart <span class="fw-normal">Total</span></h1>
 
             <div class="d-flex justify-content-between mb-3">
-              <h5 class="mb-0 me-4">Subtotal (excl. VAT):</h5>
-              <p class="mb-0" id="cartSubtotal"><%= formatMoney(cartNetSubtotal) %></p>
+              <h5 class="mb-0 me-4">
+                Products subtotal:
+              </h5>
+
+              <p class="mb-0" id="cartSubtotal">
+                <%= formatMoney(cartNetSubtotal) %>
+              </p>
             </div>
 
             <div class="d-flex justify-content-between mb-3">
-              <h5 class="mb-0 me-4">VAT (<%= (VAT * 100).toFixed(0) %>%):</h5>
-              <p class="mb-0" id="cartVatTotal"><%= formatMoney(cartVatAmount) %></p>
+              <h5 class="mb-0 me-4">
+                VAT (<%= (VAT * 100).toFixed(0) %>%):
+              </h5>
+
+              <p class="mb-0" id="cartVatTotal">
+                <%= formatMoney(cartVatAmount) %>
+              </p>
             </div>
 
             <div class="d-flex justify-content-between mb-0">
-              <h5 class="mb-0 me-4">Total (incl. VAT):</h5>
-              <p class="mb-0 fw-bold" id="cartGrandTotal"><%= formatMoney(cartGrossTotal) %></p>
+              <h5 class="mb-0 me-4">
+                Provisional total:
+              </h5>
+
+              <p class="mb-0 fw-bold" id="cartGrandTotal">
+                <%= formatMoney(cartGrossTotal) %>
+              </p>
             </div>
 
+            <% if (CART_IS_SOUTH_AFRICAN_VAT) { %>
             <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">
-              Shipping is not included in the cart total yet. You will select your shipping rate in Checkout.
+              This provisional cart total includes South African VAT.
+              Shipping is not included yet. Your validated Checkout
+              delivery address will determine the final VAT treatment
+              and available shipping rates.
             </div>
+            <% } else { %>
+            <div class="alert alert-warning mt-4 mb-0 py-3 px-3" role="alert">
+              South African VAT is provisionally shown at 0% because
+              the selected delivery destination is outside South Africa.
+              Shipping, destination-country import VAT, customs duties
+              and other import charges are not included. Your validated
+              Checkout delivery address will determine the final tax
+              treatment and shipping rates.
+            </div>
+            <% } %>
           </div>
 
           <a href="/payment/checkout" class="btn btn-primary rounded-pill px-4 py-3 text-uppercase mb-4 ms-4">

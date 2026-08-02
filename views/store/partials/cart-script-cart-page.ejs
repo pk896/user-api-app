@@ -48,45 +48,207 @@
       }
     }
 
-    const VAT_RATE_RAW = Number(
-      "<%= Number(typeof vatRate !== 'undefined' && vatRate !== null ? vatRate : 0.15) %>"
-    );
+    /*
+     * Provisional Internal VAT rate
+     * =============================
+     *
+     * The cart page route has already resolved this rate from the
+     * customer's provisional delivery country.
+     *
+     * South Africa:
+     * 0.15
+     *
+     * Destination outside South Africa:
+     * 0
+     *
+     * Checkout will later use the validated shipping address for
+     * the authoritative final VAT calculation.
+     */
+    const VAT_RATE_RAW =
+      Number(
+        "<%= Number(
+          typeof vatRate !== 'undefined' &&
+          vatRate !== null
+            ? vatRate
+            : 0.15
+        ) %>"
+      );
 
     const VAT_RATE =
-      Number.isFinite(VAT_RATE_RAW) &&
-      VAT_RATE_RAW >= 0 ?
+      Number.isFinite(
+        VAT_RATE_RAW
+      ) &&
+      VAT_RATE_RAW >= 0 &&
+      VAT_RATE_RAW <= 1 ?
       VAT_RATE_RAW :
       0;
 
     function round2(n) {
-      return Math.round(Number(n || 0) * 100) / 100;
+      const amount =
+        Number(
+          n
+        );
+
+      if (
+        !Number.isFinite(
+          amount
+        )
+      ) {
+        return 0;
+      }
+
+      return (
+        Math.round(
+          amount *
+          100
+        ) /
+        100
+      );
     }
 
     function getVariantsFromRow(row) {
-      const size = (row.getAttribute('data-variant-size') || '').trim();
-      const color = (row.getAttribute('data-variant-color') || '').trim();
+      const size =
+        (
+          row.getAttribute(
+            'data-variant-size'
+          ) ||
+          ''
+        ).trim();
+
+      const color =
+        (
+          row.getAttribute(
+            'data-variant-color'
+          ) ||
+          ''
+        ).trim();
+
       const variants = {};
 
-      if (size) variants.size = size;
-      if (color) variants.color = color;
+      if (size) {
+        variants.size = size;
+      }
+
+      if (color) {
+        variants.color = color;
+      }
 
       return variants;
     }
 
+    /*
+     * Read the authoritative VAT-exclusive unit price.
+     *
+     * New Internal cart records contain the same VAT-exclusive
+     * amount in both price and priceExVat.
+     *
+     * priceExVat remains the preferred source for compatibility
+     * with older customer sessions.
+     */
+    function getItemPriceExVat(item) {
+      const storedPriceExVat =
+        Number(
+          item &&
+          item.priceExVat
+        );
+
+      if (
+        Number.isFinite(
+          storedPriceExVat
+        ) &&
+        storedPriceExVat >= 0
+      ) {
+        return round2(
+          storedPriceExVat
+        );
+      }
+
+      const storedPrice =
+        Number(
+          item &&
+          item.price
+        );
+
+      if (
+        Number.isFinite(
+          storedPrice
+        ) &&
+        storedPrice >= 0
+      ) {
+        return round2(
+          storedPrice
+        );
+      }
+
+      return 0;
+    }
+
+    function getItemVatAmount(item) {
+      return round2(
+        getItemPriceExVat(
+          item
+        ) *
+        VAT_RATE
+      );
+    }
+
+    function getItemDisplayPrice(item) {
+      return round2(
+        getItemPriceExVat(
+          item
+        ) +
+        getItemVatAmount(
+          item
+        )
+      );
+    }
+
     function getCartSummary(items) {
-      const list = Array.isArray(items) ? items : [];
+      const list =
+        Array.isArray(items) ?
+        items :
+        [];
 
-      return list.reduce(function(acc, item) {
-        const quantity = Number(item.quantity || 0);
-        const price = Number(item.price || 0);
+      return list.reduce(
+        function(acc, item) {
+          const quantity =
+            Math.max(
+              0,
+              Math.floor(
+                Number(
+                  item &&
+                  item.quantity
+                ) ||
+                0
+              )
+            );
 
-        acc.count += quantity;
-        acc.total += price * quantity;
-        return acc;
-      }, {
-        count: 0,
-        total: 0
-      });
+          const unitPriceExVat =
+            getItemPriceExVat(
+              item
+            );
+
+          const lineSubtotalExVat =
+            round2(
+              unitPriceExVat *
+              quantity
+            );
+
+          acc.count +=
+            quantity;
+
+          acc.subtotalExVat =
+            round2(
+              acc.subtotalExVat +
+              lineSubtotalExVat
+            );
+
+          return acc;
+        }, {
+          count: 0,
+          subtotalExVat: 0
+        }
+      );
     }
 
     function escapeHtml(value) {
@@ -120,23 +282,34 @@
       const list = Array.isArray(items) ?
         items : [];
 
-      const summary = getCartSummary(list);
+      const summary =
+        getCartSummary(
+          list
+        );
 
       /*
-       * Cart item prices already include VAT.
-       * Keep the calculation in BASE_CURRENCY and convert only
-       * when writing the visible text.
+       * Internal cart prices are VAT-exclusive.
+       *
+       * Apply the current provisional VAT rate forward:
+       *
+       * subtotalExVat + VAT = provisional total.
        */
-      const grossTotal =
-        round2(summary.total);
-
       const netSubtotal =
-        VAT_RATE > 0 ?
-        round2(grossTotal / (1 + VAT_RATE)) :
-        grossTotal;
+        round2(
+          summary.subtotalExVat
+        );
 
       const vatTotal =
-        round2(grossTotal - netSubtotal);
+        round2(
+          netSubtotal *
+          VAT_RATE
+        );
+
+      const grossTotal =
+        round2(
+          netSubtotal +
+          vatTotal
+        );
 
       if (subtotalEl) {
         subtotalEl.textContent =
@@ -181,7 +354,19 @@
       body.innerHTML = list.map(function(item) {
         const size = item.variants && item.variants.size ? item.variants.size : '';
         const color = item.variants && item.variants.color ? item.variants.color : '';
-        const lineTotal = Number(item.price || 0) * Number(item.quantity || 0);
+        const unitDisplayPrice =
+          getItemDisplayPrice(
+            item
+          );
+
+        const lineTotal =
+          round2(
+            unitDisplayPrice *
+            Number(
+              item.quantity ||
+              0
+            )
+          );
 
         return [
           '<tr class="cart-row" data-pid="' + escapeHtml(item.customId || '') + '" data-variant-size="' + escapeHtml(size) + '" data-variant-color="' + escapeHtml(color) + '">',
@@ -198,7 +383,7 @@
           '    </div>',
           '  </th>',
           '  <td><p class="mb-0 py-4">' + escapeHtml(item.customId || 'N/A') + '</p></td>',
-          '  <td><p class="mb-0 py-4">' + formatMoney(Number(item.price || 0)) + '</p></td>',
+          '  <td><p class="mb-0 py-4">' + formatMoney(unitDisplayPrice) + '</p></td>',
           '  <td>',
           '    <div class="input-group quantity py-4" style="width: 100px;">',
           '      <div class="input-group-btn">',
@@ -210,7 +395,7 @@
           '      </div>',
           '    </div>',
           '  </td>',
-          '  <td><p class="mb-0 py-4">' + formatMoney(Number(lineTotal || 0)) + '</p></td>',
+          '  <td><p class="mb-0 py-4">' + formatMoney(lineTotal) + '</p></td>',
           '  <td class="py-4">',
           '    <button type="button" class="btn btn-md rounded-circle bg-light border js-cart-remove">',
           '      <i class="fa fa-times text-danger"></i>',

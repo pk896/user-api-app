@@ -50,23 +50,173 @@
     }
 
     function round2(n) {
-      return Math.round(Number(n || 0) * 100) / 100;
+      return Math.round(
+        Number(n || 0) * 100
+      ) / 100;
+    }
+
+    /*
+     * Internal Kasyora provisional VAT rate
+     * ======================================
+     *
+     * The active storefront route has already resolved this rate
+     * from the provisional delivery country:
+     *
+     * South Africa:
+     * 0.15
+     *
+     * Destination outside South Africa:
+     * 0
+     *
+     * This is used only for the visible Internal cart amount on
+     * storefront listing pages.
+     *
+     * The validated checkout shipping address will still make the
+     * authoritative final VAT decision.
+     */
+    const PROVISIONAL_INTERNAL_VAT_RATE_RAW =
+      Number(
+        "<%= Number(
+          typeof vatRate !== 'undefined' &&
+          vatRate !== null
+            ? vatRate
+            : 0.15
+        ) %>"
+      );
+
+    const PROVISIONAL_INTERNAL_VAT_RATE =
+      Number.isFinite(
+        PROVISIONAL_INTERNAL_VAT_RATE_RAW
+      ) &&
+      PROVISIONAL_INTERNAL_VAT_RATE_RAW >= 0 &&
+      PROVISIONAL_INTERNAL_VAT_RATE_RAW <= 1 ?
+      PROVISIONAL_INTERNAL_VAT_RATE_RAW :
+      0;
+
+    /*
+     * Read the authoritative VAT-exclusive cart unit price.
+     *
+     * Current Internal cart records provide priceExVat.
+     *
+     * The legacy fallbacks below protect existing customer sessions
+     * while routes/cart.js is corrected in the next focused patch.
+     */
+    function getInternalUnitPriceExVat(item) {
+      const storedPriceExVat =
+        Number(
+          item &&
+          item.priceExVat
+        );
+
+      if (
+        Number.isFinite(
+          storedPriceExVat
+        ) &&
+        storedPriceExVat >= 0
+      ) {
+        return round2(
+          storedPriceExVat
+        );
+      }
+
+      const storedPrice =
+        Number(
+          item &&
+          item.price
+        );
+
+      if (
+        !Number.isFinite(
+          storedPrice
+        ) ||
+        storedPrice < 0
+      ) {
+        return 0;
+      }
+
+      const storedVatRate =
+        Number(
+          item &&
+          item.vatRate
+        );
+
+      if (
+        item &&
+        item.vatIncluded === true &&
+        Number.isFinite(
+          storedVatRate
+        ) &&
+        storedVatRate > 0
+      ) {
+        return round2(
+          storedPrice /
+          (
+            1 +
+            storedVatRate
+          )
+        );
+      }
+
+      return round2(
+        storedPrice
+      );
     }
 
     function getCartSummary(items) {
-      const list = Array.isArray(items) ? items : [];
+      const list =
+        Array.isArray(items) ?
+        items :
+        [];
 
-      return list.reduce(function(acc, item) {
-        const quantity = Number(item.quantity || 0);
-        const price = Number(item.price || 0);
+      return list.reduce(
+        function(acc, item) {
+          const quantity =
+            Math.max(
+              0,
+              Math.floor(
+                Number(
+                  item &&
+                  item.quantity
+                ) ||
+                0
+              )
+            );
 
-        acc.count += quantity;
-        acc.total += price * quantity;
-        return acc;
-      }, {
-        count: 0,
-        total: 0
-      });
+          const unitPriceExVat =
+            getInternalUnitPriceExVat(
+              item
+            );
+
+          const unitVatAmount =
+            round2(
+              unitPriceExVat *
+              PROVISIONAL_INTERNAL_VAT_RATE
+            );
+
+          const visibleUnitPrice =
+            round2(
+              unitPriceExVat +
+              unitVatAmount
+            );
+
+          acc.count +=
+            quantity;
+
+          acc.total =
+            round2(
+              acc.total +
+              (
+                visibleUnitPrice *
+                quantity
+              )
+            );
+
+          return acc;
+        }, {
+          count: 0,
+          total: 0
+        }
+      );
     }
 
     function updateCartHeader(items) {

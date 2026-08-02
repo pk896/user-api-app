@@ -4076,44 +4076,117 @@ router.get('/store/product/:id', async (req, res) => {
 });
 
 router.get('/store/cart', async (req, res) => {
+  /*
+   * The Internal cart page must use the same provisional
+   * country-aware VAT treatment as the other Internal
+   * storefront pages.
+   *
+   * The validated Checkout shipping address will later make
+   * the authoritative final VAT decision.
+   */
+  const storefrontTaxContext = resolveStorefrontTaxContext(req, 'internal');
+
   try {
-    const shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
-      .sort({ updatedAt: -1 })
+    const shopHeaderImage = await ShopHeaderImage.findOne({
+      active: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
       .lean();
 
     const cartItems = Array.isArray(req.session?.cart?.items) ? req.session.cart.items : [];
 
+    /*
+     * Internal cart item.price is VAT-exclusive.
+     */
     const cartSubtotal = cartItems.reduce((sum, item) => {
-      const price = Number(item.price || 0);
-      const quantity = Number(item.quantity || 0);
-      return sum + price * quantity;
+      const price = Number(item?.priceExVat ?? item?.price ?? 0);
+
+      const quantity = Number(item?.quantity || 0);
+
+      const safePrice = Number.isFinite(price) ? price : 0;
+
+      const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+
+      return sum + safePrice * safeQuantity;
     }, 0);
 
     const cartCount = cartItems.reduce((sum, item) => {
-      return sum + Number(item.quantity || 0);
+      const quantity = Number(item?.quantity || 0);
+
+      return sum + (Number.isFinite(quantity) ? quantity : 0);
     }, 0);
 
-    res.render('store/cart', {
+    return res.render('store/cart', {
       layout: 'layouts/store',
+
       title: 'Cart',
+
       shopHeaderImage,
+
       cartItems,
-      cartSubtotal,
+
+      cartSubtotal: Number(cartSubtotal.toFixed(2)),
+
       cartCount,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+
+      /*
+       * This is now provisional-country-aware:
+       *
+       * South Africa:
+       * configured Internal VAT rate
+       *
+       * Outside South Africa:
+       * 0
+       */
+      vatRate: Number(storefrontTaxContext.vatRate),
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: storefrontTaxContext.provisional === true,
+
+      taxAuthoritative: false,
     });
   } catch (err) {
     console.error('❌ store cart error:', err);
-    res.render('store/cart', {
+
+    return res.render('store/cart', {
       layout: 'layouts/store',
+
       title: 'Cart',
+
       shopHeaderImage: null,
+
       cartItems: [],
+
       cartSubtotal: 0,
+
       cartCount: 0,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: Number(process.env.VAT_RATE || 0.15),
+
+      /*
+       * Preserve the resolved provisional tax treatment
+       * even when the cart-page data query fails.
+       */
+      vatRate: Number(storefrontTaxContext.vatRate),
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode,
+
+      taxCountrySource: storefrontTaxContext.countrySource,
+
+      taxProvisional: true,
+
+      taxAuthoritative: false,
     });
   }
 });
