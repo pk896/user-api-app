@@ -23,6 +23,10 @@ const {
   buildShippoParcelsFromCart_Strict,
 } = require('../utils/payment/buildShippoParcelsFromCart');
 
+const { TAX_COUNTRY_SOURCES, getSouthAfricaVatRate } = require('../utils/tax/taxConfig');
+
+const { resolveInternalTaxTreatment } = require('../utils/tax/resolveInternalTaxTreatment');
+
 // ======================================================
 // ✅ Admin guard (PROD SAFE)
 // ======================================================
@@ -142,7 +146,6 @@ const {
   // Example: BASE_CURRENCY=ZAR and PAYPAL_CHECKOUT_CURRENCY=USD.
   PAYPAL_CHECKOUT_CURRENCY = 'USD',
 
-  VAT_RATE = '0.15',
   BRAND_NAME = 'Kasyora',
   RECEIPT_TOKEN_SECRET = '', // optional (shareable receipt links)
 } = process.env;
@@ -209,12 +212,6 @@ const paypalCheckoutCcy = (() => {
   }
 
   return currency;
-})();
-
-const vatRate = (() => {
-  const n = Number(String(VAT_RATE || '0.15').trim());
-  if (!Number.isFinite(n)) return 0.15;
-  return Math.max(0, Math.min(1, n)); // clamp 0..1
 })();
 
 const BRAND_NAME_N = (() => {
@@ -470,7 +467,92 @@ function normalizeCountryCode(code) {
   const c = String(code || '')
     .trim()
     .toUpperCase();
+
   return /^[A-Z]{2}$/.test(c) ? c : null;
+}
+
+/*
+ * Provisional Internal checkout tax treatment
+ * ===========================================
+ *
+ * This is used only when initially rendering checkout.
+ *
+ * The provisional country may come from:
+ *
+ * - the customer's storefront selection;
+ * - trusted GeoIP;
+ * - Kasyora's configured default.
+ *
+ * It is not the final tax decision.
+ */
+function resolveProvisionalCheckoutTaxTreatment(req) {
+  const destinationCountryCode = normalizeCountryCode(req?.taxCountryContext?.countryCode) || 'ZA';
+
+  const countrySource = String(req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT)
+    .trim()
+    .toUpperCase();
+
+  const treatment = resolveInternalTaxTreatment({
+    destinationCountryCode,
+    countrySource,
+  });
+
+  return {
+    ...treatment,
+
+    destinationCountryCode,
+
+    countrySource,
+
+    authoritative: false,
+
+    provisional: true,
+  };
+}
+
+/*
+ * Authoritative Internal checkout tax treatment
+ * =============================================
+ *
+ * The validated shipping address supplied to /create-order is the
+ * final authority for the amount sent to PayPal.
+ *
+ * The browser does not supply a VAT rate. It supplies only the
+ * shipping address. The server resolves VAT from the validated
+ * two-letter shipping country.
+ */
+function resolveAuthoritativeCheckoutTaxTreatment(destinationCountryCode) {
+  const normalizedCountryCode = normalizeCountryCode(destinationCountryCode);
+
+  if (!normalizedCountryCode) {
+    const error = new Error(
+      'A valid checkout shipping country is required before VAT can be calculated.',
+    );
+
+    error.code = 'CHECKOUT_TAX_COUNTRY_INVALID';
+
+    throw error;
+  }
+
+  const countrySource = 'CHECKOUT_SHIPPING_ADDRESS';
+
+  const treatment = resolveInternalTaxTreatment({
+    destinationCountryCode: normalizedCountryCode,
+
+    countrySource,
+  });
+
+  return {
+    ...treatment,
+
+    destinationCountryCode: normalizedCountryCode,
+
+    countrySource,
+
+    authoritative: true,
+
+    provisional: false,
+  };
 }
 
 function cleanAddrField(v, max = 100) {
@@ -963,65 +1045,101 @@ async function normalizeShippoRates(shipmentJson, { targetCurrency = upperCcy } 
 }
 
 // ======================================================
-// ✅ Totals from cart
+// ✅ Totals from VAT-exclusive Internal cart
 // ======================================================
-function computeTotalsFromSession(cart, delivery = 0) {
+function computeTotalsFromSession(cart, delivery = 0, appliedVatRate = 0) {
   const itemsArr = Array.isArray(cart?.items) ? cart.items : [];
 
-  // Cart item prices are VAT-INCLUSIVE (gross)
-  // ✅ PayPal requires: item_total = sum(items.unit_amount * qty)
-  // So we must send NET unit_amount to PayPal and put VAT in tax_total.
-  const r = Number.isFinite(vatRate) ? vatRate : 0;
+  const parsedVatRate = Number(appliedVatRate);
+
+  const safeVatRate =
+    Number.isFinite(parsedVatRate) && parsedVatRate >= 0 && parsedVatRate <= 1 ? parsedVatRate : 0;
 
   let netItemsTotal = 0;
-  let grossItemsTotal = 0;
 
-  const ppItems = itemsArr.map((it, i) => {
-    const grossUnitRaw = normalizeMoneyNumber(it.price ?? it.unitPrice); // gross
-    const qtyN = toQty(it.qty ?? it.quantity, 1);
+  const ppItems = itemsArr.map((item, index) => {
+    /*
+     * Internal cart prices are VAT-exclusive.
+     *
+     * priceExVat is preferred for compatibility with older
+     * customer sessions.
+     */
+    const netUnitRaw = normalizeMoneyNumber(
+      item?.priceExVat ?? item?.price ?? item?.unitPriceNet ?? item?.unitPrice,
+    );
 
-    const grossUnit = grossUnitRaw === null ? 0 : +grossUnitRaw.toFixed(2);
+    const quantity = toQty(item?.qty ?? item?.quantity, 1);
 
-    // NET per unit (rounded to 2dp for PayPal consistency)
-    const netUnit = r > 0 ? +(grossUnit / (1 + r)).toFixed(2) : grossUnit;
+    const netUnit = netUnitRaw === null || netUnitRaw < 0 ? 0 : Number(netUnitRaw.toFixed(2));
 
-    const lineNet = +(netUnit * qtyN).toFixed(2);
-    const lineGross = +(grossUnit * qtyN).toFixed(2);
+    const lineNet = Number((netUnit * quantity).toFixed(2));
 
     netItemsTotal += lineNet;
-    grossItemsTotal += lineGross;
 
-    const name = (it.name || `Item ${i + 1}`).toString().slice(0, 127);
+    const name = String(item?.name || `Item ${index + 1}`)
+      .trim()
+      .slice(0, 127);
 
-    const description = safeStr(it.description || '', 127);
-    const sku = safeStr(it.sku || '', 127);
+    const description = safeStr(item?.description || '', 127);
+
+    const sku = safeStr(item?.sku || '', 127);
 
     return {
       name,
-      ...(description ? { description } : {}),
-      ...(sku ? { sku } : {}),
-      quantity: String(qtyN),
-      unit_amount: { currency_code: upperCcy, value: toMoney2(netUnit) }, // ✅ NET
+
+      ...(description
+        ? {
+            description,
+          }
+        : {}),
+
+      ...(sku
+        ? {
+            sku,
+          }
+        : {}),
+
+      quantity: String(quantity),
+
+      /*
+       * PayPal item_total remains VAT-exclusive.
+       *
+       * VAT is supplied separately through tax_total.
+       */
+      unit_amount: {
+        currency_code: upperCcy,
+
+        value: toMoney2(netUnit),
+      },
     };
   });
 
-  netItemsTotal = +netItemsTotal.toFixed(2);
-  grossItemsTotal = +grossItemsTotal.toFixed(2);
+  netItemsTotal = Number(netItemsTotal.toFixed(2));
 
-  // VAT extracted as: gross - net (using the same rounded sums)
-  const vat = +(grossItemsTotal - netItemsTotal).toFixed(2);
+  /*
+   * Apply VAT forward from the VAT-exclusive subtotal.
+   */
+  const vat = Number((netItemsTotal * safeVatRate).toFixed(2));
 
-  const del = +Number(delivery || 0).toFixed(2);
+  const deliveryAmount = normalizeMoneyNumber(delivery);
 
-  // amount.value MUST equal item_total + tax_total + shipping
-  const grand = +(netItemsTotal + vat + del).toFixed(2);
+  const safeDelivery =
+    deliveryAmount !== null && deliveryAmount >= 0 ? Number(deliveryAmount.toFixed(2)) : 0;
+
+  const grandTotal = Number((netItemsTotal + vat + safeDelivery).toFixed(2));
 
   return {
     items: ppItems,
-    subTotal: netItemsTotal, // ✅ NET (PayPal item_total)
-    vatTotal: vat, // ✅ VAT (PayPal tax_total)
-    delivery: del,
-    grandTotal: grand, // ✅ PayPal amount.value
+
+    subTotal: netItemsTotal,
+
+    vatRate: safeVatRate,
+
+    vatTotal: vat,
+
+    delivery: safeDelivery,
+
+    grandTotal,
   };
 }
 
@@ -1730,21 +1848,61 @@ function buildReceiptLink(orderId) {
 // ✅ VIEWS
 // ======================================================
 router.get('/checkout', async (req, res) => {
+  const provisionalTaxTreatment = resolveProvisionalCheckoutTaxTreatment(req);
+
   return res.render('checkout', {
     title: 'Checkout',
-    themeCss: themeCssFrom(req),
-    nonce: resNonce(req),
-    paypalClientId: String(PAYPAL_CLIENT_ID || '').trim(),
-    currency: paypalCheckoutCcy,
-    baseCurrency: upperCcy,
-    brandName: BRAND_NAME_N,
-    vatRate,
-    // COUNTRIES,
 
-    // ✅ Shippo-only checkout (no delivery options)
+    themeCss: themeCssFrom(req),
+
+    nonce: resNonce(req),
+
+    paypalClientId: String(PAYPAL_CLIENT_ID || '').trim(),
+
+    currency: paypalCheckoutCcy,
+
+    baseCurrency: upperCcy,
+
+    brandName: BRAND_NAME_N,
+
+    /*
+     * Initial checkout presentation only.
+     *
+     * The completed shipping address will become authoritative
+     * inside POST /create-order.
+     */
+    /*
+     * Initial provisional VAT rate for the currently selected
+     * delivery country.
+     */
+    vatRate: Number(provisionalTaxTreatment.vatRate),
+
+    /*
+     * Configured South African standard rate.
+     *
+     * checkout.ejs uses this when the shipping country is ZA.
+     * The server still independently makes the authoritative
+     * decision in POST /create-order.
+     */
+    southAfricaVatRate: Number(getSouthAfricaVatRate()),
+
+    taxTreatment: provisionalTaxTreatment,
+
+    taxCountryCode: provisionalTaxTreatment.destinationCountryCode,
+
+    taxCountrySource: provisionalTaxTreatment.countrySource,
+
+    taxProvisional: true,
+
+    taxAuthoritative: false,
+
+    defaultCountry: provisionalTaxTreatment.destinationCountryCode,
+
+    // ✅ Shippo-only checkout
     shippoOnly: true,
 
     success: req.flash?.('success') || [],
+
     error: req.flash?.('error') || [],
   });
 });
@@ -2049,12 +2207,32 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       });
     }
 
+    /*
+     * Authoritative VAT decision
+     * ==========================
+     *
+     * requireShippingAddressFromBody() has already validated the
+     * shipping country as a two-letter ISO code.
+     *
+     * This address country overrides all provisional storefront,
+     * GeoIP and default-country values.
+     */
+    const authoritativeTaxTreatment = resolveAuthoritativeCheckoutTaxTreatment(
+      shippingInput.address.country_code,
+    );
+
+    const authoritativeVatRate = Number(authoritativeTaxTreatment.vatRate);
+
     const itemsBrief = cart.items.map((it, i) => {
       const qty = toQty(it.qty ?? it.quantity, 1);
-      const unitPriceN = normalizeMoneyNumber(it.price ?? it.unitPrice);
+      const unitPriceExVatRaw = normalizeMoneyNumber(
+        it?.priceExVat ?? it?.price ?? it?.unitPriceNet ?? it?.unitPrice,
+      );
 
-      if (unitPriceN === null || unitPriceN < 0) {
-        throw new Error(`Invalid price for item #${i + 1}. Fix cart item price before checkout.`);
+      if (unitPriceExVatRaw === null || unitPriceExVatRaw < 0) {
+        throw new Error(
+          `Invalid VAT-exclusive price for item #${i + 1}. Fix the cart item price before checkout.`,
+        );
       }
 
       const productId = String(
@@ -2075,18 +2253,35 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
         );
       }
 
-      const grossUnit = Number(unitPriceN.toFixed(2));
-      const r = Number.isFinite(vatRate) ? vatRate : 0;
-      const netUnit = r > 0 ? Number((grossUnit / (1 + r)).toFixed(2)) : grossUnit;
+      const netUnit = Number(unitPriceExVatRaw.toFixed(2));
+
+      const unitVat = Number((netUnit * authoritativeVatRate).toFixed(2));
+
+      const grossUnit = Number((netUnit + unitVat).toFixed(2));
 
       return {
         productId,
-        name: (it.name || it.title || `Item ${i + 1}`).toString().slice(0, 127),
+
+        name: String(it.name || it.title || `Item ${i + 1}`).slice(0, 127),
+
         quantity: qty,
-        unitPrice: grossUnit,
-        unitPriceGross: grossUnit,
+
+        /*
+         * unitPrice remains VAT-exclusive because this is the
+         * authoritative cart and seller-accounting value.
+         */
+        unitPrice: netUnit,
+
         unitPriceNet: netUnit,
+
+        unitVat,
+
+        unitPriceGross: grossUnit,
+
+        vatRate: authoritativeVatRate,
+
         imageUrl: it.imageUrl || it.image || '',
+
         variants: it.variants || {},
       };
     });
@@ -2363,20 +2558,31 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     const {
       items: basePaypalItems,
       subTotal,
+      vatRate: appliedVatRate,
       vatTotal,
       delivery: del,
       grandTotal: grand,
     } = computeTotalsFromSession(
       {
-        items: itemsBrief.map((x) => ({
-          name: paypalNameWithVariants(x.name, x.variants),
-          description: variantText(x.variants),
-          sku: x.productId,
-          price: x.unitPrice,
-          quantity: x.quantity,
+        items: itemsBrief.map((item) => ({
+          name: paypalNameWithVariants(item.name, item.variants),
+
+          description: variantText(item.variants),
+
+          sku: item.productId,
+
+          /*
+           * The helper receives VAT-exclusive prices.
+           */
+          priceExVat: item.unitPriceNet,
+
+          quantity: item.quantity,
         })),
       },
+
       deliveryDollars,
+
+      authoritativeVatRate,
     );
 
     /*
@@ -2564,12 +2770,47 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
       deliveryPrice: del,
 
       /*
-       * Kasyora accounting values.
+       * Kasyora authoritative accounting values.
        */
       subTotal,
+
+      vatRate: appliedVatRate,
+
       vatTotal,
+
       grandTotal: grand,
+
       currency: upperCcy,
+
+      /*
+       * Authoritative Internal tax evidence.
+       *
+       * This was resolved from the validated checkout shipping
+       * address, not from GeoIP or the provisional selector.
+       */
+      taxTreatment: {
+        destinationCountryCode: authoritativeTaxTreatment.destinationCountryCode,
+
+        countrySource: authoritativeTaxTreatment.countrySource,
+
+        jurisdiction: authoritativeTaxTreatment.jurisdiction || '',
+
+        treatmentCode: authoritativeTaxTreatment.treatmentCode || '',
+
+        label: authoritativeTaxTreatment.label || '',
+
+        reason: authoritativeTaxTreatment.reason || '',
+
+        vatRate: appliedVatRate,
+
+        vatPercentage: Number(authoritativeTaxTreatment.vatPercentage ?? appliedVatRate * 100),
+
+        authoritative: true,
+
+        provisional: false,
+
+        resolvedAt: new Date().toISOString(),
+      },
 
       /*
        * PayPal checkout values.
@@ -2600,7 +2841,27 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
 
     await saveSession(req);
 
-    return res.json({ ok: true, id: data.id });
+    return res.json({
+      ok: true,
+
+      id: data.id,
+
+      taxTreatment: req.session.pendingOrder.taxTreatment,
+
+      totals: {
+        subTotal,
+
+        vatRate: appliedVatRate,
+
+        vatTotal,
+
+        shipping: del,
+
+        grandTotal: grand,
+
+        currency: upperCcy,
+      },
+    });
   } catch (err) {
     console.error('create-order error:', err?.stack || err);
     return res.status(500).json({
@@ -2813,29 +3074,59 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
     const grossVal = srb?.gross_amount?.value ?? null;
 
     const itemsFromPending = Array.isArray(pending?.itemsBrief)
-      ? pending.itemsBrief.map((it) => {
-          const grossN = normalizeMoneyNumber(it?.unitPriceGross ?? it?.unitPrice);
-          const grossUnit = grossN === null ? 0 : Number(grossN.toFixed(2));
+      ? pending.itemsBrief.map((item) => {
+          /*
+           * The authoritative net and gross values were frozen
+           * before PayPal order creation.
+           *
+           * Do not recalculate them using the environment VAT
+           * rate during capture.
+           */
+          const netRaw = normalizeMoneyNumber(item?.unitPriceNet ?? item?.unitPrice);
 
-          const netN = normalizeMoneyNumber(it?.unitPriceNet);
-          const r = Number.isFinite(vatRate) ? vatRate : 0;
-          const computedNet = r > 0 ? Number((grossUnit / (1 + r)).toFixed(2)) : grossUnit;
-          const netUnit = netN === null ? computedNet : Number(netN.toFixed(2));
+          const grossRaw = normalizeMoneyNumber(item?.unitPriceGross);
+
+          const netUnit = netRaw === null ? 0 : Number(netRaw.toFixed(2));
+
+          const storedVatRate = normalizeMoneyNumber(item?.vatRate);
+
+          const safeStoredVatRate =
+            storedVatRate !== null && storedVatRate >= 0 && storedVatRate <= 1
+              ? storedVatRate
+              : Number(pending?.vatRate || 0);
+
+          const computedGross = Number((netUnit + netUnit * safeStoredVatRate).toFixed(2));
+
+          const grossUnit = grossRaw === null ? computedGross : Number(grossRaw.toFixed(2));
 
           return {
-            productId: String(it?.productId || '').trim(), // ✅ Product.customId
-            name: it?.name || '',
-            quantity: toQty(it?.quantity, 1),
+            productId: String(item?.productId || '').trim(),
 
-            // ✅ IMPORTANT:
-            // price = NET (seller crediting will use this)
-            price: { value: toMoney2(netUnit), currency: upperCcy },
+            name: item?.name || '',
 
-            // ✅ keep gross for receipts/UI
-            priceGross: { value: toMoney2(grossUnit), currency: upperCcy },
+            quantity: toQty(item?.quantity, 1),
 
-            imageUrl: it?.imageUrl || '',
-            variants: it?.variants || {},
+            /*
+             * Seller accounting remains VAT-exclusive.
+             */
+            price: {
+              value: toMoney2(netUnit),
+
+              currency: upperCcy,
+            },
+
+            /*
+             * Customer receipt display amount.
+             */
+            priceGross: {
+              value: toMoney2(grossUnit),
+
+              currency: upperCcy,
+            },
+
+            imageUrl: item?.imageUrl || '',
+
+            variants: item?.variants || {},
           };
         })
       : [];
@@ -2938,24 +3229,103 @@ router.post('/capture-order', requireAllowedOriginJson, express.json(), async (r
             ? {
                 itemTotal:
                   pending.subTotal != null
-                    ? { value: toMoney2(pending.subTotal), currency: upperCcy }
+                    ? {
+                        value: toMoney2(pending.subTotal),
+
+                        currency: upperCcy,
+                      }
                     : undefined,
+
                 taxTotal:
                   pending.vatTotal != null
-                    ? { value: toMoney2(pending.vatTotal), currency: upperCcy }
+                    ? {
+                        value: toMoney2(pending.vatTotal),
+
+                        currency: upperCcy,
+                      }
                     : undefined,
+
                 shipping:
                   pending.deliveryPrice != null
-                    ? { value: toMoney2(pending.deliveryPrice), currency: upperCcy }
+                    ? {
+                        value: toMoney2(pending.deliveryPrice),
+
+                        currency: upperCcy,
+                      }
                     : undefined,
               }
             : undefined,
 
+          /*
+           * Permanent authoritative Internal VAT evidence
+           * =============================================
+           *
+           * This treatment was frozen during POST /create-order
+           * from the validated Checkout shipping address.
+           *
+           * Copy it into the completed Order before the pending
+           * session is cleared.
+           */
+          taxTreatment:
+            pending && pending.taxTreatment
+              ? {
+                  destinationCountryCode:
+                    normalizeCountryCode(pending.taxTreatment.destinationCountryCode) ||
+                    normalizeCountryCode(shippingAddress.country_code) ||
+                    '',
+
+                  countrySource: safeStr(pending.taxTreatment.countrySource, 80)
+                    .trim()
+                    .toUpperCase(),
+
+                  jurisdiction: safeStr(pending.taxTreatment.jurisdiction, 80),
+
+                  treatmentCode: safeStr(pending.taxTreatment.treatmentCode, 100)
+                    .trim()
+                    .toUpperCase(),
+
+                  label: safeStr(pending.taxTreatment.label, 200),
+
+                  reason: safeStr(pending.taxTreatment.reason, 1000),
+
+                  vatRate: (() => {
+                    const rate = Number(pending.taxTreatment.vatRate);
+
+                    return Number.isFinite(rate) && rate >= 0 && rate <= 1 ? rate : 0;
+                  })(),
+
+                  vatPercentage: (() => {
+                    const percentage = Number(pending.taxTreatment.vatPercentage);
+
+                    if (Number.isFinite(percentage) && percentage >= 0 && percentage <= 100) {
+                      return percentage;
+                    }
+
+                    const rate = Number(pending.taxTreatment.vatRate);
+
+                    return Number.isFinite(rate) && rate >= 0 && rate <= 1
+                      ? Number((rate * 100).toFixed(2))
+                      : 0;
+                  })(),
+
+                  authoritative: pending.taxTreatment.authoritative === true,
+
+                  provisional: pending.taxTreatment.provisional === true,
+
+                  resolvedAt: pending.taxTreatment.resolvedAt
+                    ? new Date(pending.taxTreatment.resolvedAt)
+                    : new Date(),
+                }
+              : undefined,
+
           delivery: pending
             ? {
                 id: pending.deliveryOptionId || null,
+
                 name: pending.deliveryName || null,
+
                 deliveryDays: pending.deliveryDays ?? null,
+
                 amount: pending.deliveryPrice != null ? toMoney2(pending.deliveryPrice) : null,
               }
             : null,

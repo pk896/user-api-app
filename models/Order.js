@@ -137,11 +137,188 @@ const ShippingAddressSchema = new Schema(
 
 const BreakdownSchema = new Schema(
   {
-    itemTotal: BreakdownMoneySchema,
-    taxTotal: BreakdownMoneySchema,
-    shipping: BreakdownMoneySchema,
+    itemTotal:
+      BreakdownMoneySchema,
+
+    taxTotal:
+      BreakdownMoneySchema,
+
+    shipping:
+      BreakdownMoneySchema,
   },
-  { _id: false },
+  {
+    _id:
+      false,
+  },
+);
+
+/*
+ * Authoritative Internal tax-treatment snapshot
+ * =============================================
+ *
+ * This records why the completed Internal order received its
+ * final VAT rate.
+ *
+ * The validated Checkout shipping address is authoritative.
+ *
+ * This schema is separate from:
+ *
+ * - provisional storefront country selection;
+ * - GeoIP suggestion;
+ * - CJ Dropshipping tax handling;
+ * - shipping-provider VAT fields.
+ */
+const TaxTreatmentSchema = new Schema(
+  {
+    destinationCountryCode: {
+      type:
+        String,
+
+      trim:
+        true,
+
+      uppercase:
+        true,
+
+      maxlength:
+        2,
+
+      index:
+        true,
+    },
+
+    countrySource: {
+      type:
+        String,
+
+      trim:
+        true,
+
+      uppercase:
+        true,
+
+      default:
+        '',
+    },
+
+    jurisdiction: {
+      type:
+        String,
+
+      trim:
+        true,
+
+      default:
+        '',
+    },
+
+    treatmentCode: {
+      type:
+        String,
+
+      trim:
+        true,
+
+      uppercase:
+        true,
+
+      default:
+        '',
+
+      index:
+        true,
+    },
+
+    label: {
+      type:
+        String,
+
+      trim:
+        true,
+
+      default:
+        '',
+    },
+
+    reason: {
+      type:
+        String,
+
+      trim:
+        true,
+
+      default:
+        '',
+    },
+
+    /*
+     * Decimal VAT rate:
+     *
+     * 0.15 = 15%
+     * 0    = 0%
+     */
+    vatRate: {
+      type:
+        Number,
+
+      min:
+        0,
+
+      max:
+        1,
+
+      default:
+        0,
+    },
+
+    /*
+     * Human-readable percentage:
+     *
+     * 15 = 15%
+     * 0  = 0%
+     */
+    vatPercentage: {
+      type:
+        Number,
+
+      min:
+        0,
+
+      max:
+        100,
+
+      default:
+        0,
+    },
+
+    authoritative: {
+      type:
+        Boolean,
+
+      default:
+        false,
+    },
+
+    provisional: {
+      type:
+        Boolean,
+
+      default:
+        true,
+    },
+
+    resolvedAt: {
+      type:
+        Date,
+
+      default:
+        null,
+    },
+  },
+  {
+    _id:
+      false,
+  },
 );
 
 // ✅ delivery snapshot for thank-you/receipt
@@ -589,10 +766,36 @@ const OrderSchema = new Schema(
     // Courier + tracking info
     shippingTracking: ShippingTrackingSchema,
 
-    amount: MoneySchema, // captured total
-    breakdown: BreakdownSchema,
+    amount:
+      MoneySchema,
 
-    platformFeeBps: { type: Number, default: 1000 }, // 10% default (basis points)
+    breakdown:
+      BreakdownSchema,
+
+    /*
+     * Permanent authoritative Internal VAT evidence.
+     *
+     * This is populated after successful PayPal capture from the
+     * tax treatment frozen during POST /payment/create-order.
+     *
+     * Existing orders remain compatible because this field is
+     * optional.
+     */
+    taxTreatment: {
+      type:
+        TaxTreatmentSchema,
+
+      default:
+        undefined,
+    },
+
+    platformFeeBps: {
+      type:
+        Number,
+
+      default:
+        1000,
+    },
 
     fee: { type: String },
     net: { type: String },
@@ -646,8 +849,32 @@ OrderSchema.index({ 'items.productId': 1, createdAt: -1 });
 OrderSchema.index({ businessBuyer: 1, createdAt: -1 });
 OrderSchema.index({ 'paypal.captureId': 1, createdAt: -1 });
 OrderSchema.index({ 'captures.captureId': 1, createdAt: -1 });
-OrderSchema.index({ 'refunds.refundId': 1, createdAt: -1 });
+OrderSchema.index({ 'refunds.refundId': 1 });
 OrderSchema.index({ 'items.refundStatus': 1, 'items.refundedAt': -1 });
+
+OrderSchema.index({
+  'taxTreatment.destinationCountryCode':
+    1,
+
+  createdAt:
+    -1,
+});
+
+OrderSchema.index({
+  'taxTreatment.treatmentCode':
+    1,
+
+  createdAt:
+    -1,
+});
+
+OrderSchema.index({
+  'taxTreatment.authoritative':
+    1,
+
+  createdAt:
+    -1,
+});
 
 // Shippo
 OrderSchema.index({ fulfillmentStatus: 1, createdAt: -1 });

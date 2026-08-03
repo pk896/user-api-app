@@ -522,10 +522,29 @@
   <!-- JSON config -->
   <script id="checkout-config" type="application/json" nonce="<%= CO_NONCE %>">
     <%- JSON.stringify({
+      /*
+      * Initial provisional checkout rate.
+      */
       VAT_RATE: Number(CO_VAT),
 
       /*
-       * Authoritative Kasyora currency.
+      * Internal South African standard VAT rate.
+      *
+      * This is used only for immediate checkout presentation when
+      * the completed shipping country is ZA.
+      *
+      * POST /payment/create-order independently resolves the
+      * authoritative server-side rate.
+      */
+      SOUTH_AFRICA_VAT_RATE:
+        Number(
+          typeof southAfricaVatRate !== 'undefined'
+            ? southAfricaVatRate
+            : 0.15
+        ),
+
+      /*
+      * Authoritative Kasyora currency.
        * Cart, shipping and total calculations remain in this currency.
        */
       BASE_CURRENCY: CO_BASE_CURRENCY,
@@ -1756,8 +1775,54 @@
         cfg = {};
       }
 
-      const VAT_RATE =
-        Number(cfg.VAT_RATE || 0);
+      /*
+       * Checkout VAT presentation
+       * =========================
+       *
+       * Internal cart prices are VAT-exclusive.
+       *
+       * Before a complete shipping address is supplied, this begins
+       * with the provisional rate supplied by payment.js.
+       *
+       * The selected shipping country then controls the visible
+       * checkout rate:
+       *
+       * ZA             → South African VAT
+       * outside ZA     → 0% South African VAT
+       *
+       * POST /payment/create-order remains the final server authority.
+       */
+      const SOUTH_AFRICA_VAT_RATE_RAW =
+        Number(
+          cfg.SOUTH_AFRICA_VAT_RATE ??
+          cfg.VAT_RATE ??
+          0,
+        );
+
+      const SOUTH_AFRICA_VAT_RATE =
+        Number.isFinite(
+          SOUTH_AFRICA_VAT_RATE_RAW,
+        ) &&
+        SOUTH_AFRICA_VAT_RATE_RAW >= 0 &&
+        SOUTH_AFRICA_VAT_RATE_RAW <= 1 ?
+        SOUTH_AFRICA_VAT_RATE_RAW :
+        0;
+
+      function getCheckoutVatRate() {
+        const shippingCountry =
+          String(
+            el.shipCountry?.value ||
+            state.shipTo?.country ||
+            DEFAULT_COUNTRY ||
+            '',
+          )
+          .trim()
+          .toUpperCase();
+
+        return shippingCountry === 'ZA' ?
+          SOUTH_AFRICA_VAT_RATE :
+          0;
+      }
 
       const BASE_CURRENCY = String(
         cfg.BASE_CURRENCY || 'USD'
@@ -2373,7 +2438,12 @@
         state.toCountry = '';
 
         updateCustomsNotice();
-        updateSummary();
+
+        /*
+         * The completed shipping country controls the visible Internal
+         * VAT rate, so update both the cart rows and the summary.
+         */
+        renderCart();
 
         if (el.shipSummary) {
           if (validation.ok) {
@@ -2420,35 +2490,99 @@
       }
 
       function calculateTotals() {
-        const itemsGross = state.items.reduce(
-          (sum, item) =>
-          sum +
-          Number(item.price || 0) *
-          Number(item.quantity || 0),
-          0
-        );
+        /*
+         * Internal cart item.price is VAT-exclusive.
+         */
+        const netSubtotal =
+          state.items.reduce(
+            (sum, item) => {
+              const unitPriceExVat =
+                Number(
+                  item?.priceExVat ??
+                  item?.price ??
+                  0,
+                );
 
-        const itemsNet =
-          VAT_RATE > 0 ?
-          itemsGross / (1 + VAT_RATE) :
-          itemsGross;
+              const quantity =
+                Number(
+                  item?.quantity ||
+                  0,
+                );
 
-        const vat = itemsGross - itemsNet;
+              const safeUnitPrice =
+                Number.isFinite(unitPriceExVat) &&
+                unitPriceExVat >= 0 ?
+                unitPriceExVat :
+                0;
 
-        const shipping = state.selectedDelivery ?
+              const safeQuantity =
+                Number.isFinite(quantity) &&
+                quantity > 0 ?
+                quantity :
+                0;
+
+              return (
+                sum +
+                (
+                  safeUnitPrice *
+                  safeQuantity
+                )
+              );
+            },
+            0,
+          );
+
+        const vatRate =
+          getCheckoutVatRate();
+
+        /*
+         * Apply VAT forward from the VAT-exclusive subtotal.
+         */
+        const vat =
+          Number(
+            (
+              netSubtotal *
+              vatRate
+            ).toFixed(2),
+          );
+
+        const shippingRaw =
+          state.selectedDelivery ?
           Number(
             state.selectedDelivery.amount ??
             state.selectedDelivery.price ??
-            0
+            0,
           ) :
           0;
 
-        const total = itemsGross + shipping;
+        const shipping =
+          Number.isFinite(shippingRaw) &&
+          shippingRaw >= 0 ?
+          Number(
+            shippingRaw.toFixed(2),
+          ) :
+          0;
+
+        const total =
+          Number(
+            (
+              netSubtotal +
+              vat +
+              shipping
+            ).toFixed(2),
+          );
 
         return {
-          subtotal: itemsGross,
+          subtotal: Number(
+            netSubtotal.toFixed(2),
+          ),
+
+          vatRate,
+
           vat,
+
           shipping,
+
           total,
         };
       }
@@ -2458,23 +2592,45 @@
           calculateTotals();
 
         /*
-         * calculateTotals() remains authoritative BASE_CURRENCY.
+         * calculateTotals() remains in BASE_CURRENCY.
+         *
          * Conversion happens only while writing visible text.
          */
-        el.sumSubtotal.textContent =
-          formatCurrency(totals.subtotal);
+        if (el.sumSubtotal) {
+          el.sumSubtotal.textContent =
+            formatCurrency(
+              totals.subtotal,
+            );
+        }
 
-        el.sumVat.textContent =
-          formatCurrency(totals.vat);
+        if (el.sumVat) {
+          el.sumVat.textContent =
+            formatCurrency(
+              totals.vat,
+            );
+        }
 
-        el.sumShipping.textContent =
-          formatCurrency(totals.shipping);
+        if (el.sumShipping) {
+          el.sumShipping.textContent =
+            formatCurrency(
+              totals.shipping,
+            );
+        }
 
-        el.sumTotal.textContent =
-          formatCurrency(totals.total);
+        if (el.sumTotal) {
+          el.sumTotal.textContent =
+            formatCurrency(
+              totals.total,
+            );
+        }
 
-        el.vatRate.textContent =
-          (VAT_RATE * 100).toFixed(0);
+        if (el.vatRate) {
+          el.vatRate.textContent =
+            (
+              totals.vatRate *
+              100
+            ).toFixed(0);
+        }
       }
 
       function blockPayment(message) {
@@ -3204,18 +3360,61 @@
               color ? `Color: ${color}` : ''
             ].filter(Boolean).join(' • ');
 
+            const priceExVatRaw =
+              Number(
+                item?.priceExVat ??
+                item?.price ??
+                0,
+              );
+
+            const priceExVat =
+              Number.isFinite(priceExVatRaw) &&
+              priceExVatRaw >= 0 ?
+              Number(
+                priceExVatRaw.toFixed(2),
+              ) :
+              0;
+
             return {
-              id: String(item.productId || item._id || item.id),
-              productId: String(item.productId || item._id || item.id),
-              name: item.name || item.title || 'Product',
-              price: Number(item.price || 0),
-              quantity: Number(item.quantity || item.qty || 1),
-              imageUrl: item.imageUrl || item.image || '',
+              id: String(
+                item.productId ||
+                item._id ||
+                item.id,
+              ),
+
+              productId: String(
+                item.productId ||
+                item._id ||
+                item.id,
+              ),
+
+              name: item.name ||
+                item.title ||
+                'Product',
+
+              /*
+               * Keep price for compatibility, but both values are
+               * authoritative VAT-exclusive amounts.
+               */
+              price: priceExVat,
+
+              priceExVat,
+
+              quantity: Number(
+                item.quantity ||
+                item.qty ||
+                1,
+              ),
+
+              imageUrl: item.imageUrl ||
+                item.image ||
+                '',
+
               variants: {
                 size,
                 color,
-                label
-              }
+                label,
+              },
             };
           });
 
@@ -3276,9 +3475,61 @@
 
         root.querySelector('.co-qty-val').textContent = String(item.quantity);
 
-        // ✅ Show row TOTAL because UI says "total"
-        const rowTotal = Number(item.price || 0) * Number(item.quantity || 0);
-        root.querySelector('.co-price-val').textContent = formatCurrency(rowTotal);
+        /*
+         * Show the customer-visible line total.
+         *
+         * The underlying item price remains VAT-exclusive.
+         */
+        const unitPriceExVat =
+          Number(
+            item?.priceExVat ??
+            item?.price ??
+            0,
+          );
+
+        const quantity =
+          Number(
+            item?.quantity ||
+            0,
+          );
+
+        const safeUnitPriceExVat =
+          Number.isFinite(unitPriceExVat) &&
+          unitPriceExVat >= 0 ?
+          unitPriceExVat :
+          0;
+
+        const safeQuantity =
+          Number.isFinite(quantity) &&
+          quantity > 0 ?
+          quantity :
+          0;
+
+        const vatRate =
+          getCheckoutVatRate();
+
+        const rowNetTotal =
+          safeUnitPriceExVat *
+          safeQuantity;
+
+        const rowVatTotal =
+          rowNetTotal *
+          vatRate;
+
+        const rowVisibleTotal =
+          Number(
+            (
+              rowNetTotal +
+              rowVatTotal
+            ).toFixed(2),
+          );
+
+        root
+          .querySelector('.co-price-val')
+          .textContent =
+          formatCurrency(
+            rowVisibleTotal,
+          );
 
         const dec = root.querySelector('.co-dec');
         const inc = root.querySelector('.co-inc');
