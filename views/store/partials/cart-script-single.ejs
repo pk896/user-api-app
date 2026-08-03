@@ -69,20 +69,110 @@
       return Math.round(Number(n || 0) * 100) / 100;
     }
 
+    /*
+     * The Single Product page inherits its provisional Internal
+     * VAT rate from views/store/single.ejs.
+     *
+     * South Africa:
+     * configured South African VAT rate
+     *
+     * Foreign destination:
+     * 0% South African VAT
+     *
+     * Cart API prices remain authoritative VAT-exclusive values.
+     */
+    const SINGLE_PROVISIONAL_VAT_RATE_RAW =
+      Number(
+        '<%= Number(
+          typeof singleProvisionalVatRate !== "undefined" &&
+          singleProvisionalVatRate !== null
+            ? singleProvisionalVatRate
+            : 0
+        ) %>'
+      );
+
+    const SINGLE_PROVISIONAL_VAT_RATE =
+      Number.isFinite(
+        SINGLE_PROVISIONAL_VAT_RATE_RAW
+      ) &&
+      SINGLE_PROVISIONAL_VAT_RATE_RAW >= 0 &&
+      SINGLE_PROVISIONAL_VAT_RATE_RAW <= 1 ?
+      SINGLE_PROVISIONAL_VAT_RATE_RAW :
+      0;
+
     function getCartSummary(items) {
-      const list = Array.isArray(items) ? items : [];
+      const list =
+        Array.isArray(items) ?
+        items : [];
 
-      return list.reduce(function(acc, item) {
-        const quantity = Number(item.quantity || 0);
-        const price = Number(item.price || 0);
+      const summary =
+        list.reduce(
+          function(acc, item) {
+            const quantityRaw =
+              Number(
+                item?.quantity ??
+                item?.qty ??
+                0
+              );
 
-        acc.count += quantity;
-        acc.total += price * quantity;
-        return acc;
-      }, {
-        count: 0,
-        total: 0
-      });
+            /*
+             * Internal cart prices are VAT-exclusive.
+             *
+             * Prefer the explicit priceExVat field and retain
+             * item.price only as the compatibility fallback.
+             */
+            const priceExVatRaw =
+              Number(
+                item?.priceExVat ??
+                item?.price ??
+                0
+              );
+
+            const quantity =
+              Number.isFinite(quantityRaw) &&
+              quantityRaw > 0 ?
+              Math.floor(quantityRaw) :
+              0;
+
+            const priceExVat =
+              Number.isFinite(priceExVatRaw) &&
+              priceExVatRaw >= 0 ?
+              priceExVatRaw :
+              0;
+
+            acc.count +=
+              quantity;
+
+            acc.netTotal +=
+              priceExVat *
+              quantity;
+
+            return acc;
+          }, {
+            count: 0,
+            netTotal: 0
+          }
+        );
+
+      const vatTotal =
+        round2(
+          summary.netTotal *
+          SINGLE_PROVISIONAL_VAT_RATE
+        );
+
+      return {
+        count: summary.count,
+
+        /*
+         * This is only the customer-visible provisional cart total.
+         *
+         * The stored cart values remain VAT-exclusive.
+         */
+        total: round2(
+          summary.netTotal +
+          vatTotal
+        )
+      };
     }
 
     function updateCartHeader(items) {

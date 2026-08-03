@@ -108,7 +108,6 @@ const BASE_CURRENCY =
 const APP_URL = String(process.env.APP_URL || 'http://localhost:3000')
   .trim()
   .replace(/\/+$/, '');
-const VAT_RATE = Number(process.env.VAT_RATE || 0.15);
 
 /*
  * Resolve the provisional storefront tax treatment.
@@ -3890,6 +3889,27 @@ router.get('/store/shop', async (req, res) => {
 });
 
 router.get('/store/product/:id/share-image', async (req, res) => {
+  /*
+   * Public sharing platforms usually fetch this URL without
+   * the customer's storefront session.
+   *
+   * Prefer the provisional country embedded in the image URL.
+   * Fall back to the normal storefront country context only when
+   * the URL does not contain a valid two-letter country code.
+   */
+  const requestedCountryCode = String(req.query?.country || '')
+    .trim()
+    .toUpperCase()
+    .slice(0, 2);
+
+  const shareTaxContext = /^[A-Z]{2}$/.test(requestedCountryCode)
+    ? resolveInternalTaxTreatment({
+        destinationCountryCode: requestedCountryCode,
+
+        countrySource: TAX_COUNTRY_SOURCES.CUSTOMER_SELECTION,
+      })
+    : resolveStorefrontTaxContext(req, 'internal');
+
   try {
     const rawProduct = await Product.findOne({
       customId: req.params.id,
@@ -3901,10 +3921,25 @@ router.get('/store/product/:id/share-image', async (req, res) => {
     }
 
     const product = mapStoreProduct(rawProduct);
+
     const productImageUrl = publicUrl(product.image || product.imageUrl || '');
+
     const productNameLines = svgTextLines(product.name || 'Product', 24, 2);
+
     const productCategory = fitText(product.category || 'Product', 28);
-    const productPrice = storeMoney(Number(product.price || 0) * (1 + VAT_RATE));
+
+    const shareVatRateRaw = Number(shareTaxContext.vatRate || 0);
+
+    const shareVatRate =
+      Number.isFinite(shareVatRateRaw) && shareVatRateRaw >= 0 && shareVatRateRaw <= 1
+        ? shareVatRateRaw
+        : 0;
+
+    const productPrice = storeMoney(
+      Number((Number(product.price || 0) * (1 + shareVatRate)).toFixed(2)),
+    );
+
+    const productPriceLabel = shareVatRate > 0 ? productPrice + ' incl. VAT' : productPrice;
 
     const productImageBuffer = await downloadImageBuffer(productImageUrl);
 
@@ -3937,7 +3972,7 @@ router.get('/store/product/:id/share-image', async (req, res) => {
         <text x="680" y="134" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Kasyora STORE</text>
         ${renderSvgTextLines(productNameLines, 650, 215, 50, 58, '#7C3AED', 800)}
         <text x="650" y="340" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#212529">Category: ${xmlSafe(productCategory)}</text>
-        <text x="650" y="410" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="#22C55E">${xmlSafe(productPrice)} incl. VAT</text>
+        <text x="650" y="410" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="#22C55E">${xmlSafe(productPriceLabel)}</text>
         <text x="650" y="500" font-family="Arial, sans-serif" font-size="28" font-weight="600" fill="#6c757d">Tap to view this product</text>
       </svg>
     `;
@@ -3969,6 +4004,21 @@ router.get('/store/product/:id/share-image', async (req, res) => {
 });
 
 router.get('/store/product/:id', async (req, res) => {
+  /*
+   * The Single Product page belongs only to the Internal
+   * Kasyora commerce flow.
+   *
+   * It inherits the provisional delivery country already
+   * resolved by the global tax-country middleware:
+   *
+   * - customer storefront selection;
+   * - trusted GeoIP;
+   * - configured default.
+   *
+   * Checkout shipping address remains authoritative later.
+   */
+  const storefrontTaxContext = resolveStorefrontTaxContext(req, 'internal');
+
   try {
     const rawProduct = await Product.findOne({
       customId: req.params.id,
@@ -4057,16 +4107,51 @@ router.get('/store/product/:id', async (req, res) => {
       title: product.name || 'Single Product',
       product: {
         ...product,
-        shareUrl: `/store/product/${product.customId}?share=${shareVersion}`,
-        shareImageUrl: `/store/product/${product.customId}/share-image?v=${shareVersion}`,
+
+        shareUrl: `/store/product/${product.customId}` + `?share=${shareVersion}`,
+
+        /*
+         * Include the provisional country in the public image URL.
+         *
+         * Social platforms normally fetch this image without the
+         * customer's Kasyora session cookie. The query value also
+         * prevents a South African cached image from being reused
+         * for a foreign provisional destination.
+         */
+        shareImageUrl:
+          `/store/product/${product.customId}/share-image` +
+          `?v=${shareVersion}` +
+          `&country=${encodeURIComponent(storefrontTaxContext.destinationCountryCode || '')}`,
       },
       myRating,
       featuredSidebarProducts,
       relatedProducts,
       shopSidebarBanner,
       shopHeaderImage,
+
       baseCurrency: BASE_CURRENCY,
-      vatRate: VAT_RATE,
+
+      /*
+       * Provisional country-aware Internal VAT:
+       *
+       * South Africa:
+       * configured South African VAT rate
+       *
+       * Outside South Africa:
+       * zero South African VAT
+       */
+      vatRate: Number(storefrontTaxContext.vatRate || 0),
+
+      taxTreatment: storefrontTaxContext,
+
+      taxCountryCode: storefrontTaxContext.destinationCountryCode || '',
+
+      taxCountrySource: storefrontTaxContext.countrySource || '',
+
+      taxProvisional: storefrontTaxContext.provisional === true,
+
+      taxAuthoritative: false,
+
       siteUrl: APP_URL,
     });
   } catch (err) {

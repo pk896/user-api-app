@@ -1,11 +1,35 @@
 <!--views/store/single.ejs-->
 <%
-  const VAT = (
-    typeof vatRate !== 'undefined' &&
-    vatRate !== null
-  )
-    ? Number(vatRate)
-    : 0.15;
+  /*
+   * The /store/product/:id route supplies the provisional
+   * country-aware Internal VAT rate:
+   *
+   * South Africa:
+   * configured South African VAT rate
+   *
+   * Foreign destination:
+   * 0% South African VAT
+   *
+   * Never assume 15% inside the view when the route local
+   * is missing or invalid.
+   */
+  const SINGLE_VAT_RATE_RAW =
+    Number(
+      typeof vatRate !== 'undefined' &&
+      vatRate !== null
+        ? vatRate
+        : 0
+    );
+
+  const VAT =
+    Number.isFinite(SINGLE_VAT_RATE_RAW) &&
+    SINGLE_VAT_RATE_RAW >= 0 &&
+    SINGLE_VAT_RATE_RAW <= 1
+      ? SINGLE_VAT_RATE_RAW
+      : 0;
+
+  const SHOW_SINGLE_VAT_TEXT =
+    VAT > 0;
 
   /*
    * BASE_CURRENCY remains Kasyora's authoritative product,
@@ -87,6 +111,70 @@
   }
 
   /*
+   * Product.price remains VAT-exclusive.
+   *
+   * This helper changes only the visible storefront amount.
+   */
+  function getSingleVisiblePrice(item) {
+    const basePriceRaw =
+      Number(
+        item?.price || 0
+      );
+
+    const basePrice =
+      Number.isFinite(basePriceRaw) &&
+      basePriceRaw >= 0
+        ? basePriceRaw
+        : 0;
+
+    return Number(
+      (
+        basePrice *
+        (
+          1 +
+          VAT
+        )
+      ).toFixed(2)
+    );
+  }
+
+  /*
+   * mapStoreProduct currently uses oldPrice only as a signal that
+   * the product is on sale.
+   *
+   * Rebuild the visible comparison amount from the authoritative
+   * VAT-exclusive product.price so the old fixed VAT value is not
+   * reused for a foreign destination.
+   */
+  function getSingleVisibleOldPrice(item) {
+    if (!item?.oldPrice) {
+      return null;
+    }
+
+    const basePriceRaw =
+      Number(
+        item?.price || 0
+      );
+
+    const basePrice =
+      Number.isFinite(basePriceRaw) &&
+      basePriceRaw >= 0
+        ? basePriceRaw
+        : 0;
+
+    return Number(
+      (
+        basePrice *
+        1.19 *
+        (
+          1 +
+          VAT
+        )
+      ).toFixed(2)
+    );
+  }
+
+  /*
    * Related-product cards have limited display space,
    * especially on mobile.
    *
@@ -141,14 +229,25 @@
   const SINGLE_PRODUCT_ANCHOR =
     '#singleProductDetails';
 
+  /*
+   * Both the currency selector and provisional delivery-country
+   * selector return to this exact Internal product.
+   */
   const SINGLE_CURRENCY_RETURN_TO =
     SINGLE_PRODUCT_ID
       ? (
           '/store/product/' +
-          encodeURIComponent(SINGLE_PRODUCT_ID) +
+          encodeURIComponent(
+            SINGLE_PRODUCT_ID
+          ) +
+          '?department=internal' +
           SINGLE_PRODUCT_ANCHOR
         )
-      : '/store/shop#shopProductsSection';
+      : (
+          '/store/shop' +
+          '?department=internal' +
+          '#shopProductsSection'
+        );
 
   /*
   * The single-product page belongs only to Kasyora's
@@ -241,12 +340,23 @@
     <div class="col-lg-4 text-center text-lg-end">
       <div class="d-inline-flex align-items-center" style="height: 45px;">
         <div class="me-2">
-          <%- include('partials/currency-selector', {
-                      currencyReturnTo: SINGLE_CURRENCY_RETURN_TO
-                    }) %>
+          <%- include('partials/tax-country-selector', {
+            taxCountryReturnTo: SINGLE_CURRENCY_RETURN_TO,
+            taxCountrySelectorMobile: false
+          }) %>
         </div>
+
+        <div class="me-2">
+          <%- include('partials/currency-selector', {
+            currencyReturnTo: SINGLE_CURRENCY_RETURN_TO
+          }) %>
+        </div>
+
         <div class="dropdown">
-          <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>English</small></a>
+          <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown">
+            <small>English</small>
+          </a>
+
           <div class="dropdown-menu rounded">
             <a href="#" class="dropdown-item"> English</a>
             <a href="#" class="dropdown-item"> Turkish</a>
@@ -254,8 +364,15 @@
             <a href="#" class="dropdown-item"> Italiano</a>
           </div>
         </div>
+
         <div class="dropdown">
-          <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown"><small><i class="fa fa-home me-2"></i> My Dashboard</small></a>
+          <a href="#" class="dropdown-toggle text-muted ms-2" data-bs-toggle="dropdown">
+            <small>
+              <i class="fa fa-home me-2"></i>
+              My Dashboard
+            </small>
+          </a>
+
           <div class="dropdown-menu rounded">
             <a href="/business/login" class="dropdown-item"> My Account</a>
             <a href="/users/wishlist" class="dropdown-item"> Wishlist</a>
@@ -447,14 +564,17 @@
             <p class="mb-3">Category: <%= product.category %></p>
             <h5 class="fw-bold text-primary mb-1">
               <%= formatMoney(
-                            Number(product.price || 0) *
-                            (1 + VAT)
-                            ) %>
+                getSingleVisiblePrice(
+                  product
+                )
+              ) %>
             </h5>
 
+            <% if (SHOW_SINGLE_VAT_TEXT) { %>
             <p class="text-muted mb-1">
               incl. VAT
             </p>
+            <% } %>
 
             <p class="small text-muted mb-3">
               Displayed in
@@ -483,10 +603,56 @@
                                 return SHARE_SITE_URL + '/' + raw.replace(/^\/+/, '');
                             }
 
-                            const shareProductUrl = shareAbsoluteUrl(product.shareUrl || product.url || ('/store/product/' + (product.customId || '')));
-                            const shareProductImage = shareAbsoluteUrl(product.shareImageUrl || product.image || product.imageUrl || '');
-                            const shareProductText = 'Check out ' + (product.name || 'this product') + ' - Category: ' + (product.category || 'Product') + ' - Price: ' + formatMoney(Number(product.price || 0) * (1 + VAT)) + ' incl. VAT';
-                            const shareProductFullText = shareProductUrl;
+                            const shareProductUrl =
+                              shareAbsoluteUrl(
+                                product.shareUrl ||
+                                product.url ||
+                                (
+                                  '/store/product/' +
+                                  (
+                                    product.customId ||
+                                    ''
+                                  )
+                                )
+                              );
+
+                            const shareProductImage =
+                              shareAbsoluteUrl(
+                                product.shareImageUrl ||
+                                product.image ||
+                                product.imageUrl ||
+                                ''
+                              );
+
+                            const shareVisiblePrice =
+                              formatMoney(
+                                getSingleVisiblePrice(
+                                  product
+                                )
+                              );
+
+                            const shareVatText =
+                              SHOW_SINGLE_VAT_TEXT
+                                ? ' incl. VAT'
+                                : '';
+
+                            const shareProductText =
+                              'Check out ' +
+                              (
+                                product.name ||
+                                'this product'
+                              ) +
+                              ' - Category: ' +
+                              (
+                                product.category ||
+                                'Product'
+                              ) +
+                              ' - Price: ' +
+                              shareVisiblePrice +
+                              shareVatText;
+
+                            const shareProductFullText =
+                              shareProductUrl;
                         %>
 
             <div class="mb-3 d-flex flex-wrap gap-2 js-product-share-wrap" data-share-title="<%= product.name || 'Product' %>" data-share-text="<%= shareProductText %>" data-share-url="<%= shareProductUrl %>" data-share-image="<%= shareProductImage %>">
@@ -605,12 +771,34 @@
                   ) %>
                 </a>
 
-                <% if (product.oldPrice) { %>
-                <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                <%
+                  const relatedCarouselOldPrice =
+                    getSingleVisibleOldPrice(
+                      product
+                    );
+                %>
+
+                <% if (relatedCarouselOldPrice !== null) { %>
+                <del class="me-2 fs-5">
+                  <%= formatMoney(
+                    relatedCarouselOldPrice
+                  ) %>
+                </del>
                 <% } %>
 
-                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                <small class="text-muted ms-2">incl. VAT</small>
+                <span class="text-primary fs-5">
+                  <%= formatMoney(
+                    getSingleVisiblePrice(
+                      product
+                    )
+                  ) %>
+                </span>
+
+                <% if (SHOW_SINGLE_VAT_TEXT) { %>
+                <small class="text-muted ms-2">
+                  incl. VAT
+                </small>
+                <% } %>
               </div>
             </div>
           </div>
@@ -686,12 +874,34 @@
                         ) %>
                       </span>
 
-                      <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <%
+                        const relatedGridOldPrice =
+                          getSingleVisibleOldPrice(
+                            product
+                          );
+                      %>
+
+                      <% if (relatedGridOldPrice !== null) { %>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          relatedGridOldPrice
+                        ) %>
+                      </del>
                       <% } %>
 
-                      <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
-                      <small class="text-muted ms-2">incl. VAT</small>
+                      <span class="text-primary fs-5">
+                        <%= formatMoney(
+                          getSingleVisiblePrice(
+                            product
+                          )
+                        ) %>
+                      </span>
+
+                      <% if (SHOW_SINGLE_VAT_TEXT) { %>
+                      <small class="text-muted ms-2">
+                        incl. VAT
+                      </small>
+                      <% } %>
                     </div>
                   </div>
                 </div>
@@ -774,11 +984,34 @@
                                     nonce
                                 }) %>
               </div>
+              <%
+                const featuredOldPrice =
+                  getSingleVisibleOldPrice(
+                    item
+                  );
+              %>
+
               <div class="d-flex mb-2 align-items-center flex-wrap">
-                <h5 class="fw-bold me-2 mb-0"><%= formatMoney(Number(item.price || 0) * (1 + VAT)) %></h5>
-                <small class="text-muted me-2">incl. VAT</small>
-                <% if (item.oldPrice) { %>
-                <h5 class="text-danger text-decoration-line-through mb-0"><%= formatMoney(item.oldPrice) %></h5>
+                <h5 class="fw-bold me-2 mb-0">
+                  <%= formatMoney(
+                    getSingleVisiblePrice(
+                      item
+                    )
+                  ) %>
+                </h5>
+
+                <% if (SHOW_SINGLE_VAT_TEXT) { %>
+                <small class="text-muted me-2">
+                  incl. VAT
+                </small>
+                <% } %>
+
+                <% if (featuredOldPrice !== null) { %>
+                <h5 class="text-danger text-decoration-line-through mb-0">
+                  <%= formatMoney(
+                    featuredOldPrice
+                  ) %>
+                </h5>
                 <% } %>
               </div>
             </div>
@@ -1178,7 +1411,10 @@
 </script>
 
 <%- include('partials/currency-client') %>
-<%- include('partials/cart-script-single') %>
+
+<%- include('partials/cart-script-single', {
+  singleProvisionalVatRate: VAT
+}) %>
 
 <!-- Mobile Floating Cart Start -->
 <div id="mobileFloatingCart" class="d-none d-lg-none position-fixed bottom-0 start-0 mb-3 ms-3" style="z-index: 1080;">
