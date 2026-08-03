@@ -1,12 +1,16 @@
 <!-- views/cj/cart.ejs -->
 <%
   /*
-   * BASE_CURRENCY remains authoritative for all CJ product,
-   * cart, VAT, checkout, shipping, payment, order and supplier
-   * fulfilment calculations.
-   *
-   * CURRENCY is only the customer's selected display currency.
-   */
+  * BASE_CURRENCY remains authoritative for all CJ product,
+  * cart, checkout, shipping, payment, order and supplier
+  * fulfilment calculations.
+  *
+  * Kasyora adds and collects no VAT in the CJ flow.
+  * Destination import VAT, customs duties and carrier charges
+  * are outside this cart calculation.
+  *
+  * CURRENCY is only the customer's selected display currency.
+  */
   const BASE_CURRENCY = String(
     typeof baseCurrency !== 'undefined'
       ? baseCurrency
@@ -41,22 +45,31 @@
       : 0
   );
 
-  const SUBTOTAL_EX_VAT = Number(
-    typeof subtotalExVat !== 'undefined'
-      ? subtotalExVat
-      : 0
+  /*
+   * CJ cart prices contain no Kasyora-added VAT.
+   *
+   * Prefer the new VAT-free summary fields.
+   * Keep the old field names only as temporary fallbacks
+   * while the CJ checkout is still being patched.
+   */
+  const CJ_SUBTOTAL = Number(
+    typeof subtotal !== 'undefined'
+      ? subtotal
+      : (
+          typeof subtotalExVat !== 'undefined'
+            ? subtotalExVat
+            : 0
+        )
   );
 
-  const VAT_AMOUNT = Number(
-    typeof vatAmount !== 'undefined'
-      ? vatAmount
-      : 0
-  );
-
-  const TOTAL_INC_VAT = Number(
-    typeof totalIncVat !== 'undefined'
-      ? totalIncVat
-      : 0
+  const CJ_TOTAL = Number(
+    typeof total !== 'undefined'
+      ? total
+      : (
+          typeof totalIncVat !== 'undefined'
+            ? totalIncVat
+            : CJ_SUBTOTAL
+        )
   );
 
   /*
@@ -317,11 +330,13 @@
                     </div>
 
                     <div class="fw-bold text-primary">
-                      <%= formatMoney(item.price) %>
-                    </div>
-
-                    <div class="small text-muted">
-                      incl. VAT
+                      <%= formatMoney(
+                        Number(
+                          item.priceExVat ??
+                          item.price ??
+                          0
+                        )
+                      ) %>
                     </div>
                   </div>
 
@@ -351,7 +366,17 @@
                     </div>
 
                     <div class="fw-bold text-primary fs-5 mb-2 js-cj-line-total" data-cj-variant-id="<%= item.cjVariantId %>">
-                      <%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %>
+                      <%= formatMoney(
+                        Number(
+                          item.priceExVat ??
+                          item.price ??
+                          0
+                        ) *
+                        Number(
+                          item.quantity ||
+                          0
+                        )
+                      ) %>
                     </div>
 
                     <button type="button" class="btn btn-outline-danger btn-sm rounded-pill js-cj-remove-item" data-cj-variant-id="<%= item.cjVariantId %>">
@@ -403,21 +428,11 @@
 
             <div class="d-flex justify-content-between mb-3">
               <span class="text-muted">
-                Subtotal excluding VAT
+                Product subtotal
               </span>
 
-              <strong id="cjSummarySubtotalExVat">
-                <%= formatMoney(SUBTOTAL_EX_VAT) %>
-              </strong>
-            </div>
-
-            <div class="d-flex justify-content-between mb-3">
-              <span class="text-muted">
-                VAT
-              </span>
-
-              <strong id="cjSummaryVatAmount">
-                <%= formatMoney(VAT_AMOUNT) %>
+              <strong id="cjSummarySubtotal">
+                <%= formatMoney(CJ_SUBTOTAL) %>
               </strong>
             </div>
 
@@ -425,11 +440,11 @@
 
             <div class="d-flex justify-content-between align-items-center mb-4">
               <span class="fw-bold fs-5">
-                Total including VAT
+                Cart total
               </span>
 
-              <strong id="cjSummaryTotalIncVat" class="text-primary fs-4">
-                <%= formatMoney(TOTAL_INC_VAT) %>
+              <strong id="cjSummaryTotal" class="text-primary fs-4">
+                <%= formatMoney(CJ_TOTAL) %>
               </strong>
             </div>
 
@@ -437,9 +452,11 @@
               <div class="mb-2">
                 <i class="fas fa-info-circle text-primary me-2"></i>
 
-                Shipping, destination taxes, customs charges and CJ logistics
-                costs are not included in this cart total yet. They will be
-                calculated and validated in the separate CJ checkout.
+                Kasyora does not add or collect VAT on CJ Dropshipping
+                products. Shipping and CJ logistics costs will be calculated
+                in the CJ checkout. Any destination import VAT,
+                customs duties remain the customer’s responsibility
+                during import and delivery.
               </div>
 
               <div>
@@ -495,16 +512,12 @@
       'cjSummaryItemCount'
     );
 
-    const summarySubtotalExVat = document.getElementById(
-      'cjSummarySubtotalExVat'
+    const summarySubtotal = document.getElementById(
+      'cjSummarySubtotal'
     );
 
-    const summaryVatAmount = document.getElementById(
-      'cjSummaryVatAmount'
-    );
-
-    const summaryTotalIncVat = document.getElementById(
-      'cjSummaryTotalIncVat'
+    const summaryTotal = document.getElementById(
+      'cjSummaryTotal'
     );
 
     const clearCartButton = document.getElementById(
@@ -625,27 +638,41 @@
     }
 
     function updateSummary(data) {
-      const itemCount = Number(
-        data?.itemCount || 0
-      );
+      const itemCount =
+        Number(
+          data?.itemCount ||
+          0
+        );
 
-      const subtotal = Number(
-        data?.subtotalExVat || 0
-      );
+      /*
+       * Prefer the new VAT-free CJ summary fields.
+       *
+       * The older names remain fallbacks only until the
+       * separate CJ checkout has also been patched.
+       */
+      const subtotal =
+        Number(
+          data?.subtotal ??
+          data?.subtotalExVat ??
+          0
+        );
 
-      const vat = Number(
-        data?.vatAmount || 0
-      );
-
-      const total = Number(
-        data?.totalIncVat || 0
-      );
+      const total =
+        Number(
+          data?.total ??
+          data?.totalIncVat ??
+          subtotal
+        );
 
       if (itemCountBadge) {
         itemCountBadge.textContent =
           String(itemCount) +
           ' item' +
-          (itemCount === 1 ? '' : 's');
+          (
+            itemCount === 1 ?
+            '' :
+            's'
+          );
       }
 
       if (summaryItemCount) {
@@ -653,19 +680,18 @@
           String(itemCount);
       }
 
-      if (summarySubtotalExVat) {
-        summarySubtotalExVat.textContent =
-          formatMoney(subtotal);
+      if (summarySubtotal) {
+        summarySubtotal.textContent =
+          formatMoney(
+            subtotal
+          );
       }
 
-      if (summaryVatAmount) {
-        summaryVatAmount.textContent =
-          formatMoney(vat);
-      }
-
-      if (summaryTotalIncVat) {
-        summaryTotalIncVat.textContent =
-          formatMoney(total);
+      if (summaryTotal) {
+        summaryTotal.textContent =
+          formatMoney(
+            total
+          );
       }
 
       if (checkoutButton) {
@@ -683,16 +709,23 @@
       }
 
       document
-        .querySelectorAll('.store-cart-total')
+        .querySelectorAll(
+          '.store-cart-total'
+        )
         .forEach(function(element) {
           element.textContent =
-            formatMoney(total);
+            formatMoney(
+              total
+            );
         });
 
       document
-        .querySelectorAll('.store-cart-link')
+        .querySelectorAll(
+          '.store-cart-link'
+        )
         .forEach(function(link) {
-          link.href = '/cj/cart';
+          link.href =
+            '/cj/cart';
 
           link.classList.toggle(
             'cart-flash-active',
@@ -810,8 +843,15 @@
         ) {
           lineTotalElement.textContent =
             formatMoney(
-              Number(updatedItem.price || 0) *
-              Number(updatedItem.quantity || 0)
+              Number(
+                updatedItem.priceExVat ??
+                updatedItem.price ??
+                0
+              ) *
+              Number(
+                updatedItem.quantity ||
+                0
+              )
             );
         }
 
