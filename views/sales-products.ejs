@@ -1,11 +1,31 @@
 <!--views/sales-products.ejs-->
 <%
-  const VAT = (
-    typeof vatRate !== 'undefined' &&
-    vatRate !== null
-  )
-    ? Number(vatRate)
-    : 0.15;
+  /*
+   * The /products/sales route supplies:
+   *
+   * Internal + provisional ZA:
+   * configured South African VAT rate
+   *
+   * Internal + provisional foreign country:
+   * 0
+   *
+   * CJ:
+   * 0 Kasyora-added VAT
+   */
+  const SALES_VAT_RATE_RAW =
+    Number(
+      typeof vatRate !== 'undefined' &&
+      vatRate !== null
+        ? vatRate
+        : 0
+    );
+
+  const VAT =
+    Number.isFinite(SALES_VAT_RATE_RAW) &&
+    SALES_VAT_RATE_RAW >= 0 &&
+    SALES_VAT_RATE_RAW <= 1
+      ? SALES_VAT_RATE_RAW
+      : 0;
 
   /*
    * BASE_CURRENCY remains Kasyora's authoritative product,
@@ -120,6 +140,65 @@
 
   const IS_CJ_DEPARTMENT =
     ACTIVE_DEPARTMENT === 'cj';
+
+  /*
+   * Only Internal Fast Liner products receive provisional
+   * Kasyora VAT.
+   *
+   * CJ remains completely separate and never receives this VAT.
+   */
+  const SALES_INTERNAL_VAT_ACTIVE =
+    !IS_CJ_DEPARTMENT &&
+    VAT > 0;
+
+  function isCjSalesProduct(product) {
+    return (
+      String(
+        product?.source || ''
+      )
+        .trim()
+        .toUpperCase() === 'CJ'
+    );
+  }
+
+  /*
+   * Return the customer-visible product price.
+   *
+   * The original product.price remains VAT-exclusive.
+   */
+  function getSalesVisiblePrice(product) {
+    const basePriceRaw =
+      Number(
+        product?.price || 0
+      );
+
+    const basePrice =
+      Number.isFinite(basePriceRaw) &&
+      basePriceRaw >= 0
+        ? basePriceRaw
+        : 0;
+
+    if (isCjSalesProduct(product)) {
+      return basePrice;
+    }
+
+    return Number(
+      (
+        basePrice *
+        (
+          1 +
+          VAT
+        )
+      ).toFixed(2)
+    );
+  }
+
+  function shouldShowSalesVatNote(product) {
+    return (
+      !isCjSalesProduct(product) &&
+      SALES_INTERNAL_VAT_ACTIVE
+    );
+  }
 
   /*
    * Search and category requests must land at the beginning
@@ -1045,16 +1124,20 @@
               product.image ||
               '/images/no-image.png';
 
-            const basePrice =
-              Number(product.price || 0);
+            const visiblePrice =
+              getSalesVisiblePrice(
+                product
+              );
 
-            const vatPrice =
-              basePrice * (1 + VAT);
+            const productShowsVat =
+              shouldShowSalesVatNote(
+                product
+              );
 
             const productIsCj =
-              String(product.source || '')
-                .trim()
-                .toUpperCase() === 'CJ';
+              isCjSalesProduct(
+                product
+              );
 
             const defaultCjVariant =
               Array.isArray(product.variants)
@@ -1097,12 +1180,14 @@
                 </a>
 
                 <span class="item-price sales-main-product-price text-primary">
-                  <%= formatMoney(vatPrice) %>
+                  <%= formatMoney(visiblePrice) %>
                 </span>
 
+                <% if (productShowsVat) { %>
                 <small class="sales-product-vat text-muted d-block mb-1">
                   incl. VAT
                 </small>
+                <% } %>
 
                 <div class="sales-product-rating mb-2">
                   <%- include('partials/rating-stars', {
@@ -1195,8 +1280,14 @@
                   '/images/no-image.png';
 
                 const ratedPrice =
-                  Number(product.price || 0) *
-                  (1 + VAT);
+                  getSalesVisiblePrice(
+                    product
+                  );
+
+                const ratedProductShowsVat =
+                  shouldShowSalesVatNote(
+                    product
+                  );
               %>
 
               <a href="<%= product.url %>" class="sales-rated-product text-decoration-none text-dark d-flex gap-2 p-1 sales-nav-link">
@@ -1234,6 +1325,12 @@
                   <div class="sales-rated-price fw-bold text-primary">
                     <%= formatMoney(ratedPrice) %>
                   </div>
+
+                  <% if (ratedProductShowsVat) { %>
+                  <small class="sales-product-vat text-muted d-block">
+                    incl. VAT
+                  </small>
+                  <% } %>
                 </div>
               </a>
               <% }) %>
@@ -1275,11 +1372,15 @@
             product.image ||
             '/images/no-image.png';
 
-          const relatedBasePrice =
-            Number(product.price || 0);
+          const relatedVisiblePrice =
+            getSalesVisiblePrice(
+              product
+            );
 
-          const relatedVatPrice =
-            relatedBasePrice * (1 + VAT);
+          const relatedProductShowsVat =
+            shouldShowSalesVatNote(
+              product
+            );
         %>
 
         <div class="col-6 col-md-4 col-lg-3">
@@ -1300,12 +1401,14 @@
                 </h3>
 
                 <span class="item-price related-product-price text-primary">
-                  <%= formatMoney(relatedVatPrice) %>
+                  <%= formatMoney(relatedVisiblePrice) %>
                 </span>
 
+                <% if (relatedProductShowsVat) { %>
                 <small class="sales-product-vat text-muted d-block mb-1">
                   incl. VAT
                 </small>
+                <% } %>
 
                 <div class="sales-product-rating">
                   <%- include('partials/rating-stars', {
@@ -1613,39 +1716,102 @@
 
           let total = 0;
 
-          if ('<%= ACTIVE_DEPARTMENT %>' === 'cj') {
-            total = Number(
-              data.totalIncVat ??
-              data.total ??
-              0
-            );
+          if (
+            '<%= ACTIVE_DEPARTMENT %>' ===
+            'cj'
+          ) {
+            /*
+             * CJ cart remains fully separate.
+             *
+             * Do not add Internal Kasyora VAT.
+             */
+            total =
+              Number(
+                data.total ??
+                data.totalIncVat ??
+                0
+              );
           } else {
             const items =
               Array.isArray(data.items) ?
-              data.items : [];
+              data.items :
+              [];
 
-            total = items.reduce(
-              function(sum, item) {
-                const price =
-                  Number(item.price || 0);
+            /*
+             * Internal cart prices are VAT-exclusive.
+             */
+            const internalNetTotal =
+              items.reduce(
+                function(sum, item) {
+                  const priceExVatRaw =
+                    Number(
+                      item.priceExVat ??
+                      item.price ??
+                      0
+                    );
 
-                const quantity =
-                  Number(
-                    item.quantity ||
-                    item.qty ||
-                    0
+                  const quantityRaw =
+                    Number(
+                      item.quantity ??
+                      item.qty ??
+                      0
+                    );
+
+                  const priceExVat =
+                    Number.isFinite(
+                      priceExVatRaw
+                    ) &&
+                    priceExVatRaw >= 0 ?
+                    priceExVatRaw :
+                    0;
+
+                  const quantity =
+                    Number.isFinite(
+                      quantityRaw
+                    ) &&
+                    quantityRaw > 0 ?
+                    quantityRaw :
+                    0;
+
+                  return (
+                    sum +
+                    (
+                      priceExVat *
+                      quantity
+                    )
                   );
+                },
+                0
+              );
 
-                return (
-                  sum +
+            /*
+             * This is the inherited provisional country-aware
+             * rate supplied by routes/products.js.
+             */
+            const provisionalVatRate =
+              Number(
+                '<%= Number(VAT) %>'
+              );
+
+            const safeVatRate =
+              Number.isFinite(
+                provisionalVatRate
+              ) &&
+              provisionalVatRate >= 0 &&
+              provisionalVatRate <= 1 ?
+              provisionalVatRate :
+              0;
+
+            total =
+              Number(
+                (
+                  internalNetTotal *
                   (
-                    price *
-                    quantity
+                    1 +
+                    safeVatRate
                   )
-                );
-              },
-              0
-            );
+                ).toFixed(2)
+              );
           }
 
           if (total > 0) {

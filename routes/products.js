@@ -21,6 +21,10 @@ const requireOfficialNumberVerified = require('../middleware/requireOfficialNumb
 const requireAdmin = require('../middleware/requireAdmin');
 const Business = require('../models/Business');
 
+const { TAX_COUNTRY_SOURCES } = require('../utils/tax/taxConfig');
+
+const { resolveInternalTaxTreatment } = require('../utils/tax/resolveInternalTaxTreatment');
+
 const router = express.Router();
 
 /* ---------------------------------------------
@@ -40,8 +44,6 @@ const BASE_CURRENCY =
   String(process.env.BASE_CURRENCY || '')
     .trim()
     .toUpperCase() || 'USD';
-
-const VAT_RATE = Number(process.env.VAT_RATE || 0.15);
 
 /*
  * Resolve the active storefront department.
@@ -73,6 +75,50 @@ function getSalesDepartment(req) {
   }
 
   return normalizeSalesDepartment(req.session?.storeDepartment);
+}
+
+/*
+ * Resolve provisional VAT for the Internal Fast Liner page.
+ * ========================================================
+ *
+ * This page does not contain its own delivery-country selector.
+ *
+ * It inherits the provisional country already resolved by the
+ * global tax-country middleware from:
+ *
+ * 1. customer storefront country selection;
+ * 2. trusted GeoIP;
+ * 3. configured default.
+ *
+ * Checkout shipping address remains authoritative later.
+ *
+ * CJ must never call this helper.
+ */
+function resolveInternalSalesTaxTreatment(req) {
+  const destinationCountryCode = String(req?.taxCountryContext?.countryCode || '')
+    .trim()
+    .toUpperCase();
+
+  const countrySource = String(req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT)
+    .trim()
+    .toUpperCase();
+
+  const treatment = resolveInternalTaxTreatment({
+    destinationCountryCode,
+    countrySource,
+  });
+
+  return {
+    ...treatment,
+
+    destinationCountryCode: treatment.destinationCountryCode || destinationCountryCode,
+
+    countrySource,
+
+    authoritative: false,
+
+    provisional: true,
+  };
 }
 
 function getEnabledSalesCjVariants(product) {
@@ -967,6 +1013,36 @@ router.get('/sales', async (req, res) => {
 
     const isCjDepartment = storeDepartment === 'cj';
 
+    /*
+     * CJ receives no Kasyora-added VAT.
+     *
+     * Internal inherits the provisional country already resolved
+     * by the storefront tax-country middleware.
+     */
+    const salesTaxTreatment = isCjDepartment
+      ? {
+          destinationCountryCode: '',
+
+          countrySource: 'CJ_SEPARATE_COMMERCE',
+
+          jurisdiction: 'CJ',
+
+          treatmentCode: 'CJ_NO_KASYORA_VAT',
+
+          label: '',
+
+          reason: '',
+
+          vatRate: 0,
+
+          vatPercentage: 0,
+
+          authoritative: false,
+
+          provisional: false,
+        }
+      : resolveInternalSalesTaxTreatment(req);
+
     const perPage = 20;
 
     let products = [];
@@ -1314,7 +1390,24 @@ router.get('/sales', async (req, res) => {
 
       nonce: res.locals.nonce,
 
-      vatRate: VAT_RATE,
+      /*
+       * Internal:
+       * provisional country-aware VAT rate.
+       *
+       * CJ:
+       * always zero Kasyora VAT.
+       */
+      vatRate: Number(salesTaxTreatment.vatRate || 0),
+
+      taxTreatment: salesTaxTreatment,
+
+      taxCountryCode: salesTaxTreatment.destinationCountryCode || '',
+
+      taxCountrySource: salesTaxTreatment.countrySource || '',
+
+      taxProvisional: salesTaxTreatment.provisional === true,
+
+      taxAuthoritative: false,
 
       baseCurrency: BASE_CURRENCY,
     });
