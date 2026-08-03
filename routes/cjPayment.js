@@ -372,11 +372,26 @@ function checkoutFromSession(req) {
     );
   }
 
-  const productTotalIncVat = round2(quote.productTotalIncVat);
-  const shippingAmount = round2(selectedShipping.shippingAmount);
-  const payableTotal = round2(productTotalIncVat + shippingAmount);
+  /*
+   * Prefer the new authoritative VAT-free product total.
+   *
+   * productTotalIncVat remains only as a temporary fallback
+   * for checkout sessions created before this migration.
+   */
+  const productTotal = round2(quote.productTotal ?? quote.productTotalIncVat ?? 0);
 
-  if (!Number.isFinite(payableTotal) || payableTotal <= 0) {
+  const shippingAmount = round2(selectedShipping.shippingAmount);
+
+  const payableTotal = round2(productTotal + shippingAmount);
+
+  if (
+    !Number.isFinite(productTotal) ||
+    productTotal < 0 ||
+    !Number.isFinite(shippingAmount) ||
+    shippingAmount < 0 ||
+    !Number.isFinite(payableTotal) ||
+    payableTotal <= 0
+  ) {
     throw createPaymentError('CJ_PAYMENT_AMOUNT_INVALID', 'The CJ payable total is invalid.', 409);
   }
 
@@ -386,7 +401,18 @@ function checkoutFromSession(req) {
     selectedShipping,
     cartSnapshot,
     items,
-    productTotalIncVat,
+
+    /*
+     * Authoritative VAT-free product amount.
+     */
+    productTotal,
+
+    /*
+     * Temporary compatibility field for the existing
+     * CjOrder schema. Its value contains no VAT.
+     */
+    productTotalIncVat: productTotal,
+
     shippingAmount,
     payableTotal,
     quoteExpiresAt,
@@ -400,45 +426,82 @@ function money(value, currency) {
   };
 }
 
+/*
+ * Build the immutable CJ order-item snapshot.
+ *
+ * Kasyora adds and collects no VAT in the CJ flow.
+ *
+ * The current CjOrder schema still uses historical field
+ * names such as unitPriceIncVat and lineTotalIncVat. Until
+ * that schema is migrated, those fields receive the same
+ * VAT-free CJ selling price.
+ */
 function buildOrderItems(items) {
   return items.map((item) => {
     const quantity = Math.max(1, Math.min(100, Math.floor(Number(item?.quantity || 1))));
-    const unitPriceExVat = round2(item?.priceExVat);
-    const unitPriceIncVat = round2(item?.price);
-    const unitVatAmount = round2(unitPriceIncVat - unitPriceExVat);
+
+    const unitPrice = round2(item?.priceExVat ?? item?.price ?? 0);
 
     return {
       source: 'CJ',
+
       cjProductId: safeString(item?.cjProductId, 300),
+
       cjVariantId: safeString(item?.cjVariantId, 300),
+
       productSku: safeString(item?.productSku, 300),
+
       variantSku: safeString(item?.variantSku, 300),
+
       name: safeString(item?.name, 500) || 'CJ Product',
+
       variantName: safeString(item?.variantName, 500) || 'Variant',
+
       imageUrl: safeString(item?.imageUrl, 2000),
+
       category: safeString(item?.category, 500),
+
       quantity,
-      unitPriceExVat: money(unitPriceExVat, BASE_CURRENCY),
-      unitVatAmount: money(unitVatAmount, BASE_CURRENCY),
-      unitPriceIncVat: money(unitPriceIncVat, BASE_CURRENCY),
-      lineSubtotalExVat: money(unitPriceExVat * quantity, BASE_CURRENCY),
-      lineVatAmount: money(unitVatAmount * quantity, BASE_CURRENCY),
-      lineTotalIncVat: money(unitPriceIncVat * quantity, BASE_CURRENCY),
-      vatRate: Number(item?.vatRate || 0),
+
+      /*
+       * Historical schema fields.
+       *
+       * All price fields contain the same VAT-free amount.
+       */
+      unitPriceExVat: money(unitPrice, BASE_CURRENCY),
+
+      unitVatAmount: money(0, BASE_CURRENCY),
+
+      unitPriceIncVat: money(unitPrice, BASE_CURRENCY),
+
+      lineSubtotalExVat: money(unitPrice * quantity, BASE_CURRENCY),
+
+      lineVatAmount: money(0, BASE_CURRENCY),
+
+      lineTotalIncVat: money(unitPrice * quantity, BASE_CURRENCY),
+
+      vatRate: 0,
+
       weightGrams: Number.isFinite(Number(item?.weightGrams)) ? Number(item.weightGrams) : null,
+
       dimensionsMm: {
         length: Number.isFinite(Number(item?.dimensionsMm?.length))
           ? Number(item.dimensionsMm.length)
           : null,
+
         width: Number.isFinite(Number(item?.dimensionsMm?.width))
           ? Number(item.dimensionsMm.width)
           : null,
+
         height: Number.isFinite(Number(item?.dimensionsMm?.height))
           ? Number(item.dimensionsMm.height)
           : null,
       },
+
       inventoryKnown: item?.inventoryKnown === true,
+
       inventorySnapshot: Math.max(0, Math.floor(Number(item?.inventorySnapshot || 0))),
+
       validatedAt: item?.validatedAt ? new Date(item.validatedAt) : new Date(),
     };
   });
@@ -714,13 +777,38 @@ async function createCjOrderAfterCompletedPaypalCapture({ req, paypalResponse, c
     paymentStatus: 'COMPLETED',
     fulfillmentStatus: 'CJ_ORDER_PENDING',
     currency: BASE_CURRENCY,
-    vatRate: Number(orderItems[0]?.vatRate || 0),
+    /*
+     * Kasyora-added CJ VAT is always zero.
+     */
+    vatRate: 0,
+
     items: orderItems,
+
     itemCount: Number(checkoutData.cartSnapshot.itemCount || 0),
-    productSubtotalExVat: money(checkoutData.cartSnapshot.subtotalExVat, BASE_CURRENCY),
-    productVatAmount: money(checkoutData.cartSnapshot.vatAmount, BASE_CURRENCY),
-    productTotalIncVat: money(checkoutData.productTotalIncVat, BASE_CURRENCY),
+
+    /*
+     * Historical CjOrder schema fields.
+     *
+     * productSubtotalExVat and productTotalIncVat both contain
+     * the same VAT-free CJ product amount.
+     */
+    productSubtotalExVat: money(
+      checkoutData.cartSnapshot.subtotal ??
+        checkoutData.cartSnapshot.subtotalExVat ??
+        checkoutData.productTotal ??
+        0,
+      BASE_CURRENCY,
+    ),
+
+    productVatAmount: money(0, BASE_CURRENCY),
+
+    productTotalIncVat: money(
+      checkoutData.productTotal ?? checkoutData.productTotalIncVat ?? 0,
+      BASE_CURRENCY,
+    ),
+
     shippingTotal: money(checkoutData.shippingAmount, BASE_CURRENCY),
+
     payableTotal: money(checkoutData.payableTotal, BASE_CURRENCY),
     deliveryAddress,
     selectedShipping: buildSelectedShipping({
@@ -753,8 +841,19 @@ async function createCjOrderAfterCompletedPaypalCapture({ req, paypalResponse, c
     lastPaymentErrorCode: '',
     lastPaymentErrorMessage: '',
     metadata: {
+      /*
+       * Authoritative VAT-free CJ product amount before
+       * CJ shipping is added.
+       */
+      baseProductAmount: {
+        value: moneyString(checkoutData.productTotal ?? checkoutData.productTotalIncVat ?? 0),
+
+        currency: BASE_CURRENCY,
+      },
+
       basePayableAmount: {
         value: moneyString(checkoutData.payableTotal),
+
         currency: BASE_CURRENCY,
       },
       paypalConversion: {

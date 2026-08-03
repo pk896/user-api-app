@@ -2,8 +2,12 @@
 <%
   /*
    * BASE_CURRENCY remains authoritative for all CJ product,
-   * VAT, cart, shipping, checkout, PayPal, order and supplier
+   * cart, shipping, checkout, PayPal, order and supplier
    * fulfilment amounts.
+   *
+   * Kasyora adds and collects no VAT in the CJ flow.
+   * Destination import VAT, customs duties and carrier charges
+   * remain outside Kasyora's product-price calculation.
    *
    * CURRENCY affects visible customer amounts only.
    */
@@ -64,14 +68,20 @@
     ).trim();
 
   /*
-   * This value always remains in BASE_CURRENCY.
-   * Client-side code uses it instead of reading formatted text
-   * back from the page.
+   * This VAT-free product total always remains in
+   * BASE_CURRENCY.
+   *
+   * Client-side code uses it instead of reading formatted
+   * display-currency text back from the page.
    */
   const INITIAL_PRODUCT_TOTAL_BASE = Number(
-    typeof totalIncVat !== 'undefined'
-      ? totalIncVat
-      : 0
+    typeof total !== 'undefined'
+      ? total
+      : (
+          typeof totalIncVat !== 'undefined'
+            ? totalIncVat
+            : 0
+        )
   );
 
   function convertBaseToDisplay(amount) {
@@ -547,12 +557,28 @@
                 <div class="small mt-1">
                   <%= item.quantity %>
                   ×
-                  <%= formatMoney(item.price) %>
+                  <%= formatMoney(
+                    Number(
+                      item.priceExVat ??
+                      item.price ??
+                      0
+                    )
+                  ) %>
                 </div>
               </div>
 
               <div class="fw-semibold text-primary text-end">
-                <%= formatMoney(Number(item.price || 0) * Number(item.quantity || 0)) %>
+                <%= formatMoney(
+                  Number(
+                    item.priceExVat ??
+                    item.price ??
+                    0
+                  ) *
+                  Number(
+                    item.quantity ||
+                    0
+                  )
+                ) %>
               </div>
             </div>
             <% }) %>
@@ -567,33 +593,21 @@
               </strong>
             </div>
 
-            <div class="d-flex justify-content-between mb-2">
-              <span class="text-muted">
-                Products excluding VAT
-              </span>
-
-              <strong id="cjCheckoutSubtotalExVat">
-                <%= formatMoney(subtotalExVat) %>
-              </strong>
-            </div>
-
-            <div class="d-flex justify-content-between mb-2">
-              <span class="text-muted">
-                Product VAT
-              </span>
-
-              <strong id="cjCheckoutVatAmount">
-                <%= formatMoney(vatAmount) %>
-              </strong>
-            </div>
-
             <div class="d-flex justify-content-between mb-3">
               <span class="fw-semibold">
-                Products including VAT
+                Product total
               </span>
 
               <strong id="cjCheckoutProductTotal" class="text-primary">
-                <%= formatMoney(totalIncVat) %>
+                <%= formatMoney(
+                  typeof total !== 'undefined'
+                    ? total
+                    : (
+                        typeof totalIncVat !== 'undefined'
+                          ? totalIncVat
+                          : 0
+                      )
+                ) %>
               </strong>
             </div>
 
@@ -618,12 +632,31 @@
 
               <strong id="cjCheckoutPayableTotal" class="text-primary fs-4">
                 <%= SAVED_SELECTED_SHIPPING
-                    ? formatMoney(SAVED_SELECTED_SHIPPING.payableTotal)
-                    : formatMoney(totalIncVat) %>
+                    ? formatMoney(
+                        SAVED_SELECTED_SHIPPING.payableTotal
+                      )
+                    : formatMoney(
+                        typeof total !== 'undefined'
+                          ? total
+                          : (
+                              typeof totalIncVat !== 'undefined'
+                                ? totalIncVat
+                                : 0
+                            )
+                      ) %>
               </strong>
             </div>
 
             <div class="alert alert-light border small mt-4 mb-0">
+              <div class="mb-2">
+                <i class="fas fa-info-circle text-primary me-2"></i>
+
+                Kasyora does not add or collect VAT on CJ Dropshipping
+                products. Any destination import VAT, customs duties or
+                carrier handling charges remain the customer’s
+                responsibility during import and delivery.
+              </div>
+
               <div class="mb-2">
                 Visible product, shipping and estimated payable amounts are
                 displayed in
@@ -763,14 +796,6 @@
 
     const itemCountElement = document.getElementById(
       'cjCheckoutItemCount'
-    );
-
-    const subtotalElement = document.getElementById(
-      'cjCheckoutSubtotalExVat'
-    );
-
-    const vatElement = document.getElementById(
-      'cjCheckoutVatAmount'
     );
 
     const continueButton = document.getElementById(
@@ -1964,26 +1989,24 @@
               String(quote.itemCount || 0);
           }
 
-          if (subtotalElement) {
-            subtotalElement.textContent =
-              formatMoney(
-                quote.productSubtotalExVat
-              );
-          }
-
-          if (vatElement) {
-            vatElement.textContent =
-              formatMoney(
-                quote.productVatAmount
-              );
-          }
-
-          const quotedProductTotalBase = Number(
-            quote.productTotalIncVat || 0
-          );
+          /*
+           * Prefer the new VAT-free quote field.
+           *
+           * productTotalIncVat remains only as a temporary
+           * compatibility fallback until the CJ payment route
+           * has also been patched.
+           */
+          const quotedProductTotalBase =
+            Number(
+              quote.productTotal ??
+              quote.productTotalIncVat ??
+              0
+            );
 
           currentProductTotalBase =
-            Number.isFinite(quotedProductTotalBase) ?
+            Number.isFinite(
+              quotedProductTotalBase
+            ) ?
             quotedProductTotalBase :
             0;
 

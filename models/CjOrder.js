@@ -13,16 +13,6 @@ function getBaseCurrency() {
   return /^[A-Z]{3}$/.test(currency) ? currency : 'USD';
 }
 
-function getVatRate() {
-  const value = Number(process.env.VAT_RATE || 0.15);
-
-  if (!Number.isFinite(value)) {
-    return 0.15;
-  }
-
-  return Math.max(0, Math.min(1, value));
-}
-
 const MoneySchema = new Schema(
   {
     value: {
@@ -151,6 +141,20 @@ const CjOrderItemSchema = new Schema(
       max: 100,
     },
 
+    /*
+     * Historical CJ money field names.
+     *
+     * For all new CJ orders:
+     * - unitPriceExVat and unitPriceIncVat contain the same
+     *   VAT-free CJ selling price.
+     * - unitVatAmount is always 0.00.
+     * - lineSubtotalExVat and lineTotalIncVat contain the same
+     *   VAT-free line total.
+     * - lineVatAmount is always 0.00.
+     *
+     * These names remain temporarily for compatibility with
+     * existing CJ order, email and supplier-order code.
+     */
     unitPriceExVat: {
       type: MoneySchema,
       required: true,
@@ -181,12 +185,18 @@ const CjOrderItemSchema = new Schema(
       required: true,
     },
 
+    /*
+     * Kasyora adds and collects no VAT on CJ order items.
+     *
+     * Destination import VAT, customs duties and carrier
+     * charges remain outside this local order calculation.
+     */
     vatRate: {
       type: Number,
       required: true,
-      default: getVatRate,
+      default: 0,
       min: 0,
-      max: 1,
+      max: 0,
     },
 
     weightGrams: {
@@ -946,12 +956,16 @@ const cjOrderSchema = new Schema(
       maxlength: 3,
     },
 
+    /*
+     * Kasyora-added VAT is always zero for the separate
+     * CJ Dropshipping order flow.
+     */
     vatRate: {
       type: Number,
       required: true,
-      default: getVatRate,
+      default: 0,
       min: 0,
-      max: 1,
+      max: 0,
     },
 
     items: {
@@ -972,6 +986,17 @@ const cjOrderSchema = new Schema(
       min: 1,
     },
 
+    /*
+     * Historical CJ order-total field names.
+     *
+     * For all new CJ orders:
+     * - productSubtotalExVat and productTotalIncVat contain
+     *   the same VAT-free product total.
+     * - productVatAmount is always 0.00.
+     *
+     * These names remain temporarily for compatibility with
+     * existing order, email, admin and supplier-order code.
+     */
     productSubtotalExVat: {
       type: MoneySchema,
       required: true,

@@ -33,10 +33,6 @@ const BASE_CURRENCY =
     .trim()
     .toUpperCase() || 'USD';
 
-const DEFAULT_VAT_RATE = Number.isFinite(Number(process.env.VAT_RATE))
-  ? Number(process.env.VAT_RATE)
-  : 0.15;
-
 function safeString(value, maxLength = 1000) {
   return String(value ?? '')
     .trim()
@@ -396,15 +392,22 @@ function currentInventoryState(variant) {
   };
 }
 
+/*
+ * Revalidate the authoritative CJ selling price.
+ *
+ * Kasyora adds and collects no VAT in the CJ flow.
+ * Destination import VAT, customs duties and carrier charges
+ * are outside this product-price calculation.
+ */
 function currentVariantPricing(product, variant) {
-  const priceExVat = Number(variant?.sellingPriceExVat?.value);
+  const rawSellingPrice = Number(variant?.sellingPriceExVat?.value);
 
   const currency = safeString(
     variant?.sellingPriceExVat?.currency || product?.pricing?.baseCurrency || BASE_CURRENCY,
     3,
   ).toUpperCase();
 
-  if (!Number.isFinite(priceExVat) || priceExVat < 0 || currency !== BASE_CURRENCY) {
+  if (!Number.isFinite(rawSellingPrice) || rawSellingPrice < 0 || currency !== BASE_CURRENCY) {
     throw createCheckoutError(
       'CJ_CHECKOUT_PRICE_INVALID',
       'A CJ cart variant no longer has a valid Kasyora selling price.',
@@ -412,17 +415,22 @@ function currentVariantPricing(product, variant) {
     );
   }
 
-  const vatRate = Number.isFinite(Number(product?.pricing?.vatRate))
-    ? Number(product.pricing.vatRate)
-    : DEFAULT_VAT_RATE;
+  const sellingPrice = round2(rawSellingPrice);
 
   return {
-    priceExVat: round2(priceExVat),
+    /*
+     * price is the VAT-free authoritative CJ selling price.
+     *
+     * priceExVat remains temporarily available for existing
+     * CJ checkout, payment and order compatibility.
+     */
+    price: sellingPrice,
 
-    priceIncVat: round2(priceExVat * (1 + vatRate)),
+    priceExVat: sellingPrice,
 
     currency,
-    vatRate,
+
+    vatRate: 0,
   };
 }
 
@@ -465,15 +473,22 @@ function buildRefreshedCartItem({ product, variant, quantity, pricing, inventory
 
     quantity,
 
-    price: pricing.priceIncVat,
+    /*
+     * The refreshed checkout item remains VAT-free.
+     *
+     * Both price fields temporarily contain the same amount
+     * so older CJ payment and order code remains operational
+     * until those files are patched.
+     */
+    price: round2(pricing.price ?? pricing.priceExVat),
 
-    priceExVat: pricing.priceExVat,
+    priceExVat: round2(pricing.priceExVat ?? pricing.price),
 
     currency: pricing.currency,
 
-    vatRate: pricing.vatRate,
+    vatRate: 0,
 
-    vatIncluded: true,
+    vatIncluded: false,
 
     weightGrams: Number.isFinite(Number(variant?.weightGrams)) ? Number(variant.weightGrams) : null,
 
@@ -584,7 +599,18 @@ async function revalidateCjCart(req) {
   return publicCjCart(sessionCart);
 }
 
-function normalizeQuoteOptions(options, productTotalIncVat) {
+/*
+ * Attach the VAT-free product total to every real CJ
+ * logistics option.
+ *
+ * taxesFeeUsd, tariffUsd and other logistics fields below
+ * are values returned by CJ's logistics quotation.
+ * They are not Kasyora-added VAT and must remain available
+ * for supplier-order and logistics auditing.
+ */
+function normalizeQuoteOptions(options, productTotal) {
+  const safeProductTotal = round2(productTotal);
+
   return (Array.isArray(options) ? options : []).map((option) => {
     const shippingAmount = round2(option?.freight?.value);
 
@@ -629,9 +655,20 @@ function normalizeQuoteOptions(options, productTotalIncVat) {
         convertedAt: option?.fxSnapshot?.convertedAt || new Date().toISOString(),
       },
 
-      productTotalIncVat: round2(productTotalIncVat),
+      /*
+       * New authoritative VAT-free fields.
+       */
+      productTotal: safeProductTotal,
 
-      payableTotal: round2(productTotalIncVat + shippingAmount),
+      payableTotal: round2(safeProductTotal + shippingAmount),
+
+      /*
+       * Temporary compatibility field.
+       *
+       * The value contains no VAT. It remains only until
+       * routes/cjPayment.js has been patched.
+       */
+      productTotalIncVat: safeProductTotal,
     };
   });
 }
@@ -675,11 +712,23 @@ router.get('/cj/checkout', async (req, res) => {
 
       itemCount: cart.itemCount,
 
-      subtotalExVat: cart.subtotalExVat,
+      /*
+       * New authoritative VAT-free CJ summary fields.
+       */
+      subtotal: cart.subtotal,
 
-      vatAmount: cart.vatAmount,
+      total: cart.total,
 
-      totalIncVat: cart.totalIncVat,
+      /*
+       * Temporary compatibility fields for checkout.ejs.
+       *
+       * These values contain no Kasyora-added VAT.
+       */
+      subtotalExVat: cart.subtotal,
+
+      vatAmount: 0,
+
+      totalIncVat: cart.total,
 
       savedAddress: previousCheckout?.deliveryAddress || null,
 
@@ -695,7 +744,7 @@ router.get('/cj/checkout', async (req, res) => {
 
       baseCurrency: BASE_CURRENCY,
 
-      vatRate: DEFAULT_VAT_RATE,
+      vatRate: 0,
 
       defaultOriginCountryCode: DEFAULT_ORIGIN_COUNTRY_CODE,
 
@@ -738,7 +787,7 @@ router.post('/api/cj-checkout/quote', async (req, res) => {
       iossNumber: deliveryAddress.iossNumber,
     });
 
-    const quoteOptions = normalizeQuoteOptions(freight.options, cart.totalIncVat);
+    const quoteOptions = normalizeQuoteOptions(freight.options, cart.total);
 
     if (!quoteOptions.length) {
       throw createCheckoutError(
@@ -759,11 +808,24 @@ router.post('/api/cj-checkout/quote', async (req, res) => {
 
       currency: BASE_CURRENCY,
 
-      productSubtotalExVat: round2(cart.subtotalExVat),
+      /*
+       * New authoritative VAT-free quote amounts.
+       */
+      productSubtotal: round2(cart.subtotal),
 
-      productVatAmount: round2(cart.vatAmount),
+      productVatAmount: 0,
 
-      productTotalIncVat: round2(cart.totalIncVat),
+      productTotal: round2(cart.total),
+
+      /*
+       * Temporary compatibility fields.
+       *
+       * Their names are historical only. Their values contain
+       * no Kasyora-added VAT.
+       */
+      productSubtotalExVat: round2(cart.subtotal),
+
+      productTotalIncVat: round2(cart.total),
 
       itemCount: Number(cart.itemCount || 0),
 
@@ -788,11 +850,21 @@ router.post('/api/cj-checkout/quote', async (req, res) => {
 
         itemCount: cart.itemCount,
 
-        subtotalExVat: cart.subtotalExVat,
+        /*
+         * New authoritative VAT-free cart snapshot.
+         */
+        subtotal: cart.subtotal,
 
-        vatAmount: cart.vatAmount,
+        vatAmount: 0,
 
-        totalIncVat: cart.totalIncVat,
+        total: cart.total,
+
+        /*
+         * Temporary compatibility fields.
+         */
+        subtotalExVat: cart.subtotal,
+
+        totalIncVat: cart.total,
 
         capturedAt: new Date().toISOString(),
       },
@@ -901,9 +973,9 @@ router.post('/api/cj-checkout/select-shipping', (req, res) => {
 
     const shippingAmount = round2(selectedOption?.shippingAmount);
 
-    const productTotalIncVat = round2(quote?.productTotalIncVat);
+    const productTotal = round2(quote?.productTotal ?? quote?.productTotalIncVat ?? 0);
 
-    const payableTotal = round2(productTotalIncVat + shippingAmount);
+    const payableTotal = round2(productTotal + shippingAmount);
 
     const selectedShipping = {
       source: 'CJ',
@@ -926,9 +998,19 @@ router.post('/api/cj-checkout/select-shipping', (req, res) => {
 
       currency: safeString(selectedOption?.currency || BASE_CURRENCY, 3).toUpperCase(),
 
-      productTotalIncVat,
+      /*
+       * Authoritative VAT-free product and payable totals.
+       */
+      productTotal,
 
       payableTotal,
+
+      /*
+       * Temporary compatibility field for cjPayment.js.
+       *
+       * Its value contains no VAT.
+       */
+      productTotalIncVat: productTotal,
 
       taxesFeeUsd: round2(selectedOption?.taxesFeeUsd),
 

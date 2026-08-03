@@ -11,14 +11,6 @@ function getBaseCurrency() {
   return /^[A-Z]{3}$/.test(value) ? value : 'USD';
 }
 
-function getVatRate() {
-  const value = Number(process.env.VAT_RATE || 0.15);
-
-  if (!Number.isFinite(value)) return 0.15;
-
-  return Math.max(0, Math.min(1, value));
-}
-
 const MoneySchema = new mongoose.Schema(
   {
     value: {
@@ -202,6 +194,16 @@ const CjProductVariantSchema = new mongoose.Schema(
       required: true,
     },
 
+    /*
+     * Historical field name.
+     *
+     * This is the authoritative VAT-free Kasyora selling price
+     * for the CJ product variant.
+     *
+     * Kasyora does not add or collect VAT in the CJ flow.
+     * The field name remains for compatibility with existing
+     * CJ import, pricing, cart and checkout code.
+     */
     sellingPriceExVat: {
       type: MoneySchema,
       required: true,
@@ -468,11 +470,17 @@ const cjProductSchema = new mongoose.Schema(
         uppercase: true,
       },
 
+      /*
+       * Kasyora adds and collects no VAT on CJ products.
+       *
+       * Destination import VAT, customs duties and carrier
+       * charges remain outside the CJ product-price model.
+       */
       vatRate: {
         type: Number,
-        default: getVatRate,
+        default: 0,
         min: 0,
-        max: 1,
+        max: 0,
       },
 
       defaultMarkupPercent: {
@@ -482,6 +490,12 @@ const cjProductSchema = new mongoose.Schema(
         max: 10000,
       },
 
+      /*
+       * Historical field names.
+       *
+       * These values represent the minimum and maximum
+       * VAT-free CJ selling prices across enabled variants.
+       */
       minimumSellingPriceExVat: {
         type: Number,
         default: 0,
