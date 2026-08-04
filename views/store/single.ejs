@@ -1,34 +1,83 @@
 <!--views/store/single.ejs-->
 <%
   /*
-   * The /store/product/:id route supplies the provisional
-   * country-aware Internal VAT rate:
+   * Resolved Internal single-product tax context
+   * =============================================
    *
-   * South Africa:
-   * configured South African VAT rate
+   * The /store/product/:id route supplies taxTreatment for
+   * this Internal Kasyora Store request.
    *
-   * Foreign destination:
-   * 0% South African VAT
+   * Possible treatments:
    *
-   * Never assume 15% inside the view when the route local
-   * is missing or invalid.
+   * - VAT_DISABLED
+   * - ZA_STANDARD
+   * - ZA_EXPORT_ZERO_RATED
+   *
+   * The checkout shipping address remains authoritative for
+   * the final VAT calculation.
+   */
+  const SINGLE_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : (
+          typeof internalTaxTreatment !== 'undefined' &&
+          internalTaxTreatment &&
+          typeof internalTaxTreatment === 'object'
+            ? internalTaxTreatment
+            : {}
+        );
+
+  /*
+   * Safe VAT-rate priority:
+   *
+   * 1. taxTreatment.vatRate
+   * 2. route vatRate
+   * 3. middleware internalVatRate
+   * 4. zero
+   *
+   * Never assume 15% inside this template.
    */
   const SINGLE_VAT_RATE_RAW =
     Number(
-      typeof vatRate !== 'undefined' &&
-      vatRate !== null
-        ? vatRate
-        : 0
+      SINGLE_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined'
+          ? vatRate
+          : (
+              typeof internalVatRate !== 'undefined'
+                ? internalVatRate
+                : 0
+            )
+      )
     );
 
   const VAT =
-    Number.isFinite(SINGLE_VAT_RATE_RAW) &&
+    Number.isFinite(
+      SINGLE_VAT_RATE_RAW
+    ) &&
     SINGLE_VAT_RATE_RAW >= 0 &&
     SINGLE_VAT_RATE_RAW <= 1
       ? SINGLE_VAT_RATE_RAW
       : 0;
 
+  const SINGLE_VAT_ENABLED =
+    SINGLE_TAX_TREATMENT.vatEnabled === true ||
+    (
+      typeof internalVatEnabled !== 'undefined' &&
+      internalVatEnabled === true
+    );
+
+  /*
+   * Show "incl. VAT" only when the visible price actually
+   * contains a positive VAT amount.
+   *
+   * VAT disabled and foreign zero-rated destinations show
+   * the price without VAT wording.
+   */
   const SHOW_SINGLE_VAT_TEXT =
+    SINGLE_VAT_ENABLED &&
     VAT > 0;
 
   /*
@@ -139,33 +188,28 @@
   }
 
   /*
-   * mapStoreProduct currently uses oldPrice only as a signal that
-   * the product is on sale.
+   * product.oldPrice is already the authoritative
+   * VAT-exclusive comparison amount in BASE_CURRENCY.
    *
-   * Rebuild the visible comparison amount from the authoritative
-   * VAT-exclusive product.price so the old fixed VAT value is not
-   * reused for a foreign destination.
+   * Apply only the resolved provisional Internal VAT rate
+   * for visible storefront presentation.
    */
   function getSingleVisibleOldPrice(item) {
-    if (!item?.oldPrice) {
+    const oldPriceRaw =
+      Number(
+        item?.oldPrice
+      );
+
+    if (
+      !Number.isFinite(oldPriceRaw) ||
+      oldPriceRaw <= 0
+    ) {
       return null;
     }
 
-    const basePriceRaw =
-      Number(
-        item?.price || 0
-      );
-
-    const basePrice =
-      Number.isFinite(basePriceRaw) &&
-      basePriceRaw >= 0
-        ? basePriceRaw
-        : 0;
-
     return Number(
       (
-        basePrice *
-        1.19 *
+        oldPriceRaw *
         (
           1 +
           VAT
