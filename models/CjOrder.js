@@ -142,6 +142,21 @@ const CjOrderItemSchema = new Schema(
     },
 
     /*
+     * Authoritative VAT-free CJ item prices.
+     *
+     * Kasyora adds and collects no VAT in the CJ department.
+     */
+    unitPrice: {
+      type: MoneySchema,
+      default: undefined,
+    },
+
+    lineTotal: {
+      type: MoneySchema,
+      default: undefined,
+    },
+
+    /*
      * Historical CJ money field names.
      *
      * For all new CJ orders:
@@ -359,6 +374,17 @@ const CjShippingSchema = new Schema(
       immutable: true,
     },
 
+    /*
+     * Normalized shipping-option identifier returned by the
+     * CJ freight calculation flow.
+     */
+    id: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+
     quoteRequestId: {
       type: String,
       trim: true,
@@ -438,6 +464,28 @@ const CjShippingSchema = new Schema(
       required: true,
     },
 
+    /*
+     * Historical zero-VAT compatibility product total stored
+     * with the selected shipping snapshot.
+     *
+     * This is not a VAT-inclusive calculation. It contains the
+     * same VAT-free CJ product total used by the order.
+     */
+    productTotalIncVat: {
+      type: MoneySchema,
+      default: undefined,
+    },
+
+    /*
+     * Product total plus the selected CJ shipping amount.
+     * This is a fulfilment snapshot and does not alter the
+     * customer's captured PayPal total.
+     */
+    payableTotal: {
+      type: MoneySchema,
+      default: undefined,
+    },
+
     freightUsd: {
       type: MoneySchema,
       required: true,
@@ -471,6 +519,11 @@ const CjShippingSchema = new Schema(
     selectedAt: {
       type: Date,
       required: true,
+    },
+
+    selectedByAdmin: {
+      type: Boolean,
+      default: false,
     },
 
     message: {
@@ -984,6 +1037,17 @@ const cjOrderSchema = new Schema(
       type: Number,
       required: true,
       min: 1,
+    },
+
+    /*
+     * Authoritative VAT-free CJ product total.
+     *
+     * This is the total of all CJ order items before shipping.
+     * Kasyora adds and collects no VAT in the CJ department.
+     */
+    productTotal: {
+      type: MoneySchema,
+      default: undefined,
     },
 
     /*

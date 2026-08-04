@@ -2,7 +2,11 @@
 <%
   /*
    * BASE_CURRENCY remains authoritative for CJ product,
-   * variant, VAT, cart, checkout, payment and order amounts.
+   * variant, cart, checkout, payment and order amounts.
+   *
+   * Kasyora adds and collects no VAT in the CJ flow.
+   * Destination import VAT, customs duties and carrier charges
+   * remain outside Kasyora's product-price calculation.
    *
    * CURRENCY affects customer-visible prices only.
    */
@@ -29,12 +33,6 @@
     CURRENCY_RATE_RAW > 0
       ? CURRENCY_RATE_RAW
       : 1;
-
-  const VAT = Number(
-    typeof vatRate !== 'undefined'
-      ? vatRate
-      : product?.vatRate || 0.15
-  );
 
   const PRODUCT =
     product && typeof product === 'object'
@@ -468,22 +466,21 @@
 
             <div class="bg-light border rounded p-3 mb-4">
               <div class="text-muted">
-                Selling price, including VAT
+                Selling price
               </div>
 
-              <div id="cjVariantPriceIncVat" class="display-6 fw-bold text-primary">
+              <div id="cjVariantPrice" class="display-6 fw-bold text-primary">
                 <%= DEFAULT_VARIANT
-                  ? formatMoney(DEFAULT_VARIANT.priceIncVat)
-                  : formatMoney(PRODUCT.minimumPriceIncVat || 0) %>
-              </div>
-
-              <div class="text-muted">
-                Excluding VAT:
-                <span id="cjVariantPriceExVat">
-                  <%= DEFAULT_VARIANT
-                      ? formatMoney(DEFAULT_VARIANT.priceExVat)
-                      : formatMoney(0) %>
-                </span>
+                  ? formatMoney(
+                      DEFAULT_VARIANT.priceExVat ??
+                      DEFAULT_VARIANT.price ??
+                      0
+                    )
+                  : formatMoney(
+                      PRODUCT.minimumPriceExVat ??
+                      PRODUCT.minimumPrice ??
+                      0
+                    ) %>
               </div>
 
               <div class="small text-muted mt-3">
@@ -505,10 +502,22 @@
 
                 <select id="cjVariantSelect" class="form-select form-select-lg" required>
                   <% VARIANTS.forEach(function(variant) { %>
-                  <option value="<%= variant.cjVariantId %>" data-image-url="<%= variant.imageUrl || PRODUCT.mainImageUrl || '' %>" data-price-inc-vat="<%= Number(variant.priceIncVat || 0) %>" data-price-ex-vat="<%= Number(variant.priceExVat || 0) %>" data-currency="<%= variant.currency || CURRENCY %>" data-inventory-known="<%= variant.inventoryKnown ? '1' : '0' %>" data-total-inventory="<%= Number(variant.totalInventory || 0) %>" data-available="<%= variant.available ? '1' : '0' %>" <%= DEFAULT_VARIANT && String(DEFAULT_VARIANT.cjVariantId) === String(variant.cjVariantId) ? 'selected' : '' %>>
+                  <option value="<%= variant.cjVariantId %>" data-image-url="<%= variant.imageUrl || PRODUCT.mainImageUrl || '' %>" data-price="<%= Number(
+                      variant.priceExVat ??
+                      variant.price ??
+                      0
+                    ) %>" data-currency="<%= variant.currency || BASE_CURRENCY %>" data-inventory-known="<%= variant.inventoryKnown ? '1' : '0' %>" data-total-inventory="<%= Number(variant.totalInventory || 0) %>" data-available="<%= variant.available ? '1' : '0' %>" <%= DEFAULT_VARIANT &&
+                        String(DEFAULT_VARIANT.cjVariantId) ===
+                        String(variant.cjVariantId)
+                          ? 'selected'
+                          : '' %>>
                     <%= variantLabel(variant) %>
                     —
-                    <%= formatMoney(variant.priceIncVat) %>
+                    <%= formatMoney(
+                      variant.priceExVat ??
+                      variant.price ??
+                      0
+                    ) %>
 
                     <% if (variant.inventoryKnown) { %>
                     —
@@ -840,20 +849,14 @@
             </a>
 
             <div class="card-body d-flex flex-column">
-              <h4
-                class="h6 text-primary"
-                title="<%= related.name || 'CJ Product' %>"
-              >
+              <h4 class="h6 text-primary" title="<%= related.name || 'CJ Product' %>">
                 <%= truncateRelatedCjText(
                   related.name || 'CJ Product',
                   80
                 ) %>
               </h4>
 
-              <div
-                class="small text-muted mb-2"
-                title="<%= related.category?.name || 'CJ Product' %>"
-              >
+              <div class="small text-muted mb-2" title="<%= related.category?.name || 'CJ Product' %>">
                 <%= truncateRelatedCjText(
                   related.category?.name || 'CJ Product',
                   60
@@ -869,7 +872,11 @@
               </div>
 
               <div class="fw-bold text-primary mt-auto">
-                <%= formatMoney(related.minimumPriceIncVat || 0) %>
+                <%= formatMoney(
+                  related.minimumPriceExVat ??
+                  related.minimumPrice ??
+                  0
+                ) %>
               </div>
 
               <a href="/cj/product/<%= encodeURIComponent(related.cjProductId) %>" class="btn btn-outline-primary btn-sm mt-3">
@@ -908,12 +915,8 @@
       'cjMainProductImage'
     );
 
-    const priceIncVatElement = document.getElementById(
-      'cjVariantPriceIncVat'
-    );
-
-    const priceExVatElement = document.getElementById(
-      'cjVariantPriceExVat'
+    const priceElement = document.getElementById(
+      'cjVariantPrice'
     );
 
     const inventoryStatusElement = document.getElementById(
@@ -1064,17 +1067,24 @@
         mainImage.src = imageUrl;
       }
 
-      if (priceIncVatElement) {
-        priceIncVatElement.textContent =
-          formatMoney(
-            variant.priceIncVat
-          );
-      }
+      /*
+       * Use only the authoritative VAT-free CJ variant price.
+       *
+       * Never fall back to the historical priceIncVat field.
+       */
+      const selectedVariantPrice = Number(
+        variant.priceExVat ??
+        variant.price ??
+        option.getAttribute('data-price') ??
+        0
+      );
 
-      if (priceExVatElement) {
-        priceExVatElement.textContent =
+      if (priceElement) {
+        priceElement.textContent =
           formatMoney(
-            variant.priceExVat
+            Number.isFinite(selectedVariantPrice) ?
+            selectedVariantPrice :
+            0
           );
       }
 

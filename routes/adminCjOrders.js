@@ -839,6 +839,7 @@ router.get('/admin/cj/orders', async (req, res) => {
             'supplierOrder.trackingNumber',
             'supplierOrder.lastErrorCode',
             'supplierOrder.lastErrorMessage',
+            'metadata.adminShippingRequired',
             'paidAt',
             'createdAt',
             'updatedAt',
@@ -1436,12 +1437,28 @@ router.get('/admin/cj/orders/:orderId', async (req, res) => {
           'paymentStatus',
           'fulfillmentStatus',
           'currency',
+
+          /*
+           * CJ always has zero Kasyora-added VAT.
+           * Retained for compatibility with historical orders.
+           */
           'vatRate',
+
           'items',
           'itemCount',
+
+          /*
+           * New authoritative VAT-free CJ product total.
+           */
+          'productTotal',
+
+          /*
+           * Historical zero-VAT compatibility fields.
+           */
           'productSubtotalExVat',
           'productVatAmount',
           'productTotalIncVat',
+
           'shippingTotal',
           'payableTotal',
 

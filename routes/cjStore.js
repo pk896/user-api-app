@@ -16,10 +16,6 @@ const BASE_CURRENCY =
     .trim()
     .toUpperCase() || 'USD';
 
-const VAT_RATE = Number.isFinite(Number(process.env.VAT_RATE))
-  ? Number(process.env.VAT_RATE)
-  : 0.15;
-
 function safeString(value, maxLength = 2000) {
   return String(value ?? '')
     .trim()
@@ -68,14 +64,15 @@ function enabledCjVariants(product) {
     : [];
 }
 
+/*
+ * Map one CJ variant for the public storefront.
+ *
+ * Kasyora adds and collects no VAT in the CJ flow.
+ * sellingPriceExVat is therefore the authoritative CJ
+ * selling price before shipping.
+ */
 function mapCjVariant(product, variant) {
-  const priceExVat = round2(variant?.sellingPriceExVat?.value);
-
-  const vatRate = Number.isFinite(Number(product?.pricing?.vatRate))
-    ? Number(product.pricing.vatRate)
-    : VAT_RATE;
-
-  const priceIncVat = round2(priceExVat * (1 + vatRate));
+  const price = round2(variant?.sellingPriceExVat?.value);
 
   const inventoryKnown = variant?.inventoryKnown === true;
 
@@ -113,15 +110,26 @@ function mapCjVariant(product, variant) {
         : null,
     },
 
-    priceExVat,
-    priceIncVat,
+    /*
+     * New authoritative VAT-free fields.
+     */
+    price,
+    priceExVat: price,
+
+    /*
+     * Temporary compatibility field.
+     *
+     * It contains the same VAT-free price and does not
+     * include VAT.
+     */
+    priceIncVat: price,
 
     currency: safeString(
       variant?.sellingPriceExVat?.currency || product?.pricing?.baseCurrency || BASE_CURRENCY,
       3,
     ).toUpperCase(),
 
-    vatRate,
+    vatRate: 0,
 
     inventoryKnown,
     totalInventory,
@@ -137,13 +145,16 @@ function mapCjProduct(product) {
 
   const displayedVariants = availableVariants.length ? availableVariants : variants;
 
+  /*
+   * Use only VAT-free CJ variant selling prices.
+   */
   const prices = displayedVariants
-    .map((variant) => Number(variant.priceIncVat))
+    .map((variant) => Number(variant.priceExVat ?? variant.price ?? 0))
     .filter((price) => Number.isFinite(price) && price >= 0);
 
-  const minimumPriceIncVat = prices.length > 0 ? Math.min(...prices) : 0;
+  const minimumPrice = prices.length > 0 ? Math.min(...prices) : 0;
 
-  const maximumPriceIncVat = prices.length > 0 ? Math.max(...prices) : 0;
+  const maximumPrice = prices.length > 0 ? Math.max(...prices) : 0;
 
   const defaultVariant = displayedVariants[0] || null;
 
@@ -233,16 +244,31 @@ function mapCjProduct(product) {
 
     ratingsCount: Math.max(0, Math.floor(Number(product?.ratingsCount || 0))),
 
-    minimumPriceIncVat,
-    maximumPriceIncVat,
+    /*
+     * New authoritative VAT-free public price fields.
+     */
+    minimumPrice,
+    maximumPrice,
 
-    hasPriceRange: maximumPriceIncVat > minimumPriceIncVat,
+    minimumPriceExVat: minimumPrice,
+
+    maximumPriceExVat: maximumPrice,
+
+    /*
+     * Temporary compatibility aliases.
+     *
+     * These contain the same VAT-free values and do not
+     * include VAT.
+     */
+    minimumPriceIncVat: minimumPrice,
+
+    maximumPriceIncVat: maximumPrice,
+
+    hasPriceRange: maximumPrice > minimumPrice,
 
     currency: safeString(product?.pricing?.baseCurrency || BASE_CURRENCY, 3).toUpperCase(),
 
-    vatRate: Number.isFinite(Number(product?.pricing?.vatRate))
-      ? Number(product.pricing.vatRate)
-      : VAT_RATE,
+    vatRate: 0,
   };
 }
 
@@ -439,8 +465,6 @@ router.get('/cj/product/:cjProductId', async (req, res) => {
       shopHeaderImage,
 
       baseCurrency: BASE_CURRENCY,
-
-      vatRate: product.vatRate,
     });
   } catch (error) {
     console.error('[CJ store] Product page error:', error?.stack || error);
@@ -478,17 +502,26 @@ router.get('/cj/cart', async (req, res) => {
 
       itemCount: cart.itemCount,
 
-      subtotalExVat: cart.subtotalExVat,
+      /*
+       * New authoritative VAT-free cart fields.
+       */
+      subtotal: cart.subtotal ?? cart.subtotalExVat ?? 0,
 
-      vatAmount: cart.vatAmount,
+      total: cart.total ?? cart.totalIncVat ?? cart.subtotal ?? cart.subtotalExVat ?? 0,
 
-      totalIncVat: cart.totalIncVat,
+      vatAmount: 0,
+
+      /*
+       * Temporary compatibility aliases for any remaining
+       * historical view references.
+       */
+      subtotalExVat: cart.subtotal ?? cart.subtotalExVat ?? 0,
+
+      totalIncVat: cart.total ?? cart.totalIncVat ?? cart.subtotal ?? cart.subtotalExVat ?? 0,
 
       shopHeaderImage,
 
       baseCurrency: BASE_CURRENCY,
-
-      vatRate: VAT_RATE,
     });
   } catch (error) {
     console.error('[CJ store] Cart page error:', error?.stack || error);
@@ -506,22 +539,41 @@ router.get('/cj/cart', async (req, res) => {
         department: 'cj',
         items: [],
         itemCount: 0,
-        subtotalExVat: 0,
+
+        subtotal: 0,
+
         vatAmount: 0,
+
+        total: 0,
+
+        /*
+         * Temporary compatibility aliases.
+         */
+        subtotalExVat: 0,
+
         totalIncVat: 0,
       },
 
       cartItems: [],
+
       itemCount: 0,
-      subtotalExVat: 0,
+
+      subtotal: 0,
+
       vatAmount: 0,
+
+      total: 0,
+
+      /*
+       * Temporary compatibility aliases.
+       */
+      subtotalExVat: 0,
+
       totalIncVat: 0,
 
       shopHeaderImage: null,
 
       baseCurrency: BASE_CURRENCY,
-
-      vatRate: VAT_RATE,
     });
   }
 });

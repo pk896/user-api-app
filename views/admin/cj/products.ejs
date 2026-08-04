@@ -1,28 +1,109 @@
 <!--views/admin/cj/products.ejs-->
 <%
-  const CURRENCY =
-    String(baseCurrency || 'USD')
-      .trim()
-      .toUpperCase() || 'USD';
+  const FILTERS =
+    typeof filters !== 'undefined' &&
+    filters &&
+    typeof filters === 'object'
+      ? filters
+      : {};
+
+  const CATEGORIES =
+    typeof categories !== 'undefined' &&
+    Array.isArray(categories)
+      ? categories.filter(function(category) {
+          return category && typeof category === 'object';
+        })
+      : [];
+
+  const PRODUCTS =
+    typeof products !== 'undefined' &&
+    Array.isArray(products)
+      ? products.filter(function(product) {
+          return product && typeof product === 'object';
+        })
+      : [];
+
+  const PAGINATION_SOURCE =
+    typeof pagination !== 'undefined' &&
+    pagination &&
+    typeof pagination === 'object'
+      ? pagination
+      : {};
+
+  const PAGINATION_PAGE_RAW =
+    Number(PAGINATION_SOURCE.page);
+
+  const PAGINATION_TOTAL_PAGES_RAW =
+    Number(PAGINATION_SOURCE.totalPages);
+
+  const PAGINATION_TOTAL_RECORDS_RAW =
+    Number(PAGINATION_SOURCE.totalRecords);
+
+  const PAGINATION = {
+    page:
+      Number.isFinite(PAGINATION_PAGE_RAW) &&
+      PAGINATION_PAGE_RAW >= 1
+        ? Math.floor(PAGINATION_PAGE_RAW)
+        : 1,
+
+    totalPages:
+      Number.isFinite(PAGINATION_TOTAL_PAGES_RAW) &&
+      PAGINATION_TOTAL_PAGES_RAW >= 1
+        ? Math.floor(PAGINATION_TOTAL_PAGES_RAW)
+        : 1,
+
+    totalRecords:
+      Number.isFinite(PAGINATION_TOTAL_RECORDS_RAW) &&
+      PAGINATION_TOTAL_RECORDS_RAW >= 0
+        ? Math.floor(PAGINATION_TOTAL_RECORDS_RAW)
+        : 0
+  };
+
+  /*
+   * Never allow the current page to exceed the known last page.
+   */
+  PAGINATION.page = Math.min(
+    PAGINATION.page,
+    PAGINATION.totalPages
+  );
+
+  const HAS_SEARCH =
+    typeof hasSearch !== 'undefined' &&
+    hasSearch === true;
+
+  const REQUEST_ID =
+    typeof requestId !== 'undefined'
+      ? String(requestId || '').trim()
+      : '';
 
   function money(amount, currency = 'USD') {
-    const value = Number(amount || 0);
+    const parsedAmount = Number(amount);
+
+    const value =
+      Number.isFinite(parsedAmount)
+        ? parsedAmount
+        : 0;
+
+    const safeCurrency =
+      String(currency || 'USD')
+        .trim()
+        .toUpperCase() || 'USD';
 
     try {
       const formatted = new Intl.NumberFormat(undefined, {
         style: 'currency',
-        currency,
+        currency: safeCurrency,
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       }).format(value);
 
-      if (currency === 'ZAR') {
+      if (safeCurrency === 'ZAR') {
         return formatted.replace(/^ZAR\s?/, 'R');
       }
 
       return formatted;
     } catch {
-      return currency + ' ' + value.toFixed(2);
+      return safeCurrency + ' ' + value.toFixed(2);
     }
   }
 
@@ -32,27 +113,29 @@
     params.set('search', '1');
     params.set('page', String(page));
 
-    if (filters.keyword) {
-      params.set('keyword', filters.keyword);
+    if (FILTERS.keyword) {
+      params.set('keyword', FILTERS.keyword);
     }
 
-    if (filters.categoryId) {
-      params.set('categoryId', filters.categoryId);
+    if (FILTERS.categoryId) {
+      params.set('categoryId', FILTERS.categoryId);
     }
 
-    if (filters.countryCode) {
-      params.set('countryCode', filters.countryCode);
+    if (FILTERS.countryCode) {
+      params.set('countryCode', FILTERS.countryCode);
     }
 
-    if (filters.startSellPrice) {
-      params.set('startSellPrice', filters.startSellPrice);
+    if (FILTERS.startSellPrice) {
+      params.set('startSellPrice', FILTERS.startSellPrice);
     }
 
-    if (filters.endSellPrice) {
-      params.set('endSellPrice', filters.endSellPrice);
+    if (FILTERS.endSellPrice) {
+      params.set('endSellPrice', FILTERS.endSellPrice);
     }
 
-    return '/admin/cj/products?' + params.toString() + '#cj-products-results';
+    return '/admin/cj/products?' +
+      params.toString() +
+      '#cj-products-results';
   }
 %>
 
@@ -107,21 +190,28 @@
               Product name or SKU
             </label>
 
-            <input id="keyword" name="keyword" class="form-control" value="<%= filters.keyword || '' %>" maxlength="200" placeholder="Example: phone case, hoodie, CJ SKU">
+            <input id="keyword" name="keyword" class="form-control" value="<%= FILTERS.keyword || '' %>" maxlength="200" placeholder="Example: phone case, hoodie, CJ SKU">
           </div>
 
           <div class="col-12 col-lg-6">
             <%
-              const selectedCjCategory = categories.find(function(category) {
-                return String(category.categoryId || '') === String(filters.categoryId || '');
+              const selectedCjCategory = CATEGORIES.find(function(category) {
+                return String(category.categoryId || '') ===
+                  String(FILTERS.categoryId || '');
               });
 
               const selectedCjCategoryText = selectedCjCategory
-                ? [
-                    selectedCjCategory.firstName,
-                    selectedCjCategory.secondName,
-                    selectedCjCategory.categoryName
-                  ].filter(Boolean).join(' › ')
+                ? (
+                    [
+                      selectedCjCategory.firstName,
+                      selectedCjCategory.secondName,
+                      selectedCjCategory.categoryName
+                    ].filter(Boolean).join(' › ') ||
+                    String(
+                      selectedCjCategory.categoryId ||
+                      'Unnamed CJ category'
+                    )
+                  )
                 : 'All CJ categories';
             %>
 
@@ -129,11 +219,11 @@
               CJ category
             </label>
 
-            <input id="categoryId" name="categoryId" type="hidden" value="<%= filters.categoryId || '' %>">
+            <input id="categoryId" name="categoryId" type="hidden" value="<%= FILTERS.categoryId || '' %>">
 
             <div class="dropdown w-100">
               <button id="cjCategoryDropdownButton" class="btn btn-light border w-100 d-flex align-items-center justify-content-between gap-2 text-start" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                <span id="cjSelectedCategoryText" class="text-truncate <%= filters.categoryId ? '' : 'text-muted' %>">
+                <span id="cjSelectedCategoryText" class="text-truncate <%= FILTERS.categoryId ? '' : 'text-muted' %>">
                   <%= selectedCjCategoryText %>
                 </span>
 
@@ -145,20 +235,21 @@
               <div class="dropdown-menu w-100 p-2 shadow overflow-auto" style="max-height: 320px;">
                 <input id="cjCategorySearch" type="text" class="form-control mb-2" placeholder="Search CJ category..." autocomplete="off">
 
-                <button type="button" class="dropdown-item rounded py-2 js-cj-category-option <%= filters.categoryId ? '' : 'active' %>" data-category-id="" data-category-name="All CJ categories">
+                <button type="button" class="dropdown-item rounded py-2 js-cj-category-option <%= FILTERS.categoryId ? '' : 'active' %>" data-category-id="" data-category-name="All CJ categories">
                   All CJ categories
                 </button>
 
-                <% categories.forEach(function(category) { %>
+                <% CATEGORIES.forEach(function(category) { %>
                 <%
                     const categoryLabel = [
                       category.firstName,
                       category.secondName,
                       category.categoryName
-                    ].filter(Boolean).join(' › ');
+                    ].filter(Boolean).join(' › ') ||
+                      String(category.categoryId || 'Unnamed CJ category');
 
                     const isSelectedCategory =
-                      String(filters.categoryId || '') === String(category.categoryId || '');
+                      String(FILTERS.categoryId || '') === String(category.categoryId || '');
                   %>
 
                 <button type="button" class="dropdown-item rounded py-2 js-cj-category-option <%= isSelectedCategory ? 'active' : '' %>" data-category-id="<%= category.categoryId %>" data-category-name="<%= categoryLabel %>">
@@ -178,7 +269,7 @@
               Warehouse country code
             </label>
 
-            <input id="countryCode" name="countryCode" class="form-control text-uppercase" value="<%= filters.countryCode || '' %>" maxlength="2" placeholder="CN, US, GB">
+            <input id="countryCode" name="countryCode" class="form-control text-uppercase" value="<%= FILTERS.countryCode || '' %>" maxlength="2" placeholder="CN, US, GB">
 
             <div class="form-text">
               Optional two-letter code.
@@ -190,7 +281,7 @@
               Minimum CJ price (USD)
             </label>
 
-            <input id="startSellPrice" name="startSellPrice" type="number" min="0" step="0.01" class="form-control" value="<%= filters.startSellPrice || '' %>">
+            <input id="startSellPrice" name="startSellPrice" type="number" min="0" step="0.01" class="form-control" value="<%= FILTERS.startSellPrice || '' %>">
           </div>
 
           <div class="col-12 col-md-4">
@@ -198,7 +289,7 @@
               Maximum CJ price (USD)
             </label>
 
-            <input id="endSellPrice" name="endSellPrice" type="number" min="0" step="0.01" class="form-control" value="<%= filters.endSellPrice || '' %>">
+            <input id="endSellPrice" name="endSellPrice" type="number" min="0" step="0.01" class="form-control" value="<%= FILTERS.endSellPrice || '' %>">
           </div>
 
           <div class="col-12">
@@ -218,7 +309,7 @@
 
     <div id="cj-products-results"></div>
 
-    <% if (!hasSearch) { %>
+    <% if (!HAS_SEARCH) { %>
     <div class="card border-0 shadow-sm">
       <div class="card-body text-center py-5">
         <div class="display-5 text-primary mb-3">
@@ -234,7 +325,7 @@
         </p>
       </div>
     </div>
-    <% } else if (!products.length) { %>
+    <% } else if (!PRODUCTS.length) { %>
     <div class="alert alert-warning shadow-sm">
       CJ returned no products for the selected filters.
     </div>
@@ -246,20 +337,20 @@
         </h2>
 
         <div class="text-muted small">
-          <%= pagination.totalRecords %> matching records reported by CJ.
+          <%= Number(PAGINATION.totalRecords || 0) %> matching records reported by CJ.
         </div>
       </div>
 
-      <% if (requestId) { %>
+      <% if (REQUEST_ID) { %>
       <div class="small text-muted">
         Request ID:
-        <code><%= requestId %></code>
+        <code><%= REQUEST_ID %></code>
       </div>
       <% } %>
     </div>
 
     <div class="row g-3">
-      <% products.forEach(function(product) { %>
+      <% PRODUCTS.forEach(function(product) { %>
       <div class="col-12 col-md-6 col-xl-4">
         <div class="card border-primary shadow-sm h-100">
           <div class="ratio ratio-1x1 bg-light">
@@ -334,11 +425,11 @@
       <% }) %>
     </div>
 
-    <% if (pagination.totalPages > 1) { %>
+    <% if (Number(PAGINATION.totalPages || 1) > 1) { %>
     <nav class="mt-4" aria-label="CJ catalogue pages">
       <div class="d-flex justify-content-between align-items-center gap-3">
-        <% if (pagination.page > 1) { %>
-        <a href="<%= buildPageUrl(pagination.page - 1) %>" class="btn btn-outline-primary">
+        <% if (Number(PAGINATION.page || 1) > 1) { %>
+        <a href="<%= buildPageUrl(Number(PAGINATION.page || 1) - 1) %>" class="btn btn-outline-primary">
           Previous
         </a>
         <% } else { %>
@@ -348,11 +439,11 @@
         <% } %>
 
         <span class="fw-semibold text-primary">
-          Page <%= pagination.page %> of <%= pagination.totalPages %>
+          Page <%= Number(PAGINATION.page || 1) %> of <%= Number(PAGINATION.totalPages || 1) %>
         </span>
 
-        <% if (pagination.page < pagination.totalPages) { %>
-        <a href="<%= buildPageUrl(pagination.page + 1) %>" class="btn btn-outline-primary">
+        <% if (Number(PAGINATION.page || 1) < Number(PAGINATION.totalPages || 1)) { %>
+        <a href="<%= buildPageUrl(Number(PAGINATION.page || 1) + 1) %>" class="btn btn-outline-primary">
           Next
         </a>
         <% } else { %>
