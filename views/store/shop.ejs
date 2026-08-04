@@ -1,12 +1,87 @@
-<!--the main products list section must not be made compact or be changed-->
+<!--the main products list section must not be made compact or otherwise redesigned-->
 
 <!-- views/store/shop.ejs -->
 <%
-  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
-    ? Number(vatRate)
-    : 0.15;
+  /*
+   * Resolved Shop tax context
+   * =========================
+   *
+   * routes/storePages.js supplies taxTreatment for the
+   * active Shop request.
+   *
+   * Internal treatments:
+   *
+   * - VAT_DISABLED
+   * - ZA_STANDARD
+   * - ZA_EXPORT_ZERO_RATED
+   *
+   * CJ:
+   *
+   * - vatEnabled is always false;
+   * - VAT remains zero;
+   * - the Internal resolver is never used.
+   */
+  const SHOP_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : (
+          typeof internalTaxTreatment !== 'undefined' &&
+          internalTaxTreatment &&
+          typeof internalTaxTreatment === 'object'
+            ? internalTaxTreatment
+            : {}
+        );
 
-    /*
+  const SHOP_DEPARTMENT =
+    String(
+      typeof storeDepartment !== 'undefined'
+        ? storeDepartment
+        : 'internal'
+    )
+      .trim()
+      .toLowerCase() === 'cj'
+        ? 'cj'
+        : 'internal';
+
+  const SHOP_IS_CJ_DEPARTMENT =
+    SHOP_DEPARTMENT === 'cj';
+
+  /*
+   * Safe provisional VAT-rate priority:
+   *
+   * 1. taxTreatment.vatRate
+   * 2. route vatRate
+   * 3. middleware internalVatRate
+   * 4. zero
+   *
+   * Never fall back to 0.15 inside an EJS template.
+   */
+  const SHOP_VAT_RATE_RAW =
+    Number(
+      SHOP_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined'
+          ? vatRate
+          : (
+              typeof internalVatRate !== 'undefined'
+                ? internalVatRate
+                : 0
+            )
+      )
+    );
+
+  const VAT =
+    Number.isFinite(
+      SHOP_VAT_RATE_RAW
+    ) &&
+    SHOP_VAT_RATE_RAW >= 0 &&
+    SHOP_VAT_RATE_RAW <= 1
+      ? SHOP_VAT_RATE_RAW
+      : 0;
+
+  /*
    * BASE_CURRENCY remains Kasyora's authoritative internal currency.
    * CURRENCY is only the customer's selected display currency.
    */
@@ -43,6 +118,56 @@
 
     return Number(
       (baseAmount * CURRENCY_RATE).toFixed(2)
+    );
+  }
+
+  /*
+   * Apply only the resolved provisional Shop VAT rate.
+   *
+   * The supplied amount remains VAT-exclusive in
+   * BASE_CURRENCY.
+   *
+   * VAT disabled:
+   *
+   * 100 -> 100
+   *
+   * Internal South Africa with 15% VAT:
+   *
+   * 100 -> 115
+   *
+   * Internal foreign destination:
+   *
+   * 100 -> 100
+   *
+   * CJ:
+   *
+   * 100 -> 100
+   */
+  function getVisibleShopPrice(amount) {
+    const baseAmount =
+      Number(amount || 0);
+
+    if (
+      !Number.isFinite(baseAmount) ||
+      baseAmount < 0
+    ) {
+      return 0;
+    }
+
+    if (SHOP_IS_CJ_DEPARTMENT) {
+      return Number(
+        baseAmount.toFixed(2)
+      );
+    }
+
+    return Number(
+      (
+        baseAmount *
+        (
+          1 +
+          VAT
+        )
+      ).toFixed(2)
     );
   }
 
@@ -102,31 +227,31 @@
   }
 }
 
-const ACTIVE_DEPARTMENT = String(
-  typeof storeDepartment !== 'undefined'
-    ? storeDepartment
-    : 'internal'
-).trim().toLowerCase() === 'cj'
-  ? 'cj'
-  : 'internal';
+const ACTIVE_DEPARTMENT =
+  SHOP_DEPARTMENT;
 
 const IS_CJ_DEPARTMENT =
-  ACTIVE_DEPARTMENT === 'cj';
+  SHOP_IS_CJ_DEPARTMENT;
 
 /*
- * Display the existing short VAT wording only when:
+ * VAT may be enabled globally while a foreign export has
+ * an applicable VAT rate of zero.
  *
- * - the active department is Kasyora In Store; and
- * - the resolved provisional VAT rate is greater than zero.
- *
- * CJ displays the price only.
- *
- * Internal destinations outside South Africa also display the
- * price only because South African VAT is provisionally zero.
+ * Show "incl. VAT" only when the visible Internal price
+ * actually contains VAT.
  */
-const SHOW_INTERNAL_VAT_TEXT =
+const SHOP_VAT_ENABLED =
   !IS_CJ_DEPARTMENT &&
-  Number.isFinite(VAT) &&
+  (
+    SHOP_TAX_TREATMENT.vatEnabled === true ||
+    (
+      typeof internalVatEnabled !== 'undefined' &&
+      internalVatEnabled === true
+    )
+  );
+
+const SHOW_INTERNAL_VAT_TEXT =
+  SHOP_VAT_ENABLED &&
   VAT > 0;
 
 /*
@@ -743,8 +868,9 @@ const ACTIVE_CART = (
               <div class="d-flex mb-2 align-items-center flex-wrap">
                 <h5 class="fw-bold text-primary me-2 mb-0">
                   <%= formatMoney(
-                    Number(product.price || 0) *
-                    (1 + VAT)
+                    getVisibleShopPrice(
+                      product.price
+                    )
                   ) %>
                 </h5>
 
@@ -756,7 +882,11 @@ const ACTIVE_CART = (
 
                 <% if (product.oldPrice) { %>
                 <h5 class="text-danger text-decoration-line-through mb-0">
-                  <%= formatMoney(product.oldPrice) %>
+                  <%= formatMoney(
+                    getVisibleShopPrice(
+                      product.oldPrice
+                    )
+                  ) %>
                 </h5>
                 <% } %>
               </div>
@@ -866,8 +996,9 @@ const ACTIVE_CART = (
 
                     <span class="item-price text-primary">
                       <%= formatMoney(
-                        Number(item.price || 0) *
-                        (1 + VAT)
+                        getVisibleShopPrice(
+                          item.price
+                        )
                       ) %>
                     </span>
                   </div>
@@ -1014,13 +1145,20 @@ const ACTIVE_CART = (
                       </a>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleShopPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
                         <%= formatMoney(
-                          Number(product.price || 0) *
-                          (1 + VAT)
+                          getVisibleShopPrice(
+                            product.price
+                          )
                         ) %>
                       </span>
 
@@ -1153,13 +1291,20 @@ const ACTIVE_CART = (
                         </span>
 
                         <% if (product.oldPrice) { %>
-                        <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                        <del class="me-2 fs-5">
+                          <%= formatMoney(
+                            getVisibleShopPrice(
+                              product.oldPrice
+                            )
+                          ) %>
+                        </del>
                         <% } %>
 
                         <span class="text-primary fs-5">
                           <%= formatMoney(
-                            Number(product.price || 0) *
-                            (1 + VAT)
+                            getVisibleShopPrice(
+                              product.price
+                            )
                           ) %>
                         </span>
 
@@ -1339,8 +1484,9 @@ const ACTIVE_CART = (
 
                     <span class="item-price customer-proven-price text-primary d-block mb-0">
                       <%= formatMoney(
-                        Number(product.price || 0) *
-                        (1 + VAT)
+                        getVisibleShopPrice(
+                          product.price
+                        )
                       ) %>
                     </span>
 
@@ -1554,8 +1700,9 @@ const ACTIVE_CART = (
 
                   <div class="text-primary fw-bold mb-1">
                     <%= formatMoney(
-                      Number(product.price || 0) *
-                      (1 + VAT)
+                      getVisibleShopPrice(
+                        product.price
+                      )
                     ) %>
                   </div>
 

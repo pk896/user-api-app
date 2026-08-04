@@ -126,6 +126,23 @@ const APP_URL = String(process.env.APP_URL || 'http://localhost:3000')
 function resolveStorefrontTaxContext(req, storeDepartment) {
   const department = normalizeStoreDepartment(storeDepartment);
 
+  /*
+   * CJ storefront tax context
+   * =========================
+   *
+   * CJ remains completely isolated from the Internal
+   * Kasyora tax resolver.
+   *
+   * The delivery country may still be retained for:
+   *
+   * - delivery presentation;
+   * - shipping;
+   * - customs information;
+   * - checkout convenience.
+   *
+   * It must never cause Internal Kasyora VAT to be
+   * added to a CJ product, cart or order.
+   */
   if (department === 'cj') {
     return {
       department: 'cj',
@@ -144,7 +161,10 @@ function resolveStorefrontTaxContext(req, storeDepartment) {
         .toUpperCase(),
 
       authoritative: false,
+
       provisional: true,
+
+      vatEnabled: false,
 
       treatmentCode: 'CJ_NO_KASYORA_VAT',
 
@@ -152,12 +172,33 @@ function resolveStorefrontTaxContext(req, storeDepartment) {
 
       vatPercentage: 0,
 
-      label: 'No Kasyora-added VAT',
+      /*
+       * Keep the label empty.
+       *
+       * CJ product cards must show the price only and must
+       * not display Internal Kasyora VAT wording.
+       */
+      label: '',
 
-      reason: 'Kasyora does not add South African VAT to CJ department products.',
+      reason: 'The CJ department uses its separate Kasyora-added VAT policy.',
+
+      exportEvidenceRequired: false,
     };
   }
 
+  /*
+   * Internal provisional country
+   * ============================
+   *
+   * This country came from:
+   *
+   * 1. customer selection;
+   * 2. trusted GeoIP;
+   * 3. configured default.
+   *
+   * It remains provisional until the validated checkout
+   * shipping address becomes authoritative.
+   */
   const provisionalCountryCode = String(req?.taxCountryContext?.countryCode || '')
     .trim()
     .toUpperCase()
@@ -169,6 +210,16 @@ function resolveStorefrontTaxContext(req, storeDepartment) {
     .trim()
     .toUpperCase();
 
+  /*
+   * Internal Kasyora Store only.
+   *
+   * The resolver now distinguishes:
+   *
+   * VAT_DISABLED
+   * ZA_STANDARD
+   * ZA_EXPORT_ZERO_RATED
+   * REVIEW_REQUIRED
+   */
   const treatment = resolveInternalTaxTreatment({
     destinationCountryCode: provisionalCountryCode,
 
@@ -177,41 +228,86 @@ function resolveStorefrontTaxContext(req, storeDepartment) {
 
   return {
     department: 'internal',
+
     ...treatment,
   };
 }
 
 function mapStoreProduct(p) {
-  const vatRate = Number(process.env.VAT_RATE || 0.15);
-  const price = Number(p.price || 0);
-  const priceWithVat = Number((price * (1 + vatRate)).toFixed(2));
-  const oldPrice = p.isOnSale ? Number((priceWithVat * 1.19).toFixed(2)) : null;
+  /*
+   * Product.price remains the authoritative VAT-exclusive
+   * Internal Kasyora price in BASE_CURRENCY.
+   *
+   * Do not add VAT inside this mapper.
+   *
+   * The provisional storefront tax treatment is resolved
+   * separately from the selected delivery country.
+   */
+  const storedPrice = Number(p?.price || 0);
+
+  const price =
+    Number.isFinite(storedPrice) && storedPrice >= 0 ? Number(storedPrice.toFixed(2)) : 0;
+
+  /*
+   * The sale comparison price must also remain VAT-exclusive.
+   *
+   * The active storefront VAT treatment will later be applied
+   * consistently to both price and oldPrice for presentation.
+   */
+  const oldPrice = p?.isOnSale === true ? Number((price * 1.19).toFixed(2)) : null;
 
   return {
     id: p.customId,
+
     customId: p.customId,
+
     name: p.name || 'Product',
+
     description: p.description || '',
+
     image: p.imageUrl,
+
     imageUrl: p.imageUrl,
+
     category: p.category || p.type || 'Product',
+
     role: p.role || 'general',
+
     type: p.type || '',
+
     color: p.color || '',
+
     size: p.size || '',
+
     sizes: Array.isArray(p.sizes) ? p.sizes : [],
+
     colors: Array.isArray(p.colors) ? p.colors : [],
+
     colorImages: Array.isArray(p.colorImages) ? p.colorImages : [],
+
     keywords: Array.isArray(p.keywords) ? p.keywords : [],
+
+    /*
+     * Both amounts remain VAT-exclusive.
+     */
     price,
+
     oldPrice,
-    isNew: !!p.isNewItem,
-    sale: !!p.isOnSale,
-    popular: !!p.isPopular,
+
+    isNew: p.isNewItem === true,
+
+    sale: p.isOnSale === true,
+
+    popular: p.isPopular === true,
+
     stock: Number(p.stock || 0),
+
     rating: 4,
+
     avgRating: Number(p.avgRating || 0),
+
     ratingsCount: Number(p.ratingsCount || 0),
+
     url: `/store/product/${p.customId}`,
   };
 }

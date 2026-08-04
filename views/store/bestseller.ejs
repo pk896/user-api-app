@@ -1,11 +1,83 @@
 <!--views/store/bestseller.ejs-->
 <%
-  const VAT = (
-    typeof vatRate !== 'undefined' &&
-    vatRate !== null
-  )
-    ? Number(vatRate)
-    : 0.15;
+  /*
+   * Resolved Bestseller tax context
+   * =================================
+   *
+   * routes/storePages.js supplies taxTreatment for the
+   * active Bestseller request.
+   *
+   * Internal treatments:
+   *
+   * - VAT_DISABLED
+   * - ZA_STANDARD
+   * - ZA_EXPORT_ZERO_RATED
+   *
+   * CJ:
+   *
+   * - vatEnabled is always false;
+   * - VAT remains zero;
+   * - the Internal resolver is never used.
+   */
+  const BESTSELLER_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : (
+          typeof internalTaxTreatment !== 'undefined' &&
+          internalTaxTreatment &&
+          typeof internalTaxTreatment === 'object'
+            ? internalTaxTreatment
+            : {}
+        );
+
+  const BESTSELLER_DEPARTMENT =
+    String(
+      typeof storeDepartment !== 'undefined'
+        ? storeDepartment
+        : 'internal'
+    )
+      .trim()
+      .toLowerCase() === 'cj'
+        ? 'cj'
+        : 'internal';
+
+  const BESTSELLER_IS_CJ_DEPARTMENT =
+    BESTSELLER_DEPARTMENT === 'cj';
+
+  /*
+   * Safe provisional VAT-rate priority:
+   *
+   * 1. taxTreatment.vatRate
+   * 2. route vatRate
+   * 3. middleware internalVatRate
+   * 4. zero
+   *
+   * Never fall back to 0.15 inside an EJS template.
+   */
+  const BESTSELLER_VAT_RATE_RAW =
+    Number(
+      BESTSELLER_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined'
+          ? vatRate
+          : (
+              typeof internalVatRate !== 'undefined'
+                ? internalVatRate
+                : 0
+            )
+      )
+    );
+
+  const VAT =
+    Number.isFinite(
+      BESTSELLER_VAT_RATE_RAW
+    ) &&
+    BESTSELLER_VAT_RATE_RAW >= 0 &&
+    BESTSELLER_VAT_RATE_RAW <= 1
+      ? BESTSELLER_VAT_RATE_RAW
+      : 0;
 
   /*
    * BASE_CURRENCY remains Kasyora's authoritative product,
@@ -52,6 +124,56 @@
       (
         baseAmount *
         CURRENCY_RATE
+      ).toFixed(2)
+    );
+  }
+
+  /*
+   * Apply only the resolved provisional Bestseller VAT rate.
+   *
+   * The supplied product amount remains VAT-exclusive in
+   * BASE_CURRENCY.
+   *
+   * Internal VAT disabled:
+   *
+   * 100 -> 100
+   *
+   * Internal South Africa with 15% VAT:
+   *
+   * 100 -> 115
+   *
+   * Internal foreign destination:
+   *
+   * 100 -> 100
+   *
+   * CJ:
+   *
+   * 100 -> 100
+   */
+  function getVisibleBestsellerPrice(amount) {
+    const baseAmount =
+      Number(amount || 0);
+
+    if (
+      !Number.isFinite(baseAmount) ||
+      baseAmount < 0
+    ) {
+      return 0;
+    }
+
+    if (BESTSELLER_IS_CJ_DEPARTMENT) {
+      return Number(
+        baseAmount.toFixed(2)
+      );
+    }
+
+    return Number(
+      (
+        baseAmount *
+        (
+          1 +
+          VAT
+        )
       ).toFixed(2)
     );
   }
@@ -118,30 +240,31 @@
     }
   }
 
-  const ACTIVE_DEPARTMENT = String(
-    typeof storeDepartment !== 'undefined'
-      ? storeDepartment
-      : 'internal'
-  ).trim().toLowerCase() === 'cj'
-    ? 'cj'
-    : 'internal';
+  const ACTIVE_DEPARTMENT =
+    BESTSELLER_DEPARTMENT;
 
   const IS_CJ_DEPARTMENT =
-    ACTIVE_DEPARTMENT === 'cj';
+    BESTSELLER_IS_CJ_DEPARTMENT;
 
   /*
-   * Show the existing short VAT wording only when:
+   * VAT may be globally enabled while a foreign export has
+   * an applicable VAT rate of zero.
    *
-   * - the active department is Kasyora In Store; and
-   * - the provisional destination VAT rate is greater than zero.
-   *
-   * CJ products never receive Kasyora-added VAT.
-   * Internal destinations outside South Africa receive
-   * provisional 0% South African VAT.
+   * Show "incl. VAT" only when the visible Internal price
+   * actually contains VAT.
    */
-  const SHOW_INTERNAL_VAT_TEXT =
+  const BESTSELLER_VAT_ENABLED =
     !IS_CJ_DEPARTMENT &&
-    Number.isFinite(VAT) &&
+    (
+      BESTSELLER_TAX_TREATMENT.vatEnabled === true ||
+      (
+        typeof internalVatEnabled !== 'undefined' &&
+        internalVatEnabled === true
+      )
+    );
+
+  const SHOW_INTERNAL_VAT_TEXT =
+    BESTSELLER_VAT_ENABLED &&
     VAT > 0;
 
   /*
@@ -829,8 +952,9 @@
 
                   <strong class="d-block">
                     <%= formatMoney(
-                      Number(bestsellerLeft.price || 0) *
-                      (1 + VAT)
+                      getVisibleBestsellerPrice(
+                        bestsellerLeft.price
+                      )
                     ) %>
                   </strong>
                 </div>
@@ -926,8 +1050,9 @@
 
                   <strong class="d-block">
                     <%= formatMoney(
-                      Number(bestsellerRight.price || 0) *
-                      (1 + VAT)
+                      getVisibleBestsellerPrice(
+                        bestsellerRight.price
+                      )
                     ) %>
                   </strong>
                 </div>
@@ -1135,13 +1260,20 @@
                 </span>
 
                 <% if (product.oldPrice) { %>
-                <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                <del class="me-2 fs-5">
+                  <%= formatMoney(
+                    getVisibleBestsellerPrice(
+                      product.oldPrice
+                    )
+                  ) %>
+                </del>
                 <% } %>
 
                 <span class="text-primary fs-5">
                   <%= formatMoney(
-                    Number(product.price || 0) *
-                    (1 + VAT)
+                    getVisibleBestsellerPrice(
+                      product.price
+                    )
                   ) %>
                 </span>
 
@@ -1310,13 +1442,20 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleBestsellerPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
                         <%= formatMoney(
-                          Number(product.price || 0) *
-                          (1 + VAT)
+                          getVisibleBestsellerPrice(
+                            product.price
+                          )
                         ) %>
                       </span>
 
@@ -1412,13 +1551,20 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleBestsellerPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
                         <%= formatMoney(
-                          Number(product.price || 0) *
-                          (1 + VAT)
+                          getVisibleBestsellerPrice(
+                            product.price
+                          )
                         ) %>
                       </span>
 
@@ -1514,13 +1660,20 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleBestsellerPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
                         <%= formatMoney(
-                          Number(product.price || 0) *
-                          (1 + VAT)
+                          getVisibleBestsellerPrice(
+                            product.price
+                          )
                         ) %>
                       </span>
 
@@ -1616,13 +1769,20 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleBestsellerPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
                         <%= formatMoney(
-                          Number(product.price || 0) *
-                          (1 + VAT)
+                          getVisibleBestsellerPrice(
+                            product.price
+                          )
                         ) %>
                       </span>
 
@@ -1735,14 +1895,19 @@
 
                 <% if (product.oldPrice) { %>
                 <del class="me-2 fs-5">
-                  <%= formatMoney(product.oldPrice) %>
+                  <%= formatMoney(
+                    getVisibleBestsellerPrice(
+                      product.oldPrice
+                    )
+                  ) %>
                 </del>
                 <% } %>
 
                 <span class="text-primary fs-5">
                   <%= formatMoney(
-                    Number(product.price || 0) *
-                    (1 + VAT)
+                    getVisibleBestsellerPrice(
+                      product.price
+                    )
                   ) %>
                 </span>
 

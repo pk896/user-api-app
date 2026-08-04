@@ -1,30 +1,105 @@
 <!-- views/store/index.ejs -->
 <%
-  const VAT = (
-    typeof vatRate !== 'undefined' &&
-    vatRate !== null
-  )
-    ? Number(vatRate)
-    : 0.15;
-
   /*
-   * Show the existing short VAT wording only when:
+   * Resolved storefront tax context
+   * ===============================
    *
-   * - the active department is Internal; and
-   * - the resolved provisional VAT rate is greater than zero.
+   * routes/storePages.js supplies taxTreatment for this
+   * request.
    *
-   * CJ shows no Kasyora VAT wording.
+   * Internal:
    *
-   * Internal destinations outside South Africa also show no VAT
-   * wording because South African VAT is provisionally zero.
+   * - VAT_DISABLED
+   * - ZA_STANDARD
+   * - ZA_EXPORT_ZERO_RATED
+   *
+   * CJ:
+   *
+   * - vatEnabled is always false;
+   * - VAT remains zero;
+   * - the Internal tax resolver is not used.
    */
-  const SHOW_INTERNAL_VAT_TEXT =
+  const INDEX_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : (
+          typeof internalTaxTreatment !== 'undefined' &&
+          internalTaxTreatment &&
+          typeof internalTaxTreatment === 'object'
+            ? internalTaxTreatment
+            : {}
+        );
+
+  const INDEX_DEPARTMENT =
     String(
       typeof storeDepartment !== 'undefined'
         ? storeDepartment
         : 'internal'
-    ).trim().toLowerCase() !== 'cj' &&
-    Number.isFinite(VAT) &&
+    )
+      .trim()
+      .toLowerCase() === 'cj'
+        ? 'cj'
+        : 'internal';
+
+  const INDEX_IS_CJ_DEPARTMENT =
+    INDEX_DEPARTMENT === 'cj';
+
+  /*
+   * Read the resolved provisional VAT rate.
+   *
+   * Safe priority:
+   *
+   * 1. taxTreatment.vatRate
+   * 2. route vatRate
+   * 3. middleware internalVatRate
+   * 4. zero
+   *
+   * Never fall back to 0.15 inside an EJS template.
+   */
+  const INDEX_VAT_RATE_RAW =
+    Number(
+      INDEX_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined'
+          ? vatRate
+          : (
+              typeof internalVatRate !== 'undefined'
+                ? internalVatRate
+                : 0
+            )
+      )
+    );
+
+  const VAT =
+    Number.isFinite(
+      INDEX_VAT_RATE_RAW
+    ) &&
+    INDEX_VAT_RATE_RAW >= 0 &&
+    INDEX_VAT_RATE_RAW <= 1
+      ? INDEX_VAT_RATE_RAW
+      : 0;
+
+  /*
+   * VAT may be globally enabled while a foreign export has
+   * a resolved rate of zero.
+   *
+   * The short "incl. VAT" wording must appear only when the
+   * actual visible Internal price contains VAT.
+   */
+  const INDEX_VAT_ENABLED =
+    !INDEX_IS_CJ_DEPARTMENT &&
+    (
+      INDEX_TAX_TREATMENT.vatEnabled === true ||
+      (
+        typeof internalVatEnabled !== 'undefined' &&
+        internalVatEnabled === true
+      )
+    );
+
+  const SHOW_INTERNAL_VAT_TEXT =
+    INDEX_VAT_ENABLED &&
     VAT > 0;
 
   /*
@@ -67,6 +142,56 @@
 
     return Number(
       (baseAmount * CURRENCY_RATE).toFixed(2)
+    );
+  }
+
+  /*
+   * Apply only the resolved provisional storefront VAT rate.
+   *
+   * The supplied amount must remain VAT-exclusive in
+   * BASE_CURRENCY.
+   *
+   * Internal South Africa with VAT enabled:
+   *
+   * 100 -> 115
+   *
+   * Internal foreign destination:
+   *
+   * 100 -> 100
+   *
+   * Internal VAT disabled:
+   *
+   * 100 -> 100
+   *
+   * CJ:
+   *
+   * 100 -> 100
+   */
+  function getVisibleStorefrontPrice(amount) {
+    const baseAmount =
+      Number(amount || 0);
+
+    if (
+      !Number.isFinite(baseAmount) ||
+      baseAmount < 0
+    ) {
+      return 0;
+    }
+
+    if (INDEX_IS_CJ_DEPARTMENT) {
+      return Number(
+        baseAmount.toFixed(2)
+      );
+    }
+
+    return Number(
+      (
+        baseAmount *
+        (
+          1 +
+          VAT
+        )
+      ).toFixed(2)
     );
   }
 
@@ -502,15 +627,26 @@
 
             <% if (sideBannerProduct.oldPrice) { %>
             <del class="me-2 text-white fs-5">
-              <%= formatMoney(sideBannerProduct.oldPrice) %>
+              <%= formatMoney(
+                getVisibleStorefrontPrice(
+                  sideBannerProduct.oldPrice
+                )
+              ) %>
             </del>
             <% } %>
 
             <span class="text-primary fs-5">
-              <%= formatMoney(Number(sideBannerProduct.price || 0) * (1 + VAT)) %>
+              <%= formatMoney(
+                getVisibleStorefrontPrice(
+                  sideBannerProduct.price
+                )
+              ) %>
             </span>
+
             <% if (SHOW_INTERNAL_VAT_TEXT) { %>
-            <small class="text-white-50 ms-2">incl. VAT</small>
+            <small class="text-white-50 ms-2">
+              incl. VAT
+            </small>
             <% } %>
           </div>
 
@@ -808,11 +944,21 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
-                        <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.price
+                          )
+                        ) %>
                       </span>
 
                       <% if (SHOW_INTERNAL_VAT_TEXT) { %>
@@ -922,11 +1068,21 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
-                        <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.price
+                          )
+                        ) %>
                       </span>
 
                       <% if (SHOW_INTERNAL_VAT_TEXT) { %>
@@ -1036,11 +1192,21 @@
                       </span>
 
                       <% if (product.oldPrice) { %>
-                      <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                      <del class="me-2 fs-5">
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.oldPrice
+                          )
+                        ) %>
+                      </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
-                        <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.price
+                          )
+                        ) %>
                       </span>
 
                       <% if (SHOW_INTERNAL_VAT_TEXT) { %>
@@ -1151,12 +1317,20 @@
 
                       <% if (product.oldPrice) { %>
                       <del class="me-2 fs-5">
-                        <%= formatMoney(product.oldPrice) %>
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.oldPrice
+                          )
+                        ) %>
                       </del>
                       <% } %>
 
                       <span class="text-primary fs-5">
-                        <%= formatMoney(Number(product.price || 0) * (1 + VAT)) %>
+                        <%= formatMoney(
+                          getVisibleStorefrontPrice(
+                            product.price
+                          )
+                        ) %>
                       </span>
 
                       <% if (SHOW_INTERNAL_VAT_TEXT) { %>
@@ -1354,11 +1528,27 @@
                 </a>
 
                 <% if (product.oldPrice) { %>
-                <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                <del class="me-2 fs-5">
+                  <%= formatMoney(
+                    getVisibleStorefrontPrice(
+                      product.oldPrice
+                    )
+                  ) %>
+                </del>
                 <% } %>
-                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+
+                <span class="text-primary fs-5">
+                  <%= formatMoney(
+                    getVisibleStorefrontPrice(
+                      product.price
+                    )
+                  ) %>
+                </span>
+
                 <% if (SHOW_INTERNAL_VAT_TEXT) { %>
-                <small class="text-muted ms-2">incl. VAT</small>
+                <small class="text-muted ms-2">
+                  incl. VAT
+                </small>
                 <% } %>
                 <div class="mt-2">
                   <%- include('../partials/rating-stars', {
@@ -1438,12 +1628,27 @@
                 </span>
 
                 <% if (product.oldPrice) { %>
-                <del class="me-2 fs-5"><%= formatMoney(product.oldPrice) %></del>
+                <del class="me-2 fs-5">
+                  <%= formatMoney(
+                    getVisibleStorefrontPrice(
+                      product.oldPrice
+                    )
+                  ) %>
+                </del>
                 <% } %>
 
-                <span class="text-primary fs-5"><%= formatMoney(Number(product.price || 0) * (1 + VAT)) %></span>
+                <span class="text-primary fs-5">
+                  <%= formatMoney(
+                    getVisibleStorefrontPrice(
+                      product.price
+                    )
+                  ) %>
+                </span>
+
                 <% if (SHOW_INTERNAL_VAT_TEXT) { %>
-                <small class="text-muted ms-2">incl. VAT</small>
+                <small class="text-muted ms-2">
+                  incl. VAT
+                </small>
                 <% } %>
               </div>
             </div>
