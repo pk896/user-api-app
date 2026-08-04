@@ -1,8 +1,80 @@
 <!--views/store/cart.ejs-->
 <%
-  const VAT = (typeof vatRate !== 'undefined' && vatRate !== null)
-    ? Number(vatRate)
-    : 0.15;
+  /*
+   * Resolved Internal cart tax context
+   * ===================================
+   *
+   * The Internal cart uses only the provisional Internal
+   * tax treatment resolved for this request.
+   *
+   * Possible treatments:
+   *
+   * - VAT_DISABLED
+   * - ZA_STANDARD
+   * - ZA_EXPORT_ZERO_RATED
+   *
+   * The validated Checkout shipping country remains
+   * authoritative for the final VAT calculation.
+   */
+  const CART_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : (
+          typeof internalTaxTreatment !== 'undefined' &&
+          internalTaxTreatment &&
+          typeof internalTaxTreatment === 'object'
+            ? internalTaxTreatment
+            : {}
+        );
+
+  /*
+   * Safe VAT-rate priority:
+   *
+   * 1. taxTreatment.vatRate
+   * 2. route vatRate
+   * 3. middleware internalVatRate
+   * 4. zero
+   *
+   * Never assume 15% inside this template.
+   */
+  const CART_VAT_RATE_RAW =
+    Number(
+      CART_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined'
+          ? vatRate
+          : (
+              typeof internalVatRate !== 'undefined'
+                ? internalVatRate
+                : 0
+            )
+      )
+    );
+
+  const VAT =
+    Number.isFinite(
+      CART_VAT_RATE_RAW
+    ) &&
+    CART_VAT_RATE_RAW >= 0 &&
+    CART_VAT_RATE_RAW <= 1
+      ? CART_VAT_RATE_RAW
+      : 0;
+
+  const CART_VAT_ENABLED =
+    CART_TAX_TREATMENT.vatEnabled === true ||
+    (
+      typeof internalVatEnabled !== 'undefined' &&
+      internalVatEnabled === true
+    );
+
+  const CART_TREATMENT_CODE =
+    String(
+      CART_TAX_TREATMENT.treatmentCode || ''
+    )
+      .trim()
+      .toUpperCase();
 
   /*
    * BASE_CURRENCY remains Kasyora's authoritative accounting,
@@ -161,8 +233,33 @@
     );
   }
 
-  const CART_IS_SOUTH_AFRICAN_VAT =
+  /*
+   * Separate the three possible presentation states.
+   *
+   * VAT disabled:
+   * - no VAT row;
+   * - no VAT wording;
+   * - cart total equals VAT-exclusive subtotal.
+   *
+   * South African standard VAT:
+   * - VAT row shown;
+   * - positive VAT included provisionally.
+   *
+   * Foreign export:
+   * - VAT row shown at 0%;
+   * - export explanation shown.
+   */
+  const CART_HAS_POSITIVE_VAT =
+    CART_VAT_ENABLED &&
     VAT > 0;
+
+  const CART_IS_EXPORT_ZERO_RATED =
+    CART_VAT_ENABLED &&
+    CART_TREATMENT_CODE ===
+      'ZA_EXPORT_ZERO_RATED';
+
+  const CART_VAT_IS_DISABLED =
+    !CART_VAT_ENABLED;
 %>
 
 <!-- Spinner Start -->
@@ -191,9 +288,16 @@
     <div class="col-lg-4 text-center text-lg-end">
       <div class="d-inline-flex align-items-center" style="height: 45px;">
         <div class="me-2">
+          <%- include('partials/tax-country-selector', {
+            taxCountryReturnTo: '/store/cart',
+            taxCountrySelectorMobile: false
+          }) %>
+        </div>
+
+        <div class="me-2">
           <%- include('partials/currency-selector', {
-                      currencyReturnTo: '/store/cart'
-                    }) %>
+            currencyReturnTo: '/store/cart'
+          }) %>
         </div>
         <div class="dropdown">
           <a href="#" class="dropdown-toggle text-muted mx-2" data-bs-toggle="dropdown"><small>English</small></a>
@@ -440,6 +544,7 @@
               </p>
             </div>
 
+            <% if (CART_VAT_ENABLED) { %>
             <div class="d-flex justify-content-between mb-3">
               <h5 class="mb-0 me-4">
                 VAT (<%= (VAT * 100).toFixed(0) %>%):
@@ -449,6 +554,7 @@
                 <%= formatMoney(cartVatAmount) %>
               </p>
             </div>
+            <% } %>
 
             <div class="d-flex justify-content-between mb-0">
               <h5 class="mb-0 me-4">
@@ -460,21 +566,29 @@
               </p>
             </div>
 
-            <% if (CART_IS_SOUTH_AFRICAN_VAT) { %>
+            <% if (CART_HAS_POSITIVE_VAT) { %>
             <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">
               This provisional cart total includes South African VAT.
               Shipping is not included yet. Your validated Checkout
               delivery address will determine the final VAT treatment
               and available shipping rates.
             </div>
-            <% } else { %>
+
+            <% } else if (CART_IS_EXPORT_ZERO_RATED) { %>
             <div class="alert alert-warning mt-4 mb-0 py-3 px-3" role="alert">
               South African VAT is provisionally shown at 0% because
               the selected delivery destination is outside South Africa.
-              Shipping, destination-country import VAT, customs duties
+              Shipping, destination-country import taxes, customs duties
               and other import charges are not included. Your validated
               Checkout delivery address will determine the final tax
               treatment and shipping rates.
+            </div>
+
+            <% } else if (CART_VAT_IS_DISABLED) { %>
+            <div class="alert alert-info mt-4 mb-0 py-3 px-3" role="alert">
+              Shipping is not included yet. Your validated Checkout
+              delivery address will determine the final tax treatment
+              and available shipping rates.
             </div>
             <% } %>
           </div>
@@ -690,3 +804,4 @@
 
 <!-- Back to Top -->
 <a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>
+
