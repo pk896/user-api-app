@@ -2384,62 +2384,76 @@
         if (!to.name) {
           return {
             ok: false,
-            message: 'Enter full name.',
+            code: 'ADDRESS_NAME_REQUIRED',
+            message: 'Enter the recipient full name.',
           };
         }
 
         if (!to.phone) {
           return {
             ok: false,
-            message: 'Enter phone number.',
+            code: 'ADDRESS_PHONE_REQUIRED',
+            message: 'Enter the recipient phone number.',
           };
         }
 
         if (!to.street1) {
           return {
             ok: false,
-            message: 'Enter street number and street name.',
+            code: 'ADDRESS_STREET_REQUIRED',
+            message: 'Enter the street number and street name.',
           };
         }
 
         if (!to.street2) {
           return {
             ok: false,
-            message: 'Enter suburb / local area.',
+            code: 'ADDRESS_AREA_REQUIRED',
+            message: 'Enter the suburb or local area.',
           };
         }
 
         if (!to.city) {
           return {
             ok: false,
-            message: 'Enter city.',
+            code: 'ADDRESS_CITY_REQUIRED',
+            message: 'Enter the delivery city.',
           };
         }
 
         if (!to.state) {
           return {
             ok: false,
-            message: 'Enter province/state.',
+            code: 'ADDRESS_STATE_REQUIRED',
+            message: 'Enter the province or state.',
           };
         }
 
         if (!to.zip) {
           return {
             ok: false,
-            message: 'Enter postal code.',
+            code: 'ADDRESS_POSTAL_CODE_REQUIRED',
+            message: 'Enter the postal code.',
           };
         }
 
-        if (!to.country) {
+        const country =
+          String(to.country || '')
+          .trim()
+          .toUpperCase();
+
+        if (!/^[A-Z]{2}$/.test(country)) {
           return {
             ok: false,
-            message: 'Select country.',
+            code: 'ADDRESS_COUNTRY_REQUIRED',
+            message: 'Select a valid delivery country.',
           };
         }
 
         return {
           ok: true,
-          message: 'Shipping address OK.',
+          code: 'ADDRESS_READY',
+          message: 'Shipping address ready for rate checking.',
         };
       }
 
@@ -2802,6 +2816,116 @@
        */
       let _addressRevision = 0;
 
+      function resolveShippingRateFailure({
+        error,
+        courierGuyResult,
+        shippoResult,
+      } = {}) {
+        const errorCode =
+          String(error?.code || '')
+          .trim()
+          .toUpperCase();
+
+        const errorMessage =
+          String(error?.message || '')
+          .trim();
+
+        /*
+         * Address validation errors must be shown first.
+         *
+         * Do not blame a shipping provider when the checkout
+         * address itself is incomplete or inconsistent.
+         */
+        if (
+          errorCode.startsWith('ADDRESS_') ||
+          errorCode.startsWith('CHECKOUT_COUNTRY_') ||
+          errorCode === 'SHIPPING_ADDRESS_INVALID'
+        ) {
+          return {
+            type: 'address',
+            debugText: 'Check shipping address',
+            customerMessage: errorMessage ||
+              'Please check the shipping address and country.',
+            paymentMessage: 'Please correct the shipping address.',
+          };
+        }
+
+        const courierGuyMessage =
+          String(
+            courierGuyResult?.data?.message || '',
+          ).trim();
+
+        const shippoMessage =
+          String(
+            shippoResult?.data?.message || '',
+          ).trim();
+
+        const courierGuyResponded = !!courierGuyResult;
+
+        const shippoResponded = !!shippoResult;
+
+        const courierGuyFailed = !courierGuyResult?.response?.ok ||
+          courierGuyResult?.data?.ok !== true;
+
+        const shippoFailed = !shippoResult?.response?.ok ||
+          shippoResult?.data?.ok !== true;
+
+        /*
+         * Both provider requests failed.
+         */
+        if (
+          courierGuyFailed &&
+          shippoFailed
+        ) {
+          return {
+            type: 'providers',
+            debugText: 'Shipping providers unavailable',
+            customerMessage: 'Shipping rates could not be obtained. Please check the shipping address and try again. If the address is correct, the shipping services may be temporarily unavailable.',
+            paymentMessage: 'Shipping rates are currently unavailable.',
+          };
+        }
+
+        /*
+         * Courier Guy failed but Shippo responded.
+         */
+        if (
+          courierGuyFailed &&
+          shippoResponded
+        ) {
+          return {
+            type: 'courier_guy',
+            debugText: 'Courier Guy unavailable',
+            customerMessage: courierGuyMessage ||
+              'Courier Guy did not return a usable rate for this address.',
+            paymentMessage: 'No usable shipping rate is currently available.',
+          };
+        }
+
+        /*
+         * Shippo failed but Courier Guy responded.
+         */
+        if (
+          shippoFailed &&
+          courierGuyResponded
+        ) {
+          return {
+            type: 'shippo',
+            debugText: 'Shippo unavailable',
+            customerMessage: shippoMessage ||
+              'Shippo did not return a usable rate for this address.',
+            paymentMessage: 'No usable shipping rate is currently available.',
+          };
+        }
+
+        return {
+          type: 'unknown',
+          debugText: 'Rate request failed',
+          customerMessage: errorMessage ||
+            'No shipping rates are available for this address. Check the address and try again.',
+          paymentMessage: 'Shipping rates could not be loaded.',
+        };
+      }
+
       async function loadDeliveryOptions() {
         /*
          * When another quote is already running, remember that a
@@ -2874,10 +2998,17 @@
             validateShipTo(shipToNow);
 
           if (!validation.ok) {
-            throw new Error(
-              validation.message ||
-              'Please complete your shipping address.'
-            );
+            const validationError =
+              new Error(
+                validation.message ||
+                'Please check the shipping address.',
+              );
+
+            validationError.code =
+              validation.code ||
+              'SHIPPING_ADDRESS_INVALID';
+
+            throw validationError;
           }
 
           state.shipTo = shipToNow;
@@ -3008,11 +3139,24 @@
             state.shippoRates.length;
 
           if (!totalRates) {
-            throw new Error(
-              courierGuyResult?.data?.message ||
-              shippoResult?.data?.message ||
-              'No shipping rates are available.'
-            );
+            const rateFailure =
+              resolveShippingRateFailure({
+                courierGuyResult,
+                shippoResult,
+              });
+
+            const rateError =
+              new Error(
+                rateFailure.customerMessage,
+              );
+
+            rateError.code =
+              'SHIPPING_NO_RATES';
+
+            rateError.shippingFailure =
+              rateFailure;
+
+            throw rateError;
           }
 
           el.deliverySelect.innerHTML = '';
@@ -3138,27 +3282,43 @@
         } catch (error) {
           console.error(
             'Shipping-rate load failed:',
-            error
+            error,
           );
 
+          const failure =
+            error?.shippingFailure ||
+            resolveShippingRateFailure({
+              error,
+            });
+
           el.deliverySelect.innerHTML =
+            failure.type === 'address' ?
+            '<option value="">Check shipping address</option>' :
             '<option value="">No shipping rates available</option>';
 
           el.deliverySelect.disabled = true;
 
           el.deliveryHint.innerHTML =
             `<span class="co-hint-ic">⚠️</span><span>${String(
-              error?.message ||
-                'Could not load shipping rates.'
+              failure.customerMessage ||
+              'Could not load shipping rates.',
             )}</span>`;
 
           if (el.ratesDebug) {
             el.ratesDebug.textContent =
-              'Rate request failed';
+              failure.debugText;
+          }
+
+          if (
+            failure.type === 'address' &&
+            el.shipHint
+          ) {
+            el.shipHint.textContent =
+              `⚠️ ${failure.customerMessage}`;
           }
 
           blockPayment(
-            'Shipping rates could not be loaded.'
+            failure.paymentMessage,
           );
         } finally {
           state.quoteInFlight = false;
