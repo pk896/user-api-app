@@ -23,7 +23,11 @@ const {
   buildShippoParcelsFromCart_Strict,
 } = require('../utils/payment/buildShippoParcelsFromCart');
 
-const { TAX_COUNTRY_SOURCES, getSouthAfricaVatRate } = require('../utils/tax/taxConfig');
+const {
+  DEFAULT_TAX_COUNTRY_CODE,
+  TAX_COUNTRY_SOURCES,
+  getSouthAfricaVatRate,
+} = require('../utils/tax/taxConfig');
 
 const { resolveInternalTaxTreatment } = require('../utils/tax/resolveInternalTaxTreatment');
 
@@ -486,7 +490,19 @@ function normalizeCountryCode(code) {
  * It is not the final tax decision.
  */
 function resolveProvisionalCheckoutTaxTreatment(req) {
-  const destinationCountryCode = normalizeCountryCode(req?.taxCountryContext?.countryCode) || 'ZA';
+  /*
+   * This country is only used for the initial checkout
+   * presentation before the customer completes the shipping
+   * address.
+   *
+   * Priority was already resolved by taxCountry middleware:
+   *
+   * 1. customer selection;
+   * 2. trusted GeoIP;
+   * 3. configured default.
+   */
+  const destinationCountryCode =
+    normalizeCountryCode(req?.taxCountryContext?.countryCode) || DEFAULT_TAX_COUNTRY_CODE;
 
   const countrySource = String(req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT)
     .trim()
@@ -496,6 +512,37 @@ function resolveProvisionalCheckoutTaxTreatment(req) {
     destinationCountryCode,
     countrySource,
   });
+
+  /*
+   * A provisional country should normally resolve successfully.
+   * Keep a defensive zero-rate result rather than allowing a
+   * malformed context to add VAT.
+   */
+  if (!treatment || treatment.success !== true) {
+    return {
+      success: false,
+
+      destinationCountryCode,
+
+      countrySource,
+
+      authoritative: false,
+
+      provisional: true,
+
+      vatEnabled: false,
+
+      treatmentCode: 'REVIEW_REQUIRED',
+
+      vatRate: 0,
+
+      vatPercentage: 0,
+
+      label: '',
+
+      exportEvidenceRequired: false,
+    };
+  }
 
   return {
     ...treatment,
@@ -534,13 +581,39 @@ function resolveAuthoritativeCheckoutTaxTreatment(destinationCountryCode) {
     throw error;
   }
 
-  const countrySource = 'CHECKOUT_SHIPPING_ADDRESS';
+  /*
+   * This exact source constant is recognised by
+   * resolveInternalTaxTreatment as authoritative.
+   *
+   * Do not replace it with a custom string.
+   */
+  const countrySource = TAX_COUNTRY_SOURCES.CHECKOUT_ADDRESS;
 
   const treatment = resolveInternalTaxTreatment({
     destinationCountryCode: normalizedCountryCode,
 
     countrySource,
   });
+
+  const resolvedVatRate = Number(treatment?.vatRate);
+
+  if (
+    !treatment ||
+    treatment.success !== true ||
+    treatment.authoritative !== true ||
+    treatment.provisional === true ||
+    !Number.isFinite(resolvedVatRate) ||
+    resolvedVatRate < 0 ||
+    resolvedVatRate > 1
+  ) {
+    const error = new Error(
+      treatment?.reason || 'The authoritative checkout tax treatment could not be resolved.',
+    );
+
+    error.code = 'CHECKOUT_TAX_TREATMENT_INVALID';
+
+    throw error;
+  }
 
   return {
     ...treatment,
@@ -2222,6 +2295,20 @@ router.post('/create-order', requireAllowedOriginJson, express.json(), async (re
     );
 
     const authoritativeVatRate = Number(authoritativeTaxTreatment.vatRate);
+
+    if (
+      !Number.isFinite(authoritativeVatRate) ||
+      authoritativeVatRate < 0 ||
+      authoritativeVatRate > 1
+    ) {
+      return res.status(422).json({
+        ok: false,
+
+        code: 'CHECKOUT_TAX_RATE_INVALID',
+
+        message: 'The final checkout VAT rate could not be resolved safely.',
+      });
+    }
 
     const itemsBrief = cart.items.map((it, i) => {
       const qty = toQty(it.qty ?? it.quantity, 1);

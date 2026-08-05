@@ -56,10 +56,56 @@
       ? brandName
       : 'Kasyora.com';
 
+  /*
+   * Resolved provisional Internal checkout tax context
+   * ==================================================
+   *
+   * This treatment controls only the initial checkout
+   * presentation.
+   *
+   * The validated shipping country submitted to
+   * POST /payment/create-order remains authoritative.
+   */
+  const CO_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : {};
+
+  const CO_VAT_RATE_RAW =
+    Number(
+      CO_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined'
+          ? vatRate
+          : 0
+      )
+    );
+
   const CO_VAT =
-    typeof vatRate !== 'undefined'
-      ? Number(vatRate)
-      : 0.15;
+    Number.isFinite(
+      CO_VAT_RATE_RAW
+    ) &&
+    CO_VAT_RATE_RAW >= 0 &&
+    CO_VAT_RATE_RAW <= 1
+      ? CO_VAT_RATE_RAW
+      : 0;
+
+  /*
+   * vatEnabled distinguishes:
+   *
+   * VAT disabled:
+   *   vatEnabled false, rate 0
+   *
+   * Foreign zero-rated export:
+   *   vatEnabled true, rate 0
+   *
+   * South African standard VAT:
+   *   vatEnabled true, positive rate
+   */
+  const CO_VAT_ENABLED =
+    CO_TAX_TREATMENT.vatEnabled === true;
 %>
 
 <section class="co-page container-fluid px-0 py-0" aria-label="Checkout">
@@ -390,8 +436,12 @@
               <strong id="sum-subtotal">—</strong>
             </div>
 
-            <div class="co-sum-row">
-              <span>VAT (<span id="vat-rate"><%= (CO_VAT * 100).toFixed(0) %></span>%)</span>
+            <div id="checkoutVatRow" class="co-sum-row <%= CO_VAT_ENABLED ? '' : 'd-none' %>">
+              <span>
+                VAT
+                (<span id="vat-rate"><%= (CO_VAT * 100).toFixed(0) %></span>%)
+              </span>
+
               <strong id="sum-vat">—</strong>
             </div>
 
@@ -411,11 +461,18 @@
               <span aria-hidden="true">💡</span>
 
               <span>
-                Prices include VAT where applicable.
+                <% if (CO_VAT_ENABLED) { %>
+                VAT is applied according to the completed shipping
+                country where applicable.
+                <% } %>
+
                 Displayed in
                 <strong><%= CO_DISPLAY_CURRENCY %></strong>;
                 PayPal payment is processed in
                 <strong><%= CO_PAYPAL_CURRENCY %></strong>.
+
+                The validated shipping address determines the final
+                tax treatment.
               </span>
             </div>
           </div>
@@ -523,24 +580,29 @@
   <script id="checkout-config" type="application/json" nonce="<%= CO_NONCE %>">
     <%- JSON.stringify({
       /*
-      * Initial provisional checkout rate.
-      */
-      VAT_RATE: Number(CO_VAT),
+       * Whether Internal Kasyora VAT is currently enabled.
+       *
+       * This controls browser presentation only.
+       * POST /payment/create-order independently resolves the
+       * authoritative server-side treatment.
+       */
+      VAT_ENABLED:
+        CO_VAT_ENABLED === true,
 
       /*
-      * Internal South African standard VAT rate.
-      *
-      * This is used only for immediate checkout presentation when
-      * the completed shipping country is ZA.
-      *
-      * POST /payment/create-order independently resolves the
-      * authoritative server-side rate.
-      */
+       * Configured South African standard VAT rate.
+       *
+       * This is used only for browser presentation after the
+       * customer selects South Africa as the shipping country.
+       *
+       * POST /payment/create-order independently resolves the
+       * authoritative server-side rate.
+       */
       SOUTH_AFRICA_VAT_RATE:
         Number(
           typeof southAfricaVatRate !== 'undefined'
             ? southAfricaVatRate
-            : 0.15
+            : 0
         ),
 
       /*
@@ -1751,11 +1813,29 @@
         customsNotice: document.getElementById('international-customs-notice'),
         customsRoute: document.getElementById('international-customs-route'),
 
-        sumSubtotal: document.getElementById('sum-subtotal'),
-        sumVat: document.getElementById('sum-vat'),
-        sumShipping: document.getElementById('sum-shipping'),
-        sumTotal: document.getElementById('sum-total'),
-        vatRate: document.getElementById('vat-rate'),
+        sumSubtotal: document.getElementById(
+          'sum-subtotal',
+        ),
+
+        vatRow: document.getElementById(
+          'checkoutVatRow',
+        ),
+
+        sumVat: document.getElementById(
+          'sum-vat',
+        ),
+
+        sumShipping: document.getElementById(
+          'sum-shipping',
+        ),
+
+        sumTotal: document.getElementById(
+          'sum-total',
+        ),
+
+        vatRate: document.getElementById(
+          'vat-rate',
+        ),
 
         payGuard: document.getElementById('pay-guard'),
         ppMount: document.getElementById('paypal-buttons'),
@@ -1779,23 +1859,20 @@
        * Checkout VAT presentation
        * =========================
        *
-       * Internal cart prices are VAT-exclusive.
+       * Internal cart prices remain VAT-exclusive.
        *
-       * Before a complete shipping address is supplied, this begins
-       * with the provisional rate supplied by payment.js.
+       * This browser calculation is presentation-only.
        *
-       * The selected shipping country then controls the visible
-       * checkout rate:
-       *
-       * ZA             → South African VAT
-       * outside ZA     → 0% South African VAT
-       *
-       * POST /payment/create-order remains the final server authority.
+       * POST /payment/create-order independently resolves the
+       * final authoritative treatment from the validated shipping
+       * country.
        */
+      const VAT_ENABLED =
+        cfg.VAT_ENABLED === true;
+
       const SOUTH_AFRICA_VAT_RATE_RAW =
         Number(
           cfg.SOUTH_AFRICA_VAT_RATE ??
-          cfg.VAT_RATE ??
           0,
         );
 
@@ -1809,6 +1886,10 @@
         0;
 
       function getCheckoutVatRate() {
+        if (!VAT_ENABLED) {
+          return 0;
+        }
+
         const shippingCountry =
           String(
             el.shipCountry?.value ||
@@ -2601,6 +2682,13 @@
             formatCurrency(
               totals.subtotal,
             );
+        }
+
+        if (el.vatRow) {
+          el.vatRow.classList.toggle(
+            'd-none',
+            !VAT_ENABLED,
+          );
         }
 
         if (el.sumVat) {
