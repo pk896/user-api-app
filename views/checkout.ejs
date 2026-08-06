@@ -2316,37 +2316,85 @@
         const value = input =>
           String(input || '').trim();
 
-        const visibleCountry = value(
-          el.coCountryDropdown?.dataset?.countryCode,
-        ).toUpperCase();
+        const normalizeCountry = input => {
+          const countryCode =
+            value(input).toUpperCase();
 
-        const hiddenCountry = value(
-          el.shipCountry?.value,
-        ).toUpperCase();
+          return /^[A-Z]{2}$/.test(countryCode)
+            ? countryCode
+            : '';
+        };
 
         /*
-         * Never send a quote when the visible dropdown and the
-         * real hidden country field disagree.
+         * The visible custom dropdown is the control the customer
+         * actually uses.
+         *
+         * The hidden select exists for backend-safe form state.
+         *
+         * Browsers may restore a hidden form control independently
+         * after autofill, refresh, back/forward navigation or a
+         * cached-page restore. That must not create a false customer
+         * address error.
+         */
+        const visibleCountry =
+          normalizeCountry(
+            el.coCountryDropdown?.dataset?.countryCode,
+          );
+
+        let hiddenCountry =
+          normalizeCountry(
+            el.shipCountry?.value,
+          );
+
+        /*
+         * Automatically repair the hidden select when the visible
+         * customer selection is valid but the two controls differ.
+         *
+         * The customer must not be asked to reselect a country that
+         * is already visibly selected.
          */
         if (
           visibleCountry &&
-          hiddenCountry &&
-          visibleCountry !== hiddenCountry
+          hiddenCountry !== visibleCountry &&
+          el.shipCountry
         ) {
-          const error = new Error(
-            `Country selection is out of sync. The page shows ${visibleCountry}, but the shipping field contains ${hiddenCountry}. Please select the country again.`,
-          );
+          const matchingOption =
+            Array.from(
+              el.shipCountry.options || [],
+            ).find(option =>
+              normalizeCountry(option?.value) ===
+              visibleCountry
+            );
 
-          error.code =
-            'CHECKOUT_COUNTRY_OUT_OF_SYNC';
+          if (matchingOption) {
+            Array.from(
+              el.shipCountry.options || [],
+            ).forEach(option => {
+              option.selected =
+                option === matchingOption;
+            });
 
-          throw error;
+            el.shipCountry.value =
+              visibleCountry;
+
+            hiddenCountry =
+              normalizeCountry(
+                el.shipCountry.value,
+              );
+          }
         }
 
+        /*
+         * Prefer the visible customer selection.
+         *
+         * If the custom control has not been initialized yet, safely
+         * fall back to the real select.
+         */
         const country =
-          visibleCountry || hiddenCountry;
+          visibleCountry ||
+          hiddenCountry;
 
-        if (!/^[A-Z]{2}$/.test(country)) {
+        if (!country) {
           const error = new Error(
             'Please select a valid delivery country.',
           );
@@ -2357,22 +2405,58 @@
           throw error;
         }
 
+        /*
+         * This should occur only if the country options themselves
+         * failed to initialize. Do not display an incorrect message
+         * claiming that the customer's address is wrong.
+         */
+        if (
+          visibleCountry &&
+          el.shipCountry &&
+          hiddenCountry !== visibleCountry
+        ) {
+          const error = new Error(
+            'The country selector could not finish loading. Please refresh the checkout page.',
+          );
+
+          error.code =
+            'CHECKOUT_COUNTRY_CONTROL_UNAVAILABLE';
+
+          throw error;
+        }
+
         return {
-          name: value(el.shipName?.value),
+          name: value(
+            el.shipName?.value,
+          ),
 
-          phone: value(el.shipPhone?.value),
+          phone: value(
+            el.shipPhone?.value,
+          ),
 
-          email: value(el.shipEmail?.value),
+          email: value(
+            el.shipEmail?.value,
+          ),
 
-          street1: value(el.shipLine1?.value),
+          street1: value(
+            el.shipLine1?.value,
+          ),
 
-          street2: value(el.shipLine2?.value),
+          street2: value(
+            el.shipLine2?.value,
+          ),
 
-          city: value(el.shipCity?.value),
+          city: value(
+            el.shipCity?.value,
+          ),
 
-          state: value(el.shipState?.value),
+          state: value(
+            el.shipState?.value,
+          ),
 
-          zip: value(el.shipZip?.value),
+          zip: value(
+            el.shipZip?.value,
+          ),
 
           country,
 

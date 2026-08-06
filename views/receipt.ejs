@@ -61,6 +61,42 @@
       ? '/payment/receipt/' + encodeURIComponent(ORDER_ID)
       : '/store';
 
+  /*
+   * Public support contacts supplied by routes/payment.js.
+   *
+   * Empty values are allowed. The receipt displays only contact
+   * methods that were safely validated by the server.
+   */
+  var RECEIPT_SUPPORT_EMAIL =
+    typeof supportEmail !== 'undefined'
+      ? String(supportEmail || '').trim()
+      : '';
+
+  var RECEIPT_SUPPORT_PHONE_DISPLAY =
+    typeof supportPhoneDisplay !== 'undefined'
+      ? String(supportPhoneDisplay || '').trim()
+      : '';
+
+  var RECEIPT_SUPPORT_PHONE_HREF =
+    typeof supportPhoneHref !== 'undefined'
+      ? String(supportPhoneHref || '').trim()
+      : '';
+
+  var RECEIPT_SUPPORT_WHATSAPP_HREF =
+    typeof supportWhatsAppHref !== 'undefined'
+      ? String(supportWhatsAppHref || '').trim()
+      : '';
+
+  var RECEIPT_HAS_SUPPORT_CONTACT =
+    !!(
+      RECEIPT_SUPPORT_EMAIL ||
+      (
+        RECEIPT_SUPPORT_PHONE_DISPLAY &&
+        RECEIPT_SUPPORT_PHONE_HREF
+      ) ||
+      RECEIPT_SUPPORT_WHATSAPP_HREF
+    );
+
   // Safe helpers
   function pickStr(){
     for (var i=0; i<arguments.length; i++){
@@ -118,8 +154,12 @@
     }
 
     try {
+      /*
+       * Use the customer's browser locale instead of forcing a
+       * South African number format on every international receipt.
+       */
       var formatted = new Intl.NumberFormat(
-        'en-ZA',
+        undefined,
         {
           style: 'currency',
           currency: code,
@@ -129,8 +169,14 @@
         }
       ).format(value);
 
+      /*
+       * Keep Kasyora's preferred compact ZAR presentation.
+       */
       if (code === 'ZAR') {
-        return formatted.replace(/^ZAR\s?/, 'R');
+        return formatted.replace(
+          /^ZAR\s?/,
+          'R'
+        );
       }
 
       return formatted;
@@ -225,17 +271,191 @@
                    : (o.amount && o.amount.value != null) ? o.amount.value
                    : (t_sub + t_tax + t_ship));
 
-  // --- Johannesburg time formatting ---
-  function fmtZA(d){
-    try{
-      if (!d) return '';
-      var dd = (d instanceof Date) ? d : new Date(d);
-      return dd.toLocaleString('en-ZA', {
-        timeZone: 'Africa/Johannesburg',
-        dateStyle: 'medium',
-        timeStyle: 'short'
-      });
-    } catch (e) {
+  /*
+   * Historical completed-order tax display
+   * ======================================
+   *
+   * The receipt must use only the tax treatment stored with the
+   * completed order.
+   *
+   * It must never infer tax from:
+   *
+   * - the current VAT_RATE;
+   * - the current country selector;
+   * - GeoIP;
+   * - the configured default country;
+   * - a hardcoded percentage.
+   */
+  var RECEIPT_TAX_TREATMENT =
+    o.taxTreatment &&
+    typeof o.taxTreatment === 'object'
+      ? o.taxTreatment
+      : null;
+
+  var RECEIPT_TAX_AUTHORITATIVE =
+    !!RECEIPT_TAX_TREATMENT &&
+    RECEIPT_TAX_TREATMENT.authoritative === true &&
+    RECEIPT_TAX_TREATMENT.provisional !== true;
+
+  var RECEIPT_TAX_AMOUNT =
+    Number.isFinite(t_tax) &&
+    t_tax >= 0
+      ? t_tax
+      : 0;
+
+  var RECEIPT_VAT_PERCENTAGE_RAW =
+    RECEIPT_TAX_TREATMENT &&
+    RECEIPT_TAX_TREATMENT.vatPercentage !== null &&
+    RECEIPT_TAX_TREATMENT.vatPercentage !== undefined &&
+    RECEIPT_TAX_TREATMENT.vatPercentage !== ''
+      ? Number(
+          RECEIPT_TAX_TREATMENT.vatPercentage
+        )
+      : null;
+
+  /*
+   * Defensive support for completed orders that stored vatRate
+   * but did not separately store vatPercentage.
+   */
+  if (
+    (
+      RECEIPT_VAT_PERCENTAGE_RAW === null ||
+      !Number.isFinite(
+        RECEIPT_VAT_PERCENTAGE_RAW
+      )
+    ) &&
+    RECEIPT_TAX_TREATMENT &&
+    RECEIPT_TAX_TREATMENT.vatRate !== null &&
+    RECEIPT_TAX_TREATMENT.vatRate !== undefined &&
+    RECEIPT_TAX_TREATMENT.vatRate !== ''
+  ) {
+    var RECEIPT_VAT_RATE_RAW =
+      Number(
+        RECEIPT_TAX_TREATMENT.vatRate
+      );
+
+    if (
+      Number.isFinite(
+        RECEIPT_VAT_RATE_RAW
+      ) &&
+      RECEIPT_VAT_RATE_RAW >= 0 &&
+      RECEIPT_VAT_RATE_RAW <= 1
+    ) {
+      RECEIPT_VAT_PERCENTAGE_RAW =
+        RECEIPT_VAT_RATE_RAW * 100;
+    }
+  }
+
+  var RECEIPT_VAT_PERCENTAGE =
+    RECEIPT_VAT_PERCENTAGE_RAW !== null &&
+    Number.isFinite(
+      RECEIPT_VAT_PERCENTAGE_RAW
+    ) &&
+    RECEIPT_VAT_PERCENTAGE_RAW >= 0 &&
+    RECEIPT_VAT_PERCENTAGE_RAW <= 100
+      ? RECEIPT_VAT_PERCENTAGE_RAW
+      : null;
+
+  var RECEIPT_SHOW_TAX_ROW =
+    false;
+
+  var RECEIPT_TAX_LABEL =
+    'Tax';
+
+  /*
+   * Any completed authoritative VAT treatment is displayed,
+   * including a valid zero-rated treatment.
+   *
+   * The wording remains global and does not name a country.
+   */
+  if (
+    RECEIPT_TAX_AUTHORITATIVE &&
+    RECEIPT_TAX_TREATMENT.vatEnabled === true
+  ) {
+    RECEIPT_SHOW_TAX_ROW =
+      true;
+
+    RECEIPT_TAX_LABEL =
+      RECEIPT_VAT_PERCENTAGE !== null
+        ? (
+            'VAT at ' +
+            RECEIPT_VAT_PERCENTAGE.toLocaleString(
+              undefined,
+              {
+                maximumFractionDigits: 2
+              }
+            ) +
+            '%'
+          )
+        : 'VAT';
+  }
+
+  /*
+   * VAT was disabled when this order was completed.
+   */
+  else if (
+    RECEIPT_TAX_AUTHORITATIVE &&
+    RECEIPT_TAX_TREATMENT.vatEnabled === false
+  ) {
+    RECEIPT_SHOW_TAX_ROW =
+      false;
+  }
+
+  /*
+   * Legacy-order support.
+   *
+   * An older order may contain a positive historical tax amount
+   * without an authoritative taxTreatment object. Show a neutral
+   * Tax label without guessing its country, type or percentage.
+   */
+  else if (
+    !RECEIPT_TAX_AUTHORITATIVE &&
+    RECEIPT_TAX_AMOUNT > 0
+  ) {
+    RECEIPT_SHOW_TAX_ROW =
+      true;
+
+    RECEIPT_TAX_LABEL =
+      'Tax';
+  }
+
+  /*
+   * Receipt date formatting
+   * =======================
+   *
+   * Display the stored order timestamp using the customer's browser
+   * locale and local timezone.
+   *
+   * Do not force South African formatting or Johannesburg time for
+   * customers in other countries.
+   */
+  function formatReceiptDate(d) {
+    try {
+      if (!d) {
+        return '';
+      }
+
+      var date =
+        d instanceof Date
+          ? d
+          : new Date(d);
+
+      if (
+        Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        return String(d || '');
+      }
+
+      return date.toLocaleString(
+        undefined,
+        {
+          dateStyle: 'medium',
+          timeStyle: 'short'
+        }
+      );
+    } catch (error) {
       return String(d || '');
     }
   }
@@ -291,12 +511,6 @@
         }) %>
       </div>
 
-      <a href="/products/sales" class="rcpt-action-btn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        Shop
-      </a>
       <button id="btnPrintReceipt" class="rcpt-action-btn rcpt-action-print">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -317,7 +531,9 @@
       </div>
       <div class="rcpt-info-row">
         <span class="rcpt-label">Date</span>
-        <span class="rcpt-value"><%= fmtZA(o.createdAt) %></span>
+        <span class="rcpt-value">
+          <%= formatReceiptDate(o.createdAt) %>
+        </span>
       </div>
       <div class="rcpt-info-row">
         <span class="rcpt-label">Status</span>
@@ -400,16 +616,18 @@
         </span>
       </div>
 
-      <% if (t_tax > 0) { %>
+      <% if (RECEIPT_SHOW_TAX_ROW) { %>
       <div class="rcpt-total-row">
-        <span>Tax/VAT</span>
+        <span><%= RECEIPT_TAX_LABEL %></span>
 
         <span class="rcpt-money-stack">
-          <strong><%= money(t_tax) %></strong>
+          <strong>
+            <%= money(RECEIPT_TAX_AMOUNT) %>
+          </strong>
 
           <% if (SHOW_RECEIPT_DISPLAY_EQUIVALENT) { %>
           <small class="rcpt-display-equivalent">
-            ≈ <%= displayMoney(t_tax) %>
+            ≈ <%= displayMoney(RECEIPT_TAX_AMOUNT) %>
           </small>
           <% } %>
         </span>
@@ -560,12 +778,67 @@
     <!-- Footer Note -->
     <div class="rcpt-footer">
       <p class="rcpt-footer-note">
-        This is your official receipt. Keep it for your records.<br>
-        For questions, contact support@yourcompany.com
+        This is your official receipt. Keep it for your records.
       </p>
+
+      <% if (RECEIPT_HAS_SUPPORT_CONTACT) { %>
+      <div class="rcpt-support">
+        <div class="rcpt-support-title">
+          Need assistance with this order?
+        </div>
+
+        <div class="rcpt-support-links">
+          <% if (RECEIPT_SUPPORT_EMAIL) { %>
+          <a class="rcpt-support-link" href="mailto:<%= RECEIPT_SUPPORT_EMAIL %>">
+            <span class="rcpt-support-label">
+              Email
+            </span>
+
+            <span class="rcpt-support-value">
+              <%= RECEIPT_SUPPORT_EMAIL %>
+            </span>
+          </a>
+          <% } %>
+
+          <% if (
+            RECEIPT_SUPPORT_PHONE_DISPLAY &&
+            RECEIPT_SUPPORT_PHONE_HREF
+          ) { %>
+          <a class="rcpt-support-link" href="<%= RECEIPT_SUPPORT_PHONE_HREF %>">
+            <span class="rcpt-support-label">
+              Phone
+            </span>
+
+            <span class="rcpt-support-value">
+              <%= RECEIPT_SUPPORT_PHONE_DISPLAY %>
+            </span>
+          </a>
+          <% } %>
+
+          <% if (RECEIPT_SUPPORT_WHATSAPP_HREF) { %>
+          <a class="rcpt-support-link" href="<%= RECEIPT_SUPPORT_WHATSAPP_HREF %>" target="_blank" rel="noopener noreferrer">
+            <span class="rcpt-support-label">
+              WhatsApp
+            </span>
+
+            <span class="rcpt-support-value">
+              Chat with support
+            </span>
+          </a>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+
       <div class="rcpt-footer-meta">
-        <span>Generated on <%= new Date().toLocaleDateString('en-ZA') %></span>
-        <span class="rcpt-footer-id">Ref: <%= ORDER_ID.slice(0, 8) %></span>
+        <span>
+          Generated on
+          <%= new Date().toLocaleDateString() %>
+        </span>
+
+        <span class="rcpt-footer-id">
+          Ref: <%= ORDER_ID.slice(0, 8) %>
+        </span>
       </div>
     </div>
   </div>
@@ -700,20 +973,25 @@
     border-color: #16A34A;
   }
 
-  /* Content Area */
+  /* Content Area - full screen width */
   .rcpt-content {
-    padding: var(--space-md);
-    max-width: 480px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
   }
 
-  /* Cards */
+  /* Cards - edge-to-edge receipt sections */
   .rcpt-card {
+    width: 100%;
     background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-top: 1px solid var(--border);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 0;
     padding: var(--space-md);
-    margin-bottom: var(--space-md);
+    margin: 0 0 var(--space-md);
     box-shadow: var(--shadow);
   }
 
@@ -1033,6 +1311,56 @@
     margin-bottom: var(--space-sm);
   }
 
+  .rcpt-support {
+    max-width: 420px;
+    margin: 0 auto var(--space-md);
+    padding: var(--space-sm);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-align: left;
+  }
+
+  .rcpt-support-title {
+    margin-bottom: 8px;
+    color: var(--text);
+    font-size: var(--font-sm);
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .rcpt-support-links {
+    display: grid;
+    gap: 7px;
+  }
+
+  .rcpt-support-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    color: var(--text);
+    font-size: var(--font-sm);
+    text-decoration: none;
+    word-break: break-word;
+  }
+
+  .rcpt-support-link:hover {
+    color: var(--purple);
+    text-decoration: underline;
+  }
+
+  .rcpt-support-label {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .rcpt-support-value {
+    text-align: right;
+    font-weight: 700;
+  }
+
   .rcpt-footer-meta {
     display: flex;
     justify-content: space-between;
@@ -1052,9 +1380,23 @@
   /* Print Styles */
   @media print {
 
-    .rcpt-header,
-    .rcpt-footer {
+    .rcpt-header {
       display: none !important;
+    }
+
+    .rcpt-footer {
+      display: block !important;
+      border-top: 1px solid #ddd !important;
+    }
+
+    .rcpt-support {
+      background: white !important;
+      border: 1px solid #ddd !important;
+    }
+
+    .rcpt-support-link {
+      color: black !important;
+      text-decoration: none !important;
     }
 
     .rcpt-content {
@@ -1093,7 +1435,7 @@
     }
 
     .rcpt-content {
-      padding: 12px;
+      padding: 0;
     }
 
     .rcpt-card {
@@ -1112,10 +1454,10 @@
     }
   }
 
-  /* Hisense U50 Lite Optimization (720px width) */
+  /* Medium mobile screens */
   @media (min-width: 361px) and (max-width: 720px) {
     .rcpt-content {
-      padding: 16px;
+      padding: 0;
     }
 
     .rcpt-card {
@@ -1126,7 +1468,7 @@
   /* Larger Screens */
   @media (min-width: 721px) {
     .rcpt-content {
-      padding: 24px;
+      padding: 0;
     }
 
     .rcpt-card {

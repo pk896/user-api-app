@@ -97,7 +97,8 @@ function getSalesDepartment(req) {
 function resolveInternalSalesTaxTreatment(req) {
   const destinationCountryCode = String(req?.taxCountryContext?.countryCode || '')
     .trim()
-    .toUpperCase();
+    .toUpperCase()
+    .slice(0, 2);
 
   const countrySource = String(req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT)
     .trim()
@@ -108,16 +109,80 @@ function resolveInternalSalesTaxTreatment(req) {
     countrySource,
   });
 
+  /*
+   * A failed provisional treatment must never:
+   *
+   * - activate VAT;
+   * - alter a product price;
+   * - display VAT wording;
+   * - affect checkout or payment.
+   *
+   * Continue with a safe zero-rate provisional presentation.
+   */
+  if (!treatment || treatment.success !== true) {
+    return {
+      success: false,
+
+      jurisdiction: 'ZA',
+
+      destinationCountryCode,
+
+      countrySource,
+
+      authoritative: false,
+
+      provisional: true,
+
+      vatEnabled: false,
+
+      treatmentCode: 'REVIEW_REQUIRED',
+
+      vatRate: 0,
+
+      vatPercentage: 0,
+
+      label: '',
+
+      reason: 'The provisional Internal Fast Liner tax treatment could not be resolved.',
+
+      exportEvidenceRequired: false,
+
+      taxCalculationVersion: '',
+    };
+  }
+
+  const resolvedVatRate = Number(treatment.vatRate);
+
+  const safeVatRate =
+    Number.isFinite(resolvedVatRate) && resolvedVatRate >= 0 && resolvedVatRate <= 1
+      ? resolvedVatRate
+      : 0;
+
   return {
     ...treatment,
 
     destinationCountryCode: treatment.destinationCountryCode || destinationCountryCode,
 
-    countrySource,
+    countrySource: treatment.countrySource || countrySource,
 
     authoritative: false,
 
     provisional: true,
+
+    vatEnabled: treatment.vatEnabled === true,
+
+    vatRate: safeVatRate,
+
+    vatPercentage: Number((safeVatRate * 100).toFixed(2)),
+
+    /*
+     * Fast Liner product cards show VAT wording only when
+     * the visible Internal price actually contains VAT.
+     *
+     * Foreign zero-rated destinations and VAT-disabled
+     * destinations show no VAT note on this page.
+     */
+    label: safeVatRate > 0 ? String(treatment.label || '').trim() : '',
   };
 }
 
@@ -1018,12 +1083,21 @@ router.get('/sales', async (req, res) => {
      *
      * Internal inherits the provisional country already resolved
      * by the storefront tax-country middleware.
+     *
+     * The Fast Liner page does not provide its own country selector.
      */
     const salesTaxTreatment = isCjDepartment
       ? {
-          destinationCountryCode: '',
+          success: true,
 
-          countrySource: 'CJ_SEPARATE_COMMERCE',
+          destinationCountryCode: String(req?.taxCountryContext?.countryCode || '')
+            .trim()
+            .toUpperCase()
+            .slice(0, 2),
+
+          countrySource: String(req?.taxCountryContext?.source || TAX_COUNTRY_SOURCES.DEFAULT)
+            .trim()
+            .toUpperCase(),
 
           jurisdiction: 'CJ',
 
@@ -1031,7 +1105,9 @@ router.get('/sales', async (req, res) => {
 
           label: '',
 
-          reason: '',
+          reason: 'CJ uses its completely separate zero-Kasyora-VAT commerce flow.',
+
+          vatEnabled: false,
 
           vatRate: 0,
 
@@ -1039,7 +1115,11 @@ router.get('/sales', async (req, res) => {
 
           authoritative: false,
 
-          provisional: false,
+          provisional: true,
+
+          exportEvidenceRequired: false,
+
+          taxCalculationVersion: '',
         }
       : resolveInternalSalesTaxTreatment(req);
 

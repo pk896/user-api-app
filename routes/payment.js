@@ -360,6 +360,68 @@ function safeStr(v, max = 2000) {
     .slice(0, max);
 }
 
+/*
+ * Public customer-support contact configuration
+ * =============================================
+ *
+ * These helpers expose only safe public contact details to views.
+ *
+ * Never expose:
+ *
+ * - SENDGRID_API_KEY;
+ * - SMTP passwords;
+ * - mail-provider credentials;
+ * - any other private environment variable.
+ */
+function getPublicSupportEmail() {
+  const email = safeStr(process.env.SUPPORT_INBOX, 254).toLowerCase();
+
+  /*
+   * This is deliberately a practical display validation rather
+   * than a complete RFC email parser.
+   */
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return '';
+  }
+
+  return email;
+}
+
+function getPublicSupportPhone() {
+  const display = safeStr(process.env.SUPPORT_PHONE_DISPLAY, 40);
+
+  const configuredE164 = safeStr(process.env.SUPPORT_PHONE_E164, 30);
+
+  /*
+   * The tel: value must contain an optional leading plus followed
+   * by digits only.
+   *
+   * Do not silently publish SHIPPO_FROM_PHONE because a warehouse
+   * or courier-origin number is not automatically a support number.
+   */
+  const phoneHref = /^\+[1-9]\d{6,14}$/.test(configuredE164) ? `tel:${configuredE164}` : '';
+
+  return {
+    display: phoneHref && display ? display : '',
+    href: phoneHref,
+  };
+}
+
+function getPublicSupportWhatsApp() {
+  const configured = safeStr(process.env.SUPPORT_WHATSAPP_E164, 30);
+
+  /*
+   * WhatsApp URLs require digits only, without the leading plus.
+   */
+  const digits = configured.replace(/\D/g, '');
+
+  if (!/^[1-9]\d{6,14}$/.test(digits)) {
+    return '';
+  }
+
+  return `https://wa.me/${digits}`;
+}
+
 function publicBaseUrlFromReq(req) {
   const fromEnv =
     String(process.env.PUBLIC_BASE_URL || '').trim() ||
@@ -1761,8 +1823,15 @@ function shapeOrderForClient(doc) {
 
   const items = Array.isArray(doc?.items)
     ? doc.items.map((it) => {
+        /*
+         * Thank You item prices must use the historical
+         * completed-order value.
+         *
+         * Never recalculate these prices using the current
+         * VAT_RATE or current provisional country.
+         */
         const raw =
-          it?.priceGross?.value ?? // ✅ prefer gross for display
+          it?.priceGross?.value ??
           it?.price?.value ??
           it?.price ??
           it?.unitPrice ??
@@ -1771,46 +1840,173 @@ function shapeOrderForClient(doc) {
           0;
 
         const priceN = normalizeMoneyNumber(raw);
+
         return {
           name: it?.name || '',
+
           quantity: toQty(it?.quantity, 1),
-          price: { value: priceN === null ? 0 : Number(priceN) },
+
+          price: {
+            value: priceN === null ? 0 : Number(priceN),
+          },
+
           imageUrl: it?.imageUrl || '',
 
-          // ✅ add back size/color (and anything else you stored)
           variants: it?.variants || {},
 
-          // ✅ optional (only if you want to show gross separately later)
           priceGross: it?.priceGross || null,
         };
       })
     : [];
 
-  const b = doc.breakdown || {};
-  const itemTotalVal = normalizeMoneyNumber(b?.itemTotal?.value) ?? null;
-  const taxTotalVal = normalizeMoneyNumber(b?.taxTotal?.value) ?? null;
-  const shipVal = normalizeMoneyNumber(b?.shipping?.value) ?? null;
+  const breakdown = doc?.breakdown || {};
+
+  const itemTotalVal = normalizeMoneyNumber(breakdown?.itemTotal?.value) ?? null;
+
+  const taxTotalVal = normalizeMoneyNumber(breakdown?.taxTotal?.value) ?? null;
+
+  const shipVal = normalizeMoneyNumber(breakdown?.shipping?.value) ?? null;
+
+  /*
+   * Historical authoritative tax treatment
+   * ======================================
+   *
+   * Use only the treatment frozen into the completed Order.
+   *
+   * Do not fall back to:
+   *
+   * - the current VAT_RATE;
+   * - GeoIP;
+   * - the current provisional country;
+   * - the configured default country;
+   * - a hardcoded 15%.
+   */
+  const storedTaxTreatment =
+    doc?.taxTreatment && typeof doc.taxTreatment === 'object' ? doc.taxTreatment : null;
+
+  const hasStoredVatRate =
+    storedTaxTreatment?.vatRate !== null &&
+    storedTaxTreatment?.vatRate !== undefined &&
+    storedTaxTreatment?.vatRate !== '';
+
+  const storedVatRateRaw = hasStoredVatRate ? Number(storedTaxTreatment.vatRate) : null;
+
+  const storedVatRate =
+    storedVatRateRaw !== null &&
+    Number.isFinite(storedVatRateRaw) &&
+    storedVatRateRaw >= 0 &&
+    storedVatRateRaw <= 1
+      ? storedVatRateRaw
+      : null;
+
+  const hasStoredVatPercentage =
+    storedTaxTreatment?.vatPercentage !== null &&
+    storedTaxTreatment?.vatPercentage !== undefined &&
+    storedTaxTreatment?.vatPercentage !== '';
+
+  const storedVatPercentageRaw = hasStoredVatPercentage
+    ? Number(storedTaxTreatment.vatPercentage)
+    : null;
+
+  const storedVatPercentage =
+    storedVatPercentageRaw !== null &&
+    Number.isFinite(storedVatPercentageRaw) &&
+    storedVatPercentageRaw >= 0 &&
+    storedVatPercentageRaw <= 100
+      ? storedVatPercentageRaw
+      : storedVatRate !== null
+        ? Number((storedVatRate * 100).toFixed(2))
+        : null;
+
+  const taxTreatment = storedTaxTreatment
+    ? {
+        destinationCountryCode:
+          normalizeCountryCode(storedTaxTreatment.destinationCountryCode) || '',
+
+        countrySource: safeStr(storedTaxTreatment.countrySource, 80).trim().toUpperCase(),
+
+        jurisdiction: safeStr(storedTaxTreatment.jurisdiction, 80),
+
+        treatmentCode: safeStr(storedTaxTreatment.treatmentCode, 100).trim().toUpperCase(),
+
+        label: safeStr(storedTaxTreatment.label, 200),
+
+        reason: safeStr(storedTaxTreatment.reason, 1000),
+
+        vatRate: storedVatRate,
+
+        vatPercentage: storedVatPercentage,
+
+        vatEnabled: storedTaxTreatment.vatEnabled === true,
+
+        authoritative: storedTaxTreatment.authoritative === true,
+
+        provisional: storedTaxTreatment.provisional === true,
+
+        exportEvidenceRequired: storedTaxTreatment.exportEvidenceRequired === true,
+
+        resolvedAt: storedTaxTreatment.resolvedAt || null,
+      }
+    : null;
 
   return {
     id: doc.orderId || String(doc._id),
+
     orderId: doc.orderId || String(doc._id),
+
     status: doc.status || 'COMPLETED',
+
     createdAt: doc.createdAt || new Date(),
+
     currency,
-    amount: { value: Number(amountVal || 0) },
-    items,
-    breakdown: {
-      itemTotal: itemTotalVal != null ? { value: itemTotalVal } : null,
-      taxTotal: taxTotalVal != null ? { value: taxTotalVal } : null,
-      shipping: shipVal != null ? { value: shipVal } : null,
+
+    amount: {
+      value: Number(amountVal || 0),
     },
+
+    items,
+
+    breakdown: {
+      itemTotal:
+        itemTotalVal !== null
+          ? {
+              value: itemTotalVal,
+            }
+          : null,
+
+      taxTotal:
+        taxTotalVal !== null
+          ? {
+              value: taxTotalVal,
+            }
+          : null,
+
+      shipping:
+        shipVal !== null
+          ? {
+              value: shipVal,
+            }
+          : null,
+    },
+
+    /*
+     * null means this is a legacy order without a stored
+     * authoritative tax-treatment snapshot.
+     *
+     * The Thank You page must never guess a treatment for it.
+     */
+    taxTreatment,
+
     delivery: doc.delivery
       ? {
           name: doc.delivery.name || null,
+
           deliveryDays: doc.delivery.deliveryDays ?? null,
+
           amount: doc.delivery.amount != null ? Number(doc.delivery.amount) : null,
         }
       : null,
+
     shipping: doc.shipping || null,
   };
 }
@@ -1819,45 +2015,153 @@ function buildSessionSnapshot(orderId, pending) {
   const items = Array.isArray(pending?.itemsBrief)
     ? pending.itemsBrief.map((it) => ({
         name: it?.name || '',
+
         quantity: toQty(it?.quantity, 1),
-        price: { value: Number(normalizeMoneyNumber(it?.unitPriceGross ?? it?.unitPrice) ?? 0) },
+
+        /*
+         * Use the historical gross unit price already frozen
+         * into the pending authoritative checkout quote.
+         */
+        price: {
+          value: Number(normalizeMoneyNumber(it?.unitPriceGross ?? it?.unitPrice) ?? 0),
+        },
+
         variants: it?.variants || {},
       }))
     : [];
 
+  const pendingTaxTreatment =
+    pending?.taxTreatment && typeof pending.taxTreatment === 'object' ? pending.taxTreatment : null;
+
+  const hasPendingVatRate =
+    pendingTaxTreatment?.vatRate !== null &&
+    pendingTaxTreatment?.vatRate !== undefined &&
+    pendingTaxTreatment?.vatRate !== '';
+
+  const pendingVatRateRaw = hasPendingVatRate ? Number(pendingTaxTreatment.vatRate) : null;
+
+  const pendingVatRate =
+    pendingVatRateRaw !== null &&
+    Number.isFinite(pendingVatRateRaw) &&
+    pendingVatRateRaw >= 0 &&
+    pendingVatRateRaw <= 1
+      ? pendingVatRateRaw
+      : null;
+
+  const hasPendingVatPercentage =
+    pendingTaxTreatment?.vatPercentage !== null &&
+    pendingTaxTreatment?.vatPercentage !== undefined &&
+    pendingTaxTreatment?.vatPercentage !== '';
+
+  const pendingVatPercentageRaw = hasPendingVatPercentage
+    ? Number(pendingTaxTreatment.vatPercentage)
+    : null;
+
+  const pendingVatPercentage =
+    pendingVatPercentageRaw !== null &&
+    Number.isFinite(pendingVatPercentageRaw) &&
+    pendingVatPercentageRaw >= 0 &&
+    pendingVatPercentageRaw <= 100
+      ? pendingVatPercentageRaw
+      : pendingVatRate !== null
+        ? Number((pendingVatRate * 100).toFixed(2))
+        : null;
+
+  /*
+   * The pending treatment was resolved from the validated
+   * checkout shipping address during POST /create-order.
+   *
+   * It is authoritative historical evidence.
+   *
+   * Do not recalculate it from the current VAT_RATE.
+   */
+  const taxTreatment = pendingTaxTreatment
+    ? {
+        destinationCountryCode:
+          normalizeCountryCode(pendingTaxTreatment.destinationCountryCode) || '',
+
+        countrySource: safeStr(pendingTaxTreatment.countrySource, 80).trim().toUpperCase(),
+
+        jurisdiction: safeStr(pendingTaxTreatment.jurisdiction, 80),
+
+        treatmentCode: safeStr(pendingTaxTreatment.treatmentCode, 100).trim().toUpperCase(),
+
+        label: safeStr(pendingTaxTreatment.label, 200),
+
+        reason: safeStr(pendingTaxTreatment.reason, 1000),
+
+        vatRate: pendingVatRate,
+
+        vatPercentage: pendingVatPercentage,
+
+        vatEnabled: pendingTaxTreatment.vatEnabled === true,
+
+        authoritative: pendingTaxTreatment.authoritative === true,
+
+        provisional: pendingTaxTreatment.provisional === true,
+
+        exportEvidenceRequired: pendingTaxTreatment.exportEvidenceRequired === true,
+
+        resolvedAt: pendingTaxTreatment.resolvedAt || null,
+      }
+    : null;
+
   return {
     id: orderId,
+
     orderId,
+
     status: 'COMPLETED',
+
     createdAt: new Date(),
+
     currency: pending?.currency || upperCcy,
-    amount: { value: Number(normalizeMoneyNumber(pending?.grandTotal) ?? 0) },
+
+    amount: {
+      value: Number(normalizeMoneyNumber(pending?.grandTotal) ?? 0),
+    },
+
     items,
+
     breakdown: {
       itemTotal:
         pending?.subTotal != null
-          ? { value: Number(normalizeMoneyNumber(pending.subTotal) ?? 0) }
+          ? {
+              value: Number(normalizeMoneyNumber(pending.subTotal) ?? 0),
+            }
           : null,
+
       taxTotal:
         pending?.vatTotal != null
-          ? { value: Number(normalizeMoneyNumber(pending.vatTotal) ?? 0) }
+          ? {
+              value: Number(normalizeMoneyNumber(pending.vatTotal) ?? 0),
+            }
           : null,
+
       shipping:
         pending?.deliveryPrice != null
-          ? { value: Number(normalizeMoneyNumber(pending.deliveryPrice) ?? 0) }
+          ? {
+              value: Number(normalizeMoneyNumber(pending.deliveryPrice) ?? 0),
+            }
           : null,
     },
+
+    taxTreatment,
+
     delivery:
       pending && (pending.deliveryName || pending.deliveryDays != null)
         ? {
             name: pending.deliveryName || null,
+
             deliveryDays: pending.deliveryDays ?? null,
+
             amount:
               pending.deliveryPrice != null
                 ? Number(normalizeMoneyNumber(pending.deliveryPrice) ?? 0)
                 : null,
           }
         : null,
+
     shipping: null,
   };
 }
@@ -3744,16 +4048,42 @@ router.get('/receipt/:id', async (req, res) => {
       return res.status(403).send('Forbidden.');
     }
 
+    const supportPhone = getPublicSupportPhone();
+
     return res.render('receipt', {
       title: 'Receipt',
+
       themeCss: themeCssFrom(req),
+
       nonce: resNonce(req),
+
       order: doc,
+
       brandName: BRAND_NAME_N,
+
       currency: doc?.amount?.currency || doc?.currency || upperCcy,
+
       publicMode: (tokenOk || sessionOk) && !loggedIn,
+
       shareLink: doc?.orderId ? buildReceiptLink(doc.orderId) : null,
+
+      /*
+       * Public customer-support contacts
+       * =================================
+       *
+       * Empty values are intentional. receipt.ejs will show only
+       * contact methods that are valid and configured.
+       */
+      supportEmail: getPublicSupportEmail(),
+
+      supportPhoneDisplay: supportPhone.display,
+
+      supportPhoneHref: supportPhone.href,
+
+      supportWhatsAppHref: getPublicSupportWhatsApp(),
+
       success: req.flash?.('success') || [],
+
       error: req.flash?.('error') || [],
     });
   } catch (err) {

@@ -1,31 +1,73 @@
 <!--views/sales-products.ejs-->
 <%
   /*
-   * The /products/sales route supplies:
+   * Resolved Fast Liner tax treatment
+   * =================================
    *
-   * Internal + provisional ZA:
-   * configured South African VAT rate
+   * This page has no delivery-country selector.
    *
-   * Internal + provisional foreign country:
-   * 0
+   * It inherits the provisional country that was already resolved
+   * globally from:
+   *
+   * 1. the customer's storefront country selection;
+   * 2. trusted GeoIP;
+   * 3. the configured default country.
+   *
+   * Internal:
+   *
+   * - ZA_STANDARD may produce a positive VAT rate;
+   * - ZA_EXPORT_ZERO_RATED produces a zero visible VAT rate;
+   * - VAT_DISABLED produces a zero visible VAT rate.
    *
    * CJ:
-   * 0 Kasyora-added VAT
+   *
+   * - Kasyora-added VAT is always zero;
+   * - the Internal tax resolver is never used.
+   *
+   * The validated checkout shipping address remains authoritative
+   * for final Internal VAT, PayPal and the completed order.
    */
+  const SALES_TAX_TREATMENT =
+    typeof taxTreatment !== 'undefined' &&
+    taxTreatment &&
+    typeof taxTreatment === 'object'
+      ? taxTreatment
+      : {};
+
   const SALES_VAT_RATE_RAW =
     Number(
-      typeof vatRate !== 'undefined' &&
-      vatRate !== null
-        ? vatRate
-        : 0
+      SALES_TAX_TREATMENT.vatRate ??
+      (
+        typeof vatRate !== 'undefined' &&
+        vatRate !== null
+          ? vatRate
+          : 0
+      )
     );
 
   const VAT =
-    Number.isFinite(SALES_VAT_RATE_RAW) &&
+    Number.isFinite(
+      SALES_VAT_RATE_RAW
+    ) &&
     SALES_VAT_RATE_RAW >= 0 &&
     SALES_VAT_RATE_RAW <= 1
       ? SALES_VAT_RATE_RAW
       : 0;
+
+  /*
+   * vatEnabled distinguishes:
+   *
+   * VAT disabled:
+   * vatEnabled false, vatRate 0
+   *
+   * Foreign zero-rated destination:
+   * vatEnabled true, vatRate 0
+   *
+   * South African standard VAT:
+   * vatEnabled true, vatRate greater than 0
+   */
+  const SALES_VAT_ENABLED =
+    SALES_TAX_TREATMENT.vatEnabled === true;
 
   /*
    * BASE_CURRENCY remains Kasyora's authoritative product,
@@ -142,13 +184,29 @@
     ACTIVE_DEPARTMENT === 'cj';
 
   /*
-   * Only Internal Fast Liner products receive provisional
-   * Kasyora VAT.
+   * Show the short "incl. VAT" note only when:
    *
-   * CJ remains completely separate and never receives this VAT.
+   * - the active department is Internal;
+   * - the resolver confirms VAT is enabled; and
+   * - the actual visible price contains a positive VAT amount.
+   *
+   * Therefore:
+   *
+   * Provisional South Africa with VAT enabled:
+   * show "incl. VAT".
+   *
+   * Provisional foreign destination:
+   * show the VAT-exclusive Product.price with no VAT note.
+   *
+   * VAT disabled:
+   * show Product.price with no VAT note.
+   *
+   * CJ:
+   * show the separate CJ price with no Internal VAT note.
    */
   const SALES_INTERNAL_VAT_ACTIVE =
     !IS_CJ_DEPARTMENT &&
+    SALES_VAT_ENABLED &&
     VAT > 0;
 
   function isCjSalesProduct(product) {
@@ -162,9 +220,31 @@
   }
 
   /*
-   * Return the customer-visible product price.
+   * Return the customer-visible Fast Liner price.
    *
    * The original product.price remains VAT-exclusive.
+   *
+   * Internal South Africa with VAT enabled:
+   *
+   * Product.price 100
+   * visible price 115
+   *
+   * Internal provisional foreign destination:
+   *
+   * Product.price 100
+   * visible price 100
+   * no VAT note
+   *
+   * Internal VAT disabled:
+   *
+   * Product.price 100
+   * visible price 100
+   * no VAT note
+   *
+   * CJ:
+   *
+   * The separate CJ price remains unchanged and receives
+   * no Internal Kasyora VAT.
    */
   function getSalesVisiblePrice(product) {
     const basePriceRaw =
@@ -173,13 +253,21 @@
       );
 
     const basePrice =
-      Number.isFinite(basePriceRaw) &&
+      Number.isFinite(
+        basePriceRaw
+      ) &&
       basePriceRaw >= 0
         ? basePriceRaw
         : 0;
 
-    if (isCjSalesProduct(product)) {
-      return basePrice;
+    if (
+      isCjSalesProduct(product) ||
+      !SALES_VAT_ENABLED ||
+      VAT <= 0
+    ) {
+      return Number(
+        basePrice.toFixed(2)
+      );
     }
 
     return Number(
@@ -193,6 +281,15 @@
     );
   }
 
+  /*
+   * No VAT wording is shown for:
+   *
+   * - provisional foreign destinations;
+   * - VAT-disabled Internal destinations;
+   * - CJ products.
+   *
+   * Foreign zero-rate information belongs in checkout.
+   */
   function shouldShowSalesVatNote(product) {
     return (
       !isCjSalesProduct(product) &&

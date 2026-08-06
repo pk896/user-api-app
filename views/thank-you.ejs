@@ -151,9 +151,30 @@
       </div>
 
       <div id="totalsBox" class="totals">
-        <div class="row"><span>Subtotal</span><span id="tSubtotal">—</span></div>
-        <div class="row"><span>VAT/Tax</span><span id="tVat">—</span></div>
-        <div class="row"><span id="tShipLabel">Delivery</span><span id="tShipping">—</span></div>
+        <div class="row">
+          <span>Subtotal</span>
+          <span id="tSubtotal">—</span>
+        </div>
+
+        <!--
+          Historical completed-order tax row.
+
+          It remains hidden until the order API confirms how the
+          completed order was treated.
+
+          The browser must never infer VAT from the current VAT_RATE,
+          selected delivery country, GeoIP or configured default.
+        -->
+        <div id="tVatRow" class="row" hidden>
+          <span id="tVatLabel">Tax</span>
+          <span id="tVat">—</span>
+        </div>
+
+        <div class="row">
+          <span id="tShipLabel">Delivery</span>
+          <span id="tShipping">—</span>
+        </div>
+
         <div class="row total">
           <span>Total Amount</span>
           <span id="tTotal" class="total-amount">—</span>
@@ -1032,19 +1053,272 @@
           }
 
           // Update totals
-          var itemTotal = o.breakdown && o.breakdown.itemTotal ? o.breakdown.itemTotal.value : (o.totals ? o.totals.subtotal : null);
-          var taxTotal = o.breakdown && o.breakdown.taxTotal ? o.breakdown.taxTotal.value : (o.totals ? o.totals.tax : null);
-          var shipTotal = o.breakdown && o.breakdown.shipping ? o.breakdown.shipping.value : (o.delivery ? o.delivery.amount : null);
-          var grandTot = (o.amount && (o.amount.value != null)) ? o.amount.value : (o.totals ? o.totals.total : null);
+          var itemTotal =
+            o.breakdown &&
+            o.breakdown.itemTotal ?
+            o.breakdown.itemTotal.value :
+            (
+              o.totals ?
+              o.totals.subtotal :
+              null
+            );
 
-          var tSub = qs('#tSubtotal'),
-            tVat = qs('#tVat'),
-            tShip = qs('#tShipping'),
-            tTot = qs('#tTotal');
-          if (tSub) tSub.textContent = (itemTotal != null) ? money(itemTotal) : '—';
-          if (tVat) tVat.textContent = (taxTotal != null) ? money(taxTotal) : '—';
-          if (tShip) tShip.textContent = (shipTotal != null) ? money(shipTotal) : '—';
-          if (tTot) tTot.textContent = (grandTot != null) ? money(grandTot) : '—';
+          var taxTotal =
+            o.breakdown &&
+            o.breakdown.taxTotal ?
+            o.breakdown.taxTotal.value :
+            (
+              o.totals ?
+              o.totals.tax :
+              null
+            );
+
+          var shipTotal =
+            o.breakdown &&
+            o.breakdown.shipping ?
+            o.breakdown.shipping.value :
+            (
+              o.delivery ?
+              o.delivery.amount :
+              null
+            );
+
+          var grandTot =
+            o.amount &&
+            o.amount.value != null ?
+            o.amount.value :
+            (
+              o.totals ?
+              o.totals.total :
+              null
+            );
+
+          var tSub =
+            qs('#tSubtotal');
+
+          var tVatRow =
+            qs('#tVatRow');
+
+          var tVatLabel =
+            qs('#tVatLabel');
+
+          var tVat =
+            qs('#tVat');
+
+          var tShip =
+            qs('#tShipping');
+
+          var tTot =
+            qs('#tTotal');
+
+          if (tSub) {
+            tSub.textContent =
+              itemTotal != null ?
+              money(itemTotal) :
+              '—';
+          }
+
+          /*
+           * Historical completed-order tax display
+           * ======================================
+           *
+           * Use only o.taxTreatment returned by the order API.
+           *
+           * Never use:
+           *
+           * - the current VAT_RATE;
+           * - the current delivery-country selector;
+           * - GeoIP;
+           * - the configured default country;
+           * - a hardcoded 15%.
+           */
+          var taxTreatment =
+            o.taxTreatment &&
+            typeof o.taxTreatment === 'object' ?
+            o.taxTreatment :
+            null;
+
+          var treatmentCode =
+            String(
+              taxTreatment &&
+              taxTreatment.treatmentCode ?
+              taxTreatment.treatmentCode :
+              ''
+            )
+            .trim()
+            .toUpperCase();
+
+          var treatmentIsAuthoritative = !!taxTreatment &&
+            taxTreatment.authoritative === true &&
+            taxTreatment.provisional !== true;
+
+          var taxAmountNumber =
+            taxTotal !== null &&
+            taxTotal !== undefined &&
+            taxTotal !== '' ?
+            Number(taxTotal) :
+            null;
+
+          var hasValidTaxAmount =
+            taxAmountNumber !== null &&
+            Number.isFinite(taxAmountNumber) &&
+            taxAmountNumber >= 0;
+
+          var vatPercentageRaw =
+            taxTreatment &&
+            taxTreatment.vatPercentage !== null &&
+            taxTreatment.vatPercentage !== undefined &&
+            taxTreatment.vatPercentage !== '' ?
+            Number(
+              taxTreatment.vatPercentage
+            ) :
+            null;
+
+          var vatPercentage =
+            vatPercentageRaw !== null &&
+            Number.isFinite(vatPercentageRaw) &&
+            vatPercentageRaw >= 0 &&
+            vatPercentageRaw <= 100 ?
+            vatPercentageRaw :
+            null;
+
+          var showTaxRow =
+            false;
+
+          var taxLabel =
+            'Tax';
+
+          /*
+           * VAT is globally disabled for this completed order.
+           *
+           * Hide the row completely, including the 0.00 value.
+           */
+          if (
+            treatmentIsAuthoritative &&
+            treatmentCode === 'VAT_DISABLED'
+          ) {
+            showTaxRow =
+              false;
+          }
+
+          /*
+           * Completed South African standard-rate order.
+           */
+          else if (
+            treatmentIsAuthoritative &&
+            treatmentCode === 'ZA_STANDARD'
+          ) {
+            showTaxRow =
+              hasValidTaxAmount;
+
+            taxLabel =
+              vatPercentage !== null ?
+              (
+                'VAT at ' +
+                vatPercentage.toLocaleString(
+                  undefined, {
+                    maximumFractionDigits: 2
+                  }
+                ) +
+                '%'
+              ) :
+              'VAT';
+          }
+
+          /*
+           * Completed qualifying export.
+           *
+           * The stored authoritative treatment confirms that
+           * VAT was applied at 0%.
+           */
+          else if (
+            treatmentIsAuthoritative &&
+            treatmentCode === 'ZA_EXPORT_ZERO_RATED'
+          ) {
+            showTaxRow =
+              hasValidTaxAmount;
+
+            taxLabel =
+              'VAT at 0%';
+          }
+
+          /*
+           * Defensive support for another authoritative treatment.
+           *
+           * Do not invent a percentage. Use its stored label only.
+           */
+          else if (
+            treatmentIsAuthoritative &&
+            taxTreatment.vatEnabled === true &&
+            hasValidTaxAmount
+          ) {
+            showTaxRow =
+              true;
+
+            taxLabel =
+              String(
+                taxTreatment.label ||
+                'Tax'
+              ).trim() || 'Tax';
+          }
+
+          /*
+           * Legacy order support
+           * ====================
+           *
+           * Older orders may have a stored positive tax total but
+           * no taxTreatment object.
+           *
+           * Show a neutral "Tax" row only when the historical stored
+           * tax amount is greater than zero.
+           *
+           * Never infer that it was South African VAT or guess 15%.
+           */
+          else if (
+            !taxTreatment &&
+            hasValidTaxAmount &&
+            taxAmountNumber > 0
+          ) {
+            showTaxRow =
+              true;
+
+            taxLabel =
+              'Tax';
+          }
+
+          if (tVatRow) {
+            tVatRow.hidden = !showTaxRow;
+          }
+
+          if (
+            showTaxRow &&
+            tVatLabel
+          ) {
+            tVatLabel.textContent =
+              taxLabel;
+          }
+
+          if (
+            showTaxRow &&
+            tVat
+          ) {
+            tVat.textContent =
+              money(taxAmountNumber);
+          }
+
+          if (tShip) {
+            tShip.textContent =
+              shipTotal != null ?
+              money(shipTotal) :
+              '—';
+          }
+
+          if (tTot) {
+            tTot.textContent =
+              grandTot != null ?
+              money(grandTot) :
+              '—';
+          }
 
           // Delivery information
           if (o.delivery && (o.delivery.name || (o.delivery.deliveryDays != null))) {
