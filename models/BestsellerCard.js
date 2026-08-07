@@ -10,7 +10,6 @@ const bestsellerCardSchema = new mongoose.Schema(
       enum: ['left', 'right'],
       required: true,
       unique: true,
-      index: true,
     },
 
     productCustomId: {

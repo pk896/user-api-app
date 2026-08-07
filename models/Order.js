@@ -849,7 +849,6 @@ OrderSchema.index({ 'items.productId': 1, createdAt: -1 });
 OrderSchema.index({ businessBuyer: 1, createdAt: -1 });
 OrderSchema.index({ 'paypal.captureId': 1, createdAt: -1 });
 OrderSchema.index({ 'captures.captureId': 1, createdAt: -1 });
-OrderSchema.index({ 'refunds.refundId': 1 });
 OrderSchema.index({ 'items.refundStatus': 1, 'items.refundedAt': -1 });
 
 OrderSchema.index({
@@ -892,10 +891,6 @@ OrderSchema.index({
 OrderSchema.index({
   shippingProvider: 1,
   'courierGuy.shipmentId': 1,
-});
-
-OrderSchema.index({
-  'courierGuy.trackingReference': 1,
 });
 
 // ---------- Statics / helpers ----------

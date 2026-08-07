@@ -2233,12 +2233,51 @@ async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory
   const salesRows = await CjOrder.aggregate([
     {
       $match: {
-        paymentStatus: {
-          $in: ['COMPLETED', 'PARTIALLY_REFUNDED'],
-        },
+        /*
+        * A successful CJ sale may be proven by either:
+        *
+        * 1. the PayPal payment lifecycle; or
+        * 2. the CJ order lifecycle.
+        *
+        * This keeps historical CJ orders compatible while
+        * remaining completely isolated from Internal Order.
+        */
+        $or: [
+          {
+            paymentStatus: {
+              $in: [
+                'COMPLETED',
+                'PARTIALLY_REFUNDED',
+              ],
+            },
+          },
 
+          {
+            status: {
+              $in: [
+                'PAID',
+                'CJ_ORDER_PENDING',
+                'CJ_ORDER_CREATED',
+                'PROCESSING',
+                'SHIPPED',
+                'DELIVERED',
+                'PARTIALLY_REFUNDED',
+              ],
+            },
+          },
+        ],
+
+        /*
+        * Never count unpaid, cancelled, fully refunded
+        * or failed CJ orders as successful sales.
+        */
         status: {
-          $nin: ['PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'],
+          $nin: [
+            'PAYMENT_PENDING',
+            'CANCELLED',
+            'REFUNDED',
+            'PAYMENT_FAILED',
+          ],
         },
       },
     },

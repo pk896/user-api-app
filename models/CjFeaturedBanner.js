@@ -24,7 +24,6 @@ const cjFeaturedBannerSchema = new mongoose.Schema(
       enum: ['right'],
       default: 'right',
       unique: true,
-      index: true,
       trim: true,
     },
 
@@ -63,19 +62,6 @@ const cjFeaturedBannerSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
-);
-
-/*
- * There can be only one saved configuration for the CJ
- * homepage right-side featured banner.
- */
-cjFeaturedBannerSchema.index(
-  {
-    slot: 1,
-  },
-  {
-    unique: true,
   },
 );
 

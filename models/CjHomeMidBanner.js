@@ -37,8 +37,6 @@ const cjHomeMidBannerSchema = new mongoose.Schema(
 
       unique: true,
 
-      index: true,
-
       trim: true,
     },
 

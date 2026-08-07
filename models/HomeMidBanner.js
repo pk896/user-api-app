@@ -10,7 +10,6 @@ const homeMidBannerSchema = new mongoose.Schema(
       required: true,
       enum: ['left', 'right'],
       unique: true,
-      index: true,
       trim: true,
     },
 

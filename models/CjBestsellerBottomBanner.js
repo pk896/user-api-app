@@ -30,7 +30,6 @@ const cjBestsellerBottomBannerSchema =
         ],
         required: true,
         unique: true,
-        index: true,
         trim: true,
       },
 
