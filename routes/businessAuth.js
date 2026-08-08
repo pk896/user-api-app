@@ -10,6 +10,9 @@ const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const Business = require('../models/Business');
+
+const BusinessSignupHeaderImage = require('../models/BusinessSignupHeaderImage');
+
 const Product = require('../models/Product'); // seller products - keep for seller/buyer flows
 const SupplierProduct = require('../models/SupplierProduct');
 const SupplierProductStockHistory = require('../models/SupplierProductStockHistory');
@@ -2124,55 +2127,113 @@ async function computeSupplierKpis(businessId) {
   };
 }
 
-router.get('/signup', redirectIfLoggedIn, async (req, res) => {
-  let shopHeaderImage = null;
+/*
+ * Business Signup Header Image
+ * ============================
+ *
+ * This middleware applies only to /business/signup.
+ *
+ * It deliberately uses BusinessSignupHeaderImage and never
+ * ShopHeaderImage.
+ *
+ * Because it writes to res.locals, the same header image
+ * remains available to:
+ *
+ * - GET /business/signup
+ * - POST validation-error renders
+ * - signup server-error renders
+ * - Multer/logo-upload error renders
+ *
+ * If the admin deactivates the image, or if loading fails,
+ * business-signup.ejs uses its existing local fallback image.
+ */
+router.use('/signup', async (_req, res, next) => {
+  res.locals.businessSignupHeaderImage = null;
 
   try {
-    const ShopHeaderImage = require('../models/ShopHeaderImage');
+    res.locals.businessSignupHeaderImage = await BusinessSignupHeaderImage.findOne({
+      singletonKey: 'main',
+      active: true,
+    }).lean();
+  } catch (err) {
+    console.warn('⚠️ Failed to load Business Signup Header Image:', err.message);
+  }
 
-    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
-      .sort({ updatedAt: -1 })
-      .lean();
+  return next();
+});
 
+router.get('/signup', redirectIfLoggedIn, async (req, res) => {
+  try {
     const businessesCount = await Business.countDocuments({});
 
     const countriesAgg = await Business.aggregate([
       {
         $project: {
           country: {
-            $trim: { input: { $ifNull: ['$country', ''] } },
+            $trim: {
+              input: {
+                $ifNull: ['$country', ''],
+              },
+            },
           },
         },
       },
-      { $match: { country: { $ne: '' } } },
-      { $group: { _id: { $toLower: '$country' } } },
-      { $count: 'total' },
+
+      {
+        $match: {
+          country: {
+            $ne: '',
+          },
+        },
+      },
+
+      {
+        $group: {
+          _id: {
+            $toLower: '$country',
+          },
+        },
+      },
+
+      {
+        $count: 'total',
+      },
     ]);
 
     const countriesCount = countriesAgg[0]?.total || 0;
 
-    res.render('business-signup', {
+    return res.render('business-signup', {
       title: 'Business Sign Up',
+
       active: 'business-signup',
+
       errors: [],
+
       themeCss: res.locals.themeCss,
+
       nonce: res.locals.nonce,
+
       businessesCount,
+
       countriesCount,
-      shopHeaderImage,
     });
   } catch (err) {
     console.error('❌ GET /business/signup stats error:', err);
 
-    res.render('business-signup', {
+    return res.render('business-signup', {
       title: 'Business Sign Up',
+
       active: 'business-signup',
+
       errors: [],
+
       themeCss: res.locals.themeCss,
+
       nonce: res.locals.nonce,
+
       businessesCount: 0,
+
       countriesCount: 0,
-      shopHeaderImage,
     });
   }
 });

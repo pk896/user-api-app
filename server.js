@@ -853,7 +853,19 @@ const adminShopMainBanner = require('./routes/adminShopMainBanner');
  * and CjProduct.
  */
 const adminCjShopMainBanner = require('./routes/adminCjShopMainBanner');
+
 const adminShopHeaderImage = require('./routes/adminShopHeaderImage');
+
+/*
+ * Standalone Kasyora Business Signup Header Image
+ * administration.
+ *
+ * This flow uses only BusinessSignupHeaderImage.
+ */
+const adminBusinessSignupHeaderImage = require('./routes/adminBusinessSignupHeaderImage');
+
+const adminKasyoraHomeHeaderImage = require('./routes/adminKasyoraHomeHeaderImage');
+
 const adminWarehousingDispenseRoutes = require('./routes/adminWarehousingDispense');
 const adminCeoAuditRoutes = require('./routes/adminCeoAudit');
 const cartRoutes = require('./routes/cart');
@@ -1070,6 +1082,14 @@ app.use('/admin', adminShopMainBanner);
 app.use('/admin', adminCjShopMainBanner);
 
 app.use('/admin', adminShopHeaderImage);
+
+/*
+ * Standalone Business Signup Header Image administration.
+ */
+app.use('/admin', adminBusinessSignupHeaderImage);
+
+app.use('/admin', adminKasyoraHomeHeaderImage);
+
 app.use('/admin', adminWarehousingDispenseRoutes);
 app.use('/admin', adminCeoAuditRoutes);
 app.use('/admin', adminBizVerifyRoutes);
@@ -1381,24 +1401,32 @@ app.post('/theme-toggle', (req, res) => {
    Home + Debug + Health
 --------------------------------------- */
 app.get('/home', async (req, res) => {
-  let shopHeaderImage = null;
+  let homeHeaderImage = null;
 
   try {
-    const ShopHeaderImage = require('./models/ShopHeaderImage');
+    const KasyoraHomeHeaderImage = require('./models/KasyoraHomeHeaderImage');
 
-    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
-      .sort({ updatedAt: -1 })
+    homeHeaderImage = await KasyoraHomeHeaderImage.findOne({
+      active: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
       .lean();
   } catch (err) {
-    console.warn('⚠️ Failed to load shopHeaderImage for home page:', err.message);
+    console.warn('⚠️ Failed to load Kasyora Home header image:', err.message);
   }
 
-  res.render('home', {
+  return res.render('home', {
     layout: 'layout',
+
     title: 'Home',
+
     active: 'home',
+
     dbAvailable: dbConnectionEstablished,
-    shopHeaderImage,
+
+    homeHeaderImage,
   });
 });
 
