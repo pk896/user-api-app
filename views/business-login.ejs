@@ -1,20 +1,36 @@
 <!-- views/business-login.ejs -->
 <%
-  const NONCE = typeof nonce !== 'undefined' ? nonce : '';
-  const IS_DARK = typeof themeCss !== 'undefined' && themeCss && themeCss.includes('dark');
+  const NONCE =
+    typeof nonce !== 'undefined'
+      ? nonce
+      : '';
 
+  const IS_DARK =
+    typeof themeCss !== 'undefined' &&
+    themeCss &&
+    themeCss.includes('dark');
+
+  /*
+   * Standalone Business Login Header Image.
+   *
+   * This page must never use ShopHeaderImage or
+   * BusinessSignupHeaderImage.
+   *
+   * routes/businessAuth.js supplies the active
+   * BusinessLoginHeaderImage through res.locals.
+   */
   const heroBg =
-    (typeof shopHeaderImage !== 'undefined' && shopHeaderImage && shopHeaderImage.image)
-      ? shopHeaderImage.image
+    (
+      typeof businessLoginHeaderImage !== 'undefined' &&
+      businessLoginHeaderImage &&
+      businessLoginHeaderImage.image
+    )
+      ? businessLoginHeaderImage.image
       : '/images/branding/logo-unincorporate.png';
 %>
 
 <!-- Spinner Start -->
-<div
-  id="spinner"
-  class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center"
-  style="z-index: 9999;"
->
+<div id="spinner" class="show fade bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center" style="z-index: 9999;">
   <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
     <span class="visually-hidden">Loading...</span>
   </div>
@@ -97,28 +113,13 @@
               <%- include('partials/massage', { success, error, info, warning, errors }) %>
             </div>
 
-            <form
-              id="businessLoginForm"
-              action="/business/login"
-              method="POST"
-              autocomplete="on"
-              novalidate
-            >
+            <form id="businessLoginForm" action="/business/login" method="POST" autocomplete="on" novalidate>
               <div class="mb-3">
                 <label for="email" class="form-label fw-semibold text-primary">
                   Business Email <span class="text-danger">*</span>
                 </label>
 
-                <input
-                  id="email"
-                  type="email"
-                  name="email"
-                  class="form-control py-3 business-login-focus"
-                  placeholder="admin@company.com"
-                  autocomplete="username"
-                  inputmode="email"
-                  required
-                >
+                <input id="email" type="email" name="email" class="form-control py-3 business-login-focus" placeholder="admin@company.com" autocomplete="username" inputmode="email" required>
 
                 <div class="form-text">
                   Enter your registered business email.
@@ -131,22 +132,9 @@
                 </label>
 
                 <div class="input-group">
-                  <input
-                    id="password"
-                    type="password"
-                    name="password"
-                    class="form-control py-3 business-login-focus"
-                    placeholder="Enter your password"
-                    autocomplete="current-password"
-                    required
-                  >
+                  <input id="password" type="password" name="password" class="form-control py-3 business-login-focus" placeholder="Enter your password" autocomplete="current-password" required>
 
-                  <button
-                    id="togglePassword"
-                    type="button"
-                    class="btn btn-outline-secondary px-3"
-                    aria-label="Toggle password visibility"
-                  >
+                  <button id="togglePassword" type="button" class="btn btn-outline-secondary px-3" aria-label="Toggle password visibility">
                     Show
                   </button>
                 </div>
@@ -163,16 +151,8 @@
                 </div>
               </div>
 
-              <button
-                id="businessLoginSubmitBtn"
-                type="submit"
-                class="btn btn-success w-100 rounded-pill py-3 fw-semibold d-flex align-items-center justify-content-center gap-2"
-              >
-                <span
-                  id="businessLoginSpinner"
-                  class="spinner-border spinner-border-sm d-none"
-                  aria-hidden="true"
-                ></span>
+              <button id="businessLoginSubmitBtn" type="submit" class="btn btn-success w-100 rounded-pill py-3 fw-semibold d-flex align-items-center justify-content-center gap-2">
+                <span id="businessLoginSpinner" class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span>
                 <span id="businessLoginSubmitText">Sign In</span>
               </button>
 
@@ -194,93 +174,93 @@
 </div>
 
 <script nonce="<%= NONCE %>">
-document.addEventListener('DOMContentLoaded', function () {
-  const form = document.getElementById('businessLoginForm');
-  const emailInput = document.getElementById('email');
-  const passwordInput = document.getElementById('password');
-  const togglePassword = document.getElementById('togglePassword');
-  const rememberCheckbox = document.getElementById('remember');
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('businessLoginForm');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const togglePassword = document.getElementById('togglePassword');
+    const rememberCheckbox = document.getElementById('remember');
 
-  const submitBtn = document.getElementById('businessLoginSubmitBtn');
-  const submitSpinner = document.getElementById('businessLoginSpinner');
-  const submitText = document.getElementById('businessLoginSubmitText');
+    const submitBtn = document.getElementById('businessLoginSubmitBtn');
+    const submitSpinner = document.getElementById('businessLoginSpinner');
+    const submitText = document.getElementById('businessLoginSubmitText');
 
-  if (togglePassword && passwordInput) {
-    togglePassword.addEventListener('click', function () {
-      const isPassword = passwordInput.type === 'password';
-      passwordInput.type = isPassword ? 'text' : 'password';
-      togglePassword.textContent = isPassword ? 'Hide' : 'Show';
-    });
-  }
-
-  if (form && emailInput && passwordInput) {
-    form.addEventListener('submit', function (event) {
-      let ok = true;
-
-      emailInput.classList.remove('is-invalid');
-      passwordInput.classList.remove('is-invalid');
-
-      const emailVal = String(emailInput.value || '').trim();
-      const passVal = String(passwordInput.value || '').trim();
-
-      if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
-        ok = false;
-        emailInput.classList.add('is-invalid');
-      }
-
-      if (!passVal) {
-        ok = false;
-        passwordInput.classList.add('is-invalid');
-      }
-
-      if (!ok) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-
-      if (submitBtn && submitSpinner && submitText) {
-        submitBtn.disabled = true;
-        submitSpinner.classList.remove('d-none');
-        submitText.textContent = 'Signing in...';
-      }
-    });
-  }
-
-  if (emailInput && rememberCheckbox) {
-    const savedFlag = localStorage.getItem('businessRemember') === '1';
-    const savedEmail = localStorage.getItem('businessEmail') || '';
-
-    if (savedFlag && savedEmail) {
-      emailInput.value = savedEmail;
-      rememberCheckbox.checked = true;
+    if (togglePassword && passwordInput) {
+      togglePassword.addEventListener('click', function() {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        togglePassword.textContent = isPassword ? 'Hide' : 'Show';
+      });
     }
 
-    if (form) {
-      form.addEventListener('submit', function () {
-        if (rememberCheckbox.checked && emailInput.value) {
-          localStorage.setItem('businessRemember', '1');
-          localStorage.setItem('businessEmail', emailInput.value);
-        } else {
-          localStorage.removeItem('businessRemember');
-          localStorage.removeItem('businessEmail');
+    if (form && emailInput && passwordInput) {
+      form.addEventListener('submit', function(event) {
+        let ok = true;
+
+        emailInput.classList.remove('is-invalid');
+        passwordInput.classList.remove('is-invalid');
+
+        const emailVal = String(emailInput.value || '').trim();
+        const passVal = String(passwordInput.value || '').trim();
+
+        if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+          ok = false;
+          emailInput.classList.add('is-invalid');
+        }
+
+        if (!passVal) {
+          ok = false;
+          passwordInput.classList.add('is-invalid');
+        }
+
+        if (!ok) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        if (submitBtn && submitSpinner && submitText) {
+          submitBtn.disabled = true;
+          submitSpinner.classList.remove('d-none');
+          submitText.textContent = 'Signing in...';
         }
       });
     }
-  }
 
-  const pageSpinner = document.getElementById('spinner');
+    if (emailInput && rememberCheckbox) {
+      const savedFlag = localStorage.getItem('businessRemember') === '1';
+      const savedEmail = localStorage.getItem('businessEmail') || '';
 
-  if (pageSpinner) {
-    window.addEventListener('load', function () {
-      setTimeout(function () {
-        pageSpinner.classList.remove('show');
+      if (savedFlag && savedEmail) {
+        emailInput.value = savedEmail;
+        rememberCheckbox.checked = true;
+      }
 
-        setTimeout(function () {
-          pageSpinner.classList.add('d-none');
-        }, 300);
-      }, 700);
-    });
-  }
-});
+      if (form) {
+        form.addEventListener('submit', function() {
+          if (rememberCheckbox.checked && emailInput.value) {
+            localStorage.setItem('businessRemember', '1');
+            localStorage.setItem('businessEmail', emailInput.value);
+          } else {
+            localStorage.removeItem('businessRemember');
+            localStorage.removeItem('businessEmail');
+          }
+        });
+      }
+    }
+
+    const pageSpinner = document.getElementById('spinner');
+
+    if (pageSpinner) {
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          pageSpinner.classList.remove('show');
+
+          setTimeout(function() {
+            pageSpinner.classList.add('d-none');
+          }, 300);
+        }, 700);
+      });
+    }
+  });
 </script>

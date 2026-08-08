@@ -862,9 +862,20 @@ const adminShopHeaderImage = require('./routes/adminShopHeaderImage');
  *
  * This flow uses only BusinessSignupHeaderImage.
  */
-const adminBusinessSignupHeaderImage = require('./routes/adminBusinessSignupHeaderImage');
+const adminBusinessSignupHeaderImage =
+  require('./routes/adminBusinessSignupHeaderImage');
 
-const adminKasyoraHomeHeaderImage = require('./routes/adminKasyoraHomeHeaderImage');
+/*
+ * Standalone Kasyora Business Login Header Image
+ * administration.
+ *
+ * This flow uses only BusinessLoginHeaderImage.
+ */
+const adminBusinessLoginHeaderImage =
+  require('./routes/adminBusinessLoginHeaderImage');
+
+const adminKasyoraHomeHeaderImage =
+  require('./routes/adminKasyoraHomeHeaderImage');
 
 const adminWarehousingDispenseRoutes = require('./routes/adminWarehousingDispense');
 const adminCeoAuditRoutes = require('./routes/adminCeoAudit');
@@ -1087,6 +1098,11 @@ app.use('/admin', adminShopHeaderImage);
  * Standalone Business Signup Header Image administration.
  */
 app.use('/admin', adminBusinessSignupHeaderImage);
+
+/*
+ * Standalone Business Login Header Image administration.
+ */
+app.use('/admin', adminBusinessLoginHeaderImage);
 
 app.use('/admin', adminKasyoraHomeHeaderImage);
 

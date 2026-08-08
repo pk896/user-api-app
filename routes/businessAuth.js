@@ -13,6 +13,9 @@ const Business = require('../models/Business');
 
 const BusinessSignupHeaderImage = require('../models/BusinessSignupHeaderImage');
 
+const BusinessLoginHeaderImage =
+  require('../models/BusinessLoginHeaderImage');
+
 const Product = require('../models/Product'); // seller products - keep for seller/buyer flows
 const SupplierProduct = require('../models/SupplierProduct');
 const SupplierProductStockHistory = require('../models/SupplierProductStockHistory');
@@ -2886,31 +2889,72 @@ router.post(
   },
 );
 
+/*
+ * Business Login Header Image
+ * ===========================
+ *
+ * This middleware applies only to /business/login.
+ *
+ * It deliberately uses BusinessLoginHeaderImage and
+ * never ShopHeaderImage or BusinessSignupHeaderImage.
+ *
+ * Because it writes to res.locals, the same image
+ * remains available to both GET and POST login renders.
+ *
+ * If the image is inactive, missing, or loading fails,
+ * business-login.ejs uses its local fallback image.
+ */
+router.use(
+  '/login',
+  async (_req, res, next) => {
+    res.locals.businessLoginHeaderImage =
+      null;
+
+    try {
+      res.locals.businessLoginHeaderImage =
+        await BusinessLoginHeaderImage.findOne({
+          singletonKey: 'main',
+          active: true,
+        }).lean();
+    } catch (err) {
+      console.warn(
+        '⚠️ Failed to load Business Login Header Image:',
+        err.message,
+      );
+    }
+
+    return next();
+  },
+);
+
 /* ----------------------------------------------------------
  * 🔐 GET: Business Login
  * -------------------------------------------------------- */
-router.get('/login', redirectIfLoggedIn, async (req, res) => {
-  let shopHeaderImage = null;
+router.get(
+  '/login',
+  redirectIfLoggedIn,
+  async (_req, res) => {
+    return res.render(
+      'business-login',
+      {
+        title:
+          'Business Login',
 
-  try {
-    const ShopHeaderImage = require('../models/ShopHeaderImage');
+        active:
+          'business-login',
 
-    shopHeaderImage = await ShopHeaderImage.findOne({ active: true })
-      .sort({ updatedAt: -1 })
-      .lean();
-  } catch (err) {
-    console.warn('⚠️ Failed to load shopHeaderImage for business login:', err.message);
-  }
+        errors:
+          [],
 
-  res.render('business-login', {
-    title: 'Business Login',
-    active: 'business-login',
-    errors: [],
-    themeCss: res.locals.themeCss,
-    nonce: res.locals.nonce,
-    shopHeaderImage,
-  });
-});
+        themeCss:
+          res.locals.themeCss,
+
+        nonce:
+          res.locals.nonce,
+      },
+    );
+  },
+);
 
 /* ----------------------------------------------------------
  * 🔑 POST: Business Login  (with verification check)
