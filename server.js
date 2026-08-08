@@ -1407,12 +1407,9 @@ app.get('/home', async (req, res) => {
     const KasyoraHomeHeaderImage = require('./models/KasyoraHomeHeaderImage');
 
     homeHeaderImage = await KasyoraHomeHeaderImage.findOne({
+      singletonKey: 'main',
       active: true,
-    })
-      .sort({
-        updatedAt: -1,
-      })
-      .lean();
+    }).lean();
   } catch (err) {
     console.warn('⚠️ Failed to load Kasyora Home header image:', err.message);
   }

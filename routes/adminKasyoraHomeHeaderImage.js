@@ -6,227 +6,139 @@ const router = express.Router();
 
 const multer = require('multer');
 
-const {
-  v4: uuidv4,
-} = require('uuid');
+const { v4: uuidv4 } = require('uuid');
 
-const {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
-const requireAdmin =
-  require('../middleware/requireAdmin');
+const requireAdmin = require('../middleware/requireAdmin');
 
-const requireAdminRole =
-  require('../middleware/requireAdminRole');
+const requireAdminRole = require('../middleware/requireAdminRole');
 
-const requireAdminPermission =
-  require('../middleware/requireAdminPermission');
+const requireAdminPermission = require('../middleware/requireAdminPermission');
 
-const {
-  logAdminAction,
-} = require('../utils/logAdminAction');
+const { logAdminAction } = require('../utils/logAdminAction');
 
-const KasyoraHomeHeaderImage =
-  require('../models/KasyoraHomeHeaderImage');
+const KasyoraHomeHeaderImage = require('../models/KasyoraHomeHeaderImage');
 
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
-const AWS_REGION =
-  process.env.AWS_REGION ||
-  'us-east-1';
-
-const BUCKET =
-  process.env.AWS_BUCKET_NAME;
-
+const BUCKET = process.env.AWS_BUCKET_NAME;
 
 if (!BUCKET) {
-  console.warn(
-    '⚠️ AWS_BUCKET_NAME missing — Kasyora Home header image uploads will fail.',
-  );
+  console.warn('⚠️ AWS_BUCKET_NAME missing — Kasyora Home header image uploads will fail.');
 }
 
+const s3 = new S3Client({
+  region: AWS_REGION,
 
-const s3 =
-  new S3Client({
-    region:
-      AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
 
-    credentials: {
-      accessKeyId:
-        process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
-      secretAccessKey:
-        process.env.AWS_SECRET_ACCESS_KEY,
-    },
-  });
+const upload = multer({
+  storage: multer.memoryStorage(),
 
+  limits: {
+    fileSize: 8 * 1024 * 1024,
+  },
 
-const upload =
-  multer({
-    storage:
-      multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const allowed = /^image\/(png|jpe?g|webp|gif|bmp)$/.test(file.mimetype);
 
-    limits: {
-      fileSize:
-        8 * 1024 * 1024,
-    },
+    if (!allowed) {
+      return cb(new Error('Only PNG/JPG/WEBP/GIF/BMP images are allowed'));
+    }
 
-    fileFilter: (
-      _req,
-      file,
-      cb,
-    ) => {
-      const allowed =
-        /^image\/(png|jpe?g|webp|gif|bmp)$/.test(
-          file.mimetype,
-        );
-
-      if (!allowed) {
-        return cb(
-          new Error(
-            'Only PNG/JPG/WEBP/GIF/BMP images are allowed',
-          ),
-        );
-      }
-
-      return cb(
-        null,
-        true,
-      );
-    },
-  });
-
+    return cb(null, true);
+  },
+});
 
 function buildImageUrl(key) {
-  return (
-    `https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`
-  );
+  return `https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
 }
 
-
 function extFromFilename(name) {
-  const filename =
-    String(
-      name || '',
-    ).trim();
+  const filename = String(name || '').trim();
 
-  const dot =
-    filename.lastIndexOf('.');
+  const dot = filename.lastIndexOf('.');
 
   if (dot === -1) {
     return 'bin';
   }
 
-  return filename
-    .substring(
-      dot + 1,
-    )
-    .toLowerCase();
+  return filename.substring(dot + 1).toLowerCase();
 }
 
-
-function randomKey(
-  folder,
-  ext,
-) {
-  return (
-    `${folder}/${uuidv4()}.${ext}`
-  );
+function randomKey(folder, ext) {
+  return `${folder}/${uuidv4()}.${ext}`;
 }
-
 
 function themeCssFromSession(req) {
-  const theme =
-    req.session?.theme ||
-    'light';
+  const theme = req.session?.theme || 'light';
 
-  return theme === 'dark'
-    ? '/css/dark.css'
-    : '/css/light.css';
+  return theme === 'dark' ? '/css/dark.css' : '/css/light.css';
 }
 
-
-function homeHeaderImageSnapshot(
-  headerImage,
-) {
+function homeHeaderImageSnapshot(headerImage) {
   if (!headerImage) {
     return null;
   }
 
   return {
-    image:
-      headerImage.image || '',
+    image: headerImage.image || '',
 
-    active:
-      !!headerImage.active,
+    active: !!headerImage.active,
   };
 }
 
-
-async function uploadImageToS3(
-  file,
-  folder,
-) {
+async function uploadImageToS3(file, folder) {
   if (!BUCKET) {
-    throw new Error(
-      'AWS_BUCKET_NAME is not configured.',
-    );
+    throw new Error('AWS_BUCKET_NAME is not configured.');
   }
 
-  const {
-    originalname,
-    buffer,
-    mimetype,
-  } = file;
+  const { originalname, buffer, mimetype } = file;
 
-  const ext =
-    extFromFilename(
-      originalname,
-    );
+  const ext = extFromFilename(originalname);
 
-  const key =
-    randomKey(
-      folder,
-      ext,
-    );
+  const key = randomKey(folder, ext);
 
   await s3.send(
     new PutObjectCommand({
-      Bucket:
-        BUCKET,
+      Bucket: BUCKET,
 
-      Key:
-        key,
+      Key: key,
 
-      Body:
-        buffer,
+      Body: buffer,
 
-      ContentType:
-        mimetype,
+      ContentType: mimetype,
     }),
   );
 
-  return buildImageUrl(
-    key,
-  );
+  return buildImageUrl(key);
 }
 
-
-async function deleteS3ImageByUrl(
-  imageUrl,
-) {
+async function deleteS3ImageByUrl(imageUrl) {
   try {
-    if (
-      !imageUrl ||
-      !imageUrl.includes('.com/')
-    ) {
+    if (!imageUrl || !BUCKET) {
       return;
     }
 
-    const oldKey =
-      imageUrl.split('.com/')[1];
+    /*
+     * Delete only objects that belong to Kasyora's
+     * configured S3 bucket.
+     *
+     * Never derive a deletion key from an arbitrary URL.
+     */
+    const expectedPrefix = `https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
+
+    if (!String(imageUrl).startsWith(expectedPrefix)) {
+      return;
+    }
+
+    const oldKey = String(imageUrl).slice(expectedPrefix.length);
 
     if (!oldKey) {
       return;
@@ -234,21 +146,14 @@ async function deleteS3ImageByUrl(
 
     await s3.send(
       new DeleteObjectCommand({
-        Bucket:
-          BUCKET,
-
-        Key:
-          oldKey,
+        Bucket: BUCKET,
+        Key: oldKey,
       }),
     );
   } catch (err) {
-    console.warn(
-      '⚠️ Failed to delete Kasyora Home header image from S3:',
-      err.message,
-    );
+    console.warn('⚠️ Failed to delete Kasyora Home header image from S3:', err.message);
   }
 }
-
 
 /*
  * =========================================
@@ -260,81 +165,42 @@ router.get(
 
   requireAdmin,
 
-  requireAdminRole([
-    'super_admin',
-    'store_admin',
-  ]),
+  requireAdminRole(['super_admin', 'store_admin']),
 
-  requireAdminPermission(
-    'store.content.manage',
-  ),
+  requireAdminPermission('store.content.manage'),
 
   async (req, res) => {
     try {
-      const headerImage =
-        await KasyoraHomeHeaderImage
-          .findOne({})
-          .sort({
-            updatedAt:
-              -1,
-          })
-          .lean();
+      const headerImage = await KasyoraHomeHeaderImage.findOne({
+        singletonKey: 'main',
+      }).lean();
 
-      return res.render(
-        'admin/kasyora-home-header-image/index',
-        {
-          title:
-            'Kasyora Home Header Image',
+      return res.render('admin/kasyora-home-header-image/index', {
+        title: 'Kasyora Home Header Image',
 
-          themeCss:
-            themeCssFromSession(
-              req,
-            ),
+        themeCss: themeCssFromSession(req),
 
-          nonce:
-            res.locals.nonce,
+        nonce: res.locals.nonce,
 
-          headerImage,
+        headerImage,
 
-          success:
-            req.flash(
-              'success',
-            ),
+        success: req.flash('success'),
 
-          error:
-            req.flash(
-              'error',
-            ),
+        error: req.flash('error'),
 
-          info:
-            req.flash(
-              'info',
-            ),
+        info: req.flash('info'),
 
-          warning:
-            req.flash(
-              'warning',
-            ),
-        },
-      );
+        warning: req.flash('warning'),
+      });
     } catch (err) {
-      console.error(
-        '❌ admin Kasyora Home header image index error:',
-        err,
-      );
+      console.error('❌ admin Kasyora Home header image index error:', err);
 
-      req.flash(
-        'error',
-        'Could not load the Kasyora Home header image.',
-      );
+      req.flash('error', 'Could not load the Kasyora Home header image.');
 
-      return res.redirect(
-        '/admin/dashboard',
-      );
+      return res.redirect('/admin/dashboard');
     }
   },
 );
-
 
 /*
  * =========================================
@@ -346,81 +212,42 @@ router.get(
 
   requireAdmin,
 
-  requireAdminRole([
-    'super_admin',
-    'store_admin',
-  ]),
+  requireAdminRole(['super_admin', 'store_admin']),
 
-  requireAdminPermission(
-    'store.content.manage',
-  ),
+  requireAdminPermission('store.content.manage'),
 
   async (req, res) => {
     try {
-      const headerImage =
-        await KasyoraHomeHeaderImage
-          .findOne({})
-          .sort({
-            updatedAt:
-              -1,
-          })
-          .lean();
+      const headerImage = await KasyoraHomeHeaderImage.findOne({
+        singletonKey: 'main',
+      }).lean();
 
-      return res.render(
-        'admin/kasyora-home-header-image/edit',
-        {
-          title:
-            'Edit Kasyora Home Header Image',
+      return res.render('admin/kasyora-home-header-image/edit', {
+        title: 'Edit Kasyora Home Header Image',
 
-          themeCss:
-            themeCssFromSession(
-              req,
-            ),
+        themeCss: themeCssFromSession(req),
 
-          nonce:
-            res.locals.nonce,
+        nonce: res.locals.nonce,
 
-          headerImage,
+        headerImage,
 
-          success:
-            req.flash(
-              'success',
-            ),
+        success: req.flash('success'),
 
-          error:
-            req.flash(
-              'error',
-            ),
+        error: req.flash('error'),
 
-          info:
-            req.flash(
-              'info',
-            ),
+        info: req.flash('info'),
 
-          warning:
-            req.flash(
-              'warning',
-            ),
-        },
-      );
+        warning: req.flash('warning'),
+      });
     } catch (err) {
-      console.error(
-        '❌ Kasyora Home header image edit page error:',
-        err,
-      );
+      console.error('❌ Kasyora Home header image edit page error:', err);
 
-      req.flash(
-        'error',
-        'Could not load the Kasyora Home header image.',
-      );
+      req.flash('error', 'Could not load the Kasyora Home header image.');
 
-      return res.redirect(
-        '/admin/kasyora-home-header-image',
-      );
+      return res.redirect('/admin/kasyora-home-header-image');
     }
   },
 );
-
 
 /*
  * =========================================
@@ -432,87 +259,51 @@ router.post(
 
   requireAdmin,
 
-  requireAdminRole([
-    'super_admin',
-    'store_admin',
-  ]),
+  requireAdminRole(['super_admin', 'store_admin']),
 
-  requireAdminPermission(
-    'store.content.manage',
-  ),
+  requireAdminPermission('store.content.manage'),
 
-  upload.single(
-    'imageFile',
-  ),
+  upload.single('imageFile'),
 
   async (req, res) => {
     try {
-      let headerImage =
-        await KasyoraHomeHeaderImage
-          .findOne({});
+      let headerImage = await KasyoraHomeHeaderImage.findOne({
+        singletonKey: 'main',
+      });
 
-      const before =
-        homeHeaderImageSnapshot(
-          headerImage,
-        );
+      const before = homeHeaderImageSnapshot(headerImage);
 
-      const isCreate =
-        !headerImage;
+      const isCreate = !headerImage;
 
-      const hadImageUpload =
-        !!req.file;
-
+      const hadImageUpload = !!req.file;
 
       if (!headerImage) {
-        headerImage =
-          new KasyoraHomeHeaderImage({
-            image:
-              '',
+        headerImage = new KasyoraHomeHeaderImage({
+          singletonKey: 'main',
 
-            active:
-              String(
-                req.body.active || '',
-              ) === 'on',
-          });
+          image: '',
+
+          active: String(req.body.active || '') === 'on',
+        });
       } else {
-        headerImage.active =
-          String(
-            req.body.active || '',
-          ) === 'on';
+        headerImage.active = String(req.body.active || '') === 'on';
       }
 
+      const oldImage = headerImage.image || '';
 
-      const oldImage =
-        headerImage.image ||
-        '';
-
-      let uploadedNewImage =
-        '';
-
+      let uploadedNewImage = '';
 
       if (req.file) {
-        uploadedNewImage =
-          await uploadImageToS3(
-            req.file,
-            'kasyora-home-header-image',
-          );
+        uploadedNewImage = await uploadImageToS3(req.file, 'kasyora-home-header-image');
 
-        headerImage.image =
-          uploadedNewImage;
+        headerImage.image = uploadedNewImage;
       }
-
 
       if (!headerImage.image) {
-        req.flash(
-          'error',
-          'Home header image is required. Please upload an image.',
-        );
+        req.flash('error', 'Home header image is required. Please upload an image.');
 
-        return res.redirect(
-          '/admin/kasyora-home-header-image/edit',
-        );
+        return res.redirect('/admin/kasyora-home-header-image/edit');
       }
-
 
       /*
        * Save MongoDB before deleting the old
@@ -530,18 +321,12 @@ router.post(
          * The previous database URL and
          * previous S3 object remain intact.
          */
-        if (
-          uploadedNewImage &&
-          uploadedNewImage !== oldImage
-        ) {
-          await deleteS3ImageByUrl(
-            uploadedNewImage,
-          );
+        if (uploadedNewImage && uploadedNewImage !== oldImage) {
+          await deleteS3ImageByUrl(uploadedNewImage);
         }
 
         throw saveErr;
       }
-
 
       /*
        * MongoDB now safely references the
@@ -550,81 +335,44 @@ router.post(
        * The previous S3 object may now
        * be removed.
        */
-      if (
-        uploadedNewImage &&
-        oldImage &&
-        oldImage !== uploadedNewImage
-      ) {
-        await deleteS3ImageByUrl(
-          oldImage,
-        );
+      if (uploadedNewImage && oldImage && oldImage !== uploadedNewImage) {
+        await deleteS3ImageByUrl(oldImage);
       }
 
+      await logAdminAction(req, {
+        action: isCreate
+          ? 'store.kasyora_home_header_image.create'
+          : 'store.kasyora_home_header_image.update',
 
-      await logAdminAction(
-        req,
-        {
-          action:
-            isCreate
-              ? 'store.kasyora_home_header_image.create'
-              : 'store.kasyora_home_header_image.update',
+        entityType: 'kasyora_home_header_image',
 
-          entityType:
-            'kasyora_home_header_image',
+        entityId: String(headerImage._id),
 
-          entityId:
-            String(
-              headerImage._id,
-            ),
+        status: 'success',
 
-          status:
-            'success',
+        before,
 
-          before,
+        after: homeHeaderImageSnapshot(headerImage),
 
-          after:
-            homeHeaderImageSnapshot(
-              headerImage,
-            ),
+        meta: {
+          section: 'kasyora_home_header_image',
 
-          meta: {
-            section:
-              'kasyora_home_header_image',
-
-            uploadedImage:
-              hadImageUpload,
-          },
+          uploadedImage: hadImageUpload,
         },
-      );
+      });
 
+      req.flash('success', 'Kasyora Home header image saved successfully.');
 
-      req.flash(
-        'success',
-        'Kasyora Home header image saved successfully.',
-      );
-
-      return res.redirect(
-        '/admin/kasyora-home-header-image',
-      );
+      return res.redirect('/admin/kasyora-home-header-image');
     } catch (err) {
-      console.error(
-        '❌ save Kasyora Home header image error:',
-        err,
-      );
+      console.error('❌ save Kasyora Home header image error:', err);
 
-      req.flash(
-        'error',
-        err.message ||
-          'Failed to save the Kasyora Home header image.',
-      );
+      req.flash('error', err.message || 'Failed to save the Kasyora Home header image.');
 
-      return res.redirect(
-        '/admin/kasyora-home-header-image',
-      );
+      return res.redirect('/admin/kasyora-home-header-image');
     }
   },
 );
-
 
 /*
  * =========================================
@@ -639,150 +387,83 @@ router.get(
 
   requireAdmin,
 
-  requireAdminRole([
-    'super_admin',
-    'store_admin',
-  ]),
+  requireAdminRole(['super_admin', 'store_admin']),
 
-  requireAdminPermission(
-    'store.content.manage',
-  ),
+  requireAdminPermission('store.content.manage'),
 
   async (req, res) => {
     try {
-      const headerImage =
-        await KasyoraHomeHeaderImage
-          .findOne({});
+      const headerImage = await KasyoraHomeHeaderImage.findOne({
+        singletonKey: 'main',
+      });
 
       if (!headerImage) {
-        req.flash(
-          'error',
-          'Kasyora Home header image not found.',
-        );
+        req.flash('error', 'Kasyora Home header image not found.');
 
-        return res.redirect(
-          '/admin/kasyora-home-header-image',
-        );
+        return res.redirect('/admin/kasyora-home-header-image');
       }
 
+      const before = homeHeaderImageSnapshot(headerImage);
 
-      const before =
-        homeHeaderImageSnapshot(
-          headerImage,
-        );
-
-
-      headerImage.active =
-        !headerImage.active;
+      headerImage.active = !headerImage.active;
 
       await headerImage.save();
 
+      await logAdminAction(req, {
+        action: headerImage.active
+          ? 'store.kasyora_home_header_image.activate'
+          : 'store.kasyora_home_header_image.deactivate',
 
-      await logAdminAction(
-        req,
-        {
-          action:
-            headerImage.active
-              ? 'store.kasyora_home_header_image.activate'
-              : 'store.kasyora_home_header_image.deactivate',
+        entityType: 'kasyora_home_header_image',
 
-          entityType:
-            'kasyora_home_header_image',
+        entityId: String(headerImage._id),
 
-          entityId:
-            String(
-              headerImage._id,
-            ),
+        status: 'success',
 
-          status:
-            'success',
+        before,
 
-          before,
+        after: homeHeaderImageSnapshot(headerImage),
 
-          after:
-            homeHeaderImageSnapshot(
-              headerImage,
-            ),
-
-          meta: {
-            section:
-              'kasyora_home_header_image',
-          },
+        meta: {
+          section: 'kasyora_home_header_image',
         },
-      );
-
+      });
 
       req.flash(
         'success',
         `Kasyora Home header image ${
-          headerImage.active
-            ? 'activated'
-            : 'deactivated'
+          headerImage.active ? 'activated' : 'deactivated'
         } successfully.`,
       );
 
-      return res.redirect(
-        '/admin/kasyora-home-header-image',
-      );
+      return res.redirect('/admin/kasyora-home-header-image');
     } catch (err) {
-      console.error(
-        '❌ toggle Kasyora Home header image error:',
-        err,
-      );
+      console.error('❌ toggle Kasyora Home header image error:', err);
 
-      req.flash(
-        'error',
-        'Failed to toggle the Kasyora Home header image.',
-      );
+      req.flash('error', 'Failed to toggle the Kasyora Home header image.');
 
-      return res.redirect(
-        '/admin/kasyora-home-header-image',
-      );
+      return res.redirect('/admin/kasyora-home-header-image');
     }
   },
 );
-
 
 /*
  * =========================================
  * MULTER / ROUTE ERROR HANDLER
  * =========================================
  */
-router.use(
-  (
-    err,
-    req,
-    res,
-    _next,
-  ) => {
-    console.error(
-      '❌ adminKasyoraHomeHeaderImage route error:',
-      err.message,
-    );
+router.use((err, req, res, _next) => {
+  console.error('❌ adminKasyoraHomeHeaderImage route error:', err.message);
 
-    req.flash(
-      'error',
-      err.message ||
-        'Unexpected server error.',
-    );
+  req.flash('error', err.message || 'Unexpected server error.');
 
-    const back =
-      req.get(
-        'referer',
-      );
+  const back = req.get('referer');
 
-    if (back) {
-      return res.redirect(
-        back,
-      );
-    }
+  if (back) {
+    return res.redirect(back);
+  }
 
-    return res.redirect(
-      '/admin/kasyora-home-header-image',
-    );
-  },
-);
+  return res.redirect('/admin/kasyora-home-header-image');
+});
 
-
-module.exports =
-  router;
+module.exports = router;
