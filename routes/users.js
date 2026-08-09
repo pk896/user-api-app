@@ -12,7 +12,7 @@ const { sendMail, _FROM } = require('../utils/mailer');
 const ResetToken = require('../models/ResetToken');
 const requireAdmin = require('../middleware/requireAdmin');
 
-// Optional wishlist model (if you have it)
+// Optional wishlist model (if you have it).
 let Wishlist = null;
 try {
   Wishlist = require('../models/Wishlist');
@@ -22,7 +22,7 @@ try {
 
 /* -----------------------------------------------------
    Small helpers so renders never crash even if your EJS
-   doesn't reference these
+   doesn't reference these.
 ----------------------------------------------------- */
 function pageStyles() {
   return '';

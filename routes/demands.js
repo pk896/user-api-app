@@ -129,7 +129,9 @@ router.get('/aggregate', requireBusiness, async (req, res) => {
     const nameSummaryMap = new Map();
     for (const d of demandsAll) {
       const type = (d.type || '').trim();
-      if (type) {typesSet.add(type);}
+      if (type) {
+        typesSet.add(type);
+      }
 
       const qty = Number(d.quantity || 0);
       totalQtyAll += qty;
@@ -148,7 +150,9 @@ router.get('/aggregate', requireBusiness, async (req, res) => {
       const entry = nameSummaryMap.get(key);
       entry.requests += 1;
       entry.totalQty += qty;
-      if (type) {entry.types.add(type);}
+      if (type) {
+        entry.types.add(type);
+      }
     }
 
     const summaryByName = Array.from(nameSummaryMap.values())
