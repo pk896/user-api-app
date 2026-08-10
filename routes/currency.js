@@ -7,6 +7,7 @@ const {
   isSupportedUserCurrency,
   normalizeCurrencyCode,
   getSupportedUserCurrencies,
+  getPopularUserCurrencies,
 } = require('../utils/currency/currencyConfig');
 
 const {
@@ -30,6 +31,7 @@ function safeReturnPath(value) {
     !raw ||
     !raw.startsWith('/') ||
     raw.startsWith('//') ||
+    raw.includes('\\') ||
     raw.includes('\r') ||
     raw.includes('\n')
   ) {
@@ -45,12 +47,37 @@ function safeReturnPath(value) {
  * Useful for browser JavaScript and future mobile clients.
  */
 router.get('/', (req, res) => {
+  const supportedCurrencies =
+    getSupportedUserCurrencies();
+
+  /*
+   * This response contains the customer's session-derived
+   * currency preference.
+   *
+   * Do not allow browsers, CDNs or shared intermediaries
+   * to cache one customer's currency state.
+   */
+  res.set(
+    'Cache-Control',
+    'no-store',
+  );
+
   return res.json({
     ok: true,
-    baseCurrency: getBaseCurrency(),
-    userCurrency: getUserCurrency(req),
-    supportedCurrencies:
-      getSupportedUserCurrencies(),
+
+    baseCurrency:
+      getBaseCurrency(),
+
+    userCurrency:
+      getUserCurrency(req),
+
+    supportedCurrencyCount:
+      supportedCurrencies.length,
+
+    popularCurrencies:
+      getPopularUserCurrencies(),
+
+    supportedCurrencies,
   });
 });
 

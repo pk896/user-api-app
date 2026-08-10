@@ -94,43 +94,91 @@ async function _getFxRateFromCustom(from, to) {
   return rate;
 }
 
-async function _getFxRateFromFrankfurter(from, to) {
-  const hosts = [
-    'https://api.frankfurter.dev/v1/latest',
-    'https://api.frankfurter.app/latest', // fallback
-  ];
+async function _getFxRateFromFrankfurter(
+  from,
+  to,
+) {
+  /*
+   * Frankfurter v2 provides a dedicated endpoint for one
+   * currency pair:
+   *
+   * /v2/rate/{base}/{quote}
+   *
+   * Keep this provider implementation completely behind
+   * getFxRate() so existing storefront and payment callers
+   * do not need to change.
+   */
+  const baseUrl =
+    'https://api.frankfurter.dev/v2/rate';
 
-  let lastErr = null;
+  const url =
+    `${baseUrl}/` +
+    `${encodeURIComponent(from)}/` +
+    `${encodeURIComponent(to)}`;
 
-  for (const baseUrl of hosts) {
-    try {
-      const url =
-        `${baseUrl}?base=${encodeURIComponent(from)}&symbols=${encodeURIComponent(to)}`;
+  let res;
 
-      const res = await fetchWithTimeout(
-        url,
-        { method: 'GET', headers: { Accept: 'application/json' } },
-        FX_TIMEOUT_MS
-      );
+  try {
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+      },
+      FX_TIMEOUT_MS,
+    );
+  } catch (error) {
+    const err = new Error(
+      `FX Frankfurter request failed for ${from}->${to}: ` +
+      `${error?.message || 'network error'}`,
+    );
 
-      const json = await res.json().catch(() => ({}));
-      const rate = Number(json?.rates?.[to]);
+    err.code =
+      'FX_LOOKUP_FAILED';
 
-      if (res.ok && Number.isFinite(rate) && rate > 0) {
-        return rate;
-      }
-
-      lastErr = new Error(`Frankfurter bad response from ${baseUrl}`);
-    } catch (e) {
-      lastErr = e;
-    }
+    throw err;
   }
 
-  const err = new Error(
-    `FX Frankfurter lookup failed for ${from}->${to}: ${lastErr?.message || 'unknown error'}`
-  );
-  err.code = 'FX_LOOKUP_FAILED';
-  throw err;
+  const json =
+    await res
+      .json()
+      .catch(() => ({}));
+
+  const rate =
+    Number(
+      json?.rate,
+    );
+
+  if (
+    !res.ok ||
+    !Number.isFinite(rate) ||
+    rate <= 0
+  ) {
+    const providerMessage =
+      String(
+        json?.message || '',
+      )
+        .trim()
+        .slice(0, 300);
+
+    const err = new Error(
+      `FX Frankfurter lookup failed for ${from}->${to}` +
+      (
+        providerMessage
+          ? `: ${providerMessage}`
+          : ` (HTTP ${res.status})`
+      ),
+    );
+
+    err.code =
+      'FX_LOOKUP_FAILED';
+
+    throw err;
+  }
+
+  return rate;
 }
 
 async function getFxRate(fromCcy, toCcy) {

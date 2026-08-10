@@ -124,24 +124,53 @@
   const CURRENCY_RATE_RAW = Number(
     typeof displayRate !== 'undefined'
       ? displayRate
-      : 1
+      : NaN
   );
 
   const CURRENCY_RATE =
     Number.isFinite(CURRENCY_RATE_RAW) &&
     CURRENCY_RATE_RAW > 0
       ? CURRENCY_RATE_RAW
-      : 1;
+      : (
+          BASE_CURRENCY === CURRENCY
+            ? 1
+            : NaN
+        );
+
+  const CURRENCY_DECIMALS_RAW =
+    Number(
+      typeof displayCurrencyDetails !== 'undefined' &&
+      displayCurrencyDetails &&
+      typeof displayCurrencyDetails.decimals !== 'undefined'
+        ? displayCurrencyDetails.decimals
+        : 2
+    );
+
+  const CURRENCY_DECIMALS =
+    Number.isInteger(CURRENCY_DECIMALS_RAW) &&
+    CURRENCY_DECIMALS_RAW >= 0 &&
+    CURRENCY_DECIMALS_RAW <= 4
+      ? CURRENCY_DECIMALS_RAW
+      : 2;
 
   function convertBaseToDisplay(amount) {
     const baseAmount = Number(amount || 0);
 
-    if (!Number.isFinite(baseAmount)) {
+    if (
+      !Number.isFinite(baseAmount) ||
+      !Number.isFinite(CURRENCY_RATE) ||
+      CURRENCY_RATE <= 0
+    ) {
       return 0;
     }
 
     return Number(
-      (baseAmount * CURRENCY_RATE).toFixed(2)
+      (
+        baseAmount *
+        CURRENCY_RATE
+      ).toFixed(
+        CURRENCY_DECIMALS
+      )
     );
   }
 
@@ -289,23 +318,41 @@
       convertBaseToDisplay(amount);
 
     try {
-      const formatted = new Intl.NumberFormat(
-        undefined,
-        {
-          style: 'currency',
-          currency: CURRENCY,
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }
-      ).format(convertedAmount);
+      const formatted =
+        new Intl.NumberFormat(
+          undefined,
+          {
+            style:
+              'currency',
+
+            currency:
+              CURRENCY,
+
+            minimumFractionDigits:
+              CURRENCY_DECIMALS,
+
+            maximumFractionDigits:
+              CURRENCY_DECIMALS
+          }
+        ).format(
+          convertedAmount
+        );
 
       if (CURRENCY === 'ZAR') {
-        return formatted.replace(/^ZAR\s?/, 'R');
+        return formatted.replace(
+          /^ZAR\s?/,
+          'R'
+        );
       }
 
       return formatted;
     } catch (error) {
-      return `${CURRENCY} ${convertedAmount.toFixed(2)}`;
+      return (
+        `${CURRENCY} ` +
+        convertedAmount.toFixed(
+          CURRENCY_DECIMALS
+        )
+      );
     }
   }
 

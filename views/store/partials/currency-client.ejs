@@ -3,18 +3,66 @@
   (function () {
     const BASE_CURRENCY = "<%= String(typeof baseCurrency !== 'undefined' ? baseCurrency : 'USD').trim().toUpperCase() || 'USD' %>";
     const DISPLAY_CURRENCY = "<%= String(typeof displayCurrency !== 'undefined' ? displayCurrency : BASE_CURRENCY).trim().toUpperCase() || BASE_CURRENCY %>";
-    const DISPLAY_RATE = Number("<%= Number(typeof displayRate !== 'undefined' ? displayRate : 1) %>") || 1;
+    const DISPLAY_RATE_RAW =
+      Number(
+        "<%= Number(
+          typeof displayRate !== 'undefined'
+            ? displayRate
+            : NaN
+        ) %>"
+      );
+
+    const DISPLAY_RATE =
+      Number.isFinite(DISPLAY_RATE_RAW) &&
+      DISPLAY_RATE_RAW > 0
+        ? DISPLAY_RATE_RAW
+        : (
+            BASE_CURRENCY === DISPLAY_CURRENCY
+              ? 1
+              : NaN
+          );
+
+    const DISPLAY_DECIMALS_RAW =
+      Number(
+        "<%= Number(
+          typeof displayCurrencyDetails !== 'undefined' &&
+          displayCurrencyDetails &&
+          typeof displayCurrencyDetails.decimals !== 'undefined'
+            ? displayCurrencyDetails.decimals
+            : 2
+        ) %>"
+      );
+
+    const DISPLAY_DECIMALS =
+      Number.isInteger(
+        DISPLAY_DECIMALS_RAW
+      ) &&
+      DISPLAY_DECIMALS_RAW >= 0 &&
+      DISPLAY_DECIMALS_RAW <= 4
+        ? DISPLAY_DECIMALS_RAW
+        : 2;
 
     function roundCurrency(value) {
+      const factor =
+        10 ** DISPLAY_DECIMALS;
+
       return Math.round(
-        (Number(value || 0) + Number.EPSILON) * 100
-      ) / 100;
+        (
+          Number(value || 0) +
+          Number.EPSILON
+        ) *
+        factor
+      ) / factor;
     }
 
     function convertBaseToDisplay(amount) {
       const baseAmount = Number(amount || 0);
 
-      if (!Number.isFinite(baseAmount)) {
+      if (
+        !Number.isFinite(baseAmount) ||
+        !Number.isFinite(DISPLAY_RATE) ||
+        DISPLAY_RATE <= 0
+      ) {
         return 0;
       }
 
@@ -27,15 +75,23 @@
       const displayAmount =
         convertBaseToDisplay(amount);
 
-      const formatted = new Intl.NumberFormat(
-        undefined,
-        {
-          style: 'currency',
-          currency: DISPLAY_CURRENCY,
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }
-      ).format(displayAmount);
+      const formatted =
+        new Intl.NumberFormat(
+          undefined,
+          {
+            style: 'currency',
+            currency:
+              DISPLAY_CURRENCY,
+
+            minimumFractionDigits:
+              DISPLAY_DECIMALS,
+
+            maximumFractionDigits:
+              DISPLAY_DECIMALS
+          }
+        ).format(
+          displayAmount
+        );
 
       if (DISPLAY_CURRENCY === 'ZAR') {
         return formatted.replace(/^ZAR\s?/, 'R');
@@ -45,11 +101,23 @@
     }
 
     window.KasyoraCurrency = Object.freeze({
-      baseCurrency: BASE_CURRENCY,
-      displayCurrency: DISPLAY_CURRENCY,
-      displayRate: DISPLAY_RATE,
-      convertBaseToDisplay: convertBaseToDisplay,
-      formatBaseAmount: formatDisplayMoneyFromBase
+      baseCurrency:
+        BASE_CURRENCY,
+
+      displayCurrency:
+        DISPLAY_CURRENCY,
+
+      displayRate:
+        DISPLAY_RATE,
+
+      displayDecimals:
+        DISPLAY_DECIMALS,
+
+      convertBaseToDisplay:
+        convertBaseToDisplay,
+
+      formatBaseAmount:
+        formatDisplayMoneyFromBase
     });
   })();
 </script>

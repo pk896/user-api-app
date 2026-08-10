@@ -1,14 +1,18 @@
 <!-- views/store/partials/currency-selector.ejs -->
 <%
   const CURRENCY_SELECTOR_ACTIVE = String(
-    typeof userCurrency !== 'undefined'
-      ? userCurrency
+    typeof displayCurrency !== 'undefined'
+      ? displayCurrency
       : (
-          typeof displayCurrency !== 'undefined'
-            ? displayCurrency
-            : 'USD'
+          typeof userCurrency !== 'undefined'
+            ? userCurrency
+            : (
+                typeof baseCurrency !== 'undefined'
+                  ? baseCurrency
+                  : ''
+              )
         )
-  ).trim().toUpperCase() || 'USD';
+  ).trim().toUpperCase();
 
   const CURRENCY_SELECTOR_OPTIONS =
     Array.isArray(
@@ -53,6 +57,11 @@
     CURRENCY_SELECTOR_IS_MOBILE
       ? 'dropdown-menu rounded shadow-sm border-0 p-2 w-100'
       : 'dropdown-menu dropdown-menu-end rounded shadow-sm border-0 p-2';
+
+  const CURRENCY_SELECTOR_SEARCH_ID =
+    CURRENCY_SELECTOR_IS_MOBILE
+      ? 'kasyoraCurrencySearchMobile'
+      : 'kasyoraCurrencySearchDesktop';
 %>
 
 <div class="<%= CURRENCY_SELECTOR_WRAPPER_CLASS %>">
@@ -93,47 +102,325 @@
       </div>
 
       <div class="small text-muted">
-        Payments remain securely processed in USD.
+        This selection changes displayed prices only.
+        Payment currency is handled separately at checkout.
       </div>
     </div>
 
-    <% CURRENCY_SELECTOR_OPTIONS.forEach(function(currencyOption) { %>
-    <form
-      method="post"
-      action="/currency/select"
-      class="m-0"
-    >
-      <input
-        type="hidden"
-        name="currency"
-        value="<%= currencyOption.code %>"
+    <div class="px-1 pb-2">
+      <label
+        for="<%= CURRENCY_SELECTOR_SEARCH_ID %>"
+        class="form-label small fw-semibold text-primary mb-1"
       >
+        Find a display currency
+      </label>
 
-      <input
-        type="hidden"
-        name="returnTo"
-        value="<%= CURRENCY_SELECTOR_RETURN_TO %>"
-      >
-
-      <button
-        type="submit"
-        class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 <%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'active bg-primary text-white' : '' %>"
-      >
-        <span class="d-inline-flex align-items-center">
-          <span class="fw-semibold flex-shrink-0">
-            <%= currencyOption.symbol %>
-          </span>
-
-          <span class="ms-2">
-            <%= currencyOption.name %>
-          </span>
+      <div class="input-group input-group-sm">
+        <span
+          class="input-group-text bg-white"
+          aria-hidden="true"
+        >
+          <i class="fas fa-search text-muted"></i>
         </span>
 
-        <small class="flex-shrink-0 <%= currencyOption.code === CURRENCY_SELECTOR_ACTIVE ? 'text-white' : 'text-muted' %>">
-          <%= currencyOption.code %>
-        </small>
-      </button>
-    </form>
-    <% }) %>
+        <input
+          id="<%= CURRENCY_SELECTOR_SEARCH_ID %>"
+          type="search"
+          class="form-control"
+          placeholder="Search name or code"
+          autocomplete="off"
+          aria-label="Search display currencies"
+        >
+      </div>
+
+      <div class="small text-muted mt-1">
+        Popular currencies are shown first. Search to access all
+        <%= CURRENCY_SELECTOR_OPTIONS.length %> currencies.
+      </div>
+    </div>
+
+    <div
+      id="<%= CURRENCY_SELECTOR_SEARCH_ID %>Options"
+      style="max-height: 260px; overflow-y: auto;"
+    >
+      <% CURRENCY_SELECTOR_OPTIONS.forEach(function(currencyOption) { %>
+      <%
+        const CURRENCY_OPTION_IS_ACTIVE =
+          currencyOption.code ===
+          CURRENCY_SELECTOR_ACTIVE;
+
+        const CURRENCY_OPTION_IS_POPULAR =
+          currencyOption.popular === true;
+
+        const CURRENCY_OPTION_SEARCH_VALUE =
+          (
+            String(currencyOption.code || '') +
+            ' ' +
+            String(currencyOption.name || '')
+          )
+            .trim()
+            .toLowerCase();
+
+        const CURRENCY_OPTION_CODE_SEARCH =
+          String(
+            currencyOption.code || ''
+          )
+            .trim()
+            .toLowerCase();
+
+        const CURRENCY_OPTION_NAME_SEARCH =
+          String(
+            currencyOption.name || ''
+          )
+            .trim()
+            .toLowerCase();
+      %>
+
+      <form
+        method="post"
+        action="/currency/select"
+        class="m-0"
+        data-currency-option="true"
+        data-currency-popular="<%= CURRENCY_OPTION_IS_POPULAR ? 'true' : 'false' %>"
+        data-currency-active="<%= CURRENCY_OPTION_IS_ACTIVE ? 'true' : 'false' %>"
+        data-currency-search-value="<%= CURRENCY_OPTION_SEARCH_VALUE %>"
+        data-currency-code="<%= CURRENCY_OPTION_CODE_SEARCH %>"
+        data-currency-name="<%= CURRENCY_OPTION_NAME_SEARCH %>"
+      >
+        <input
+          type="hidden"
+          name="currency"
+          value="<%= currencyOption.code %>"
+        >
+
+        <input
+          type="hidden"
+          name="returnTo"
+          value="<%= CURRENCY_SELECTOR_RETURN_TO %>"
+        >
+
+        <button
+          type="submit"
+          class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 py-2 px-3 <%= CURRENCY_OPTION_IS_ACTIVE ? 'active bg-primary text-white' : '' %>"
+        >
+          <span class="d-inline-flex align-items-center overflow-hidden">
+            <span class="fw-semibold flex-shrink-0">
+              <%= currencyOption.symbol %>
+            </span>
+
+            <span class="ms-2 text-truncate">
+              <%= currencyOption.name %>
+            </span>
+          </span>
+
+          <small class="flex-shrink-0 <%= CURRENCY_OPTION_IS_ACTIVE ? 'text-white' : 'text-muted' %>">
+            <%= currencyOption.code %>
+          </small>
+        </button>
+      </form>
+      <% }) %>
+
+      <div
+        id="<%= CURRENCY_SELECTOR_SEARCH_ID %>NoResults"
+        class="small text-muted text-center py-3 d-none"
+        aria-live="polite"
+      >
+        No matching currency found.
+      </div>
+    </div>
+
+    <script nonce="<%= nonce %>">
+      (function () {
+        const searchInput =
+          document.getElementById(
+            "<%= CURRENCY_SELECTOR_SEARCH_ID %>"
+          );
+
+        const optionsContainer =
+          document.getElementById(
+            "<%= CURRENCY_SELECTOR_SEARCH_ID %>Options"
+          );
+
+        const noResults =
+          document.getElementById(
+            "<%= CURRENCY_SELECTOR_SEARCH_ID %>NoResults"
+          );
+
+        if (
+          !searchInput ||
+          !optionsContainer
+        ) {
+          return;
+        }
+
+        const currencyOptions =
+          Array.from(
+            optionsContainer.querySelectorAll(
+              '[data-currency-option="true"]'
+            )
+          );
+
+        const originalCurrencyOrder =
+          currencyOptions.slice();
+
+        function normalizeValue(value) {
+          return String(value || '')
+            .trim()
+            .toLowerCase();
+        }
+
+        function currencyRank(
+          currencyOption,
+          query
+        ) {
+          const code =
+            normalizeValue(
+              currencyOption.dataset.currencyCode
+            );
+
+          const name =
+            normalizeValue(
+              currencyOption.dataset.currencyName
+            );
+
+          /*
+          * Best matches appear first:
+          *
+          * 0 = exact currency code
+          * 1 = code starts with search
+          * 2 = name starts with search
+          * 3 = name/code contains search
+          */
+          if (code === query) {
+            return 0;
+          }
+
+          if (code.startsWith(query)) {
+            return 1;
+          }
+
+          if (name.startsWith(query)) {
+            return 2;
+          }
+
+          return 3;
+        }
+
+        function filterCurrencies() {
+          const query =
+            normalizeValue(
+              searchInput.value
+            );
+
+          let visibleCount = 0;
+
+          currencyOptions.forEach(
+            function (currencyOption) {
+              const searchValue =
+                normalizeValue(
+                  currencyOption.dataset
+                    .currencySearchValue
+                );
+
+              const matches =
+                !query ||
+                searchValue.includes(query);
+
+              currencyOption.classList.toggle(
+                'd-none',
+                !matches
+              );
+
+              if (matches) {
+                visibleCount += 1;
+              }
+            }
+          );
+
+          /*
+          * While searching, move the strongest matches
+          * to the top of the scrollable results list.
+          */
+          if (query) {
+            currencyOptions
+              .filter(function(currencyOption) {
+                return !currencyOption.classList
+                  .contains('d-none');
+              })
+              .sort(function(left, right) {
+                const rankDifference =
+                  currencyRank(left, query) -
+                  currencyRank(right, query);
+
+                if (rankDifference !== 0) {
+                  return rankDifference;
+                }
+
+                return normalizeValue(
+                  left.dataset.currencyName
+                ).localeCompare(
+                  normalizeValue(
+                    right.dataset.currencyName
+                  )
+                );
+              })
+              .forEach(function(currencyOption) {
+                optionsContainer.appendChild(
+                  currencyOption
+                );
+              });
+          } else {
+            originalCurrencyOrder.forEach(
+              function(currencyOption) {
+                optionsContainer.appendChild(
+                  currencyOption
+                );
+              }
+            );
+          }
+
+          noResults?.classList.toggle(
+            'd-none',
+            visibleCount > 0
+          );
+
+          /*
+          * Always bring the first matching result
+          * to the top of the scrollable list.
+          */
+          optionsContainer.scrollTop = 0;
+        }
+
+        /*
+        * Keep the Bootstrap dropdown open while the
+        * customer uses the currency search.
+        */
+        searchInput.addEventListener(
+          'click',
+          function (event) {
+            event.stopPropagation();
+          }
+        );
+
+        searchInput.addEventListener(
+          'keydown',
+          function (event) {
+            event.stopPropagation();
+
+            if (event.key === 'Escape') {
+              searchInput.value = '';
+              filterCurrencies();
+            }
+          }
+        );
+
+        searchInput.addEventListener(
+          'input',
+          filterCurrencies
+        );
+
+        filterCurrencies();
+      })();
+    </script>
   </div>
 </div>

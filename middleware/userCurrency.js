@@ -43,8 +43,11 @@ async function userCurrencyMiddleware(req, res, next) {
 
       const rate = Number(
         conversion?.fx?.rate ??
-        conversion?.value ??
-        1,
+          (
+            baseCurrency === requestedCurrency
+              ? 1
+              : NaN
+          ),
       );
 
       if (!Number.isFinite(rate) || rate <= 0) {
@@ -78,11 +81,51 @@ async function userCurrencyMiddleware(req, res, next) {
         `Prices are currently shown in ${baseCurrency}.`;
     }
 
+    /*
+    * Resolve metadata for the currency that will actually be
+    * rendered on this response.
+    *
+    * Usually:
+    *
+    * requestedCurrency === displayCurrency
+    *
+    * During an FX-provider failure:
+    *
+    * requestedCurrency may remain INR/JPY/etc.
+    * displayCurrency safely falls back to BASE_CURRENCY.
+    */
+    const displayCurrencyDetails =
+      currencyData.supportedUserCurrencies
+        .find(
+          (currency) =>
+            currency.code ===
+            displayCurrency,
+        ) || {
+          code:
+            displayCurrency,
+
+          name:
+            displayCurrency,
+
+          symbol:
+            displayCurrency,
+
+          locale:
+            'en',
+
+          decimals:
+            2,
+
+          popular:
+            false,
+        };
+
     const requestCurrencyData = {
       ...currencyData,
 
       requestedCurrency,
       displayCurrency,
+      displayCurrencyDetails,
       displayRate,
       displayFx,
       currencyConversionAvailable,
@@ -90,13 +133,14 @@ async function userCurrencyMiddleware(req, res, next) {
     };
 
     /*
-     * Server routes and APIs can read the same resolved context.
-     */
-    req.currency = requestCurrencyData;
+    * Server routes and APIs can read the same resolved context.
+    */
+    req.currency =
+      requestCurrencyData;
 
     /*
-     * Globally available to EJS templates.
-     */
+    * Globally available to EJS templates.
+    */
     res.locals.baseCurrency =
       baseCurrency;
 
@@ -108,6 +152,9 @@ async function userCurrencyMiddleware(req, res, next) {
 
     res.locals.displayCurrency =
       displayCurrency;
+
+    res.locals.displayCurrencyDetails =
+      displayCurrencyDetails;
 
     res.locals.displayRate =
       displayRate;

@@ -133,33 +133,121 @@ async function convertAmountForUser(
   amount,
   options = {},
 ) {
-  const normalizedAmount = normalizeMoneyAmount(amount);
+  const normalizedAmount =
+    normalizeMoneyAmount(amount);
 
-  const fromCurrency = normalizeCurrencyCode(
-    options.fromCurrency || getBaseCurrency(),
-  );
+  const fromCurrency =
+    normalizeCurrencyCode(
+      options.fromCurrency ||
+      getBaseCurrency(),
+    );
 
-  const toCurrency = normalizeCurrencyCode(
-    options.toCurrency || getUserCurrency(req),
-  );
+  const toCurrency =
+    normalizeCurrencyCode(
+      options.toCurrency ||
+      getUserCurrency(req),
+    );
 
-  const converted = await convertMoneyAmount(
-    normalizedAmount,
-    fromCurrency,
-    toCurrency,
-  );
+  if (!isSupportedUserCurrency(toCurrency)) {
+    const err = new Error(
+      `Unsupported display currency: ${toCurrency}`,
+    );
+
+    err.code =
+      'USER_CURRENCY_NOT_SUPPORTED';
+
+    throw err;
+  }
+
+  const converted =
+    await convertMoneyAmount(
+      normalizedAmount,
+      fromCurrency,
+      toCurrency,
+    );
+
+  const rate =
+    Number(
+      converted?.fx?.rate ??
+      (
+        fromCurrency === toCurrency
+          ? 1
+          : NaN
+      ),
+    );
+
+  if (
+    !Number.isFinite(rate) ||
+    rate <= 0
+  ) {
+    const err = new Error(
+      `Invalid display FX rate for ${fromCurrency}->${toCurrency}.`,
+    );
+
+    err.code =
+      'USER_CURRENCY_RATE_INVALID';
+
+    throw err;
+  }
+
+  const currencyDetails =
+    getSupportedUserCurrency(
+      toCurrency,
+    );
+
+  const displayDecimalsRaw =
+    Number(
+      currencyDetails?.decimals,
+    );
+
+  const displayDecimals =
+    Number.isInteger(
+      displayDecimalsRaw,
+    ) &&
+    displayDecimalsRaw >= 0 &&
+    displayDecimalsRaw <= 4
+      ? displayDecimalsRaw
+      : 2;
+
+  const displayValue =
+    Number(
+      (
+        normalizedAmount *
+        rate
+      ).toFixed(
+        displayDecimals,
+      ),
+    );
 
   return {
-    baseValue: Number(normalizedAmount.toFixed(2)),
-    baseCurrency: fromCurrency,
+    /*
+     * BASE_CURRENCY remains Kasyora's authoritative
+     * accounting amount.
+     */
+    baseValue:
+      Number(
+        normalizedAmount.toFixed(2),
+      ),
 
-    displayValue: Number(
-      Number(converted.value || 0).toFixed(2),
-    ),
+    baseCurrency:
+      fromCurrency,
 
-    displayCurrency: toCurrency,
+    /*
+     * Display rounding follows the selected currency.
+     *
+     * Examples:
+     *
+     * JPY -> 0 decimals
+     * USD -> 2 decimals
+     * KWD -> 3 decimals
+     */
+    displayValue,
 
-    fx: converted.fx || null,
+    displayCurrency:
+      toCurrency,
+
+    fx:
+      converted.fx || null,
   };
 }
 
@@ -186,22 +274,41 @@ async function convertAmountsForUser(
     options.fromCurrency || getBaseCurrency(),
   );
 
-  const toCurrency = normalizeCurrencyCode(
-    options.toCurrency || getUserCurrency(req),
-  );
+  const toCurrency =
+    normalizeCurrencyCode(
+      options.toCurrency ||
+      getUserCurrency(req),
+    );
+
+  if (!isSupportedUserCurrency(toCurrency)) {
+    const err = new Error(
+      `Unsupported display currency: ${toCurrency}`,
+    );
+
+    err.code =
+      'USER_CURRENCY_NOT_SUPPORTED';
+
+    throw err;
+  }
 
   /*
-   * Get one conversion result for 1 unit.
-   * Your FX utility caches and deduplicates this lookup.
-   */
-  const unitConversion = await convertMoneyAmount(
-    1,
-    fromCurrency,
-    toCurrency,
-  );
+  * Get one conversion result for 1 unit.
+  * Your FX utility caches and deduplicates this lookup.
+  */
+  const unitConversion =
+    await convertMoneyAmount(
+      1,
+      fromCurrency,
+      toCurrency,
+    );
 
   const rate = Number(
-    unitConversion?.fx?.rate ?? 1,
+    unitConversion?.fx?.rate ??
+      (
+        fromCurrency === toCurrency
+          ? 1
+          : NaN
+      ),
   );
 
   if (!Number.isFinite(rate) || rate <= 0) {
@@ -213,14 +320,56 @@ async function convertAmountsForUser(
     throw err;
   }
 
+  /*
+  * Display rounding must follow the selected display
+  * currency rather than assuming two decimal places.
+  *
+  * Examples:
+  *
+  * JPY -> 0 decimals
+  * USD -> 2 decimals
+  * KWD -> 3 decimals
+  */
+  const currencyDetails =
+    getSupportedUserCurrency(
+      toCurrency,
+    );
+
+  const displayDecimalsRaw =
+    Number(
+      currencyDetails?.decimals,
+    );
+
+  const displayDecimals =
+    Number.isInteger(
+      displayDecimalsRaw,
+    ) &&
+    displayDecimalsRaw >= 0 &&
+    displayDecimalsRaw <= 4
+      ? displayDecimalsRaw
+      : 2;
+
   return {
-    baseCurrency: fromCurrency,
-    displayCurrency: toCurrency,
+    baseCurrency:
+      fromCurrency,
+
+    displayCurrency:
+      toCurrency,
+
     rate,
 
-    values: normalizedAmounts.map((amount) =>
-      Number((amount * rate).toFixed(2)),
-    ),
+    values:
+      normalizedAmounts.map(
+        (amount) =>
+          Number(
+            (
+              amount *
+              rate
+            ).toFixed(
+              displayDecimals,
+            ),
+          ),
+      ),
 
     fx: {
       ...(unitConversion.fx || {}),
