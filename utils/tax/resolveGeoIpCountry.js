@@ -5,196 +5,175 @@ const {
   normalizeCountryCode,
 } = require('./taxConfig');
 
+const {
+  firstHeaderValue,
+  resolveTrustedHeaderCountry:
+    resolveNeutralTrustedHeaderCountry,
+  resolveGeoIpCountry:
+    resolveNeutralGeoIpCountry,
+} = require('../geo/resolveGeoIpCountry');
+
 /*
- * Kasyora provisional GeoIP-country resolver
- * ==========================================
+ * Kasyora tax GeoIP compatibility wrapper
+ * ========================================
  *
- * This helper has no third-party Node.js GeoIP dependency.
+ * The actual trusted infrastructure-country detection now lives in:
  *
- * GeoIP is used only as a provisional storefront convenience.
- * It must never become authoritative for:
+ * utils/geo/resolveGeoIpCountry.js
  *
- * - checkout VAT;
- * - PayPal totals;
- * - completed orders;
- * - invoices;
- * - receipts;
- * - refunds.
+ * This file remains in place so the existing tax flow can continue
+ * importing:
  *
- * Priority elsewhere in the application remains:
+ * ../utils/tax/resolveGeoIpCountry
  *
- * 1. Validated checkout shipping address
- * 2. Customer-selected delivery country
- * 3. Provisional GeoIP country
- * 4. Configured default country
+ * without changing the working provisional VAT flow.
+ *
+ * This wrapper performs only the small amount of tax-compatible
+ * country normalization required by the existing callers.
+ *
+ * It must not:
+ *
+ * - calculate VAT;
+ * - resolve tax treatment;
+ * - alter checkout tax;
+ * - alter PayPal totals;
+ * - alter completed orders.
  */
 
 /*
- * Country headers may be supplied by a trusted CDN or hosting proxy.
+ * Preserve the existing tax helper API.
  *
- * Examples:
+ * The neutral GeoIP resolver already:
  *
- * Cloudflare:
- * CF-IPCountry
+ * - takes the first forwarded header value;
+ * - uppercases the country code;
+ * - rejects XX;
+ * - rejects T1;
+ * - validates a two-letter country code.
  *
- * AWS CloudFront:
- * CloudFront-Viewer-Country
- *
- * Vercel:
- * X-Vercel-IP-Country
- *
- * These headers must not be trusted unless the deployment owner has
- * explicitly enabled them and the trusted proxy removes any matching
- * browser-supplied header before forwarding the request.
- */
-const TRUST_GEO_COUNTRY_HEADERS =
-  String(
-    process.env.TRUST_GEO_COUNTRY_HEADERS ||
-    'false',
-  )
-    .trim()
-    .toLowerCase() === 'true';
-
-/*
- * Normalize a possible request-header value.
- *
- * Express header values may be strings or arrays.
- */
-function firstHeaderValue(value) {
-  if (Array.isArray(value)) {
-    return String(value[0] || '')
-      .trim();
-  }
-
-  return String(value || '')
-    .split(',')[0]
-    .trim();
-}
-
-/*
- * Some providers use special values when no country can be resolved.
- *
- * Cloudflare examples include:
- *
- * XX = unknown
- * T1 = Tor network
- *
- * Neither is an ISO 3166-1 alpha-2 delivery country that should drive
- * Kasyora's provisional tax presentation.
+ * This final normalizeCountryCode() call keeps the tax subsystem's
+ * own country normalization boundary intact.
  */
 function normalizeGeoCountryHeader(value) {
-  const rawValue =
-    firstHeaderValue(value)
+  const trustedValue =
+    firstHeaderValue(value);
+
+  const normalized =
+    String(trustedValue || '')
+      .trim()
       .toUpperCase();
 
   if (
-    !rawValue ||
-    rawValue === 'XX' ||
-    rawValue === 'T1'
+    !normalized ||
+    normalized === 'XX' ||
+    normalized === 'T1'
   ) {
     return '';
   }
 
   return normalizeCountryCode(
-    rawValue,
+    normalized,
     '',
   );
 }
 
 /*
- * Find a country supplied by an explicitly trusted infrastructure
- * provider.
+ * Preserve the existing tax-facing trusted-header helper.
  *
- * We intentionally do not read X-Forwarded-For and perform a local
- * database lookup. This avoids vulnerable GeoIP dependencies and
- * avoids treating a browser-provided header as authoritative.
+ * Infrastructure parsing is delegated to the neutral resolver.
  */
 function resolveTrustedHeaderCountry(req) {
+  const neutralResult =
+    resolveNeutralTrustedHeaderCountry(
+      req,
+    );
+
+  const countryCode =
+    normalizeCountryCode(
+      neutralResult?.countryCode,
+      '',
+    );
+
   if (
-    !TRUST_GEO_COUNTRY_HEADERS
+    neutralResult?.success !== true ||
+    !countryCode
   ) {
     return {
       success: false,
+
       countryCode: '',
+
       provider: '',
     };
   }
 
-  const candidates = [
-    {
-      provider: 'cloudflare',
-      value:
-        req?.headers?.['cf-ipcountry'],
-    },
-    {
-      provider: 'aws-cloudfront',
-      value:
-        req?.headers?.[
-          'cloudfront-viewer-country'
-        ],
-    },
-    {
-      provider: 'vercel',
-      value:
-        req?.headers?.[
-          'x-vercel-ip-country'
-        ],
-    },
-  ];
-
-  for (const candidate of candidates) {
-    const countryCode =
-      normalizeGeoCountryHeader(
-        candidate.value,
-      );
-
-    if (countryCode) {
-      return {
-        success: true,
-        countryCode,
-        provider:
-          candidate.provider,
-      };
-    }
-  }
-
   return {
-    success: false,
-    countryCode: '',
-    provider: '',
+    success: true,
+
+    countryCode,
+
+    provider:
+      String(
+        neutralResult.provider || '',
+      )
+        .trim()
+        .slice(0, 100),
   };
 }
 
 /*
- * Resolve a provisional country from trusted request infrastructure.
+ * Preserve the existing tax-facing GeoIP helper.
  *
- * An unsuccessful result is expected and safe.
+ * The neutral resolver determines the visitor country.
  *
- * The later tax-country middleware will fall back to:
- *
- * DEFAULT_TAX_COUNTRY_CODE
- *
- * until the customer selects a delivery country.
+ * This wrapper then keeps the result compatible with the existing
+ * tax-country middleware.
  */
 function resolveGeoIpCountry(req) {
-  const trustedHeaderResult =
-    resolveTrustedHeaderCountry(req);
+  const neutralResult =
+    resolveNeutralGeoIpCountry(
+      req,
+    );
+
+  const countryCode =
+    normalizeCountryCode(
+      neutralResult?.countryCode,
+      '',
+    );
+
+  if (
+    neutralResult?.success !== true ||
+    !countryCode
+  ) {
+    return {
+      success: false,
+
+      countryCode: '',
+
+      provider: '',
+    };
+  }
 
   return {
-    success:
-      trustedHeaderResult.success,
+    success: true,
 
-    countryCode:
-      trustedHeaderResult.countryCode,
+    countryCode,
 
     provider:
-      trustedHeaderResult.provider,
+      String(
+        neutralResult.provider || '',
+      )
+        .trim()
+        .slice(0, 100),
   };
 }
 
 module.exports = {
   firstHeaderValue,
+
   normalizeGeoCountryHeader,
+
   resolveTrustedHeaderCountry,
+
   resolveGeoIpCountry,
 };

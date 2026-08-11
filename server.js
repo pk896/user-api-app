@@ -641,6 +641,18 @@ app.get(
             }
           : null,
 
+      /*
+       * Preserve only the customer's explicit display-currency
+       * selection across secure session regeneration.
+       *
+       * GeoIP-derived automatic currency is never stored in
+       * req.session.userCurrency, so there is nothing automatic
+       * to preserve here.
+       */
+      userCurrency: String(req.session?.userCurrency || '')
+        .trim()
+        .toUpperCase(),
+
       theme: req.session?.theme || null,
 
       returnTo: req.session?.returnTo || null,
@@ -685,6 +697,19 @@ app.get(
 
           selectedAt: keep.taxCountrySelection.selectedAt || new Date().toISOString(),
         };
+      }
+
+      /*
+       * Restore only a structurally valid explicit customer
+       * display-currency preference.
+       *
+       * The normal currency resolver will still validate this
+       * against currencyConfig.js before actually using it.
+       *
+       * No GeoIP currency is created or stored here.
+       */
+      if (/^[A-Z]{3}$/.test(keep.userCurrency)) {
+        req.session.userCurrency = keep.userCurrency;
       }
 
       if (keep.theme) {
@@ -862,8 +887,7 @@ const adminShopHeaderImage = require('./routes/adminShopHeaderImage');
  *
  * This flow uses only BusinessSignupHeaderImage.
  */
-const adminBusinessSignupHeaderImage =
-  require('./routes/adminBusinessSignupHeaderImage');
+const adminBusinessSignupHeaderImage = require('./routes/adminBusinessSignupHeaderImage');
 
 /*
  * Standalone Kasyora Business Login Header Image
@@ -871,11 +895,9 @@ const adminBusinessSignupHeaderImage =
  *
  * This flow uses only BusinessLoginHeaderImage.
  */
-const adminBusinessLoginHeaderImage =
-  require('./routes/adminBusinessLoginHeaderImage');
+const adminBusinessLoginHeaderImage = require('./routes/adminBusinessLoginHeaderImage');
 
-const adminKasyoraHomeHeaderImage =
-  require('./routes/adminKasyoraHomeHeaderImage');
+const adminKasyoraHomeHeaderImage = require('./routes/adminKasyoraHomeHeaderImage');
 
 const adminWarehousingDispenseRoutes = require('./routes/adminWarehousingDispense');
 const adminCeoAuditRoutes = require('./routes/adminCeoAudit');

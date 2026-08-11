@@ -30,6 +30,45 @@
       : '/store';
 
   /*
+   * Currency-resolution state
+   * =========================
+   *
+   * requestedCurrencyAutomatic describes how the customer's
+   * requested display currency was resolved:
+   *
+   * true:
+   * GeoIP or BASE_CURRENCY automatic resolution.
+   *
+   * false:
+   * explicit customer selection.
+   *
+   * Default to true for defensive compatibility if this partial
+   * is rendered somewhere without the new middleware locals.
+   */
+  const CURRENCY_SELECTOR_IS_AUTOMATIC =
+    typeof requestedCurrencyAutomatic !== 'undefined'
+      ? requestedCurrencyAutomatic === true
+      : true;
+
+  const CURRENCY_SELECTOR_SOURCE =
+    String(
+      typeof requestedCurrencySource !== 'undefined'
+        ? requestedCurrencySource
+        : 'BASE_CURRENCY'
+    )
+      .trim()
+      .toUpperCase();
+
+  const CURRENCY_SELECTOR_COUNTRY_CODE =
+    String(
+      typeof requestedCurrencyCountryCode !== 'undefined'
+        ? requestedCurrencyCountryCode
+        : ''
+    )
+      .trim()
+      .toUpperCase();
+
+  /*
    * The same currency selector is shared by:
    *
    * - the compact desktop topbar;
@@ -65,29 +104,17 @@
 %>
 
 <div class="<%= CURRENCY_SELECTOR_WRAPPER_CLASS %>">
-  <button
-    type="button"
-    class="<%= CURRENCY_SELECTOR_BUTTON_CLASS %>"
-    data-bs-toggle="dropdown"
-    aria-expanded="false"
-    aria-label="Choose display currency"
-  >
+  <button type="button" class="<%= CURRENCY_SELECTOR_BUTTON_CLASS %>" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Choose display currency">
     <% if (CURRENCY_SELECTOR_IS_MOBILE) { %>
     <span class="d-inline-flex align-items-center gap-2">
-      <i
-        class="fas fa-coins text-primary"
-        aria-hidden="true"
-      ></i>
+      <i class="fas fa-coins text-primary" aria-hidden="true"></i>
 
       <span class="fw-semibold">
         <%= CURRENCY_SELECTOR_ACTIVE %>
       </span>
     </span>
     <% } else { %>
-    <i
-      class="fas fa-coins text-primary"
-      aria-hidden="true"
-    ></i>
+    <i class="fas fa-coins text-primary" aria-hidden="true"></i>
 
     <span class="fw-semibold">
       <%= CURRENCY_SELECTOR_ACTIVE %>
@@ -105,32 +132,62 @@
         This selection changes displayed prices only.
         Payment currency is handled separately at checkout.
       </div>
+
+      <div class="mt-2">
+        <% if (CURRENCY_SELECTOR_IS_AUTOMATIC) { %>
+        <div class="d-flex align-items-center justify-content-between gap-2 border rounded px-2 py-2">
+          <span class="d-inline-flex align-items-center gap-2">
+            <i class="fas fa-location-dot text-primary" aria-hidden="true"></i>
+
+            <span>
+              <span class="small fw-semibold">
+                Automatic currency
+              </span>
+
+              <span class="small text-muted d-block">
+                <% if (
+                  CURRENCY_SELECTOR_SOURCE === 'GEO_IP' &&
+                  CURRENCY_SELECTOR_COUNTRY_CODE
+                ) { %>
+                Detected from <%= CURRENCY_SELECTOR_COUNTRY_CODE %>
+                <% } else { %>
+                Using Kasyora's default currency
+                <% } %>
+              </span>
+            </span>
+          </span>
+
+          <span class="badge bg-light text-primary border">
+            On
+          </span>
+        </div>
+        <% } else { %>
+        <form method="post" action="/currency/reset" class="m-0">
+          <input type="hidden" name="returnTo" value="<%= CURRENCY_SELECTOR_RETURN_TO %>">
+
+          <button type="submit" class="btn btn-sm btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-2">
+            <i class="fas fa-location-dot" aria-hidden="true"></i>
+
+            <span>
+              Use automatic currency
+            </span>
+          </button>
+        </form>
+        <% } %>
+      </div>
     </div>
 
     <div class="px-1 pb-2">
-      <label
-        for="<%= CURRENCY_SELECTOR_SEARCH_ID %>"
-        class="form-label small fw-semibold text-primary mb-1"
-      >
+      <label for="<%= CURRENCY_SELECTOR_SEARCH_ID %>" class="form-label small fw-semibold text-primary mb-1">
         Find a display currency
       </label>
 
       <div class="input-group input-group-sm">
-        <span
-          class="input-group-text bg-white"
-          aria-hidden="true"
-        >
+        <span class="input-group-text bg-white" aria-hidden="true">
           <i class="fas fa-search text-muted"></i>
         </span>
 
-        <input
-          id="<%= CURRENCY_SELECTOR_SEARCH_ID %>"
-          type="search"
-          class="form-control"
-          placeholder="Search name or code"
-          autocomplete="off"
-          aria-label="Search display currencies"
-        >
+        <input id="<%= CURRENCY_SELECTOR_SEARCH_ID %>" type="search" class="form-control" placeholder="Search name or code" autocomplete="off" aria-label="Search display currencies">
       </div>
 
       <div class="small text-muted mt-1">
@@ -139,10 +196,7 @@
       </div>
     </div>
 
-    <div
-      id="<%= CURRENCY_SELECTOR_SEARCH_ID %>Options"
-      style="max-height: 260px; overflow-y: auto;"
-    >
+    <div id="<%= CURRENCY_SELECTOR_SEARCH_ID %>Options" style="max-height: 260px; overflow-y: auto;">
       <% CURRENCY_SELECTOR_OPTIONS.forEach(function(currencyOption) { %>
       <%
         const CURRENCY_OPTION_IS_ACTIVE =
@@ -176,33 +230,12 @@
             .toLowerCase();
       %>
 
-      <form
-        method="post"
-        action="/currency/select"
-        class="m-0"
-        data-currency-option="true"
-        data-currency-popular="<%= CURRENCY_OPTION_IS_POPULAR ? 'true' : 'false' %>"
-        data-currency-active="<%= CURRENCY_OPTION_IS_ACTIVE ? 'true' : 'false' %>"
-        data-currency-search-value="<%= CURRENCY_OPTION_SEARCH_VALUE %>"
-        data-currency-code="<%= CURRENCY_OPTION_CODE_SEARCH %>"
-        data-currency-name="<%= CURRENCY_OPTION_NAME_SEARCH %>"
-      >
-        <input
-          type="hidden"
-          name="currency"
-          value="<%= currencyOption.code %>"
-        >
+      <form method="post" action="/currency/select" class="m-0" data-currency-option="true" data-currency-popular="<%= CURRENCY_OPTION_IS_POPULAR ? 'true' : 'false' %>" data-currency-active="<%= CURRENCY_OPTION_IS_ACTIVE ? 'true' : 'false' %>" data-currency-search-value="<%= CURRENCY_OPTION_SEARCH_VALUE %>" data-currency-code="<%= CURRENCY_OPTION_CODE_SEARCH %>" data-currency-name="<%= CURRENCY_OPTION_NAME_SEARCH %>">
+        <input type="hidden" name="currency" value="<%= currencyOption.code %>">
 
-        <input
-          type="hidden"
-          name="returnTo"
-          value="<%= CURRENCY_SELECTOR_RETURN_TO %>"
-        >
+        <input type="hidden" name="returnTo" value="<%= CURRENCY_SELECTOR_RETURN_TO %>">
 
-        <button
-          type="submit"
-          class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 py-2 px-3 <%= CURRENCY_OPTION_IS_ACTIVE ? 'active bg-primary text-white' : '' %>"
-        >
+        <button type="submit" class="dropdown-item rounded d-flex align-items-center justify-content-between gap-3 py-2 px-3 <%= CURRENCY_OPTION_IS_ACTIVE ? 'active bg-primary text-white' : '' %>">
           <span class="d-inline-flex align-items-center overflow-hidden">
             <span class="fw-semibold flex-shrink-0">
               <%= currencyOption.symbol %>
@@ -220,17 +253,13 @@
       </form>
       <% }) %>
 
-      <div
-        id="<%= CURRENCY_SELECTOR_SEARCH_ID %>NoResults"
-        class="small text-muted text-center py-3 d-none"
-        aria-live="polite"
-      >
+      <div id="<%= CURRENCY_SELECTOR_SEARCH_ID %>NoResults" class="small text-muted text-center py-3 d-none" aria-live="polite">
         No matching currency found.
       </div>
     </div>
 
     <script nonce="<%= nonce %>">
-      (function () {
+      (function() {
         const searchInput =
           document.getElementById(
             "<%= CURRENCY_SELECTOR_SEARCH_ID %>"
@@ -284,13 +313,13 @@
             );
 
           /*
-          * Best matches appear first:
-          *
-          * 0 = exact currency code
-          * 1 = code starts with search
-          * 2 = name starts with search
-          * 3 = name/code contains search
-          */
+           * Best matches appear first:
+           *
+           * 0 = exact currency code
+           * 1 = code starts with search
+           * 2 = name starts with search
+           * 3 = name/code contains search
+           */
           if (code === query) {
             return 0;
           }
@@ -315,15 +344,14 @@
           let visibleCount = 0;
 
           currencyOptions.forEach(
-            function (currencyOption) {
+            function(currencyOption) {
               const searchValue =
                 normalizeValue(
                   currencyOption.dataset
-                    .currencySearchValue
+                  .currencySearchValue
                 );
 
-              const matches =
-                !query ||
+              const matches = !query ||
                 searchValue.includes(query);
 
               currencyOption.classList.toggle(
@@ -338,9 +366,9 @@
           );
 
           /*
-          * While searching, move the strongest matches
-          * to the top of the scrollable results list.
-          */
+           * While searching, move the strongest matches
+           * to the top of the scrollable results list.
+           */
           if (query) {
             currencyOptions
               .filter(function(currencyOption) {
@@ -385,26 +413,26 @@
           );
 
           /*
-          * Always bring the first matching result
-          * to the top of the scrollable list.
-          */
+           * Always bring the first matching result
+           * to the top of the scrollable list.
+           */
           optionsContainer.scrollTop = 0;
         }
 
         /*
-        * Keep the Bootstrap dropdown open while the
-        * customer uses the currency search.
-        */
+         * Keep the Bootstrap dropdown open while the
+         * customer uses the currency search.
+         */
         searchInput.addEventListener(
           'click',
-          function (event) {
+          function(event) {
             event.stopPropagation();
           }
         );
 
         searchInput.addEventListener(
           'keydown',
-          function (event) {
+          function(event) {
             event.stopPropagation();
 
             if (event.key === 'Escape') {

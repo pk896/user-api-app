@@ -13,66 +13,166 @@ const {
   getSupportedUserCurrencies,
 } = require('./currencyConfig');
 
-function getBaseCurrency() {
-  const currency = normalizeCurrencyCode(
-    process.env.BASE_CURRENCY || 'USD',
-  );
+const {
+  resolveDisplayCurrency,
+} = require('./resolveDisplayCurrency');
 
-  return /^[A-Z]{3}$/.test(currency)
+/*
+ * Kasyora authoritative accounting currency.
+ *
+ * Display-currency selection must never change this value.
+ */
+function getBaseCurrency() {
+  const currency =
+    normalizeCurrencyCode(
+      process.env.BASE_CURRENCY ||
+        'USD',
+    );
+
+  return /^[A-Z]{3}$/.test(
+    currency,
+  )
     ? currency
     : 'USD';
 }
 
-function getUserCurrency(req) {
-  const baseCurrency = getBaseCurrency();
-
-  const sessionCurrency = normalizeCurrencyCode(
-    req?.session?.userCurrency,
+/*
+ * Resolve the complete customer display-currency context.
+ *
+ * Priority is owned by resolveDisplayCurrency.js:
+ *
+ * 1. Explicit customer selection
+ * 2. Trusted GeoIP country
+ * 3. BASE_CURRENCY fallback
+ *
+ * This helper does not perform FX conversion.
+ */
+function getUserCurrencyContext(req) {
+  return resolveDisplayCurrency(
+    req,
+    {
+      baseCurrency:
+        getBaseCurrency(),
+    },
   );
+}
 
-  if (isSupportedUserCurrency(sessionCurrency)) {
-    return sessionCurrency;
+/*
+ * Preserve the existing getUserCurrency() public API.
+ *
+ * Existing routes and helpers can continue asking only for the
+ * three-letter display currency code.
+ *
+ * The difference is that, when the customer has not manually
+ * selected a currency, GeoIP may now supply the automatic
+ * display currency.
+ */
+function getUserCurrency(req) {
+  const context =
+    getUserCurrencyContext(
+      req,
+    );
+
+  const currency =
+    normalizeCurrencyCode(
+      context?.currency,
+    );
+
+  if (
+    isSupportedUserCurrency(
+      currency,
+    )
+  ) {
+    return currency;
   }
 
   /*
-   * BASE_CURRENCY is the fallback only when it is also an enabled
-   * customer-facing currency.
+   * Defensive fallback.
    *
-   * Kasyora currently uses USD, which is enabled.
+   * resolveDisplayCurrency() already provides this protection,
+   * but keep getUserCurrency() independently safe because many
+   * existing Kasyora callers rely on this function.
    */
-  if (isSupportedUserCurrency(baseCurrency)) {
+  const baseCurrency =
+    getBaseCurrency();
+
+  if (
+    isSupportedUserCurrency(
+      baseCurrency,
+    )
+  ) {
     return baseCurrency;
   }
 
   return 'USD';
 }
 
-function setUserCurrency(req, currency) {
+/*
+ * Store an explicit customer choice.
+ *
+ * IMPORTANT:
+ *
+ * This session key means:
+ *
+ * "The customer deliberately selected this display currency."
+ *
+ * GeoIP must never write into this key.
+ */
+function setUserCurrency(
+  req,
+  currency,
+) {
   if (!req?.session) {
-    const err = new Error(
-      'A session is required before selecting a currency.',
-    );
+    const err =
+      new Error(
+        'A session is required before selecting a currency.',
+      );
 
-    err.code = 'USER_CURRENCY_SESSION_REQUIRED';
+    err.code =
+      'USER_CURRENCY_SESSION_REQUIRED';
+
     throw err;
   }
 
-  const normalized = normalizeCurrencyCode(currency);
-
-  if (!isSupportedUserCurrency(normalized)) {
-    const err = new Error(
-      `Unsupported customer currency: ${currency}`,
+  const normalized =
+    normalizeCurrencyCode(
+      currency,
     );
 
-    err.code = 'USER_CURRENCY_NOT_SUPPORTED';
+  if (
+    !isSupportedUserCurrency(
+      normalized,
+    )
+  ) {
+    const err =
+      new Error(
+        `Unsupported customer currency: ${currency}`,
+      );
+
+    err.code =
+      'USER_CURRENCY_NOT_SUPPORTED';
+
     throw err;
   }
 
-  req.session.userCurrency = normalized;
+  req.session.userCurrency =
+    normalized;
 
   return normalized;
 }
 
+/*
+ * Remove only the explicit customer preference.
+ *
+ * After this value is removed, the normal resolution policy
+ * becomes active again:
+ *
+ * GeoIP
+ * -> BASE_CURRENCY
+ *
+ * This function deliberately does not write a replacement
+ * currency into the session.
+ */
 function clearUserCurrency(req) {
   if (req?.session) {
     delete req.session.userCurrency;
@@ -80,48 +180,132 @@ function clearUserCurrency(req) {
 }
 
 function getUserCurrencyDetails(req) {
-  const currency = getUserCurrency(req);
+  const currency =
+    getUserCurrency(req);
 
   return (
-    getSupportedUserCurrency(currency) ||
-    getSupportedUserCurrency('USD')
+    getSupportedUserCurrency(
+      currency,
+    ) ||
+    getSupportedUserCurrency(
+      'USD',
+    )
   );
 }
 
+/*
+ * Build the standard currency presentation state used by routes
+ * and EJS templates.
+ *
+ * Existing fields are preserved.
+ *
+ * Additional fields expose where the requested display currency
+ * came from without changing any accounting values.
+ */
 function getCurrencyViewData(req) {
-  const baseCurrency = getBaseCurrency();
-  const userCurrency = getUserCurrency(req);
-  const userCurrencyDetails = getUserCurrencyDetails(req);
+  const baseCurrency =
+    getBaseCurrency();
+
+  const currencyContext =
+    getUserCurrencyContext(
+      req,
+    );
+
+  const userCurrency =
+    getUserCurrency(
+      req,
+    );
+
+  const userCurrencyDetails =
+    getSupportedUserCurrency(
+      userCurrency,
+    ) ||
+    getSupportedUserCurrency(
+      'USD',
+    );
 
   return {
     baseCurrency,
+
     userCurrency,
 
     /*
-     * displayCurrency is the clearer name for templates.
-     * userCurrency is retained because it describes where the
-     * value originated.
+     * displayCurrency is the clearer presentation name.
+     *
+     * userCurrency is retained for backward compatibility with
+     * existing Kasyora routes and views.
      */
-    displayCurrency: userCurrency,
+    displayCurrency:
+      userCurrency,
 
     userCurrencyDetails,
 
     supportedUserCurrencies:
       getSupportedUserCurrencies(),
 
-    fxProvider: FX_PROVIDER,
+    fxProvider:
+      FX_PROVIDER,
+
+    /*
+     * Display-currency resolution metadata.
+     *
+     * These values describe only customer presentation.
+     *
+     * They must never be interpreted as:
+     *
+     * - tax-country authority;
+     * - shipping destination;
+     * - checkout currency;
+     * - PayPal currency.
+     */
+    displayCurrencySource:
+      String(
+        currencyContext?.source ||
+          'BASE_CURRENCY',
+      )
+        .trim()
+        .toUpperCase(),
+
+    displayCurrencyAutomatic:
+      currencyContext?.automatic ===
+      true,
+
+    displayCurrencyCountryCode:
+      String(
+        currencyContext
+          ?.countryCode ||
+          '',
+      )
+        .trim()
+        .toUpperCase(),
+
+    displayCurrencyGeoProvider:
+      String(
+        currencyContext?.provider ||
+          '',
+      )
+        .trim()
+        .slice(0, 100),
   };
 }
 
 function normalizeMoneyAmount(value) {
-  const amount = Number(value);
+  const amount =
+    Number(value);
 
-  if (!Number.isFinite(amount)) {
-    const err = new Error(
-      'Invalid money amount supplied for display conversion.',
-    );
+  if (
+    !Number.isFinite(
+      amount,
+    )
+  ) {
+    const err =
+      new Error(
+        'Invalid money amount supplied for display conversion.',
+      );
 
-    err.code = 'USER_CURRENCY_AMOUNT_INVALID';
+    err.code =
+      'USER_CURRENCY_AMOUNT_INVALID';
+
     throw err;
   }
 
@@ -134,24 +318,31 @@ async function convertAmountForUser(
   options = {},
 ) {
   const normalizedAmount =
-    normalizeMoneyAmount(amount);
+    normalizeMoneyAmount(
+      amount,
+    );
 
   const fromCurrency =
     normalizeCurrencyCode(
       options.fromCurrency ||
-      getBaseCurrency(),
+        getBaseCurrency(),
     );
 
   const toCurrency =
     normalizeCurrencyCode(
       options.toCurrency ||
-      getUserCurrency(req),
+        getUserCurrency(req),
     );
 
-  if (!isSupportedUserCurrency(toCurrency)) {
-    const err = new Error(
-      `Unsupported display currency: ${toCurrency}`,
-    );
+  if (
+    !isSupportedUserCurrency(
+      toCurrency,
+    )
+  ) {
+    const err =
+      new Error(
+        `Unsupported display currency: ${toCurrency}`,
+      );
 
     err.code =
       'USER_CURRENCY_NOT_SUPPORTED';
@@ -169,20 +360,24 @@ async function convertAmountForUser(
   const rate =
     Number(
       converted?.fx?.rate ??
-      (
-        fromCurrency === toCurrency
-          ? 1
-          : NaN
-      ),
+        (
+          fromCurrency ===
+          toCurrency
+            ? 1
+            : NaN
+        ),
     );
 
   if (
-    !Number.isFinite(rate) ||
+    !Number.isFinite(
+      rate,
+    ) ||
     rate <= 0
   ) {
-    const err = new Error(
-      `Invalid display FX rate for ${fromCurrency}->${toCurrency}.`,
-    );
+    const err =
+      new Error(
+        `Invalid display FX rate for ${fromCurrency}->${toCurrency}.`,
+      );
 
     err.code =
       'USER_CURRENCY_RATE_INVALID';
@@ -226,7 +421,9 @@ async function convertAmountForUser(
      */
     baseValue:
       Number(
-        normalizedAmount.toFixed(2),
+        normalizedAmount.toFixed(
+          2,
+        ),
       ),
 
     baseCurrency:
@@ -247,43 +444,54 @@ async function convertAmountForUser(
       toCurrency,
 
     fx:
-      converted.fx || null,
+      converted.fx ||
+      null,
   };
 }
 
 /*
- * Converts several amounts using one rate lookup.
+ * Convert several amounts using one FX-rate lookup.
  *
- * This is better for pages containing many products because it does
- * not call convertMoneyAmount separately for every product.
+ * This remains preferable for pages containing many products
+ * because it avoids performing a separate FX request for every
+ * displayed product amount.
  */
 async function convertAmountsForUser(
   req,
   amounts,
   options = {},
 ) {
-  const source = Array.isArray(amounts)
-    ? amounts
-    : [];
+  const source =
+    Array.isArray(amounts)
+      ? amounts
+      : [];
 
-  const normalizedAmounts = source.map(
-    normalizeMoneyAmount,
-  );
+  const normalizedAmounts =
+    source.map(
+      normalizeMoneyAmount,
+    );
 
-  const fromCurrency = normalizeCurrencyCode(
-    options.fromCurrency || getBaseCurrency(),
-  );
+  const fromCurrency =
+    normalizeCurrencyCode(
+      options.fromCurrency ||
+        getBaseCurrency(),
+    );
 
   const toCurrency =
     normalizeCurrencyCode(
       options.toCurrency ||
-      getUserCurrency(req),
+        getUserCurrency(req),
     );
 
-  if (!isSupportedUserCurrency(toCurrency)) {
-    const err = new Error(
-      `Unsupported display currency: ${toCurrency}`,
-    );
+  if (
+    !isSupportedUserCurrency(
+      toCurrency,
+    )
+  ) {
+    const err =
+      new Error(
+        `Unsupported display currency: ${toCurrency}`,
+      );
 
     err.code =
       'USER_CURRENCY_NOT_SUPPORTED';
@@ -292,9 +500,10 @@ async function convertAmountsForUser(
   }
 
   /*
-  * Get one conversion result for 1 unit.
-  * Your FX utility caches and deduplicates this lookup.
-  */
+   * Get one conversion result for one unit.
+   *
+   * The FX utility already caches and deduplicates the lookup.
+   */
   const unitConversion =
     await convertMoneyAmount(
       1,
@@ -302,34 +511,44 @@ async function convertAmountsForUser(
       toCurrency,
     );
 
-  const rate = Number(
-    unitConversion?.fx?.rate ??
-      (
-        fromCurrency === toCurrency
-          ? 1
-          : NaN
-      ),
-  );
-
-  if (!Number.isFinite(rate) || rate <= 0) {
-    const err = new Error(
-      `Invalid display FX rate for ${fromCurrency}->${toCurrency}.`,
+  const rate =
+    Number(
+      unitConversion?.fx?.rate ??
+        (
+          fromCurrency ===
+          toCurrency
+            ? 1
+            : NaN
+        ),
     );
 
-    err.code = 'USER_CURRENCY_RATE_INVALID';
+  if (
+    !Number.isFinite(
+      rate,
+    ) ||
+    rate <= 0
+  ) {
+    const err =
+      new Error(
+        `Invalid display FX rate for ${fromCurrency}->${toCurrency}.`,
+      );
+
+    err.code =
+      'USER_CURRENCY_RATE_INVALID';
+
     throw err;
   }
 
   /*
-  * Display rounding must follow the selected display
-  * currency rather than assuming two decimal places.
-  *
-  * Examples:
-  *
-  * JPY -> 0 decimals
-  * USD -> 2 decimals
-  * KWD -> 3 decimals
-  */
+   * Display rounding follows the selected display currency
+   * rather than assuming two decimal places.
+   *
+   * Examples:
+   *
+   * JPY -> 0 decimals
+   * USD -> 2 decimals
+   * KWD -> 3 decimals
+   */
   const currencyDetails =
     getSupportedUserCurrency(
       toCurrency,
@@ -372,43 +591,73 @@ async function convertAmountsForUser(
       ),
 
     fx: {
-      ...(unitConversion.fx || {}),
+      ...(
+        unitConversion.fx ||
+        {}
+      ),
+
       rate,
-      from: fromCurrency,
-      to: toCurrency,
+
+      from:
+        fromCurrency,
+
+      to:
+        toCurrency,
     },
   };
 }
 
 function saveSession(req) {
-  return new Promise((resolve, reject) => {
-    if (
-      !req?.session ||
-      typeof req.session.save !== 'function'
-    ) {
-      resolve();
-      return;
-    }
-
-    req.session.save((err) => {
-      if (err) {
-        reject(err);
+  return new Promise(
+    (resolve, reject) => {
+      if (
+        !req?.session ||
+        typeof req.session.save !==
+          'function'
+      ) {
+        resolve();
         return;
       }
 
-      resolve();
-    });
-  });
+      req.session.save(
+        (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          resolve();
+        },
+      );
+    },
+  );
 }
 
 module.exports = {
   getBaseCurrency,
+
+  /*
+   * Newly exported complete resolution context.
+   *
+   * Existing callers do not need to use this unless they need
+   * to know whether the currency came from customer selection,
+   * GeoIP or BASE_CURRENCY.
+   */
+  getUserCurrencyContext,
+
   getUserCurrency,
+
   setUserCurrency,
+
   clearUserCurrency,
+
   getUserCurrencyDetails,
+
   getCurrencyViewData,
+
   convertAmountForUser,
+
   convertAmountsForUser,
+
   saveSession,
 };
