@@ -42,14 +42,54 @@
   const CO_DISPLAY_RATE_RAW = Number(
     typeof displayRate !== 'undefined'
       ? displayRate
-      : 1
+      : NaN
   );
 
+  /*
+   * displayCurrency/displayRate are already resolved safely by
+   * middleware/userCurrency.js.
+   *
+   * If FX conversion is unavailable, the middleware changes the
+   * actual rendered displayCurrency back to BASE_CURRENCY and
+   * supplies rate 1.
+   *
+   * Keep Checkout defensive too: rate 1 is safe without an FX
+   * lookup only when the rendered currency is BASE_CURRENCY.
+   */
   const CO_DISPLAY_RATE =
     Number.isFinite(CO_DISPLAY_RATE_RAW) &&
     CO_DISPLAY_RATE_RAW > 0
       ? CO_DISPLAY_RATE_RAW
-      : 1;
+      : (
+          CO_DISPLAY_CURRENCY === CO_BASE_CURRENCY
+            ? 1
+            : NaN
+        );
+
+  /*
+   * Visible Checkout amounts must use the fraction digits of the
+   * currency actually rendered to the customer.
+   *
+   * Examples:
+   *
+   * JPY -> 0 decimals
+   * USD -> 2 decimals
+   * KWD -> 3 decimals
+   */
+  const CO_DISPLAY_DECIMALS_RAW = Number(
+    typeof displayCurrencyDetails !== 'undefined' &&
+    displayCurrencyDetails &&
+    typeof displayCurrencyDetails.decimals !== 'undefined'
+      ? displayCurrencyDetails.decimals
+      : 2
+  );
+
+  const CO_DISPLAY_DECIMALS =
+    Number.isInteger(CO_DISPLAY_DECIMALS_RAW) &&
+    CO_DISPLAY_DECIMALS_RAW >= 0 &&
+    CO_DISPLAY_DECIMALS_RAW <= 4
+      ? CO_DISPLAY_DECIMALS_RAW
+      : 2;
 
   const CO_BRAND =
     typeof brandName !== 'undefined'
@@ -621,6 +661,12 @@
        * BASE_CURRENCY → DISPLAY_CURRENCY.
        */
       DISPLAY_RATE: Number(CO_DISPLAY_RATE),
+
+      /*
+       * Fraction digits for the currency actually rendered to the
+       * customer.
+       */
+      DISPLAY_DECIMALS: CO_DISPLAY_DECIMALS,
 
       /*
        * Currency loaded into the PayPal SDK.
@@ -1915,13 +1961,32 @@
       ).trim().toUpperCase() || BASE_CURRENCY;
 
       const DISPLAY_RATE_RAW =
-        Number(cfg.DISPLAY_RATE || 1);
+        Number(cfg.DISPLAY_RATE);
 
       const DISPLAY_RATE =
         Number.isFinite(DISPLAY_RATE_RAW) &&
         DISPLAY_RATE_RAW > 0 ?
         DISPLAY_RATE_RAW :
-        1;
+        (
+          DISPLAY_CURRENCY ===
+          BASE_CURRENCY ?
+          1 :
+          NaN
+        );
+
+      const DISPLAY_DECIMALS_RAW =
+        Number(
+          cfg.DISPLAY_DECIMALS
+        );
+
+      const DISPLAY_DECIMALS =
+        Number.isInteger(
+          DISPLAY_DECIMALS_RAW
+        ) &&
+        DISPLAY_DECIMALS_RAW >= 0 &&
+        DISPLAY_DECIMALS_RAW <= 4 ?
+        DISPLAY_DECIMALS_RAW :
+        2;
 
       const PAYPAL_CURRENCY = String(
         cfg.PAYPAL_CURRENCY || 'USD'
@@ -2213,18 +2278,22 @@
         const baseAmount =
           Number(amount || 0);
 
-        if (!Number.isFinite(baseAmount)) {
+        if (
+          !Number.isFinite(baseAmount) ||
+          !Number.isFinite(DISPLAY_RATE) ||
+          DISPLAY_RATE <= 0
+        ) {
           return 0;
         }
 
-        return Math.round(
+        return Number(
           (
             baseAmount *
-            DISPLAY_RATE +
-            Number.EPSILON
-          ) *
-          100
-        ) / 100;
+            DISPLAY_RATE
+          ).toFixed(
+            DISPLAY_DECIMALS
+          )
+        );
       }
 
       function formatCurrency(amount) {
@@ -2236,13 +2305,21 @@
             new Intl.NumberFormat(
               undefined, {
                 style: 'currency',
-                currency: DISPLAY_CURRENCY,
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              }
-            ).format(displayAmount);
 
-          if (DISPLAY_CURRENCY === 'ZAR') {
+                currency: DISPLAY_CURRENCY,
+
+                minimumFractionDigits: DISPLAY_DECIMALS,
+
+                maximumFractionDigits: DISPLAY_DECIMALS
+              }
+            ).format(
+              displayAmount
+            );
+
+          if (
+            DISPLAY_CURRENCY ===
+            'ZAR'
+          ) {
             return formatted.replace(
               /^ZAR\s?/,
               'R'
@@ -2254,7 +2331,9 @@
           return (
             DISPLAY_CURRENCY +
             ' ' +
-            displayAmount.toFixed(2)
+            displayAmount.toFixed(
+              DISPLAY_DECIMALS
+            )
           );
         }
       }
@@ -2320,9 +2399,9 @@
           const countryCode =
             value(input).toUpperCase();
 
-          return /^[A-Z]{2}$/.test(countryCode)
-            ? countryCode
-            : '';
+          return /^[A-Z]{2}$/.test(countryCode) ?
+            countryCode :
+            '';
         };
 
         /*

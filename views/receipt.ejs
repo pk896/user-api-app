@@ -42,14 +42,52 @@
   var RECEIPT_DISPLAY_RATE_RAW = Number(
     typeof displayRate !== 'undefined'
       ? displayRate
-      : 1
+      : NaN
   );
 
+  /*
+   * displayCurrency/displayRate are already resolved safely by
+   * middleware/userCurrency.js.
+   *
+   * If FX conversion is unavailable, that middleware changes the
+   * actual rendered displayCurrency back to BASE_CURRENCY and
+   * supplies rate 1.
+   *
+   * Keep the receipt defensive too: rate 1 is safe without an FX
+   * lookup only when the rendered display currency equals the
+   * authoritative BASE_CURRENCY.
+   */
   var RECEIPT_DISPLAY_RATE =
     Number.isFinite(RECEIPT_DISPLAY_RATE_RAW) &&
     RECEIPT_DISPLAY_RATE_RAW > 0
       ? RECEIPT_DISPLAY_RATE_RAW
-      : 1;
+      : (
+          RECEIPT_DISPLAY_CURRENCY === RECEIPT_BASE_CURRENCY
+            ? 1
+            : NaN
+        );
+
+  /*
+   * Customer-selected display currency decimals.
+   *
+   * These apply only to the approximate secondary equivalent.
+   * The official receipt amount continues to use the stored
+   * order currency's own normal fraction digits.
+   */
+  var RECEIPT_DISPLAY_DECIMALS_RAW = Number(
+    typeof displayCurrencyDetails !== 'undefined' &&
+    displayCurrencyDetails &&
+    typeof displayCurrencyDetails.decimals !== 'undefined'
+      ? displayCurrencyDetails.decimals
+      : 2
+  );
+
+  var RECEIPT_DISPLAY_DECIMALS =
+    Number.isInteger(RECEIPT_DISPLAY_DECIMALS_RAW) &&
+    RECEIPT_DISPLAY_DECIMALS_RAW >= 0 &&
+    RECEIPT_DISPLAY_DECIMALS_RAW <= 4
+      ? RECEIPT_DISPLAY_DECIMALS_RAW
+      : 2;
 
   var SHOW_RECEIPT_DISPLAY_EQUIVALENT =
     RECEIPT_DISPLAY_CURRENCY &&
@@ -141,33 +179,66 @@
    * Format the authoritative stored order amount.
    * This is the official receipt value.
    */
-  function formatCurrencyAmount(amount, currencyCode) {
+  function formatCurrencyAmount(
+    amount,
+    currencyCode,
+    explicitDecimals
+  ) {
     var value = Number(amount || 0);
-    var code = String(currencyCode || '').trim().toUpperCase();
+    var code = String(
+      currencyCode || ''
+    ).trim().toUpperCase();
 
     if (!Number.isFinite(value)) {
       value = 0;
     }
 
+    var decimalsRaw =
+      Number(explicitDecimals);
+
+    var hasExplicitDecimals =
+      Number.isInteger(decimalsRaw) &&
+      decimalsRaw >= 0 &&
+      decimalsRaw <= 4;
+
     if (!code) {
-      return value.toFixed(2);
+      return value.toFixed(
+        hasExplicitDecimals
+          ? decimalsRaw
+          : 2
+      );
     }
 
     try {
       /*
        * Use the customer's browser locale instead of forcing a
        * South African number format on every international receipt.
+       *
+       * When explicitDecimals is omitted, Intl uses the stored
+       * order currency's own normal fraction digits.
        */
-      var formatted = new Intl.NumberFormat(
-        undefined,
-        {
-          style: 'currency',
-          currency: code,
-          currencyDisplay: 'symbol',
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }
-      ).format(value);
+      var formatOptions = {
+        style: 'currency',
+        currency: code,
+        currencyDisplay: 'symbol'
+      };
+
+      if (hasExplicitDecimals) {
+        formatOptions.minimumFractionDigits =
+          decimalsRaw;
+
+        formatOptions.maximumFractionDigits =
+          decimalsRaw;
+      }
+
+      var formatter =
+        new Intl.NumberFormat(
+          undefined,
+          formatOptions
+        );
+
+      var formatted =
+        formatter.format(value);
 
       /*
        * Keep Kasyora's preferred compact ZAR presentation.
@@ -181,7 +252,50 @@
 
       return formatted;
     } catch (error) {
-      return code + ' ' + value.toFixed(2);
+      var fallbackDecimals = 2;
+
+      if (hasExplicitDecimals) {
+        fallbackDecimals =
+          decimalsRaw;
+      } else {
+        try {
+          var resolvedDecimals =
+            Number(
+              new Intl.NumberFormat(
+                undefined,
+                {
+                  style: 'currency',
+                  currency: code
+                }
+              )
+                .resolvedOptions()
+                .maximumFractionDigits
+            );
+
+          if (
+            Number.isInteger(
+              resolvedDecimals
+            ) &&
+            resolvedDecimals >= 0 &&
+            resolvedDecimals <= 4
+          ) {
+            fallbackDecimals =
+              resolvedDecimals;
+          }
+        } catch (nestedError) {
+          /*
+           * Keep the defensive default of 2.
+           */
+        }
+      }
+
+      return (
+        code +
+        ' ' +
+        value.toFixed(
+          fallbackDecimals
+        )
+      );
     }
   }
 
@@ -195,26 +309,38 @@
   function convertOrderToDisplay(amount) {
     var orderAmount = Number(amount || 0);
 
-    if (!Number.isFinite(orderAmount)) {
+    if (
+      !Number.isFinite(orderAmount) ||
+      !Number.isFinite(
+        RECEIPT_DISPLAY_RATE
+      ) ||
+      RECEIPT_DISPLAY_RATE <= 0
+    ) {
       return 0;
     }
 
     /*
      * Current Kasyora orders are stored in BASE_CURRENCY.
      * DISPLAY_RATE converts BASE_CURRENCY to the selected currency.
+     *
+     * This conversion affects only the approximate secondary
+     * equivalent shown on the receipt.
      */
     return Number(
       (
         orderAmount *
         RECEIPT_DISPLAY_RATE
-      ).toFixed(2)
+      ).toFixed(
+        RECEIPT_DISPLAY_DECIMALS
+      )
     );
   }
 
   function displayMoney(amount) {
     return formatCurrencyAmount(
       convertOrderToDisplay(amount),
-      RECEIPT_DISPLAY_CURRENCY
+      RECEIPT_DISPLAY_CURRENCY,
+      RECEIPT_DISPLAY_DECIMALS
     );
   }
 
