@@ -419,6 +419,280 @@
   }
 %>
 
+<%
+  /*
+   * Internal Kasyora Product structured data
+   * =========================================
+   *
+   * This describes only the current Internal Kasyora product.
+   *
+   * Pricing is intentionally NOT included yet because:
+   *
+   * - Product.price is authoritative in BASE_CURRENCY;
+   * - the visible display currency can change per customer;
+   * - provisional VAT can change according to destination;
+   * - checkout shipping address later becomes authoritative.
+   *
+   * We must not publish misleading Offer.price structured data.
+   */
+  const INTERNAL_PRODUCT_SCHEMA_SITE_URL =
+    String(
+      typeof siteUrl !== 'undefined' &&
+      siteUrl
+        ? siteUrl
+        : (
+            typeof appUrl !== 'undefined' &&
+            appUrl
+              ? appUrl
+              : 'https://kasyora.com'
+          )
+    )
+      .trim()
+      .replace(/\/+$/, '');
+
+  const INTERNAL_PRODUCT_SCHEMA_URL =
+    INTERNAL_PRODUCT_SCHEMA_SITE_URL +
+    '/store/product/' +
+    encodeURIComponent(
+      String(
+        product?.customId ||
+        ''
+      ).trim()
+    );
+
+  const INTERNAL_PRODUCT_SCHEMA_IMAGES =
+    [
+      product?.image,
+      product?.imageUrl,
+      ...(Array.isArray(product?.colorImages)
+        ? product.colorImages.map(function (entry) {
+            return entry?.imageUrl || '';
+          })
+        : [])
+    ]
+      .map(function (imageUrl) {
+        const raw =
+          String(
+            imageUrl ||
+            ''
+          ).trim();
+
+        if (!raw) {
+          return '';
+        }
+
+        if (/^https?:\/\//i.test(raw)) {
+          return raw;
+        }
+
+        return (
+          INTERNAL_PRODUCT_SCHEMA_SITE_URL +
+          '/' +
+          raw.replace(/^\/+/, '')
+        );
+      })
+      .filter(Boolean)
+      .filter(function (imageUrl, index, array) {
+        return array.indexOf(imageUrl) === index;
+      });
+
+  const INTERNAL_PRODUCT_SCHEMA = {
+    '@context': 'https://schema.org',
+
+    '@type': 'Product',
+
+    '@id':
+      INTERNAL_PRODUCT_SCHEMA_URL +
+      '#product',
+
+    url:
+      INTERNAL_PRODUCT_SCHEMA_URL,
+
+    name:
+      String(
+        product?.name ||
+        'Product'
+      ).trim(),
+
+    sku:
+      String(
+        product?.customId ||
+        ''
+      ).trim(),
+
+    category:
+      String(
+        product?.category ||
+        'Product'
+      ).trim(),
+
+    image:
+      INTERNAL_PRODUCT_SCHEMA_IMAGES,
+
+    description:
+      String(
+        product?.description ||
+        (
+          String(
+            product?.name ||
+            'Product'
+          ).trim() +
+          ' available on Kasyora.'
+        )
+      ).trim()
+  };
+
+  if (
+    Number.isFinite(
+      Number(
+        product?.avgRating
+      )
+    ) &&
+    Number(
+      product?.avgRating
+    ) > 0 &&
+    Number(
+      product?.avgRating
+    ) <= 5 &&
+    Number.isFinite(
+      Number(
+        product?.ratingsCount
+      )
+    ) &&
+    Number(
+      product?.ratingsCount
+    ) > 0
+  ) {
+    INTERNAL_PRODUCT_SCHEMA.aggregateRating = {
+      '@type':
+        'AggregateRating',
+
+      ratingValue:
+        Number(
+          Number(
+            product.avgRating
+          ).toFixed(2)
+        ),
+
+      ratingCount:
+        Math.max(
+          1,
+          Math.floor(
+            Number(
+              product.ratingsCount
+            )
+          )
+        ),
+
+      bestRating:
+        5,
+
+      worstRating:
+        1
+    };
+  }
+
+  function safeInternalProductSchemaJson(value) {
+    return JSON.stringify(
+      value
+    )
+      .replace(
+        /</g,
+        '\\u003c'
+      )
+      .replace(
+        />/g,
+        '\\u003e'
+      )
+      .replace(
+        /&/g,
+        '\\u0026'
+      );
+  }
+%>
+
+<script
+  type="application/ld+json"
+  nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>"
+><%- safeInternalProductSchemaJson(INTERNAL_PRODUCT_SCHEMA) %></script>
+
+<%
+  /*
+   * Internal product breadcrumb structured data
+   * ============================================
+   *
+   * Search hierarchy:
+   *
+   * Kasyora
+   * → Store
+   * → Shop
+   * → Current Internal product
+   */
+  const INTERNAL_PRODUCT_BREADCRUMB_SCHEMA = {
+    '@context': 'https://schema.org',
+
+    '@type': 'BreadcrumbList',
+
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+
+        position: 1,
+
+        name: 'Kasyora',
+
+        item:
+          INTERNAL_PRODUCT_SCHEMA_SITE_URL +
+          '/'
+      },
+
+      {
+        '@type': 'ListItem',
+
+        position: 2,
+
+        name: 'Store',
+
+        item:
+          INTERNAL_PRODUCT_SCHEMA_SITE_URL +
+          '/store'
+      },
+
+      {
+        '@type': 'ListItem',
+
+        position: 3,
+
+        name: 'Shop',
+
+        item:
+          INTERNAL_PRODUCT_SCHEMA_SITE_URL +
+          '/store/shop'
+      },
+
+      {
+        '@type': 'ListItem',
+
+        position: 4,
+
+        name:
+          String(
+            product?.name ||
+            'Product'
+          ).trim(),
+
+        item:
+          INTERNAL_PRODUCT_SCHEMA_URL
+      }
+    ]
+  };
+%>
+
+<script
+  type="application/ld+json"
+  nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>"
+><%- safeInternalProductSchemaJson(INTERNAL_PRODUCT_BREADCRUMB_SCHEMA) %></script>
+
 <!-- Spinner Start -->
 <div id="spinner" class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
   <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">

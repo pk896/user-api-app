@@ -509,6 +509,89 @@ const ACTIVE_CART = (
     '/store/shop?department=cj';
 %>
 
+<%
+  /*
+   * Shop page breadcrumb structured data
+   * =====================================
+   *
+   * Search hierarchy:
+   *
+   * Kasyora
+   * → Store
+   * → Shop
+   *
+   * The canonical Shop page remains /store/shop.
+   *
+   * Department, search, category, sort, pagination
+   * and section-anchor values are intentionally not
+   * included in the breadcrumb URLs.
+   */
+  const SHOP_BREADCRUMB_SITE_URL =
+    String(
+      typeof appUrl !== 'undefined' &&
+      appUrl
+        ? appUrl
+        : 'https://kasyora.com'
+    )
+      .trim()
+      .replace(/\/+$/, '');
+
+  const SHOP_BREADCRUMB_SCHEMA = {
+    '@context': 'https://schema.org',
+
+    '@type': 'BreadcrumbList',
+
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+
+        position: 1,
+
+        name: 'Kasyora',
+
+        item:
+          SHOP_BREADCRUMB_SITE_URL +
+          '/'
+      },
+
+      {
+        '@type': 'ListItem',
+
+        position: 2,
+
+        name: 'Store',
+
+        item:
+          SHOP_BREADCRUMB_SITE_URL +
+          '/store'
+      },
+
+      {
+        '@type': 'ListItem',
+
+        position: 3,
+
+        name: 'Shop',
+
+        item:
+          SHOP_BREADCRUMB_SITE_URL +
+          '/store/shop'
+      }
+    ]
+  };
+
+  function safeShopBreadcrumbJson(value) {
+    return JSON.stringify(value)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026');
+  }
+%>
+
+<script type="application/ld+json" nonce="<%= typeof nonce !== 'undefined' ? nonce : '' %>">
+  <%- safeShopBreadcrumbJson(SHOP_BREADCRUMB_SCHEMA) %>
+</script>
+
 <!-- Spinner Start -->
 <div id="spinner" class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
   <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">

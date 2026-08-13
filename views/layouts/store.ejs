@@ -1,81 +1,255 @@
 <!-- views/layouts/store.ejs -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
 
   <%
-    const layoutProduct = (typeof product !== 'undefined' && product) ? product : null;
-    const layoutVatRate = (typeof vatRate !== 'undefined' && vatRate !== null) ? Number(vatRate) : 0.15;
-    const layoutCurrency = String(typeof baseCurrency !== 'undefined' ? baseCurrency : 'USD').trim().toUpperCase() || 'USD';
-    const layoutSiteUrl = String(typeof siteUrl !== 'undefined' ? siteUrl : '').replace(/\/+$/, '');
+    /*
+     * Kasyora public Store SEO
+     * ========================
+     *
+     * APP_URL is the canonical production site identity.
+     * Render production:
+     * https://kasyora.com
+     *
+     * Local development:
+     * http://localhost:3000
+     */
+    const layoutProduct =
+      typeof product !== 'undefined' &&
+      product
+        ? product
+        : null;
 
-    function layoutMoney(amount) {
-      const n = Number(amount || 0);
-
-      try {
-        const formatted = new Intl.NumberFormat(undefined, {
-          style: 'currency',
-          currency: layoutCurrency,
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }).format(n);
-
-        if (layoutCurrency === 'ZAR') {
-          return formatted.replace(/^ZAR\s?/, 'R');
-        }
-
-        return formatted;
-      } catch (error) {
-        return layoutCurrency + ' ' + n.toFixed(2);
-      }
-    }
+    const layoutSiteUrl =
+      String(
+        typeof siteUrl !== 'undefined' &&
+        siteUrl
+          ? siteUrl
+          : (
+              typeof appUrl !== 'undefined' &&
+              appUrl
+                ? appUrl
+                : 'https://kasyora.com'
+            )
+      )
+        .trim()
+        .replace(/\/+$/, '');
 
     function layoutAbsoluteUrl(value) {
-      const raw = String(value || '').trim();
+      const raw =
+        String(value || '').trim();
 
-      if (!raw) return '';
-      if (/^https?:\/\//i.test(raw)) return raw;
-      if (!layoutSiteUrl) return raw;
+      if (!raw) {
+        return '';
+      }
 
-      return layoutSiteUrl + '/' + raw.replace(/^\/+/, '');
+      if (/^https?:\/\//i.test(raw)) {
+        return raw;
+      }
+
+      return (
+        layoutSiteUrl +
+        '/' +
+        raw.replace(/^\/+/, '')
+      );
     }
 
-    const layoutProductName = layoutProduct ? String(layoutProduct.name || 'Product').trim() : '';
-    const layoutProductCategory = layoutProduct ? String(layoutProduct.category || 'Product').trim() : '';
-    const layoutProductPrice = layoutProduct ? layoutMoney(Number(layoutProduct.price || 0) * (1 + layoutVatRate)) : '';
-    const layoutProductUrl = layoutProduct ? layoutAbsoluteUrl(layoutProduct.shareUrl || layoutProduct.url || '') : '';
-    const layoutProductImage = layoutProduct ? layoutAbsoluteUrl(layoutProduct.shareImageUrl || layoutProduct.image || layoutProduct.imageUrl || '') : '';
-    const layoutProductDescription = layoutProduct
-      ? `Category: ${layoutProductCategory} - Price: ${layoutProductPrice} incl. VAT`
-      : '';
+    const layoutProductName =
+      layoutProduct
+        ? String(
+            layoutProduct.name ||
+            'Product'
+          ).trim()
+        : '';
+
+    const layoutProductCategory =
+      layoutProduct
+        ? String(
+            layoutProduct.category ||
+            'Product'
+          ).trim()
+        : '';
+
+    /*
+     * Product URLs have two separate purposes.
+     *
+     * CANONICAL:
+     * Use the permanent clean product URL for search engines.
+     *
+     * SOCIAL SHARE:
+     * Keep the optional versioned shareUrl used by the existing
+     * Kasyora social-sharing/cache flow.
+     */
+    const layoutProductCanonicalUrl =
+      layoutProduct
+        ? layoutAbsoluteUrl(
+            layoutProduct.url ||
+            ''
+          )
+        : '';
+
+    const layoutProductShareUrl =
+      layoutProduct
+        ? layoutAbsoluteUrl(
+            layoutProduct.shareUrl ||
+            layoutProduct.url ||
+            ''
+          )
+        : '';
+
+    const layoutProductImage =
+      layoutProduct
+        ? layoutAbsoluteUrl(
+            layoutProduct.shareImageUrl ||
+            layoutProduct.image ||
+            layoutProduct.imageUrl ||
+            ''
+          )
+        : '';
+
+    /*
+     * Do not put VAT or converted prices into the SEO description.
+     *
+     * Storefront VAT and display currency depend on the customer's
+     * resolved destination and currency preferences. The SEO text
+     * therefore remains stable and truthful for every visitor.
+     */
+    const layoutProductDescription =
+      layoutProduct
+        ? (
+            `${layoutProductName} in ${layoutProductCategory}. ` +
+            'View product details, pricing and availability on Kasyora.'
+          )
+        : '';
+
+    /*
+     * Routes may provide page-specific SEO values.
+     *
+     * These fallbacks make the main Store useful immediately while
+     * allowing Shop, Bestseller and other public pages to receive
+     * their own titles/descriptions later.
+     */
+    const layoutPageTitle =
+      layoutProduct
+        ? `${layoutProductName} | Kasyora`
+        : String(
+            typeof seoTitle !== 'undefined' &&
+            seoTitle
+              ? seoTitle
+              : (
+                  typeof title !== 'undefined' &&
+                  title
+                    ? title
+                    : 'Kasyora Online Store'
+                )
+          ).trim();
+
+    const layoutPageDescription =
+      layoutProduct
+        ? layoutProductDescription
+        : String(
+            typeof seoDescription !== 'undefined' &&
+            seoDescription
+              ? seoDescription
+              : (
+                  'Shop products online with Kasyora. ' +
+                  'Discover products from Kasyora sellers, suppliers ' +
+                  'and global commerce partners.'
+                )
+          ).trim();
+
+    /*
+     * Canonical URL priority:
+     *
+     * 1. Permanent clean product URL.
+     * 2. Route-supplied canonicalUrl.
+     * 3. Route-supplied seoCanonicalPath.
+     * 4. Main Store fallback.
+     *
+     * Never use the versioned product shareUrl as the canonical URL.
+     */
+    const layoutCanonicalUrl =
+      layoutProductCanonicalUrl ||
+      (
+        typeof canonicalUrl !== 'undefined' &&
+        canonicalUrl
+          ? layoutAbsoluteUrl(
+              canonicalUrl
+            )
+          : (
+              typeof seoCanonicalPath !== 'undefined' &&
+              seoCanonicalPath
+                ? layoutAbsoluteUrl(
+                    seoCanonicalPath
+                  )
+                : layoutAbsoluteUrl(
+                    '/store'
+                  )
+            )
+      );
+
+    /*
+     * Social platforms may continue receiving the versioned
+     * product share URL used by the existing Kasyora sharing flow.
+     *
+     * Non-product pages use their canonical URL.
+     */
+    const layoutSocialUrl =
+      layoutProduct
+        ? (
+            layoutProductShareUrl ||
+            layoutCanonicalUrl
+          )
+        : layoutCanonicalUrl;
+
+    const layoutOgImage =
+      layoutProductImage ||
+      layoutAbsoluteUrl(
+        '/images/branding/logo-unincorporate.png'
+      );
+
+    const layoutOgType =
+      layoutProduct
+        ? 'product'
+        : 'website';
   %>
 
-  <title><%= layoutProduct ? layoutProductName + ' | Uni Store' : (title || 'Uni Store') %></title>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport">
-  <meta content="" name="keywords">
-  <meta name="description" content="<%= layoutProduct ? layoutProductDescription : '' %>">
+  <title><%= layoutPageTitle %></title>
 
-  <% if (layoutProduct) { %>
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Kasyora Store">
-    <meta property="og:title" content="<%= layoutProductName %>">
-    <meta property="og:description" content="<%= layoutProductDescription %>">
-    <meta property="og:url" content="<%= layoutProductUrl %>">
-    <meta property="og:image" content="<%= layoutProductImage %>">
-    <meta property="og:image:url" content="<%= layoutProductImage %>">
-    <meta property="og:image:secure_url" content="<%= layoutProductImage %>">
-    <meta property="og:image:type" content="image/jpeg">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="<%= layoutProductName %>">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="<%= layoutProductName %>">
-    <meta name="twitter:description" content="<%= layoutProductDescription %>">
-    <meta name="twitter:image" content="<%= layoutProductImage %>">
-    <meta name="twitter:image:alt" content="<%= layoutProductName %>">
-  <% } %>
+  <meta name="description" content="<%= layoutPageDescription %>">
+
+  <meta name="robots" content="index,follow,max-image-preview:large">
+
+  <link rel="canonical" href="<%= layoutCanonicalUrl %>">
+
+  <meta property="og:type" content="<%= layoutOgType %>">
+
+  <meta property="og:site_name" content="Kasyora">
+
+  <meta property="og:title" content="<%= layoutPageTitle %>">
+
+  <meta property="og:description" content="<%= layoutPageDescription %>">
+
+  <meta property="og:url" content="<%= layoutSocialUrl %>">
+
+  <meta property="og:image" content="<%= layoutOgImage %>">
+
+  <meta property="og:image:alt" content="<%= layoutProduct ? layoutProductName : 'Kasyora' %>">
+
+  <meta name="twitter:card" content="summary_large_image">
+
+  <meta name="twitter:title" content="<%= layoutPageTitle %>">
+
+  <meta name="twitter:description" content="<%= layoutPageDescription %>">
+
+  <meta name="twitter:image" content="<%= layoutOgImage %>">
+
+  <meta name="twitter:image:alt" content="<%= layoutProduct ? layoutProductName : 'Kasyora' %>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -92,11 +266,13 @@
   <link href="/electro/css/style.css" rel="stylesheet">
 
   <style>
-    html, body {
+    html,
+    body {
       overflow-x: hidden;
     }
   </style>
 </head>
+
 <body>
   <%- body %>
 
@@ -111,4 +287,5 @@
   <script nonce="<%= nonce %>" src="/electro/js/main.js?v=20260723-2"></script>
   <script nonce="<%= nonce %>" src="/electro/js/store-custom.js"></script>
 </body>
+
 </html>

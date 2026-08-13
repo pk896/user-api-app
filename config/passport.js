@@ -4,25 +4,24 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
 
-const GOOGLE_CALLBACK_URL =
-  process.env.NODE_ENV === 'production'
-    ? 'https://my-express-server-rq4a.onrender.com/auth/google/callback'
-    : 'http://localhost:3000/auth/google/callback';
+const GOOGLE_CALLBACK_URL = String(
+  process.env.GOOGLE_CALLBACK_URL ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://kasyora.com/auth/google/callback'
+      : 'http://localhost:3000/auth/google/callback'),
+).trim();
 
 /**
  * Helper to read Google email + verified flag safely
  */
 function extractGoogleEmail(profile) {
-  const emailObj = Array.isArray(profile.emails) && profile.emails.length > 0
-    ? profile.emails[0]
-    : null;
+  const emailObj =
+    Array.isArray(profile.emails) && profile.emails.length > 0 ? profile.emails[0] : null;
 
   const email = emailObj?.value ? String(emailObj.value).toLowerCase().trim() : null;
 
   // Google may give "verified" either on emails[0].verified or on _json.email_verified
-  const emailVerified =
-    emailObj?.verified === true ||
-    profile._json?.email_verified === true;
+  const emailVerified = emailObj?.verified === true || profile._json?.email_verified === true;
 
   return { email, emailVerified };
 }
@@ -130,7 +129,7 @@ passport.use(
         console.error('[GoogleStrategy] Error:', err);
         return done(err, null);
       }
-    }
+    },
   ),
 );
 

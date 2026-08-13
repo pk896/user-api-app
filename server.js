@@ -938,6 +938,7 @@ const businessLogoApiRoutes = require('./routes/businessLogoApi');
 const staticPagesRoutes = require('./routes/staticPages');
 const someLinksRoutes = require('./routes/someRoute');
 const storePagesRoutes = require('./routes/storePages');
+const sitemapRoutes = require('./routes/sitemap');
 const demandsRoutes = require('./routes/demands');
 const matchesRoutes = require('./routes/matches');
 const notificationsRoutes = require('./routes/notifications');
@@ -1378,6 +1379,21 @@ app.use(
 app.get('/seller-ui', requireBusiness, (req, res) => {
   res.redirect('/seller-ui/');
 });
+
+/*
+ * Dynamic public sitemap
+ * ======================
+ *
+ * This must be mounted before express.static(public),
+ * otherwise public/sitemap.xml would answer the request first.
+ *
+ * The sitemap router generates:
+ *
+ * - public Store URLs;
+ * - Internal product URLs;
+ * - active CJ product URLs.
+ */
+app.use('/', sitemapRoutes);
 
 // Public static files.
 // The explicit "/" storefront redirect is registered earlier,

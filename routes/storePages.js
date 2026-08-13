@@ -2234,21 +2234,18 @@ async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory
     {
       $match: {
         /*
-        * A successful CJ sale may be proven by either:
-        *
-        * 1. the PayPal payment lifecycle; or
-        * 2. the CJ order lifecycle.
-        *
-        * This keeps historical CJ orders compatible while
-        * remaining completely isolated from Internal Order.
-        */
+         * A successful CJ sale may be proven by either:
+         *
+         * 1. the PayPal payment lifecycle; or
+         * 2. the CJ order lifecycle.
+         *
+         * This keeps historical CJ orders compatible while
+         * remaining completely isolated from Internal Order.
+         */
         $or: [
           {
             paymentStatus: {
-              $in: [
-                'COMPLETED',
-                'PARTIALLY_REFUNDED',
-              ],
+              $in: ['COMPLETED', 'PARTIALLY_REFUNDED'],
             },
           },
 
@@ -2268,16 +2265,11 @@ async function getCjBestsellingCategories(categoryLimit = 5, productsPerCategory
         ],
 
         /*
-        * Never count unpaid, cancelled, fully refunded
-        * or failed CJ orders as successful sales.
-        */
+         * Never count unpaid, cancelled, fully refunded
+         * or failed CJ orders as successful sales.
+         */
         status: {
-          $nin: [
-            'PAYMENT_PENDING',
-            'CANCELLED',
-            'REFUNDED',
-            'PAYMENT_FAILED',
-          ],
+          $nin: ['PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'],
         },
       },
     },
@@ -2857,7 +2849,15 @@ router.get('/store', async (req, res) => {
 
       return res.render('store/index', {
         layout: 'layouts/store',
+
         title: 'CJ Products | Kasyora',
+
+        seoTitle: 'CJ Dropshipping Products | Kasyora Global Online Store',
+
+        seoDescription:
+          'Shop CJ Dropshipping products on Kasyora. Discover global products, product categories and international shopping opportunities through the Kasyora CJ Store.',
+
+        seoCanonicalPath: '/store',
 
         storeDepartment: 'cj',
         productSource: 'CJ',
@@ -3099,7 +3099,15 @@ router.get('/store', async (req, res) => {
 
     return res.render('store/index', {
       layout: 'layouts/store',
+
       title: 'Kasyora Store',
+
+      seoTitle: 'Kasyora Online Store | Shop Products from Sellers and Suppliers',
+
+      seoDescription:
+        'Shop online with Kasyora and discover products from independent sellers and suppliers. Explore categories, featured products, new arrivals and customer-proven products.',
+
+      seoCanonicalPath: '/store',
 
       storeDepartment: 'internal',
       productSource: 'INTERNAL',
@@ -3141,6 +3149,22 @@ router.get('/store', async (req, res) => {
       layout: 'layouts/store',
 
       title: storeDepartment === 'cj' ? 'CJ Products | Kasyora' : 'Kasyora Store',
+
+      seoTitle:
+        storeDepartment === 'cj'
+          ? 'CJ Dropshipping Products | Kasyora Global Online Store'
+          : 'Kasyora Online Store | Shop Products from Sellers and Suppliers',
+
+      seoDescription:
+        storeDepartment === 'cj'
+          ? 'Shop CJ Dropshipping products on Kasyora. Discover global products, ' +
+            'product categories and international shopping opportunities through ' +
+            'the Kasyora CJ Store.'
+          : 'Shop online with Kasyora and discover products from independent sellers ' +
+            'and suppliers. Explore categories, featured products, new arrivals and ' +
+            'customer-proven products.',
+
+      seoCanonicalPath: '/store',
 
       storeDepartment,
       productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',
@@ -3514,6 +3538,13 @@ router.get('/store/shop', async (req, res) => {
         layout: 'layouts/store',
 
         title: 'CJ Shop | Kasyora',
+
+        seoTitle: 'Shop Global CJ Products Online | Kasyora',
+
+        seoDescription:
+          'Browse the Kasyora CJ Store for global products across available categories. Compare products, explore popular items and shop through Kasyora online.',
+
+        seoCanonicalPath: '/store/shop',
 
         storeDepartment: 'cj',
         productSource: 'CJ',
@@ -3892,7 +3923,15 @@ router.get('/store/shop', async (req, res) => {
 
     return res.render('store/shop', {
       layout: 'layouts/store',
+
       title: 'Shop',
+
+      seoTitle: 'Shop Products Online | Kasyora Marketplace',
+
+      seoDescription:
+        'Browse products on Kasyora by category, popularity, price and rating. Discover products offered by Kasyora sellers and suppliers through our online marketplace.',
+
+      seoCanonicalPath: '/store/shop',
 
       storeDepartment: 'internal',
       productSource: 'INTERNAL',
@@ -3965,6 +4004,22 @@ router.get('/store/shop', async (req, res) => {
       layout: 'layouts/store',
 
       title: storeDepartment === 'cj' ? 'CJ Shop | Kasyora' : 'Shop',
+
+      seoTitle:
+        storeDepartment === 'cj'
+          ? 'Shop Global CJ Products Online | Kasyora'
+          : 'Shop Products Online | Kasyora Marketplace',
+
+      seoDescription:
+        storeDepartment === 'cj'
+          ? 'Browse the Kasyora CJ Store for global products across available ' +
+            'categories. Compare products, explore popular items and shop through ' +
+            'Kasyora online.'
+          : 'Browse products on Kasyora by category, popularity, price and rating. ' +
+            'Discover products offered by Kasyora sellers and suppliers through our ' +
+            'online marketplace.',
+
+      seoCanonicalPath: '/store/shop',
 
       storeDepartment,
 
@@ -4735,6 +4790,13 @@ router.get('/store/bestseller', async (req, res) => {
 
         title: 'CJ Bestsellers | Kasyora',
 
+        seoTitle: 'Popular CJ Dropshipping Products | Kasyora Bestsellers',
+
+        seoDescription:
+          'Explore popular and bestselling CJ Dropshipping products on Kasyora. Discover highly rated products, popular categories and global shopping opportunities.',
+
+        seoCanonicalPath: '/store/bestseller',
+
         storeDepartment: 'cj',
 
         productSource: 'CJ',
@@ -4944,7 +5006,15 @@ router.get('/store/bestseller', async (req, res) => {
 
     return res.render('store/bestseller', {
       layout: 'layouts/store',
+
       title: 'Bestseller',
+
+      seoTitle: 'Bestselling Products Online | Kasyora',
+
+      seoDescription:
+        'Discover bestselling and popular products on Kasyora. Explore products customers buy, rate and recommend across Kasyora marketplace categories.',
+
+      seoCanonicalPath: '/store/bestseller',
 
       storeDepartment: 'internal',
       productSource: 'INTERNAL',
@@ -4993,6 +5063,21 @@ router.get('/store/bestseller', async (req, res) => {
       layout: 'layouts/store',
 
       title: storeDepartment === 'cj' ? 'CJ Bestsellers | Kasyora' : 'Bestseller',
+
+      seoTitle:
+        storeDepartment === 'cj'
+          ? 'Popular CJ Dropshipping Products | Kasyora Bestsellers'
+          : 'Bestselling Products Online | Kasyora',
+
+      seoDescription:
+        storeDepartment === 'cj'
+          ? 'Explore popular and bestselling CJ Dropshipping products on Kasyora. ' +
+            'Discover highly rated products, popular categories and global shopping ' +
+            'opportunities.'
+          : 'Discover bestselling and popular products on Kasyora. Explore products ' +
+            'customers buy, rate and recommend across Kasyora marketplace categories.',
+
+      seoCanonicalPath: '/store/bestseller',
 
       storeDepartment,
 
