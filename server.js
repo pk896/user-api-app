@@ -129,10 +129,33 @@ const DEV_VITE_1 = 'http://localhost:5173';
 const DEV_VITE_2 = 'http://localhost:5174';
 const DEV_BACKEND = 'http://localhost:3000';
 const DEV_BACKEND_127 = 'http://127.0.0.1:3000';
-const PROD_BACKEND = 'https://my-express-server-rq4a.onrender.com';
-const PROD_FRONTEND = 'https://my-vite-app-ra7d.onrender.com';
-const ENV_FRONTEND = process.env.FRONTEND_URL;
-const ENV_APP_URL = process.env.APP_URL;
+
+const PROD_BACKEND = 'https://kasyora.com';
+const PROD_FRONTEND = 'https://kasyora.com';
+
+const ENV_FRONTEND = String(
+  process.env.FRONTEND_URL || '',
+).trim();
+
+const ENV_APP_URL = String(
+  process.env.APP_URL || '',
+).trim();
+
+/*
+ * Environment-configured web origins.
+ *
+ * LOCAL example:
+ * WEB_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+ *
+ * RENDER production:
+ * WEB_ORIGINS=https://kasyora.com,https://www.kasyora.com
+ */
+const ENV_WEB_ORIGINS = String(
+  process.env.WEB_ORIGINS || '',
+)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const allowedOrigins = Array.from(
   new Set(
@@ -145,6 +168,7 @@ const allowedOrigins = Array.from(
       PROD_FRONTEND,
       ENV_FRONTEND,
       ENV_APP_URL,
+      ...ENV_WEB_ORIGINS,
     ].filter(Boolean),
   ),
 );
