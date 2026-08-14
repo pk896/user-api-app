@@ -1437,15 +1437,48 @@ router.get('/sales', async (req, res) => {
     return res.render('sales-products', {
       title: isCjDepartment ? 'CJ Fast Liner Products' : 'Kasyora Fast Liner Products',
 
+      /*
+      * Public Fast Liner SEO
+      * =====================
+      *
+      * Internal and CJ Fast Liner are separate catalogue
+      * experiences, so each receives its own canonical URL.
+      *
+      * Search, category and pagination query strings are not
+      * included in the canonical URL. They remain functional
+      * storefront controls without creating duplicate canonical
+      * versions of the Fast Liner landing pages.
+      */
+      seoTitle: isCjDepartment
+        ? 'CJ Fast Liner Products | Kasyora'
+        : 'Fast Liner Products | Kasyora',
+
+      seoDescription: isCjDepartment
+        ? 'Explore Kasyora CJ Fast Liner products from the separate CJ Store catalogue, including active imported products available through Kasyora.'
+        : 'Explore Kasyora Fast Liner products available from the Kasyora marketplace, with product categories, ratings and convenient product discovery.',
+
+      seoCanonicalPath: isCjDepartment
+        ? '/products/sales?department=cj'
+        : '/products/sales',
+
+      seoRobots:
+        'index,follow,max-image-preview:large',
+
+      seoOgType:
+        'website',
+
+      seoImage:
+        '/images/branding/logo-unincorporate.png',
+
       products,
       relatedProducts,
       topRatedProducts,
 
       /*
-       * CJ receives only active imported CJ categories.
-       * Internal Fast Liner retains the existing global
-       * Internal Store category list.
-       */
+      * CJ receives only active imported CJ categories.
+      * Internal Fast Liner retains the existing global
+      * Internal Store category list.
+      */
       CATEGORIES: salesCategories,
 
       storeDepartment,
@@ -1471,12 +1504,12 @@ router.get('/sales', async (req, res) => {
       nonce: res.locals.nonce,
 
       /*
-       * Internal:
-       * provisional country-aware VAT rate.
-       *
-       * CJ:
-       * always zero Kasyora VAT.
-       */
+      * Internal:
+      * provisional country-aware VAT rate.
+      *
+      * CJ:
+      * always zero Kasyora VAT.
+      */
       vatRate: Number(salesTaxTreatment.vatRate || 0),
 
       taxTreatment: salesTaxTreatment,

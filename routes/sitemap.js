@@ -69,10 +69,15 @@ function sitemapUrlEntry({
  * Public Kasyora sitemap
  * ======================
  *
+ * Includes only public canonical pages that Kasyora intends
+ * search engines to discover and index.
+ *
  * Includes:
  *
+ * - public Kasyora company/legal pages;
  * - main public Store pages;
- * - Internal Kasyora product pages;
+ * - Internal and CJ Fast Liner landing pages;
+ * - in-stock Internal Kasyora product pages;
  * - active CJ product pages with enabled variants.
  *
  * Excludes:
@@ -83,8 +88,9 @@ function sitemapUrlEntry({
  * - dashboards;
  * - admin;
  * - authentication;
- * - search/filter/query URLs;
- * - department query parameters;
+ * - search/filter URLs;
+ * - pagination URLs;
+ * - non-canonical department variants;
  * - product share URLs.
  */
 router.get('/sitemap.xml', async (_req, res) => {
@@ -96,10 +102,23 @@ router.get('/sitemap.xml', async (_req, res) => {
       internalProducts,
       cjProducts,
     ] = await Promise.all([
+      /*
+       * Internal public product route:
+       *
+       * /store/product/:id
+       *
+       * The live product page requires stock > 0, so the
+       * sitemap must not advertise out-of-stock product URLs
+       * that would redirect away from the product page.
+       */
       Product.find({
         customId: {
           $exists: true,
           $ne: '',
+        },
+
+        stock: {
+          $gt: 0,
         },
       })
         .select(
@@ -111,6 +130,13 @@ router.get('/sitemap.xml', async (_req, res) => {
         })
         .lean(),
 
+      /*
+       * CJ product URLs remain completely separate from
+       * Internal Kasyora product URLs.
+       *
+       * Only active CJ products with at least one enabled
+       * variant are included.
+       */
       CjProduct.find({
         status: 'active',
 
@@ -135,6 +161,12 @@ router.get('/sitemap.xml', async (_req, res) => {
         .lean(),
     ]);
 
+    /*
+     * Public canonical landing pages.
+     *
+     * Do not add cart, checkout, account, dashboard,
+     * authentication or search-result URLs here.
+     */
     const staticEntries = [
       {
         location:
@@ -157,13 +189,43 @@ router.get('/sitemap.xml', async (_req, res) => {
       {
         location:
           siteUrl +
-          '/about',
+          '/products/sales',
       },
 
       {
         location:
           siteUrl +
-          '/contact',
+          '/products/sales?department=cj',
+      },
+
+      {
+        location:
+          siteUrl +
+          '/home',
+      },
+
+      {
+        location:
+          siteUrl +
+          '/users/about',
+      },
+
+      {
+        location:
+          siteUrl +
+          '/store/contact',
+      },
+
+      {
+        location:
+          siteUrl +
+          '/privacy',
+      },
+
+      {
+        location:
+          siteUrl +
+          '/terms',
       },
     ];
 

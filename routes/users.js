@@ -1448,12 +1448,43 @@ router.post('/profile/delete', ensureUser, async (req, res) => {
 ======================================================= */
 router.get('/about', (req, res) => {
   const { nonce = '' } = res.locals;
+
   res.render('about', {
     title: 'About Kasyora',
+
+    /*
+     * Public Kasyora About SEO
+     * ========================
+     *
+     * This page uses views/layout.ejs, which activates
+     * public SEO metadata only when these values are supplied.
+     */
+    seoTitle:
+      'About Kasyora | Building Global Commerce Without Borders',
+
+    seoDescription:
+      'Learn about Kasyora, a South African e-commerce company building technology and commerce systems designed to connect people, businesses and markets across borders.',
+
+    seoCanonicalPath:
+      '/users/about',
+
+    seoRobots:
+      'index,follow,max-image-preview:large',
+
+    seoOgType:
+      'website',
+
+    seoImage:
+      '/images/branding/logo-unincorporate.png',
+
     active: 'about',
+
     styles: pageStyles(nonce),
+
     scripts: pageScripts(nonce),
+
     user: req.session.user || null,
+
     business: req.session.business || null,
   });
 });

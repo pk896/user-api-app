@@ -1497,6 +1497,29 @@ app.get('/home', async (req, res) => {
 
     title: 'Home',
 
+    /*
+     * Public Kasyora Home SEO
+     * =======================
+     *
+     * views/layout.ejs uses these values only for public
+     * pages that explicitly opt into search-engine metadata.
+     */
+    seoTitle:
+      'Kasyora | Global Commerce and Online Marketplace',
+
+    seoDescription:
+      'Discover Kasyora, a South African commerce company building technology that connects buyers, sellers and suppliers across markets through an accessible global commerce ecosystem.',
+
+    seoCanonicalPath: '/home',
+
+    seoRobots:
+      'index,follow,max-image-preview:large',
+
+    seoOgType: 'website',
+
+    seoImage:
+      '/images/branding/logo-unincorporate.png',
+
     active: 'home',
 
     dbAvailable: dbConnectionEstablished,
