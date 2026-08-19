@@ -171,7 +171,7 @@ router.get('/sitemap.xml', async (_req, res) => {
       {
         location:
           siteUrl +
-          '/store',
+          '/',
       },
 
       {

@@ -2627,7 +2627,24 @@ function downloadImageBuffer(url) {
   });
 }
 
-router.get('/store', async (req, res) => {
+/*
+ * Canonical Kasyora storefront homepage
+ * ======================================
+ *
+ * Both:
+ *
+ * GET /
+ * GET /store
+ *
+ * use this exact same Store controller.
+ *
+ * The bare domain "/" is the canonical public homepage.
+ * "/store" remains available for existing navigation and links,
+ * but it must not be treated as a separate canonical page.
+ *
+ * No redirect is required between these two application routes.
+ */
+router.get(['/', '/store'], async (req, res) => {
   const storeDepartment = getStoreDepartment(req);
 
   const storefrontTaxContext = resolveStorefrontTaxContext(req, storeDepartment);
@@ -2857,7 +2874,7 @@ router.get('/store', async (req, res) => {
         seoDescription:
           'Shop CJ Dropshipping products on Kasyora. Discover global products, product categories and international shopping opportunities through the Kasyora CJ Store.',
 
-        seoCanonicalPath: '/store',
+        seoCanonicalPath: '/',
 
         storeDepartment: 'cj',
         productSource: 'CJ',
@@ -3107,7 +3124,7 @@ router.get('/store', async (req, res) => {
       seoDescription:
         'Shop online with Kasyora and discover products from independent sellers and suppliers. Explore categories, featured products, new arrivals and customer-proven products.',
 
-      seoCanonicalPath: '/store',
+      seoCanonicalPath: '/',
 
       storeDepartment: 'internal',
       productSource: 'INTERNAL',
@@ -3164,7 +3181,7 @@ router.get('/store', async (req, res) => {
             'and suppliers. Explore categories, featured products, new arrivals and ' +
             'customer-proven products.',
 
-      seoCanonicalPath: '/store',
+      seoCanonicalPath: '/',
 
       storeDepartment,
       productSource: storeDepartment === 'cj' ? 'CJ' : 'INTERNAL',

@@ -1196,11 +1196,22 @@ app.use('/payment', paymentRouter);
 app.use('/contact', contactRoutes);
 app.use('/links', someLinksRoutes);
 
-// The public Kasyora storefront must own the root URL.
-// This must be registered before any router mounted at "/".
-app.get('/', (req, res) => {
-  return res.redirect(302, '/store');
-});
+/*
+ * Canonical Kasyora storefront entry
+ * ==================================
+ *
+ * The bare domain:
+ *
+ * https://kasyora.com/
+ *
+ * is served directly by routes/storePages.js with HTTP 200.
+ *
+ * /store remains supported by the same Store controller for existing
+ * navigation and links, while "/" is the canonical public homepage.
+ *
+ * Do not add a redirect here. The storePages router mounted below
+ * owns both "/" and "/store".
+ */
 
 // Public CJ storefront.
 // This is separate from the internal seller/supplier storefront.
@@ -1396,8 +1407,8 @@ app.get('/seller-ui', requireBusiness, (req, res) => {
 app.use('/', sitemapRoutes);
 
 // Public static files.
-// The explicit "/" storefront redirect is registered earlier,
-// before routers mounted at the root path.
+// The canonical "/" storefront route is handled earlier by
+// routes/storePages.js before static-file fallback.
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Cart count API
