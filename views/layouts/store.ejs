@@ -65,12 +65,38 @@
           ).trim()
         : '';
 
+    /*
+     * Product category may arrive in two forms:
+     *
+     * Internal Kasyora:
+     * category is normally a plain string.
+     *
+     * CJ Store:
+     * category may be either a normalized string supplied by the
+     * route or the original CJ category object.
+     *
+     * Resolve both safely so SEO metadata can never contain
+     * "[object Object]".
+     */
+    const layoutRawProductCategory =
+      layoutProduct
+        ? layoutProduct.category
+        : null;
+
     const layoutProductCategory =
       layoutProduct
         ? String(
-            layoutProduct.category ||
-            'Product'
-          ).trim()
+            typeof layoutRawProductCategory === 'string'
+              ? layoutRawProductCategory
+              : (
+                  layoutRawProductCategory?.name ||
+                  layoutRawProductCategory?.secondName ||
+                  layoutRawProductCategory?.firstName ||
+                  layoutProduct.productType ||
+                  layoutProduct.type ||
+                  'Product'
+                )
+          ).trim() || 'Product'
         : '';
 
     /*
