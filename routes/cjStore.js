@@ -170,10 +170,25 @@ function mapCjProduct(product) {
 
   const uniqueImages = [...new Set(images)];
 
+  const cjProductId = safeString(
+    product?.cjProductId,
+    300,
+  );
+
   return {
     source: 'CJ',
 
-    cjProductId: safeString(product?.cjProductId, 300),
+    cjProductId,
+
+    /*
+     * Permanent public canonical CJ product URL.
+     *
+     * This is intentionally separate from Internal Kasyora
+     * product URLs.
+     */
+    url:
+      '/cj/product/' +
+      encodeURIComponent(cjProductId),
 
     productSku: safeString(product?.productSku, 300),
 
